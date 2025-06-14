@@ -7,11 +7,11 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 text-gray-800 leading-relaxed">
 
-<nav class="bg-white shadow">
+<nav class="bg-white shadow-md">
   <div class="container mx-auto px-4 py-3 flex items-center justify-between">
-    <div class="text-lg font-semibold">Admin</div>
+    <div class="text-xl font-semibold">Admin</div>
     <button id="menuButton" class="md:hidden">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -19,37 +19,37 @@
     </button>
     <div id="navLinks" class="hidden md:flex space-x-6">
       <a href="#" class="text-blue-600 font-semibold">Сотрудники</a>
-      <a href="#" class="text-gray-600 hover:text-blue-600">Выплаты</a>
-      <a href="#" class="text-gray-600 hover:text-blue-600">Отчёты</a>
-      <a href="#" class="text-gray-600 hover:text-blue-600">Дни рождения</a>
-      <a href="#" class="text-gray-600 hover:text-blue-600">Рассылки</a>
-      <a href="#" class="text-gray-600 hover:text-blue-600">Настройки</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Выплаты</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Отчёты</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Дни рождения</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Рассылки</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Настройки</a>
     </div>
   </div>
   <div id="mobileMenu" class="md:hidden px-4 pb-3 space-y-1 hidden">
     <a href="#" class="block py-1 text-blue-600 font-semibold">Сотрудники</a>
-    <a href="#" class="block py-1 text-gray-600 hover:text-blue-600">Выплаты</a>
-    <a href="#" class="block py-1 text-gray-600 hover:text-blue-600">Отчёты</a>
-    <a href="#" class="block py-1 text-gray-600 hover:text-blue-600">Дни рождения</a>
-    <a href="#" class="block py-1 text-gray-600 hover:text-blue-600">Рассылки</a>
-    <a href="#" class="block py-1 text-gray-600 hover:text-blue-600">Настройки</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Выплаты</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Отчёты</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Дни рождения</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Рассылки</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Настройки</a>
   </div>
 </nav>
-<div class="container mx-auto py-6">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white p-4 rounded shadow">
+<div class="container mx-auto py-6 mt-8">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white p-4 rounded-xl shadow-md">
             <div class="text-gray-500">Всего сотрудников</div>
             <div id="totalEmployees" class="text-2xl font-bold">0</div>
         </div>
-        <div class="bg-white p-4 rounded shadow">
+        <div class="bg-white p-4 rounded-xl shadow-md">
             <div class="text-gray-500">Активных заявок</div>
             <div id="activeRequests" class="text-2xl font-bold">0</div>
         </div>
-        <div class="bg-white p-4 rounded shadow">
+        <div class="bg-white p-4 rounded-xl shadow-md">
             <div class="text-gray-500">Отправлено сегодня</div>
             <div id="sentToday" class="text-2xl font-bold">0</div>
         </div>
-        <div class="bg-white p-4 rounded shadow">
+        <div class="bg-white p-4 rounded-xl shadow-md">
             <div class="text-gray-500">Ближайший день рождения</div>
             <div id="nextBirthday" class="text-2xl font-bold">-</div>
         </div>
@@ -57,90 +57,90 @@
     <div class="flex flex-col md:flex-row">
     <div class="md:w-3/4 md:pr-4">
         <div class="flex justify-between items-center mb-4">
-            <h1 class="text-2xl font-bold">Employees</h1>
-            <button id="addBtn" class="bg-blue-500 text-white px-4 py-2 rounded">Add Employee</button>
+            <h1 class="text-2xl font-semibold">Employees</h1>
+            <button id="addBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow">Add Employee</button>
         </div>
     <div class="mb-4">
         <label for="statusFilter" class="mr-2">Status:</label>
-        <select id="statusFilter" class="border p-2 rounded">
+        <select id="statusFilter" class="border border-gray-300 p-2 rounded-md">
             <option value="all">All</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
         </select>
     </div>
-<div class="overflow-x-auto">
+<div class="overflow-x-auto bg-white p-4 rounded-xl shadow-md">
     <table class="min-w-full bg-white text-sm">
-        <thead>
+        <thead class="bg-gray-50">
         <tr>
-            <th class="py-2 px-4 border-b">ID</th>
-            <th class="py-2 px-4 border-b">Full Name</th>
-            <th class="py-2 px-4 border-b">Phone</th>
-            <th class="py-2 px-4 border-b">Bank</th>
-            <th class="py-2 px-4 border-b">Card</th>
-            <th class="py-2 px-4 border-b">Birthdate</th>
-            <th class="py-2 px-4 border-b">Status</th>
-            <th class="py-2 px-4 border-b">Photo</th>
-            <th class="py-2 px-4 border-b">Actions</th>
+            <th class="py-2 px-4 border-b text-left">ID</th>
+            <th class="py-2 px-4 border-b text-left">Full Name</th>
+            <th class="py-2 px-4 border-b text-left">Phone</th>
+            <th class="py-2 px-4 border-b text-left">Bank</th>
+            <th class="py-2 px-4 border-b text-left">Card</th>
+            <th class="py-2 px-4 border-b text-left">Birthdate</th>
+            <th class="py-2 px-4 border-b text-left">Status</th>
+            <th class="py-2 px-4 border-b text-left">Photo</th>
+            <th class="py-2 px-4 border-b text-left">Actions</th>
         </tr>
         </thead>
         <tbody id="tableBody"></tbody>
     </table>
 </div>
     </div>
-    <div class="md:w-1/4 mt-6 md:mt-0" id="historyBlock">
-        <h2 class="text-lg font-semibold mb-2">История действий</h2>
+    <div class="md:w-1/4 mt-6 md:mt-0 bg-white p-4 rounded-xl shadow-md" id="historyBlock">
+        <h2 class="text-xl font-semibold mb-2">История действий</h2>
         <ul id="notifications" class="space-y-2 text-sm">
         </ul>
     </div>
     </div>
 </div>
 
-<div id="toast" class="fixed top-5 right-5 hidden"></div>
+<div id="toast" class="shadow-md rounded-md fixed top-5 right-5 hidden"></div>
 
 <!-- Modal -->
 <div id="modal" class="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-white p-6 rounded w-full max-w-lg mx-auto">
+    <div class="bg-white p-6 rounded-xl shadow-md w-full max-w-lg mx-auto">
         <h2 id="modalTitle" class="text-xl font-bold mb-4">Add Employee</h2>
         <form id="employeeForm" class="space-y-3">
             <input type="hidden" id="employeeId">
             <div>
                 <label class="block">Full Name</label>
-                <input type="text" id="fullName" class="border p-2 w-full" required>
+                <input type="text" id="fullName" class="border border-gray-300 p-2 rounded-md w-full" required>
             </div>
             <div>
                 <label class="block">Phone</label>
-                <input type="text" id="phone" class="border p-2 w-full" required>
+                <input type="text" id="phone" class="border border-gray-300 p-2 rounded-md w-full" required>
             </div>
             <div>
                 <label class="block">Bank</label>
-                <input type="text" id="bank" class="border p-2 w-full" required>
+                <input type="text" id="bank" class="border border-gray-300 p-2 rounded-md w-full" required>
             </div>
             <div>
                 <label class="block">Card Number</label>
-                <input type="text" id="cardNumber" class="border p-2 w-full" required>
+                <input type="text" id="cardNumber" class="border border-gray-300 p-2 rounded-md w-full" required>
             </div>
             <div>
                 <label class="block">Birthdate</label>
-                <input type="date" id="birthdate" class="border p-2 w-full">
+                <input type="date" id="birthdate" class="border border-gray-300 p-2 rounded-md w-full">
             </div>
             <div>
                 <label class="block">Note</label>
-                <textarea id="note" class="border p-2 w-full"></textarea>
+                <textarea id="note" class="border border-gray-300 p-2 rounded-md w-full"></textarea>
             </div>
             <div>
                 <label class="block">Status</label>
-                <select id="status" class="border p-2 w-full">
+                <select id="status" class="border border-gray-300 p-2 rounded-md w-full">
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                 </select>
             </div>
             <div>
                 <label class="block">Photo</label>
-                <input type="file" id="photo" accept="image/*" class="border p-2 w-full">
+                <input type="file" id="photo" accept="image/*" class="border border-gray-300 p-2 rounded-md w-full">
             </div>
             <div class="flex justify-end space-x-2 pt-4">
-                <button type="button" id="cancelBtn" class="px-4 py-2 border rounded">Cancel</button>
-                <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">Save</button>
+                <button type="button" id="cancelBtn" class="px-4 py-2 border border-gray-300 rounded-md bg-gray-100 hover:bg-gray-200">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow">Save</button>
             </div>
         </form>
     </div>
