@@ -166,7 +166,7 @@ function showToast(message, type='info') {
     setTimeout(() => toast.classList.add('hidden'), 3000);
 }
 
-async function fetchEmployees() {
+async function loadEmployees() {
     try {
         const res = await api.get('/');
         employees = res.data;
@@ -244,7 +244,7 @@ document.getElementById('cancelBtn').addEventListener('click', closeModal);
 
 document.getElementById('statusFilter').addEventListener('change', renderTable);
 
-async function saveEmployee(event) {
+async function submitEmployee(event) {
     event.preventDefault();
     const id = document.getElementById('employeeId').value;
     const data = {
@@ -261,13 +261,12 @@ async function saveEmployee(event) {
         return;
     }
     try {
-        let res;
         if (id) {
-            res = await api.put(`/${id}`, data);
-        } else {
-            res = await api.post('/', data);
+            await editEmployee(id, data);
+            return;
         }
-        const empId = id || res.data.id;
+        const res = await api.post('/', data);
+        const empId = res.data.id;
         const file = document.getElementById('photo').files[0];
         if (file) {
             const formData = new FormData();
@@ -276,16 +275,35 @@ async function saveEmployee(event) {
                 headers: {'Content-Type': 'multipart/form-data'}
             });
         }
-        showToast('Saved successfully');
-        addNotification('Employee saved');
+        showToast('Employee added');
+        addNotification('Employee added');
         closeModal();
-        fetchEmployees();
+        loadEmployees();
     } catch (err) {
         showToast('Save failed', 'error');
     }
 }
 
-document.getElementById('employeeForm').addEventListener('submit', saveEmployee);
+async function editEmployee(id, data) {
+    try {
+        await api.put(`/${id}`, data);
+        const file = document.getElementById('photo').files[0];
+        if (file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            await api.post(`/${id}/upload-photo`, formData, {
+                headers: {'Content-Type': 'multipart/form-data'}
+            });
+        }
+        showToast('Employee updated');
+        addNotification('Employee updated');
+        closeModal();
+        loadEmployees();
+    } catch (err) {
+        showToast('Update failed', 'error');
+    }
+}
+document.getElementById('employeeForm').addEventListener('submit', submitEmployee);
 
 async function deleteEmployee(id) {
     if (!confirm('Delete employee?')) return;
@@ -293,14 +311,14 @@ async function deleteEmployee(id) {
         await api.delete(`/${id}`);
         showToast('Deleted');
         addNotification('Employee deleted');
-        fetchEmployees();
+        loadEmployees();
     } catch (err) {
         showToast('Delete failed', 'error');
     }
 }
 document.getElementById("menuButton").addEventListener("click", () => document.getElementById("mobileMenu").classList.toggle("hidden"));
 
-fetchEmployees();
+window.addEventListener('load', loadEmployees);
 </script>
 </body>
 </html>
