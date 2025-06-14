@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Depends, Request
+from fastapi.responses import FileResponse
+from pathlib import Path
 from telegram import Update
 
 from ..core.application import create_application
@@ -27,6 +29,11 @@ def create_app() -> FastAPI:
         create_employee_router(employee_api),
         dependencies=[Depends(check_token)],
     )
+
+    @app.get("/", include_in_schema=False)
+    async def index():
+        path = Path(__file__).resolve().parents[2] / "UI_full.html"
+        return FileResponse(path)
 
     @app.post("/webhook")
     async def webhook(request: Request):

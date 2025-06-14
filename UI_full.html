@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 leading-relaxed">
+
+<nav class="bg-white shadow-md">
+  <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="text-xl font-semibold">Admin</div>
+    <button id="menuButton" class="md:hidden">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+    <div id="navLinks" class="hidden md:flex space-x-6">
+      <a href="#" class="text-blue-600 font-semibold">Сотрудники</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Выплаты</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Отчёты</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Дни рождения</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Рассылки</a>
+      <a href="#" class="text-gray-700 hover:text-blue-600">Настройки</a>
+    </div>
+  </div>
+  <div id="mobileMenu" class="md:hidden px-4 pb-3 space-y-1 hidden">
+    <a href="#" class="block py-1 text-blue-600 font-semibold">Сотрудники</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Выплаты</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Отчёты</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Дни рождения</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Рассылки</a>
+    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Настройки</a>
+  </div>
+</nav>
+<div class="container mx-auto py-6 mt-8">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white p-4 rounded-xl shadow-md">
+            <div class="text-gray-500">Всего сотрудников</div>
+            <div id="totalEmployees" class="text-2xl font-bold">0</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-md">
+            <div class="text-gray-500">Активных заявок</div>
+            <div id="activeRequests" class="text-2xl font-bold">0</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-md">
+            <div class="text-gray-500">Отправлено сегодня</div>
+            <div id="sentToday" class="text-2xl font-bold">0</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-md">
+            <div class="text-gray-500">Ближайший день рождения</div>
+            <div id="nextBirthday" class="text-2xl font-bold">-</div>
+        </div>
+    </div>
+    <div class="flex flex-col md:flex-row">
+    <div class="md:w-3/4 md:pr-4">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl font-semibold">Employees</h1>
+            <button id="addBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow">Add Employee</button>
+        </div>
+    <div class="mb-4">
+        <label for="statusFilter" class="mr-2">Status:</label>
+        <select id="statusFilter" class="border border-gray-300 p-2 rounded-md">
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+        </select>
+    </div>
+<div class="overflow-x-auto bg-white p-4 rounded-xl shadow-md">
+    <table class="min-w-full bg-white text-sm">
+        <thead class="bg-gray-50">
+        <tr>
+            <th class="py-2 px-4 border-b text-left">ID</th>
+            <th class="py-2 px-4 border-b text-left">Full Name</th>
+            <th class="py-2 px-4 border-b text-left">Phone</th>
+            <th class="py-2 px-4 border-b text-left">Bank</th>
+            <th class="py-2 px-4 border-b text-left">Card</th>
+            <th class="py-2 px-4 border-b text-left">Birthdate</th>
+            <th class="py-2 px-4 border-b text-left">Status</th>
+            <th class="py-2 px-4 border-b text-left">Photo</th>
+            <th class="py-2 px-4 border-b text-left">Actions</th>
+        </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+    </div>
+    <div class="md:w-1/4 mt-6 md:mt-0 bg-white p-4 rounded-xl shadow-md" id="historyBlock">
+        <h2 class="text-xl font-semibold mb-2">История действий</h2>
+        <ul id="notifications" class="space-y-2 text-sm">
+        </ul>
+    </div>
+    </div>
+</div>
+
+<div id="toast" class="shadow-md rounded-md fixed top-5 right-5 hidden"></div>
+
+<!-- Modal -->
+<div id="modal" class="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white p-6 rounded-xl shadow-md w-full max-w-lg mx-auto">
+        <h2 id="modalTitle" class="text-xl font-bold mb-4">Add Employee</h2>
+        <form id="employeeForm" class="space-y-3">
+            <input type="hidden" id="employeeId">
+            <div>
+                <label class="block">Full Name</label>
+                <input type="text" id="fullName" class="border border-gray-300 p-2 rounded-md w-full" required>
+            </div>
+            <div>
+                <label class="block">Phone</label>
+                <input type="text" id="phone" class="border border-gray-300 p-2 rounded-md w-full" required>
+            </div>
+            <div>
+                <label class="block">Bank</label>
+                <input type="text" id="bank" class="border border-gray-300 p-2 rounded-md w-full" required>
+            </div>
+            <div>
+                <label class="block">Card Number</label>
+                <input type="text" id="cardNumber" class="border border-gray-300 p-2 rounded-md w-full" required>
+            </div>
+            <div>
+                <label class="block">Birthdate</label>
+                <input type="date" id="birthdate" class="border border-gray-300 p-2 rounded-md w-full">
+            </div>
+            <div>
+                <label class="block">Note</label>
+                <textarea id="note" class="border border-gray-300 p-2 rounded-md w-full"></textarea>
+            </div>
+            <div>
+                <label class="block">Status</label>
+                <select id="status" class="border border-gray-300 p-2 rounded-md w-full">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+            <div>
+                <label class="block">Photo</label>
+                <input type="file" id="photo" accept="image/*" class="border border-gray-300 p-2 rounded-md w-full">
+            </div>
+            <div class="flex justify-end space-x-2 pt-4">
+                <button type="button" id="cancelBtn" class="px-4 py-2 border border-gray-300 rounded-md bg-gray-100 hover:bg-gray-200">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const api = axios.create({ baseURL: '/employees' });
+let employees = [];
+
+function addNotification(message) {
+    const list = document.getElementById('notifications');
+    const item = document.createElement('li');
+    item.textContent = message;
+    item.className = 'bg-white p-3 rounded shadow';
+    list.prepend(item);
+}
+
+function showToast(message, type='info') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `px-4 py-2 rounded shadow text-white mb-2 ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 3000);
+}
+
+async function fetchEmployees() {
+    try {
+        const res = await api.get('/');
+        employees = res.data;
+        renderTable();
+        updateStats();
+        addNotification('Employees loaded');
+    } catch (err) {
+        showToast('Failed to load employees', 'error');
+    }
+}
+
+function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    const filter = document.getElementById('statusFilter').value;
+    const filtered = employees.filter(e => filter === 'all' || e.status === filter);
+    filtered.forEach(emp => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="border px-4 py-2">${emp.id}</td>
+            <td class="border px-4 py-2">${emp.full_name}</td>
+            <td class="border px-4 py-2">${emp.phone}</td>
+            <td class="border px-4 py-2">${emp.bank}</td>
+            <td class="border px-4 py-2">${emp.card_number}</td>
+            <td class="border px-4 py-2">${emp.birthdate || ''}</td>
+            <td class="border px-4 py-2">${emp.status}</td>
+            <td class="border px-4 py-2">${emp.photo_url ? `<a href="${emp.photo_url}" target="_blank">View</a>` : ''}</td>
+            <td class="border px-4 py-2 space-x-2">
+                <button class="text-blue-600" onclick="openModal(${emp.id})">Edit</button>
+                <button class="text-red-600" onclick="deleteEmployee(${emp.id})">Delete</button>
+            </td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+function updateStats() {
+    document.getElementById('totalEmployees').textContent = employees.length;
+    document.getElementById('activeRequests').textContent = employees.filter(e => e.status === 'active').length;
+    document.getElementById('sentToday').textContent = '0';
+    const upcoming = employees
+        .filter(e => e.birthdate)
+        .sort((a, b) => new Date(a.birthdate) - new Date(b.birthdate));
+    document.getElementById('nextBirthday').textContent = upcoming.length ? upcoming[0].full_name : '-';
+}
+
+function openModal(id=null) {
+    const modal = document.getElementById('modal');
+    document.getElementById('employeeForm').reset();
+    document.getElementById('employeeId').value = '';
+    document.getElementById('photo').value = '';
+    if (id) {
+        const emp = employees.find(e => e.id === id);
+        if (!emp) return;
+        document.getElementById('modalTitle').textContent = 'Edit Employee';
+        document.getElementById('employeeId').value = emp.id;
+        document.getElementById('fullName').value = emp.full_name;
+        document.getElementById('phone').value = emp.phone;
+        document.getElementById('bank').value = emp.bank;
+        document.getElementById('cardNumber').value = emp.card_number;
+        document.getElementById('birthdate').value = emp.birthdate || '';
+        document.getElementById('note').value = emp.note || '';
+        document.getElementById('status').value = emp.status;
+    } else {
+        document.getElementById('modalTitle').textContent = 'Add Employee';
+    }
+    modal.classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('modal').classList.add('hidden');
+}
+
+document.getElementById('addBtn').addEventListener('click', () => openModal());
+document.getElementById('cancelBtn').addEventListener('click', closeModal);
+
+document.getElementById('statusFilter').addEventListener('change', renderTable);
+
+async function saveEmployee(event) {
+    event.preventDefault();
+    const id = document.getElementById('employeeId').value;
+    const data = {
+        full_name: document.getElementById('fullName').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        bank: document.getElementById('bank').value.trim(),
+        card_number: document.getElementById('cardNumber').value.trim(),
+        birthdate: document.getElementById('birthdate').value || null,
+        note: document.getElementById('note').value.trim(),
+        status: document.getElementById('status').value
+    };
+    if (!data.full_name || !data.phone || !data.bank || !data.card_number) {
+        showToast('Please fill required fields', 'error');
+        return;
+    }
+    try {
+        let res;
+        if (id) {
+            res = await api.put(`/${id}`, data);
+        } else {
+            res = await api.post('/', data);
+        }
+        const empId = id || res.data.id;
+        const file = document.getElementById('photo').files[0];
+        if (file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            await api.post(`/${empId}/upload-photo`, formData, {
+                headers: {'Content-Type': 'multipart/form-data'}
+            });
+        }
+        showToast('Saved successfully');
+        addNotification('Employee saved');
+        closeModal();
+        fetchEmployees();
+    } catch (err) {
+        showToast('Save failed', 'error');
+    }
+}
+
+document.getElementById('employeeForm').addEventListener('submit', saveEmployee);
+
+async function deleteEmployee(id) {
+    if (!confirm('Delete employee?')) return;
+    try {
+        await api.delete(`/${id}`);
+        showToast('Deleted');
+        addNotification('Employee deleted');
+        fetchEmployees();
+    } catch (err) {
+        showToast('Delete failed', 'error');
+    }
+}
+document.getElementById("menuButton").addEventListener("click", () => document.getElementById("mobileMenu").classList.toggle("hidden"));
+
+fetchEmployees();
+</script>
+</body>
+</html>
