@@ -257,7 +257,7 @@
 
     async function loadBirthdays() {
       try {
-        const res = await axios.get('/birthdays');
+        const res = await axios.get('/birthdays/');
         const body = document.getElementById('birthdays-body');
         body.innerHTML = res.data.map(p => `
           <tr class='border-b'>
