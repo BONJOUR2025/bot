@@ -4,7 +4,7 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from typing import List
 
-from app.core.types import Employee
+from app.core.types import Employee, EmployeeStatus
 from app.utils.config import DATA_FILE
 from .json_storage import JsonStorage
 
@@ -32,11 +32,23 @@ class Repository:
         self._storage.save(self._data)
 
     def list_employees(self) -> List[Employee]:
-        return [
-            Employee(id=str(uid), **data)
-            for uid, data in self._data.items()
-            if isinstance(data, dict)
-        ]
+        employees: List[Employee] = []
+        for uid, data in self._data.items():
+            if not isinstance(data, dict):
+                continue
+            record = {
+                "id": str(uid),
+                "full_name": data.get("full_name") or data.get("name", ""),
+                "phone": data.get("phone", ""),
+                "card_number": data.get("card_number", ""),
+                "bank": data.get("bank", ""),
+                "birthdate": data.get("birthdate"),
+                "note": data.get("note", ""),
+                "photo_url": data.get("photo_url", ""),
+                "status": EmployeeStatus(data.get("status", "active")),
+            }
+            employees.append(Employee(**record))
+        return employees
 
     def add_employee(self, employee: Employee) -> None:
         data = _serialize(employee)

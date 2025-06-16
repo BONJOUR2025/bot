@@ -14,7 +14,7 @@ class Employee:
     id: str
     full_name: str
     phone: str
-    card_number: str
+    card_number: str = ""
     bank: str
     birthdate: Optional[date] = None
     note: str = ""
