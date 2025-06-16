@@ -3,7 +3,7 @@
 <script>
 async function resetStorage() {
   try {
-    await axios.post('/employees/reset');
+    await axios.post('/api/employees/reset');
     alert('user.json сброшен');
   } catch (err) {
     console.error(err);

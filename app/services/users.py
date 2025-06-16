@@ -9,7 +9,7 @@ from ..utils.logger import log
 from ..models import User
 
 # Base URL of the FastAPI application running locally
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 
 def load_users() -> Dict[str, Any]:

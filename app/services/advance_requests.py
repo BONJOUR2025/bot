@@ -10,7 +10,7 @@ from ..utils.logger import log
 from ..models import PayoutRequest
 
 # Base URL of the local API
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8000/api"
 
 # Соответствие статусов на английском и русском языках
 STATUS_TRANSLATIONS = {

@@ -11,7 +11,7 @@
 <script>
 async function loadEmployees() {
   try {
-    const res = await axios.get('/employees/');
+    const res = await axios.get('/api/employees/');
     const table = document.getElementById('employee-table');
     table.innerHTML = `
       <thead><tr class='bg-gray-200'>
@@ -44,12 +44,12 @@ async function submitEmployee() {
   form.append('birthday', document.getElementById('birthday').value);
   const file = document.getElementById('photo').files[0];
   try {
-    const res = await axios.post('/employees/', Object.fromEntries(form), { headers: { 'Content-Type': 'application/json' } });
+    const res = await axios.post('/api/employees/', Object.fromEntries(form), { headers: { 'Content-Type': 'application/json' } });
     const id = res.data.id;
     if (file) {
       const photoForm = new FormData();
       photoForm.append('file', file);
-      await axios.post(`/employees/${id}/photo`, photoForm);
+      await axios.post(`/api/employees/${id}/photo`, photoForm);
     }
     await loadEmployees();
     alert('Сотрудник создан');
@@ -60,7 +60,7 @@ async function submitEmployee() {
 
 async function deleteEmployee(id) {
   try {
-    await axios.delete(`/employees/${id}`);
+    await axios.delete(`/api/employees/${id}`);
     await loadEmployees();
   } catch (err) {
     console.error(err);

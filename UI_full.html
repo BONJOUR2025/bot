@@ -245,7 +245,7 @@
 
     async function loadEmployees() {
       try {
-        const res = await axios.get('/employees/');
+        const res = await axios.get('/api/employees/');
         employees = res.data;
         renderTable();
         document.getElementById('stat-total').textContent = employees.length;
@@ -257,7 +257,7 @@
 
     async function loadBirthdays() {
       try {
-        const res = await axios.get('/birthdays/');
+        const res = await axios.get('/api/birthdays/');
         const body = document.getElementById('birthdays-body');
         body.innerHTML = res.data.map(p => `
           <tr class='border-b'>
@@ -365,20 +365,20 @@
       const file = document.getElementById('emp-photo').files[0];
       try {
         if (editingId) {
-          await axios.put(`/employees/${editingId}`, data);
+          await axios.put(`/api/employees/${editingId}`, data);
           if (file) {
             const form = new FormData();
             form.append('file', file);
-            await axios.post(`/employees/${editingId}/photo`, form);
+            await axios.post(`/api/employees/${editingId}/photo`, form);
           }
           showToast('Изменения сохранены');
         } else {
-          const res = await axios.post('/employees/', data);
+          const res = await axios.post('/api/employees/', data);
           const id = res.data.id;
           if (file) {
             const form = new FormData();
             form.append('file', file);
-            await axios.post(`/employees/${id}/photo`, form);
+            await axios.post(`/api/employees/${id}/photo`, form);
           }
           showToast('Сотрудник добавлен');
         }
@@ -393,7 +393,7 @@
     async function deleteEmployee(id) {
       if (!confirm('Удалить сотрудника?')) return;
       try {
-        await axios.delete(`/employees/${id}`);
+        await axios.delete(`/api/employees/${id}`);
         showToast('Удалено');
         await loadEmployees();
       } catch (err) {
@@ -412,7 +412,7 @@
 
     async function openMessageModal() {
       try {
-        const res = await axios.get('/employees/');
+        const res = await axios.get('/api/employees/');
         const select = document.getElementById('msg-emp');
         select.innerHTML = res.data.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
         document.getElementById('msg-text').value = '';
@@ -434,7 +434,7 @@
         return;
       }
       try {
-        await axios.post('/telegram/send_message', { user_id: userId, message: text });
+        await axios.post('/api/telegram/send_message', { user_id: userId, message: text });
         addNotify(`Сообщение отправлено пользователю ${userId}`);
         closeMessageModal();
       } catch (err) {
@@ -445,7 +445,7 @@
 
     async function populateSalaryFilters() {
       try {
-        const res = await axios.get('/salary/months');
+        const res = await axios.get('/api/salary/months');
         const monthSel = document.getElementById('salary-month-filter');
         monthSel.innerHTML = '<option value="">Выберите месяц</option>' +
           res.data.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -463,7 +463,7 @@
       const month = document.getElementById('salary-month-filter').value;
       const emp = document.getElementById('salary-employee-filter').value;
       try {
-        const res = await axios.get('/salary/', { params: { month, employee_id: emp } });
+        const res = await axios.get('/api/salary/', { params: { month, employee_id: emp } });
         renderSalaryTable(res.data);
       } catch (err) {
         console.error(err);
@@ -538,7 +538,7 @@
     function loadScheduleByDay() {
       const date = document.getElementById('schedule-date-picker').value;
       if (!date) return;
-      axios.get('/schedule/by_day', { params: { date } }).then(res => {
+      axios.get('/api/schedule/by_day', { params: { date } }).then(res => {
         const body = document.getElementById('schedule-by-day-body');
         body.innerHTML = '';
         const colors = {
@@ -566,7 +566,7 @@
         to_date: document.getElementById('payout-to').value,
       };
       try {
-        const res = await axios.get('/payouts/', { params });
+        const res = await axios.get('/api/payouts/', { params });
         lastPayouts = res.data;
         renderPayoutTable(lastPayouts);
       } catch (err) {
@@ -599,17 +599,17 @@
     }
 
     async function approvePayout(idx) {
-      await axios.put(`/payouts/${idx}`, { status: 'Одобрено' });
+      await axios.put(`/api/payouts/${idx}`, { status: 'Одобрено' });
       fetchPayouts();
     }
 
     async function rejectPayout(idx) {
-      await axios.put(`/payouts/${idx}`, { status: 'Отклонено' });
+      await axios.put(`/api/payouts/${idx}`, { status: 'Отклонено' });
       fetchPayouts();
     }
 
     async function payPayout(idx) {
-      await axios.put(`/payouts/${idx}`, { status: 'Выплачено' });
+      await axios.put(`/api/payouts/${idx}`, { status: 'Выплачено' });
       fetchPayouts();
     }
 
@@ -627,14 +627,14 @@
     }
 
     async function deletePayout(idx) {
-      await axios.delete(`/payouts/${idx}`);
+      await axios.delete(`/api/payouts/${idx}`);
       fetchPayouts();
     }
 
     async function deleteSelectedPayouts() {
       const ids = Array.from(document.querySelectorAll('.payout-check:checked')).map(cb => cb.value);
       if (!ids.length) return;
-      await axios.delete(`/payouts/`, { params: { indices: ids.join(',') } });
+      await axios.delete(`/api/payouts/`, { params: { indices: ids.join(',') } });
       fetchPayouts();
     }
 
@@ -678,10 +678,10 @@
       };
       try {
         if (editingPayout === null) {
-          await axios.post('/payouts/', payload);
+          await axios.post('/api/payouts/', payload);
           showToast('Выплата создана');
         } else {
-          await axios.put(`/payouts/${editingPayout}`, payload);
+          await axios.put(`/api/payouts/${editingPayout}`, payload);
           showToast('Выплата обновлена');
         }
         closePayoutModal();
