@@ -12,7 +12,7 @@
     <nav class="flex flex-wrap gap-2 mb-4">
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('employees')">Сотрудники</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSalary()">💼 Просмотр ЗП</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('schedule')">📅 Просмотр расписания</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSchedule()">📅 Просмотр расписания</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('payouts')">💳 Выплаты</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('birthdays')">🎂 Дни рождения</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="openMessageModal()">✉ Сообщение пользователю</button>
@@ -81,9 +81,17 @@
     </section>
 
     <!-- SCHEDULE SECTION -->
-    <section id="schedule" class="hidden">
-      <h2 class="text-xl font-semibold mb-2">Расписание</h2>
-      <div id="schedule-content" class="text-sm">Загрузка...</div>
+    <section id="schedule" class="hidden space-y-4">
+      <h2 class="text-xl font-semibold">📅 Просмотр расписания по дате</h2>
+      <input type="date" id="schedule-date-picker" class="border p-2" onchange="loadScheduleByDay()" />
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm table-auto">
+          <thead>
+            <tr class="bg-gray-200"><th>Точка</th><th>Сотрудник</th></tr>
+          </thead>
+          <tbody id="schedule-by-day-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- PAYOUTS SECTION -->
@@ -419,9 +427,42 @@
       await fetchSalaryData();
     }
 
+    function showSchedule() {
+      showSection('schedule');
+      const input = document.getElementById('schedule-date-picker');
+      if (!input.value) {
+        input.value = new Date().toISOString().slice(0, 10);
+      }
+      loadScheduleByDay();
+    }
+
+    function loadScheduleByDay() {
+      const date = document.getElementById('schedule-date-picker').value;
+      if (!date) return;
+      axios.get('/schedule/by_day', { params: { date } }).then(res => {
+        const body = document.getElementById('schedule-by-day-body');
+        body.innerHTML = '';
+        const colors = {
+          'Цех': '#7D3C98',
+          'Охта': '#239B56',
+          'Меркурий': '#1E8449',
+          'Академка': '#F4D03F',
+          'Озерки': '#F5B041',
+          'Пассаж': '#85C1E9',
+          'Рио': '#E59866'
+        };
+        res.data.forEach(item => {
+          const color = colors[item.point] || '#ffffff';
+          body.innerHTML += `<tr><td style="background-color:${color};font-weight:bold;">${item.point}</td><td>${item.name || '-'}</td></tr>`;
+        });
+      }).catch(err => console.error(err));
+    }
+
     window.onload = () => {
       loadEmployees();
       loadBirthdays();
+      const input = document.getElementById('schedule-date-picker');
+      if (input) input.value = new Date().toISOString().slice(0, 10);
       showSection('employees');
     };
   </script>
