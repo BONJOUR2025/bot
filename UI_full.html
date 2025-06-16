@@ -11,7 +11,7 @@
   <div class="container mx-auto p-4 space-y-6">
     <nav class="flex flex-wrap gap-2 mb-4">
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('employees')">Сотрудники</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('salary')">💼 Просмотр ЗП</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSalary()">💼 Просмотр ЗП</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('schedule')">📅 Просмотр расписания</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('payouts')">💳 Выплаты</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('birthdays')">🎂 Дни рождения</button>
@@ -67,9 +67,17 @@
     </section>
 
     <!-- SALARY SECTION -->
-    <section id="salary" class="hidden">
-      <h2 class="text-xl font-semibold mb-2">Просмотр зарплаты</h2>
-      <div id="salary-content" class="text-sm">Загрузка...</div>
+    <section id="salary" class="hidden space-y-4">
+      <h2 class="text-xl font-semibold">Просмотр зарплаты</h2>
+      <div class="flex flex-wrap gap-2">
+        <select id="salary-month-filter" class="border p-2">
+          <option value="">Выберите месяц</option>
+        </select>
+        <select id="salary-employee-filter" class="border p-2">
+          <option value="">Все сотрудники</option>
+        </select>
+      </div>
+      <div id="salary-table-container" class="overflow-x-auto bg-white shadow rounded p-2 text-sm"></div>
     </section>
 
     <!-- SCHEDULE SECTION -->
@@ -326,6 +334,62 @@
         console.error(err);
         showToast('Ошибка отправки', true);
       }
+    }
+
+    async function populateSalaryFilters() {
+      try {
+        const res = await axios.get('/salary/months');
+        const monthSel = document.getElementById('salary-month-filter');
+        monthSel.innerHTML = '<option value="">Выберите месяц</option>' +
+          res.data.map(m => `<option value="${m}">${m}</option>`).join('');
+        monthSel.onchange = fetchSalaryData;
+      } catch (err) {
+        console.error(err);
+      }
+      const empSel = document.getElementById('salary-employee-filter');
+      empSel.innerHTML = '<option value="">Все сотрудники</option>' +
+        employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+      empSel.onchange = fetchSalaryData;
+    }
+
+    async function fetchSalaryData() {
+      const month = document.getElementById('salary-month-filter').value;
+      const emp = document.getElementById('salary-employee-filter').value;
+      try {
+        const res = await axios.get('/salary/', { params: { month, employee_id: emp } });
+        renderSalaryTable(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderSalaryTable(data) {
+      const container = document.getElementById('salary-table-container');
+      if (!data || !data.length) {
+        container.innerHTML = '<p>Нет данных</p>';
+        return;
+      }
+      let html = `<table class='min-w-full text-sm'><thead><tr class='bg-gray-200'>` +
+        '<th class="p-2 text-left">Имя</th>' +
+        '<th class="p-2 text-left">Месяц</th>' +
+        '<th class="p-2 text-left">ЗП</th>' +
+        '<th class="p-2 text-left">Комментарий</th>' +
+        '</tr></thead><tbody>';
+      html += data.map(r => `
+        <tr class='border-b'>
+          <td class='p-2'>${r.name}</td>
+          <td class='p-2'>${r.month}</td>
+          <td class='p-2'>${r.amount.toLocaleString('ru-RU', {style:'currency', currency:'RUB'})}</td>
+          <td class='p-2'>${r.comment || ''}</td>
+        </tr>`).join('');
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    async function showSalary() {
+      showSection('salary');
+      await populateSalaryFilters();
+      await fetchSalaryData();
     }
 
     window.onload = () => {
