@@ -138,7 +138,17 @@
     <!-- BIRTHDAYS SECTION -->
     <section id="birthdays" class="hidden">
       <h2 class="text-xl font-semibold mb-2">Ближайшие дни рождения</h2>
-      <ul id="birthday-list" class="list-disc pl-5 text-sm"></ul>
+      <table class="min-w-full bg-white border rounded shadow">
+        <thead>
+          <tr class="bg-gray-200 text-sm">
+            <th class="p-2 text-left">ФИО</th>
+            <th class="p-2 text-left">Дата рождения</th>
+            <th class="p-2 text-left">Возраст</th>
+            <th class="p-2 text-left">Через сколько дней</th>
+          </tr>
+        </thead>
+        <tbody id="birthdays-body"></tbody>
+      </table>
     </section>
 
     <!-- REQUESTS SECTION -->
@@ -218,6 +228,9 @@
           sel.innerHTML = '<option value="">Все сотрудники</option>' + employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
           fetchPayouts();
         }
+        if (id === 'birthdays') {
+          loadBirthdays();
+        }
       }
     }
 
@@ -243,11 +256,17 @@
 
     async function loadBirthdays() {
       try {
-        const res = await axios.get('/employees/birthdays');
-        const list = document.getElementById('birthday-list');
-        list.innerHTML = res.data.map(e => `<li>${e.full_name} – ${e.birthday}</li>`).join('');
+        const res = await axios.get('/birthdays/upcoming');
+        const body = document.getElementById('birthdays-body');
+        body.innerHTML = res.data.map(p => `
+          <tr class='border-b'>
+            <td class='p-2'>${p.full_name}</td>
+            <td class='p-2'>${new Date(p.birthdate).toLocaleDateString()}</td>
+            <td class='p-2'>${p.age}</td>
+            <td class='p-2'>${p.in_days === 0 ? 'Сегодня 🎉' : p.in_days + ' дн.'}</td>
+          </tr>`).join('');
         if (res.data.length) {
-          document.getElementById('stat-birthday').textContent = res.data[0].birthdate;
+          document.getElementById('stat-birthday').textContent = new Date(res.data[0].birthdate).toLocaleDateString();
         }
       } catch (err) {
         console.error(err);

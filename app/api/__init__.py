@@ -8,10 +8,12 @@ from .employees import create_employee_router
 from .salary import create_salary_router
 from .schedule import create_schedule_router
 from .payouts import create_payout_router
+from .birthdays import create_birthdays_router
 from ..services.employee_service import EmployeeService, EmployeeAPIService
 from ..services.salary_service import SalaryService
 from ..services.schedule_service import ScheduleService
 from ..services.payout_service import PayoutService
+from ..services.birthday_service import BirthdayService
 
 
 def create_app() -> FastAPI:
@@ -46,6 +48,9 @@ def create_app() -> FastAPI:
 
     payout_service = PayoutService()
     app.include_router(create_payout_router(payout_service))
+
+    birthday_service = BirthdayService(employee_service._repo)
+    app.include_router(create_birthdays_router(birthday_service))
 
     # Admin UI routes
     from .admin_ui import router as admin_router
