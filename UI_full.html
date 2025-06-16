@@ -527,7 +527,7 @@
         to_date: document.getElementById('payout-to').value,
       };
       try {
-        const res = await axios.get('/payouts', { params });
+        const res = await axios.get('/payouts/', { params });
         renderPayoutTable(res.data);
       } catch (err) {
         console.error(err);
@@ -589,7 +589,7 @@
         payout_type: document.getElementById('payout-type').value
       };
       try {
-        await axios.post('/payouts', payload);
+        await axios.post('/payouts/', payload);
         closePayoutModal();
         fetchPayouts();
         showToast('Выплата создана');
