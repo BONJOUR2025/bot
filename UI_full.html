@@ -374,26 +374,40 @@
         container.innerHTML = '<p>Нет данных</p>';
         return;
       }
-      let html = `<table class='min-w-full text-sm'><thead><tr class='bg-gray-200'>` +
-        '<th class="p-2 text-left">Имя</th>' +
-        '<th class="p-2 text-left">Месяц</th>' +
-        '<th class="p-2 text-left">Оклад</th>' +
-        '<th class="p-2 text-left">Премия (KPI)</th>' +
-        '<th class="p-2 text-left">Бонусы</th>' +
-        '<th class="p-2 text-left">Удержания</th>' +
-        '<th class="p-2 text-left">Итог</th>' +
-        '<th class="p-2 text-left">Комментарий</th>' +
-        '</tr></thead><tbody>';
+      let html = `<table class='min-w-full text-sm'><thead>
+        <tr class='bg-gray-200'>
+          <th rowspan="2" class='p-2 text-left'>Имя</th>
+          <th rowspan="2" class='p-2 text-left'>Месяц</th>
+          <th colspan="3" class='p-2 text-center'>ИТОГО СМЕН</th>
+          <th colspan="10" class='p-2 text-center'>РАСЧЁТ ЗП</th>
+          <th colspan="4"></th>
+        </tr>
+        <tr class='bg-gray-100'>
+          <th class='p-1'>ОСН.</th><th class='p-1'>ДОП.</th><th class='p-1'>ОБЩ.</th>
+          <th class='p-1'>ОКЛАД</th><th class='p-1'>Ремонт</th><th class='p-1'>Косметика</th><th class='p-1'>Обувь</th><th class='p-1'>Аксессуары</th><th class='p-1'>Ключи</th><th class='p-1'>Тапки</th><th class='p-1'>Цех</th><th class='p-1'>Бонус</th>
+          <th class='p-1 font-semibold'>ИТОГО</th><th class='p-1'>Удержание</th><th class='p-1'>Аванс</th><th class='p-1 font-semibold'>К выплате</th>
+        </tr>
+        </thead><tbody>`;
       html += data.map(r => `
         <tr class='border-b'>
           <td class='p-2'>${r.name}</td>
           <td class='p-2'>${r.month}</td>
-          <td class='p-2'>${formatRub(r.base_salary)}</td>
-          <td class='p-2'>${formatRub(r.kpi_bonus)}</td>
-          <td class='p-2'>${formatRub(r.attendance_bonus)}</td>
-          <td class='p-2'>${formatRub(r.deductions)}</td>
+          <td class='p-2'>${r.shifts_main}</td>
+          <td class='p-2'>${r.shifts_extra}</td>
+          <td class='p-2'>${r.shifts_total}</td>
+          <td class='p-2'>${formatRub(r.salary_fixed)}</td>
+          <td class='p-2'>${formatRub(r.salary_repair)}</td>
+          <td class='p-2'>${formatRub(r.salary_cosmetics)}</td>
+          <td class='p-2'>${formatRub(r.salary_shoes)}</td>
+          <td class='p-2'>${formatRub(r.salary_accessories)}</td>
+          <td class='p-2'>${formatRub(r.salary_keys)}</td>
+          <td class='p-2'>${formatRub(r.salary_slippers)}</td>
+          <td class='p-2'>${formatRub(r.salary_workshop)}</td>
+          <td class='p-2'>${formatRub(r.salary_bonus)}</td>
+          <td class='p-2 font-semibold'>${formatRub(r.salary_total)}</td>
+          <td class='p-2'>${formatRub(r.deduction)}</td>
+          <td class='p-2'>${formatRub(r.advance)}</td>
           <td class='p-2 font-semibold'>${formatRub(r.final_amount)}</td>
-          <td class='p-2'>${r.comment || ''}</td>
         </tr>`).join('');
       html += '</tbody></table>';
       container.innerHTML = html;

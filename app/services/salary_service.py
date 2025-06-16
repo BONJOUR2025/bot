@@ -40,20 +40,34 @@ class SalaryService:
             return []
         name_map = {e.name: e.id for e in self._repo.list_employees()}
         result: List[SalaryRow] = []
-        cols = {c.lower(): c for c in df.columns}
+        cols = {str(c).strip().lower(): c for c in df.columns}
+
         def pick(*names: str) -> Optional[str]:
             for n in names:
-                key = n.lower()
+                key = str(n).strip().lower()
                 if key in cols:
                     return cols[key]
             return None
 
-        base_col = pick("ОКЛАД", "base_salary", "оклад")
-        kpi_col = pick("KPI", "kpi_bonus", "Премия (KPI)")
-        bonus_col = pick("Бонусы", "attendance_bonus", "Бонус", "Бонус за посещаемость")
-        deduct_col = pick("Удержание", "Удержания", "deductions")
-        final_col = pick("К выплате", "final_amount")
-        comment_col = pick("Комментарий", "comment")
+        colmap = {
+            "shifts_main": pick("осн.", "основные", "shifts_main"),
+            "shifts_extra": pick("доп.", "дополнительные", "shifts_extra"),
+            "shifts_total": pick("общ", "итого смен", "shifts_total"),
+            "salary_fixed": pick("оклад", "salary_fixed"),
+            "salary_repair": pick("ремонт", "salary_repair"),
+            "salary_cosmetics": pick("косметика", "salary_cosmetics"),
+            "salary_shoes": pick("обувь", "salary_shoes"),
+            "salary_accessories": pick("аксессуары", "salary_accessories"),
+            "salary_keys": pick("ключи", "salary_keys"),
+            "salary_slippers": pick("тапки", "salary_slippers"),
+            "salary_workshop": pick("цех", "workshop", "salary_workshop"),
+            "salary_bonus": pick("бонус", "salary_bonus"),
+            "salary_total": pick("итого", "salary_total"),
+            "deduction": pick("удержание", "deduction"),
+            "advance": pick("аванс", "advance"),
+            "final_amount": pick("к выплате", "final_amount"),
+            "comment": pick("комментарий", "comment"),
+        }
         for _, row in df.iterrows():
             name = str(row.get("ИМЯ", "")).strip()
             if not name:
@@ -61,6 +75,7 @@ class SalaryService:
             emp_id = name_map.get(name, "")
             if employee_id and emp_id != employee_id:
                 continue
+
             def to_float(val: object) -> float:
                 try:
                     if pd.isna(val):
@@ -69,23 +84,36 @@ class SalaryService:
                 except Exception:
                     return 0.0
 
-            base = to_float(row.get(base_col))
-            kpi = to_float(row.get(kpi_col))
-            bonus = to_float(row.get(bonus_col))
-            deduct = to_float(row.get(deduct_col))
-            final_amt = to_float(row.get(final_col))
-            comment = str(row.get(comment_col, "")).strip() if comment_col else ""
+            def to_int(val: object) -> int:
+                try:
+                    if pd.isna(val):
+                        return 0
+                    return int(float(val))
+                except Exception:
+                    return 0
+
+            values = {}
+            for field, col in colmap.items():
+                if col is None:
+                    values[field] = 0
+                    continue
+                if field.startswith("shifts_"):
+                    values[field] = to_int(row.get(col))
+                elif field in {"comment"}:
+                    values[field] = str(row.get(col, "")).strip()
+                else:
+                    values[field] = to_float(row.get(col))
+
+            if values.get("shifts_total") == 0:
+                values["shifts_total"] = values.get("shifts_main", 0) + values.get("shifts_extra", 0)
+
             result.append(
                 SalaryRow(
                     employee_id=emp_id,
                     name=name,
                     month=month,
-                    base_salary=base,
-                    kpi_bonus=kpi,
-                    attendance_bonus=bonus,
-                    deductions=deduct,
-                    final_amount=final_amt,
-                    comment=comment or None,
+                    **values,
+                    comment=values.get("comment") or None,
                 )
             )
         return result
