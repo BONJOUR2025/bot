@@ -2,10 +2,14 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    telegram_bot_token: str = Field(..., env="TELEGRAM_BOT_TOKEN")
-    excel_file: str = Field(..., env="EXCEL_FILE")
-    users_file: str = Field(..., env="USERS_FILE")
-    advance_requests_file: str = Field(..., env="ADVANCE_REQUESTS_FILE")
+    """Application settings with sane defaults for local usage."""
+
+    telegram_bot_token: str = Field("dummy", env="TELEGRAM_BOT_TOKEN")
+    excel_file: str = Field("data.xlsx", env="EXCEL_FILE")
+    users_file: str = Field("user.json", env="USERS_FILE")
+    advance_requests_file: str = Field(
+        "advance_requests.json", env="ADVANCE_REQUESTS_FILE"
+    )
     admin_id: int = Field(0, env="ADMIN_ID")
     admin_chat_id: int = Field(0, env="ADMIN_CHAT_ID")
     admin_login: str = Field("admin", env="ADMIN_LOGIN")
