@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import date
 from typing import List
 
-from ..data.repository import Repository
+from ..data.employee_repository import EmployeeRepository
 from ..schemas.birthday import BirthdayOut
 
 
 class BirthdayService:
     """Service to work with employee birthdays."""
 
-    def __init__(self, repo: Repository) -> None:
+    def __init__(self, repo: EmployeeRepository) -> None:
         self._repo = repo
 
     async def upcoming_birthdays(self, days_ahead: int = 30) -> List[BirthdayOut]:

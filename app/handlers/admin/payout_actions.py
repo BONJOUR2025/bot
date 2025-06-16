@@ -16,8 +16,8 @@ from ...services.advance_requests import (
 )
 import requests
     try:
-        requests.put(f"{API_URL}/payouts/{request_to_approve['idx']}", json={"status": "Одобрено"})
-        log(f"✅ Статус выплаты {request_to_approve['idx']} обновлён на Одобрено")
+        requests.put(f"{API_URL}/payouts/{request_to_approve['id']}", json={"status": "Одобрено"})
+        log(f"✅ Статус выплаты {request_to_approve['id']} обновлён на Одобрено")
     except Exception as e:
         log(f"❌ Ошибка обновления статуса выплаты: {e}")
 from ...utils.logger import log
@@ -69,8 +69,8 @@ from ...utils.logger import log
             f"💰 {request_to_approve['amount']} ₽\n"
             f"📂 {payout_type}"
     try:
-        requests.put(f"{API_URL}/payouts/{request_to_deny['idx']}", json={"status": "Отклонено"})
-        log(f"✅ Статус выплаты {request_to_deny['idx']} обновлён на Отклонено")
+        requests.put(f"{API_URL}/payouts/{request_to_deny['id']}", json={"status": "Отклонено"})
+        log(f"✅ Статус выплаты {request_to_deny['id']} обновлён на Отклонено")
     except Exception as e:
         log(f"❌ Ошибка обновления статуса выплаты: {e}")
         cashier_buttons = InlineKeyboardMarkup(

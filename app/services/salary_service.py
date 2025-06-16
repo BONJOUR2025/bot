@@ -5,15 +5,15 @@ from typing import List, Optional
 import pandas as pd
 
 from .excel import load_data
-from ..data.repository import Repository
+from ..data.employee_repository import EmployeeRepository
 from ..schemas.salary import SalaryRow
 
 
 class SalaryService:
     """Service to load salary data from Excel."""
 
-    def __init__(self, repo: Repository | None = None) -> None:
-        self._repo = repo or Repository()
+    def __init__(self, repo: EmployeeRepository | None = None) -> None:
+        self._repo = repo or EmployeeRepository()
         self._cache: dict[str, pd.DataFrame] = {}
 
     def _load_month(self, month: str) -> pd.DataFrame | None:

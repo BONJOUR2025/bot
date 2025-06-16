@@ -8,15 +8,15 @@ from fastapi import HTTPException, UploadFile
 
 from app.core.enums import EmployeeStatus
 from app.core.types import Employee
-from app.data.repository import Repository
+from app.data.employee_repository import EmployeeRepository
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeOut
 
 
 class EmployeeService:
     """Service to manage employee data."""
 
-    def __init__(self, repo: Repository | None = None) -> None:
-        self._repo = repo or Repository()
+    def __init__(self, repo: EmployeeRepository | None = None) -> None:
+        self._repo = repo or EmployeeRepository()
         self._employees: List[Employee] = self._repo.list_employees()
         self._counter = max((int(e.id) for e in self._employees if str(e.id).isdigit()), default=0)
 

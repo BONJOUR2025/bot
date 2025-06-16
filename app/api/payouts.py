@@ -22,22 +22,22 @@ def create_payout_router(service: PayoutService) -> APIRouter:
     async def create_payout(data: PayoutCreate):
         return await service.create_payout(data)
 
-    @router.put("/{idx}", response_model=Payout)
-    async def update_payout(idx: int, update: PayoutUpdate):
-        updated = await service.update_payout(idx, update)
+    @router.put("/{payout_id}", response_model=Payout)
+    async def update_payout(payout_id: str, update: PayoutUpdate):
+        updated = await service.update_payout(payout_id, update)
         if updated:
             return updated
-        return Payout(idx=idx, user_id="", name="", phone="", bank="", amount=0.0, method="", payout_type="", status="", timestamp="")
+        return Payout(id=payout_id, user_id="", name="", phone="", bank="", amount=0.0, method="", payout_type="", status="", timestamp="")
 
-    @router.delete("/{idx}")
-    async def delete_payout(idx: int):
-        await service.delete_payouts([idx])
+    @router.delete("/{payout_id}")
+    async def delete_payout(payout_id: str):
+        await service.delete_payouts([payout_id])
         return {"ok": True}
 
     @router.delete("/")
-    async def delete_many(indices: str):
-        idxs = [int(i) for i in indices.split(",") if i]
-        await service.delete_payouts(idxs)
+    async def delete_many(ids: str):
+        id_list = [i for i in ids.split(",") if i]
+        await service.delete_payouts(id_list)
         return {"ok": True}
 
     return router

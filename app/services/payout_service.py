@@ -1,28 +1,25 @@
-import json
-import os
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 
-from ..config import ADVANCE_REQUESTS_FILE
-from ..schemas.payout import Payout, PayoutCreate, PayoutUpdate
+from app.schemas.payout import Payout, PayoutCreate, PayoutUpdate
+from app.data.payout_repository import PayoutRepository
+
+import logging
+from pathlib import Path
+
+logger = logging.getLogger("payout_actions")
+if not logger.handlers:
+    Path("logs").mkdir(exist_ok=True)
+    handler = logging.FileHandler("logs/payout_actions.log", encoding="utf-8")
+    formatter = logging.Formatter("[%(asctime)s] %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 
 class PayoutService:
-    def __init__(self, file_path: Optional[str] = None) -> None:
-        self._file = file_path or ADVANCE_REQUESTS_FILE
-
-    def _load(self) -> List[dict]:
-        if not os.path.exists(self._file):
-            return []
-        try:
-            with open(self._file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return []
-
-    def _save(self, data: List[dict]) -> None:
-        with open(self._file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+    def __init__(self, repo: Optional[PayoutRepository] = None) -> None:
+        self._repo = repo or PayoutRepository()
 
     async def list_payouts(
         self,
@@ -32,40 +29,11 @@ class PayoutService:
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
     ) -> List[Payout]:
-        data = self._load()
-        result: List[Payout] = []
-        from_dt = datetime.fromisoformat(from_date) if from_date else None
-        to_dt = datetime.fromisoformat(to_date) if to_date else None
-        for idx, item in enumerate(data):
-            if employee_id and str(item.get("user_id")) != str(employee_id):
-                continue
-            if payout_type and item.get("payout_type") != payout_type:
-                continue
-            if status and item.get("status") != status:
-                continue
-            ts_str = item.get("timestamp")
-            created = None
-            if ts_str:
-                try:
-                    created = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    pass
-            if from_dt and created and created < from_dt:
-                continue
-            if to_dt and created and created > to_dt:
-                continue
-            result.append(Payout(idx=idx, **item))
-        def _ts(p: Payout) -> datetime:
-            try:
-                return datetime.strptime(p.timestamp, "%Y-%m-%d %H:%M:%S")
-            except Exception:
-                return datetime.min
-        result.sort(key=_ts, reverse=True)
-        return result
+        rows = self._repo.list(employee_id, payout_type, status, from_date, to_date)
+        return [Payout(**r) for r in rows]
 
     async def create_payout(self, data: PayoutCreate) -> Payout:
-        items = self._load()
-        payout_dict = {
+        payout_dict: Dict = {
             "user_id": data.user_id,
             "name": data.name,
             "phone": data.phone,
@@ -76,24 +44,24 @@ class PayoutService:
             "status": "В ожидании",
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
-        items.append(payout_dict)
-        self._save(items)
-        return Payout(idx=len(items) - 1, **payout_dict)
+        created = self._repo.create(payout_dict)
+        logger.info(
+            f"🆕 Выплата '{created['payout_type']}' на {created['amount']} ₽ для user_id {created['user_id']} — статус: {created['status']}"
+        )
+        return Payout(**created)
 
-    async def update_payout(self, idx: int, update: PayoutUpdate) -> Optional[Payout]:
-        items = self._load()
-        if 0 <= idx < len(items):
-            item = items[idx]
-            for field, value in update.model_dump(exclude_none=True).items():
-                item[field] = value
-            self._save(items)
-            return Payout(idx=idx, **item)
+    async def update_payout(self, payout_id: str, update: PayoutUpdate) -> Optional[Payout]:
+        updated = self._repo.update(payout_id, update.model_dump(exclude_none=True))
+        if updated:
+            logger.info(
+                f"✏️ Выплата {payout_id} обновлена — статус: {updated.get('status')}"
+            )
+            return Payout(**updated)
         return None
 
-    async def delete_payouts(self, indices: List[int]) -> None:
-        items = self._load()
-        for idx in sorted(set(indices), reverse=True):
-            if 0 <= idx < len(items):
-                items.pop(idx)
-        self._save(items)
+    async def delete_payouts(self, ids: List[str]) -> None:
+        if not ids:
+            return
+        self._repo.delete_many(ids)
+        logger.info(f"🗑 Удалены выплаты: {', '.join(ids)}")
 

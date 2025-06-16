@@ -578,7 +578,7 @@
       const body = document.getElementById('payouts-body');
       body.innerHTML = data.map(p => `
         <tr class='border-b'>
-          <td class='p-2'><input type="checkbox" class="payout-check" value="${p.idx}"></td>
+          <td class='p-2'><input type="checkbox" class="payout-check" value="${p.id}"></td>
           <td class='p-2'>${p.name}</td>
           <td class='p-2'>${p.payout_type}</td>
           <td class='p-2'>${p.method}</td>
@@ -586,30 +586,30 @@
           <td class='p-2'>${p.status}</td>
           <td class='p-2'>${p.timestamp}</td>
           <td class='p-2 flex gap-2'>
-            <button onclick="openEditPayout(${p.idx})" title="Редактировать">✏️</button>
-            <button onclick="deletePayout(${p.idx})" title="Удалить">🗑️</button>
+            <button onclick="openEditPayout(${p.id})" title="Редактировать">✏️</button>
+            <button onclick="deletePayout(${p.id})" title="Удалить">🗑️</button>
             ${p.status === 'В ожидании' ? `
-              <button onclick="approvePayout(${p.idx})" class='text-green-600'>✅</button>
-              <button onclick="rejectPayout(${p.idx})" class='text-red-600'>❌</button>
-              <button onclick="payPayout(${p.idx})" class='text-blue-600'>💸</button>
+              <button onclick="approvePayout(${p.id})" class='text-green-600'>✅</button>
+              <button onclick="rejectPayout(${p.id})" class='text-red-600'>❌</button>
+              <button onclick="payPayout(${p.id})" class='text-blue-600'>💸</button>
             ` : ''}
           </td>
         </tr>
       `).join('');
     }
 
-    async function approvePayout(idx) {
-      await axios.put(`/api/payouts/${idx}`, { status: 'Одобрено' });
+    async function approvePayout(id) {
+      await axios.put(`/api/payouts/${id}`, { status: 'Одобрено' });
       fetchPayouts();
     }
 
-    async function rejectPayout(idx) {
-      await axios.put(`/api/payouts/${idx}`, { status: 'Отклонено' });
+    async function rejectPayout(id) {
+      await axios.put(`/api/payouts/${id}`, { status: 'Отклонено' });
       fetchPayouts();
     }
 
-    async function payPayout(idx) {
-      await axios.put(`/api/payouts/${idx}`, { status: 'Выплачено' });
+    async function payPayout(id) {
+      await axios.put(`/api/payouts/${id}`, { status: 'Выплачено' });
       fetchPayouts();
     }
 
@@ -626,22 +626,22 @@
       document.querySelectorAll('.payout-check').forEach(cb => cb.checked = box.checked);
     }
 
-    async function deletePayout(idx) {
-      await axios.delete(`/api/payouts/${idx}`);
+    async function deletePayout(id) {
+      await axios.delete(`/api/payouts/${id}`);
       fetchPayouts();
     }
 
     async function deleteSelectedPayouts() {
       const ids = Array.from(document.querySelectorAll('.payout-check:checked')).map(cb => cb.value);
       if (!ids.length) return;
-      await axios.delete(`/api/payouts/`, { params: { indices: ids.join(',') } });
+      await axios.delete(`/api/payouts/`, { params: { ids: ids.join(',') } });
       fetchPayouts();
     }
 
     let editingPayout = null;
-    function openEditPayout(idx) {
-      editingPayout = idx;
-      const item = lastPayouts.find(p => p.idx === idx);
+    function openEditPayout(id) {
+      editingPayout = id;
+      const item = lastPayouts.find(p => p.id === id);
       if (!item) return;
       openPayoutModal();
       document.getElementById('payout-emp').value = item.user_id;
