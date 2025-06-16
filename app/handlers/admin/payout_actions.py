@@ -12,8 +12,9 @@ from ...keyboards.reply_admin import get_admin_menu
 from ...services.advance_requests import (
     load_advance_requests,
     save_advance_requests,
-    update_request_status,
+    API_URL,
 )
+import requests
 from ...utils.logger import log
 
 
@@ -32,7 +33,11 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await query.edit_message_text("❌ Нет активного запроса для одобрения.")
         return
 
-    update_request_status(user_id, "Одобрено")
+    try:
+        requests.put(f"{API_URL}/payouts/{request_to_approve['idx']}", json={"status": "Одобрено"})
+        log(f"✅ Статус выплаты {request_to_approve['idx']} обновлён на Одобрено")
+    except Exception as e:
+        log(f"❌ Ошибка обновления статуса выплаты: {e}")
 
     payout_type = request_to_approve.get("payout_type") or "Не указано"
     user_message = (
@@ -85,7 +90,11 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await query.edit_message_text("❌ Нет активного запроса для отклонения.")
         return
 
-    update_request_status(user_id, "Отклонено")
+    try:
+        requests.put(f"{API_URL}/payouts/{request_to_deny['idx']}", json={"status": "Отклонено"})
+        log(f"✅ Статус выплаты {request_to_deny['idx']} обновлён на Отклонено")
+    except Exception as e:
+        log(f"❌ Ошибка обновления статуса выплаты: {e}")
 
     payout_type = request_to_deny.get("payout_type") or "Не указано"
     user_message = (
