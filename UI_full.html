@@ -1,338 +1,186 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Employee Admin</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Панель администратора</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 text-gray-800 leading-relaxed">
-
-<nav class="bg-white shadow-md">
-  <div class="container mx-auto px-4 py-3 flex items-center justify-between">
-    <div class="text-xl font-semibold">Admin</div>
-    <button id="menuButton" class="md:hidden">
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-      </svg>
-    </button>
-    <div id="navLinks" class="hidden md:flex space-x-6">
-      <a href="#" class="text-blue-600 font-semibold">Сотрудники</a>
-      <a href="#" class="text-gray-700 hover:text-blue-600">Выплаты</a>
-      <a href="#" class="text-gray-700 hover:text-blue-600">Отчёты</a>
-      <a href="#" class="text-gray-700 hover:text-blue-600">Дни рождения</a>
-      <a href="#" class="text-gray-700 hover:text-blue-600">Рассылки</a>
-      <a href="#" class="text-gray-700 hover:text-blue-600">Настройки</a>
+<body class="bg-gray-100">
+  <header class="bg-white shadow sticky top-0 z-10">
+    <div class="container mx-auto flex justify-between items-center px-4 py-4">
+      <h1 class="text-xl font-bold">Добро пожаловать, Администратор!</h1>
+      <nav class="flex gap-4 text-sm">
+        <a href="#" onclick="showTab('employees')">Сотрудники</a>
+        <a href="#" onclick="showTab('payouts')">Выплаты</a>
+        <a href="#" onclick="showTab('reports')">Отчёты</a>
+        <a href="#" onclick="showTab('birthdays')">Дни рождения</a>
+        <a href="#" onclick="showTab('broadcasts')">Рассылки</a>
+        <a href="#" onclick="showTab('settings')">Настройки</a>
+      </nav>
     </div>
-  </div>
-  <div id="mobileMenu" class="md:hidden px-4 pb-3 space-y-1 hidden">
-    <a href="#" class="block py-1 text-blue-600 font-semibold">Сотрудники</a>
-    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Выплаты</a>
-    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Отчёты</a>
-    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Дни рождения</a>
-    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Рассылки</a>
-    <a href="#" class="block py-1 text-gray-700 hover:text-blue-600">Настройки</a>
-  </div>
-</nav>
-<div class="container mx-auto py-6 mt-8">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div class="bg-white p-4 rounded-xl shadow-md">
-            <div class="text-gray-500">Всего сотрудников</div>
-            <div id="totalEmployees" class="text-2xl font-bold">0</div>
-        </div>
-        <div class="bg-white p-4 rounded-xl shadow-md">
-            <div class="text-gray-500">Активных заявок</div>
-            <div id="activeRequests" class="text-2xl font-bold">0</div>
-        </div>
-        <div class="bg-white p-4 rounded-xl shadow-md">
-            <div class="text-gray-500">Отправлено сегодня</div>
-            <div id="sentToday" class="text-2xl font-bold">0</div>
-        </div>
-        <div class="bg-white p-4 rounded-xl shadow-md">
-            <div class="text-gray-500">Ближайший день рождения</div>
-            <div id="nextBirthday" class="text-2xl font-bold">-</div>
-        </div>
-    </div>
-    <div class="flex flex-col md:flex-row">
-    <div class="md:w-3/4 md:pr-4">
-        <div class="flex justify-between items-center mb-4">
-            <h1 class="text-2xl font-semibold">Employees</h1>
-            <button id="addBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow">Add Employee</button>
-        </div>
-    <div class="mb-4">
-        <label for="statusFilter" class="mr-2">Status:</label>
-        <select id="statusFilter" class="border border-gray-300 p-2 rounded-md">
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-        </select>
-    </div>
-<div class="overflow-x-auto bg-white p-4 rounded-xl shadow-md">
-    <table class="min-w-full bg-white text-sm">
-        <thead class="bg-gray-50">
-        <tr>
-            <th class="py-2 px-4 border-b text-left">ID</th>
-            <th class="py-2 px-4 border-b text-left">Full Name</th>
-            <th class="py-2 px-4 border-b text-left">Phone</th>
-            <th class="py-2 px-4 border-b text-left">Bank</th>
-            <th class="py-2 px-4 border-b text-left">Card</th>
-            <th class="py-2 px-4 border-b text-left">Birthdate</th>
-            <th class="py-2 px-4 border-b text-left">Status</th>
-            <th class="py-2 px-4 border-b text-left">Photo</th>
-            <th class="py-2 px-4 border-b text-left">Actions</th>
-        </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-    </table>
-</div>
-    </div>
-    <div class="md:w-1/4 mt-6 md:mt-0 bg-white p-4 rounded-xl shadow-md" id="historyBlock">
-        <h2 class="text-xl font-semibold mb-2">История действий</h2>
-        <ul id="notifications" class="space-y-2 text-sm">
-        </ul>
-    </div>
-    </div>
-</div>
+  </header>
 
-<div id="toast" class="shadow-md rounded-md fixed top-5 right-5 hidden"></div>
+  <main class="container mx-auto px-4 py-6 space-y-8">
+    <section id="employees" class="tab-section">
+      <h2 class="text-lg font-semibold mb-4">Сотрудники</h2>
+      <table class="min-w-full bg-white border" id="employee-table"></table>
+      <form onsubmit="submitEmployee(); return false;" class="mt-4 space-y-2">
+        <input id="name" class="border p-2 w-full" placeholder="ФИО" required />
+        <input id="phone" class="border p-2 w-full" placeholder="Телефон" required />
+        <input id="note" class="border p-2 w-full" placeholder="Примечание" />
+        <input id="birthday" type="date" class="border p-2 w-full" placeholder="Дата рождения" />
+        <input id="photo" type="file" class="border p-2 w-full" accept="image/*" />
+        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Создать</button>
+      </form>
+    </section>
 
-<!-- Modal -->
-<div id="modal" class="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-white p-6 rounded-xl shadow-md w-full max-w-lg mx-auto">
-        <h2 id="modalTitle" class="text-xl font-bold mb-4">Add Employee</h2>
-        <form id="employeeForm" class="space-y-3">
-            <input type="hidden" id="employeeId">
-            <div>
-                <label class="block">Full Name</label>
-                <input type="text" id="fullName" class="border border-gray-300 p-2 rounded-md w-full" required>
-            </div>
-            <div>
-                <label class="block">Phone</label>
-                <input type="text" id="phone" class="border border-gray-300 p-2 rounded-md w-full" required>
-            </div>
-            <div>
-                <label class="block">Bank</label>
-                <input type="text" id="bank" class="border border-gray-300 p-2 rounded-md w-full" required>
-            </div>
-            <div>
-                <label class="block">Card Number</label>
-                <input type="text" id="cardNumber" class="border border-gray-300 p-2 rounded-md w-full" required>
-            </div>
-            <div>
-                <label class="block">Birthdate</label>
-                <input type="date" id="birthdate" class="border border-gray-300 p-2 rounded-md w-full">
-            </div>
-            <div>
-                <label class="block">Note</label>
-                <textarea id="note" class="border border-gray-300 p-2 rounded-md w-full"></textarea>
-            </div>
-            <div>
-                <label class="block">Status</label>
-                <select id="status" class="border border-gray-300 p-2 rounded-md w-full">
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
-            </div>
-            <div>
-                <label class="block">Photo</label>
-                <input type="file" id="photo" accept="image/*" class="border border-gray-300 p-2 rounded-md w-full">
-            </div>
-            <div class="flex justify-end space-x-2 pt-4">
-                <button type="button" id="cancelBtn" class="px-4 py-2 border border-gray-300 rounded-md bg-gray-100 hover:bg-gray-200">Cancel</button>
-                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow">Save</button>
-            </div>
-        </form>
-    </div>
-</div>
+    <section id="payouts" class="tab-section hidden">
+      <h2 class="text-lg font-semibold mb-4">Выплаты</h2>
+      <div id="payout-table">Загрузка...</div>
+    </section>
 
-<script>
-const api = axios.create({ baseURL: '/employees' });
-let employees = [];
+    <section id="reports" class="tab-section hidden">
+      <h2 class="text-lg font-semibold mb-4">Отчёты</h2>
+      <button onclick="downloadReport()" class="bg-indigo-600 text-white px-4 py-2 rounded">📄 Скачать PDF</button>
+    </section>
 
-function addNotification(message) {
-    const list = document.getElementById('notifications');
-    const item = document.createElement('li');
-    item.textContent = message;
-    item.className = 'bg-white p-3 rounded shadow';
-    list.prepend(item);
-}
+    <section id="birthdays" class="tab-section hidden">
+      <h2 class="text-lg font-semibold mb-4">Ближайшие дни рождения</h2>
+      <ul id="birthday-list" class="list-disc pl-5 text-sm"></ul>
+    </section>
 
-function showToast(message, type='info') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.className = `px-4 py-2 rounded shadow text-white mb-2 ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
-    toast.classList.remove('hidden');
-    setTimeout(() => toast.classList.add('hidden'), 3000);
-}
+    <section id="broadcasts" class="tab-section hidden">
+      <h2 class="text-lg font-semibold mb-4">Создать рассылку</h2>
+      <textarea id="broadcastText" class="w-full border p-2"></textarea>
+      <button onclick="sendBroadcast()" class="mt-2 bg-green-600 text-white px-4 py-2 rounded">Отправить</button>
+    </section>
 
-async function loadEmployees() {
-    try {
-        const res = await api.get('/');
-        employees = res.data;
-        populateEmployeeTable();
-        updateStats();
-        addNotification('Employees loaded');
-    } catch (err) {
+    <section id="settings" class="tab-section hidden">
+      <h2 class="text-lg font-semibold mb-4">Настройки</h2>
+      <button onclick="resetStorage()" class="bg-red-500 text-white px-4 py-2 rounded">Сбросить user.json</button>
+    </section>
+  </main>
+
+  <footer class="text-center text-xs text-gray-400 py-4">
+    Система администрирования · версия 1.0
+  </footer>
+
+  <script>
+    function showTab(tab) {
+      document.querySelectorAll('.tab-section').forEach(el => el.classList.add('hidden'));
+      document.getElementById(tab).classList.remove('hidden');
+    }
+
+    async function loadEmployees() {
+      try {
+        const res = await axios.get("/employees/");
+        const table = document.getElementById("employee-table");
+        table.innerHTML = `
+          <thead><tr class='bg-gray-200'>
+            <th class='p-2'>ФИО</th><th>Телефон</th><th>Прим.</th><th>Дата рождения</th><th>Фото</th><th>Действия</th>
+          </tr></thead>
+          <tbody>
+            ${res.data.map(e => `
+              <tr class='border-t'>
+                <td class='p-2'>${e.name}</td>
+                <td>${e.phone}</td>
+                <td>${e.note || ''}</td>
+                <td>${e.birthday || ''}</td>
+                <td>${e.photo_url ? `<img src="${e.photo_url}" class='h-10'>` : ''}</td>
+                <td>
+                  <button onclick="deleteEmployee('${e.id}')" class='text-red-500'>Удалить</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>`;
+      } catch (err) {
         console.error(err);
-        showToast('Failed to load employees', 'error');
+      }
     }
-}
 
-function reloadEmployees() {
-    loadEmployees();
-}
-
-function populateEmployeeTable() {
-    const tbody = document.getElementById('tableBody');
-    tbody.innerHTML = '';
-    const filter = document.getElementById('statusFilter').value;
-    const filtered = employees.filter(e => filter === 'all' || e.status === filter);
-    filtered.forEach(emp => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="border px-4 py-2">${emp.id}</td>
-            <td class="border px-4 py-2">${emp.full_name}</td>
-            <td class="border px-4 py-2">${emp.phone}</td>
-            <td class="border px-4 py-2">${emp.bank}</td>
-            <td class="border px-4 py-2">${emp.card_number}</td>
-            <td class="border px-4 py-2">${emp.birthdate || ''}</td>
-            <td class="border px-4 py-2">${emp.status}</td>
-            <td class="border px-4 py-2">${emp.photo_url ? `<a href="${emp.photo_url}" target="_blank">View</a>` : ''}</td>
-            <td class="border px-4 py-2 space-x-2">
-                <button class="text-blue-600" onclick="openModal('${emp.id}')">Edit</button>
-                <button class="text-red-600" onclick="deleteEmployee('${emp.id}')">Delete</button>
-            </td>`;
-        tbody.appendChild(tr);
-    });
-}
-
-function updateStats() {
-    document.getElementById('totalEmployees').textContent = employees.length;
-    document.getElementById('activeRequests').textContent = employees.filter(e => e.status === 'active').length;
-    document.getElementById('sentToday').textContent = '0';
-    const upcoming = employees
-        .filter(e => e.birthdate)
-        .sort((a, b) => new Date(a.birthdate) - new Date(b.birthdate));
-    document.getElementById('nextBirthday').textContent = upcoming.length ? upcoming[0].full_name : '-';
-}
-
-async function openModal(id=null) {
-    const modal = document.getElementById('modal');
-    document.getElementById('employeeForm').reset();
-    document.getElementById('employeeId').value = '';
-    document.getElementById('photo').value = '';
-    if (id) {
-        try {
-            const res = await api.get(`/${id}`);
-            const emp = res.data;
-            document.getElementById('modalTitle').textContent = 'Edit Employee';
-            document.getElementById('employeeId').value = emp.id;
-            document.getElementById('fullName').value = emp.full_name;
-            document.getElementById('phone').value = emp.phone;
-            document.getElementById('bank').value = emp.bank;
-            document.getElementById('cardNumber').value = emp.card_number;
-            document.getElementById('birthdate').value = emp.birthdate || '';
-            document.getElementById('note').value = emp.note || '';
-            document.getElementById('status').value = emp.status;
-        } catch (err) {
-            console.error(err);
-            showToast('Failed to load employee', 'error');
-            return;
-        }
-    } else {
-        document.getElementById('modalTitle').textContent = 'Add Employee';
-    }
-    modal.classList.remove('hidden');
-}
-
-function closeModal() {
-    document.getElementById('modal').classList.add('hidden');
-}
-
-document.getElementById('addBtn').addEventListener('click', () => openModal());
-document.getElementById('cancelBtn').addEventListener('click', closeModal);
-
-document.getElementById('statusFilter').addEventListener('change', populateEmployeeTable);
-
-async function submitEmployee(event) {
-    event.preventDefault();
-    const id = document.getElementById('employeeId').value;
-    const data = {
-        full_name: document.getElementById('fullName').value.trim(),
-        phone: document.getElementById('phone').value.trim(),
-        bank: document.getElementById('bank').value.trim(),
-        card_number: document.getElementById('cardNumber').value.trim(),
-        birthdate: document.getElementById('birthdate').value || null,
-        note: document.getElementById('note').value.trim(),
-        status: document.getElementById('status').value
-    };
-    if (!data.full_name || !data.phone || !data.bank || !data.card_number) {
-        showToast('Please fill required fields', 'error');
-        return;
-    }
-    try {
-        if (id) {
-            await editEmployee(id, data);
-            return;
-        }
-        const res = await api.post('/', data);
-        const empId = res.data.id;
-        const file = document.getElementById('photo').files[0];
+    async function submitEmployee() {
+      const form = new FormData();
+      form.append("name", document.getElementById("name").value);
+      form.append("phone", document.getElementById("phone").value);
+      form.append("note", document.getElementById("note").value);
+      form.append("birthday", document.getElementById("birthday").value);
+      const file = document.getElementById("photo").files[0];
+      try {
+        const res = await axios.post("/employees/", Object.fromEntries(form), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const id = res.data.id;
         if (file) {
-            const formData = new FormData();
-            formData.append('file', file);
-            await api.post(`/${empId}/photo`, formData, {
-                headers: {'Content-Type': 'multipart/form-data'}
-            });
+          const photoForm = new FormData();
+          photoForm.append("file", file);
+          await axios.post(`/employees/${id}/photo`, photoForm);
         }
-        showToast('Employee added');
-        addNotification('Employee added');
-        closeModal();
-        reloadEmployees();
-    } catch (err) {
+        await loadEmployees();
+        alert("Сотрудник создан");
+      } catch (err) {
         console.error(err);
-        showToast('Save failed', 'error');
+      }
     }
-}
 
-async function editEmployee(id, data) {
-    try {
-        await api.put(`/${id}`, data);
-        const file = document.getElementById('photo').files[0];
-        if (file) {
-            const formData = new FormData();
-            formData.append('file', file);
-            await api.post(`/${id}/photo`, formData, {
-                headers: {'Content-Type': 'multipart/form-data'}
-            });
-        }
-        showToast('Employee updated');
-        addNotification('Employee updated');
-        closeModal();
-        reloadEmployees();
-    } catch (err) {
+    async function deleteEmployee(id) {
+      try {
+        await axios.delete(`/employees/${id}`);
+        await loadEmployees();
+      } catch (err) {
         console.error(err);
-        showToast('Update failed', 'error');
+      }
     }
-}
-document.getElementById('employeeForm').addEventListener('submit', submitEmployee);
 
-async function deleteEmployee(id) {
-    if (!confirm('Delete employee?')) return;
-    try {
-        await api.delete(`/${id}`);
-        showToast('Deleted');
-        addNotification('Employee deleted');
-        reloadEmployees();
-    } catch (err) {
+    async function sendBroadcast() {
+      const text = document.getElementById("broadcastText").value;
+      try {
+        await axios.post("/broadcast/", { message: text });
+        alert("Рассылка отправлена");
+      } catch (err) {
         console.error(err);
-        showToast('Delete failed', 'error');
+      }
     }
-}
-document.getElementById("menuButton").addEventListener("click", () => document.getElementById("mobileMenu").classList.toggle("hidden"));
 
-window.addEventListener('load', loadEmployees);
-</script>
+    async function downloadReport() {
+      try {
+        const res = await axios.get("/reports/pdf", { responseType: 'blob' });
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'report.pdf');
+        document.body.appendChild(link);
+        link.click();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function resetStorage() {
+      try {
+        await axios.post("/employees/reset");
+        await loadEmployees();
+        alert("user.json сброшен");
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadBirthdays() {
+      try {
+        const res = await axios.get("/employees/birthdays");
+        const list = document.getElementById("birthday-list");
+        list.innerHTML = res.data.map(e => `<li>${e.name} – ${e.birthday}</li>`).join('');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    window.onload = () => {
+      loadEmployees();
+      loadBirthdays();
+    }
+  </script>
 </body>
 </html>
