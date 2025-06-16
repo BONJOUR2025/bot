@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
-from app.utils.config import ADVANCE_REQUESTS_FILE
+from app.config import ADVANCE_REQUESTS_FILE
 
 
 class PayoutRepository:
