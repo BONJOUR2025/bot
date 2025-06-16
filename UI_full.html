@@ -95,9 +95,41 @@
     </section>
 
     <!-- PAYOUTS SECTION -->
-    <section id="payouts" class="hidden">
-      <h2 class="text-xl font-semibold mb-2">Выплаты</h2>
-      <div id="payouts-content" class="text-sm">Загрузка...</div>
+    <section id="payouts" class="hidden space-y-4">
+      <h2 class="text-xl font-semibold">Выплаты</h2>
+      <div class="flex flex-wrap gap-2 items-end">
+        <select id="payout-type-filter" class="border p-2">
+          <option value="">Все типы</option>
+          <option value="Аванс">Аванс</option>
+          <option value="ЗП">ЗП</option>
+          <option value="Доплата">Доплата</option>
+        </select>
+        <select id="payout-status-filter" class="border p-2">
+          <option value="">Все статусы</option>
+          <option value="pending">pending</option>
+          <option value="approved">approved</option>
+          <option value="sent">sent</option>
+          <option value="rejected">rejected</option>
+        </select>
+        <select id="payout-employee-filter" class="border p-2">
+          <option value="">Все сотрудники</option>
+        </select>
+        <input id="payout-from" type="date" class="border p-2">
+        <input id="payout-to" type="date" class="border p-2">
+        <button onclick="fetchPayouts()" class="bg-blue-500 text-white px-4 py-2 rounded">Поиск</button>
+        <button onclick="openPayoutModal()" class="bg-green-600 text-white px-4 py-2 rounded ml-auto">Создать выплату</button>
+      </div>
+      <div class="overflow-x-auto shadow rounded bg-white">
+        <table class="min-w-full text-sm table-auto">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="p-2">ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th><th>Комментарий</th>
+              <th>Статус</th><th>Создано</th><th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="payouts-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- BIRTHDAYS SECTION -->
@@ -145,6 +177,28 @@
     </div>
   </div>
 
+  <div id="payout-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+    <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
+      <h2 class="text-xl font-semibold">Создать выплату</h2>
+      <select id="payout-emp" class="border p-2 w-full"></select>
+      <input id="payout-amount" type="number" class="border p-2 w-full" placeholder="Сумма">
+      <select id="payout-type" class="border p-2 w-full">
+        <option value="Аванс">Аванс</option>
+        <option value="ЗП">ЗП</option>
+        <option value="Доплата">Доплата</option>
+      </select>
+      <select id="payout-method" class="border p-2 w-full">
+        <option value="На карту">На карту</option>
+        <option value="Наличными">Наличными</option>
+      </select>
+      <textarea id="payout-comment" class="border p-2 w-full" placeholder="Комментарий"></textarea>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closePayoutModal()" class="px-4 py-2">Отмена</button>
+        <button onclick="submitPayout()" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="fixed top-2 right-2 px-4 py-2 rounded shadow hidden"></div>
 
   <script>
@@ -154,7 +208,14 @@
     function showSection(id) {
       document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
       const el = document.getElementById(id);
-      if (el) el.classList.remove('hidden');
+      if (el) {
+        el.classList.remove('hidden');
+        if (id === 'payouts') {
+          const sel = document.getElementById('payout-employee-filter');
+          sel.innerHTML = '<option value="">Все сотрудники</option>' + employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+          fetchPayouts();
+        }
+      }
     }
 
     function addNotify(text) {
@@ -456,6 +517,81 @@
           body.innerHTML += `<tr><td style="background-color:${color};font-weight:bold;">${item.point}</td><td>${item.employee || '-'}</td></tr>`;
         });
       }).catch(err => console.error(err));
+    }
+
+    async function fetchPayouts() {
+      const params = {
+        type: document.getElementById('payout-type-filter').value,
+        status: document.getElementById('payout-status-filter').value,
+        employee_id: document.getElementById('payout-employee-filter').value,
+        from_date: document.getElementById('payout-from').value,
+        to_date: document.getElementById('payout-to').value,
+      };
+      try {
+        const res = await axios.get('/payouts', { params });
+        renderPayoutTable(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderPayoutTable(data) {
+      const body = document.getElementById('payouts-body');
+      body.innerHTML = data.map(p => `
+        <tr class='border-b'>
+          <td class='p-2'>${p.name}</td>
+          <td class='p-2'>${p.type}</td>
+          <td class='p-2'>${p.method}</td>
+          <td class='p-2'>${formatRub(p.amount)}</td>
+          <td class='p-2'>${p.comment || ''}</td>
+          <td class='p-2'>${p.status}</td>
+          <td class='p-2'>${new Date(p.created_at).toLocaleDateString()}</td>
+          <td class='p-2'>${p.status === 'pending' ? `
+            <button onclick="approvePayout('${p.id}')" class='text-green-600'>✅</button>
+            <button onclick="rejectPayout('${p.id}')" class='text-red-600 ml-2'>❌</button>` : ''}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function approvePayout(id) {
+      await axios.put(`/payouts/${id}`, { status: 'approved' });
+      fetchPayouts();
+    }
+
+    async function rejectPayout(id) {
+      await axios.put(`/payouts/${id}`, { status: 'rejected' });
+      fetchPayouts();
+    }
+
+    function openPayoutModal() {
+      const sel = document.getElementById('payout-emp');
+      sel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+      document.getElementById('payout-modal').classList.remove('hidden');
+    }
+
+    function closePayoutModal() {
+      document.getElementById('payout-modal').classList.add('hidden');
+    }
+
+    async function submitPayout() {
+      const payload = {
+        user_id: document.getElementById('payout-emp').value,
+        name: employees.find(e => e.id === document.getElementById('payout-emp').value)?.full_name || '',
+        amount: Number(document.getElementById('payout-amount').value || 0),
+        type: document.getElementById('payout-type').value,
+        method: document.getElementById('payout-method').value,
+        comment: document.getElementById('payout-comment').value
+      };
+      try {
+        await axios.post('/payouts', payload);
+        closePayoutModal();
+        fetchPayouts();
+        showToast('Выплата создана');
+      } catch (err) {
+        console.error(err);
+        showToast('Ошибка', true);
+      }
     }
 
     window.onload = () => {

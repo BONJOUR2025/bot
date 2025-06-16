@@ -7,9 +7,11 @@ from ..core.application import create_application
 from .employees import create_employee_router
 from .salary import create_salary_router
 from .schedule import create_schedule_router
+from .payouts import create_payout_router
 from ..services.employee_service import EmployeeService, EmployeeAPIService
 from ..services.salary_service import SalaryService
 from ..services.schedule_service import ScheduleService
+from ..services.payout_service import PayoutService
 
 
 def create_app() -> FastAPI:
@@ -41,6 +43,9 @@ def create_app() -> FastAPI:
 
     schedule_service = ScheduleService()
     app.include_router(create_schedule_router(schedule_service))
+
+    payout_service = PayoutService()
+    app.include_router(create_payout_router(payout_service))
 
     # Admin UI routes
     from .admin_ui import router as admin_router
