@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -25,7 +25,7 @@ class EmployeeUpdate(EmployeeBase):
 
 class EmployeeOut(EmployeeBase):
     id: str
-    created_at: str
+    created_at: datetime
 
 
 class Employee(BaseModel):
