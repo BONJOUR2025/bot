@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Админка{% endblock %}</title>
+  <title>Админка</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -11,18 +11,35 @@
   <header class="bg-white dark:bg-gray-900 shadow">
     <nav class="container mx-auto flex justify-between items-center p-4">
       <div class="flex gap-4">
-        <a href="/" class="hover:text-blue-600">Сотрудники</a>
-        <a href="/payouts" class="hover:text-blue-600">Выплаты</a>
-        <a href="/reports" class="hover:text-blue-600">Отчёты</a>
-        <a href="/birthdays" class="hover:text-blue-600">Дни рождения</a>
-        <a href="/broadcasts" class="hover:text-blue-600">Рассылки</a>
-        <a href="/settings" class="hover:text-blue-600">Настройки</a>
+        <a href="#" onclick="loadPage('/employees')" class="hover:text-blue-600">Сотрудники</a>
+        <a href="#" onclick="loadPage('/payouts')" class="hover:text-blue-600">Выплаты</a>
+        <a href="#" onclick="loadPage('/reports')" class="hover:text-blue-600">Отчёты</a>
+        <a href="#" onclick="loadPage('/birthdays')" class="hover:text-blue-600">Дни рождения</a>
+        <a href="#" onclick="loadPage('/broadcasts')" class="hover:text-blue-600">Рассылки</a>
+        <a href="#" onclick="loadPage('/settings')" class="hover:text-blue-600">Настройки</a>
       </div>
       <button onclick="document.documentElement.classList.toggle('dark')" class="text-sm">🌙</button>
     </nav>
   </header>
   <main class="container mx-auto p-4">
-    {% block content %}{% endblock %}
+    <div id="page-content"></div>
   </main>
+  <script>
+    function loadPage(url) {
+      fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const container = document.getElementById('page-content');
+          container.innerHTML = html;
+          container.querySelectorAll('script').forEach(s => {
+            const copy = document.createElement('script');
+            if (s.src) copy.src = s.src; else copy.textContent = s.textContent;
+            document.body.appendChild(copy);
+            document.body.removeChild(copy);
+          });
+        });
+    }
+    window.onload = () => loadPage('/employees');
+  </script>
 </body>
 </html>

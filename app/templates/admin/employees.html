@@ -1,6 +1,3 @@
-{% extends 'admin/layout.html' %}
-{% block title %}Сотрудники{% endblock %}
-{% block content %}
 <h1 class="text-2xl font-semibold mb-4">Сотрудники</h1>
 <table class="min-w-full bg-white border mb-4" id="employee-table"></table>
 <form onsubmit="submitEmployee(); return false;" class="space-y-2 max-w-md">
@@ -74,4 +71,3 @@ window.onload = () => {
   loadEmployees();
 };
 </script>
-{% endblock %}
