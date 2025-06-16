@@ -1,64 +1,63 @@
-import json
-import os
+"""Helpers for accessing employees via the local REST API instead of JSON files."""
+
 from dataclasses import asdict
 from typing import Dict, Any
 
-from ..config import USERS_FILE
+import requests
+
 from ..utils.logger import log
 from ..models import User
 
+# Base URL of the FastAPI application running locally
+API_URL = "http://localhost:8000"
+
 
 def load_users() -> Dict[str, Any]:
-    """Загружает пользователей из JSON-файла."""
-    if not USERS_FILE or not os.path.exists(USERS_FILE):
-        log(f"⚠️ Файл {USERS_FILE} не найден!")
-        return {}
+    """Fetch users via the local API."""
     try:
-        with open(USERS_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
+        resp = requests.get(f"{API_URL}/employees/")
+        resp.raise_for_status()
+        items = resp.json()
+        return {str(item.get("id")): item for item in items}
     except Exception as e:
-        log(f"❌ Ошибка чтения {USERS_FILE}: {e}")
+        log(f"❌ Ошибка загрузки сотрудников через API: {e}")
         return {}
 
 
-def save_users(users: Dict[str, Any]) -> None:
-    """Сохраняет словарь users в JSON-файл."""
-    directory = os.path.dirname(USERS_FILE)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    try:
-        with open(USERS_FILE, "w", encoding="utf-8") as f:
-            json.dump(users, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        log(f"❌ Ошибка сохранения {USERS_FILE}: {e}")
+def save_users(_users: Dict[str, Any]) -> None:
+    """Deprecated helper to keep compatibility."""
+    log("⚠️ save_users is deprecated when using the API")
 
 
 def load_users_dataclass() -> Dict[str, User]:
-    """Загружает пользователей как объекты User."""
+    """Load users and convert to :class:`User` objects."""
     raw = load_users()
     return {uid: User(**data) for uid, data in raw.items()}
 
 
 def save_users_dataclass(users: Dict[str, User]) -> None:
-    """Сохраняет словарь объектов User."""
-    save_users({uid: asdict(user) for uid, user in users.items()})
+    """Deprecated; sends updates via the API instead."""
+    for uid, user in users.items():
+        update_user(uid, asdict(user))
 
 
 def add_user(user_id: str, user_data: Dict[str, Any]) -> None:
-    users = load_users()
-    users[user_id] = user_data
-    save_users(users)
+    payload = {"id": user_id, **user_data}
+    try:
+        requests.post(f"{API_URL}/employees/", json=payload)
+    except Exception as e:
+        log(f"❌ Ошибка создания сотрудника через API: {e}")
 
 
 def update_user(user_id: str, fields: Dict[str, Any]) -> None:
-    users = load_users()
-    if user_id in users:
-        users[user_id].update(fields)
-        save_users(users)
+    try:
+        requests.put(f"{API_URL}/employees/{user_id}", json=fields)
+    except Exception as e:
+        log(f"❌ Ошибка обновления сотрудника через API: {e}")
 
 
 def delete_user(user_id: str) -> None:
-    users = load_users()
-    if user_id in users:
-        users.pop(user_id)
-        save_users(users)
+    try:
+        requests.delete(f"{API_URL}/employees/{user_id}")
+    except Exception as e:
+        log(f"❌ Ошибка удаления сотрудника через API: {e}")
