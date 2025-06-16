@@ -26,3 +26,14 @@ class EmployeeUpdate(EmployeeBase):
 class EmployeeOut(EmployeeBase):
     id: str
     created_at: str
+
+
+class Employee(BaseModel):
+    """Employee entry as stored in ``user.json``."""
+
+    id: str
+    name: str
+    phone: str
+    note: Optional[str] = None
+    photo_url: Optional[str] = None
+
