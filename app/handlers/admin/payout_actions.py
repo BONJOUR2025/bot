@@ -23,7 +23,10 @@ import requests
 from ...utils.logger import log
 
 
-async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    requests.post(
+        f"{API_URL}/telegram/send_message",
+        json={"user_id": user_id, "message": user_message},
+    )
     query = update.callback_query
     await query.answer()
     user_id = query.data.split("_")[-1]
@@ -78,7 +81,10 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 chat_id=CARD_DISPATCH_CHAT_ID,
                 text=cashier_text,
                 reply_markup=cashier_buttons,
-            )
+    requests.post(
+        f"{API_URL}/telegram/send_message",
+        json={"user_id": user_id, "message": user_message},
+    )
             log(f"📨 [allow_payout] Сообщение кассиру отправлено для user_id: {user_id}")
         except Exception as e:
             log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")

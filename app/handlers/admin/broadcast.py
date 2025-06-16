@@ -8,6 +8,9 @@ from telegram import (
     InlineKeyboardMarkup,
 )
 from telegram.ext import Application, ContextTypes, ConversationHandler
+import requests
+
+from ...services.advance_requests import API_URL
 
 from ...config import ADMIN_ID
 from ...services.users import load_users
@@ -22,7 +25,10 @@ async def send_message(
     """Отправляет сообщение конкретному пользователю."""
     try:
         if message.text:
-            await app.bot.send_message(chat_id=user_id, text=message.text)
+            requests.post(
+                f"{API_URL}/telegram/send_message",
+                json={"user_id": str(user_id), "message": message.text},
+            )
         elif message.photo:
             await app.bot.send_photo(
                 chat_id=user_id,
