@@ -34,7 +34,7 @@ def create_app() -> FastAPI:
     salary_service = SalaryService(employee_service._repo)
     app.include_router(create_salary_router(salary_service))
 
-    schedule_service = ScheduleService(employee_service._repo)
+    schedule_service = ScheduleService()
     app.include_router(create_schedule_router(schedule_service))
 
     # Admin UI routes
