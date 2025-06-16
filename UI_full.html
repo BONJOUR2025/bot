@@ -363,6 +363,11 @@
       }
     }
 
+    function formatRub(amount) {
+      const num = Number(amount) || 0;
+      return num.toLocaleString('ru-RU') + ' ₽';
+    }
+
     function renderSalaryTable(data) {
       const container = document.getElementById('salary-table-container');
       if (!data || !data.length) {
@@ -372,14 +377,22 @@
       let html = `<table class='min-w-full text-sm'><thead><tr class='bg-gray-200'>` +
         '<th class="p-2 text-left">Имя</th>' +
         '<th class="p-2 text-left">Месяц</th>' +
-        '<th class="p-2 text-left">ЗП</th>' +
+        '<th class="p-2 text-left">Оклад</th>' +
+        '<th class="p-2 text-left">Премия (KPI)</th>' +
+        '<th class="p-2 text-left">Бонусы</th>' +
+        '<th class="p-2 text-left">Удержания</th>' +
+        '<th class="p-2 text-left">Итог</th>' +
         '<th class="p-2 text-left">Комментарий</th>' +
         '</tr></thead><tbody>';
       html += data.map(r => `
         <tr class='border-b'>
           <td class='p-2'>${r.name}</td>
           <td class='p-2'>${r.month}</td>
-          <td class='p-2'>${r.amount.toLocaleString('ru-RU', {style:'currency', currency:'RUB'})}</td>
+          <td class='p-2'>${formatRub(r.base_salary)}</td>
+          <td class='p-2'>${formatRub(r.kpi_bonus)}</td>
+          <td class='p-2'>${formatRub(r.attendance_bonus)}</td>
+          <td class='p-2'>${formatRub(r.deductions)}</td>
+          <td class='p-2 font-semibold'>${formatRub(r.final_amount)}</td>
           <td class='p-2'>${r.comment || ''}</td>
         </tr>`).join('');
       html += '</tbody></table>';
