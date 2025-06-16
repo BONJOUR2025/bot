@@ -36,7 +36,7 @@ class PayoutService:
         result: List[Payout] = []
         from_dt = datetime.fromisoformat(from_date) if from_date else None
         to_dt = datetime.fromisoformat(to_date) if to_date else None
-        for item in data:
+        for idx, item in enumerate(data):
             if employee_id and str(item.get("user_id")) != str(employee_id):
                 continue
             if payout_type and item.get("payout_type") != payout_type:
@@ -54,7 +54,7 @@ class PayoutService:
                 continue
             if to_dt and created and created > to_dt:
                 continue
-            result.append(Payout(**item))
+            result.append(Payout(idx=idx, **item))
         return result
 
     async def create_payout(self, data: PayoutCreate) -> Payout:
@@ -72,14 +72,22 @@ class PayoutService:
         }
         items.append(payout_dict)
         self._save(items)
-        return Payout(**payout_dict)
+        return Payout(idx=len(items) - 1, **payout_dict)
 
-    async def update_payout(self, user_id: str, status: str) -> Optional[Payout]:
+    async def update_payout(self, idx: int, update: PayoutUpdate) -> Optional[Payout]:
         items = self._load()
-        for item in reversed(items):
-            if str(item.get("user_id")) == str(user_id) and item.get("status") == "В ожидании":
-                item["status"] = status
-                self._save(items)
-                return Payout(**item)
+        if 0 <= idx < len(items):
+            item = items[idx]
+            for field, value in update.model_dump(exclude_none=True).items():
+                item[field] = value
+            self._save(items)
+            return Payout(idx=idx, **item)
         return None
+
+    async def delete_payouts(self, indices: List[int]) -> None:
+        items = self._load()
+        for idx in sorted(set(indices), reverse=True):
+            if 0 <= idx < len(items):
+                items.pop(idx)
+        self._save(items)
 

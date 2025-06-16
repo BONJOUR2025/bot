@@ -117,12 +117,15 @@
         <input id="payout-from" type="date" class="border p-2">
         <input id="payout-to" type="date" class="border p-2">
         <button onclick="fetchPayouts()" class="bg-blue-500 text-white px-4 py-2 rounded">Поиск</button>
+        <button onclick="resetPayoutFilters()" class="bg-gray-200 px-4 py-2 rounded">Сброс</button>
+        <button onclick="deleteSelectedPayouts()" class="bg-red-500 text-white px-4 py-2 rounded">Удалить выбранные</button>
         <button onclick="openPayoutModal()" class="bg-green-600 text-white px-4 py-2 rounded ml-auto">Создать выплату</button>
       </div>
       <div class="overflow-x-auto shadow rounded bg-white">
         <table class="min-w-full text-sm table-auto">
           <thead class="bg-gray-200">
             <tr>
+              <th class="p-2"><input type="checkbox" id="payout-select-all" onclick="toggleAllPayouts(this)"></th>
               <th class="p-2">ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th>
               <th>Статус</th><th>Время</th><th>Действия</th>
             </tr>
@@ -193,7 +196,7 @@
       </select>
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closePayoutModal()" class="px-4 py-2">Отмена</button>
-        <button onclick="submitPayout()" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
+        <button id="payout-save-btn" onclick="submitPayout()" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
       </div>
     </div>
   </div>
@@ -203,6 +206,7 @@
   <script>
     let employees = [];
     let editingId = null;
+    let lastPayouts = [];
 
     function showSection(id) {
       document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
@@ -528,7 +532,8 @@
       };
       try {
         const res = await axios.get('/payouts/', { params });
-        renderPayoutTable(res.data);
+        lastPayouts = res.data;
+        renderPayoutTable(lastPayouts);
       } catch (err) {
         console.error(err);
       }
@@ -538,41 +543,89 @@
       const body = document.getElementById('payouts-body');
       body.innerHTML = data.map(p => `
         <tr class='border-b'>
+          <td class='p-2'><input type="checkbox" class="payout-check" value="${p.idx}"></td>
           <td class='p-2'>${p.name}</td>
           <td class='p-2'>${p.payout_type}</td>
           <td class='p-2'>${p.method}</td>
           <td class='p-2'>${formatRub(p.amount)}</td>
           <td class='p-2'>${p.status}</td>
           <td class='p-2'>${p.timestamp}</td>
-          <td class='p-2'>${p.status === 'В ожидании' ? `
-            <button onclick="approvePayout('${p.user_id}')" class='text-green-600'>✅</button>
-            <button onclick="rejectPayout('${p.user_id}')" class='text-red-600 ml-2'>❌</button>
-            <button onclick="payPayout('${p.user_id}')" class='text-blue-600 ml-2'>💸</button>` : ''}
+          <td class='p-2 flex gap-2'>
+            <button onclick="openEditPayout(${p.idx})" title="Редактировать">✏️</button>
+            <button onclick="deletePayout(${p.idx})" title="Удалить">🗑️</button>
+            ${p.status === 'В ожидании' ? `
+              <button onclick="approvePayout(${p.idx})" class='text-green-600'>✅</button>
+              <button onclick="rejectPayout(${p.idx})" class='text-red-600'>❌</button>
+              <button onclick="payPayout(${p.idx})" class='text-blue-600'>💸</button>
+            ` : ''}
           </td>
         </tr>
       `).join('');
     }
 
-    async function approvePayout(id) {
-      await axios.put(`/payouts/${id}`, { status: 'Одобрено' });
+    async function approvePayout(idx) {
+      await axios.put(`/payouts/${idx}`, { status: 'Одобрено' });
       fetchPayouts();
     }
 
-    async function rejectPayout(id) {
-      await axios.put(`/payouts/${id}`, { status: 'Отклонено' });
+    async function rejectPayout(idx) {
+      await axios.put(`/payouts/${idx}`, { status: 'Отклонено' });
       fetchPayouts();
     }
 
-    async function payPayout(id) {
-      await axios.put(`/payouts/${id}`, { status: 'Выплачено' });
+    async function payPayout(idx) {
+      await axios.put(`/payouts/${idx}`, { status: 'Выплачено' });
       fetchPayouts();
     }
 
-    function openPayoutModal() {
+    function resetPayoutFilters() {
+      document.getElementById('payout-type-filter').value = '';
+      document.getElementById('payout-status-filter').value = '';
+      document.getElementById('payout-employee-filter').value = '';
+      document.getElementById('payout-from').value = '';
+      document.getElementById('payout-to').value = '';
+      fetchPayouts();
+    }
+
+    function toggleAllPayouts(box) {
+      document.querySelectorAll('.payout-check').forEach(cb => cb.checked = box.checked);
+    }
+
+    async function deletePayout(idx) {
+      await axios.delete(`/payouts/${idx}`);
+      fetchPayouts();
+    }
+
+    async function deleteSelectedPayouts() {
+      const ids = Array.from(document.querySelectorAll('.payout-check:checked')).map(cb => cb.value);
+      if (!ids.length) return;
+      await axios.delete(`/payouts/`, { params: { indices: ids.join(',') } });
+      fetchPayouts();
+    }
+
+    let editingPayout = null;
+    function openEditPayout(idx) {
+      editingPayout = idx;
+      const item = lastPayouts.find(p => p.idx === idx);
+      if (!item) return;
+      openPayoutModal();
+      document.getElementById('payout-emp').value = item.user_id;
+      document.getElementById('payout-amount').value = item.amount;
+      document.getElementById('payout-type').value = item.payout_type;
+      document.getElementById('payout-method').value = item.method;
+      document.getElementById('payout-save-btn').textContent = 'Сохранить';
+    }
+
+  function openPayoutModal() {
       const sel = document.getElementById('payout-emp');
       sel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
       document.getElementById('payout-modal').classList.remove('hidden');
-    }
+      editingPayout = null;
+      document.getElementById('payout-amount').value = '';
+      document.getElementById('payout-type').value = 'Аванс';
+      document.getElementById('payout-method').value = 'На карту';
+      document.getElementById('payout-save-btn').textContent = 'Создать';
+  }
 
     function closePayoutModal() {
       document.getElementById('payout-modal').classList.add('hidden');
@@ -589,10 +642,15 @@
         payout_type: document.getElementById('payout-type').value
       };
       try {
-        await axios.post('/payouts/', payload);
+        if (editingPayout === null) {
+          await axios.post('/payouts/', payload);
+          showToast('Выплата создана');
+        } else {
+          await axios.put(`/payouts/${editingPayout}`, payload);
+          showToast('Выплата обновлена');
+        }
         closePayoutModal();
         fetchPayouts();
-        showToast('Выплата создана');
       } catch (err) {
         console.error(err);
         showToast('Ошибка', true);

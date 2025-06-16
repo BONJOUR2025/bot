@@ -2,6 +2,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 class Payout(BaseModel):
+    idx: int
     user_id: str
     name: str
     phone: str
@@ -22,4 +23,11 @@ class PayoutCreate(BaseModel):
     payout_type: str
 
 class PayoutUpdate(BaseModel):
+    user_id: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    bank: Optional[str] = None
+    amount: Optional[float] = None
+    method: Optional[str] = None
+    payout_type: Optional[str] = None
     status: Optional[str] = None
