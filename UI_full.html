@@ -137,7 +137,7 @@
 
     <!-- BIRTHDAYS SECTION -->
     <section id="birthdays" class="hidden">
-      <h2 class="text-xl font-semibold mb-2">Ближайшие дни рождения</h2>
+      <h2 class="text-xl font-semibold mb-2">Все дни рождения</h2>
       <table class="min-w-full bg-white border rounded shadow">
         <thead>
           <tr class="bg-gray-200 text-sm">
@@ -257,7 +257,7 @@
 
     async function loadBirthdays() {
       try {
-        const res = await axios.get('/birthdays/upcoming');
+        const res = await axios.get('/birthdays');
         const body = document.getElementById('birthdays-body');
         body.innerHTML = res.data.map(p => `
           <tr class='border-b'>
