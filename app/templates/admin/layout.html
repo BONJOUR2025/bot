@@ -27,7 +27,12 @@
   <script>
     function loadPage(url) {
       fetch(url)
-        .then(res => res.text())
+        .then(res => {
+          if (!res.ok) {
+            throw new Error('Failed to load page: ' + res.status);
+          }
+          return res.text();
+        })
         .then(html => {
           const container = document.getElementById('page-content');
           container.innerHTML = html;
@@ -37,6 +42,11 @@
             document.body.appendChild(copy);
             document.body.removeChild(copy);
           });
+        })
+        .catch(err => {
+          const container = document.getElementById('page-content');
+          container.innerHTML = '<p class="text-red-500">Ошибка загрузки страницы</p>';
+          console.error(err);
         });
     }
     window.onload = () => loadPage('/employees');
