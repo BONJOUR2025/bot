@@ -9,6 +9,7 @@ from .salary import create_salary_router
 from .schedule import create_schedule_router
 from .payouts import create_payout_router
 from .birthdays import create_birthdays_router
+from .telegram import create_telegram_router
 from ..services.employee_service import EmployeeService, EmployeeAPIService
 from ..services.salary_service import SalaryService
 from ..services.schedule_service import ScheduleService
@@ -51,6 +52,8 @@ def create_app() -> FastAPI:
 
     birthday_service = BirthdayService(employee_service._repo)
     app.include_router(create_birthdays_router(birthday_service))
+
+    app.include_router(create_telegram_router())
 
     # Admin UI routes
     from .admin_ui import router as admin_router

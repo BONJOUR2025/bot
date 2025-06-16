@@ -186,7 +186,7 @@
       <textarea id="msg-text" class="border p-2 w-full" placeholder="Текст сообщения"></textarea>
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closeMessageModal()" class="px-4 py-2">Отмена</button>
-        <button onclick="sendMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
+        <button onclick="sendPersonalMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
       </div>
     </div>
   </div>
@@ -410,27 +410,36 @@
       setTimeout(() => toast.classList.add('hidden'), 3000);
     }
 
-    function openMessageModal() {
-      const select = document.getElementById('msg-emp');
-      select.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
-      document.getElementById('msg-text').value = '';
-      document.getElementById('message-modal').classList.remove('hidden');
+    async function openMessageModal() {
+      try {
+        const res = await axios.get('/employees/');
+        const select = document.getElementById('msg-emp');
+        select.innerHTML = res.data.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+        document.getElementById('msg-text').value = '';
+        document.getElementById('message-modal').classList.remove('hidden');
+      } catch (err) {
+        console.error(err);
+      }
     }
 
     function closeMessageModal() {
       document.getElementById('message-modal').classList.add('hidden');
     }
 
-    async function sendMessage() {
+    async function sendPersonalMessage() {
       const userId = document.getElementById('msg-emp').value;
       const text = document.getElementById('msg-text').value;
+      if (!userId || !text.trim()) {
+        alert('Пожалуйста, выберите пользователя и введите сообщение.');
+        return;
+      }
       try {
-        await axios.post('/broadcast/', { user_id: userId, message: text });
+        await axios.post('/telegram/send_message', { user_id: userId, message: text });
         addNotify(`Сообщение отправлено пользователю ${userId}`);
         closeMessageModal();
       } catch (err) {
         console.error(err);
-        showToast('Ошибка отправки', true);
+        alert('❌ Ошибка при отправке: ' + (err.response?.data?.detail || ''));
       }
     }
 
