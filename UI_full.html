@@ -8,8 +8,44 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 text-gray-900">
-  <div class="container mx-auto p-4">
-    <h1 class="text-2xl font-bold mb-4">Список сотрудников</h1>
+  <div class="container mx-auto p-4 space-y-6">
+    <nav class="flex flex-wrap gap-2 mb-4">
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('employees')">Сотрудники</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('salary')">💼 Просмотр ЗП</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('schedule')">📅 Просмотр расписания</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('payouts')">💳 Выплаты</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('birthdays')">🎂 Дни рождения</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="openMessageModal()">✉ Сообщение пользователю</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('requests')">📬 Текущие запросы</button>
+    </nav>
+
+    <div id="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="bg-white rounded-xl shadow-md p-4">
+        <p class="text-sm text-gray-500">Всего сотрудников</p>
+        <p id="stat-total" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-md p-4">
+        <p class="text-sm text-gray-500">Активных заявок</p>
+        <p id="stat-active" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-md p-4">
+        <p class="text-sm text-gray-500">Отправлено сегодня</p>
+        <p id="stat-sent" class="text-2xl font-semibold">0</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-md p-4">
+        <p class="text-sm text-gray-500">Ближайший день рождения</p>
+        <p id="stat-birthday" class="text-2xl font-semibold">-</p>
+      </div>
+    </div>
+
+    <div id="notifications" class="bg-white rounded shadow-md p-4 mt-4 hidden">
+      <h2 class="font-semibold mb-2">История действий</h2>
+      <ul id="notify-list" class="text-sm space-y-1"></ul>
+    </div>
+
+    <!-- EMPLOYEES SECTION -->
+    <section id="employees" class="space-y-4">
+      <h1 class="text-2xl font-bold">Список сотрудников</h1>
     <div class="flex flex-wrap gap-4 mb-4 items-end">
       <input id="filter-name" class="border p-2 flex-grow" placeholder="Поиск по имени">
       <select id="filter-status" class="border p-2">
@@ -22,13 +58,43 @@
       <button onclick="applyFilters()" class="bg-blue-500 text-white px-4 py-2 rounded">Фильтр</button>
       <button onclick="openModal()" class="bg-green-600 text-white px-4 py-2 rounded ml-auto">Добавить сотрудника</button>
     </div>
-    <div class="overflow-x-auto shadow rounded bg-white">
-      <table id="employee-table" class="min-w-full text-sm">
-        <thead class="bg-gray-200"></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
+      <div class="overflow-x-auto shadow rounded bg-white">
+        <table id="employee-table" class="min-w-full text-sm">
+          <thead class="bg-gray-200"></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SALARY SECTION -->
+    <section id="salary" class="hidden">
+      <h2 class="text-xl font-semibold mb-2">Просмотр зарплаты</h2>
+      <div id="salary-content" class="text-sm">Загрузка...</div>
+    </section>
+
+    <!-- SCHEDULE SECTION -->
+    <section id="schedule" class="hidden">
+      <h2 class="text-xl font-semibold mb-2">Расписание</h2>
+      <div id="schedule-content" class="text-sm">Загрузка...</div>
+    </section>
+
+    <!-- PAYOUTS SECTION -->
+    <section id="payouts" class="hidden">
+      <h2 class="text-xl font-semibold mb-2">Выплаты</h2>
+      <div id="payouts-content" class="text-sm">Загрузка...</div>
+    </section>
+
+    <!-- BIRTHDAYS SECTION -->
+    <section id="birthdays" class="hidden">
+      <h2 class="text-xl font-semibold mb-2">Ближайшие дни рождения</h2>
+      <ul id="birthday-list" class="list-disc pl-5 text-sm"></ul>
+    </section>
+
+    <!-- REQUESTS SECTION -->
+    <section id="requests" class="hidden">
+      <h2 class="text-xl font-semibold mb-2">Текущие запросы</h2>
+      <div id="requests-content" class="text-sm">Загрузка...</div>
+    </section>
 
   <div id="modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
     <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
@@ -51,20 +117,60 @@
     </div>
   </div>
 
+  <div id="message-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+    <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
+      <h2 class="text-xl font-semibold">Сообщение пользователю</h2>
+      <select id="msg-emp" class="border p-2 w-full"></select>
+      <textarea id="msg-text" class="border p-2 w-full" placeholder="Текст сообщения"></textarea>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeMessageModal()" class="px-4 py-2">Отмена</button>
+        <button onclick="sendMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="fixed top-2 right-2 px-4 py-2 rounded shadow hidden"></div>
 
   <script>
     let employees = [];
     let editingId = null;
 
+    function showSection(id) {
+      document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('hidden');
+    }
+
+    function addNotify(text) {
+      const list = document.getElementById('notify-list');
+      const item = document.createElement('li');
+      item.textContent = text;
+      list.prepend(item);
+      document.getElementById('notifications').classList.remove('hidden');
+    }
+
     async function loadEmployees() {
       try {
         const res = await axios.get('/employees/');
         employees = res.data;
         renderTable();
+        document.getElementById('stat-total').textContent = employees.length;
       } catch (err) {
         console.error(err);
         showToast('Ошибка загрузки', true);
+      }
+    }
+
+    async function loadBirthdays() {
+      try {
+        const res = await axios.get('/employees/birthdays');
+        const list = document.getElementById('birthday-list');
+        list.innerHTML = res.data.map(e => `<li>${e.full_name} – ${e.birthday}</li>`).join('');
+        if (res.data.length) {
+          document.getElementById('stat-birthday').textContent = res.data[0].birthdate;
+        }
+      } catch (err) {
+        console.error(err);
       }
     }
 
@@ -198,7 +304,35 @@
       setTimeout(() => toast.classList.add('hidden'), 3000);
     }
 
-    window.onload = loadEmployees;
+    function openMessageModal() {
+      const select = document.getElementById('msg-emp');
+      select.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+      document.getElementById('msg-text').value = '';
+      document.getElementById('message-modal').classList.remove('hidden');
+    }
+
+    function closeMessageModal() {
+      document.getElementById('message-modal').classList.add('hidden');
+    }
+
+    async function sendMessage() {
+      const userId = document.getElementById('msg-emp').value;
+      const text = document.getElementById('msg-text').value;
+      try {
+        await axios.post('/broadcast/', { user_id: userId, message: text });
+        addNotify(`Сообщение отправлено пользователю ${userId}`);
+        closeMessageModal();
+      } catch (err) {
+        console.error(err);
+        showToast('Ошибка отправки', true);
+      }
+    }
+
+    window.onload = () => {
+      loadEmployees();
+      loadBirthdays();
+      showSection('employees');
+    };
   </script>
 </body>
 </html>
