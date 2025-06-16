@@ -1,8 +1,9 @@
 from pydantic import BaseModel
 from typing import Optional
 
-class ScheduleRow(BaseModel):
+class SchedulePointOut(BaseModel):
+    """Employee assignment for a single point."""
+
     point: str
     short: str
-    employee_id: Optional[str] = None
-    name: Optional[str] = None
+    employee: str

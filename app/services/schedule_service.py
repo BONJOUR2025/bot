@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import List, Optional, Dict
+from typing import Dict, List
 
-import pandas as pd
+import os
+from openpyxl import load_workbook
 
-from .excel import load_data
-from ..data.repository import Repository
-from ..schemas.schedule import ScheduleRow
+from ..config import EXCEL_FILE
+from ..schemas.schedule import SchedulePointOut
 
 MONTHS_RU = [
     "ЯНВАРЬ",
@@ -38,71 +38,95 @@ POINTS = {
 class ScheduleService:
     """Load schedule from Excel by day."""
 
-    def __init__(self, repo: Repository | None = None) -> None:
-        self._repo = repo or Repository()
-        self._cache: Dict[str, pd.DataFrame | None] = {}
+    def __init__(self) -> None:
+        pass
 
-    def _load_month(self, month: str) -> pd.DataFrame | None:
-        month = month.upper()
-        if month in self._cache:
-            return self._cache[month]
-        df = load_data(sheet_name=month)
-        if df is not None:
-            df = df.copy()
-        self._cache[month] = df
-        return df
+    async def get_schedule_by_day(self, date_str: str) -> List[SchedulePointOut]:
+        """Return list of points and assigned employees for given date."""
 
-    async def get_schedule_by_day(self, date_str: str) -> List[ScheduleRow]:
         try:
             day_date = date.fromisoformat(date_str)
         except Exception:
             return []
-        month_name = MONTHS_RU[day_date.month - 1]
-        df = self._load_month(month_name)
-        result: List[ScheduleRow] = []
-        point_map = {v: k for k, v in POINTS.items()}
-        if df is None:
-            for code, name in POINTS.items():
-                result.append(ScheduleRow(point=name, short=code))
-            return result
-        df = df.reset_index(drop=True)
-        if df.shape[0] < 2:
-            return result
-        header = df.iloc[0].tolist()
-        df.columns = header
-        df = df.drop([0, 1]).reset_index(drop=True)
-        day_col = str(day_date.day)
-        if day_col not in df.columns:
-            for code, name in POINTS.items():
-                result.append(ScheduleRow(point=name, short=code))
-            return result
-        name_col = "ИМЯ" if "ИМЯ" in df.columns else df.columns[0]
-        name_map = {}
-        for e in self._repo.list_employees():
-            name_map[e.name] = e.id
-            name_map[e.full_name] = e.id
-        assign: Dict[str, ScheduleRow] = {}
-        for _, row in df.iterrows():
-            raw_name = str(row.get(name_col, "")).strip()
-            if not raw_name:
+
+        months = [
+            "Январь",
+            "Февраль",
+            "Март",
+            "Апрель",
+            "Май",
+            "Июнь",
+            "Июль",
+            "Август",
+            "Сентябрь",
+            "Октябрь",
+            "Ноябрь",
+            "Декабрь",
+        ]
+        month_name = months[day_date.month - 1]
+
+        if not os.path.exists(EXCEL_FILE):
+            return [
+                SchedulePointOut(point=name, short=code, employee="")
+                for code, name in POINTS.items()
+            ]
+
+        try:
+            wb = load_workbook(EXCEL_FILE, data_only=True)
+        except Exception:
+            return [
+                SchedulePointOut(point=name, short=code, employee="")
+                for code, name in POINTS.items()
+            ]
+
+        sheet = None
+        if month_name in wb.sheetnames:
+            sheet = wb[month_name]
+        elif month_name.upper() in wb.sheetnames:
+            sheet = wb[month_name.upper()]
+        else:
+            for title in wb.sheetnames:
+                if title.startswith(month_name) or title.startswith(month_name.upper()):
+                    sheet = wb[title]
+                    break
+
+        if sheet is None:
+            return [
+                SchedulePointOut(point=name, short=code, employee="")
+                for code, name in POINTS.items()
+            ]
+
+        day_col = None
+        target = str(day_date.day)
+        for col in range(1, sheet.max_column + 1):
+            v1 = str(sheet.cell(row=1, column=col).value or "").strip()
+            v2 = str(sheet.cell(row=2, column=col).value or "").strip()
+            if v1 == target or v2 == target:
+                day_col = col
+                break
+
+        if day_col is None:
+            return [
+                SchedulePointOut(point=name, short=code, employee="")
+                for code, name in POINTS.items()
+            ]
+
+        assignments: Dict[str, str] = {}
+        for row in range(3, sheet.max_row + 1):
+            code = str(sheet.cell(row=row, column=day_col).value or "").strip()
+            if code not in POINTS or code in assignments:
                 continue
-            code = str(row.get(day_col, "")).strip()
-            if not code:
-                continue
-            point_full = POINTS.get(code)
-            if not point_full:
-                if code in point_map:
-                    point_full = code
-                    code = point_map[code]
-                else:
-                    continue
-            if code not in assign:
-                assign[code] = ScheduleRow(
-                    point=point_full,
-                    short=code,
-                    employee_id=name_map.get(raw_name, ""),
-                    name=raw_name,
-                )
-        for code, name in POINTS.items():
-            result.append(assign.get(code, ScheduleRow(point=name, short=code)))
-        return result
+            employee_cell = sheet.cell(row=row, column=1).value
+            employee_name = str(employee_cell).strip() if employee_cell else ""
+            assignments[code] = employee_name
+            if len(assignments) == len(POINTS):
+                break
+
+        return [
+            SchedulePointOut(
+                point=name,
+                short=code,
+                employee=assignments.get(code, ""),
+            )
+            for code, name in POINTS.items()
+        ]

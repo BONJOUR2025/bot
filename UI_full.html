@@ -453,7 +453,7 @@
         };
         res.data.forEach(item => {
           const color = colors[item.point] || '#ffffff';
-          body.innerHTML += `<tr><td style="background-color:${color};font-weight:bold;">${item.point}</td><td>${item.name || '-'}</td></tr>`;
+          body.innerHTML += `<tr><td style="background-color:${color};font-weight:bold;">${item.point}</td><td>${item.employee || '-'}</td></tr>`;
         });
       }).catch(err => console.error(err));
     }
