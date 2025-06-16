@@ -95,7 +95,10 @@ class SalaryService:
             values = {}
             for field, col in colmap.items():
                 if col is None:
-                    values[field] = 0
+                    if field == "comment":
+                        values[field] = ""
+                    else:
+                        values[field] = 0
                     continue
                 if field.startswith("shifts_"):
                     values[field] = to_int(row.get(col))
@@ -107,7 +110,8 @@ class SalaryService:
             if values.get("shifts_total") == 0:
                 values["shifts_total"] = values.get("shifts_main", 0) + values.get("shifts_extra", 0)
 
-            comment = values.pop("comment", "").strip() or None
+            comment_raw = values.pop("comment", "")
+            comment = str(comment_raw).strip() or None
             result.append(
                 SalaryRow(
                     employee_id=emp_id,
