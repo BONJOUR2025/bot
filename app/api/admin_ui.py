@@ -11,7 +11,8 @@ router = APIRouter()
 @router.get("/", include_in_schema=False)
 async def admin_root() -> FileResponse:
     """Return the bundled admin interface."""
-    return FileResponse(Path("UI_full.html"))
+    root_path = Path(__file__).resolve().parent.parent.parent
+    return FileResponse(root_path / "UI_full.html")
 
 @router.get("/employees", response_class=HTMLResponse)
 async def admin_employees(request: Request):
