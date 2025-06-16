@@ -19,7 +19,7 @@ def create_employee_router(service: EmployeeAPIService) -> APIRouter:
     async def update(employee_id: str, data: EmployeeUpdate):
         return await service.update_employee(employee_id, data)
 
-    @router.post("/{employee_id}/upload-photo")
+    @router.post("/{employee_id}/photo")
     async def upload_photo(employee_id: str, file: UploadFile = File(...)):
         return await service.upload_employee_photo(employee_id, file)
 

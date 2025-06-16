@@ -170,15 +170,20 @@ async function loadEmployees() {
     try {
         const res = await api.get('/');
         employees = res.data;
-        renderTable();
+        populateEmployeeTable();
         updateStats();
         addNotification('Employees loaded');
     } catch (err) {
+        console.error(err);
         showToast('Failed to load employees', 'error');
     }
 }
 
-function renderTable() {
+function reloadEmployees() {
+    loadEmployees();
+}
+
+function populateEmployeeTable() {
     const tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
     const filter = document.getElementById('statusFilter').value;
@@ -195,8 +200,8 @@ function renderTable() {
             <td class="border px-4 py-2">${emp.status}</td>
             <td class="border px-4 py-2">${emp.photo_url ? `<a href="${emp.photo_url}" target="_blank">View</a>` : ''}</td>
             <td class="border px-4 py-2 space-x-2">
-                <button class="text-blue-600" onclick="openModal(${emp.id})">Edit</button>
-                <button class="text-red-600" onclick="deleteEmployee(${emp.id})">Delete</button>
+                <button class="text-blue-600" onclick="openModal('${emp.id}')">Edit</button>
+                <button class="text-red-600" onclick="deleteEmployee('${emp.id}')">Delete</button>
             </td>`;
         tbody.appendChild(tr);
     });
@@ -212,23 +217,29 @@ function updateStats() {
     document.getElementById('nextBirthday').textContent = upcoming.length ? upcoming[0].full_name : '-';
 }
 
-function openModal(id=null) {
+async function openModal(id=null) {
     const modal = document.getElementById('modal');
     document.getElementById('employeeForm').reset();
     document.getElementById('employeeId').value = '';
     document.getElementById('photo').value = '';
     if (id) {
-        const emp = employees.find(e => e.id === id);
-        if (!emp) return;
-        document.getElementById('modalTitle').textContent = 'Edit Employee';
-        document.getElementById('employeeId').value = emp.id;
-        document.getElementById('fullName').value = emp.full_name;
-        document.getElementById('phone').value = emp.phone;
-        document.getElementById('bank').value = emp.bank;
-        document.getElementById('cardNumber').value = emp.card_number;
-        document.getElementById('birthdate').value = emp.birthdate || '';
-        document.getElementById('note').value = emp.note || '';
-        document.getElementById('status').value = emp.status;
+        try {
+            const res = await api.get(`/${id}`);
+            const emp = res.data;
+            document.getElementById('modalTitle').textContent = 'Edit Employee';
+            document.getElementById('employeeId').value = emp.id;
+            document.getElementById('fullName').value = emp.full_name;
+            document.getElementById('phone').value = emp.phone;
+            document.getElementById('bank').value = emp.bank;
+            document.getElementById('cardNumber').value = emp.card_number;
+            document.getElementById('birthdate').value = emp.birthdate || '';
+            document.getElementById('note').value = emp.note || '';
+            document.getElementById('status').value = emp.status;
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to load employee', 'error');
+            return;
+        }
     } else {
         document.getElementById('modalTitle').textContent = 'Add Employee';
     }
@@ -242,7 +253,7 @@ function closeModal() {
 document.getElementById('addBtn').addEventListener('click', () => openModal());
 document.getElementById('cancelBtn').addEventListener('click', closeModal);
 
-document.getElementById('statusFilter').addEventListener('change', renderTable);
+document.getElementById('statusFilter').addEventListener('change', populateEmployeeTable);
 
 async function submitEmployee(event) {
     event.preventDefault();
@@ -271,15 +282,16 @@ async function submitEmployee(event) {
         if (file) {
             const formData = new FormData();
             formData.append('file', file);
-            await api.post(`/${empId}/upload-photo`, formData, {
+            await api.post(`/${empId}/photo`, formData, {
                 headers: {'Content-Type': 'multipart/form-data'}
             });
         }
         showToast('Employee added');
         addNotification('Employee added');
         closeModal();
-        loadEmployees();
+        reloadEmployees();
     } catch (err) {
+        console.error(err);
         showToast('Save failed', 'error');
     }
 }
@@ -291,15 +303,16 @@ async function editEmployee(id, data) {
         if (file) {
             const formData = new FormData();
             formData.append('file', file);
-            await api.post(`/${id}/upload-photo`, formData, {
+            await api.post(`/${id}/photo`, formData, {
                 headers: {'Content-Type': 'multipart/form-data'}
             });
         }
         showToast('Employee updated');
         addNotification('Employee updated');
         closeModal();
-        loadEmployees();
+        reloadEmployees();
     } catch (err) {
+        console.error(err);
         showToast('Update failed', 'error');
     }
 }
@@ -311,8 +324,9 @@ async function deleteEmployee(id) {
         await api.delete(`/${id}`);
         showToast('Deleted');
         addNotification('Employee deleted');
-        loadEmployees();
+        reloadEmployees();
     } catch (err) {
+        console.error(err);
         showToast('Delete failed', 'error');
     }
 }
