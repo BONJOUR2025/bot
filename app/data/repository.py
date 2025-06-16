@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from enum import Enum
+from datetime import date
 from typing import List
 
 from app.core.types import Employee, EmployeeStatus
@@ -31,6 +32,17 @@ class Repository:
     def _save(self) -> None:
         self._storage.save(self._data)
 
+    @staticmethod
+    def _parse_date(value) -> date | None:
+        if not value:
+            return None
+        if isinstance(value, date):
+            return value
+        try:
+            return date.fromisoformat(str(value))
+        except Exception:
+            return None
+
     def list_employees(self) -> List[Employee]:
         employees: List[Employee] = []
         for uid, data in self._data.items():
@@ -42,7 +54,7 @@ class Repository:
                 "phone": data.get("phone", ""),
                 "card_number": data.get("card_number", ""),
                 "bank": data.get("bank", ""),
-                "birthdate": data.get("birthdate"),
+                "birthdate": self._parse_date(data.get("birthdate")),
                 "note": data.get("note", ""),
                 "photo_url": data.get("photo_url", ""),
                 "status": EmployeeStatus(data.get("status", "active")),
