@@ -18,33 +18,33 @@ class EmployeeService:
     def __init__(self, repo: Repository | None = None) -> None:
         self._repo = repo or Repository()
         self._employees: List[Employee] = self._repo.list_employees()
-        self._counter = max((e.id for e in self._employees), default=0)
+        self._counter = max((int(e.id) for e in self._employees if str(e.id).isdigit()), default=0)
 
     def list_employees(self) -> List[Employee]:
         return list(self._employees)
 
     def add_employee(self, employee: Employee) -> Employee:
         self._counter += 1
-        employee.id = self._counter
+        employee.id = str(self._counter)
         self._employees.append(employee)
-        self._repo.save_employees(self._employees)
+        self._repo.add_employee(employee)
         return employee
 
-    def update_employee(self, employee_id: int, **updates) -> Optional[Employee]:
+    def update_employee(self, employee_id: str, **updates) -> Optional[Employee]:
         emp = self.get_employee(employee_id)
         if not emp:
             return None
         for key, value in updates.items():
             if hasattr(emp, key) and value is not None:
                 setattr(emp, key, value)
-        self._repo.save_employees(self._employees)
+        self._repo.update_employee(emp)
         return emp
 
-    def remove_employee(self, employee_id: int) -> None:
+    def remove_employee(self, employee_id: str) -> None:
         self._employees = [e for e in self._employees if e.id != employee_id]
-        self._repo.save_employees(self._employees)
+        self._repo.delete_employee_by_id(employee_id)
 
-    def get_employee(self, employee_id: int) -> Optional[Employee]:
+    def get_employee(self, employee_id: str) -> Optional[Employee]:
         for emp in self._employees:
             if emp.id == employee_id:
                 return emp
@@ -63,7 +63,7 @@ class EmployeeAPIService:
 
     async def create_employee(self, data: EmployeeCreate) -> EmployeeOut:
         employee = Employee(
-            id=0,
+            id="0",
             full_name=data.full_name,
             phone=data.phone,
             card_number=data.card_number,
@@ -76,13 +76,13 @@ class EmployeeAPIService:
         created = self.service.add_employee(employee)
         return EmployeeOut(**created.__dict__)
 
-    async def update_employee(self, employee_id: int, data: EmployeeUpdate) -> EmployeeOut:
+    async def update_employee(self, employee_id: str, data: EmployeeUpdate) -> EmployeeOut:
         emp = self.service.update_employee(employee_id, **data.dict())
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         return EmployeeOut(**emp.__dict__)
 
-    async def upload_employee_photo(self, employee_id: int, file: UploadFile) -> dict[str, str]:
+    async def upload_employee_photo(self, employee_id: str, file: UploadFile) -> dict[str, str]:
         emp = self.service.get_employee(employee_id)
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
@@ -93,7 +93,7 @@ class EmployeeAPIService:
         self.service.update_employee(employee_id, photo_url="/" + str(upload_path))
         return {"status": "photo_uploaded", "url": "/" + str(upload_path)}
 
-    async def delete_employee(self, employee_id: int) -> dict[str, str]:
+    async def delete_employee(self, employee_id: str) -> dict[str, str]:
         emp = self.service.get_employee(employee_id)
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")

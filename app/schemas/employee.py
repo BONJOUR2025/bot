@@ -24,5 +24,5 @@ class EmployeeUpdate(EmployeeBase):
 
 
 class EmployeeOut(EmployeeBase):
-    id: int
+    id: str
     created_at: str

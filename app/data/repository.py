@@ -26,14 +26,38 @@ class Repository:
 
     def __init__(self, storage: JsonStorage | None = None) -> None:
         self._storage = storage or JsonStorage(DATA_FILE)
-        self._data = self._storage.load() or {"employees": []}
+        self._data: dict[str, dict] = self._storage.load() or {}
 
     def _save(self) -> None:
         self._storage.save(self._data)
 
     def list_employees(self) -> List[Employee]:
-        return [Employee(**e) for e in self._data.get("employees", [])]
+        return [
+            Employee(id=str(uid), **data)
+            for uid, data in self._data.items()
+            if isinstance(data, dict)
+        ]
+
+    def add_employee(self, employee: Employee) -> None:
+        data = _serialize(employee)
+        data.pop("id", None)
+        self._data[employee.id] = data
+        self._save()
+
+    def update_employee(self, employee: Employee) -> None:
+        if employee.id in self._data:
+            data = _serialize(employee)
+            data.pop("id", None)
+            self._data[employee.id].update(data)
+            self._save()
+
+    def delete_employee_by_id(self, employee_id: str) -> None:
+        if employee_id in self._data:
+            self._data.pop(employee_id)
+            self._save()
 
     def save_employees(self, employees: List[Employee]) -> None:
-        self._data["employees"] = [_serialize(e) for e in employees]
+        self._data = {e.id: _serialize(e) | {"id": e.id} for e in employees}
+        for v in self._data.values():
+            v.pop("id", None)
         self._save()

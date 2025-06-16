@@ -11,7 +11,7 @@ from .enums import EmployeeStatus
 class Employee:
     """Employee information."""
 
-    id: int
+    id: str
     full_name: str
     phone: str
     card_number: str
