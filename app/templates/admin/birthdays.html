@@ -26,7 +26,8 @@ async function loadBirthdays() {
     console.error(err);
   }
 }
-window.onload = function(){
-  loadBirthdays();
-}
+
+// Immediately fetch birthdays when this script loads. This works both when
+// the page is loaded directly and when injected dynamically via loadPage().
+loadBirthdays();
 </script>
