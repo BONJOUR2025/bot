@@ -107,13 +107,14 @@ class SalaryService:
             if values.get("shifts_total") == 0:
                 values["shifts_total"] = values.get("shifts_main", 0) + values.get("shifts_extra", 0)
 
+            comment = values.pop("comment", "").strip() or None
             result.append(
                 SalaryRow(
                     employee_id=emp_id,
                     name=name,
                     month=month,
+                    comment=comment,
                     **values,
-                    comment=values.get("comment") or None,
                 )
             )
         return result
