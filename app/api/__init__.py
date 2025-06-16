@@ -1,10 +1,9 @@
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from pathlib import Path
 from telegram import Update
 
 from ..core.application import create_application
-from .auth import check_token
 from .employees import create_employee_router
 from ..services.employee_service import EmployeeService, EmployeeAPIService
 
@@ -25,10 +24,7 @@ def create_app() -> FastAPI:
 
     employee_service = EmployeeService()
     employee_api = EmployeeAPIService(employee_service)
-    app.include_router(
-        create_employee_router(employee_api),
-        dependencies=[Depends(check_token)],
-    )
+    app.include_router(create_employee_router(employee_api))
 
     @app.get("/", include_in_schema=False)
     async def index():
