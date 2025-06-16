@@ -8,21 +8,7 @@ from openpyxl import load_workbook
 
 from ..config import EXCEL_FILE
 from ..schemas.schedule import SchedulePointOut
-
-MONTHS_RU = [
-    "ЯНВАРЬ",
-    "ФЕВРАЛЬ",
-    "МАРТ",
-    "АПРЕЛЬ",
-    "МАЙ",
-    "ИЮНЬ",
-    "ИЮЛЬ",
-    "АВГУСТ",
-    "СЕНТЯБРЬ",
-    "ОКТЯБРЬ",
-    "НОЯБРЬ",
-    "ДЕКАБРЬ",
-]
+from ..core.constants import MONTHS_RU
 
 POINTS = {
     "Ц": "Цех",
@@ -49,21 +35,7 @@ class ScheduleService:
         except Exception:
             return []
 
-        months = [
-            "Январь",
-            "Февраль",
-            "Март",
-            "Апрель",
-            "Май",
-            "Июнь",
-            "Июль",
-            "Август",
-            "Сентябрь",
-            "Октябрь",
-            "Ноябрь",
-            "Декабрь",
-        ]
-        month_name = months[day_date.month - 1]
+        month_name = MONTHS_RU[day_date.month - 1]
 
         if not os.path.exists(EXCEL_FILE):
             return [

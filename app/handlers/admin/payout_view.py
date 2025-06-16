@@ -6,6 +6,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
 from ...constants import UserStates
+from ...core.constants import MONTHS_RU, PAYOUT_TYPES
 from ...config import ADMIN_ID
 from ...keyboards.reply_admin import get_admin_menu
 from ...services.advance_requests import load_advance_requests
@@ -30,7 +31,7 @@ async def view_payouts(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     keyboard = [
-        ["Аванс", "Зарплата"],
+        PAYOUT_TYPES,
         ["Все типы"],
         ["🏠 Домой"],
     ]
@@ -54,7 +55,7 @@ async def select_payout_type(
         )
         return ConversationHandler.END
 
-    if payout_type not in ["Аванс", "Зарплата", "Все типы"]:
+    if payout_type not in PAYOUT_TYPES + ["Все типы"]:
         await update.message.reply_text(
             "❌ Выберите корректный тип из предложенных."
         )
@@ -64,21 +65,7 @@ async def select_payout_type(
         payout_type if payout_type != "Все типы" else None
     )
 
-    months = [
-        "Январь",
-        "Февраль",
-        "Март",
-        "Апрель",
-        "Май",
-        "Июнь",
-        "Июль",
-        "Август",
-        "Сентябрь",
-        "Октябрь",
-        "Ноябрь",
-        "Декабрь",
-    ]
-    keyboard = [[month] for month in months] + [["Все периоды"], ["🏠 Домой"]]
+    keyboard = [[month] for month in MONTHS_RU] + [["Все периоды"], ["🏠 Домой"]]
     reply_markup = ReplyKeyboardMarkup(
         keyboard, resize_keyboard=True, one_time_keyboard=True
     )
@@ -97,20 +84,7 @@ async def select_period(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
-    months = {
-        "Январь": "01",
-        "Февраль": "02",
-        "Март": "03",
-        "Апрель": "04",
-        "Май": "05",
-        "Июнь": "06",
-        "Июль": "07",
-        "Август": "08",
-        "Сентябрь": "09",
-        "Октябрь": "10",
-        "Ноябрь": "11",
-        "Декабрь": "12",
-    }
+    months = {name: f"{i:02d}" for i, name in enumerate(MONTHS_RU, start=1)}
     if period not in months and period != "Все периоды":
         await update.message.reply_text(
             "❌ Выберите корректный месяц из предложенных."
