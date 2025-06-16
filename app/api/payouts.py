@@ -1,4 +1,3 @@
-from datetime import datetime
 from fastapi import APIRouter
 from typing import Optional
 
@@ -12,31 +11,32 @@ def create_payout_router(service: PayoutService) -> APIRouter:
     @router.get("/", response_model=list[Payout])
     async def list_payouts(
         employee_id: Optional[str] = None,
-        type: Optional[str] = None,
+        payout_type: Optional[str] = None,
         status: Optional[str] = None,
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
     ):
-        return await service.list_payouts(employee_id, type, status, from_date, to_date)
+        return await service.list_payouts(employee_id, payout_type, status, from_date, to_date)
 
     @router.post("/", response_model=Payout)
     async def create_payout(data: PayoutCreate):
         return await service.create_payout(data)
 
-    @router.put("/{payout_id}", response_model=Payout)
-    async def update_payout(payout_id: str, update: PayoutUpdate):
-        updated = await service.update_payout(payout_id, update)
+    @router.put("/{user_id}", response_model=Payout)
+    async def update_payout(user_id: str, update: PayoutUpdate):
+        updated = await service.update_payout(user_id, update.status or "")
         if updated:
             return updated
         return Payout(
-            id=payout_id,
-            user_id="",
+            user_id=user_id,
             name="",
-            amount=0,
-            type="",
+            phone="",
+            bank="",
+            amount=0.0,
             method="",
-            status="",
-            created_at=datetime.utcnow(),
+            payout_type="",
+            status=update.status or "",
+            timestamp="",
         )
 
     return router

@@ -27,7 +27,7 @@ class PayoutService:
     async def list_payouts(
         self,
         employee_id: Optional[str] = None,
-        type: Optional[str] = None,
+        payout_type: Optional[str] = None,
         status: Optional[str] = None,
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
@@ -39,18 +39,17 @@ class PayoutService:
         for item in data:
             if employee_id and str(item.get("user_id")) != str(employee_id):
                 continue
-            if type and item.get("type") != type:
+            if payout_type and item.get("payout_type") != payout_type:
                 continue
             if status and item.get("status") != status:
                 continue
-            created_str = item.get("created_at")
-            if created_str:
+            ts_str = item.get("timestamp")
+            created = None
+            if ts_str:
                 try:
-                    created = datetime.fromisoformat(created_str)
+                    created = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
                 except Exception:
-                    created = None
-            else:
-                created = None
+                    pass
             if from_dt and created and created < from_dt:
                 continue
             if to_dt and created and created > to_dt:
@@ -60,29 +59,26 @@ class PayoutService:
 
     async def create_payout(self, data: PayoutCreate) -> Payout:
         items = self._load()
-        payout = Payout(
-            id=str(len(items) + 1),
-            user_id=data.user_id,
-            name=data.name,
-            amount=data.amount,
-            type=data.type,
-            method=data.method,
-            status="pending",
-            created_at=datetime.utcnow().isoformat(),
-            comment=data.comment,
-        )
-        items.append(payout.model_dump())
+        payout_dict = {
+            "user_id": data.user_id,
+            "name": data.name,
+            "phone": data.phone,
+            "bank": data.bank,
+            "amount": data.amount,
+            "method": data.method,
+            "payout_type": data.payout_type,
+            "status": "В ожидании",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        items.append(payout_dict)
         self._save(items)
-        return payout
+        return Payout(**payout_dict)
 
-    async def update_payout(self, payout_id: str, update: PayoutUpdate) -> Optional[Payout]:
+    async def update_payout(self, user_id: str, status: str) -> Optional[Payout]:
         items = self._load()
-        for item in items:
-            if str(item.get("id")) == str(payout_id):
-                if update.status is not None:
-                    item["status"] = update.status
-                if update.comment is not None:
-                    item["comment"] = update.comment
+        for item in reversed(items):
+            if str(item.get("user_id")) == str(user_id) and item.get("status") == "В ожидании":
+                item["status"] = status
                 self._save(items)
                 return Payout(**item)
         return None

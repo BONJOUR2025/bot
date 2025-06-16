@@ -1,26 +1,25 @@
-from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 
 class Payout(BaseModel):
-    id: str
     user_id: str
     name: str
+    phone: str
+    bank: str
     amount: float
-    type: str
     method: str
+    payout_type: str
     status: str
-    created_at: datetime
-    comment: Optional[str] = None
+    timestamp: str
 
 class PayoutCreate(BaseModel):
     user_id: str
     name: str
+    phone: str
+    bank: str
     amount: float
-    type: str
     method: str
-    comment: Optional[str] = None
+    payout_type: str
 
 class PayoutUpdate(BaseModel):
     status: Optional[str] = None
-    comment: Optional[str] = None

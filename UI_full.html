@@ -106,10 +106,10 @@
         </select>
         <select id="payout-status-filter" class="border p-2">
           <option value="">Все статусы</option>
-          <option value="pending">pending</option>
-          <option value="approved">approved</option>
-          <option value="sent">sent</option>
-          <option value="rejected">rejected</option>
+          <option value="В ожидании">В ожидании</option>
+          <option value="Одобрено">Одобрено</option>
+          <option value="Выплачено">Выплачено</option>
+          <option value="Отклонено">Отклонено</option>
         </select>
         <select id="payout-employee-filter" class="border p-2">
           <option value="">Все сотрудники</option>
@@ -123,8 +123,8 @@
         <table class="min-w-full text-sm table-auto">
           <thead class="bg-gray-200">
             <tr>
-              <th class="p-2">ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th><th>Комментарий</th>
-              <th>Статус</th><th>Создано</th><th>Действия</th>
+              <th class="p-2">ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th>
+              <th>Статус</th><th>Время</th><th>Действия</th>
             </tr>
           </thead>
           <tbody id="payouts-body"></tbody>
@@ -191,7 +191,6 @@
         <option value="На карту">На карту</option>
         <option value="Наличными">Наличными</option>
       </select>
-      <textarea id="payout-comment" class="border p-2 w-full" placeholder="Комментарий"></textarea>
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closePayoutModal()" class="px-4 py-2">Отмена</button>
         <button onclick="submitPayout()" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
@@ -521,7 +520,7 @@
 
     async function fetchPayouts() {
       const params = {
-        type: document.getElementById('payout-type-filter').value,
+        payout_type: document.getElementById('payout-type-filter').value,
         status: document.getElementById('payout-status-filter').value,
         employee_id: document.getElementById('payout-employee-filter').value,
         from_date: document.getElementById('payout-from').value,
@@ -540,27 +539,32 @@
       body.innerHTML = data.map(p => `
         <tr class='border-b'>
           <td class='p-2'>${p.name}</td>
-          <td class='p-2'>${p.type}</td>
+          <td class='p-2'>${p.payout_type}</td>
           <td class='p-2'>${p.method}</td>
           <td class='p-2'>${formatRub(p.amount)}</td>
-          <td class='p-2'>${p.comment || ''}</td>
           <td class='p-2'>${p.status}</td>
-          <td class='p-2'>${new Date(p.created_at).toLocaleDateString()}</td>
-          <td class='p-2'>${p.status === 'pending' ? `
-            <button onclick="approvePayout('${p.id}')" class='text-green-600'>✅</button>
-            <button onclick="rejectPayout('${p.id}')" class='text-red-600 ml-2'>❌</button>` : ''}
+          <td class='p-2'>${p.timestamp}</td>
+          <td class='p-2'>${p.status === 'В ожидании' ? `
+            <button onclick="approvePayout('${p.user_id}')" class='text-green-600'>✅</button>
+            <button onclick="rejectPayout('${p.user_id}')" class='text-red-600 ml-2'>❌</button>
+            <button onclick="payPayout('${p.user_id}')" class='text-blue-600 ml-2'>💸</button>` : ''}
           </td>
         </tr>
       `).join('');
     }
 
     async function approvePayout(id) {
-      await axios.put(`/payouts/${id}`, { status: 'approved' });
+      await axios.put(`/payouts/${id}`, { status: 'Одобрено' });
       fetchPayouts();
     }
 
     async function rejectPayout(id) {
-      await axios.put(`/payouts/${id}`, { status: 'rejected' });
+      await axios.put(`/payouts/${id}`, { status: 'Отклонено' });
+      fetchPayouts();
+    }
+
+    async function payPayout(id) {
+      await axios.put(`/payouts/${id}`, { status: 'Выплачено' });
       fetchPayouts();
     }
 
@@ -578,10 +582,11 @@
       const payload = {
         user_id: document.getElementById('payout-emp').value,
         name: employees.find(e => e.id === document.getElementById('payout-emp').value)?.full_name || '',
+        phone: employees.find(e => e.id === document.getElementById('payout-emp').value)?.phone || '',
+        bank: employees.find(e => e.id === document.getElementById('payout-emp').value)?.bank || '',
         amount: Number(document.getElementById('payout-amount').value || 0),
-        type: document.getElementById('payout-type').value,
         method: document.getElementById('payout-method').value,
-        comment: document.getElementById('payout-comment').value
+        payout_type: document.getElementById('payout-type').value
       };
       try {
         await axios.post('/payouts', payload);
