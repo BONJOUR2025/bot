@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 
 class EmployeeBase(BaseModel):
+    name: str
     full_name: str
     phone: str
     card_number: str

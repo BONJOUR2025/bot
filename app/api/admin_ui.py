@@ -1,14 +1,17 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 
 templates = Jinja2Templates(directory="app/templates")
 
 router = APIRouter()
 
-@router.get("/", response_class=HTMLResponse)
-async def admin_root(request: Request):
-    return templates.TemplateResponse("admin/layout.html", {"request": request})
+@router.get("/", include_in_schema=False)
+async def admin_root() -> FileResponse:
+    """Return the bundled admin interface."""
+    return FileResponse(Path("UI_full.html"))
 
 @router.get("/employees", response_class=HTMLResponse)
 async def admin_employees(request: Request):

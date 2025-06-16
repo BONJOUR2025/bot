@@ -64,6 +64,7 @@ class EmployeeAPIService:
     async def create_employee(self, data: EmployeeCreate) -> EmployeeOut:
         employee = Employee(
             id="0",
+            name=data.name,
             full_name=data.full_name,
             phone=data.phone,
             card_number=data.card_number,

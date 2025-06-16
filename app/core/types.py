@@ -12,6 +12,7 @@ class Employee:
     """Employee information."""
 
     id: str
+    name: str = ""
     full_name: str
     phone: str
     card_number: str = ""

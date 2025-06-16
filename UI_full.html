@@ -1,186 +1,204 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Панель администратора</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Админ панель</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100">
-  <header class="bg-white shadow sticky top-0 z-10">
-    <div class="container mx-auto flex justify-between items-center px-4 py-4">
-      <h1 class="text-xl font-bold">Добро пожаловать, Администратор!</h1>
-      <nav class="flex gap-4 text-sm">
-        <a href="#" onclick="showTab('employees')">Сотрудники</a>
-        <a href="#" onclick="showTab('payouts')">Выплаты</a>
-        <a href="#" onclick="showTab('reports')">Отчёты</a>
-        <a href="#" onclick="showTab('birthdays')">Дни рождения</a>
-        <a href="#" onclick="showTab('broadcasts')">Рассылки</a>
-        <a href="#" onclick="showTab('settings')">Настройки</a>
-      </nav>
+<body class="bg-gray-100 text-gray-900">
+  <div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-4">Список сотрудников</h1>
+    <div class="flex flex-wrap gap-4 mb-4 items-end">
+      <input id="filter-name" class="border p-2 flex-grow" placeholder="Поиск по имени">
+      <select id="filter-status" class="border p-2">
+        <option value="">Все статусы</option>
+        <option value="active">Активен</option>
+        <option value="inactive">Уволен</option>
+      </select>
+      <input id="filter-from" type="date" class="border p-2" placeholder="С">
+      <input id="filter-to" type="date" class="border p-2" placeholder="По">
+      <button onclick="applyFilters()" class="bg-blue-500 text-white px-4 py-2 rounded">Фильтр</button>
+      <button onclick="openModal()" class="bg-green-600 text-white px-4 py-2 rounded ml-auto">Добавить сотрудника</button>
     </div>
-  </header>
+    <div class="overflow-x-auto shadow rounded bg-white">
+      <table id="employee-table" class="min-w-full text-sm">
+        <thead class="bg-gray-200"></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
 
-  <main class="container mx-auto px-4 py-6 space-y-8">
-    <section id="employees" class="tab-section">
-      <h2 class="text-lg font-semibold mb-4">Сотрудники</h2>
-      <table class="min-w-full bg-white border" id="employee-table"></table>
-      <form onsubmit="submitEmployee(); return false;" class="mt-4 space-y-2">
-        <input id="name" class="border p-2 w-full" placeholder="ФИО" required />
-        <input id="phone" class="border p-2 w-full" placeholder="Телефон" required />
-        <input id="note" class="border p-2 w-full" placeholder="Примечание" />
-        <input id="birthday" type="date" class="border p-2 w-full" placeholder="Дата рождения" />
-        <input id="photo" type="file" class="border p-2 w-full" accept="image/*" />
-        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Создать</button>
-      </form>
-    </section>
+  <div id="modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+    <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
+      <h2 id="modal-title" class="text-xl font-semibold">Добавить сотрудника</h2>
+      <input id="emp-name" class="border p-2 w-full" placeholder="Имя">
+      <input id="emp-full_name" class="border p-2 w-full" placeholder="ФИО">
+      <input id="emp-birthdate" type="date" class="border p-2 w-full">
+      <input id="emp-phone" class="border p-2 w-full" placeholder="Телефон">
+      <input id="emp-bank" class="border p-2 w-full" placeholder="Банк">
+      <select id="emp-status" class="border p-2 w-full">
+        <option value="active">Активен</option>
+        <option value="inactive">Уволен</option>
+      </select>
+      <input id="emp-photo" type="file" class="border p-2 w-full" accept="image/*">
+      <textarea id="emp-note" class="border p-2 w-full" placeholder="Примечание"></textarea>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeModal()" class="px-4 py-2">Отмена</button>
+        <button id="modal-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+      </div>
+    </div>
+  </div>
 
-    <section id="payouts" class="tab-section hidden">
-      <h2 class="text-lg font-semibold mb-4">Выплаты</h2>
-      <div id="payout-table">Загрузка...</div>
-    </section>
-
-    <section id="reports" class="tab-section hidden">
-      <h2 class="text-lg font-semibold mb-4">Отчёты</h2>
-      <button onclick="downloadReport()" class="bg-indigo-600 text-white px-4 py-2 rounded">📄 Скачать PDF</button>
-    </section>
-
-    <section id="birthdays" class="tab-section hidden">
-      <h2 class="text-lg font-semibold mb-4">Ближайшие дни рождения</h2>
-      <ul id="birthday-list" class="list-disc pl-5 text-sm"></ul>
-    </section>
-
-    <section id="broadcasts" class="tab-section hidden">
-      <h2 class="text-lg font-semibold mb-4">Создать рассылку</h2>
-      <textarea id="broadcastText" class="w-full border p-2"></textarea>
-      <button onclick="sendBroadcast()" class="mt-2 bg-green-600 text-white px-4 py-2 rounded">Отправить</button>
-    </section>
-
-    <section id="settings" class="tab-section hidden">
-      <h2 class="text-lg font-semibold mb-4">Настройки</h2>
-      <button onclick="resetStorage()" class="bg-red-500 text-white px-4 py-2 rounded">Сбросить user.json</button>
-    </section>
-  </main>
-
-  <footer class="text-center text-xs text-gray-400 py-4">
-    Система администрирования · версия 1.0
-  </footer>
+  <div id="toast" class="fixed top-2 right-2 px-4 py-2 rounded shadow hidden"></div>
 
   <script>
-    function showTab(tab) {
-      document.querySelectorAll('.tab-section').forEach(el => el.classList.add('hidden'));
-      document.getElementById(tab).classList.remove('hidden');
-    }
+    let employees = [];
+    let editingId = null;
 
     async function loadEmployees() {
       try {
-        const res = await axios.get("/employees/");
-        const table = document.getElementById("employee-table");
-        table.innerHTML = `
-          <thead><tr class='bg-gray-200'>
-            <th class='p-2'>ФИО</th><th>Телефон</th><th>Прим.</th><th>Дата рождения</th><th>Фото</th><th>Действия</th>
-          </tr></thead>
-          <tbody>
-            ${res.data.map(e => `
-              <tr class='border-t'>
-                <td class='p-2'>${e.name}</td>
-                <td>${e.phone}</td>
-                <td>${e.note || ''}</td>
-                <td>${e.birthday || ''}</td>
-                <td>${e.photo_url ? `<img src="${e.photo_url}" class='h-10'>` : ''}</td>
-                <td>
-                  <button onclick="deleteEmployee('${e.id}')" class='text-red-500'>Удалить</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>`;
+        const res = await axios.get('/employees/');
+        employees = res.data;
+        renderTable();
       } catch (err) {
         console.error(err);
+        showToast('Ошибка загрузки', true);
       }
     }
 
-    async function submitEmployee() {
-      const form = new FormData();
-      form.append("name", document.getElementById("name").value);
-      form.append("phone", document.getElementById("phone").value);
-      form.append("note", document.getElementById("note").value);
-      form.append("birthday", document.getElementById("birthday").value);
-      const file = document.getElementById("photo").files[0];
-      try {
-        const res = await axios.post("/employees/", Object.fromEntries(form), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const id = res.data.id;
-        if (file) {
-          const photoForm = new FormData();
-          photoForm.append("file", file);
-          await axios.post(`/employees/${id}/photo`, photoForm);
-        }
-        await loadEmployees();
-        alert("Сотрудник создан");
-      } catch (err) {
-        console.error(err);
+    function renderTable(list = employees) {
+      const tbody = document.querySelector('#employee-table tbody');
+      const thead = document.querySelector('#employee-table thead');
+      thead.innerHTML = `<tr>
+        <th class='p-2 text-left'>Имя</th>
+        <th class='p-2 text-left'>ФИО</th>
+        <th class='p-2 text-left'>Дата рождения</th>
+        <th class='p-2 text-left'>Телефон</th>
+        <th class='p-2 text-left'>Банк</th>
+        <th class='p-2 text-left'>Статус</th>
+        <th class='p-2 text-left'>Действия</th>
+      </tr>`;
+      tbody.innerHTML = list.map(e => `
+        <tr class='border-b'>
+          <td class='p-2'>${e.name || ''}</td>
+          <td class='p-2'>${e.full_name || ''}</td>
+          <td class='p-2'>${e.birthdate || ''}</td>
+          <td class='p-2'>${e.phone || ''}</td>
+          <td class='p-2'>${e.bank || ''}</td>
+          <td class='p-2'>${e.status}</td>
+          <td class='p-2 whitespace-nowrap'>
+            <button onclick="openModal('${e.id}')" class='text-blue-600 mr-2'>Редактировать</button>
+            <button onclick="deleteEmployee('${e.id}')" class='text-red-600'>Удалить</button>
+          </td>
+        </tr>`).join('');
+    }
+
+    function applyFilters() {
+      const name = document.getElementById('filter-name').value.toLowerCase();
+      const status = document.getElementById('filter-status').value;
+      const from = document.getElementById('filter-from').value;
+      const to = document.getElementById('filter-to').value;
+      const filtered = employees.filter(e => {
+        const matchName = !name || (e.name?.toLowerCase().includes(name) || e.full_name?.toLowerCase().includes(name));
+        const matchStatus = !status || e.status === status;
+        const bd = e.birthdate ? new Date(e.birthdate) : null;
+        const matchFrom = !from || (bd && bd >= new Date(from));
+        const matchTo = !to || (bd && bd <= new Date(to));
+        return matchName && matchStatus && matchFrom && matchTo;
+      });
+      renderTable(filtered);
+    }
+
+    function openModal(id = null) {
+      editingId = id;
+      document.getElementById('modal').classList.remove('hidden');
+      const title = document.getElementById('modal-title');
+      if (id) {
+        const emp = employees.find(e => e.id === id);
+        if (!emp) return;
+        title.textContent = 'Редактировать сотрудника';
+        document.getElementById('emp-name').value = emp.name || '';
+        document.getElementById('emp-full_name').value = emp.full_name || '';
+        document.getElementById('emp-birthdate').value = emp.birthdate || '';
+        document.getElementById('emp-phone').value = emp.phone || '';
+        document.getElementById('emp-bank').value = emp.bank || '';
+        document.getElementById('emp-status').value = emp.status;
+        document.getElementById('emp-note').value = emp.note || '';
+      } else {
+        title.textContent = 'Добавить сотрудника';
+        document.querySelectorAll('#modal input, #modal textarea').forEach(el => el.value = '');
+        document.getElementById('emp-status').value = 'active';
       }
     }
+
+    function closeModal() {
+      document.getElementById('modal').classList.add('hidden');
+      editingId = null;
+    }
+
+    document.getElementById('modal-save').onclick = async () => {
+      const data = {
+        name: document.getElementById('emp-name').value,
+        full_name: document.getElementById('emp-full_name').value,
+        phone: document.getElementById('emp-phone').value,
+        card_number: '',
+        bank: document.getElementById('emp-bank').value,
+        birthdate: document.getElementById('emp-birthdate').value || null,
+        note: document.getElementById('emp-note').value,
+        photo_url: '',
+        status: document.getElementById('emp-status').value,
+      };
+      const file = document.getElementById('emp-photo').files[0];
+      try {
+        if (editingId) {
+          await axios.put(`/employees/${editingId}`, data);
+          if (file) {
+            const form = new FormData();
+            form.append('file', file);
+            await axios.post(`/employees/${editingId}/photo`, form);
+          }
+          showToast('Изменения сохранены');
+        } else {
+          const res = await axios.post('/employees/', data);
+          const id = res.data.id;
+          if (file) {
+            const form = new FormData();
+            form.append('file', file);
+            await axios.post(`/employees/${id}/photo`, form);
+          }
+          showToast('Сотрудник добавлен');
+        }
+        closeModal();
+        await loadEmployees();
+      } catch (err) {
+        console.error(err);
+        showToast('Ошибка сохранения', true);
+      }
+    };
 
     async function deleteEmployee(id) {
+      if (!confirm('Удалить сотрудника?')) return;
       try {
         await axios.delete(`/employees/${id}`);
+        showToast('Удалено');
         await loadEmployees();
       } catch (err) {
         console.error(err);
+        showToast('Ошибка удаления', true);
       }
     }
 
-    async function sendBroadcast() {
-      const text = document.getElementById("broadcastText").value;
-      try {
-        await axios.post("/broadcast/", { message: text });
-        alert("Рассылка отправлена");
-      } catch (err) {
-        console.error(err);
-      }
+    function showToast(text, error=false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = text;
+      toast.className = `fixed top-2 right-2 px-4 py-2 rounded shadow ${error ? 'bg-red-500' : 'bg-green-500'} text-white`;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 3000);
     }
 
-    async function downloadReport() {
-      try {
-        const res = await axios.get("/reports/pdf", { responseType: 'blob' });
-        const url = window.URL.createObjectURL(new Blob([res.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'report.pdf');
-        document.body.appendChild(link);
-        link.click();
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    async function resetStorage() {
-      try {
-        await axios.post("/employees/reset");
-        await loadEmployees();
-        alert("user.json сброшен");
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    async function loadBirthdays() {
-      try {
-        const res = await axios.get("/employees/birthdays");
-        const list = document.getElementById("birthday-list");
-        list.innerHTML = res.data.map(e => `<li>${e.name} – ${e.birthday}</li>`).join('');
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    window.onload = () => {
-      loadEmployees();
-      loadBirthdays();
-    }
+    window.onload = loadEmployees;
   </script>
 </body>
 </html>

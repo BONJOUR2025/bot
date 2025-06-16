@@ -50,7 +50,8 @@ class Repository:
                 continue
             record = {
                 "id": str(uid),
-                "full_name": data.get("full_name") or data.get("name", ""),
+                "name": data.get("name", ""),
+                "full_name": data.get("full_name", ""),
                 "phone": data.get("phone", ""),
                 "card_number": data.get("card_number", ""),
                 "bank": data.get("bank", ""),
