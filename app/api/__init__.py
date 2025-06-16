@@ -2,7 +2,6 @@ from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 from telegram import Update
 
 from ..core.application import create_application
@@ -13,7 +12,9 @@ from ..services.employee_service import EmployeeService, EmployeeAPIService
 def create_app() -> FastAPI:
     app = FastAPI()
     telegram_app = create_application()
-    templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
+    # Path to the Jinja templates is fixed so it works regardless of where the
+    # application is started from.
+    templates = Jinja2Templates(directory="app/templates")
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
     @app.on_event("startup")

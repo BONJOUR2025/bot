@@ -8,7 +8,7 @@ async function loadBirthdays() {
   try {
     const res = await axios.get('/employees/birthdays');
     const list = document.getElementById('birthday-list');
-    list.innerHTML = res.data.map(e => `<li>${e.name} – ${e.birthday}</li>`).join('');
+    list.innerHTML = res.data.map(e => `<li>${e.full_name} – ${e.birthday}</li>`).join('');
   } catch (err) {
     console.error(err);
   }

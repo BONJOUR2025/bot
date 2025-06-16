@@ -4,7 +4,7 @@
 <h1 class="text-2xl font-semibold mb-4">Сотрудники</h1>
 <table class="min-w-full bg-white border mb-4" id="employee-table"></table>
 <form onsubmit="submitEmployee(); return false;" class="space-y-2 max-w-md">
-  <input id="name" class="border p-2 w-full" placeholder="ФИО" required />
+  <input id="full_name" class="border p-2 w-full" placeholder="ФИО" required />
   <input id="phone" class="border p-2 w-full" placeholder="Телефон" required />
   <input id="note" class="border p-2 w-full" placeholder="Примечание" />
   <input id="birthday" type="date" class="border p-2 w-full" placeholder="Дата рождения" />
@@ -23,7 +23,7 @@ async function loadEmployees() {
       <tbody>
         ${res.data.map(e => `
           <tr class='border-t'>
-            <td class='p-2'>${e.name}</td>
+            <td class='p-2'>${e.full_name}</td>
             <td>${e.phone}</td>
             <td>${e.note || ''}</td>
             <td>${e.birthday || ''}</td>
@@ -41,7 +41,7 @@ async function loadEmployees() {
 
 async function submitEmployee() {
   const form = new FormData();
-  form.append('name', document.getElementById('name').value);
+  form.append('full_name', document.getElementById('full_name').value);
   form.append('phone', document.getElementById('phone').value);
   form.append('note', document.getElementById('note').value);
   form.append('birthday', document.getElementById('birthday').value);
