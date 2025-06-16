@@ -17,7 +17,7 @@ class EmployeeBase(BaseModel):
 
 
 class EmployeeCreate(EmployeeBase):
-    pass
+    id: str
 
 
 class EmployeeUpdate(EmployeeBase):

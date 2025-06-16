@@ -160,6 +160,7 @@
   <div id="modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
     <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
       <h2 id="modal-title" class="text-xl font-semibold">Добавить сотрудника</h2>
+      <input id="emp-id" class="border p-2 w-full" placeholder="ID">
       <input id="emp-name" class="border p-2 w-full" placeholder="Имя">
       <input id="emp-full_name" class="border p-2 w-full" placeholder="ФИО">
       <input id="emp-birthdate" type="date" class="border p-2 w-full">
@@ -320,10 +321,13 @@
       editingId = id;
       document.getElementById('modal').classList.remove('hidden');
       const title = document.getElementById('modal-title');
+      const idInput = document.getElementById('emp-id');
       if (id) {
         const emp = employees.find(e => e.id === id);
         if (!emp) return;
         title.textContent = 'Редактировать сотрудника';
+        idInput.value = emp.id;
+        idInput.disabled = true;
         document.getElementById('emp-name').value = emp.name || '';
         document.getElementById('emp-full_name').value = emp.full_name || '';
         document.getElementById('emp-birthdate').value = emp.birthdate || '';
@@ -334,17 +338,19 @@
       } else {
         title.textContent = 'Добавить сотрудника';
         document.querySelectorAll('#modal input, #modal textarea').forEach(el => el.value = '');
+        idInput.disabled = false;
         document.getElementById('emp-status').value = 'active';
       }
     }
 
-    function closeModal() {
-      document.getElementById('modal').classList.add('hidden');
+   function closeModal() {
+     document.getElementById('modal').classList.add('hidden');
+      document.getElementById('emp-id').disabled = false;
       editingId = null;
-    }
+   }
 
     document.getElementById('modal-save').onclick = async () => {
-      const data = {
+      const base = {
         name: document.getElementById('emp-name').value,
         full_name: document.getElementById('emp-full_name').value,
         phone: document.getElementById('emp-phone').value,
@@ -355,6 +361,7 @@
         photo_url: '',
         status: document.getElementById('emp-status').value,
       };
+      const data = editingId ? base : { id: document.getElementById('emp-id').value, ...base };
       const file = document.getElementById('emp-photo').files[0];
       try {
         if (editingId) {

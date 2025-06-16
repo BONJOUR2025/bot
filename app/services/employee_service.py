@@ -24,8 +24,13 @@ class EmployeeService:
         return list(self._employees)
 
     def add_employee(self, employee: Employee) -> Employee:
-        self._counter += 1
-        employee.id = str(self._counter)
+        if not employee.id:
+            self._counter += 1
+            employee.id = str(self._counter)
+        else:
+            # keep counter in sync if numeric ids are provided
+            if str(employee.id).isdigit():
+                self._counter = max(self._counter, int(employee.id))
         self._employees.append(employee)
         self._repo.add_employee(employee)
         return employee
@@ -63,7 +68,7 @@ class EmployeeAPIService:
 
     async def create_employee(self, data: EmployeeCreate) -> EmployeeOut:
         employee = Employee(
-            id="0",
+            id=data.id,
             name=data.name,
             full_name=data.full_name,
             phone=data.phone,
