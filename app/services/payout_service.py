@@ -55,6 +55,12 @@ class PayoutService:
             if to_dt and created and created > to_dt:
                 continue
             result.append(Payout(idx=idx, **item))
+        def _ts(p: Payout) -> datetime:
+            try:
+                return datetime.strptime(p.timestamp, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return datetime.min
+        result.sort(key=_ts, reverse=True)
         return result
 
     async def create_payout(self, data: PayoutCreate) -> Payout:
