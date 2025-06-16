@@ -1,0 +1,20 @@
+{% extends 'admin/layout.html' %}
+{% block title %}Дни рождения{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">Ближайшие дни рождения</h1>
+<ul id="birthday-list" class="list-disc pl-5 text-sm"></ul>
+<script>
+async function loadBirthdays() {
+  try {
+    const res = await axios.get('/employees/birthdays');
+    const list = document.getElementById('birthday-list');
+    list.innerHTML = res.data.map(e => `<li>${e.name} – ${e.birthday}</li>`).join('');
+  } catch (err) {
+    console.error(err);
+  }
+}
+window.onload = function(){
+  loadBirthdays();
+}
+</script>
+{% endblock %}
