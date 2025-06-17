@@ -18,6 +18,7 @@
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('vacations')">🛫 Отпуска</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('birthdays')">🎂 Дни рождения</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="openMessageModal()">✉ Сообщение пользователю</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="openBroadcastModal()">📢 Рассылка</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('requests')">📬 Текущие запросы</button>
     </nav>
 
@@ -216,6 +217,22 @@
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closeMessageModal()" class="px-4 py-2">Отмена</button>
         <button onclick="sendPersonalMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="broadcast-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+    <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
+      <h2 class="text-xl font-semibold">Общая рассылка</h2>
+      <textarea id="broadcast-text" class="border p-2 w-full" placeholder="Текст сообщения"></textarea>
+      <input id="broadcast-photo" class="border p-2 w-full" placeholder="Ссылка на фото (опционально)">
+      <div class="space-x-4">
+        <label><input type="radio" name="broadcast-format" value="HTML" checked> HTML</label>
+        <label><input type="radio" name="broadcast-format" value="Markdown"> Markdown</label>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeBroadcastModal()" class="px-4 py-2">Отмена</button>
+        <button onclick="sendBroadcast()" class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
       </div>
     </div>
   </div>
@@ -494,6 +511,30 @@
       } catch (err) {
         console.error(err);
         alert('❌ Ошибка при отправке: ' + (err.response?.data?.detail || ''));
+      }
+    }
+
+    function openBroadcastModal() {
+      document.getElementById('broadcast-text').value = '';
+      document.getElementById('broadcast-photo').value = '';
+      document.getElementById('broadcast-modal').classList.remove('hidden');
+    }
+
+    function closeBroadcastModal() {
+      document.getElementById('broadcast-modal').classList.add('hidden');
+    }
+
+    async function sendBroadcast() {
+      const text = document.getElementById('broadcast-text').value;
+      const photo = document.getElementById('broadcast-photo').value;
+      const mode = document.querySelector("input[name='broadcast-format']:checked").value;
+      try {
+        await axios.post('/api/telegram/broadcast', { message: text, parse_mode: mode, photo_url: photo || null });
+        addNotify('Рассылка отправлена');
+        closeBroadcastModal();
+      } catch (err) {
+        console.error(err);
+        alert('❌ Ошибка при отправке');
       }
     }
 

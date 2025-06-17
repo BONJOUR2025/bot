@@ -58,7 +58,7 @@ def create_app() -> FastAPI:
     vacation_service = VacationService()
     app.include_router(create_vacation_router(vacation_service), prefix="/api")
 
-    app.include_router(create_telegram_router(), prefix="/api")
+    app.include_router(create_telegram_router(employee_service._repo), prefix="/api")
 
     # Admin UI routes
     from .admin_ui import router as admin_router

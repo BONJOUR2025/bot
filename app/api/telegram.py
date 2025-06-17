@@ -3,11 +3,14 @@ from fastapi import APIRouter, HTTPException
 from telegram import Bot
 
 from app.config import TOKEN
-from app.schemas.message import MessageRequest
+from app.schemas.message import MessageRequest, BroadcastRequest
+from app.services.telegram_service import TelegramService
+from app.data.employee_repository import EmployeeRepository
 
 
-def create_telegram_router() -> APIRouter:
+def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
     router = APIRouter(prefix="/telegram", tags=["Telegram"])
+    service = TelegramService(repo)
 
     @router.post("/send_message")
     async def send_message(data: MessageRequest):
@@ -17,6 +20,16 @@ def create_telegram_router() -> APIRouter:
             return {"success": True, "sent_at": datetime.utcnow().isoformat()}
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Ошибка отправки: {exc}")
+
+    @router.post("/broadcast")
+    async def broadcast(data: BroadcastRequest):
+        try:
+            result = await service.broadcast_message_to_all(
+                data.message, parse_mode=data.parse_mode, photo_url=data.photo_url
+            )
+            return result
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Ошибка рассылки: {exc}")
 
     return router
 
