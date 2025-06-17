@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from typing import Optional
 
 from app.schemas.payout import Payout, PayoutCreate, PayoutUpdate
@@ -31,8 +31,10 @@ def create_payout_router(service: PayoutService) -> APIRouter:
 
     @router.delete("/{payout_id}")
     async def delete_payout(payout_id: str):
-        await service.delete_payouts([payout_id])
-        return {"ok": True}
+        deleted = await service.delete_payout(payout_id)
+        if deleted:
+            return {"detail": "deleted"}
+        raise HTTPException(status_code=404, detail="not found")
 
     @router.get("/active", response_model=list[Payout])
     async def list_active_payouts():

@@ -10,7 +10,18 @@ class PayoutRepository:
     def __init__(self, file_path: Optional[str] = None) -> None:
         self._file = file_path or ADVANCE_REQUESTS_FILE
         self._data: List[Dict[str, Any]] = self._load()
-        self._counter = max((int(p.get("id", 0)) for p in self._data if str(p.get("id")).isdigit()), default=0)
+        self._counter = 0
+        changed = False
+        for item in self._data:
+            raw_id = item.get("id")
+            if raw_id is None or not str(raw_id).isdigit():
+                self._counter += 1
+                item["id"] = str(self._counter)
+                changed = True
+            else:
+                self._counter = max(self._counter, int(raw_id))
+        if changed:
+            self._save()
 
     def _load(self) -> List[Dict[str, Any]]:
         if not os.path.exists(self._file):
@@ -84,4 +95,12 @@ class PayoutRepository:
     def delete_many(self, ids: List[str]) -> None:
         self._data = [p for p in self._data if str(p.get("id")) not in ids]
         self._save()
+
+    def delete(self, payout_id: str) -> bool:
+        before = len(self._data)
+        self._data = [p for p in self._data if str(p.get("id")) != str(payout_id)]
+        if len(self._data) != before:
+            self._save()
+            return True
+        return False
 

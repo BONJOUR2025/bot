@@ -11,6 +11,8 @@ from app.schemas.payout import Payout
 def test_payout_json_fields_match_schema():
     path = Path('advance_requests.json')
     data = json.loads(path.read_text(encoding='utf-8'))
-    expected = set(Payout.model_fields.keys()) - {'id'}
+    fields = set(Payout.model_fields.keys())
+    required = fields - {'id'}
     for item in data:
-        assert set(item.keys()) == expected
+        assert required.issubset(item.keys())
+        assert set(item.keys()).issubset(fields)
