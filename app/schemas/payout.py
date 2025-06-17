@@ -2,7 +2,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 class Payout(BaseModel):
-    id: str
+    id: Optional[int] = None
     user_id: str
     name: str
     phone: str
