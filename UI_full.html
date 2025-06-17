@@ -1056,15 +1056,19 @@
     }
 
     async function deletePayout(id) {
+      if (!confirm('Удалить выплату?')) return;
       await axios.delete(`/api/payouts/${id}`);
       fetchPayouts();
+      showToast('Выплата удалена');
     }
 
     async function deleteSelectedPayouts() {
       const ids = Array.from(document.querySelectorAll('.payout-check:checked')).map(cb => cb.value);
       if (!ids.length) return;
+      if (!confirm('Удалить выбранные выплаты?')) return;
       await axios.delete(`/api/payouts/`, { params: { ids: ids.join(',') } });
       fetchPayouts();
+      showToast('Выплаты удалены');
     }
 
     async function loadActiveRequests() {
@@ -1088,10 +1092,10 @@
 
     let editingPayout = null;
     function openEditPayout(id) {
-      editingPayout = id;
       const item = lastPayouts.find(p => p.id === id);
       if (!item) return;
-      openPayoutModal();
+      openPayoutModal(false);
+      editingPayout = id;
       document.getElementById('payout-emp').value = item.user_id;
       document.getElementById('payout-amount').value = item.amount;
       document.getElementById('payout-type').value = item.payout_type;
@@ -1099,15 +1103,17 @@
       document.getElementById('payout-save-btn').textContent = 'Сохранить';
     }
 
-  function openPayoutModal() {
+  function openPayoutModal(isNew = true) {
       const sel = document.getElementById('payout-emp');
       sel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
       document.getElementById('payout-modal').classList.remove('hidden');
-      editingPayout = null;
-      document.getElementById('payout-amount').value = '';
-      document.getElementById('payout-type').value = 'Аванс';
-      document.getElementById('payout-method').value = '💳 На карту';
-      document.getElementById('payout-save-btn').textContent = 'Создать';
+      if (isNew) {
+        editingPayout = null;
+        document.getElementById('payout-amount').value = '';
+        document.getElementById('payout-type').value = 'Аванс';
+        document.getElementById('payout-method').value = '💳 На карту';
+        document.getElementById('payout-save-btn').textContent = 'Создать';
+      }
   }
 
     function closePayoutModal() {
