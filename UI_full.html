@@ -6,6 +6,7 @@
   <title>Админ панель</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 </head>
 <body class="bg-gray-100 text-gray-900">
   <div class="container mx-auto p-4 space-y-6">
@@ -14,6 +15,7 @@
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSalary()">💼 Просмотр ЗП</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSchedule()">📅 Просмотр расписания</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('payouts')">💳 Выплаты</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('vacations')">🛫 Отпуска</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('birthdays')">🎂 Дни рождения</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="openMessageModal()">✉ Сообщение пользователю</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('requests')">📬 Текущие запросы</button>
@@ -135,6 +137,16 @@
       </div>
     </section>
 
+    <!-- VACATIONS SECTION -->
+    <section id="vacations" class="hidden space-y-4">
+      <h2 class="text-xl font-semibold">Отпуска</h2>
+      <div id="vacation-calendar" class="mb-4"></div>
+      <button onclick="openVacationModal()" class="bg-green-600 text-white px-4 py-2 rounded">Добавить отпуск</button>
+      <div class="overflow-x-auto shadow rounded bg-white">
+        <table class="min-w-full text-sm table-auto" id="vacation-table"></table>
+      </div>
+    </section>
+
     <!-- BIRTHDAYS SECTION -->
     <section id="birthdays" class="hidden">
       <h2 class="text-xl font-semibold mb-2">Все дни рождения</h2>
@@ -229,6 +241,25 @@
     </div>
   </div>
 
+  <div id="vacation-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+    <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
+      <h2 id="vacation-modal-title" class="text-xl font-semibold">Добавить отпуск</h2>
+      <select id="vac-emp" class="border p-2 w-full"></select>
+      <input type="date" id="vac-start" class="border p-2 w-full">
+      <input type="date" id="vac-end" class="border p-2 w-full">
+      <select id="vac-type" class="border p-2 w-full">
+        <option value="Отпуск">Отпуск</option>
+        <option value="Больничный">Больничный</option>
+        <option value="Командировка">Командировка</option>
+      </select>
+      <textarea id="vac-comment" class="border p-2 w-full" placeholder="Комментарий"></textarea>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeVacationModal()" class="px-4 py-2">Отмена</button>
+        <button id="vac-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="fixed top-2 right-2 px-4 py-2 rounded shadow hidden"></div>
 
   <script>
@@ -245,6 +276,9 @@
           const sel = document.getElementById('payout-employee-filter');
           sel.innerHTML = '<option value="">Все сотрудники</option>' + employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
           fetchPayouts();
+        }
+        if (id === 'vacations') {
+          loadVacations();
         }
         if (id === 'birthdays') {
           loadBirthdays();
@@ -633,6 +667,96 @@
       fetchPayouts();
     }
 
+    // ---- Vacations ----
+    let vacations = [];
+    let vacEditing = null;
+    let vacCalendar = null;
+
+    async function loadVacations() {
+      const res = await axios.get('/api/vacations/');
+      vacations = res.data;
+      renderVacationTable();
+      renderVacationCalendar();
+      const sel = document.getElementById('vac-emp');
+      if (sel) sel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+    }
+
+    function renderVacationTable() {
+      const table = document.getElementById('vacation-table');
+      if (!table) return;
+      table.innerHTML = `<thead class='bg-gray-200'><tr><th class='p-2'>ID</th><th>Имя</th><th>Даты</th><th>Тип</th><th>Комментарий</th><th></th></tr></thead>` +
+        '<tbody>' + vacations.map(v => `<tr class='border-t'><td class='p-2'>${v.id}</td><td>${v.name}</td><td>${v.start_date} - ${v.end_date}</td><td>${v.type}</td><td>${v.comment||''}</td><td><button onclick="openVacationModal(${v.id})" class='text-blue-600 mr-2'>✏️</button><button onclick="deleteVacation(${v.id})" class='text-red-600'>❌</button></td></tr>`).join('') +
+        '</tbody>';
+    }
+
+    function renderVacationCalendar() {
+      const el = document.getElementById('vacation-calendar');
+      if (!el) return;
+      const events = vacations.map(v => ({
+        id: String(v.id),
+        title: v.name + ' (' + v.type + ')',
+        start: v.start_date,
+        end: new Date(new Date(v.end_date).getTime() + 86400000).toISOString().slice(0,10),
+        color: v.type === 'Отпуск' ? '#3b82f6' : v.type === 'Больничный' ? '#ef4444' : '#f59e0b'
+      }));
+      if (!vacCalendar) {
+        vacCalendar = new FullCalendar.Calendar(el, {initialView:'dayGridMonth', locale:'ru', events});
+        vacCalendar.render();
+      } else {
+        vacCalendar.removeAllEvents();
+        events.forEach(e => vacCalendar.addEvent(e));
+      }
+    }
+
+    function openVacationModal(id=null) {
+      vacEditing = id;
+      document.getElementById('vacation-modal').classList.remove('hidden');
+      if (id) {
+        const v = vacations.find(x => x.id == id);
+        if (!v) return;
+        document.getElementById('vacation-modal-title').textContent = 'Редактировать отпуск';
+        document.getElementById('vac-emp').value = v.employee_id;
+        document.getElementById('vac-start').value = v.start_date;
+        document.getElementById('vac-end').value = v.end_date;
+        document.getElementById('vac-type').value = v.type;
+        document.getElementById('vac-comment').value = v.comment || '';
+      } else {
+        document.getElementById('vacation-modal-title').textContent = 'Добавить отпуск';
+        document.getElementById('vac-start').value = '';
+        document.getElementById('vac-end').value = '';
+        document.getElementById('vac-type').value = 'Отпуск';
+        document.getElementById('vac-comment').value = '';
+      }
+    }
+
+    function closeVacationModal() {
+      document.getElementById('vacation-modal').classList.add('hidden');
+    }
+
+    document.getElementById('vac-save')?.addEventListener('click', async () => {
+      const payload = {
+        employee_id: document.getElementById('vac-emp').value,
+        name: employees.find(e => e.id === document.getElementById('vac-emp').value)?.full_name || '',
+        start_date: document.getElementById('vac-start').value,
+        end_date: document.getElementById('vac-end').value,
+        type: document.getElementById('vac-type').value,
+        comment: document.getElementById('vac-comment').value
+      };
+      if (vacEditing) {
+        await axios.put(`/api/vacations/${vacEditing}`, payload);
+      } else {
+        await axios.post('/api/vacations/', payload);
+      }
+      closeVacationModal();
+      loadVacations();
+    });
+
+    async function deleteVacation(id) {
+      if (!confirm('Удалить запись?')) return;
+      await axios.delete(`/api/vacations/${id}`);
+      loadVacations();
+    }
+
     function resetPayoutFilters() {
       document.getElementById('payout-type-filter').value = '';
       document.getElementById('payout-status-filter').value = '';
@@ -735,6 +859,7 @@
       loadEmployees();
       loadBirthdays();
       loadActiveRequests();
+      loadVacations();
       const input = document.getElementById('schedule-date-picker');
       if (input) input.value = new Date().toISOString().slice(0, 10);
       showSection('employees');

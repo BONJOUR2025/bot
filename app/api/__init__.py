@@ -15,6 +15,8 @@ from ..services.salary_service import SalaryService
 from ..services.schedule_service import ScheduleService
 from ..services.payout_service import PayoutService
 from ..services.birthday_service import BirthdayService
+from ..services.vacation_service import VacationService
+from .vacations import create_vacation_router
 
 
 def create_app() -> FastAPI:
@@ -52,6 +54,9 @@ def create_app() -> FastAPI:
 
     birthday_service = BirthdayService(employee_service._repo)
     app.include_router(create_birthdays_router(birthday_service), prefix="/api")
+
+    vacation_service = VacationService()
+    app.include_router(create_vacation_router(vacation_service), prefix="/api")
 
     app.include_router(create_telegram_router(), prefix="/api")
 

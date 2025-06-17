@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     advance_requests_file: str = Field(
         "advance_requests.json", env="ADVANCE_REQUESTS_FILE"
     )
+    vacations_file: str = Field("vacations.json", env="VACATIONS_FILE")
     admin_id: int = Field(0, env="ADMIN_ID")
     admin_chat_id: int = Field(0, env="ADMIN_CHAT_ID")
     admin_login: str = Field("admin", env="ADMIN_LOGIN")

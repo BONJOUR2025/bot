@@ -34,6 +34,10 @@ async def admin_birthdays(request: Request):
 async def admin_broadcasts(request: Request):
     return templates.TemplateResponse("admin/broadcasts.html", {"request": request})
 
+@router.get("/vacations", response_class=HTMLResponse)
+async def admin_vacations(request: Request):
+    return templates.TemplateResponse("admin/vacations.html", {"request": request})
+
 @router.get("/settings", response_class=HTMLResponse)
 async def admin_settings(request: Request):
     return templates.TemplateResponse("admin/settings.html", {"request": request})
