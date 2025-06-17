@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from telegram import Bot
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.config import TOKEN
 from app.data.employee_repository import EmployeeRepository
@@ -47,3 +48,32 @@ class TelegramService:
             except Exception as exc:
                 logger.warning(f"Failed for {emp.id}: {exc}")
         return {"success": True, "sent": success, "total": len(employees)}
+
+    async def send_message_to_user(
+        self,
+        user_id: str,
+        message: str,
+        parse_mode: str = "HTML",
+        photo_url: Optional[str] = None,
+        require_ack: bool = False,
+    ) -> None:
+        reply_markup = None
+        if require_ack:
+            reply_markup = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("✅ Принято", callback_data=f"ack_{user_id}")]]
+            )
+        if photo_url:
+            await self.bot.send_photo(
+                chat_id=user_id,
+                photo=photo_url,
+                caption=message,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
+            )
+        else:
+            await self.bot.send_message(
+                chat_id=user_id,
+                text=message,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
+            )

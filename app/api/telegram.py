@@ -1,8 +1,5 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
-from telegram import Bot
-
-from app.config import TOKEN
 from app.schemas.message import MessageRequest, BroadcastRequest
 from app.services.telegram_service import TelegramService
 from app.data.employee_repository import EmployeeRepository
@@ -14,9 +11,14 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
 
     @router.post("/send_message")
     async def send_message(data: MessageRequest):
-        bot = Bot(token=TOKEN)
         try:
-            await bot.send_message(chat_id=data.user_id, text=data.message)
+            await service.send_message_to_user(
+                data.user_id,
+                data.message,
+                parse_mode=data.parse_mode,
+                photo_url=data.photo_url,
+                require_ack=data.require_ack,
+            )
             return {"success": True, "sent_at": datetime.utcnow().isoformat()}
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Ошибка отправки: {exc}")

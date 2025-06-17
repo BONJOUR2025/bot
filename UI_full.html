@@ -214,6 +214,12 @@
       <h2 class="text-xl font-semibold">Сообщение пользователю</h2>
       <select id="msg-emp" class="border p-2 w-full"></select>
       <textarea id="msg-text" class="border p-2 w-full" placeholder="Текст сообщения"></textarea>
+      <input id="msg-photo" class="border p-2 w-full" placeholder="Ссылка на фото">
+      <div class="space-x-4 text-sm">
+        <label><input type="radio" name="msg-format" value="HTML" checked> HTML</label>
+        <label><input type="radio" name="msg-format" value="Markdown"> Markdown</label>
+      </div>
+      <label class="text-sm"><input type="checkbox" id="msg-ack" class="mr-1">Добавить кнопку 'Принято'</label>
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closeMessageModal()" class="px-4 py-2">Отмена</button>
         <button onclick="sendPersonalMessage()" class="bg-blue-600 text-white px-4 py-2 rounded">Отправить</button>
@@ -487,6 +493,9 @@
         const select = document.getElementById('msg-emp');
         select.innerHTML = res.data.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
         document.getElementById('msg-text').value = '';
+        document.getElementById('msg-photo').value = '';
+        document.getElementById('msg-ack').checked = false;
+        document.querySelector('input[name="msg-format"][value="HTML"]').checked = true;
         document.getElementById('message-modal').classList.remove('hidden');
       } catch (err) {
         console.error(err);
@@ -500,12 +509,21 @@
     async function sendPersonalMessage() {
       const userId = document.getElementById('msg-emp').value;
       const text = document.getElementById('msg-text').value;
+      const format = document.querySelector('input[name="msg-format"]:checked').value;
+      const photoUrl = document.getElementById('msg-photo').value || null;
+      const requireAck = document.getElementById('msg-ack').checked;
       if (!userId || !text.trim()) {
         alert('Пожалуйста, выберите пользователя и введите сообщение.');
         return;
       }
       try {
-        await axios.post('/api/telegram/send_message', { user_id: userId, message: text });
+        await axios.post('/api/telegram/send_message', {
+          user_id: userId,
+          message: text,
+          parse_mode: format,
+          photo_url: photoUrl,
+          require_ack: requireAck
+        });
         addNotify(`Сообщение отправлено пользователю ${userId}`);
         closeMessageModal();
       } catch (err) {

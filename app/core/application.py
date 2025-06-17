@@ -31,6 +31,7 @@ from ..handlers.user import (
     change_payout_amount,
     handle_edit_confirmation,
     handle_admin_change_response,
+    handle_acknowledgment,
 )
 from ..handlers.admin import (
     admin,
@@ -108,6 +109,7 @@ def register_handlers(app):
     app.add_handler(CommandHandler("reset_payout", reset_payout_request, filters=filters.User(ADMIN_ID)))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.User(ADMIN_ID), save_new_value))
     app.add_handler(CallbackQueryHandler(mark_sent, pattern=r"^mark_sent_"))
+    app.add_handler(CallbackQueryHandler(handle_acknowledgment, pattern=r"^ack_"))
     app.add_handler(manual_payout_handler)
     app.add_error_handler(error_handler)
 
