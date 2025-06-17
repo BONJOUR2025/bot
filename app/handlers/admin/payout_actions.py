@@ -15,18 +15,10 @@ from ...services.advance_requests import (
     API_URL,
 )
 import requests
-    try:
-        requests.put(f"{API_URL}/payouts/{request_to_approve['id']}", json={"status": "Одобрено"})
-        log(f"✅ Статус выплаты {request_to_approve['id']} обновлён на Одобрено")
-    except Exception as e:
-        log(f"❌ Ошибка обновления статуса выплаты: {e}")
 from ...utils.logger import log
 
 
-    requests.post(
-        f"{API_URL}/telegram/send_message",
-        json={"user_id": user_id, "message": user_message},
-    )
+async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     user_id = query.data.split("_")[-1]
@@ -41,11 +33,6 @@ from ...utils.logger import log
         await query.edit_message_text("❌ Нет активного запроса для одобрения.")
         return
 
-    try:
-        requests.put(f"{API_URL}/payouts/{request_to_approve['idx']}", json={"status": "Одобрено"})
-        log(f"✅ Статус выплаты {request_to_approve['idx']} обновлён на Одобрено")
-    except Exception as e:
-        log(f"❌ Ошибка обновления статуса выплаты: {e}")
 
     payout_type = request_to_approve.get("payout_type") or "Не указано"
     user_message = (
@@ -54,7 +41,6 @@ from ...utils.logger import log
         f"Сумма: {request_to_approve['amount']} ₽\n"
         f"Метод: {request_to_approve['method']}"
     )
-    await context.bot.send_message(chat_id=user_id, text=user_message)
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n✅ Разрешено"
@@ -68,11 +54,7 @@ from ...utils.logger import log
             f"🏦 {request_to_approve['bank']}\n"
             f"💰 {request_to_approve['amount']} ₽\n"
             f"📂 {payout_type}"
-    try:
-        requests.put(f"{API_URL}/payouts/{request_to_deny['id']}", json={"status": "Отклонено"})
-        log(f"✅ Статус выплаты {request_to_deny['id']} обновлён на Отклонено")
-    except Exception as e:
-        log(f"❌ Ошибка обновления статуса выплаты: {e}")
+        )
         cashier_buttons = InlineKeyboardMarkup(
             [[InlineKeyboardButton("📤 Отправлено", callback_data=f"mark_sent_{user_id}")]]
         )
@@ -81,10 +63,7 @@ from ...utils.logger import log
                 chat_id=CARD_DISPATCH_CHAT_ID,
                 text=cashier_text,
                 reply_markup=cashier_buttons,
-    requests.post(
-        f"{API_URL}/telegram/send_message",
-        json={"user_id": user_id, "message": user_message},
-    )
+            )
             log(f"📨 [allow_payout] Сообщение кассиру отправлено для user_id: {user_id}")
         except Exception as e:
             log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")
@@ -105,11 +84,6 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await query.edit_message_text("❌ Нет активного запроса для отклонения.")
         return
 
-    try:
-        requests.put(f"{API_URL}/payouts/{request_to_deny['idx']}", json={"status": "Отклонено"})
-        log(f"✅ Статус выплаты {request_to_deny['idx']} обновлён на Отклонено")
-    except Exception as e:
-        log(f"❌ Ошибка обновления статуса выплаты: {e}")
 
     payout_type = request_to_deny.get("payout_type") or "Не указано"
     user_message = (
@@ -118,7 +92,6 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"Сумма: {request_to_deny['amount']} ₽\n"
         f"Метод: {request_to_deny['method']}"
     )
-    await context.bot.send_message(chat_id=user_id, text=user_message)
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n❌ Отказано"
@@ -170,6 +143,33 @@ async def reset_payout_request(update: Update, context: ContextTypes.DEFAULT_TYP
             if persistence:
                 persistence.update_user_data(int(uid), user_data)
 
+    message_lines = []
+    if pending_requests:
+        message_lines.append(f"✅ Сброшено {len(pending_requests)} запросов из файла:")
+        message_lines.extend([f"Запрос #{i+1}:\n{detail}" for i, detail in enumerate(reset_details)])
+    else:
+        message_lines.append("📭 Нет активных запросов в файле.")
+
+    if reset_users:
+        message_lines.append(f"\n✅ Очищено {len(reset_users)} зависших состояний:")
+        message_lines.extend([f"Пользователь #{i+1}: {user}" for i, user in enumerate(reset_users)])
+    else:
+        message_lines.append("\n📭 Нет зависших состояний у пользователей.")
+
+    reset_message = "\n\n".join(message_lines)
+    await update.message.reply_text(reset_message, reply_markup=get_admin_menu())
+    log(f"✅ [reset_payout_request] Завершён сброс: {reset_message}")
+
+
+async def mark_sent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.data.split("_")[-1]
+    current_text = query.message.text
+    updated_text = f"{current_text}\n\n📤 Отправлено"
+
+    await query.edit_message_text(updated_text)
     message_lines = []
     if pending_requests:
         message_lines.append(f"✅ Сброшено {len(pending_requests)} запросов из файла:")
