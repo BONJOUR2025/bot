@@ -187,7 +187,16 @@
       </div>
       <div class="overflow-x-auto shadow rounded bg-white">
         <table class="min-w-full text-sm" id="messages-table">
-          <thead class="bg-gray-200"><tr><th class="p-2">Получатель</th><th class="p-2">Текст</th><th class="p-2">Фото</th><th class="p-2">Дата</th><th class="p-2">Статус</th><th class="p-2">Принято</th><th class="p-2">Время принятия</th></tr></thead>
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="p-2">Получатель</th>
+              <th class="p-2">Текст</th>
+              <th class="p-2">Фото</th>
+              <th class="p-2">Дата</th>
+              <th class="p-2">Статус</th>
+              <th class="p-2">Действие</th>
+            </tr>
+          </thead>
           <tbody id="messages-body"></tbody>
         </table>
       </div>
@@ -421,10 +430,14 @@
         const body = document.getElementById('messages-body');
         body.innerHTML = res.data.map(m => {
           const photo = m.photo ? '✅' : '❌';
-          const accepted = m.accepted ? '✅' : '❌';
           const ts = new Date(m.timestamp).toLocaleString();
-          const acceptTs = m.timestamp_accept ? new Date(m.timestamp_accept).toLocaleString() : '';
-          return `<tr class='border-b'><td class='p-2'>${m.name}</td><td class='p-2'>${m.text}</td><td class='p-2'>${photo}</td><td class='p-2'>${ts}</td><td class='p-2'>${m.status}</td><td class='p-2'>${accepted}</td><td class='p-2'>${acceptTs}</td></tr>`;
+          let status = m.status;
+          if (m.accepted) {
+            const at = m.timestamp_accept ? new Date(m.timestamp_accept).toLocaleString() : '';
+            status = `✅ Принято${at ? ' в ' + at : ''}`;
+          }
+          const action = m.accepted ? '' : `<button class='text-blue-600' onclick="acceptMessage('${m.id}')">Принято</button>`;
+          return `<tr class='border-b'><td class='p-2'>${m.name}</td><td class='p-2'>${m.text}</td><td class='p-2'>${photo}</td><td class='p-2'>${ts}</td><td class='p-2'>${status}</td><td class='p-2'>${action}</td></tr>`;
         }).join('');
       } catch (err) {
         console.error(err);
@@ -623,6 +636,15 @@
       } catch (err) {
         console.error(err);
         alert('❌ Ошибка при отправке');
+      }
+    }
+
+    async function acceptMessage(id) {
+      try {
+        await axios.post(`/api/messages/${id}/accept`);
+        loadMessages();
+      } catch (err) {
+        console.error(err);
       }
     }
 
