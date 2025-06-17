@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 
 class MessageRepository:
@@ -39,14 +40,17 @@ class MessageRepository:
             if str(m.get("id")) == str(msg_id):
                 m["status"] = "Принято"
                 m["accepted"] = True
+                m["timestamp_accept"] = datetime.utcnow().isoformat()
                 self._save()
                 return m
         return None
 
-    def accept_by_details(self, user_id: str, message_id: int) -> None:
+    def accept_by_details(self, user_id: str, message_id: int) -> Optional[Dict[str, Any]]:
         for m in self._data:
             if str(m.get("user_id")) == str(user_id) and m.get("message_id") == message_id:
                 m["status"] = "Принято"
                 m["accepted"] = True
+                m["timestamp_accept"] = datetime.utcnow().isoformat()
                 self._save()
-                break
+                return m
+        return None

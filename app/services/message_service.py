@@ -41,10 +41,16 @@ class MessageService:
     async def accept_message(self, msg_id: str) -> Optional[MessageOut]:
         updated = self._repo.accept(msg_id)
         if updated:
-            self._telegram.update_sent_message_status(updated["user_id"], updated["message_id"], "принято")
+            self._telegram.update_sent_message_status(
+                updated["user_id"], updated["message_id"], "принято"
+            )
             return MessageOut(**updated)
         return None
 
     @staticmethod
     def accept_by_details(user_id: str, message_id: int) -> None:
         MessageRepository().accept_by_details(user_id, message_id)
+
+    @staticmethod
+    def mark_message_as_accepted(msg_id: str) -> None:
+        MessageRepository().accept(msg_id)

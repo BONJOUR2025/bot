@@ -16,6 +16,7 @@ class MessageOut(BaseModel):
     status: str
     accepted: bool
     timestamp: str
+    timestamp_accept: Optional[str] = None
     message_id: int
 
 class BroadcastRequest(BaseModel):
