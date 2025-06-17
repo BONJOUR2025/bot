@@ -153,7 +153,10 @@
 
     <!-- REQUESTS SECTION -->
     <section id="requests" class="hidden">
-      <h2 class="text-xl font-semibold mb-2">Текущие запросы</h2>
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-xl font-semibold">Текущие запросы</h2>
+        <button onclick="loadActiveRequests()" class="px-3 py-1 bg-white rounded shadow text-sm">🔄 Обновить</button>
+      </div>
       <div class="overflow-x-auto">
         <table id="requests-table" class="min-w-full text-sm table-auto">
           <thead class="bg-gray-200">
