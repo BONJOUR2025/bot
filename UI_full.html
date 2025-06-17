@@ -18,7 +18,7 @@
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('adjustments')">📈 Удержания/Премии</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('vacations')">🛫 Отпуска</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('birthdays')">🎂 Дни рождения</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="openMessageModal()">✉ Сообщение пользователю</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('messages')">✉ Сообщения</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="openBroadcastModal()">📢 Рассылка</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('requests')">📬 Текущие запросы</button>
     </nav>
@@ -66,13 +66,6 @@
         <table id="employee-table" class="min-w-full text-sm">
           <thead class="bg-gray-200"></thead>
           <tbody></tbody>
-        </table>
-      </div>
-      <h2 class="text-xl font-semibold mt-8">Журнал сообщений</h2>
-      <div class="overflow-x-auto shadow rounded bg-white">
-        <table id="sent-messages-table" class="min-w-full text-sm">
-          <thead class="bg-gray-200"><tr><th class="p-2">Сотрудник</th><th class="p-2">Статус</th><th class="p-2">Время</th></tr></thead>
-          <tbody id="sent-body"></tbody>
         </table>
       </div>
     </section>
@@ -186,6 +179,20 @@
       </table>
     </section>
 
+    <!-- MESSAGES SECTION -->
+    <section id="messages" class="hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">Сообщения</h2>
+        <button onclick="openMessageModal()" class="bg-blue-600 text-white px-4 py-2 rounded">📨 Новое сообщение</button>
+      </div>
+      <div class="overflow-x-auto shadow rounded bg-white">
+        <table class="min-w-full text-sm" id="messages-table">
+          <thead class="bg-gray-200"><tr><th class="p-2">Получатель</th><th class="p-2">Текст</th><th class="p-2">Фото</th><th class="p-2">Дата</th><th class="p-2">Статус</th><th class="p-2">Принято</th></tr></thead>
+          <tbody id="messages-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- REQUESTS SECTION -->
     <section id="requests" class="hidden">
       <div class="flex items-center justify-between mb-2">
@@ -242,7 +249,7 @@
         <button onclick="applyFormat('s')" class="px-2 py-1 border rounded">S</button>
         <button onclick="applyFormat('a')" class="px-2 py-1 border rounded">A</button>
       </div>
-      <input id="msg-photo" class="border p-2 w-full" placeholder="Ссылка на фото">
+      <input id="msg-photo" type="file" accept="image/*" class="border p-2 w-full">
       <div class="space-x-4 text-sm">
         <label><input type="radio" name="msg-format" value="HTML" checked> HTML</label>
         <label><input type="radio" name="msg-format" value="Markdown"> Markdown</label>
@@ -360,6 +367,9 @@
         if (id === 'birthdays') {
           loadBirthdays();
         }
+        if (id === 'messages') {
+          loadMessages();
+        }
         if (id === 'requests') {
           loadActiveRequests();
         }
@@ -405,16 +415,15 @@
       }
     }
 
-    async function loadSentMessages() {
+    async function loadMessages() {
       try {
-        const res = await axios.get('/api/telegram/sent_messages');
-        const body = document.getElementById('sent-body');
+        const res = await axios.get('/api/messages/');
+        const body = document.getElementById('messages-body');
         body.innerHTML = res.data.map(m => {
-          const emp = employees.find(e => e.id === m.user_id);
-          const name = emp ? (emp.full_name || emp.name) : m.user_id;
-          const status = m.status === 'принято' ? 'Принято ✅' : 'Отправлено';
+          const photo = m.photo ? '✅' : '❌';
+          const accepted = m.accepted ? '✅' : '❌';
           const ts = new Date(m.timestamp).toLocaleString();
-          return `<tr class='border-b'><td class='p-2'>${name}</td><td class='p-2'>${status}</td><td class='p-2'>${ts}</td></tr>`;
+          return `<tr class='border-b'><td class='p-2'>${m.name}</td><td class='p-2'>${m.text}</td><td class='p-2'>${photo}</td><td class='p-2'>${ts}</td><td class='p-2'>${m.status}</td><td class='p-2'>${accepted}</td></tr>`;
         }).join('');
       } catch (err) {
         console.error(err);
@@ -594,27 +603,25 @@
     async function sendPersonalMessage() {
       const userId = document.getElementById('msg-emp').value;
       const text = document.getElementById('msg-text').value;
-      const format = document.querySelector('input[name="msg-format"]:checked').value;
-      const photoUrl = document.getElementById('msg-photo').value || null;
       const requireAck = document.getElementById('msg-ack').checked;
       if (!userId || !text.trim()) {
         alert('Пожалуйста, выберите пользователя и введите сообщение.');
         return;
       }
+      const form = new FormData();
+      form.append('user_id', userId);
+      form.append('message', text);
+      form.append('require_ack', requireAck);
+      const file = document.getElementById('msg-photo').files[0];
+      if (file) form.append('photo', file);
       try {
-        await axios.post('/api/telegram/send_message', {
-          user_id: userId,
-          message: text,
-          parse_mode: format,
-          photo_url: photoUrl,
-          require_ack: requireAck
-        });
+        await axios.post('/api/messages/', form);
         addNotify(`Сообщение отправлено пользователю ${userId}`);
         closeMessageModal();
-        loadSentMessages();
+        loadMessages();
       } catch (err) {
         console.error(err);
-        alert('❌ Ошибка при отправке: ' + (err.response?.data?.detail || ''));
+        alert('❌ Ошибка при отправке');
       }
     }
 
@@ -1113,7 +1120,7 @@
     window.onload = () => {
       loadEmployees();
       loadBirthdays();
-      loadSentMessages();
+      loadMessages();
       loadActiveRequests();
       loadVacations();
       loadAdjustments();
