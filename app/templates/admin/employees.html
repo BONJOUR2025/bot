@@ -1,13 +1,30 @@
-<h1 class="text-2xl font-semibold mb-4">Сотрудники</h1>
-<table class="min-w-full bg-white border mb-4" id="employee-table"></table>
-<form onsubmit="submitEmployee(); return false;" class="space-y-2 max-w-md">
-  <input id="full_name" class="border p-2 w-full" placeholder="ФИО" required />
-  <input id="phone" class="border p-2 w-full" placeholder="Телефон" required />
-  <input id="note" class="border p-2 w-full" placeholder="Примечание" />
-  <input id="birthday" type="date" class="border p-2 w-full" placeholder="Дата рождения" />
-  <input id="photo" type="file" class="border p-2 w-full" accept="image/*" />
-  <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Создать</button>
-</form>
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <h1 class="text-2xl font-semibold mb-4">Сотрудники</h1>
+  <table class="min-w-full text-sm table-auto divide-y divide-gray-200 mb-4" id="employee-table"></table>
+  <form onsubmit="submitEmployee(); return false;" class="space-y-3 max-w-md">
+    <label class="block">
+      <span class="text-sm">ФИО</span>
+      <input id="full_name" class="border rounded p-2 w-full" required />
+    </label>
+    <label class="block">
+      <span class="text-sm">Телефон</span>
+      <input id="phone" class="border rounded p-2 w-full" required />
+    </label>
+    <label class="block">
+      <span class="text-sm">Примечание</span>
+      <input id="note" class="border rounded p-2 w-full" />
+    </label>
+    <label class="block">
+      <span class="text-sm">Дата рождения</span>
+      <input id="birthday" type="date" class="border rounded p-2 w-full" />
+    </label>
+    <label class="block">
+      <span class="text-sm">Фото</span>
+      <input id="photo" type="file" class="border rounded p-2 w-full" accept="image/*" />
+    </label>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
+  </form>
+</div>
 <script>
 async function loadEmployees() {
   try {
@@ -19,7 +36,7 @@ async function loadEmployees() {
       </tr></thead>
       <tbody>
         ${res.data.map(e => `
-          <tr class='border-t'>
+          <tr class='border-t odd:bg-gray-50'>
             <td class='p-2'>${e.full_name}</td>
             <td>${e.phone}</td>
             <td>${e.note || ''}</td>

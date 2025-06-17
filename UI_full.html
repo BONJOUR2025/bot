@@ -10,17 +10,17 @@
 </head>
 <body class="bg-gray-100 text-gray-900">
   <div class="container mx-auto p-4 space-y-6">
-    <nav class="flex flex-wrap gap-2 mb-4">
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('employees')">Сотрудники</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSalary()">💼 Просмотр ЗП</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSchedule()">📅 Просмотр расписания</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('payouts')">💳 Выплаты</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('adjustments')">📈 Удержания/Премии</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('vacations')">🛫 Отпуска</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('birthdays')">🎂 Дни рождения</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('messages')">✉ Сообщения</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="openBroadcastModal()">📢 Рассылка</button>
-      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('requests')">📬 Текущие запросы</button>
+    <nav class="flex flex-wrap gap-2 mb-4 bg-white p-3 rounded shadow">
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSection('employees')">Сотрудники</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSalary()">💼 Просмотр ЗП</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSchedule()">📅 Просмотр расписания</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSection('payouts')">💳 Выплаты</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSection('adjustments')">📈 Удержания/Премии</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSection('vacations')">🛫 Отпуска</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSection('birthdays')">🎂 Дни рождения</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSection('messages')">✉ Сообщения</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="openBroadcastModal()">📢 Рассылка</button>
+      <button class="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" onclick="showSection('requests')">📬 Текущие запросы</button>
     </nav>
 
     <div id="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -410,7 +410,7 @@
         const res = await axios.get('/api/birthdays/');
         const body = document.getElementById('birthdays-body');
         body.innerHTML = res.data.map(p => `
-          <tr class='border-b'>
+          <tr class='border-b odd:bg-gray-50'>
             <td class='p-2'>${p.full_name}</td>
             <td class='p-2'>${new Date(p.birthdate).toLocaleDateString()}</td>
             <td class='p-2'>${p.age}</td>
@@ -437,7 +437,7 @@
             status = `✅ Принято${at ? ' в ' + at : ''}`;
           }
           const action = m.accepted ? '' : `<button class='text-blue-600' onclick="acceptMessage('${m.id}')">Принято</button>`;
-          return `<tr class='border-b'><td class='p-2'>${m.name}</td><td class='p-2'>${m.text}</td><td class='p-2'>${photo}</td><td class='p-2'>${ts}</td><td class='p-2'>${status}</td><td class='p-2'>${action}</td></tr>`;
+          return `<tr class='border-b odd:bg-gray-50'><td class='p-2'>${m.name}</td><td class='p-2'>${m.text}</td><td class='p-2'>${photo}</td><td class='p-2'>${ts}</td><td class='p-2'>${status}</td><td class='p-2'>${action}</td></tr>`;
         }).join('');
       } catch (err) {
         console.error(err);
@@ -457,7 +457,7 @@
         <th class='p-2 text-left'>Действия</th>
       </tr>`;
       tbody.innerHTML = list.map(e => `
-        <tr class='border-b'>
+        <tr class='border-b odd:bg-gray-50'>
           <td class='p-2'>${e.name || ''}</td>
           <td class='p-2'>${e.full_name || ''}</td>
           <td class='p-2'>${e.birthdate || ''}</td>
@@ -725,7 +725,7 @@
         </tr>
         </thead><tbody>`;
       html += data.map(r => `
-        <tr class='border-b'>
+        <tr class='border-b odd:bg-gray-50'>
           <td class='p-2'>${r.name}</td>
           <td class='p-2'>${r.month}</td>
           <td class='p-2'>${r.shifts_main}</td>
@@ -806,7 +806,7 @@
     function renderPayoutTable(data) {
       const body = document.getElementById('payouts-body');
       body.innerHTML = data.map(p => `
-        <tr class='border-b'>
+        <tr class='border-b odd:bg-gray-50'>
           <td class='p-2'><input type="checkbox" class="payout-check" value="${p.id}"></td>
           <td class='p-2'>${p.name}</td>
           <td class='p-2'>${p.payout_type}</td>
@@ -968,7 +968,7 @@
       const body = document.getElementById('adj-table');
       if (!body) return;
       body.innerHTML = adjustments.map(a => `
-        <tr class='border-b'>
+        <tr class='border-b odd:bg-gray-50'>
           <td class='p-2'>${a.employee_name}</td>
           <td class='p-2'>${a.record_type}</td>
           <td class='p-2'>${a.reason}</td>
@@ -1072,7 +1072,7 @@
         const res = await axios.get('/api/payouts/active');
         const tbody = document.querySelector('#requests-table tbody');
         tbody.innerHTML = res.data.map(r => `
-          <tr class='border-b'>
+          <tr class='border-b odd:bg-gray-50'>
             <td class='p-2'>${r.name}</td>
             <td class='p-2'>${r.amount} ₽</td>
             <td class='p-2'>${r.method}</td>

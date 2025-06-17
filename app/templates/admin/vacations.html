@@ -1,9 +1,9 @@
-<h1 class="text-2xl font-semibold mb-4">Отпуска</h1>
-<div id="vacation-calendar" class="mb-4"></div>
-<div class="mb-2">
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <h1 class="text-2xl font-semibold">Отпуска</h1>
+  <div id="vacation-calendar" class="mb-4"></div>
   <button onclick="openVacationModal()" class="bg-green-600 text-white px-4 py-2 rounded">➕ Добавить отпуск</button>
+  <table class="min-w-full text-sm bg-white rounded shadow" id="vacation-table"></table>
 </div>
-<table class="min-w-full text-sm bg-white rounded shadow" id="vacation-table"></table>
 
 <div id="vacation-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
   <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
@@ -33,7 +33,7 @@ let vacEditing = null;
 function renderVacationTable(data){
   const table = document.getElementById('vacation-table');
   table.innerHTML = `<thead class='bg-gray-200'><tr><th class='p-2'>ID</th><th>Имя</th><th>Даты</th><th>Тип</th><th>Комментарий</th><th></th></tr></thead><tbody>`+
-    data.map(v=>`<tr class='border-t'><td class='p-2'>${v.id}</td><td>${v.name}</td><td>${v.start_date} - ${v.end_date}</td><td>${v.type}</td><td>${v.comment||''}</td><td><button onclick="editVacation(${v.id})" class='text-blue-600 mr-2'>✏️</button><button onclick="deleteVacation(${v.id})" class='text-red-600'>❌</button></td></tr>`).join('')+
+    data.map(v=>`<tr class='border-t odd:bg-gray-50'><td class='p-2'>${v.id}</td><td>${v.name}</td><td>${v.start_date} - ${v.end_date}</td><td>${v.type}</td><td>${v.comment||''}</td><td><button onclick="editVacation(${v.id})" class='text-blue-600 mr-2'>✏️</button><button onclick="deleteVacation(${v.id})" class='text-red-600'>❌</button></td></tr>`).join('')+
     `</tbody>`;
 }
 

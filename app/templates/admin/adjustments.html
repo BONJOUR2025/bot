@@ -1,6 +1,7 @@
-<h1 class="text-2xl font-semibold mb-4">Удержания и Премии</h1>
-<button onclick="openAdjModal()" class="bg-green-600 text-white px-4 py-2 rounded mb-4">Добавить запись</button>
-<table class="min-w-full bg-white border rounded shadow text-sm">
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <h1 class="text-2xl font-semibold">Удержания и Премии</h1>
+  <button onclick="openAdjModal()" class="bg-green-600 text-white px-4 py-2 rounded">Добавить запись</button>
+  <table class="min-w-full bg-white border rounded shadow text-sm">
   <thead class="bg-gray-200">
     <tr>
       <th class="p-2">Сотрудник</th>
@@ -14,6 +15,7 @@
   </thead>
   <tbody id="adj-body"></tbody>
 </table>
+</div>
 
 <div id="adj-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
   <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
@@ -78,7 +80,7 @@ async function loadAdjustments() {
 function renderAdjTable() {
   const body = document.getElementById('adj-body');
   body.innerHTML = adjustments.map(a => `
-    <tr class='border-b'>
+    <tr class='border-b odd:bg-gray-50'>
       <td class='p-2'>${a.employee_name}</td>
       <td class='p-2'>${a.record_type}</td>
       <td class='p-2'>${a.reason}</td>
