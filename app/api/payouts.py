@@ -34,6 +34,11 @@ def create_payout_router(service: PayoutService) -> APIRouter:
         await service.delete_payouts([payout_id])
         return {"ok": True}
 
+    @router.get("/active", response_model=list[Payout])
+    async def list_active_payouts():
+        rows = await service.list_active_payouts()
+        return rows
+
     @router.delete("/")
     async def delete_many(ids: str):
         id_list = [i for i in ids.split(",") if i]

@@ -154,7 +154,21 @@
     <!-- REQUESTS SECTION -->
     <section id="requests" class="hidden">
       <h2 class="text-xl font-semibold mb-2">Текущие запросы</h2>
-      <div id="requests-content" class="text-sm">Загрузка...</div>
+      <div class="overflow-x-auto">
+        <table id="requests-table" class="min-w-full text-sm table-auto">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="p-2 text-left">Имя</th>
+              <th class="p-2 text-left">Сумма</th>
+              <th class="p-2 text-left">Способ</th>
+              <th class="p-2 text-left">Тип</th>
+              <th class="p-2 text-left">Статус</th>
+              <th class="p-2 text-left">Дата</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
 
   <div id="modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
@@ -231,6 +245,9 @@
         }
         if (id === 'birthdays') {
           loadBirthdays();
+        }
+        if (id === 'requests') {
+          loadActiveRequests();
         }
       }
     }
@@ -638,6 +655,25 @@
       fetchPayouts();
     }
 
+    async function loadActiveRequests() {
+      try {
+        const res = await axios.get('/api/payouts/active');
+        const tbody = document.querySelector('#requests-table tbody');
+        tbody.innerHTML = res.data.map(r => `
+          <tr class='border-b'>
+            <td class='p-2'>${r.name}</td>
+            <td class='p-2'>${r.amount} ₽</td>
+            <td class='p-2'>${r.method}</td>
+            <td class='p-2'>${r.payout_type}</td>
+            <td class='p-2'>${r.status}</td>
+            <td class='p-2'>${new Date(r.timestamp).toLocaleString()}</td>
+          </tr>`).join('');
+        document.getElementById('stat-active').textContent = res.data.length;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
     let editingPayout = null;
     function openEditPayout(id) {
       editingPayout = id;
@@ -695,6 +731,7 @@
     window.onload = () => {
       loadEmployees();
       loadBirthdays();
+      loadActiveRequests();
       const input = document.getElementById('schedule-date-picker');
       if (input) input.value = new Date().toISOString().slice(0, 10);
       showSection('employees');

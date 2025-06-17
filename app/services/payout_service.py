@@ -65,3 +65,9 @@ class PayoutService:
         self._repo.delete_many(ids)
         logger.info(f"🗑 Удалены выплаты: {', '.join(ids)}")
 
+    async def list_active_payouts(self) -> List[Payout]:
+        """Return payouts that are pending approval or already approved."""
+        rows = self._repo.load_all()
+        active = [r for r in rows if r.get("status") in ("В ожидании", "Разрешено", "Ожидает", "pending")]
+        return [Payout(**r) for r in active]
+

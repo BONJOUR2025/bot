@@ -29,6 +29,10 @@ class PayoutRepository:
         self._counter += 1
         return str(self._counter)
 
+    def load_all(self) -> List[Dict[str, Any]]:
+        """Return raw payout list without filtering."""
+        return list(self._data)
+
     def list(
         self,
         employee_id: Optional[str] = None,
