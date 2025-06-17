@@ -32,10 +32,12 @@ class TelegramService:
             self.msg_log.write_text("[]", encoding="utf-8")
 
     def _load_log(self) -> List[Dict]:
+        """Return log records sorted by timestamp descending."""
         try:
-            return json.loads(self.msg_log.read_text(encoding="utf-8"))
+            data = json.loads(self.msg_log.read_text(encoding="utf-8"))
         except Exception:
             return []
+        return sorted(data, key=lambda x: x.get("timestamp", ""), reverse=True)[:50]
 
     def _save_log(self, data: List[Dict]) -> None:
         self.msg_log.write_text(

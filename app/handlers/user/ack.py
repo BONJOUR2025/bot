@@ -13,9 +13,13 @@ async def handle_acknowledgment(update: Update, context: ContextTypes.DEFAULT_TY
         if "✅ Принято" not in text:
             text = text + "\n\n✅ Принято"
         if query.message.photo:
-            await query.edit_message_caption(text, parse_mode="HTML")
+            await query.edit_message_caption(
+                text, parse_mode="HTML", reply_markup=None
+            )
         else:
-            await query.edit_message_text(text, parse_mode="HTML")
+            await query.edit_message_text(
+                text, parse_mode="HTML", reply_markup=None
+            )
     except Exception as exc:
         log(f"Ack edit failed: {exc}")
     TelegramService.update_sent_message_status(
