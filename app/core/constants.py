@@ -5,6 +5,7 @@ MONTHS_RU = [
 
 BANKS = ["Сбер", "Тинькофф", "Альфа", "ВТБ", "Райффайзен"]
 
-PAYOUT_METHODS = ["💳 На карту", "💸 Наличными"]
+# payout can be transferred to a card or issued from the cash desk
+PAYOUT_METHODS = ["💳 На карту", "💵 Из кассы"]
 
 PAYOUT_TYPES = ["Аванс", "Зарплата"]

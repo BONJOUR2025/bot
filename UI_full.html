@@ -216,8 +216,8 @@
         <option value="Доплата">Доплата</option>
       </select>
       <select id="payout-method" class="border p-2 w-full">
-        <option value="На карту">На карту</option>
-        <option value="Наличными">Наличными</option>
+        <option value="💳 На карту">💳 На карту</option>
+        <option value="💵 Из кассы">💵 Из кассы</option>
       </select>
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closePayoutModal()" class="px-4 py-2">Отмена</button>
@@ -694,7 +694,7 @@
       editingPayout = null;
       document.getElementById('payout-amount').value = '';
       document.getElementById('payout-type').value = 'Аванс';
-      document.getElementById('payout-method').value = 'На карту';
+      document.getElementById('payout-method').value = '💳 На карту';
       document.getElementById('payout-save-btn').textContent = 'Создать';
   }
 
