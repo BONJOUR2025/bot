@@ -15,6 +15,7 @@
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSalary()">💼 Просмотр ЗП</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSchedule()">📅 Просмотр расписания</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('payouts')">💳 Выплаты</button>
+      <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('adjustments')">📈 Удержания/Премии</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('vacations')">🛫 Отпуска</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="showSection('birthdays')">🎂 Дни рождения</button>
       <button class="px-3 py-2 bg-white rounded shadow" onclick="openMessageModal()">✉ Сообщение пользователю</button>
@@ -72,6 +73,20 @@
         <table id="sent-messages-table" class="min-w-full text-sm">
           <thead class="bg-gray-200"><tr><th class="p-2">Сотрудник</th><th class="p-2">Статус</th><th class="p-2">Время</th></tr></thead>
           <tbody id="sent-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ADJUSTMENTS SECTION -->
+    <section id="adjustments" class="hidden space-y-4">
+      <h2 class="text-xl font-semibold">Удержания и Премии</h2>
+      <button onclick="openAdjModal()" class="bg-green-600 text-white px-4 py-2 rounded">Добавить запись</button>
+      <div class="overflow-x-auto shadow rounded bg-white">
+        <table class="min-w-full text-sm table-auto">
+          <thead class="bg-gray-200">
+            <tr><th>Сотрудник</th><th>Тип</th><th>Причина</th><th>Сумма</th><th>Дата</th><th>Статус</th><th></th></tr>
+          </thead>
+          <tbody id="adj-table"></tbody>
         </table>
       </div>
     </section>
@@ -296,6 +311,29 @@
     </div>
   </div>
 
+  <div id="adj-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+    <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
+      <h2 class="text-xl font-semibold">Запись</h2>
+      <select id="adj-emp" class="border p-2 w-full"></select>
+      <select id="adj-type" class="border p-2 w-full">
+        <option value="Удержание">Удержание</option>
+        <option value="Премия">Премия</option>
+      </select>
+      <select id="adj-reason" class="border p-2 w-full"></select>
+      <input id="custom-adj-reason" class="border p-2 w-full hidden" placeholder="Причина" />
+      <input id="adj-amount" type="number" min="0" class="border p-2 w-full" placeholder="Сумма">
+      <input id="adj-date" type="date" class="border p-2 w-full">
+      <select id="adj-status" class="border p-2 w-full">
+        <option value="Активно">Активно</option>
+        <option value="Снято">Снято</option>
+      </select>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeAdjModal()" class="px-4 py-2">Отмена</button>
+        <button id="adj-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="fixed top-2 right-2 px-4 py-2 rounded shadow hidden"></div>
 
   <script>
@@ -312,6 +350,9 @@
           const sel = document.getElementById('payout-employee-filter');
           sel.innerHTML = '<option value="">Все сотрудники</option>' + employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
           fetchPayouts();
+        }
+        if (id === 'adjustments') {
+          loadAdjustments();
         }
         if (id === 'vacations') {
           loadVacations();
@@ -861,6 +902,116 @@
       loadVacations();
     }
 
+    // ---- Adjustments ----
+    let adjustments = [];
+    let adjEditing = null;
+
+    const adjReasons = {
+      'Удержание': ['Опоздание', 'Пропуск смены', 'Нарушение формы', 'Урон имуществу', 'Другое'],
+      'Премия': ['За выручку', 'За доп. смену', 'За качество', 'За клиента', 'Другое']
+    };
+
+    function updateAdjReasonOptions() {
+      const type = document.getElementById('adj-type').value;
+      const sel = document.getElementById('adj-reason');
+      sel.innerHTML = adjReasons[type].map(r => `<option value="${r}">${r}</option>`).join('');
+      document.getElementById('custom-adj-reason').classList.add('hidden');
+    }
+
+    function getAdjReason() {
+      const val = document.getElementById('adj-reason').value;
+      if (val === 'Другое') {
+        return document.getElementById('custom-adj-reason').value;
+      }
+      return val;
+    }
+
+    async function loadAdjustments() {
+      const res = await axios.get('/api/adjustments/');
+      adjustments = res.data;
+      renderAdjTable();
+      const empSel = document.getElementById('adj-emp');
+      if (empSel) empSel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+    }
+
+    function renderAdjTable() {
+      const body = document.getElementById('adj-table');
+      if (!body) return;
+      body.innerHTML = adjustments.map(a => `
+        <tr class='border-b'>
+          <td class='p-2'>${a.employee_name}</td>
+          <td class='p-2'>${a.record_type}</td>
+          <td class='p-2'>${a.reason}</td>
+          <td class='p-2'>${a.amount}</td>
+          <td class='p-2'>${a.date}</td>
+          <td class='p-2'>${a.status}</td>
+          <td class='p-2 whitespace-nowrap'>
+            <button onclick="openAdjModal(${a.id})" class='mr-2'>✏️</button>
+            <button onclick="deleteAdjustment(${a.id})">❌</button>
+          </td>
+        </tr>`).join('');
+    }
+
+    function openAdjModal(id=null) {
+      adjEditing = id;
+      document.getElementById('adj-modal').classList.remove('hidden');
+      updateAdjReasonOptions();
+      if (id) {
+        const item = adjustments.find(a => a.id === id);
+        if (!item) return;
+        document.getElementById('adj-emp').value = item.employee_id;
+        document.getElementById('adj-type').value = item.record_type;
+        updateAdjReasonOptions();
+        document.getElementById('adj-reason').value = adjReasons[item.record_type].includes(item.reason) ? item.reason : 'Другое';
+        if (document.getElementById('adj-reason').value === 'Другое') {
+          document.getElementById('custom-adj-reason').classList.remove('hidden');
+          document.getElementById('custom-adj-reason').value = item.reason;
+        }
+        document.getElementById('adj-amount').value = item.amount;
+        document.getElementById('adj-date').value = item.date;
+        document.getElementById('adj-status').value = item.status;
+      } else {
+        document.querySelectorAll('#adj-modal input').forEach(i => i.value='');
+        document.getElementById('adj-type').value = 'Удержание';
+        updateAdjReasonOptions();
+        document.getElementById('adj-status').value = 'Активно';
+      }
+    }
+
+    function closeAdjModal() {
+      document.getElementById('adj-modal').classList.add('hidden');
+    }
+
+    document.getElementById('adj-type')?.addEventListener('change', updateAdjReasonOptions);
+    document.getElementById('adj-reason')?.addEventListener('change', () => {
+      document.getElementById('custom-adj-reason').classList.toggle('hidden', document.getElementById('adj-reason').value !== 'Другое');
+    });
+
+    document.getElementById('adj-save')?.addEventListener('click', async () => {
+      const payload = {
+        employee_id: document.getElementById('adj-emp').value,
+        employee_name: employees.find(e => e.id === document.getElementById('adj-emp').value)?.full_name || '',
+        record_type: document.getElementById('adj-type').value,
+        reason: getAdjReason(),
+        amount: Number(document.getElementById('adj-amount').value),
+        date: document.getElementById('adj-date').value,
+        status: document.getElementById('adj-status').value,
+      };
+      if (adjEditing) {
+        await axios.put(`/api/adjustments/${adjEditing}`, payload);
+      } else {
+        await axios.post('/api/adjustments/', payload);
+      }
+      closeAdjModal();
+      loadAdjustments();
+    });
+
+    async function deleteAdjustment(id) {
+      if (!confirm('Удалить запись?')) return;
+      await axios.delete(`/api/adjustments/${id}`);
+      loadAdjustments();
+    }
+
     function resetPayoutFilters() {
       document.getElementById('payout-type-filter').value = '';
       document.getElementById('payout-status-filter').value = '';
@@ -965,6 +1116,7 @@
       loadSentMessages();
       loadActiveRequests();
       loadVacations();
+      loadAdjustments();
       const input = document.getElementById('schedule-date-picker');
       if (input) input.value = new Date().toISOString().slice(0, 10);
       showSection('employees');

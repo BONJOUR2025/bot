@@ -5,6 +5,7 @@ EXCEL_FILE = settings.excel_file
 USERS_FILE = settings.users_file
 ADVANCE_REQUESTS_FILE = settings.advance_requests_file
 VACATIONS_FILE = settings.vacations_file
+ADJUSTMENTS_FILE = settings.adjustments_file
 ADMIN_ID = settings.admin_id
 ADMIN_CHAT_ID = settings.admin_chat_id
 ADMIN_LOGIN = settings.admin_login
