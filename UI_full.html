@@ -67,6 +67,13 @@
           <tbody></tbody>
         </table>
       </div>
+      <h2 class="text-xl font-semibold mt-8">Журнал сообщений</h2>
+      <div class="overflow-x-auto shadow rounded bg-white">
+        <table id="sent-messages-table" class="min-w-full text-sm">
+          <thead class="bg-gray-200"><tr><th class="p-2">Сотрудник</th><th class="p-2">Статус</th><th class="p-2">Время</th></tr></thead>
+          <tbody id="sent-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- SALARY SECTION -->
@@ -214,6 +221,12 @@
       <h2 class="text-xl font-semibold">Сообщение пользователю</h2>
       <select id="msg-emp" class="border p-2 w-full"></select>
       <textarea id="msg-text" class="border p-2 w-full" placeholder="Текст сообщения"></textarea>
+      <div class="flex gap-2 text-sm">
+        <button onclick="applyFormat('b')" class="px-2 py-1 border rounded">B</button>
+        <button onclick="applyFormat('i')" class="px-2 py-1 border rounded">I</button>
+        <button onclick="applyFormat('s')" class="px-2 py-1 border rounded">S</button>
+        <button onclick="applyFormat('a')" class="px-2 py-1 border rounded">A</button>
+      </div>
       <input id="msg-photo" class="border p-2 w-full" placeholder="Ссылка на фото">
       <div class="space-x-4 text-sm">
         <label><input type="radio" name="msg-format" value="HTML" checked> HTML</label>
@@ -346,6 +359,22 @@
         if (res.data.length) {
           document.getElementById('stat-birthday').textContent = new Date(res.data[0].birthdate).toLocaleDateString();
         }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadSentMessages() {
+      try {
+        const res = await axios.get('/api/telegram/sent_messages');
+        const body = document.getElementById('sent-body');
+        body.innerHTML = res.data.map(m => {
+          const emp = employees.find(e => e.id === m.user_id);
+          const name = emp ? (emp.full_name || emp.name) : m.user_id;
+          const status = m.status === 'принято' ? 'Принято ✅' : 'Отправлено';
+          const ts = new Date(m.timestamp).toLocaleString();
+          return `<tr class='border-b'><td class='p-2'>${name}</td><td class='p-2'>${status}</td><td class='p-2'>${ts}</td></tr>`;
+        }).join('');
       } catch (err) {
         console.error(err);
       }
@@ -506,6 +535,21 @@
       document.getElementById('message-modal').classList.add('hidden');
     }
 
+    function applyFormat(tag) {
+      const ta = document.getElementById('msg-text');
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      let open = `<${tag}>`, close = `</${tag}>`;
+      if (tag === 'a') {
+        const url = prompt('URL');
+        if (!url) return;
+        open = `<a href="${url}">`; close = '</a>';
+      }
+      const selected = ta.value.slice(start, end);
+      ta.setRangeText(open + selected + close, start, end, 'end');
+      ta.focus();
+    }
+
     async function sendPersonalMessage() {
       const userId = document.getElementById('msg-emp').value;
       const text = document.getElementById('msg-text').value;
@@ -526,6 +570,7 @@
         });
         addNotify(`Сообщение отправлено пользователю ${userId}`);
         closeMessageModal();
+        loadSentMessages();
       } catch (err) {
         console.error(err);
         alert('❌ Ошибка при отправке: ' + (err.response?.data?.detail || ''));
@@ -917,6 +962,7 @@
     window.onload = () => {
       loadEmployees();
       loadBirthdays();
+      loadSentMessages();
       loadActiveRequests();
       loadVacations();
       const input = document.getElementById('schedule-date-picker');

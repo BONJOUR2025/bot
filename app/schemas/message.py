@@ -15,3 +15,13 @@ class BroadcastRequest(BaseModel):
     parse_mode: str = "HTML"
     photo_url: Optional[str] = None
 
+
+class SentMessage(BaseModel):
+    user_id: str
+    message: str
+    status: str
+    message_id: int
+    timestamp: str
+    photo_url: Optional[str] = None
+    requires_ack: bool = False
+
