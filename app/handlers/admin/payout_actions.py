@@ -21,17 +21,19 @@ from ...utils.logger import log
 async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    user_id = query.data.split("_")[-1]
-    log(f"✅ [allow_payout] Одобрение выплаты для user_id: {user_id}")
+    payout_id = query.data.split("_", 1)[1]
+    log(f"✅ [allow_payout] Одобрение выплаты {payout_id}")
 
     requests = load_advance_requests()
     request_to_approve = next(
-        (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
+        (r for r in requests if str(r.get("id")) == payout_id),
         None,
     )
     if not request_to_approve:
         await query.edit_message_text("❌ Нет активного запроса для одобрения.")
         return
+
+    user_id = request_to_approve.get("user_id")
 
 
     payout_type = request_to_approve.get("payout_type") or "Не указано"
@@ -72,17 +74,19 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    user_id = query.data.split("_")[-1]
-    log(f"❌ [deny_payout] Отклонение выплаты для user_id: {user_id}")
+    payout_id = query.data.split("_", 1)[1]
+    log(f"❌ [deny_payout] Отклонение выплаты {payout_id}")
 
     requests = load_advance_requests()
     request_to_deny = next(
-        (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
+        (r for r in requests if str(r.get("id")) == payout_id),
         None,
     )
     if not request_to_deny:
         await query.edit_message_text("❌ Нет активного запроса для отклонения.")
         return
+
+    user_id = request_to_deny.get("user_id")
 
 
     payout_type = request_to_deny.get("payout_type") or "Не указано"

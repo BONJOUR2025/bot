@@ -55,8 +55,8 @@ def log_new_request(
     amount: Any,
     payout_method: str,
     payout_type: str | None = None,
-) -> None:
-    """Send a new payout request to the API."""
+) -> dict | None:
+    """Send a new payout request to the API and return created data."""
     payload = {
         "user_id": str(user_id),
         "name": name,
@@ -67,10 +67,14 @@ def log_new_request(
         "payout_type": payout_type,
     }
     try:
-        requests.post(f"{API_URL}/payouts/", json=payload)
-        log(f"📝 Новый запрос выплаты: {payload}")
+        resp = requests.post(f"{API_URL}/payouts/", json=payload)
+        resp.raise_for_status()
+        created = resp.json()
+        log(f"📝 Новый запрос выплаты: {created}")
+        return created
     except Exception as e:
         log(f"❌ Ошибка создания запроса выплаты через API: {e}")
+        return None
 
 
 def check_pending_request(user_id: Any) -> bool:
