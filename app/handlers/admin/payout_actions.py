@@ -24,9 +24,9 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user_id = query.data.split("_")[-1]
     log(f"✅ [allow_payout] Одобрение выплаты для user_id: {user_id}")
 
-    requests = load_advance_requests()
+    payout_requests = load_advance_requests()
     request_to_approve = next(
-        (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
+        (r for r in payout_requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
         None,
     )
     if not request_to_approve:
@@ -34,7 +34,10 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     try:
-        requests.put(f"{API_URL}/payouts/{request_to_approve['idx']}", json={"status": "Одобрено"})
+        requests.put(
+            f"{API_URL}/payouts/{request_to_approve['idx']}",
+            json={"status": "Одобрено"},
+        )
         log(f"✅ Статус выплаты {request_to_approve['idx']} обновлён на Одобрено")
     except Exception as e:
         log(f"❌ Ошибка обновления статуса выплаты: {e}")
@@ -81,9 +84,9 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = query.data.split("_")[-1]
     log(f"❌ [deny_payout] Отклонение выплаты для user_id: {user_id}")
 
-    requests = load_advance_requests()
+    payout_requests = load_advance_requests()
     request_to_deny = next(
-        (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
+        (r for r in payout_requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
         None,
     )
     if not request_to_deny:
@@ -91,7 +94,10 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     try:
-        requests.put(f"{API_URL}/payouts/{request_to_deny['idx']}", json={"status": "Отклонено"})
+        requests.put(
+            f"{API_URL}/payouts/{request_to_deny['idx']}",
+            json={"status": "Отклонено"},
+        )
         log(f"✅ Статус выплаты {request_to_deny['idx']} обновлён на Отклонено")
     except Exception as e:
         log(f"❌ Ошибка обновления статуса выплаты: {e}")
@@ -116,15 +122,15 @@ async def reset_payout_request(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ У вас нет прав для выполнения этой команды.")
         return
 
-    requests = load_advance_requests()
-    if not requests:
+    payout_requests = load_advance_requests()
+    if not payout_requests:
         await update.message.reply_text(
             "📭 Нет запросов в файле для сброса.",
             reply_markup=get_admin_menu(),
         )
         return
 
-    pending_requests = [req for req in requests if req.get("status") == "Ожидает"]
+    pending_requests = [req for req in payout_requests if req.get("status") == "Ожидает"]
     reset_details = []
 
     if pending_requests:
@@ -136,7 +142,7 @@ async def reset_payout_request(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"Метод: {req['method']}\n"
                 f"Тип: {req.get('payout_type', 'Не указано')}"
             )
-        save_advance_requests(requests)
+        save_advance_requests(payout_requests)
         log(
             f"✅ [reset_payout_request] Сброшено {len(pending_requests)} запросов из файла: {reset_details}"
         )
