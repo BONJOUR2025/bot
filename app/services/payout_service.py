@@ -36,6 +36,7 @@ class PayoutService:
         payout_dict: Dict = {
             "user_id": data.user_id,
             "name": data.name,
+            "full_name": data.full_name or "",
             "phone": data.phone,
             "bank": data.bank,
             "amount": data.amount,

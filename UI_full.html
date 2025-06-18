@@ -144,7 +144,9 @@
           <thead class="bg-gray-200">
             <tr>
               <th class="p-2"><input type="checkbox" id="payout-select-all" onclick="toggleAllPayouts(this)"></th>
-              <th class="p-2">ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th>
+              <th class="p-2">Имя</th>
+              <th class="p-2">ФИО</th>
+              <th>Тип</th><th>Способ</th><th>Сумма</th>
               <th>Статус</th><th>Время</th><th>Действия</th>
             </tr>
           </thead>
@@ -808,7 +810,8 @@
       body.innerHTML = data.map(p => `
         <tr class='border-b odd:bg-gray-50'>
           <td class='p-2'><input type="checkbox" class="payout-check" value="${p.id}"></td>
-          <td class='p-2'>${p.name}</td>
+          <td class='p-2'>${p.name || '—'}</td>
+          <td class='p-2'>${p.full_name || '—'}</td>
           <td class='p-2'>${p.payout_type}</td>
           <td class='p-2'>${p.method}</td>
           <td class='p-2'>${formatRub(p.amount)}</td>
@@ -1120,12 +1123,15 @@
       document.getElementById('payout-modal').classList.add('hidden');
     }
 
-    async function submitPayout() {
+   async function submitPayout() {
+      const empId = document.getElementById('payout-emp').value;
+      const emp = employees.find(e => e.id === empId) || {};
       const payload = {
-        user_id: document.getElementById('payout-emp').value,
-        name: employees.find(e => e.id === document.getElementById('payout-emp').value)?.full_name || '',
-        phone: employees.find(e => e.id === document.getElementById('payout-emp').value)?.phone || '',
-        bank: employees.find(e => e.id === document.getElementById('payout-emp').value)?.bank || '',
+        user_id: empId,
+        name: emp.name || '',
+        full_name: emp.full_name || '',
+        phone: emp.phone || '',
+        bank: emp.bank || '',
         amount: Number(document.getElementById('payout-amount').value || 0),
         method: document.getElementById('payout-method').value,
         payout_type: document.getElementById('payout-type').value

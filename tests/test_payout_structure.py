@@ -12,7 +12,7 @@ def test_payout_json_fields_match_schema():
     path = Path('advance_requests.json')
     data = json.loads(path.read_text(encoding='utf-8'))
     fields = set(Payout.model_fields.keys())
-    required = fields - {'id'}
+    required = {k for k, v in Payout.model_fields.items() if v.is_required()}
     for item in data:
         assert required.issubset(item.keys())
         assert set(item.keys()).issubset(fields)

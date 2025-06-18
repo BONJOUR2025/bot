@@ -5,6 +5,7 @@ class Payout(BaseModel):
     id: Optional[int] = None
     user_id: str
     name: str
+    full_name: Optional[str] = ""
     phone: str
     bank: str
     amount: float
@@ -16,6 +17,7 @@ class Payout(BaseModel):
 class PayoutCreate(BaseModel):
     user_id: str
     name: str
+    full_name: Optional[str] = ""
     phone: str
     bank: str
     amount: float
@@ -25,6 +27,7 @@ class PayoutCreate(BaseModel):
 class PayoutUpdate(BaseModel):
     user_id: Optional[str] = None
     name: Optional[str] = None
+    full_name: Optional[str] = None
     phone: Optional[str] = None
     bank: Optional[str] = None
     amount: Optional[float] = None
