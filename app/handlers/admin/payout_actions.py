@@ -1,13 +1,10 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-
 from ...config import ADMIN_ID, CARD_DISPATCH_CHAT_ID
 from ...keyboards.reply_admin import get_admin_menu
 from ...services.advance_requests import load_advance_requests, save_advance_requests
 from ...services.users import load_users
 from ...utils.logger import log
-
-
 async def allow_payout(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -15,7 +12,6 @@ async def allow_payout(
     await query.answer()
     user_id = query.data.split("_")[-1]
     log(f"✅ [allow_payout] Одобрение выплаты для user_id: {user_id}")
-
     requests = load_advance_requests()
     req = next(
         (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
@@ -23,12 +19,9 @@ async def allow_payout(
     if not req:
         await query.edit_message_text("❌ Нет активного запроса для одобрения.")
         return
-
     req["status"] = "Разрешено"
     save_advance_requests(requests)
-    updated_text = f"{query.message.text}\n\n✅ Разрешено"
     await query.edit_message_text(updated_text)
-    if req["method"] == "💳 На карту":
         payout_type = req.get("payout_type", "Не указано")
             f"👤 {req['name']}\n"
             f"📱 {req['phone']}\n"
@@ -42,8 +35,6 @@ async def allow_payout(
             )
         except Exception as e:
             log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")
-
-
 async def deny_payout(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -51,7 +42,6 @@ async def deny_payout(
     await query.answer()
     user_id = query.data.split("_")[-1]
     log(f"❌ [deny_payout] Отклонение выплаты для user_id: {user_id}")
-
     requests = load_advance_requests()
     req = next(
         (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
@@ -59,22 +49,14 @@ async def deny_payout(
     if not req:
         await query.edit_message_text("❌ Нет активного запроса для отклонения.")
         return
-
     req["status"] = "Отказано"
     save_advance_requests(requests)
-    updated_text = f"{query.message.text}\n\n❌ Отказано"
     await query.edit_message_text(updated_text)
-async def reset_payout_request(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE) -> None:
-    pending_requests = [r for r in requests if r.get("status") == "Ожидает"]
     for r in pending_requests:
         r["status"] = "Отменено"
     if pending_requests:
         save_advance_requests(requests)
-
     await update.message.reply_text("✅ Сброс выполнен", reply_markup=get_admin_menu())
-
-
 async def mark_sent(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE) -> None:
