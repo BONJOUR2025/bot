@@ -180,10 +180,7 @@ async def handle_card_confirmation(update: Update, context: ContextTypes.DEFAULT
         save_users(users)
     try:
         log(f"DEBUG [handle_card_confirmation] Логируем запрос для {user_id}")
-        created = log_new_request(
-            user_id, name, phone, bank, amount, method, payout_type
-        )
-        payout_id = created.get("id") if created else None
+        log_new_request(user_id, name, phone, bank, amount, method, payout_type)
     except Exception as e:
         log(f"❌ [handle_card_confirmation] Ошибка записи запроса: {e}")
         await query.edit_message_text(
@@ -208,11 +205,10 @@ async def handle_card_confirmation(update: Update, context: ContextTypes.DEFAULT
         f"💳 Метод: {method}\n"
         f"📂 Тип: {payout_type}"
     )
-    cb_id = payout_id or user_id
     admin_buttons = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("✅ Разрешить", callback_data=f"allow_payout_{cb_id}")],
-            [InlineKeyboardButton("❌ Отклонить", callback_data=f"deny_payout_{cb_id}")],
+            [InlineKeyboardButton("✅ Разрешить", callback_data=f"allow_payout_{user_id}")],
+            [InlineKeyboardButton("❌ Отклонить", callback_data=f"deny_payout_{user_id}")],
         ]
     )
     try:
@@ -279,25 +275,23 @@ async def confirm_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"Способ выплаты: {'Переводом на карту' if payout_method == '💳 На карту' else payout_method}\n\n"
         f"Пользователь: {name}\n"
     )
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Разрешить", callback_data=f"allow_payout_{user_id}")],
+            [InlineKeyboardButton("❌ Запретить", callback_data=f"deny_payout_{user_id}")],
+        ]
+    )
     try:
         log(f"DEBUG [confirm_payout_user] Логируем запрос для {user_id}")
-        created = log_new_request(
+        log_new_request(
             user_id, name, phone, bank, amount, payout_method, payout_type
         )
-        payout_id = created.get("id") if created else None
     except Exception as e:
         log(f"❌ [confirm_payout_user] Ошибка записи запроса: {e}")
         await message.reply_text(
             "❌ Не удалось сохранить запрос. Попробуйте позже."
         )
         return ConversationHandler.END
-    cb_id = payout_id or user_id
-    keyboard = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("✅ Разрешить", callback_data=f"allow_payout_{cb_id}")],
-            [InlineKeyboardButton("❌ Запретить", callback_data=f"deny_payout_{cb_id}")],
-        ]
-    )
     try:
         log(f"DEBUG [confirm_payout_user] Отправляем сообщение администратору")
         await context.bot.send_message(

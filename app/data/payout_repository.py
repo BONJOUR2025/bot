@@ -20,13 +20,6 @@ class PayoutRepository:
                 changed = True
             else:
                 self._counter = max(self._counter, int(raw_id))
-            # ensure name and full_name keys exist
-            if "name" not in item:
-                item["name"] = ""
-                changed = True
-            if "full_name" not in item:
-                item["full_name"] = ""
-                changed = True
         if changed:
             self._save()
 
@@ -87,8 +80,6 @@ class PayoutRepository:
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
         if "id" not in data or any(p.get("id") == data["id"] for p in self._data):
             data["id"] = self._generate_id()
-        data.setdefault("name", "")
-        data.setdefault("full_name", "")
         self._data.append(data)
         self._save()
         return data
@@ -97,10 +88,6 @@ class PayoutRepository:
         for item in self._data:
             if str(item.get("id")) == str(payout_id):
                 item.update({k: v for k, v in updates.items() if v is not None})
-                if "name" not in item:
-                    item["name"] = ""
-                if "full_name" not in item:
-                    item["full_name"] = ""
                 self._save()
                 return item
         return None

@@ -21,32 +21,21 @@ from ...utils.logger import log
 async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    payout_id = query.data.split("_", 1)[1]
-    log(f"✅ [allow_payout] Одобрение выплаты {payout_id}")
+    user_id = query.data.split("_")[-1]
+    log(f"✅ [allow_payout] Одобрение выплаты для user_id: {user_id}")
 
     requests = load_advance_requests()
     request_to_approve = next(
-        (r for r in requests if str(r.get("id")) == payout_id),
+        (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
         None,
     )
     if not request_to_approve:
         await query.edit_message_text("❌ Нет активного запроса для одобрения.")
         return
 
-    user_id = request_to_approve.get("user_id")
-
-
-    payout_type = request_to_approve.get("payout_type") or "Не указано"
-    user_message = (
-        f"✅ Ваш запрос на выплату одобрен!\n"
-        f"Тип: {payout_type}\n"
         f"Сумма: {request_to_approve['amount']} ₽\n"
         f"Метод: {request_to_approve['method']}"
     )
-
-    current_text = query.message.text
-    updated_text = f"{current_text}\n\n✅ Разрешено"
-    await query.edit_message_text(text=updated_text)
 
     if request_to_approve["method"] == "💳 На карту":
         cashier_text = (
@@ -74,32 +63,21 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    payout_id = query.data.split("_", 1)[1]
-    log(f"❌ [deny_payout] Отклонение выплаты {payout_id}")
+    user_id = query.data.split("_")[-1]
+    log(f"❌ [deny_payout] Отклонение выплаты для user_id: {user_id}")
 
     requests = load_advance_requests()
     request_to_deny = next(
-        (r for r in requests if str(r.get("id")) == payout_id),
+        (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
         None,
     )
     if not request_to_deny:
         await query.edit_message_text("❌ Нет активного запроса для отклонения.")
         return
 
-    user_id = request_to_deny.get("user_id")
-
-
-    payout_type = request_to_deny.get("payout_type") or "Не указано"
-    user_message = (
-        f"❌ Ваш запрос на выплату отклонён.\n"
-        f"Тип: {payout_type}\n"
         f"Сумма: {request_to_deny['amount']} ₽\n"
         f"Метод: {request_to_deny['method']}"
     )
-
-    current_text = query.message.text
-    updated_text = f"{current_text}\n\n❌ Отказано"
-    await query.edit_message_text(text=updated_text, reply_markup=None)
 
 
 async def reset_payout_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -147,6 +125,33 @@ async def reset_payout_request(update: Update, context: ContextTypes.DEFAULT_TYP
             if persistence:
                 persistence.update_user_data(int(uid), user_data)
 
+    message_lines = []
+    if pending_requests:
+        message_lines.append(f"✅ Сброшено {len(pending_requests)} запросов из файла:")
+        message_lines.extend([f"Запрос #{i+1}:\n{detail}" for i, detail in enumerate(reset_details)])
+    else:
+        message_lines.append("📭 Нет активных запросов в файле.")
+
+    if reset_users:
+        message_lines.append(f"\n✅ Очищено {len(reset_users)} зависших состояний:")
+        message_lines.extend([f"Пользователь #{i+1}: {user}" for i, user in enumerate(reset_users)])
+    else:
+        message_lines.append("\n📭 Нет зависших состояний у пользователей.")
+
+    reset_message = "\n\n".join(message_lines)
+    await update.message.reply_text(reset_message, reply_markup=get_admin_menu())
+    log(f"✅ [reset_payout_request] Завершён сброс: {reset_message}")
+
+
+async def mark_sent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.data.split("_")[-1]
+    current_text = query.message.text
+    updated_text = f"{current_text}\n\n📤 Отправлено"
+
+    await query.edit_message_text(updated_text)
     message_lines = []
     if pending_requests:
         message_lines.append(f"✅ Сброшено {len(pending_requests)} запросов из файла:")
