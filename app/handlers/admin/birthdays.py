@@ -1,3 +1,7 @@
+from ...keyboards.reply_admin import get_admin_menu
+from ...constants import UserStates
+from telegram.ext import ContextTypes, ConversationHandler
+from telegram import Update
 import datetime
 from ...config import ADMIN_CHAT_ID
 from ...services.users import load_users
@@ -28,11 +32,6 @@ async def check_birthdays(app: Application):
             await app.bot.send_message(
                 chat_id=ADMIN_CHAT_ID, text=f"📅 Завтра день рождения у {name}"
             )
-
-from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler
-from ...constants import UserStates
-from ...keyboards.reply_admin import get_admin_menu
 
 
 async def show_birthdays(update: Update, context: ContextTypes.DEFAULT_TYPE):

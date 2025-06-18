@@ -11,4 +11,7 @@ SQLAlchemy==2.0.30
 
 python-telegram-bot==20.6
 itsdangerous==2.2.0
+pydantic-settings==2.2.1
+fpdf==1.7.2
+requests==2.31.0
 

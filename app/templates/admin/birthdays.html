@@ -1,0 +1,35 @@
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+<h1 class="text-2xl font-semibold">Все дни рождения</h1>
+<table class="min-w-full bg-white border rounded shadow">
+  <thead>
+    <tr class="bg-gray-200 text-sm">
+      <th class="p-2 text-left">ФИО</th>
+      <th class="p-2 text-left">Дата рождения</th>
+      <th class="p-2 text-left">Возраст</th>
+      <th class="p-2 text-left">Через сколько дней</th>
+    </tr>
+  </thead>
+  <tbody id="birthdays-body"></tbody>
+</table>
+</div>
+<script>
+async function loadBirthdays() {
+  try {
+    const res = await axios.get('/birthdays/');
+    const body = document.getElementById('birthdays-body');
+    body.innerHTML = res.data.map(p => `
+      <tr class='border-b odd:bg-gray-50'>
+        <td class="p-2">${p.full_name}</td>
+        <td class="p-2">${new Date(p.birthdate).toLocaleDateString()}</td>
+        <td class="p-2">${p.age}</td>
+        <td class="p-2">${p.in_days === 0 ? 'Сегодня 🎉' : p.in_days + ' дн.'}</td>
+      </tr>`).join('');
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Immediately fetch birthdays when this script loads. This works both when
+// the page is loaded directly and when injected dynamically via loadPage().
+loadBirthdays();
+</script>

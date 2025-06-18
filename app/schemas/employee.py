@@ -1,10 +1,11 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel
 
 
 class EmployeeBase(BaseModel):
+    name: str
     full_name: str
     phone: str
     card_number: str
@@ -16,7 +17,7 @@ class EmployeeBase(BaseModel):
 
 
 class EmployeeCreate(EmployeeBase):
-    pass
+    id: str
 
 
 class EmployeeUpdate(EmployeeBase):
@@ -24,5 +25,15 @@ class EmployeeUpdate(EmployeeBase):
 
 
 class EmployeeOut(EmployeeBase):
-    id: int
-    created_at: str
+    id: str
+    created_at: datetime
+
+
+class Employee(BaseModel):
+    """Employee entry as stored in ``user.json``."""
+
+    id: str
+    name: str
+    phone: str
+    note: Optional[str] = None
+    photo_url: Optional[str] = None

@@ -28,8 +28,8 @@ async def home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат в главное меню администратора."""
     context.user_data.clear()
     log(
-        f"DEBUG [home_callback] Сброс состояний для user_id: {update.effective_user.id}"
-    )
+        f"DEBUG [home_callback] Сброс состояний для user_id: {
+            update.effective_user.id}")
     await update.message.reply_text(
         "🏠 Главное меню", reply_markup=get_admin_menu()
     )
@@ -47,4 +47,3 @@ async def exit_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log(f"Пользователь {user_id} вышел из режима АДМИН.")
     else:
         await update.message.reply_text("❌ Вы не в режиме администратора.")
-

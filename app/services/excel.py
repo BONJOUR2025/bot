@@ -69,8 +69,8 @@ def load_data(sheet_name=None):
 
         if sheet_name not in xls.sheet_names:
             log(
-                f"❌ Ошибка: Лист '{sheet_name}' не найден! Доступные листы: {xls.sheet_names}"
-            )
+                f"❌ Ошибка: Лист '{sheet_name}' не найден! Доступные листы: {
+                    xls.sheet_names}")
             return None
 
         return pd.read_excel(xls, sheet_name=sheet_name, header=1)

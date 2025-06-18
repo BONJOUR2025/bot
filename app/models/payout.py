@@ -15,4 +15,5 @@ class PayoutRequest:
     method: str
     payout_type: Optional[str] = None
     status: str = "Ожидает"
-    timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
+    timestamp: str = field(
+        default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))

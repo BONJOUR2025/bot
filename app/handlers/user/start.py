@@ -20,4 +20,3 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text(
                 "❌ Произошла ошибка. Попробуйте позже."
             )
-

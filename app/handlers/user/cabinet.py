@@ -15,7 +15,9 @@ from ...keyboards.reply_user import get_cabinet_menu, get_main_menu
 from ...utils.logger import log
 
 
-async def personal_cabinet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def personal_cabinet(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = str(update.effective_user.id)
     users = load_users()
     user = users.get(user_id)
@@ -33,7 +35,9 @@ async def personal_cabinet(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return ConversationHandler.END
 
 
-async def view_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def view_user_info(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = str(update.effective_user.id)
     users = load_users()
     user = users.get(user_id)
@@ -71,7 +75,8 @@ async def edit_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log("❌ [edit_user_info] Нет message и callback_query в update")
 
 
-async def handle_edit_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_edit_selection(update: Update,
+                                context: ContextTypes.DEFAULT_TYPE) -> None:
     choice = update.message.text.strip()
     log(f"DEBUG [handle_edit_selection] Выбор: {choice}")
     if choice == "📱 Изменить телефон":
@@ -91,16 +96,20 @@ async def handle_edit_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return
     context.user_data["awaiting_new_value"] = True
     log(
-        f"DEBUG [handle_edit_selection] Установлены edit_field: {context.user_data.get('edit_field')}, awaiting_new_value: {context.user_data.get('awaiting_new_value')}"
-    )
+        f"DEBUG [handle_edit_selection] Установлены edit_field: {
+            context.user_data.get('edit_field')}, awaiting_new_value: {
+            context.user_data.get('awaiting_new_value')}")
 
 
-async def save_new_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def save_new_value(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.user_data.get("payout_request"):
         return
     log(
-        f"DEBUG [save_new_value] Текст: '{update.message.text if update.message else ''}', context.user_data: {context.user_data}"
-    )
+        f"DEBUG [save_new_value] Текст: '{
+            update.message.text if update.message else ''}', context.user_data: {
+            context.user_data}")
     if not context.user_data.get("awaiting_new_value"):
         return
     new_value = update.message.text.strip()
@@ -112,7 +121,8 @@ async def save_new_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
     elif field == "bank":
-        if len(new_value) > 50 or not re.match(r"^[a-zA-Zа-яА-Я0-9\s]+$", new_value):
+        if len(new_value) > 50 or not re.match(
+                r"^[a-zA-Zа-яА-Я0-9\s]+$", new_value):
             await update.message.reply_text(
                 "❌ Название банка должно быть до 50 символов и содержать только буквы, цифры и пробелы. Повторите ввод:"
             )
@@ -133,7 +143,9 @@ async def save_new_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
-async def handle_edit_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_edit_confirmation(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -192,7 +204,9 @@ async def handle_edit_confirmation(update: Update, context: ContextTypes.DEFAULT
         context.user_data.pop("editing_info", None)
 
 
-async def handle_admin_change_response(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_admin_change_response(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -236,8 +250,7 @@ async def handle_admin_change_response(update: Update, context: ContextTypes.DEF
             del users[user_id]["pending_change"]
             save_users(users)
         log(
-            f"❌ [admin_change] Изменение {field} для {user_id} отклонено: {new_value}"
-        )
+            f"❌ [admin_change] Изменение {field} для {user_id} отклонено: {new_value}")
         await query.edit_message_text(
             f"❌ Изменение {field} для {users[user_id]['name']} отклонено."
         )
@@ -248,7 +261,8 @@ async def handle_admin_change_response(update: Update, context: ContextTypes.DEF
         )
 
 
-async def view_request_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def view_request_history(update: Update,
+                               context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = str(update.effective_user.id)
     try:
         requests_list = load_advance_requests()
@@ -280,7 +294,8 @@ async def view_request_history(update: Update, context: ContextTypes.DEFAULT_TYP
         and r["timestamp"].startswith(current_month)
         and (r.get("payout_type") in ["Аванс", None] or "payout_type" not in r)
     ]
-    total_advance_amount = sum(int(r.get("amount", 0)) for r in user_advance_requests)
+    total_advance_amount = sum(int(r.get("amount", 0))
+                               for r in user_advance_requests)
     remaining_amount = MAX_ADVANCE_AMOUNT_PER_MONTH - total_advance_amount
     if not user_requests:
         await update.message.reply_text(
@@ -297,15 +312,23 @@ async def view_request_history(update: Update, context: ContextTypes.DEFAULT_TYP
             "Отменено": "🚫 Отменено",
         }.get(req["status"], "Неизвестно")
         history_text += (
-            f"Тип: {req.get('payout_type', 'Не указано')} ({req.get('method', 'Не указано')})\n"
-            f"Сумма: {req.get('amount', 'Не указано')} ₽\n"
-            f"Статус: {status_text}\n"
-            f"Дата: {req.get('timestamp', 'Не указана')}\n\n"
-        )
+            f"Тип: {
+                req.get(
+                    'payout_type',
+                    'Не указано')} ({
+                req.get(
+                    'method',
+                    'Не указано')})\n" f"Сумма: {
+                        req.get(
+                            'amount',
+                            'Не указано')} ₽\n" f"Статус: {status_text}\n" f"Дата: {
+                                req.get(
+                                    'timestamp',
+                                    'Не указана')}\n\n")
     history_text += f"Авансы за {current_month}: {total_advance_amount} ₽ из {MAX_ADVANCE_AMOUNT_PER_MONTH} ₽\nОстаток: {remaining_amount} ₽"
     await update.message.reply_text(
         history_text.strip(), reply_markup=get_cabinet_menu()
     )
-    log(f"DEBUG [view_request_history] История запросов отправлена для user_id: {user_id}")
+    log(
+        f"DEBUG [view_request_history] История запросов отправлена для user_id: {user_id}")
     context.user_data.clear()
-

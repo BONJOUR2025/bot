@@ -11,11 +11,12 @@ from .enums import EmployeeStatus
 class Employee:
     """Employee information."""
 
-    id: int
+    id: str
+    name: str
     full_name: str
     phone: str
-    card_number: str
-    bank: str
+    card_number: str = ""
+    bank: str = ""
     birthdate: Optional[date] = None
     note: str = ""
     photo_url: str = ""

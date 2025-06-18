@@ -28,5 +28,6 @@ from .cabinet import (
     handle_admin_change_response,
 )
 from .salary import handle_salary_request
+from .ack import handle_acknowledgment
 
 __all__ = [name for name in globals() if not name.startswith("_")]

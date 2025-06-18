@@ -12,7 +12,9 @@ from ...services.report import generate_employee_report
 from ...utils.logger import log
 
 
-async def view_salary_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def view_salary_user(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     """Запрашивает месяц для просмотра зарплаты."""
     context.user_data["requested_data"] = "salary"
     if update.message:
@@ -23,7 +25,8 @@ async def view_salary_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return ConversationHandler.END
 
 
-async def view_schedule_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def view_schedule_user(update: Update,
+                             context: ContextTypes.DEFAULT_TYPE) -> None:
     """Запрашивает месяц для просмотра расписания."""
     context.user_data["requested_data"] = "schedule"
     if update.message:
@@ -34,7 +37,9 @@ async def view_schedule_user(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
-async def handle_selected_month_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_selected_month_user(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обрабатывает выбор месяца для ЗП или расписания."""
     if not update.message:
         return
@@ -54,7 +59,8 @@ async def handle_selected_month_user(update: Update, context: ContextTypes.DEFAU
         "НОЯБРЬ",
         "ДЕКАБРЬ",
     ]
-    log(f"📌 [handle_selected_month_user] Пользователь {user_id} выбрал месяц: {month}")
+    log(
+        f"📌 [handle_selected_month_user] Пользователь {user_id} выбрал месяц: {month}")
     if month not in valid_months:
         await update.message.reply_text(
             "❌ Неверный месяц. Выберите из предложенных.",
@@ -81,7 +87,8 @@ async def handle_selected_month_user(update: Update, context: ContextTypes.DEFAU
         try:
             data = load_data(sheet_name=month)
             if data is None or "ИМЯ" not in data.columns:
-                log(f"❌ [handle_selected_month_user] Неверная структура данных для {month}")
+                log(
+                    f"❌ [handle_selected_month_user] Неверная структура данных для {month}")
                 await loading_message.edit_text(
                     f"❌ Ошибка загрузки данных для {month}.",
                     reply_markup=get_main_menu(),
@@ -105,13 +112,16 @@ async def handle_selected_month_user(update: Update, context: ContextTypes.DEFAU
             return
 
         row_index = employee_data.index[0]
-        report_tables = generate_employee_report(user_name, month, data, row_index)
-        filename = create_combined_table_image(report_tables, f"salary_report_{user_id}.png")
+        report_tables = generate_employee_report(
+            user_name, month, data, row_index)
+        filename = create_combined_table_image(
+            report_tables, f"salary_report_{user_id}.png")
         if filename and os.path.exists(filename):
             try:
                 await loading_message.delete()
             except Exception as e:
-                log(f"⚠️ [handle_selected_month_user] Ошибка удаления сообщения: {e}")
+                log(
+                    f"⚠️ [handle_selected_month_user] Ошибка удаления сообщения: {e}")
             with open(filename, "rb") as photo:
                 await update.message.reply_photo(
                     photo=photo,
@@ -151,12 +161,14 @@ async def handle_selected_month_user(update: Update, context: ContextTypes.DEFAU
                 reply_markup=get_main_menu(),
             )
             return
-        filename = create_schedule_image(raw_data, user_name, month, weekdays_row[2:33])
+        filename = create_schedule_image(
+            raw_data, user_name, month, weekdays_row[2:33])
         if filename and os.path.exists(filename):
             try:
                 await loading_message.delete()
             except Exception as e:
-                log(f"⚠️ [handle_selected_month_user] Ошибка удаления сообщения: {e}")
+                log(
+                    f"⚠️ [handle_selected_month_user] Ошибка удаления сообщения: {e}")
             with open(filename, "rb") as photo:
                 await update.message.reply_photo(
                     photo=photo,
@@ -175,7 +187,9 @@ async def handle_selected_month_user(update: Update, context: ContextTypes.DEFAU
         )
 
 
-async def handle_schedule_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_schedule_request(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
     """Отправляет расписание на текущий выбранный месяц."""
     user_id = update.effective_user.id
     users = load_users()
@@ -198,7 +212,8 @@ async def handle_schedule_request(update: Update, context: ContextTypes.DEFAULT_
             await loading_message.edit_text("❌ Неверная структура данных в Excel.")
             return
     except Exception as e:
-        log(f"❌ [handle_schedule_request] Ошибка загрузки данных для {month}: {e}")
+        log(
+            f"❌ [handle_schedule_request] Ошибка загрузки данных для {month}: {e}")
         await loading_message.edit_text(f"❌ Ошибка загрузки данных: {e}")
         return
     first_row = data.iloc[0].tolist()
@@ -212,7 +227,8 @@ async def handle_schedule_request(update: Update, context: ContextTypes.DEFAULT_
     if employee_data.empty:
         await loading_message.edit_text("❌ Нет данных для сотрудника. Проверьте совпадение имени.")
         return
-    filename = create_schedule_image(data, original_employee_name, month, weekdays_row[2:33])
+    filename = create_schedule_image(
+        data, original_employee_name, month, weekdays_row[2:33])
     if not filename or not os.path.exists(filename):
         await loading_message.edit_text("❌ Не удалось создать изображение расписания.")
         return
@@ -223,4 +239,3 @@ async def handle_schedule_request(update: Update, context: ContextTypes.DEFAULT_
     except Exception as e:
         log(f"❌ [handle_schedule_request] Ошибка отправки изображения: {e}")
         await loading_message.edit_text(f"❌ Ошибка отправки расписания: {e}")
-

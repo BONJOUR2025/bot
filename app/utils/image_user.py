@@ -93,8 +93,8 @@ def create_schedule_image(tables, filename="salary_report.png"):
         for row in table[1:]:
             if len(row) != 2:
                 print(
-                    f"❌ Error: row {row} has {len(row)} elements (expected 2). Skipping!"
-                )
+                    f"❌ Error: row {row} has {
+                        len(row)} elements (expected 2). Skipping!")
                 continue
             key, value = row
             value_lines = value.split("\n")
