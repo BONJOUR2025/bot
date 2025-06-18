@@ -78,16 +78,19 @@ class PayoutRepository:
         return result
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        if "id" not in data or any(p.get("id") == data["id"] for p in self._data):
+        if "id" not in data or any(
+                p.get("id") == data["id"] for p in self._data):
             data["id"] = self._generate_id()
         self._data.append(data)
         self._save()
         return data
 
-    def update(self, payout_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def update(self, payout_id: str,
+               updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         for item in self._data:
             if str(item.get("id")) == str(payout_id):
-                item.update({k: v for k, v in updates.items() if v is not None})
+                item.update(
+                    {k: v for k, v in updates.items() if v is not None})
                 self._save()
                 return item
         return None
@@ -98,9 +101,10 @@ class PayoutRepository:
 
     def delete(self, payout_id: str) -> bool:
         before = len(self._data)
-        self._data = [p for p in self._data if str(p.get("id")) != str(payout_id)]
+        self._data = [
+            p for p in self._data if str(
+                p.get("id")) != str(payout_id)]
         if len(self._data) != before:
             self._save()
             return True
         return False
-

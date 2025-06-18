@@ -18,7 +18,11 @@ class EmployeeService:
     def __init__(self, repo: EmployeeRepository | None = None) -> None:
         self._repo = repo or EmployeeRepository()
         self._employees: List[Employee] = self._repo.list_employees()
-        self._counter = max((int(e.id) for e in self._employees if str(e.id).isdigit()), default=0)
+        self._counter = max(
+            (int(
+                e.id) for e in self._employees if str(
+                e.id).isdigit()),
+            default=0)
 
     def list_employees(self) -> List[Employee]:
         return list(self._employees)
@@ -35,7 +39,10 @@ class EmployeeService:
         self._repo.add_employee(employee)
         return employee
 
-    def update_employee(self, employee_id: str, **updates) -> Optional[Employee]:
+    def update_employee(
+            self,
+            employee_id: str,
+            **updates) -> Optional[Employee]:
         emp = self.get_employee(employee_id)
         if not emp:
             return None
@@ -82,13 +89,17 @@ class EmployeeAPIService:
         created = self.service.add_employee(employee)
         return EmployeeOut(**created.__dict__)
 
-    async def update_employee(self, employee_id: str, data: EmployeeUpdate) -> EmployeeOut:
+    async def update_employee(
+            self,
+            employee_id: str,
+            data: EmployeeUpdate) -> EmployeeOut:
         emp = self.service.update_employee(employee_id, **data.dict())
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         return EmployeeOut(**emp.__dict__)
 
-    async def upload_employee_photo(self, employee_id: str, file: UploadFile) -> dict[str, str]:
+    async def upload_employee_photo(
+            self, employee_id: str, file: UploadFile) -> dict[str, str]:
         emp = self.service.get_employee(employee_id)
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
@@ -96,7 +107,8 @@ class EmployeeAPIService:
         upload_path.parent.mkdir(parents=True, exist_ok=True)
         with open(upload_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        self.service.update_employee(employee_id, photo_url="/" + str(upload_path))
+        self.service.update_employee(
+            employee_id, photo_url="/" + str(upload_path))
         return {"status": "photo_uploaded", "url": "/" + str(upload_path)}
 
     async def delete_employee(self, employee_id: str) -> dict[str, str]:

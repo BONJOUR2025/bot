@@ -27,7 +27,8 @@ class ScheduleService:
     def __init__(self) -> None:
         pass
 
-    async def get_schedule_by_day(self, date_str: str) -> List[SchedulePointOut]:
+    async def get_schedule_by_day(
+            self, date_str: str) -> List[SchedulePointOut]:
         """Return list of points and assigned employees for given date."""
 
         try:
@@ -58,7 +59,8 @@ class ScheduleService:
             sheet = wb[month_name.upper()]
         else:
             for title in wb.sheetnames:
-                if title.startswith(month_name) or title.startswith(month_name.upper()):
+                if title.startswith(month_name) or title.startswith(
+                        month_name.upper()):
                     sheet = wb[title]
                     break
 

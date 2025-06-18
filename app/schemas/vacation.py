@@ -1,6 +1,7 @@
 from typing import Optional, Literal
 from pydantic import BaseModel
 
+
 class Vacation(BaseModel):
     id: Optional[int] = None
     employee_id: str
@@ -10,6 +11,7 @@ class Vacation(BaseModel):
     type: Literal["Отпуск", "Больничный", "Командировка"]
     comment: Optional[str] = ""
 
+
 class VacationCreate(BaseModel):
     employee_id: str
     name: str
@@ -17,6 +19,7 @@ class VacationCreate(BaseModel):
     end_date: str
     type: Literal["Отпуск", "Больничный", "Командировка"]
     comment: Optional[str] = ""
+
 
 class VacationUpdate(BaseModel):
     employee_id: Optional[str] = None

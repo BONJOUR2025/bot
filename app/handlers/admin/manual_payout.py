@@ -94,10 +94,13 @@ async def manual_payout_method(
     data["bank"] = user.get("bank", "—")
 
     msg = (
-        f"📤 Создать запрос от имени:\n"
-        f"👤 {data['name']}\n📱 {data['phone']}\n🏦 {data['bank']}\n\n"
-        f"Тип: {data['payout_type']}\nСумма: {data['amount']} ₽\nМетод: {data['method']}"
-    )
+        f"📤 Создать запрос от имени:\n" f"👤 {
+            data['name']}\n📱 {
+            data['phone']}\n🏦 {
+                data['bank']}\n\n" f"Тип: {
+                    data['payout_type']}\nСумма: {
+                        data['amount']} ₽\nМетод: {
+                            data['method']}")
     keyboard = InlineKeyboardMarkup(
         [
             [

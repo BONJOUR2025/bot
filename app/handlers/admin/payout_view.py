@@ -65,7 +65,8 @@ async def select_payout_type(
         payout_type if payout_type != "Все типы" else None
     )
 
-    keyboard = [[month] for month in MONTHS_RU] + [["Все периоды"], ["🏠 Домой"]]
+    keyboard = [[month]
+                for month in MONTHS_RU] + [["Все периоды"], ["🏠 Домой"]]
     reply_markup = ReplyKeyboardMarkup(
         keyboard, resize_keyboard=True, one_time_keyboard=True
     )

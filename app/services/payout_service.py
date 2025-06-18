@@ -29,7 +29,12 @@ class PayoutService:
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
     ) -> List[Payout]:
-        rows = self._repo.list(employee_id, payout_type, status, from_date, to_date)
+        rows = self._repo.list(
+            employee_id,
+            payout_type,
+            status,
+            from_date,
+            to_date)
         return [Payout(**r) for r in rows]
 
     async def create_payout(self, data: PayoutCreate) -> Payout:
@@ -46,16 +51,24 @@ class PayoutService:
         }
         created = self._repo.create(payout_dict)
         logger.info(
-            f"🆕 Выплата '{created['payout_type']}' на {created['amount']} ₽ для user_id {created['user_id']} — статус: {created['status']}"
-        )
+            f"🆕 Выплата '{
+                created['payout_type']}' на {
+                created['amount']} ₽ для user_id {
+                created['user_id']} — статус: {
+                    created['status']}")
         return Payout(**created)
 
-    async def update_payout(self, payout_id: str, update: PayoutUpdate) -> Optional[Payout]:
-        updated = self._repo.update(payout_id, update.model_dump(exclude_none=True))
+    async def update_payout(
+            self,
+            payout_id: str,
+            update: PayoutUpdate) -> Optional[Payout]:
+        updated = self._repo.update(
+            payout_id, update.model_dump(
+                exclude_none=True))
         if updated:
             logger.info(
-                f"✏️ Выплата {payout_id} обновлена — статус: {updated.get('status')}"
-            )
+                f"✏️ Выплата {payout_id} обновлена — статус: {
+                    updated.get('status')}")
             return Payout(**updated)
         return None
 
@@ -74,6 +87,10 @@ class PayoutService:
     async def list_active_payouts(self) -> List[Payout]:
         """Return payouts that are pending approval or already approved."""
         rows = self._repo.load_all()
-        active = [r for r in rows if r.get("status") in ("В ожидании", "Разрешено", "Ожидает", "pending")]
+        active = [
+            r for r in rows if r.get("status") in (
+                "В ожидании",
+                "Разрешено",
+                "Ожидает",
+                "pending")]
         return [Payout(**r) for r in active]
-

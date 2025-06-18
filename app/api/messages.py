@@ -19,7 +19,11 @@ def create_message_router(service: MessageService) -> APIRouter:
         require_ack: bool = Form(False),
         photo: Optional[UploadFile] = File(None),
     ) -> MessageOut:
-        data = MessageRequest(user_id=user_id, message=message, parse_mode=parse_mode, require_ack=require_ack)
+        data = MessageRequest(
+            user_id=user_id,
+            message=message,
+            parse_mode=parse_mode,
+            require_ack=require_ack)
         # photo handling not yet stored
         return await service.send_message(data)
 

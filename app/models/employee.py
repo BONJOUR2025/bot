@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Date, Text, DateTime
 from sqlalchemy.sql import func
 from app.db.base_class import Base
 
+
 class Employee(Base):
     __tablename__ = "employees"
 

@@ -5,7 +5,8 @@ from ...services.users import load_users
 from ...keyboards.reply_user import get_main_menu
 
 
-async def get_user_info_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def get_user_info_user(update: Update,
+                             context: ContextTypes.DEFAULT_TYPE) -> None:
     """Выводит главное меню сотрудника."""
     user_id = str(update.effective_user.id)
     users = load_users()
@@ -23,10 +24,11 @@ async def get_user_info_user(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(greeting_text, reply_markup=get_main_menu())
 
 
-async def home_handler_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def home_handler_user(update: Update,
+                            context: ContextTypes.DEFAULT_TYPE) -> int:
     log(
-        f"DEBUG [home_handler] Получено сообщение: '{update.message.text if update.message else ''}'"
-    )
+        f"DEBUG [home_handler] Получено сообщение: '{
+            update.message.text if update.message else ''}'")
     context.user_data.clear()
     if update.message:
         await update.message.reply_text(

@@ -8,14 +8,18 @@ from ...services.users import load_users
 from ...utils.logger import log
 
 
-async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def allow_payout(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     user_id = query.data.split("_")[-1]
     log(f"✅ [allow_payout] Одобрение выплаты для user_id: {user_id}")
 
     requests = load_advance_requests()
-    req = next((r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"), None)
+    req = next(
+        (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
+        None)
     if not req:
         await query.edit_message_text("❌ Нет активного запроса для одобрения.")
         return
@@ -40,14 +44,18 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")
 
 
-async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def deny_payout(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     user_id = query.data.split("_")[-1]
     log(f"❌ [deny_payout] Отклонение выплаты для user_id: {user_id}")
 
     requests = load_advance_requests()
-    req = next((r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"), None)
+    req = next(
+        (r for r in requests if r["user_id"] == user_id and r["status"] == "Ожидает"),
+        None)
     if not req:
         await query.edit_message_text("❌ Нет активного запроса для отклонения.")
         return
@@ -56,7 +64,8 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     save_advance_requests(requests)
     updated_text = f"{query.message.text}\n\n❌ Отказано"
     await query.edit_message_text(updated_text)
-    requests = load_advance_requests()
+async def reset_payout_request(update: Update,
+                               context: ContextTypes.DEFAULT_TYPE) -> None:
     pending_requests = [r for r in requests if r.get("status") == "Ожидает"]
     for r in pending_requests:
         r["status"] = "Отменено"
@@ -66,7 +75,9 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.reply_text("✅ Сброс выполнен", reply_markup=get_admin_menu())
 
 
-async def mark_sent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def mark_sent(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     user_id = query.data.split("_")[-1]

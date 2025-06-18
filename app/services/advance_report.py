@@ -39,7 +39,9 @@ def dataframe_to_markdown(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def save_markdown_file(df: pd.DataFrame, filename: str = "advance_report.md") -> str:
+def save_markdown_file(
+        df: pd.DataFrame,
+        filename: str = "advance_report.md") -> str:
     """Сохраняет DataFrame в Markdown-файл и возвращает имя файла."""
     data = dataframe_to_markdown(df)
     with open(filename, "w", encoding="utf-8") as f:

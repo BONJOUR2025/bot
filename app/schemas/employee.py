@@ -37,4 +37,3 @@ class Employee(BaseModel):
     phone: str
     note: Optional[str] = None
     photo_url: Optional[str] = None
-

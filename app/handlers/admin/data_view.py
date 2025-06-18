@@ -87,7 +87,9 @@ async def select_employee(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return UserStates.SELECT_DATA_TYPE
 
 
-async def handle_salary_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_salary_admin(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
     month = context.user_data.get("selected_month")
     employee_name = context.user_data.get("selected_employee")
     if not month or not employee_name:
@@ -116,8 +118,7 @@ async def handle_salary_admin(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
         if "ИМЯ" not in data.columns:
             log(
-                f"❌ [handle_salary_admin] Столбец 'ИМЯ' отсутствует в данных за {month}"
-            )
+                f"❌ [handle_salary_admin] Столбец 'ИМЯ' отсутствует в данных за {month}")
             await loading_message.edit_text(
                 f"❌ Ошибка: неверная структура данных для {month}."
             )
@@ -147,15 +148,14 @@ async def handle_salary_admin(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         if not report_tables:
             log(
-                f"❌ [handle_salary_admin] Отчёт не сгенерирован для {employee_name}"
-            )
+                f"❌ [handle_salary_admin] Отчёт не сгенерирован для {employee_name}")
             await loading_message.edit_text(
                 "❌ Ошибка: отчёт не сгенерирован."
             )
             return
         log(
-            f"✅ [handle_salary_admin] Отчёт сгенерирован, таблиц: {len(report_tables)}"
-        )
+            f"✅ [handle_salary_admin] Отчёт сгенерирован, таблиц: {
+                len(report_tables)}")
     except Exception as e:
         log(f"❌ [handle_salary_admin] Ошибка генерации отчёта: {e}")
         await loading_message.edit_text(f"❌ Ошибка генерации отчёта: {e}")
@@ -174,8 +174,7 @@ async def handle_salary_admin(update: Update, context: ContextTypes.DEFAULT_TYPE
         with open(filename, "rb") as photo:
             await update.message.reply_photo(photo=photo)
         log(
-            f"✅ [handle_salary_admin] Изображение отправлено пользоателю {user_id}"
-        )
+            f"✅ [handle_salary_admin] Изображение отправлено пользоателю {user_id}")
         try:
             await loading_message.delete()
         except Exception as e:
@@ -189,7 +188,9 @@ async def handle_salary_admin(update: Update, context: ContextTypes.DEFAULT_TYPE
         await loading_message.edit_text(f"❌ Ошибка отправки отчёта: {e}")
 
 
-async def handle_schedule_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_schedule_admin(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     employee_name = context.user_data.get("selected_employee")
     month = context.user_data.get("selected_month")
@@ -208,8 +209,8 @@ async def handle_schedule_admin(update: Update, context: ContextTypes.DEFAULT_TY
         data = pd.read_excel(EXCEL_FILE, sheet_name=month, header=None)
         if data.shape[0] < 2 or data.shape[1] < 3:
             log(
-                f"❌ [handle_schedule_admin] Неверная структура данных для {month}: {data.shape}"
-            )
+                f"❌ [handle_schedule_admin] Неверная структура данных для {month}: {
+                    data.shape}")
             await loading_message.edit_text(
                 "❌ Неверная структура данных в Excel."
             )
@@ -219,8 +220,7 @@ async def handle_schedule_admin(update: Update, context: ContextTypes.DEFAULT_TY
         )
     except Exception as e:
         log(
-            f"❌ [handle_schedule_admin] Ошибка загрузки данных для {month}: {e}"
-        )
+            f"❌ [handle_schedule_admin] Ошибка загрузки данных для {month}: {e}")
         await loading_message.edit_text(f"❌ Ошибка загрузки данных: {e}")
         return UserStates.SELECT_DATA_TYPE
     first_row = data.iloc[0].tolist()
@@ -231,8 +231,8 @@ async def handle_schedule_admin(update: Update, context: ContextTypes.DEFAULT_TY
     data["ИМЯ"] = data["ИМЯ"].astype(str).str.strip().str.lower()
     compare_name = employee_name.strip().lower()
     log(
-        f"DEBUG [handle_schedule_admin] Столбцы: {data.columns.tolist()}, Имя для поиска: '{compare_name}'"
-    )
+        f"DEBUG [handle_schedule_admin] Столбцы: {
+            data.columns.tolist()}, Имя для поиска: '{compare_name}'")
     log(f"DEBUG [handle_schedule_admin] Дни недели: {weekdays_row[2:33]}")
     employee_data = data[data["ИМЯ"] == compare_name]
     if employee_data.empty:
@@ -267,8 +267,7 @@ async def handle_schedule_admin(update: Update, context: ContextTypes.DEFAULT_TY
                 reply_markup=get_home_button(),
             )
         log(
-            f"✅ [handle_schedule_admin] Расписание отправлено пользователю {user_id}"
-        )
+            f"✅ [handle_schedule_admin] Расписание отправлено пользователю {user_id}")
         await loading_message.delete()
     except Exception as e:
         log(f"❌ [handle_schedule_admin] Ошибка отправки изображения: {e}")

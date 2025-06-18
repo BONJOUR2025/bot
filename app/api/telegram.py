@@ -25,7 +25,9 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
                 "message_id": message_id,
             }
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Ошибка отправки: {exc}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ошибка отправки: {exc}")
 
     @router.post("/broadcast")
     async def broadcast(data: BroadcastRequest):
@@ -35,11 +37,12 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
             )
             return result
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Ошибка рассылки: {exc}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ошибка рассылки: {exc}")
 
     @router.get("/sent_messages", response_model=list[SentMessage])
     async def sent_messages() -> list[SentMessage]:
         return [SentMessage(**m) for m in service._load_log()]
 
     return router
-

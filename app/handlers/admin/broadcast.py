@@ -179,6 +179,6 @@ async def handle_broadcast_send(
         reply_markup=get_admin_menu(),
     )
     log(
-        f"✅ [handle_broadcast_send] Рассылка завершена для {len(user_ids)} пользователей"
-    )
+        f"✅ [handle_broadcast_send] Рассылка завершена для {
+            len(user_ids)} пользователей")
     return ConversationHandler.END

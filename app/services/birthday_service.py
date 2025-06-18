@@ -13,7 +13,8 @@ class BirthdayService:
     def __init__(self, repo: EmployeeRepository) -> None:
         self._repo = repo
 
-    async def upcoming_birthdays(self, days_ahead: int = 30) -> List[BirthdayOut]:
+    async def upcoming_birthdays(
+            self, days_ahead: int = 30) -> List[BirthdayOut]:
         employees = self._repo.list_employees()
         today = date.today()
         items: List[BirthdayOut] = []

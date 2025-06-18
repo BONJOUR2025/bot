@@ -27,7 +27,17 @@ def create_payout_router(service: PayoutService) -> APIRouter:
         updated = await service.update_payout(payout_id, update)
         if updated:
             return updated
-        return Payout(id=payout_id, user_id="", name="", phone="", bank="", amount=0.0, method="", payout_type="", status="", timestamp="")
+        return Payout(
+            id=payout_id,
+            user_id="",
+            name="",
+            phone="",
+            bank="",
+            amount=0.0,
+            method="",
+            payout_type="",
+            status="",
+            timestamp="")
 
     @router.delete("/{payout_id}")
     async def delete_payout(payout_id: str):
@@ -48,4 +58,3 @@ def create_payout_router(service: PayoutService) -> APIRouter:
         return {"ok": True}
 
     return router
-

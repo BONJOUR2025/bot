@@ -18,7 +18,8 @@ from ...utils.logger import log
 from ...constants import PayoutStates
 
 
-async def request_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def request_payout_user(update: Update,
+                              context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = str(update.effective_user.id)
     log(f"DEBUG [request_payout_user] Запрос выплаты от user_id: {user_id}")
     users = load_users()
@@ -34,7 +35,8 @@ async def request_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "❌ У вас уже есть необработанный запрос.",
                 reply_markup=get_main_menu(),
             )
-        log(f"DEBUG [request_payout_user] Обнаружен pending-запрос для {user_id}")
+        log(
+            f"DEBUG [request_payout_user] Обнаружен pending-запрос для {user_id}")
         return ConversationHandler.END
     requests_list = load_advance_requests()
     total_advance_amount = sum(
@@ -42,7 +44,8 @@ async def request_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE
         for req in requests_list
         if req["user_id"] == user_id and req["status"] == "Одобрено"
     )
-    log(f"DEBUG [request_payout_user] total_advance_amount: {total_advance_amount}")
+    log(
+        f"DEBUG [request_payout_user] total_advance_amount: {total_advance_amount}")
     if total_advance_amount >= MAX_ADVANCE_AMOUNT_PER_MONTH:
         if update.message:
             await update.message.reply_text(
@@ -65,7 +68,9 @@ async def request_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE
     return PayoutStates.SELECT_TYPE
 
 
-async def handle_payout_type_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_payout_type_user(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
     payout_type = update.message.text
     user_id = str(update.effective_user.id)
     log(f"DEBUG [handle_payout_type_user] Выбран тип выплаты: {payout_type}")
@@ -79,12 +84,14 @@ async def handle_payout_type_user(update: Update, context: ContextTypes.DEFAULT_
     return PayoutStates.ENTER_AMOUNT
 
 
-async def handle_payout_amount_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_payout_amount_user(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
     log(
-        f"DEBUG [handle_payout_amount_user] Текст: '{text}', awaiting_amount: {context.user_data.get('awaiting_amount')}"
-    )
+        f"DEBUG [handle_payout_amount_user] Текст: '{text}', awaiting_amount: {
+            context.user_data.get('awaiting_amount')}")
     if not text.isdigit():
         await update.message.reply_text("❌ Введите корректную сумму цифрами.")
         return PayoutStates.ENTER_AMOUNT
@@ -115,13 +122,15 @@ async def handle_payout_amount_user(update: Update, context: ContextTypes.DEFAUL
     return PayoutStates.SELECT_METHOD
 
 
-async def payout_method_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def payout_method_user(update: Update,
+                             context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     method = update.message.text
     payout_data = context.user_data.get("payout_data", {})
     payout_data["method"] = method
     context.user_data["payout_data"] = payout_data
-    log(f"DEBUG [payout_method_user] Выбран метод: {method} для user_id: {user_id}")
+    log(
+        f"DEBUG [payout_method_user] Выбран метод: {method} для user_id: {user_id}")
     if method == "💳 На карту":
         users = load_users()
         user_info = users.get(str(user_id), {})
@@ -143,19 +152,24 @@ async def payout_method_user(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return await confirm_payout_user(update, context)
 
 
-async def handle_card_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_card_confirmation(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = str(query.from_user.id)
     await query.answer()
-    log(f"DEBUG [handle_card_confirmation] Начало обработки для user_id: {user_id}")
+    log(
+        f"DEBUG [handle_card_confirmation] Начало обработки для user_id: {user_id}")
     payout_data = context.user_data.get("payout_data", {})
     method = payout_data.get("method")
     amount = payout_data.get("amount")
     payout_type = payout_data.get("payout_type")
     if not all([amount, method, payout_type]):
         log(
-            f"❌ [handle_card_confirmation] Недостаточно данных: {amount=}, {method=}, {payout_type=}"
-        )
+            f"❌ [handle_card_confirmation] Недостаточно данных: {
+                amount=}, {
+                method=}, {
+                payout_type=}")
         await query.edit_message_text(
             "❌ Невозможно сформировать запрос: недостаточно данных."
         )
@@ -180,7 +194,14 @@ async def handle_card_confirmation(update: Update, context: ContextTypes.DEFAULT
         save_users(users)
     try:
         log(f"DEBUG [handle_card_confirmation] Логируем запрос для {user_id}")
-        log_new_request(user_id, name, phone, bank, amount, method, payout_type)
+        log_new_request(
+            user_id,
+            name,
+            phone,
+            bank,
+            amount,
+            method,
+            payout_type)
     except Exception as e:
         log(f"❌ [handle_card_confirmation] Ошибка записи запроса: {e}")
         await query.edit_message_text(
@@ -231,7 +252,8 @@ async def handle_card_confirmation(update: Update, context: ContextTypes.DEFAULT
     return ConversationHandler.END
 
 
-async def confirm_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def confirm_payout_user(update: Update,
+                              context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.callback_query:
         query = update.callback_query
         user_id = str(query.from_user.id)
@@ -247,8 +269,10 @@ async def confirm_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE
     payout_method = payout_data.get("method")
     if not all([amount, payout_type, payout_method]):
         log(
-            f"❌ [confirm_payout_user] Недостаточно данных: {amount=}, {payout_type=}, {payout_method=}"
-        )
+            f"❌ [confirm_payout_user] Недостаточно данных: {
+                amount=}, {
+                payout_type=}, {
+                payout_method=}")
         await message.reply_text(
             "❌ Запрос неполный, начните сначала.",
             reply_markup=get_main_menu(),
@@ -300,12 +324,14 @@ async def confirm_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_markup=keyboard,
         )
     except Exception as e:
-        log(f"❌ [confirm_payout_user] Ошибка отправки сообщения администратору: {e}")
+        log(
+            f"❌ [confirm_payout_user] Ошибка отправки сообщения администратору: {e}")
         await message.reply_text(
             "❌ Ошибка при отправке запроса администратору. Попробуйте позже."
         )
         return ConversationHandler.END
-    log(f"DEBUG [confirm_payout_user] Отправляем подтверждение пользователю {user_id}")
+    log(
+        f"DEBUG [confirm_payout_user] Отправляем подтверждение пользователю {user_id}")
     await message.reply_text(
         f"✅ Ваш запрос на ({amount} ₽, {payout_method}) отправлен.",
         reply_markup=get_main_menu(),
@@ -317,7 +343,8 @@ async def confirm_payout_user(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
-async def change_payout_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def change_payout_amount(update: Update,
+                               context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     await update.callback_query.message.reply_text(
         "💸 Введите новую сумму выплаты:"
@@ -327,7 +354,8 @@ async def change_payout_amount(update: Update, context: ContextTypes.DEFAULT_TYP
     return PayoutStates.ENTER_AMOUNT
 
 
-async def change_payout_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def change_payout_type(update: Update,
+                             context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     keyboard = ReplyKeyboardMarkup(
         [["Аванс", "Зарплата"], ["🏠 Домой"]], resize_keyboard=True
@@ -339,7 +367,8 @@ async def change_payout_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return PayoutStates.SELECT_TYPE
 
 
-async def change_payout_method(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def change_payout_method(update: Update,
+                               context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     keyboard = ReplyKeyboardMarkup(
         [["💵 Из кассы", "💳 На карту"], ["🏠 Домой"]], resize_keyboard=True
@@ -348,4 +377,3 @@ async def change_payout_method(update: Update, context: ContextTypes.DEFAULT_TYP
         "Выберите способ получения выплаты:", reply_markup=keyboard
     )
     return PayoutStates.SELECT_METHOD
-

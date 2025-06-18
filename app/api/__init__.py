@@ -56,19 +56,25 @@ def create_app() -> FastAPI:
     app.include_router(create_payout_router(payout_service), prefix="/api")
 
     birthday_service = BirthdayService(employee_service._repo)
-    app.include_router(create_birthdays_router(birthday_service), prefix="/api")
+    app.include_router(
+        create_birthdays_router(birthday_service),
+        prefix="/api")
 
     vacation_service = VacationService()
     app.include_router(create_vacation_router(vacation_service), prefix="/api")
 
     adjustment_service = AdjustmentService()
-    app.include_router(create_adjustment_router(adjustment_service), prefix="/api")
+    app.include_router(create_adjustment_router(
+        adjustment_service), prefix="/api")
 
     from .messages import create_message_router
     message_service = MessageService(employee_repo=employee_service._repo)
     app.include_router(create_message_router(message_service), prefix="/api")
 
-    app.include_router(create_telegram_router(employee_service._repo), prefix="/api")
+    app.include_router(
+        create_telegram_router(
+            employee_service._repo),
+        prefix="/api")
 
     # Admin UI routes
     from .admin_ui import router as admin_router

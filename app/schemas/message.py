@@ -1,11 +1,13 @@
 from typing import Optional
 from pydantic import BaseModel
 
+
 class MessageRequest(BaseModel):
     user_id: str
     message: str
     parse_mode: str = "HTML"
     require_ack: bool = False
+
 
 class MessageOut(BaseModel):
     id: str
@@ -19,10 +21,12 @@ class MessageOut(BaseModel):
     timestamp_accept: Optional[str] = None
     message_id: int
 
+
 class BroadcastRequest(BaseModel):
     message: str
     parse_mode: str = "HTML"
     photo_url: Optional[str] = None
+
 
 class SentMessage(BaseModel):
     user_id: str

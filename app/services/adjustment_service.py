@@ -3,6 +3,7 @@ from datetime import datetime
 
 from app.data.adjustment_repository import AdjustmentRepository
 
+
 class AdjustmentService:
     def __init__(self) -> None:
         self._repo = AdjustmentRepository()
@@ -15,7 +16,8 @@ class AdjustmentService:
             data['date'] = datetime.today().date().isoformat()
         return self._repo.create(data)
 
-    def update(self, adj_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def update(self, adj_id: str,
+               updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return self._repo.update(adj_id, updates)
 
     def delete(self, adj_id: str) -> None:

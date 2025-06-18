@@ -8,7 +8,10 @@ from .telegram_service import TelegramService
 
 
 class MessageService:
-    def __init__(self, repo: Optional[MessageRepository] = None, employee_repo: Optional[EmployeeRepository] = None) -> None:
+    def __init__(
+            self,
+            repo: Optional[MessageRepository] = None,
+            employee_repo: Optional[EmployeeRepository] = None) -> None:
         self._repo = repo or MessageRepository()
         self._employees = employee_repo or EmployeeRepository()
         self._telegram = TelegramService(self._employees)
@@ -24,7 +27,8 @@ class MessageService:
             photo_url=None,
             require_ack=data.require_ack,
         )
-        emp = next((e for e in self._employees.list_employees() if e.id == data.user_id), None)
+        emp = next((e for e in self._employees.list_employees()
+                   if e.id == data.user_id), None)
         record = {
             "user_id": data.user_id,
             "name": emp.full_name if emp else data.user_id,

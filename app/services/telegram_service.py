@@ -37,7 +37,13 @@ class TelegramService:
             data = json.loads(self.msg_log.read_text(encoding="utf-8"))
         except Exception:
             return []
-        return sorted(data, key=lambda x: x.get("timestamp", ""), reverse=True)[:50]
+        return sorted(
+            data,
+            key=lambda x: x.get(
+                "timestamp",
+                ""),
+            reverse=True)[
+            :50]
 
     def _save_log(self, data: List[Dict]) -> None:
         self.msg_log.write_text(
@@ -67,8 +73,10 @@ class TelegramService:
         )
 
     async def broadcast_message_to_all(
-        self, message: str, parse_mode: str = "HTML", photo_url: Optional[str] = None
-    ) -> dict:
+            self,
+            message: str,
+            parse_mode: str = "HTML",
+            photo_url: Optional[str] = None) -> dict:
         employees = self.repo.list_employees()
         success = 0
         for emp in employees:

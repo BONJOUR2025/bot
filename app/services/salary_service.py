@@ -108,7 +108,8 @@ class SalaryService:
                     values[field] = to_float(row.get(col))
 
             if values.get("shifts_total") == 0:
-                values["shifts_total"] = values.get("shifts_main", 0) + values.get("shifts_extra", 0)
+                values["shifts_total"] = values.get(
+                    "shifts_main", 0) + values.get("shifts_extra", 0)
 
             comment_raw = values.pop("comment", "")
             comment = str(comment_raw).strip() or None

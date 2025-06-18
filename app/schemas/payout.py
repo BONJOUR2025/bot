@@ -1,6 +1,7 @@
 from typing import Optional
 from pydantic import BaseModel
 
+
 class Payout(BaseModel):
     id: Optional[int] = None
     user_id: str
@@ -13,6 +14,7 @@ class Payout(BaseModel):
     status: str
     timestamp: str
 
+
 class PayoutCreate(BaseModel):
     user_id: str
     name: str
@@ -21,6 +23,7 @@ class PayoutCreate(BaseModel):
     amount: float
     method: str
     payout_type: str
+
 
 class PayoutUpdate(BaseModel):
     user_id: Optional[str] = None
