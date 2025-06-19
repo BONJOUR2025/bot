@@ -1,3 +1,4 @@
+# Handler functions for payout approval and rejection.
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
