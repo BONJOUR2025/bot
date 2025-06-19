@@ -30,7 +30,7 @@
 
     function loadPage(url) {
       currentUrl = url;
-      fetch(url)
+      fetch(`${url}?_=${Date.now()}`)
         .then(res => {
           if (!res.ok) {
             throw new Error('Failed to load page: ' + res.status);
