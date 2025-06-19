@@ -1,23 +1,50 @@
 <div class="bg-white rounded-xl shadow-md p-6 space-y-4">
-  <h1 class="text-2xl font-semibold">Отпуска</h1>
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">Отпуска</h1>
+    <button onclick="openVacationModal()" class="btn btn-primary flex items-center gap-1">📅 Добавить отпуск</button>
+  </div>
+  <div class="flex flex-wrap items-end gap-4">
+    <label class="block">
+      <span class="text-sm">Сотрудник</span>
+      <select id="employeeSelect" class="border rounded p-2 w-full sm:w-48"></select>
+    </label>
+    <label class="block">
+      <span class="text-sm">От</span>
+      <input type="date" id="startDate" class="border rounded p-2 w-full sm:w-40" />
+    </label>
+    <label class="block">
+      <span class="text-sm">До</span>
+      <input type="date" id="endDate" class="border rounded p-2 w-full sm:w-40" />
+    </label>
+    <button onclick="loadVacations()" class="btn btn-success ml-auto">Показать</button>
+  </div>
   <div id="vacation-calendar" class="mb-4"></div>
-  <button onclick="openVacationModal()" class="bg-green-600 text-white px-4 py-2 rounded">➕ Добавить отпуск</button>
   <table class="min-w-full text-sm bg-white rounded shadow" id="vacation-table"></table>
 </div>
 
 <div id="vacation-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
-  <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
-    <h2 id="vacation-modal-title" class="text-xl font-semibold">Добавить отпуск</h2>
-    <select id="vac-emp" class="border p-2 w-full"></select>
-    <input type="date" id="vac-start" class="border p-2 w-full">
-    <input type="date" id="vac-end" class="border p-2 w-full">
-    <select id="vac-type" class="border p-2 w-full">
-      <option value="Отпуск">Отпуск</option>
-      <option value="Больничный">Больничный</option>
-      <option value="Командировка">Командировка</option>
-    </select>
-    <textarea id="vac-comment" class="border p-2 w-full" placeholder="Комментарий"></textarea>
-    <div class="flex justify-end gap-2 pt-2">
+  <div class="bg-white p-4 rounded shadow-xl w-full max-w-md">
+    <h2 id="vacation-modal-title" class="text-xl font-semibold mb-2">Добавление/редактирование отпуска</h2>
+    <div class="mb-2">
+      <select id="vac-emp" class="border p-2 w-full"></select>
+    </div>
+    <div class="mb-2">
+      <input type="date" id="vac-start" class="border p-2 w-full" placeholder="Начало" />
+    </div>
+    <div class="mb-2">
+      <input type="date" id="vac-end" class="border p-2 w-full" placeholder="Окончание" />
+    </div>
+    <div class="mb-2">
+      <select id="vac-type" class="border p-2 w-full">
+        <option value="Отпуск">Отпуск</option>
+        <option value="Больничный">Больничный</option>
+        <option value="Командировка">Командировка</option>
+      </select>
+    </div>
+    <div class="mb-2">
+      <textarea id="vac-comment" class="border p-2 w-full" placeholder="Комментарий"></textarea>
+    </div>
+    <div class="flex justify-end gap-4 pt-2">
       <button onclick="closeVacationModal()" class="px-4 py-2">Отмена</button>
       <button id="vac-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
     </div>
@@ -32,9 +59,32 @@ let vacEditing = null;
 
 function renderVacationTable(data){
   const table = document.getElementById('vacation-table');
-  table.innerHTML = `<thead class='bg-gray-200'><tr><th class='p-2'>ID</th><th>Имя</th><th>Даты</th><th>Тип</th><th>Комментарий</th><th></th></tr></thead><tbody>`+
-    data.map(v=>`<tr class='border-t odd:bg-gray-50'><td class='p-2'>${v.id}</td><td>${v.name}</td><td>${v.start_date} - ${v.end_date}</td><td>${v.type}</td><td>${v.comment||''}</td><td><button onclick="editVacation(${v.id})" class='text-blue-600 mr-2'>✏️</button><button onclick="deleteVacation(${v.id})" class='text-red-600'>❌</button></td></tr>`).join('')+
-    `</tbody>`;
+  table.innerHTML =
+    `<thead class='bg-gray-100 font-semibold'>\
+      <tr>\
+        <th class='p-2 text-left'>ID</th>\
+        <th class='p-2 text-left'>Имя</th>\
+        <th class='p-2 text-left'>Даты</th>\
+        <th class='p-2 text-left'>Тип</th>\
+        <th class='p-2 text-left'>Комментарий</th>\
+        <th class='p-2'></th>\
+      </tr>\
+    </thead>`+
+    '<tbody>'+
+    data.map(v =>
+      `<tr class='border-t odd:bg-gray-50'>\
+        <td class='px-2 py-1 text-left'>${v.id}</td>\
+        <td class='px-2 py-1 text-left'>${v.name}</td>\
+        <td class='px-2 py-1 text-left'>${v.start_date} - ${v.end_date}</td>\
+        <td class='px-2 py-1 text-left'>${v.type}</td>\
+        <td class='px-2 py-1 text-left'>${v.comment || '—'}</td>\
+        <td class='px-2 py-1 text-left'>\
+          <button onclick="editVacation(${v.id})" class='text-blue-600 mr-2'>✏️</button>\
+          <button onclick="deleteVacation(${v.id})" class='text-red-600'>❌</button>\
+        </td>\
+      </tr>`
+    ).join('') +
+    '</tbody>';
 }
 
 function renderCalendar(data){
