@@ -26,7 +26,10 @@
     <div id="page-content"></div>
   </main>
   <script>
+    let currentUrl = '/employees';
+
     function loadPage(url) {
+      currentUrl = url;
       fetch(url)
         .then(res => {
           if (!res.ok) {
@@ -50,6 +53,11 @@
           console.error(err);
         });
     }
+
+    function refreshPage() {
+      loadPage(currentUrl);
+    }
+
     window.onload = () => loadPage('/employees');
   </script>
 </body>
