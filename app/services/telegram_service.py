@@ -9,7 +9,7 @@ from datetime import datetime
 from telegram import Bot
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.config import TOKEN
+from app.config import TOKEN, ADMIN_CHAT_ID
 from app.data.employee_repository import EmployeeRepository
 
 logger = logging.getLogger("broadcast")
@@ -99,12 +99,12 @@ class TelegramService:
         return {"success": True, "sent": success, "total": len(employees)}
 
     async def send_message_to_user(
-        self,
-        user_id: str,
-        message: str,
-        parse_mode: str = "HTML",
-        photo_url: Optional[str] = None,
-        require_ack: bool = False,
+            self,
+            user_id: str,
+            message: str,
+            parse_mode: str = "HTML",
+            photo_url: Optional[str] = None,
+            require_ack: bool = False,
     ) -> int:
         reply_markup = None
         if require_ack:
@@ -139,3 +139,24 @@ class TelegramService:
         data.append(log_entry)
         self._save_log(data)
         return result.message_id
+
+    async def send_payout_request_to_admin(self, payout: Dict[str, Any]) -> None:
+        """Notify the admin chat about a payout request."""
+        text = (
+            "📥 Новый запрос на выплату:\n\n"
+            f"👤 {payout['name']}\n"
+            f"📱 {payout['phone']}\n"
+            f"🏦 {payout['bank']}\n"
+            f"💰 Сумма: {payout['amount']} ₽\n"
+            f"💳 Метод: {payout['method']}\n"
+            f"📂 Тип: {payout['payout_type']}"
+        )
+        markup = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("✅ Разрешить", callback_data=f"allow_payout_{payout['user_id']}")],
+                [InlineKeyboardButton("❌ Отклонить", callback_data=f"deny_payout_{payout['user_id']}")],
+            ]
+        )
+        await self.bot.send_message(
+            chat_id=ADMIN_CHAT_ID, text=text, reply_markup=markup
+        )

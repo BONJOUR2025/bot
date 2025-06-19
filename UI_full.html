@@ -301,6 +301,10 @@
         <option value="💳 На карту">💳 На карту</option>
         <option value="💵 Из кассы">💵 Из кассы</option>
       </select>
+      <label class="flex items-center mt-2">
+        <input type="checkbox" id="syncToBot" class="mr-2" />
+        Отразить в боте
+      </label>
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closePayoutModal()" class="px-4 py-2">Отмена</button>
         <button id="payout-save-btn" onclick="submitPayout()" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
@@ -1100,6 +1104,7 @@
       document.getElementById('payout-amount').value = item.amount;
       document.getElementById('payout-type').value = item.payout_type;
       document.getElementById('payout-method').value = item.method;
+      document.getElementById('syncToBot').checked = false;
       document.getElementById('payout-save-btn').textContent = 'Сохранить';
     }
 
@@ -1112,6 +1117,7 @@
         document.getElementById('payout-amount').value = '';
         document.getElementById('payout-type').value = 'Аванс';
         document.getElementById('payout-method').value = '💳 На карту';
+        document.getElementById('syncToBot').checked = false;
         document.getElementById('payout-save-btn').textContent = 'Создать';
       }
   }
@@ -1128,7 +1134,8 @@
         bank: employees.find(e => e.id === document.getElementById('payout-emp').value)?.bank || '',
         amount: Number(document.getElementById('payout-amount').value || 0),
         method: document.getElementById('payout-method').value,
-        payout_type: document.getElementById('payout-type').value
+        payout_type: document.getElementById('payout-type').value,
+        sync_to_bot: document.getElementById('syncToBot').checked
       };
       try {
         if (editingPayout === null) {
