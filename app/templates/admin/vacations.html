@@ -2,29 +2,34 @@
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-semibold">👒 Управление отпусками</h1>
     <div class="flex gap-2">
-      <button onclick="refreshPage()" class="bg-blue-500 text-white px-4 py-2 rounded">🔄 Обновить</button>
-      <button onclick="openVacationModal()" class="btn btn-primary flex items-center gap-1">📅 Добавить отпуск</button>
+      <button onclick="refreshPage()" class="px-3 py-1 bg-white rounded shadow text-sm">🔄 Обновить</button>
+      <button onclick="openVacationModal()" class="btn btn-success flex items-center gap-1">➕ Добавить отпуск</button>
     </div>
   </div>
-  <div class="flex flex-wrap items-end gap-4">
-    <label class="block">
-      <span class="text-sm">Сотрудник</span>
-      <select id="employeeSelect" class="border rounded p-2 w-full sm:w-48"></select>
-    </label>
-    <label class="block">
-      <span class="text-sm">От</span>
-      <input type="date" id="startDate" class="border rounded p-2 w-full sm:w-40" />
-    </label>
-    <label class="block">
-      <span class="text-sm">До</span>
-      <input type="date" id="endDate" class="border rounded p-2 w-full sm:w-40" />
-    </label>
-    <label class="block">
-      <span class="text-sm">Комментарий</span>
-      <input type="text" id="commentFilter" class="border rounded p-2 w-full sm:w-48" placeholder="Поиск" />
-    </label>
-    <button onclick="loadVacations()" class="btn btn-success ml-auto">Показать</button>
+  <div class="space-y-2">
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="block">
+        <span class="text-sm">Сотрудник</span>
+        <select id="employeeSelect" class="border rounded p-2 w-full sm:w-48"></select>
+      </label>
+    </div>
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="block">
+        <span class="text-sm">Дата от</span>
+        <input type="date" id="startDate" class="border rounded p-2 w-full sm:w-40" />
+      </label>
+      <label class="block">
+        <span class="text-sm">до</span>
+        <input type="date" id="endDate" class="border rounded p-2 w-full sm:w-40" />
+      </label>
+      <label class="block flex-1 min-w-[8rem]">
+        <span class="text-sm">Комментарий</span>
+        <input type="text" id="commentFilter" class="border rounded p-2 w-full" placeholder="Поиск" />
+      </label>
+      <button onclick="loadVacations()" class="btn btn-success">Показать</button>
+    </div>
   </div>
+  <div id="vac-calendar-nav" class="flex items-center justify-between mb-2"></div>
   <div id="vacation-calendar" class="mb-4"></div>
   <table class="min-w-full text-sm bg-white rounded shadow" id="vacation-table"></table>
 </div>
@@ -82,20 +87,41 @@ function renderVacationTable(list){
       </tr>\
     </thead>`+
     '<tbody>'+
-    list.map(v =>
-      `<tr class='border-t odd:bg-gray-50'>\
+    list.map(v => {
+      const today=new Date().toISOString().slice(0,10);
+      let cls='';
+      if(v.end_date < today) cls='bg-gray-100';
+      else if(v.start_date <= today && v.end_date >= today) cls='bg-yellow-100';
+      else if(v.start_date > today) cls='bg-green-50';
+      return `<tr class='border-t ${cls}'>\
         <td class='px-2 py-1 text-left'>${v.name}</td>\
         <td class='px-2 py-1 text-left'>${v.start_date}</td>\
         <td class='px-2 py-1 text-left'>${v.end_date}</td>\
         <td class='px-2 py-1 text-left'>${v.type}</td>\
-        <td class='px-2 py-1 text-left'>${v.comment || '—'}</td>\
+        <td class='px-2 py-1 text-left'>${v.comment || 'Нет'}</td>\
         <td class='px-2 py-1 text-left'>\
           <button onclick="editVacation(${v.id})" class='text-blue-600 mr-2'>✏️</button>\
           <button onclick="deleteVacation(${v.id})" class='text-red-600'>🗑️</button>\
         </td>\
-      </tr>`
-    ).join('') +
+      </tr>`;
+    }).join('') +
     '</tbody>';
+}
+
+function updateCalNav(){
+  const nav=document.getElementById('vac-calendar-nav');
+  if(!vacCalendar||!nav) return;
+  const cur=vacCalendar.view.currentStart;
+  const fmt=d=>d.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+  const prev=new Date(cur);prev.setMonth(prev.getMonth()-1);
+  const next=new Date(cur);next.setMonth(next.getMonth()+1);
+  nav.innerHTML=`<button id="vac-prev" class="px-2">← ${fmt(prev)}</button>`+
+    `<span class="font-semibold">${fmt(cur)}</span>`+
+    `<button id="vac-next" class="px-2">${fmt(next)} →</button>`+
+    `<button id="vac-today" class="border px-2 py-1 text-sm rounded ml-2">Сегодня</button>`;
+  document.getElementById('vac-prev').onclick=()=>vacCalendar.prev();
+  document.getElementById('vac-next').onclick=()=>vacCalendar.next();
+  document.getElementById('vac-today').onclick=()=>vacCalendar.today();
 }
 
 function renderCalendar(data){
@@ -103,11 +129,13 @@ function renderCalendar(data){
     color:v.type==='Отпуск'?'#3b82f6':v.type==='Больничный'?'#ef4444':'#f59e0b'}));
   if(!vacCalendar){
     const el=document.getElementById('vacation-calendar');
-    vacCalendar=new FullCalendar.Calendar(el,{initialView:'dayGridMonth',locale:'ru',events});
+    vacCalendar=new FullCalendar.Calendar(el,{initialView:'dayGridMonth',locale:'ru',events,headerToolbar:false});
+    vacCalendar.on('datesSet',updateCalNav);
     vacCalendar.render();
   }else{
     vacCalendar.removeAllEvents();
     events.forEach(e=>vacCalendar.addEvent(e));
+    updateCalNav();
   }
 }
 
