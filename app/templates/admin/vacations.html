@@ -57,9 +57,12 @@
     <div class="mb-2">
       <textarea id="vac-comment" class="border p-2 w-full" placeholder="Комментарий"></textarea>
     </div>
-    <div class="flex justify-end gap-4 pt-2">
-      <button onclick="closeVacationModal()" class="px-4 py-2">Отмена</button>
-      <button id="vac-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+    <div class="flex justify-between items-center pt-2">
+      <button id="vac-delete" class="text-red-600 hidden">🗑️ Удалить</button>
+      <div class="flex gap-4">
+        <button onclick="closeVacationModal()" class="px-4 py-2">Отмена</button>
+        <button id="vac-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+      </div>
     </div>
   </div>
 </div>
@@ -157,17 +160,23 @@ async function loadVacations(){
 }
 
 function openVacationModal(id=null){
-  vacEditing=id; 
+  vacEditing=id;
   document.getElementById('vacation-modal').classList.remove('hidden');
+  document.getElementById('vac-delete').classList.add('hidden');
+  document.getElementById('vac-emp').disabled=false;
+  document.querySelectorAll('#vacation-table td.highlight').forEach(td=>td.classList.remove('ring-2','ring-blue-500','highlight'));
   if(id){
     const v=vacations.find(x=>String(x.id)===String(id));
-    if(!v)return; 
+    if(!v)return;
     document.getElementById('vacation-modal-title').textContent='Редактировать отпуск';
     document.getElementById('vac-emp').value=v.employee_id;
     document.getElementById('vac-start').value=v.start_date;
     document.getElementById('vac-end').value=v.end_date;
     document.getElementById('vac-type').value=v.type;
     document.getElementById('vac-comment').value=v.comment||'';
+    document.getElementById('vac-delete').classList.remove('hidden');
+    document.getElementById('vac-emp').disabled=true;
+    document.querySelectorAll(`#vacation-table td[data-id='${id}']`).forEach(td=>td.classList.add('ring-2','ring-blue-500','highlight'));
   }else{
     document.getElementById('vacation-modal-title').textContent='Добавить отпуск';
     document.getElementById('vac-start').value='';
@@ -179,6 +188,7 @@ function openVacationModal(id=null){
 
 function closeVacationModal(){
   document.getElementById('vacation-modal').classList.add('hidden');
+  document.querySelectorAll('#vacation-table td.highlight').forEach(td=>td.classList.remove('ring-2','ring-blue-500','highlight'));
 }
 
 document.getElementById('vac-save').onclick=async()=>{
@@ -195,6 +205,17 @@ document.getElementById('vac-save').onclick=async()=>{
   }else{
     await axios.post('/api/vacations/',payload);
   }
+  closeVacationModal();
+  loadVacations();
+};
+
+document.getElementById('vac-delete').onclick=async()=>{
+  if(!vacEditing)return;
+  const v=vacations.find(x=>String(x.id)===String(vacEditing));
+  if(!v)return;
+  const emp=employees.find(e=>String(e.id)===String(v.employee_id))?.full_name||'';
+  if(!confirm(`Удалить отпуск с ${v.start_date} по ${v.end_date} для ${emp}?`))return;
+  await axios.delete(`/api/vacations/${vacEditing}`);
   closeVacationModal();
   loadVacations();
 };
