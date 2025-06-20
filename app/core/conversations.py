@@ -111,7 +111,7 @@ def build_payout_conversation():
             ],
             PayoutStates.SELECT_METHOD: [
                 MessageHandler(
-                    filters.Regex(r"^(💵 Из кассы|💳 На карту|🏠 Домой)$")
+                    filters.Regex(r"^(🏦 Из кассы|🤝 Наличными|💳 На карту|🏠 Домой)$")
                     & ~filters.User(ADMIN_ID),
                     payout_method_user,
                 ),

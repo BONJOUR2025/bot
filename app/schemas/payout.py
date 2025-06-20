@@ -23,6 +23,7 @@ class PayoutCreate(BaseModel):
     amount: float
     method: str
     payout_type: str
+    sync_to_bot: bool = False
 
 
 class PayoutUpdate(BaseModel):

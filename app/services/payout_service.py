@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 
 from app.schemas.payout import Payout, PayoutCreate, PayoutUpdate
 from app.data.payout_repository import PayoutRepository
+from .telegram_service import TelegramService
 
 import logging
 from pathlib import Path
@@ -18,8 +19,13 @@ if not logger.handlers:
 
 
 class PayoutService:
-    def __init__(self, repo: Optional[PayoutRepository] = None) -> None:
+    def __init__(
+        self,
+        repo: Optional[PayoutRepository] = None,
+        telegram_service: Optional["TelegramService"] = None,
+    ) -> None:
         self._repo = repo or PayoutRepository()
+        self._telegram = telegram_service
 
     async def list_payouts(
         self,
@@ -56,6 +62,11 @@ class PayoutService:
                 created['amount']} ₽ для user_id {
                 created['user_id']} — статус: {
                     created['status']}")
+        if self._telegram and data.sync_to_bot:
+            try:
+                await self._telegram.send_payout_request_to_admin(created)
+            except Exception as exc:
+                logger.warning(f"Не удалось отправить в бот: {exc}")
         return Payout(**created)
 
     async def update_payout(

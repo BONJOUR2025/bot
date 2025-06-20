@@ -6,7 +6,6 @@
   <title>Админ панель</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 </head>
 <body class="bg-gray-100 text-gray-900">
   <div class="container mx-auto p-4 space-y-6">
@@ -150,16 +149,48 @@
           </thead>
           <tbody id="payouts-body"></tbody>
         </table>
+        <div id="payoutStats" class="text-right mt-4 font-medium text-sm text-gray-600 hidden">
+          <span>ИТОГО: </span>
+          <span id="payoutCount">—</span> выплат на сумму <span id="payoutTotal">—</span> ₽
+        </div>
       </div>
     </section>
 
     <!-- VACATIONS SECTION -->
     <section id="vacations" class="hidden space-y-4">
-      <h2 class="text-xl font-semibold">Отпуска</h2>
-      <div id="vacation-calendar" class="mb-4"></div>
-      <button onclick="openVacationModal()" class="bg-green-600 text-white px-4 py-2 rounded">Добавить отпуск</button>
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">👒 Управление отпусками</h2>
+        <div class="flex gap-2">
+          <button onclick="refreshPage()" class="px-3 py-1 bg-white rounded shadow text-sm">🔄 Обновить</button>
+          <button onclick="openVacationModal()" class="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-1">➕ Добавить отпуск</button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex flex-wrap items-end gap-4">
+          <label class="block">
+            <span class="text-sm">Сотрудник</span>
+            <select id="vac-filter-employee" class="border rounded p-2 w-full sm:w-48"></select>
+          </label>
+        </div>
+        <div class="flex flex-wrap items-end gap-4">
+          <label class="block">
+            <span class="text-sm">Дата от</span>
+            <input type="date" id="vac-filter-start" class="border rounded p-2 w-full sm:w-40" />
+          </label>
+          <label class="block">
+            <span class="text-sm">до</span>
+            <input type="date" id="vac-filter-end" class="border rounded p-2 w-full sm:w-40" />
+          </label>
+          <label class="block flex-1 min-w-[8rem]">
+            <span class="text-sm">Комментарий</span>
+            <input type="text" id="vac-filter-comment" placeholder="Поиск" class="border rounded p-2 w-full" />
+          </label>
+          <button onclick="loadVacations()" class="btn btn-success">Показать</button>
+        </div>
+      </div>
+      <div id="vac-calendar-nav" class="flex items-center justify-between mb-2"></div>
       <div class="overflow-x-auto shadow rounded bg-white">
-        <table class="min-w-full text-sm table-auto" id="vacation-table"></table>
+        <table class="min-w-full text-sm" id="vacation-table"></table>
       </div>
     </section>
 
@@ -299,8 +330,13 @@
       </select>
       <select id="payout-method" class="border p-2 w-full">
         <option value="💳 На карту">💳 На карту</option>
-        <option value="💵 Из кассы">💵 Из кассы</option>
+        <option value="🏦 Из кассы">🏦 Из кассы</option>
+        <option value="🤝 Наличными">🤝 Наличными</option>
       </select>
+      <label class="flex items-center mt-2">
+        <input type="checkbox" id="syncToBot" class="mr-2" />
+        Отразить в боте
+      </label>
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closePayoutModal()" class="px-4 py-2">Отмена</button>
         <button id="payout-save-btn" onclick="submitPayout()" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
@@ -320,9 +356,12 @@
         <option value="Командировка">Командировка</option>
       </select>
       <textarea id="vac-comment" class="border p-2 w-full" placeholder="Комментарий"></textarea>
-      <div class="flex justify-end gap-2 pt-2">
-        <button onclick="closeVacationModal()" class="px-4 py-2">Отмена</button>
-        <button id="vac-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+      <div class="flex justify-between items-center pt-2">
+        <button id="vac-delete" class="text-red-600 hidden">🗑️ Удалить</button>
+        <div class="flex gap-2">
+          <button onclick="closeVacationModal()" class="px-4 py-2">Отмена</button>
+          <button id="vac-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+        </div>
       </div>
     </div>
   </div>
@@ -825,6 +864,15 @@
           </td>
         </tr>
       `).join('');
+      const stats = document.getElementById('payoutStats');
+      if (data.length) {
+        const total = data.reduce((acc, p) => acc + (p.amount || 0), 0);
+        document.getElementById('payoutCount').textContent = data.length;
+        document.getElementById('payoutTotal').textContent = formatRub(total);
+        stats.classList.remove('hidden');
+      } else {
+        stats.classList.add('hidden');
+      }
     }
 
     async function approvePayout(id) {
@@ -845,47 +893,100 @@
     // ---- Vacations ----
     let vacations = [];
     let vacEditing = null;
-    let vacCalendar = null;
+    let currentMonth = new Date();
+    currentMonth.setDate(1);
+    let filteredVacations = [];
 
     async function loadVacations() {
       const res = await axios.get('/api/vacations/');
       vacations = res.data;
-      renderVacationTable();
+      const filterSel = document.getElementById('vac-filter-employee');
+      if (filterSel && !filterSel.dataset.filled) {
+        filterSel.innerHTML = '<option value="">Все</option>' + employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+        filterSel.dataset.filled = '1';
+      }
+      const modalSel = document.getElementById('vac-emp');
+      if (modalSel) modalSel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+
+      filteredVacations = [...vacations];
+      const emp = filterSel?.value;
+      const start = document.getElementById('vac-filter-start')?.value;
+      const end = document.getElementById('vac-filter-end')?.value;
+      const kw = document.getElementById('vac-filter-comment')?.value?.toLowerCase() || '';
+      if (emp) filteredVacations = filteredVacations.filter(v => String(v.employee_id) === emp);
+      if (start) filteredVacations = filteredVacations.filter(v => v.start_date >= start);
+      if (end) filteredVacations = filteredVacations.filter(v => v.end_date <= end);
+      if (kw) filteredVacations = filteredVacations.filter(v => (v.comment || '').toLowerCase().includes(kw));
+      filteredVacations.sort((a,b) => new Date(a.start_date) - new Date(b.start_date));
+
       renderVacationCalendar();
-      const sel = document.getElementById('vac-emp');
-      if (sel) sel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
     }
 
-    function renderVacationTable() {
-      const table = document.getElementById('vacation-table');
-      if (!table) return;
-      table.innerHTML = `<thead class='bg-gray-200'><tr><th class='p-2'>ID</th><th>Имя</th><th>Даты</th><th>Тип</th><th>Комментарий</th><th></th></tr></thead>` +
-        '<tbody>' + vacations.map(v => `<tr class='border-t'><td class='p-2'>${v.id}</td><td>${v.name}</td><td>${v.start_date} - ${v.end_date}</td><td>${v.type}</td><td>${v.comment||''}</td><td><button onclick="openVacationModal(${v.id})" class='text-blue-600 mr-2'>✏️</button><button onclick="deleteVacation(${v.id})" class='text-red-600'>❌</button></td></tr>`).join('') +
-        '</tbody>';
+    function updateVacNav() {
+      const nav = document.getElementById('vac-calendar-nav');
+      if (!nav) return;
+      const fmt = d => d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+      const prev = new Date(currentMonth); prev.setMonth(prev.getMonth() - 1);
+      const next = new Date(currentMonth); next.setMonth(next.getMonth() + 1);
+      nav.innerHTML = `<button id="vac-prev" class="px-2">← ${fmt(prev)}</button>` +
+        `<span class="font-semibold">${fmt(currentMonth)}</span>` +
+        `<button id="vac-next" class="px-2">${fmt(next)} →</button>` +
+        `<button id="vac-today" class="border px-2 py-1 text-sm rounded ml-2">Сегодня</button>`;
+      document.getElementById('vac-prev').onclick = () => { currentMonth.setMonth(currentMonth.getMonth() - 1); renderVacationCalendar(); };
+      document.getElementById('vac-next').onclick = () => { currentMonth.setMonth(currentMonth.getMonth() + 1); renderVacationCalendar(); };
+      document.getElementById('vac-today').onclick = () => { currentMonth = new Date(); currentMonth.setDate(1); renderVacationCalendar(); };
     }
 
     function renderVacationCalendar() {
-      const el = document.getElementById('vacation-calendar');
-      if (!el) return;
-      const events = vacations.map(v => ({
-        id: String(v.id),
-        title: v.name + ' (' + v.type + ')',
-        start: v.start_date,
-        end: new Date(new Date(v.end_date).getTime() + 86400000).toISOString().slice(0,10),
-        color: v.type === 'Отпуск' ? '#3b82f6' : v.type === 'Больничный' ? '#ef4444' : '#f59e0b'
-      }));
-      if (!vacCalendar) {
-        vacCalendar = new FullCalendar.Calendar(el, {initialView:'dayGridMonth', locale:'ru', events});
-        vacCalendar.render();
-      } else {
-        vacCalendar.removeAllEvents();
-        events.forEach(e => vacCalendar.addEvent(e));
+      const table = document.getElementById('vacation-table');
+      if (!table) return;
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const days = new Date(year, month + 1, 0).getDate();
+      if (!filteredVacations.length) {
+        table.innerHTML = '<p class="p-4 text-center text-gray-500">Нет зарегистрированных отпусков</p>';
+        updateVacNav();
+        return;
       }
+      let head = '';
+      for (let d = 1; d <= days; d++) head += `<th class="p-1 text-xs">${d}</th>`;
+      const empIds = [...new Set(filteredVacations.map(v => v.employee_id))];
+      const todayStr = new Date().toISOString().slice(0,10);
+      let body = '';
+      empIds.forEach(eid => {
+        const name = employees.find(e => String(e.id) === String(eid))?.full_name || employees.find(e => String(e.id) === String(eid))?.name || '';
+        let row = `<th class="p-2 text-left sticky left-0 bg-white z-10">${name}</th>`;
+        for (let d = 1; d <= days; d++) {
+          const date = new Date(year, month, d).toISOString().slice(0,10);
+          const vac = filteredVacations.find(v => String(v.employee_id) === String(eid) && v.start_date <= date && v.end_date >= date);
+          let cls = '';
+          let title = '';
+          let id = '';
+          if (vac) {
+            id = vac.id;
+            title = `${vac.start_date} - ${vac.end_date}${vac.comment ? ' ' + vac.comment : ''}`;
+            if (vac.end_date < todayStr) cls = 'bg-gray-300';
+            else if (vac.start_date <= todayStr && vac.end_date >= todayStr) cls = 'bg-yellow-200';
+            else cls = 'bg-green-200';
+          } else {
+            const dow = new Date(year, month, d).getDay();
+            if (dow === 0 || dow === 6) cls = 'bg-gray-50';
+          }
+          row += `<td class="border p-1 ${cls}" data-id="${id}" title="${title}"></td>`;
+        }
+        body += `<tr>${row}</tr>`;
+      });
+      table.innerHTML = `<thead class="bg-gray-100 sticky top-0"><tr><th class="p-2 text-left sticky left-0 bg-gray-100 z-20">Сотрудник</th>${head}</tr></thead><tbody>${body}</tbody>`;
+      updateVacNav();
+      table.querySelectorAll('td[data-id]').forEach(td => { if (td.dataset.id) { td.onclick = () => openVacationModal(td.dataset.id); } });
     }
 
     function openVacationModal(id=null) {
       vacEditing = id;
       document.getElementById('vacation-modal').classList.remove('hidden');
+      document.getElementById('vac-delete').classList.add('hidden');
+      document.getElementById('vac-emp').disabled = false;
+      document.querySelectorAll('#vacation-table td.highlight').forEach(td => td.classList.remove('ring-2','ring-blue-500','highlight'));
       if (id) {
         const v = vacations.find(x => x.id == id);
         if (!v) return;
@@ -895,6 +996,9 @@
         document.getElementById('vac-end').value = v.end_date;
         document.getElementById('vac-type').value = v.type;
         document.getElementById('vac-comment').value = v.comment || '';
+        document.getElementById('vac-delete').classList.remove('hidden');
+        document.getElementById('vac-emp').disabled = true;
+        document.querySelectorAll(`#vacation-table td[data-id='${id}']`).forEach(td => td.classList.add('ring-2','ring-blue-500','highlight'));
       } else {
         document.getElementById('vacation-modal-title').textContent = 'Добавить отпуск';
         document.getElementById('vac-start').value = '';
@@ -906,6 +1010,7 @@
 
     function closeVacationModal() {
       document.getElementById('vacation-modal').classList.add('hidden');
+      document.querySelectorAll('#vacation-table td.highlight').forEach(td => td.classList.remove('ring-2','ring-blue-500','highlight'));
     }
 
     document.getElementById('vac-save')?.addEventListener('click', async () => {
@@ -922,6 +1027,17 @@
       } else {
         await axios.post('/api/vacations/', payload);
       }
+      closeVacationModal();
+      loadVacations();
+    });
+
+    document.getElementById('vac-delete').addEventListener('click', async () => {
+      if (!vacEditing) return;
+      const v = vacations.find(x => String(x.id) === String(vacEditing));
+      if (!v) return;
+      const emp = employees.find(e => String(e.id) === String(v.employee_id))?.full_name || '';
+      if (!confirm(`Удалить отпуск с ${v.start_date} по ${v.end_date} для ${emp}?`)) return;
+      await axios.delete(`/api/vacations/${vacEditing}`);
       closeVacationModal();
       loadVacations();
     });
@@ -1100,6 +1216,7 @@
       document.getElementById('payout-amount').value = item.amount;
       document.getElementById('payout-type').value = item.payout_type;
       document.getElementById('payout-method').value = item.method;
+      document.getElementById('syncToBot').checked = false;
       document.getElementById('payout-save-btn').textContent = 'Сохранить';
     }
 
@@ -1112,6 +1229,7 @@
         document.getElementById('payout-amount').value = '';
         document.getElementById('payout-type').value = 'Аванс';
         document.getElementById('payout-method').value = '💳 На карту';
+        document.getElementById('syncToBot').checked = false;
         document.getElementById('payout-save-btn').textContent = 'Создать';
       }
   }
@@ -1128,7 +1246,8 @@
         bank: employees.find(e => e.id === document.getElementById('payout-emp').value)?.bank || '',
         amount: Number(document.getElementById('payout-amount').value || 0),
         method: document.getElementById('payout-method').value,
-        payout_type: document.getElementById('payout-type').value
+        payout_type: document.getElementById('payout-type').value,
+        sync_to_bot: document.getElementById('syncToBot').checked
       };
       try {
         if (editingPayout === null) {
