@@ -149,6 +149,10 @@
           </thead>
           <tbody id="payouts-body"></tbody>
         </table>
+        <div id="payoutStats" class="text-right mt-4 font-medium text-sm text-gray-600 hidden">
+          <span>ИТОГО: </span>
+          <span id="payoutCount">—</span> выплат на сумму <span id="payoutTotal">—</span> ₽
+        </div>
       </div>
     </section>
 
@@ -859,6 +863,15 @@
           </td>
         </tr>
       `).join('');
+      const stats = document.getElementById('payoutStats');
+      if (data.length) {
+        const total = data.reduce((acc, p) => acc + (p.amount || 0), 0);
+        document.getElementById('payoutCount').textContent = data.length;
+        document.getElementById('payoutTotal').textContent = formatRub(total);
+        stats.classList.remove('hidden');
+      } else {
+        stats.classList.add('hidden');
+      }
     }
 
     async function approvePayout(id) {

@@ -7,6 +7,10 @@
     <button onclick="openPayoutModal()" class="bg-green-600 text-white px-4 py-2 rounded">Создать выплату</button>
   </div>
   <div id="payout-table" class="overflow-x-auto">Загрузка...</div>
+  <div id="payoutStats" class="text-right mt-4 font-medium text-sm text-gray-600 hidden">
+    <span>ИТОГО: </span>
+    <span id="payoutCount">—</span> выплат на сумму <span id="payoutTotal">—</span> ₽
+  </div>
 </div>
 
 <div id="payout-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
@@ -35,17 +39,31 @@
 </div>
 
 <script>
+function formatRub(amount) {
+  const num = Number(amount) || 0;
+  return num.toLocaleString('ru-RU') + ' ₽';
+}
+
 let payouts = [];
 let editingPayout = null;
 
-async function loadPayouts() {
-  const res = await axios.get('/api/payouts/');
-  payouts = res.data;
-  const table = document.getElementById('payout-table');
-  table.innerHTML = `<table class='min-w-full text-sm table-auto'><thead class='bg-gray-200'><tr><th class='p-2'>ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th><th>Статус</th><th>Дата</th><th></th></tr></thead><tbody>`+
-    payouts.map(p=>`<tr class='border-b odd:bg-gray-50'><td class='p-2'>${p.name}</td><td>${p.payout_type}</td><td>${p.method}</td><td>${p.amount}</td><td>${p.status}</td><td>${p.timestamp}</td><td><button onclick="openEditPayout(${p.id})" class='mr-2'>✏️</button></td></tr>`).join('')+
-    `</tbody></table>`;
-}
+  async function loadPayouts() {
+    const res = await axios.get('/api/payouts/');
+    payouts = res.data;
+    const table = document.getElementById('payout-table');
+    table.innerHTML = `<table class='min-w-full text-sm table-auto'><thead class='bg-gray-200'><tr><th class='p-2'>ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th><th>Статус</th><th>Дата</th><th></th></tr></thead><tbody>`+
+      payouts.map(p=>`<tr class='border-b odd:bg-gray-50'><td class='p-2'>${p.name}</td><td>${p.payout_type}</td><td>${p.method}</td><td>${p.amount}</td><td>${p.status}</td><td>${p.timestamp}</td><td><button onclick="openEditPayout(${p.id})" class='mr-2'>✏️</button></td></tr>`).join('')+
+      `</tbody></table>`;
+    const stats = document.getElementById('payoutStats');
+    if (payouts.length) {
+      const total = payouts.reduce((acc, p) => acc + (p.amount || 0), 0);
+      document.getElementById('payoutCount').textContent = payouts.length;
+      document.getElementById('payoutTotal').textContent = formatRub(total);
+      stats.classList.remove('hidden');
+    } else {
+      stats.classList.add('hidden');
+    }
+  }
 
 function openPayoutModal(isNew=true){
   const sel=document.getElementById('payout-emp');
