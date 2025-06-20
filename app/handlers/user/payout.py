@@ -112,7 +112,7 @@ async def handle_payout_amount_user(
     log(
         f"DEBUG [handle_payout_amount_user] Сумма {amount} принята для user_id: {user_id}, ожидается выбор метода"
     )
-    keyboard = [["💵 Из кассы", "💳 На карту"], ["🏠 Домой"]]
+    keyboard = [["🏦 Из кассы", "💳 На карту", "🤝 Наличными"], ["🏠 Домой"]]
     reply_markup = ReplyKeyboardMarkup(
         keyboard, resize_keyboard=True, one_time_keyboard=False
     )
@@ -371,7 +371,7 @@ async def change_payout_method(update: Update,
                                context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     keyboard = ReplyKeyboardMarkup(
-        [["💵 Из кассы", "💳 На карту"], ["🏠 Домой"]], resize_keyboard=True
+        [["🏦 Из кассы", "💳 На карту", "🤝 Наличными"], ["🏠 Домой"]], resize_keyboard=True
     )
     await update.callback_query.message.reply_text(
         "Выберите способ получения выплаты:", reply_markup=keyboard

@@ -75,7 +75,7 @@ async def manual_payout_amount(
     await update.message.reply_text(
         "Выберите способ:",
         reply_markup=ReplyKeyboardMarkup(
-            [["💳 На карту", "💵 Из кассы"], ["🏠 Домой"]],
+            [["💳 На карту", "🏦 Из кассы", "🤝 Наличными"], ["🏠 Домой"]],
             resize_keyboard=True,
         ),
     )
