@@ -1,6 +1,12 @@
 # Handler functions for payout approval and rejection.
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+)
 from telegram.ext import ContextTypes, ConversationHandler
+from telegram.error import BadRequest
 
 from ...constants import UserStates
 from ...config import (
@@ -54,11 +60,27 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"Сумма: {request_to_approve['amount']} ₽\n"
         f"Метод: {request_to_approve['method']}"
     )
-    await context.bot.send_message(chat_id=user_id, text=user_message)
+    log(
+        f"[Telegram] sending approval notice to {user_id} — text: '{user_message[:50]}'"
+    )
+    try:
+        await context.bot.send_message(chat_id=user_id, text=user_message)
+    except BadRequest as e:
+        log(f"❌ Failed to send message to chat {user_id} — {e}")
+        raise
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n✅ Разрешено"
-    await query.edit_message_text(text=updated_text)
+    log(
+        f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
+    )
+    try:
+        await query.edit_message_text(text=updated_text)
+    except BadRequest as e:
+        log(
+            f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
+        )
+        raise
 
     if request_to_approve["method"] == "💳 На карту":
         cashier_text = (
@@ -72,6 +94,9 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         cashier_buttons = InlineKeyboardMarkup(
             [[InlineKeyboardButton("📤 Отправлено", callback_data=f"mark_sent_{user_id}")]]
         )
+        log(
+            f"[Telegram] sending cashier notice to {CARD_DISPATCH_CHAT_ID} — text: '{cashier_text[:50]}'"
+        )
         try:
             await context.bot.send_message(
                 chat_id=CARD_DISPATCH_CHAT_ID,
@@ -79,6 +104,9 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 reply_markup=cashier_buttons,
             )
             log(f"📨 [allow_payout] Сообщение кассиру отправлено для user_id: {user_id}")
+        except BadRequest as e:
+            log(f"❌ Failed to send message to chat {CARD_DISPATCH_CHAT_ID} — {e}")
+            raise
         except Exception as e:
             log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")
 
@@ -117,11 +145,27 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"Сумма: {request_to_deny['amount']} ₽\n"
         f"Метод: {request_to_deny['method']}"
     )
-    await context.bot.send_message(chat_id=user_id, text=user_message)
+    log(
+        f"[Telegram] sending denial notice to {user_id} — text: '{user_message[:50]}'"
+    )
+    try:
+        await context.bot.send_message(chat_id=user_id, text=user_message)
+    except BadRequest as e:
+        log(f"❌ Failed to send message to chat {user_id} — {e}")
+        raise
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n❌ Отказано"
-    await query.edit_message_text(text=updated_text, reply_markup=None)
+    log(
+        f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
+    )
+    try:
+        await query.edit_message_text(text=updated_text, reply_markup=None)
+    except BadRequest as e:
+        log(
+            f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
+        )
+        raise
 
 
 async def reset_payout_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -199,5 +243,13 @@ async def mark_sent(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.data.split("_")[-1]
     current_text = query.message.text
     updated_text = f"{current_text}\n\n📤 Отправлено"
-
-    await query.edit_message_text(updated_text)
+    log(
+        f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
+    )
+    try:
+        await query.edit_message_text(updated_text)
+    except BadRequest as e:
+        log(
+            f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
+        )
+        raise

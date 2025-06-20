@@ -8,6 +8,7 @@ from telegram import (
     InlineKeyboardMarkup,
 )
 from telegram.ext import Application, ContextTypes, ConversationHandler
+from telegram.error import BadRequest
 import requests
 
 from ...services.advance_requests import API_URL
@@ -23,6 +24,9 @@ async def send_message(
     app: Application, user_id: int, message: Message
 ) -> None:
     """Отправляет сообщение конкретному пользователю."""
+    log(
+        f"[Telegram] broadcasting message to {user_id} — text: '{(message.text or message.caption or '')[:50]}'"
+    )
     try:
         if message.text:
             requests.post(
@@ -36,6 +40,9 @@ async def send_message(
                 caption=message.caption or "",
             )
         log(f"✅ [send_message] Сообщение отправлено пользователю {user_id}")
+    except BadRequest as e:
+        log(f"❌ Failed to send message to chat {user_id} — {e}")
+        raise
     except Exception as e:
         log(f"❌ [send_message] Ошибка отправки пользователю {user_id}: {e}")
 
@@ -132,14 +139,32 @@ async def handle_broadcast_confirm(
     if query.data == "broadcast_confirm":
         return await handle_broadcast_send(update, context)
     if query.data == "broadcast_edit":
-        await query.edit_message_text("Введите новый текст для рассылки:")
+        log(
+            f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
+        )
+        try:
+            await query.edit_message_text("Введите новый текст для рассылки:")
+        except BadRequest as e:
+            log(
+                f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
+            )
+            raise
         return UserStates.BROADCAST_MESSAGE
 
     context.user_data.pop("broadcast_in_progress", None)
     context.user_data.pop("broadcast_text", None)
-    await query.edit_message_text(
-        "🏠 Рассылка отменена.", reply_markup=get_admin_menu()
+    log(
+        f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
     )
+    try:
+        await query.edit_message_text(
+            "🏠 Рассылка отменена.", reply_markup=get_admin_menu()
+        )
+    except BadRequest as e:
+        log(
+            f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
+        )
+        raise
     return ConversationHandler.END
 
 

@@ -2,6 +2,8 @@ from ...keyboards.reply_admin import get_admin_menu
 from ...constants import UserStates
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram import Update
+from telegram.error import BadRequest
+from ...utils.logger import log
 import datetime
 from ...config import ADMIN_CHAT_ID
 from ...services.users import load_users
@@ -24,14 +26,29 @@ async def check_birthdays(app: Application):
             continue
         name = user.get("name", "Без имени")
         if (bdate.day, bdate.month) == (today.day, today.month):
-            await app.bot.send_message(
-                chat_id=ADMIN_CHAT_ID,
-                text=f"🎉 Сегодня день рождения у {name}!",
+            log(
+                f"[Telegram] birthday notification for today to {ADMIN_CHAT_ID} — {name}"
             )
+            try:
+                await app.bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    text=f"🎉 Сегодня день рождения у {name}!",
+                )
+            except BadRequest as e:
+                log(f"❌ Failed to send message to chat {ADMIN_CHAT_ID} — {e}")
+                raise
         elif (bdate.day, bdate.month) == (tomorrow.day, tomorrow.month):
-            await app.bot.send_message(
-                chat_id=ADMIN_CHAT_ID, text=f"📅 Завтра день рождения у {name}"
+            log(
+                f"[Telegram] birthday notification for tomorrow to {ADMIN_CHAT_ID} — {name}"
             )
+            try:
+                await app.bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    text=f"📅 Завтра день рождения у {name}",
+                )
+            except BadRequest as e:
+                log(f"❌ Failed to send message to chat {ADMIN_CHAT_ID} — {e}")
+                raise
 
 
 async def show_birthdays(update: Update, context: ContextTypes.DEFAULT_TYPE):

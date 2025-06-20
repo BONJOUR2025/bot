@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Sequence, List, Dict
+from typing import Optional, Sequence, List, Dict, Any
 from datetime import datetime
 
 from telegram import Bot
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
+
+from app.utils.logger import log
 
 from app.config import TOKEN, ADMIN_CHAT_ID
 from app.data.employee_repository import EmployeeRepository
@@ -30,6 +33,8 @@ class TelegramService:
         self.msg_log = Path("logs/sent_messages.json")
         if not self.msg_log.exists():
             self.msg_log.write_text("[]", encoding="utf-8")
+        if not ADMIN_CHAT_ID:
+            log("⚠️ ADMIN_CHAT_ID not configured")
 
     def _load_log(self) -> List[Dict]:
         """Return log records sorted by timestamp descending."""
@@ -80,6 +85,9 @@ class TelegramService:
         employees = self.repo.list_employees()
         success = 0
         for emp in employees:
+            log(
+                f"[Telegram] Broadcasting to {emp.id} — text: '{message[:50]}', photo: {bool(photo_url)}"
+            )
             try:
                 if photo_url:
                     await self.bot.send_photo(
@@ -90,10 +98,15 @@ class TelegramService:
                     )
                 else:
                     await self.bot.send_message(
-                        chat_id=emp.id, text=message, parse_mode=parse_mode
+                        chat_id=emp.id,
+                        text=message,
+                        parse_mode=parse_mode,
                     )
                 success += 1
                 logger.info(f"Sent to {emp.id}")
+            except BadRequest as exc:
+                log(f"❌ Failed to send broadcast to chat {emp.id} — {exc}")
+                raise
             except Exception as exc:
                 logger.warning(f"Failed for {emp.id}: {exc}")
         return {"success": True, "sent": success, "total": len(employees)}
@@ -111,21 +124,28 @@ class TelegramService:
             reply_markup = InlineKeyboardMarkup(
                 [[InlineKeyboardButton("✅ Принято", callback_data=f"ack_{user_id}")]]
             )
-        if photo_url:
-            result = await self.bot.send_photo(
-                chat_id=user_id,
-                photo=photo_url,
-                caption=message,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup,
-            )
-        else:
-            result = await self.bot.send_message(
-                chat_id=user_id,
-                text=message,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup,
-            )
+        log(
+            f"[Telegram] Sending personal message to {user_id} — text: '{message[:50]}'"
+        )
+        try:
+            if photo_url:
+                result = await self.bot.send_photo(
+                    chat_id=user_id,
+                    photo=photo_url,
+                    caption=message,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+            else:
+                result = await self.bot.send_message(
+                    chat_id=user_id,
+                    text=message,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+        except BadRequest as exc:
+            log(f"❌ Failed to send message to chat {user_id} — {exc}")
+            raise
         log_entry = {
             "user_id": str(user_id),
             "message": message,
@@ -157,6 +177,18 @@ class TelegramService:
                 [InlineKeyboardButton("❌ Отклонить", callback_data=f"deny_payout_{payout['user_id']}")],
             ]
         )
-        await self.bot.send_message(
-            chat_id=ADMIN_CHAT_ID, text=text, reply_markup=markup
+        if not ADMIN_CHAT_ID:
+            log("⚠️ ADMIN_CHAT_ID not configured; cannot notify admin")
+            return
+        log(
+            f"[Telegram] Sending payout approval request to {ADMIN_CHAT_ID} — text: '{text[:50]}'"
         )
+        try:
+            await self.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=text,
+                reply_markup=markup,
+            )
+        except BadRequest as exc:
+            log(f"❌ Failed to send message to chat {ADMIN_CHAT_ID} — {exc}")
+            raise

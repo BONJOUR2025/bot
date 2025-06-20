@@ -7,11 +7,13 @@ from telegram import (
     InlineKeyboardButton,
 )
 from telegram.ext import ContextTypes, ConversationHandler
+from telegram.error import BadRequest
 
 from ...services.users import load_users
 from ...keyboards.reply_admin import get_admin_menu
 from ...services.advance_requests import log_new_request
 from ...constants import ManualPayoutStates
+from ...utils.logger import log
 
 
 async def manual_payout_start(
@@ -121,12 +123,28 @@ async def manual_payout_finalize(
     query = update.callback_query
     await query.answer()
     if query.data == "manual_cancel":
-        await query.edit_message_text("❌ Запрос отменён.")
-        await query.bot.send_message(
-            chat_id=query.message.chat.id,
-            text="🏠 Возврат в меню администратора.",
-            reply_markup=get_admin_menu(),
+        log(
+            f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
         )
+        try:
+            await query.edit_message_text("❌ Запрос отменён.")
+        except BadRequest as e:
+            log(
+                f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
+            )
+            raise
+        log(
+            f"[Telegram] sending return-to-menu to {query.message.chat.id}"
+        )
+        try:
+            await query.bot.send_message(
+                chat_id=query.message.chat.id,
+                text="🏠 Возврат в меню администратора.",
+                reply_markup=get_admin_menu(),
+            )
+        except BadRequest as e:
+            log(f"❌ Failed to send message to chat {query.message.chat.id} — {e}")
+            raise
         context.user_data.clear()
         return ConversationHandler.END
 
@@ -140,11 +158,27 @@ async def manual_payout_finalize(
         data["method"],
         data["payout_type"],
     )
-    await query.edit_message_text("✅ Запрос создан и сохранён.")
-    await query.bot.send_message(
-        chat_id=query.message.chat.id,
-        text="🏠 Возврат в меню администратора.",
-        reply_markup=get_admin_menu(),
+    log(
+        f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
     )
+    try:
+        await query.edit_message_text("✅ Запрос создан и сохранён.")
+    except BadRequest as e:
+        log(
+            f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
+        )
+        raise
+    log(
+        f"[Telegram] sending return-to-menu to {query.message.chat.id}"
+    )
+    try:
+        await query.bot.send_message(
+            chat_id=query.message.chat.id,
+            text="🏠 Возврат в меню администратора.",
+            reply_markup=get_admin_menu(),
+        )
+    except BadRequest as e:
+        log(f"❌ Failed to send message to chat {query.message.chat.id} — {e}")
+        raise
     context.user_data.clear()
     return ConversationHandler.END
