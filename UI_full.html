@@ -6,7 +6,6 @@
   <title>Админ панель</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
 </head>
 <body class="bg-gray-100 text-gray-900">
   <div class="container mx-auto p-4 space-y-6">
@@ -186,7 +185,6 @@
         </div>
       </div>
       <div id="vac-calendar-nav" class="flex items-center justify-between mb-2"></div>
-      <div id="vacation-calendar" class="mb-4"></div>
       <div class="overflow-x-auto shadow rounded bg-white">
         <table class="min-w-full text-sm" id="vacation-table"></table>
       </div>
@@ -878,7 +876,9 @@
     // ---- Vacations ----
     let vacations = [];
     let vacEditing = null;
-    let vacCalendar = null;
+    let currentMonth = new Date();
+    currentMonth.setDate(1);
+    let filteredVacations = [];
 
     async function loadVacations() {
       const res = await axios.get('/api/vacations/');
@@ -891,98 +891,77 @@
       const modalSel = document.getElementById('vac-emp');
       if (modalSel) modalSel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
 
-      let list = [...vacations];
+      filteredVacations = [...vacations];
       const emp = filterSel?.value;
       const start = document.getElementById('vac-filter-start')?.value;
       const end = document.getElementById('vac-filter-end')?.value;
       const kw = document.getElementById('vac-filter-comment')?.value?.toLowerCase() || '';
-      if (emp) list = list.filter(v => String(v.employee_id) === emp);
-      if (start) list = list.filter(v => v.start_date >= start);
-      if (end) list = list.filter(v => v.end_date <= end);
-      if (kw) list = list.filter(v => (v.comment || '').toLowerCase().includes(kw));
-      list.sort((a,b) => new Date(a.start_date) - new Date(b.start_date));
+      if (emp) filteredVacations = filteredVacations.filter(v => String(v.employee_id) === emp);
+      if (start) filteredVacations = filteredVacations.filter(v => v.start_date >= start);
+      if (end) filteredVacations = filteredVacations.filter(v => v.end_date <= end);
+      if (kw) filteredVacations = filteredVacations.filter(v => (v.comment || '').toLowerCase().includes(kw));
+      filteredVacations.sort((a,b) => new Date(a.start_date) - new Date(b.start_date));
 
-      renderVacationTable(list);
-      renderVacationCalendar(list);
-    }
-
-    function renderVacationTable(list) {
-      const table = document.getElementById('vacation-table');
-      if (!table) return;
-      if (!list.length) {
-        table.innerHTML = '<p class="p-4 text-center text-gray-500">Нет зарегистрированных отпусков</p>';
-        return;
-      }
-      table.innerHTML =
-        `<thead class='bg-gray-200 font-semibold'>\
-          <tr>\
-            <th class='p-2 text-left'>Сотрудник</th>\
-            <th class='p-2 text-left'>Начало</th>\
-            <th class='p-2 text-left'>Конец</th>\
-            <th class='p-2 text-left'>Тип</th>\
-            <th class='p-2 text-left'>Комментарий</th>\
-            <th class='p-2'></th>\
-          </tr>\
-        </thead>` +
-        '<tbody>' +
-        list.map(v => {
-          const today = new Date().toISOString().slice(0,10);
-          let cls = '';
-          if (v.end_date < today) cls = 'bg-gray-100';
-          else if (v.start_date <= today && v.end_date >= today) cls = 'bg-yellow-100';
-          else if (v.start_date > today) cls = 'bg-green-50';
-          return `\
-          <tr class='border-t ${cls}'>\
-            <td class='p-2'>${v.name}</td>\
-            <td class='p-2'>${v.start_date}</td>\
-            <td class='p-2'>${v.end_date}</td>\
-            <td class='p-2'>${v.type}</td>\
-            <td class='p-2'>${v.comment || 'Нет'}</td>\
-            <td class='p-2'>\
-              <button onclick="openVacationModal(${v.id})" class='text-blue-600 mr-2'>✏️</button>\
-              <button onclick="deleteVacation(${v.id})" class='text-red-600'>🗑️</button>\
-            </td>\
-          </tr>`;
-        }).join('') +
-        '</tbody>';
+      renderVacationCalendar();
     }
 
     function updateVacNav() {
-      if (!vacCalendar) return;
       const nav = document.getElementById('vac-calendar-nav');
       if (!nav) return;
-      const cur = vacCalendar.view.currentStart;
       const fmt = d => d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-      const prev = new Date(cur); prev.setMonth(prev.getMonth() - 1);
-      const next = new Date(cur); next.setMonth(next.getMonth() + 1);
+      const prev = new Date(currentMonth); prev.setMonth(prev.getMonth() - 1);
+      const next = new Date(currentMonth); next.setMonth(next.getMonth() + 1);
       nav.innerHTML = `<button id="vac-prev" class="px-2">← ${fmt(prev)}</button>` +
-        `<span class="font-semibold">${fmt(cur)}</span>` +
+        `<span class="font-semibold">${fmt(currentMonth)}</span>` +
         `<button id="vac-next" class="px-2">${fmt(next)} →</button>` +
         `<button id="vac-today" class="border px-2 py-1 text-sm rounded ml-2">Сегодня</button>`;
-      document.getElementById('vac-prev').onclick = () => vacCalendar.prev();
-      document.getElementById('vac-next').onclick = () => vacCalendar.next();
-      document.getElementById('vac-today').onclick = () => vacCalendar.today();
+      document.getElementById('vac-prev').onclick = () => { currentMonth.setMonth(currentMonth.getMonth() - 1); renderVacationCalendar(); };
+      document.getElementById('vac-next').onclick = () => { currentMonth.setMonth(currentMonth.getMonth() + 1); renderVacationCalendar(); };
+      document.getElementById('vac-today').onclick = () => { currentMonth = new Date(); currentMonth.setDate(1); renderVacationCalendar(); };
     }
 
     function renderVacationCalendar() {
-      const el = document.getElementById('vacation-calendar');
-      if (!el) return;
-      const events = vacations.map(v => ({
-        id: String(v.id),
-        title: v.name + ' (' + v.type + ')',
-        start: v.start_date,
-        end: new Date(new Date(v.end_date).getTime() + 86400000).toISOString().slice(0,10),
-        color: v.type === 'Отпуск' ? '#3b82f6' : v.type === 'Больничный' ? '#ef4444' : '#f59e0b'
-      }));
-      if (!vacCalendar) {
-        vacCalendar = new FullCalendar.Calendar(el, {initialView:'dayGridMonth', locale:'ru', events, headerToolbar:false});
-        vacCalendar.on('datesSet', updateVacNav);
-        vacCalendar.render();
-      } else {
-        vacCalendar.removeAllEvents();
-        events.forEach(e => vacCalendar.addEvent(e));
+      const table = document.getElementById('vacation-table');
+      if (!table) return;
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const days = new Date(year, month + 1, 0).getDate();
+      if (!filteredVacations.length) {
+        table.innerHTML = '<p class="p-4 text-center text-gray-500">Нет зарегистрированных отпусков</p>';
         updateVacNav();
+        return;
       }
+      let head = '';
+      for (let d = 1; d <= days; d++) head += `<th class="p-1 text-xs">${d}</th>`;
+      const empIds = [...new Set(filteredVacations.map(v => v.employee_id))];
+      const todayStr = new Date().toISOString().slice(0,10);
+      let body = '';
+      empIds.forEach(eid => {
+        const name = employees.find(e => String(e.id) === String(eid))?.full_name || employees.find(e => String(e.id) === String(eid))?.name || '';
+        let row = `<th class="p-2 text-left sticky left-0 bg-white z-10">${name}</th>`;
+        for (let d = 1; d <= days; d++) {
+          const date = new Date(year, month, d).toISOString().slice(0,10);
+          const vac = filteredVacations.find(v => String(v.employee_id) === String(eid) && v.start_date <= date && v.end_date >= date);
+          let cls = '';
+          let title = '';
+          let id = '';
+          if (vac) {
+            id = vac.id;
+            title = `${vac.start_date} - ${vac.end_date}${vac.comment ? ' ' + vac.comment : ''}`;
+            if (vac.end_date < todayStr) cls = 'bg-gray-300';
+            else if (vac.start_date <= todayStr && vac.end_date >= todayStr) cls = 'bg-yellow-200';
+            else cls = 'bg-green-200';
+          } else {
+            const dow = new Date(year, month, d).getDay();
+            if (dow === 0 || dow === 6) cls = 'bg-gray-50';
+          }
+          row += `<td class="border p-1 ${cls}" data-id="${id}" title="${title}"></td>`;
+        }
+        body += `<tr>${row}</tr>`;
+      });
+      table.innerHTML = `<thead class="bg-gray-100 sticky top-0"><tr><th class="p-2 text-left sticky left-0 bg-gray-100 z-20">Сотрудник</th>${head}</tr></thead><tbody>${body}</tbody>`;
+      updateVacNav();
+      table.querySelectorAll('td[data-id]').forEach(td => { if (td.dataset.id) { td.onclick = () => openVacationModal(td.dataset.id); } });
     }
 
     function openVacationModal(id=null) {
