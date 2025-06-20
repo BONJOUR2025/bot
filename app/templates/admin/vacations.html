@@ -1,6 +1,6 @@
 <div class="bg-white rounded-xl shadow-md p-6 space-y-4">
   <div class="flex items-center justify-between">
-    <h1 class="text-2xl font-semibold">Отпуска</h1>
+    <h1 class="text-2xl font-semibold">👒 Управление отпусками</h1>
     <div class="flex gap-2">
       <button onclick="refreshPage()" class="bg-blue-500 text-white px-4 py-2 rounded">🔄 Обновить</button>
       <button onclick="openVacationModal()" class="btn btn-primary flex items-center gap-1">📅 Добавить отпуск</button>
@@ -18,6 +18,10 @@
     <label class="block">
       <span class="text-sm">До</span>
       <input type="date" id="endDate" class="border rounded p-2 w-full sm:w-40" />
+    </label>
+    <label class="block">
+      <span class="text-sm">Комментарий</span>
+      <input type="text" id="commentFilter" class="border rounded p-2 w-full sm:w-48" placeholder="Поиск" />
     </label>
     <button onclick="loadVacations()" class="btn btn-success ml-auto">Показать</button>
   </div>
@@ -60,30 +64,34 @@ let vacations = [];
 let vacCalendar;
 let vacEditing = null;
 
-function renderVacationTable(data){
+function renderVacationTable(list){
   const table = document.getElementById('vacation-table');
+  if(!list.length){
+    table.innerHTML = '<p class="p-4 text-center text-gray-500">Нет зарегистрированных отпусков</p>';
+    return;
+  }
   table.innerHTML =
     `<thead class='bg-gray-100 font-semibold'>\
       <tr>\
-        <th class='p-2 text-left'>ID</th>\
-        <th class='p-2 text-left'>Имя</th>\
-        <th class='p-2 text-left'>Даты</th>\
+        <th class='p-2 text-left'>Сотрудник</th>\
+        <th class='p-2 text-left'>Начало</th>\
+        <th class='p-2 text-left'>Конец</th>\
         <th class='p-2 text-left'>Тип</th>\
         <th class='p-2 text-left'>Комментарий</th>\
         <th class='p-2'></th>\
       </tr>\
     </thead>`+
     '<tbody>'+
-    data.map(v =>
+    list.map(v =>
       `<tr class='border-t odd:bg-gray-50'>\
-        <td class='px-2 py-1 text-left'>${v.id}</td>\
         <td class='px-2 py-1 text-left'>${v.name}</td>\
-        <td class='px-2 py-1 text-left'>${v.start_date} - ${v.end_date}</td>\
+        <td class='px-2 py-1 text-left'>${v.start_date}</td>\
+        <td class='px-2 py-1 text-left'>${v.end_date}</td>\
         <td class='px-2 py-1 text-left'>${v.type}</td>\
         <td class='px-2 py-1 text-left'>${v.comment || '—'}</td>\
         <td class='px-2 py-1 text-left'>\
           <button onclick="editVacation(${v.id})" class='text-blue-600 mr-2'>✏️</button>\
-          <button onclick="deleteVacation(${v.id})" class='text-red-600'>❌</button>\
+          <button onclick="deleteVacation(${v.id})" class='text-red-600'>🗑️</button>\
         </td>\
       </tr>`
     ).join('') +
@@ -104,12 +112,29 @@ function renderCalendar(data){
 }
 
 async function loadVacations(){
-  const res=await axios.get('/api/vacations/');
-  vacations=res.data; 
-  renderVacationTable(vacations);
-  renderCalendar(vacations);
-  const sel=document.getElementById('vac-emp');
-  sel.innerHTML=employees.map(e=>`<option value="${e.id}">${e.full_name||e.name}</option>`).join('');
+  const res = await axios.get('/api/vacations/');
+  vacations = res.data;
+  const filterSel = document.getElementById('employeeSelect');
+  if(filterSel && !filterSel.dataset.filled){
+    filterSel.innerHTML = '<option value="">Все</option>' + employees.map(e=>`<option value="${e.id}">${e.full_name||e.name}</option>`).join('');
+    filterSel.dataset.filled='1';
+  }
+  const modalSel=document.getElementById('vac-emp');
+  if(modalSel) modalSel.innerHTML = employees.map(e=>`<option value="${e.id}">${e.full_name||e.name}</option>`).join('');
+
+  let list=[...vacations];
+  const emp=filterSel?.value;
+  const start=document.getElementById('startDate')?.value;
+  const end=document.getElementById('endDate')?.value;
+  const kw=document.getElementById('commentFilter')?.value?.toLowerCase()||'';
+  if(emp) list=list.filter(v=>String(v.employee_id)===emp);
+  if(start) list=list.filter(v=>v.start_date>=start);
+  if(end) list=list.filter(v=>v.end_date<=end);
+  if(kw) list=list.filter(v=>(v.comment||'').toLowerCase().includes(kw));
+  list.sort((a,b)=>new Date(a.start_date)-new Date(b.start_date));
+
+  renderVacationTable(list);
+  renderCalendar(list);
 }
 
 function openVacationModal(id=null){

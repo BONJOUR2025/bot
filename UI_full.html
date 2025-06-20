@@ -155,11 +155,35 @@
 
     <!-- VACATIONS SECTION -->
     <section id="vacations" class="hidden space-y-4">
-      <h2 class="text-xl font-semibold">Отпуска</h2>
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">👒 Управление отпусками</h2>
+        <div class="flex gap-2">
+          <button onclick="refreshPage()" class="px-3 py-2 bg-white rounded shadow text-sm">🔄 Обновить</button>
+          <button onclick="openVacationModal()" class="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-1">📅 Добавить отпуск</button>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-end gap-4">
+        <label class="block">
+          <span class="text-sm">Сотрудник</span>
+          <select id="vac-filter-employee" class="border rounded p-2 w-full sm:w-48"></select>
+        </label>
+        <label class="block">
+          <span class="text-sm">От</span>
+          <input type="date" id="vac-filter-start" class="border rounded p-2 w-full sm:w-40" />
+        </label>
+        <label class="block">
+          <span class="text-sm">До</span>
+          <input type="date" id="vac-filter-end" class="border rounded p-2 w-full sm:w-40" />
+        </label>
+        <label class="block">
+          <span class="text-sm">Комментарий</span>
+          <input type="text" id="vac-filter-comment" placeholder="Поиск" class="border rounded p-2 w-full sm:w-48" />
+        </label>
+        <button onclick="loadVacations()" class="btn btn-success ml-auto">Показать</button>
+      </div>
       <div id="vacation-calendar" class="mb-4"></div>
-      <button onclick="openVacationModal()" class="bg-green-600 text-white px-4 py-2 rounded">Добавить отпуск</button>
       <div class="overflow-x-auto shadow rounded bg-white">
-        <table class="min-w-full text-sm table-auto" id="vacation-table"></table>
+        <table class="min-w-full text-sm" id="vacation-table"></table>
       </div>
     </section>
 
@@ -854,17 +878,60 @@
     async function loadVacations() {
       const res = await axios.get('/api/vacations/');
       vacations = res.data;
-      renderVacationTable();
-      renderVacationCalendar();
-      const sel = document.getElementById('vac-emp');
-      if (sel) sel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+      const filterSel = document.getElementById('vac-filter-employee');
+      if (filterSel && !filterSel.dataset.filled) {
+        filterSel.innerHTML = '<option value="">Все</option>' + employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+        filterSel.dataset.filled = '1';
+      }
+      const modalSel = document.getElementById('vac-emp');
+      if (modalSel) modalSel.innerHTML = employees.map(e => `<option value="${e.id}">${e.full_name || e.name}</option>`).join('');
+
+      let list = [...vacations];
+      const emp = filterSel?.value;
+      const start = document.getElementById('vac-filter-start')?.value;
+      const end = document.getElementById('vac-filter-end')?.value;
+      const kw = document.getElementById('vac-filter-comment')?.value?.toLowerCase() || '';
+      if (emp) list = list.filter(v => String(v.employee_id) === emp);
+      if (start) list = list.filter(v => v.start_date >= start);
+      if (end) list = list.filter(v => v.end_date <= end);
+      if (kw) list = list.filter(v => (v.comment || '').toLowerCase().includes(kw));
+      list.sort((a,b) => new Date(a.start_date) - new Date(b.start_date));
+
+      renderVacationTable(list);
+      renderVacationCalendar(list);
     }
 
-    function renderVacationTable() {
+    function renderVacationTable(list) {
       const table = document.getElementById('vacation-table');
       if (!table) return;
-      table.innerHTML = `<thead class='bg-gray-200'><tr><th class='p-2'>ID</th><th>Имя</th><th>Даты</th><th>Тип</th><th>Комментарий</th><th></th></tr></thead>` +
-        '<tbody>' + vacations.map(v => `<tr class='border-t'><td class='p-2'>${v.id}</td><td>${v.name}</td><td>${v.start_date} - ${v.end_date}</td><td>${v.type}</td><td>${v.comment||''}</td><td><button onclick="openVacationModal(${v.id})" class='text-blue-600 mr-2'>✏️</button><button onclick="deleteVacation(${v.id})" class='text-red-600'>❌</button></td></tr>`).join('') +
+      if (!list.length) {
+        table.innerHTML = '<p class="p-4 text-center text-gray-500">Нет зарегистрированных отпусков</p>';
+        return;
+      }
+      table.innerHTML =
+        `<thead class='bg-gray-200 font-semibold'>\
+          <tr>\
+            <th class='p-2 text-left'>Сотрудник</th>\
+            <th class='p-2 text-left'>Начало</th>\
+            <th class='p-2 text-left'>Конец</th>\
+            <th class='p-2 text-left'>Тип</th>\
+            <th class='p-2 text-left'>Комментарий</th>\
+            <th class='p-2'></th>\
+          </tr>\
+        </thead>` +
+        '<tbody>' +
+        list.map(v => `\
+          <tr class='border-t odd:bg-gray-50'>\
+            <td class='p-2'>${v.name}</td>\
+            <td class='p-2'>${v.start_date}</td>\
+            <td class='p-2'>${v.end_date}</td>\
+            <td class='p-2'>${v.type}</td>\
+            <td class='p-2'>${v.comment || '—'}</td>\
+            <td class='p-2'>\
+              <button onclick="openVacationModal(${v.id})" class='text-blue-600 mr-2'>✏️</button>\
+              <button onclick="deleteVacation(${v.id})" class='text-red-600'>🗑️</button>\
+            </td>\
+          </tr>`).join('') +
         '</tbody>';
     }
 
