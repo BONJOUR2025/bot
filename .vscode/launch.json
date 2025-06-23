@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "▶ Запуск main.py как модуля",
+      "type": "python",
+      "request": "launch",
+      "module": "app.main",
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}
