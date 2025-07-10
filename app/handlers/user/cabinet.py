@@ -99,9 +99,8 @@ async def handle_edit_selection(update: Update,
         return
     context.user_data["awaiting_new_value"] = True
     log(
-        f"DEBUG [handle_edit_selection] Установлены edit_field: {
-            context.user_data.get('edit_field')}, awaiting_new_value: {
-            context.user_data.get('awaiting_new_value')}")
+        f"DEBUG [handle_edit_selection] Установлены edit_field: {context.user_data.get('edit_field')}, awaiting_new_value: {context.user_data.get('awaiting_new_value')}"
+    )
 
 
 async def save_new_value(
@@ -112,9 +111,8 @@ async def save_new_value(
     if not context.user_data.get("awaiting_new_value"):
         return
     log(
-        f"DEBUG [save_new_value] Текст: '{
-            update.message.text if update.message else ''}', context.user_data: {
-            context.user_data}")
+        f"DEBUG [save_new_value] Текст: '{update.message.text if update.message else ''}', context.user_data: {context.user_data}"
+    )
     new_value = update.message.text.strip()
     field = context.user_data.get("edit_field")
     if field == "phone":
@@ -315,19 +313,11 @@ async def view_request_history(update: Update,
             "Отменено": "🚫 Отменено",
         }.get(req["status"], "Неизвестно")
         history_text += (
-            f"Тип: {
-                req.get(
-                    'payout_type',
-                    'Не указано')} ({
-                req.get(
-                    'method',
-                    'Не указано')})\n" f"Сумма: {
-                        req.get(
-                            'amount',
-                            'Не указано')} ₽\n" f"Статус: {status_text}\n" f"Дата: {
-                                req.get(
-                                    'timestamp',
-                                    'Не указана')}\n\n")
+            f"Тип: {req.get('payout_type', 'Не указано')} ({req.get('method', 'Не указано')})\n"
+            f"Сумма: {req.get('amount', 'Не указано')} ₽\n"
+            f"Статус: {status_text}\n"
+            f"Дата: {req.get('timestamp', 'Не указана')}\n\n"
+        )
     history_text += f"Авансы за {current_month}: {total_advance_amount} ₽ из {MAX_ADVANCE_AMOUNT_PER_MONTH} ₽\nОстаток: {remaining_amount} ₽"
     await update.message.reply_text(
         history_text.strip(), reply_markup=get_cabinet_menu()

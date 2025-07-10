@@ -34,8 +34,8 @@ async def home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log(f"[FSM] state before entry: {state}")
     context.user_data.clear()
     log(
-        f"DEBUG [home_callback] Сброс состояний для user_id: {
-            update.effective_user.id}")
+        f"DEBUG [home_callback] Сброс состояний для user_id: {update.effective_user.id}"
+    )
     await update.message.reply_text(
         "🏠 Главное меню", reply_markup=get_admin_menu()
     )
