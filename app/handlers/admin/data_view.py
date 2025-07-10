@@ -157,8 +157,8 @@ async def handle_salary_admin(
             )
             return
         log(
-            f"✅ [handle_salary_admin] Отчёт сгенерирован, таблиц: {
-                len(report_tables)}")
+            f"✅ [handle_salary_admin] Отчёт сгенерирован, таблиц: {len(report_tables)}"
+        )
     except Exception as e:
         log(f"❌ [handle_salary_admin] Ошибка генерации отчёта: {e}")
         await loading_message.edit_text(f"❌ Ошибка генерации отчёта: {e}")
@@ -212,8 +212,8 @@ async def handle_schedule_admin(
         data = pd.read_excel(EXCEL_FILE, sheet_name=month, header=None)
         if data.shape[0] < 2 or data.shape[1] < 3:
             log(
-                f"❌ [handle_schedule_admin] Неверная структура данных для {month}: {
-                    data.shape}")
+                f"❌ [handle_schedule_admin] Неверная структура данных для {month}: {data.shape}"
+            )
             await loading_message.edit_text(
                 "❌ Неверная структура данных в Excel."
             )
@@ -234,8 +234,8 @@ async def handle_schedule_admin(
     data["ИМЯ"] = data["ИМЯ"].astype(str).str.strip().str.lower()
     compare_name = employee_name.strip().lower()
     log(
-        f"DEBUG [handle_schedule_admin] Столбцы: {
-            data.columns.tolist()}, Имя для поиска: '{compare_name}'")
+        f"DEBUG [handle_schedule_admin] Столбцы: {data.columns.tolist()}, Имя для поиска: '{compare_name}'"
+    )
     log(f"DEBUG [handle_schedule_admin] Дни недели: {weekdays_row[2:33]}")
     employee_data = data[data["ИМЯ"] == compare_name]
     if employee_data.empty:

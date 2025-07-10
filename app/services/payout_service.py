@@ -62,11 +62,8 @@ class PayoutService:
         }
         created = self._repo.create(payout_dict)
         logger.info(
-            f"🆕 Выплата '{
-                created['payout_type']}' на {
-                created['amount']} ₽ для user_id {
-                created['user_id']} — статус: {
-                    created['status']}")
+            f"🆕 Выплата '{created['payout_type']}' на {created['amount']} ₽ для user_id {created['user_id']} — статус: {created['status']}"
+        )
         if self._telegram and data.sync_to_bot:
             try:
                 await self._telegram.send_payout_request_to_admin(created)

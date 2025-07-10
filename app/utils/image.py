@@ -142,8 +142,8 @@ def create_schedule_image(data, employee_name, sheet_name, weekdays):
         return None
     employee_row = employee_rows.iloc[0]
     log(
-        f"DEBUG [create_schedule_image] Данные сотрудника: {
-            employee_row.to_dict()}")
+        f"DEBUG [create_schedule_image] Данные сотрудника: {employee_row.to_dict()}"
+    )
 
     valid_day_cols = []
     for col in data.columns[2:]:

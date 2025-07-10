@@ -106,8 +106,7 @@ async def handle_payout_amount_user(
     user_id = update.effective_user.id
     text = update.message.text.strip()
     log(
-        f"DEBUG [handle_payout_amount_user] Текст: '{text}', awaiting_amount: {
-            context.user_data.get('awaiting_amount')}")
+        f"DEBUG [handle_payout_amount_user] Текст: '{text}', awaiting_amount: {context.user_data.get('awaiting_amount')}")
     if not text.isdigit():
         await update.message.reply_text("❌ Введите корректную сумму цифрами.")
         return PayoutStates.ENTER_AMOUNT
