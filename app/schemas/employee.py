@@ -1,0 +1,43 @@
+from datetime import date, datetime
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class EmployeeBase(BaseModel):
+    name: str
+    full_name: Optional[str] = ""
+    phone: Optional[str] = ""
+    position: Optional[str] = ""
+    is_admin: bool = False
+    card_number: Optional[str] = ""
+    bank: Optional[str] = ""
+    birthdate: Optional[date] = None
+    note: Optional[str] = ""
+    photo_url: Optional[str] = ""
+    status: str = "active"
+
+
+class EmployeeCreate(EmployeeBase):
+    id: Optional[str] = ""
+
+
+class EmployeeUpdate(EmployeeBase):
+    pass
+
+
+class EmployeeOut(EmployeeBase):
+    id: str
+    created_at: datetime
+
+
+class Employee(BaseModel):
+    """Employee entry as stored in ``user.json``."""
+
+    id: str
+    name: str
+    phone: str
+    position: str = ""
+    is_admin: bool = False
+    note: Optional[str] = None
+    photo_url: Optional[str] = None

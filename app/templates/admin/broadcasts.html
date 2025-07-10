@@ -1,0 +1,31 @@
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4 max-w-lg">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">Общая рассылка</h1>
+    <button onclick="refreshPage()" class="bg-blue-500 text-white px-4 py-2 rounded">🔄 Обновить</button>
+  </div>
+  <textarea id="broadcast-text" class="w-full border p-2 rounded" placeholder="Текст сообщения"></textarea>
+  <input id="broadcast-photo" class="w-full border p-2 rounded" placeholder="Ссылка на фото (опционально)" />
+  <div class="space-x-4 text-sm">
+    <label><input type="radio" name="format" value="HTML" checked> HTML</label>
+    <label><input type="radio" name="format" value="Markdown"> Markdown</label>
+  </div>
+  <button onclick="sendBroadcast()" class="bg-green-600 text-white px-4 py-2 rounded">Отправить</button>
+</div>
+<script>
+async function sendBroadcast() {
+  const text = document.getElementById('broadcast-text').value;
+  const photo = document.getElementById('broadcast-photo').value;
+  const mode = document.querySelector("input[name='format']:checked").value;
+  try {
+    await axios.post('/api/telegram/broadcast', {
+      message: text,
+      parse_mode: mode,
+      photo_url: photo || null
+    });
+    alert('Рассылка отправлена');
+  } catch (err) {
+    console.error(err);
+    alert('Ошибка отправки');
+  }
+}
+</script>

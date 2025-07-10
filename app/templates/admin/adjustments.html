@@ -1,0 +1,161 @@
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">Удержания и Премии</h1>
+    <div class="flex gap-2">
+      <button onclick="refreshPage()" class="bg-blue-500 text-white px-4 py-2 rounded">🔄 Обновить</button>
+      <button onclick="openAdjModal()" class="bg-green-600 text-white px-4 py-2 rounded">Добавить запись</button>
+    </div>
+  </div>
+  <table class="min-w-full bg-white border rounded shadow text-sm">
+  <thead class="bg-gray-200">
+    <tr>
+      <th class="p-2">Сотрудник</th>
+      <th class="p-2">Тип</th>
+      <th class="p-2">Причина</th>
+      <th class="p-2">Сумма</th>
+      <th class="p-2">Дата</th>
+      <th class="p-2">Статус</th>
+      <th class="p-2"></th>
+    </tr>
+  </thead>
+  <tbody id="adj-body"></tbody>
+</table>
+</div>
+
+<div id="adj-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+  <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
+    <h2 id="adj-modal-title" class="text-xl font-semibold">Добавить запись</h2>
+    <select id="adj-emp" class="border p-2 w-full"></select>
+    <select id="adj-type" class="border p-2 w-full">
+      <option value="Удержание">Удержание</option>
+      <option value="Премия">Премия</option>
+    </select>
+    <select id="reason-select" class="border p-2 w-full"></select>
+    <input id="custom-reason-input" class="border p-2 w-full hidden" placeholder="Причина" />
+    <input id="adj-amount" type="number" min="0" class="border p-2 w-full" placeholder="Сумма">
+    <input id="adj-date" type="date" class="border p-2 w-full">
+    <select id="adj-status" class="border p-2 w-full">
+      <option value="Активно">Активно</option>
+      <option value="Снято">Снято</option>
+    </select>
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="closeAdjModal()" class="px-4 py-2">Отмена</button>
+      <button id="adj-save-btn" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+    </div>
+  </div>
+</div>
+<script>
+let adjustments = [];
+let adjEditing = null;
+
+const reasons = {
+  'Удержание': ['Опоздание', 'Пропуск смены', 'Нарушение формы', 'Урон имуществу', 'Другое'],
+  'Премия': ['За выручку', 'За доп. смену', 'За качество', 'За клиента', 'Другое']
+};
+
+function updateReasonOptions() {
+  const type = document.getElementById('adj-type').value;
+  const sel = document.getElementById('reason-select');
+  sel.innerHTML = reasons[type].map(r => `<option value="${r}">${r}</option>`).join('');
+  document.getElementById('custom-reason-input').classList.add('hidden');
+}
+
+document.getElementById('adj-type').addEventListener('change', updateReasonOptions);
+document.getElementById('reason-select').addEventListener('change', function() {
+  const custom = document.getElementById('custom-reason-input');
+  custom.classList.toggle('hidden', this.value !== 'Другое');
+});
+
+function getFinalReason() {
+  const sel = document.getElementById('reason-select').value;
+  if (sel === 'Другое') {
+    return document.getElementById('custom-reason-input').value;
+  }
+  return sel;
+}
+
+async function loadAdjustments() {
+  const res = await axios.get('/api/adjustments/');
+  adjustments = res.data;
+  renderAdjTable();
+  const empSel = document.getElementById('adj-emp');
+  empSel.innerHTML = employees.map(e => `<option value="${e.id}">${e.name} ${e.full_name || ''}</option>`).join('');
+}
+
+function renderAdjTable() {
+  const body = document.getElementById('adj-body');
+  body.innerHTML = adjustments.map(a => `
+    <tr class='border-b odd:bg-gray-50'>
+      <td class='p-2'>${a.employee_name}</td>
+      <td class='p-2'>${a.record_type}</td>
+      <td class='p-2'>${a.reason}</td>
+      <td class='p-2'>${a.amount}</td>
+      <td class='p-2'>${a.date}</td>
+      <td class='p-2'>${a.status}</td>
+      <td class='p-2 whitespace-nowrap'>
+        <button onclick="openAdjModal(${a.id})" class='mr-2'>✏️</button>
+        <button onclick="deleteAdjustment(${a.id})">❌</button>
+      </td>
+    </tr>`).join('');
+}
+
+function openAdjModal(id=null) {
+  adjEditing = id;
+  document.getElementById('adj-modal').classList.remove('hidden');
+  updateReasonOptions();
+  if (id) {
+    const item = adjustments.find(a => a.id === id);
+    if (!item) return;
+    document.getElementById('adj-modal-title').textContent = 'Редактировать запись';
+    document.getElementById('adj-emp').value = item.employee_id;
+    document.getElementById('adj-type').value = item.record_type;
+    updateReasonOptions();
+    document.getElementById('reason-select').value = reasons[item.record_type].includes(item.reason) ? item.reason : 'Другое';
+    if (document.getElementById('reason-select').value === 'Другое') {
+      document.getElementById('custom-reason-input').classList.remove('hidden');
+      document.getElementById('custom-reason-input').value = item.reason;
+    }
+    document.getElementById('adj-amount').value = item.amount;
+    document.getElementById('adj-date').value = item.date;
+    document.getElementById('adj-status').value = item.status;
+  } else {
+    document.getElementById('adj-modal-title').textContent = 'Добавить запись';
+    document.querySelectorAll('#adj-modal input, #adj-modal select').forEach(el => el.value = '');
+    document.getElementById('adj-type').value = 'Удержание';
+    updateReasonOptions();
+    document.getElementById('adj-status').value = 'Активно';
+  }
+}
+
+function closeAdjModal() {
+  document.getElementById('adj-modal').classList.add('hidden');
+  adjEditing = null;
+}
+
+document.getElementById('adj-save-btn').addEventListener('click', async () => {
+  const payload = {
+    employee_id: document.getElementById('adj-emp').value,
+    employee_name: employees.find(e => e.id === document.getElementById('adj-emp').value)?.name || '',
+    record_type: document.getElementById('adj-type').value,
+    reason: getFinalReason(),
+    amount: Number(document.getElementById('adj-amount').value),
+    date: document.getElementById('adj-date').value,
+    status: document.getElementById('adj-status').value,
+  };
+  if (adjEditing) {
+    await axios.put(`/api/adjustments/${adjEditing}`, payload);
+  } else {
+    await axios.post('/api/adjustments/', payload);
+  }
+  closeAdjModal();
+  await loadAdjustments();
+});
+
+async function deleteAdjustment(id) {
+  if (!confirm('Удалить запись?')) return;
+  await axios.delete(`/api/adjustments/${id}`);
+  await loadAdjustments();
+}
+
+loadAdjustments();
+</script>

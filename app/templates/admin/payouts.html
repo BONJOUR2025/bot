@@ -1,0 +1,121 @@
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">Выплаты</h1>
+    <button onclick="refreshPage()" class="bg-blue-500 text-white px-4 py-2 rounded">🔄 Обновить</button>
+  </div>
+  <div class="flex gap-2">
+    <button onclick="openPayoutModal()" class="bg-green-600 text-white px-4 py-2 rounded">Создать выплату</button>
+  </div>
+  <div id="payout-table" class="overflow-x-auto">Загрузка...</div>
+  <div id="payoutStats" class="text-right mt-4 font-medium text-sm text-gray-600 hidden">
+    <span>ИТОГО: </span>
+    <span id="payoutCount">—</span> выплат на сумму <span id="payoutTotal">—</span> ₽
+  </div>
+</div>
+
+<div id="payout-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+  <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
+    <h2 class="text-xl font-semibold">Создать выплату</h2>
+    <select id="payout-emp" class="border p-2 w-full"></select>
+    <input id="payout-amount" type="number" class="border p-2 w-full" placeholder="Сумма">
+    <select id="payout-type" class="border p-2 w-full">
+      <option value="Аванс">Аванс</option>
+      <option value="ЗП">ЗП</option>
+      <option value="Доплата">Доплата</option>
+    </select>
+    <select id="payout-method" class="border p-2 w-full">
+      <option value="💳 На карту">💳 На карту</option>
+      <option value="🏦 Из кассы">🏦 Из кассы</option>
+      <option value="🤝 Наличными">🤝 Наличными</option>
+    </select>
+    <label class="flex items-center mt-2">
+      <input type="checkbox" id="syncToBot" class="mr-2" />
+      Отразить в боте
+    </label>
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="closePayoutModal()" class="px-4 py-2">Отмена</button>
+      <button id="payout-save-btn" onclick="submitPayout()" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function formatRub(amount) {
+  const num = Number(amount) || 0;
+  return num.toLocaleString('ru-RU') + ' ₽';
+}
+
+let payouts = [];
+let editingPayout = null;
+
+  async function loadPayouts() {
+    const res = await axios.get('/api/payouts/');
+    payouts = res.data;
+    const table = document.getElementById('payout-table');
+    table.innerHTML = `<table class='min-w-full text-sm table-auto'><thead class='bg-gray-200'><tr><th class='p-2'>ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th><th>Статус</th><th>Дата</th><th></th></tr></thead><tbody>`+
+      payouts.map(p=>`<tr class='border-b odd:bg-gray-50'><td class='p-2'>${p.name}</td><td>${p.payout_type}</td><td>${p.method}</td><td>${p.amount}</td><td>${p.status}</td><td>${p.timestamp}</td><td><button onclick="openEditPayout(${p.id})" class='mr-2'>✏️</button></td></tr>`).join('')+
+      `</tbody></table>`;
+    const stats = document.getElementById('payoutStats');
+    if (payouts.length) {
+      const total = payouts.reduce((acc, p) => acc + (p.amount || 0), 0);
+      document.getElementById('payoutCount').textContent = payouts.length;
+      document.getElementById('payoutTotal').textContent = formatRub(total);
+      stats.classList.remove('hidden');
+    } else {
+      stats.classList.add('hidden');
+    }
+  }
+
+function openPayoutModal(isNew=true){
+  const sel=document.getElementById('payout-emp');
+  sel.innerHTML=employees.map(e=>`<option value="${e.id}">${e.full_name||e.name}</option>`).join('');
+  document.getElementById('payout-modal').classList.remove('hidden');
+  if(isNew){
+    editingPayout=null;
+    document.getElementById('payout-amount').value='';
+    document.getElementById('payout-type').value='Аванс';
+    document.getElementById('payout-method').value='💳 На карту';
+    document.getElementById('syncToBot').checked=false;
+    document.getElementById('payout-save-btn').textContent='Создать';
+  }
+}
+
+function closePayoutModal(){
+  document.getElementById('payout-modal').classList.add('hidden');
+}
+
+function openEditPayout(id){
+  const item=payouts.find(p=>p.id==id);
+  if(!item)return;
+  openPayoutModal(false);
+  editingPayout=id;
+  document.getElementById('payout-emp').value=item.user_id;
+  document.getElementById('payout-amount').value=item.amount;
+  document.getElementById('payout-type').value=item.payout_type;
+  document.getElementById('payout-method').value=item.method;
+  document.getElementById('syncToBot').checked=false;
+  document.getElementById('payout-save-btn').textContent='Сохранить';
+}
+
+async function submitPayout(){
+  const payload={
+    user_id:document.getElementById('payout-emp').value,
+    name:employees.find(e=>e.id===document.getElementById('payout-emp').value)?.full_name||'',
+    phone:employees.find(e=>e.id===document.getElementById('payout-emp').value)?.phone||'',
+    bank:employees.find(e=>e.id===document.getElementById('payout-emp').value)?.bank||'',
+    amount:Number(document.getElementById('payout-amount').value||0),
+    method:document.getElementById('payout-method').value,
+    payout_type:document.getElementById('payout-type').value,
+    sync_to_bot:document.getElementById('syncToBot').checked
+  };
+  if(editingPayout===null){
+    await axios.post('/api/payouts/',payload);
+  }else{
+    await axios.put(`/api/payouts/${editingPayout}`,payload);
+  }
+  closePayoutModal();
+  loadPayouts();
+}
+
+window.addEventListener('load', loadPayouts);
+</script>
