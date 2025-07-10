@@ -110,7 +110,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await context.bot.send_message(chat_id=user_id, text=user_message)
         except BadRequest as e:
             log(f"❌ Failed to send message to chat {user_id} — {e}")
-            raise
+            # Do not interrupt the payout process if user notification fails
     else:
         log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
 
@@ -125,7 +125,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         log(
             f"❌ Failed to edit message {query.message.message_id} in chat {query.message.chat.id} — {e}"
         )
-        raise
+        # Editing message is optional; continue without raising
 
     if request_to_approve["method"] == "💳 На карту":
         cashier_text = (
@@ -159,7 +159,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
         except BadRequest as e:
             log(f"❌ Failed to send message to chat {CARD_DISPATCH_CHAT_ID} — {e}")
-            raise
+            # Continue even if the cashier chat is missing
         except Exception as e:
             log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")
 
