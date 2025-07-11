@@ -61,3 +61,13 @@ Several JSON files are used as a simple storage backend and are expected to be p
 
 Example files are provided and will be created automatically if missing.
 
+
+## Requesting payouts via the bot
+
+Employees can ask for a payout directly from the Telegram interface. A new **💰 Запросить выплату** button is available in the main menu and in the personal cabinet.
+
+1. Choose the payout type (Аванс or Зарплата).
+2. Enter the desired amount.
+3. Select how you want to receive the money: transfer to a card, from the register or in cash.
+
+After confirmation the administrator receives a notification and must approve the request before it is processed.
