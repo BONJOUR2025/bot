@@ -10,6 +10,8 @@ from ..constants import (
     UserStates,
     AdvanceReportStates,
     ManualPayoutStates,
+    PayoutStates,
+    PAYMENT_REQUEST_PATTERN,
 )
 from ..config import ADMIN_ID
 from ..handlers.user import (
@@ -17,6 +19,13 @@ from ..handlers.user import (
     view_salary_user,
     view_schedule_user,
     personal_cabinet,
+)
+from ..handlers.user.payout import (
+    request_payout_start,
+    select_type,
+    enter_amount,
+    select_method,
+    confirm_card,
 )
 from ..handlers.admin import (
     admin,
@@ -163,7 +172,34 @@ def build_manual_payout_conversation():
     )
 
 
+def build_payout_conversation():
+    return ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(PAYMENT_REQUEST_PATTERN), request_payout_start)
+        ],
+        states={
+            PayoutStates.SELECT_TYPE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, select_type)
+            ],
+            PayoutStates.ENTER_AMOUNT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_amount)
+            ],
+            PayoutStates.SELECT_METHOD: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, select_method)
+            ],
+            PayoutStates.CONFIRM_CARD: [
+                CallbackQueryHandler(confirm_card, pattern="^payout_")
+            ],
+        },
+        fallbacks=[
+            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset)
+        ],
+        per_message=True,
+    )
+
+
 __all__ = [
     "build_admin_conversation",
     "build_manual_payout_conversation",
+    "build_payout_conversation",
 ]
