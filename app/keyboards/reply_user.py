@@ -8,6 +8,7 @@ def get_main_menu() -> ReplyKeyboardMarkup:
     """
     keyboard: List[List[str]] = [
         ["📄 Просмотр ЗП"],
+        ["💰 Запросить выплату"],
         ["📅 Просмотр расписания", "👤 Личный кабинет"],
     ]
     return ReplyKeyboardMarkup(
@@ -37,7 +38,8 @@ def get_cabinet_menu() -> ReplyKeyboardMarkup:
     """
     keyboard: List[List[str]] = [
         ["📋 Мои данные", "✏️ Изменить данные"],
-        ["📜 История запросов", "🏠 Домой"],
+        ["💰 Запросить выплату", "📜 История запросов"],
+        ["🏠 Домой"],
     ]
     return ReplyKeyboardMarkup(
         keyboard, resize_keyboard=True, one_time_keyboard=False
