@@ -9,7 +9,6 @@ from telegram.ext import (
 from ..config import TOKEN, ADMIN_ID
 from ..utils.logger import log
 from .conversations import (
-    build_payout_conversation,
     build_admin_conversation,
     build_manual_payout_conversation,
 )
@@ -26,9 +25,6 @@ from ..handlers.user import (
     handle_edit_selection,
     save_new_value,
     view_request_history,
-    handle_card_confirmation,
-    confirm_payout_user,
-    change_payout_amount,
     handle_edit_confirmation,
     handle_admin_change_response,
     handle_acknowledgment,
@@ -67,7 +63,6 @@ def create_application():
 
 
 def _register_all_handlers(app):
-    payout_conv_handler = build_payout_conversation()
     admin_conv_handler = build_admin_conversation()
     manual_payout_handler = build_manual_payout_conversation()
     reset_filter = filters.Regex(r"^(🏠 Домой|🔙 Назад|❌ Отмена)$")
@@ -80,22 +75,10 @@ def _register_all_handlers(app):
             "schedule", handle_salary_request, filters=~filters.User(ADMIN_ID)
         )
     )
-    app.add_handler(payout_conv_handler)
     app.add_handler(admin_conv_handler)
     app.add_handler(manual_payout_handler)
     app.add_handler(CallbackQueryHandler(allow_payout, pattern=r"^allow_payout_"))
     app.add_handler(CallbackQueryHandler(deny_payout, pattern=r"^deny_payout_"))
-    app.add_handler(
-        CallbackQueryHandler(
-            handle_card_confirmation, pattern=r"^(confirm_card|cancel_card)"
-        )
-    )
-    app.add_handler(
-        CallbackQueryHandler(confirm_payout_user, pattern=r"^confirm_payout")
-    )
-    app.add_handler(
-        CallbackQueryHandler(change_payout_amount, pattern=r"^change_amount")
-    )
     app.add_handler(
         CallbackQueryHandler(
             handle_edit_confirmation, pattern=r"^(confirm_|cancel_edit)"

@@ -7,7 +7,7 @@ def get_main_menu() -> ReplyKeyboardMarkup:
     Возвращает главное меню для обычного сотрудника.
     """
     keyboard: List[List[str]] = [
-        ["📄 Просмотр ЗП", "💰 Запросить выплату"],
+        ["📄 Просмотр ЗП"],
         ["📅 Просмотр расписания", "👤 Личный кабинет"],
     ]
     return ReplyKeyboardMarkup(
