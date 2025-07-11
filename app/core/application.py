@@ -11,6 +11,7 @@ from ..utils.logger import log
 from .conversations import (
     build_admin_conversation,
     build_manual_payout_conversation,
+    build_payout_conversation,
 )
 from ..handlers.user import (
     handle_salary_request,
@@ -65,6 +66,7 @@ def create_application():
 def _register_all_handlers(app):
     admin_conv_handler = build_admin_conversation()
     manual_payout_handler = build_manual_payout_conversation()
+    payout_conv_handler = build_payout_conversation()
     reset_filter = filters.Regex(r"^(🏠 Домой|🔙 Назад|❌ Отмена)$")
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
@@ -77,6 +79,7 @@ def _register_all_handlers(app):
     )
     app.add_handler(admin_conv_handler)
     app.add_handler(manual_payout_handler)
+    app.add_handler(payout_conv_handler)
     app.add_handler(CallbackQueryHandler(allow_payout, pattern=r"^allow_payout_"))
     app.add_handler(CallbackQueryHandler(deny_payout, pattern=r"^deny_payout_"))
     app.add_handler(
