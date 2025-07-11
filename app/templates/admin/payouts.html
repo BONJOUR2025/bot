@@ -16,6 +16,9 @@
 <div id="payout-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
   <div class="bg-white p-4 rounded shadow-xl w-full max-w-md space-y-2">
     <h2 class="text-xl font-semibold">Создать выплату</h2>
+    <label class="flex items-center gap-1 text-sm">
+      <input type="checkbox" id="showFullName" checked /> Использовать ФИО
+    </label>
     <select id="payout-emp" class="border p-2 w-full"></select>
     <input id="payout-amount" type="number" class="border p-2 w-full" placeholder="Сумма">
     <select id="payout-type" class="border p-2 w-full">
@@ -45,15 +48,36 @@ function formatRub(amount) {
   return num.toLocaleString('ru-RU') + ' ₽';
 }
 
+function formatDateTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    const fixed = value.replace(' ', 'T');
+    const dt = new Date(fixed);
+    if (Number.isNaN(dt.getTime())) return value;
+    return (
+      dt.toLocaleDateString('ru-RU') +
+      ' ' +
+      dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    );
+  }
+  return (
+    d.toLocaleDateString('ru-RU') +
+    ' ' +
+    d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  );
+}
+
 let payouts = [];
 let editingPayout = null;
+let showFullName = true;
 
   async function loadPayouts() {
     const res = await axios.get('/api/payouts/');
     payouts = res.data;
     const table = document.getElementById('payout-table');
     table.innerHTML = `<table class='min-w-full text-sm table-auto'><thead class='bg-gray-200'><tr><th class='p-2'>ФИО</th><th>Тип</th><th>Способ</th><th>Сумма</th><th>Статус</th><th>Дата</th><th></th></tr></thead><tbody>`+
-      payouts.map(p=>`<tr class='border-b odd:bg-gray-50'><td class='p-2'>${p.name}</td><td>${p.payout_type}</td><td>${p.method}</td><td>${p.amount}</td><td>${p.status}</td><td>${p.timestamp}</td><td><button onclick="openEditPayout(${p.id})" class='mr-2'>✏️</button></td></tr>`).join('')+
+      payouts.map(p=>`<tr class='border-b odd:bg-gray-50'><td class='p-2'>${p.name}</td><td>${p.payout_type}</td><td>${p.method}</td><td>${p.amount}</td><td>${p.status}</td><td>${formatDateTime(p.timestamp)}</td><td><button onclick="openEditPayout(${p.id})" class='mr-2'>✏️</button></td></tr>`).join('')+
       `</tbody></table>`;
     const stats = document.getElementById('payoutStats');
     if (payouts.length) {
@@ -68,7 +92,8 @@ let editingPayout = null;
 
 function openPayoutModal(isNew=true){
   const sel=document.getElementById('payout-emp');
-  sel.innerHTML=employees.map(e=>`<option value="${e.id}">${e.full_name||e.name}</option>`).join('');
+  showFullName = document.getElementById('showFullName').checked;
+  sel.innerHTML=employees.map(e=>`<option value="${e.id}">${showFullName ? (e.full_name||e.name) : (e.name||e.full_name)}</option>`).join('');
   document.getElementById('payout-modal').classList.remove('hidden');
   if(isNew){
     editingPayout=null;
@@ -100,7 +125,7 @@ function openEditPayout(id){
 async function submitPayout(){
   const payload={
     user_id:document.getElementById('payout-emp').value,
-    name:employees.find(e=>e.id===document.getElementById('payout-emp').value)?.full_name||'',
+    name:(()=>{const emp=employees.find(e=>e.id===document.getElementById('payout-emp').value);return showFullName?(emp?.full_name||emp?.name||''):(emp?.name||emp?.full_name||'');})(),
     phone:employees.find(e=>e.id===document.getElementById('payout-emp').value)?.phone||'',
     bank:employees.find(e=>e.id===document.getElementById('payout-emp').value)?.bank||'',
     amount:Number(document.getElementById('payout-amount').value||0),
@@ -118,4 +143,9 @@ async function submitPayout(){
 }
 
 window.addEventListener('load', loadPayouts);
+document.getElementById('showFullName').addEventListener('change', () => {
+  const sel = document.getElementById('payout-emp');
+  showFullName = document.getElementById('showFullName').checked;
+  sel.innerHTML = employees.map(e=>`<option value="${e.id}">${showFullName ? (e.full_name||e.name) : (e.name||e.full_name)}</option>`).join('');
+});
 </script>

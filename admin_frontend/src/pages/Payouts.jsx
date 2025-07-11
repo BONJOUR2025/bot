@@ -71,6 +71,26 @@ function Summary({ list }) {
   );
 }
 
+function formatDateTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    const fixed = value.replace(' ', 'T');
+    const dt = new Date(fixed);
+    if (Number.isNaN(dt.getTime())) return value;
+    return (
+      dt.toLocaleDateString('ru-RU') +
+      ' ' +
+      dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    );
+  }
+  return (
+    d.toLocaleDateString('ru-RU') +
+    ' ' +
+    d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  );
+}
+
 export default function Payouts() {
   const emptyForm = {
     id: null,
@@ -90,6 +110,7 @@ export default function Payouts() {
 
   const [payouts, setPayouts] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [useFullName, setUseFullName] = useState(true);
   const [filters, setFilters] = useState({
     query: '',
     type: '',
@@ -232,7 +253,7 @@ export default function Payouts() {
       setForm((f) => ({
         ...f,
         user_id: emp.id,
-        name: emp.full_name || emp.name,
+        name: useFullName ? emp.full_name || emp.name : emp.name || emp.full_name,
         phone: emp.phone || '',
         bank: emp.bank || emp.card_number || '',
       }));
@@ -387,7 +408,7 @@ export default function Payouts() {
                     {p.status}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-xs">{p.timestamp}</td>
+                <td className="px-4 py-2 text-xs">{formatDateTime(p.timestamp)}</td>
                 <td className="px-4 py-2 space-x-1 whitespace-nowrap">
                   <button
                     onClick={() => openEdit(p)}
@@ -464,6 +485,14 @@ export default function Payouts() {
             <h2 className="text-lg font-bold mb-2">
               {form.id ? 'Редактирование' : 'Новая выплата'}
             </h2>
+            <label className="flex items-center gap-1 text-sm">
+              <input
+                type="checkbox"
+                checked={useFullName}
+                onChange={(e) => setUseFullName(e.target.checked)}
+              />
+              Использовать ФИО
+            </label>
             <select
               className="border p-2 w-full"
               value={form.user_id}
@@ -472,7 +501,7 @@ export default function Payouts() {
               <option value="">Сотрудник</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.full_name || e.name}
+                  {useFullName ? e.full_name || e.name : e.name || e.full_name}
                 </option>
               ))}
             </select>
