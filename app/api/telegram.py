@@ -32,8 +32,18 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
     @router.post("/broadcast")
     async def broadcast(data: BroadcastRequest):
         try:
+            filters = {
+                "status": data.status,
+                "position": data.position,
+                "birthday_today": data.birthday_today,
+                "tags": data.tags,
+            }
             result = await service.broadcast_message_to_all(
-                data.message, parse_mode=data.parse_mode, photo_url=data.photo_url
+                data.message,
+                parse_mode=data.parse_mode,
+                photo_url=data.photo_url,
+                filters=filters,
+                test_user_id=data.test_user_id,
             )
             return result
         except Exception as exc:

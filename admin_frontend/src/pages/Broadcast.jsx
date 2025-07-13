@@ -5,19 +5,33 @@ import api from '../api';
 export default function Broadcast() {
   const [message, setMessage] = useState('');
   const [chatId, setChatId] = useState('');
+  const [templates, setTemplates] = useState([]);
+  const [selectedTpl, setSelectedTpl] = useState('');
+  const [status, setStatus] = useState('active');
 
   useEffect(() => {
+    const saved = localStorage.getItem('broadcast_draft');
+    if (saved) setMessage(saved);
+    api.get('messages/templates').then(r => setTemplates(r.data));
     window.refreshPage = () => {
       setMessage('');
       setChatId('');
     };
   }, []);
 
-  async function sendAll() {
+  useEffect(() => {
+    localStorage.setItem('broadcast_draft', message);
+  }, [message]);
+
+  async function sendAll(mode) {
     if (!message.trim()) return;
-    if (!window.confirm('Отправить сообщение всем?')) return;
+    if (mode !== 'test' && !window.confirm('Отправить сообщение всем?')) return;
     try {
-      await api.post('telegram/broadcast', { message });
+      await api.post('telegram/broadcast', {
+        message,
+        status,
+        test_user_id: mode === 'test' ? chatId : undefined,
+      });
       setMessage('');
     } catch (err) {
       console.error(err);
@@ -30,6 +44,7 @@ export default function Broadcast() {
       await api.post('telegram/send_message', {
         user_id: chatId,
         message,
+        require_ack: true,
       });
       setMessage('');
     } catch (err) {
@@ -51,11 +66,23 @@ export default function Broadcast() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
         />
+        <div className="mt-2 flex gap-2">
+          <select className="border p-2" value={selectedTpl} onChange={(e) => {
+            const id = e.target.value; setSelectedTpl(id); const tpl = templates.find(t => t.id === id); if (tpl) setMessage(tpl.text);
+          }}>
+            <option value="">-- шаблон --</option>
+            {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <select className="border p-2" value={status} onChange={e => setStatus(e.target.value)}>
+            <option value="active">Активные</option>
+            <option value="inactive">Неактивные</option>
+          </select>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
         <button
-          onClick={sendAll}
+          onClick={() => sendAll()}
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700"
         >
           <Send size={16} /> Отправить всем
@@ -73,6 +100,13 @@ export default function Broadcast() {
           className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700"
         >
           <User size={16} /> Отправить одному
+        </button>
+
+        <button
+          onClick={() => sendAll('test')}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded shadow hover:bg-purple-700"
+        >
+          <Send size={16} /> Тест
         </button>
       </div>
     </div>

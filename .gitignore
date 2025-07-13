@@ -133,4 +133,5 @@ ENV/
 
 # local docker-compose override files
 docker-compose.override.yml
+logs/
 

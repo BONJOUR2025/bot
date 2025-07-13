@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, date
-from typing import Optional
+from typing import Optional, List
 
 from .enums import EmployeeStatus
 from ..constants import PayoutStates as PayoutStates  # re-export for handlers
@@ -25,3 +25,4 @@ class Employee:
     photo_url: str = ""
     status: EmployeeStatus = EmployeeStatus.ACTIVE
     created_at: datetime = field(default_factory=datetime.utcnow)
+    tags: List[str] = field(default_factory=list)

@@ -59,7 +59,8 @@ class EmployeeRepository:
         except Exception:
             return None
 
-    def list_employees(self) -> List[Employee]:
+    def list_employees(self, **filters) -> List[Employee]:
+        """Return employees optionally filtered by provided criteria."""
         employees: List[Employee] = []
         for uid, data in self._data.items():
             if not isinstance(data, dict):
@@ -79,8 +80,25 @@ class EmployeeRepository:
                 "status": EmployeeStatus(data.get("status", "active")),
                 "created_at": self._parse_datetime(data.get("created_at"))
                 or datetime.utcnow(),
+                "tags": data.get("tags", []),
             }
-            employees.append(Employee(**record))
+            emp = Employee(**record)
+            if filters:
+                status = filters.get("status")
+                if status and emp.status.value not in (status if isinstance(status, list) else [status]):
+                    continue
+                position = filters.get("position")
+                if position and emp.position not in (position if isinstance(position, list) else [position]):
+                    continue
+                birthday_today = filters.get("birthday_today")
+                if birthday_today:
+                    if not emp.birthdate or emp.birthdate.timetuple()[1:3] != datetime.utcnow().date().timetuple()[1:3]:
+                        continue
+                tags = filters.get("tags")
+                if tags:
+                    if not set(tags).intersection(set(emp.tags)):
+                        continue
+            employees.append(emp)
         return employees
 
     def add_employee(self, employee: Employee) -> None:

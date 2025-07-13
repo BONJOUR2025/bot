@@ -85,28 +85,35 @@ class TelegramService:
             self,
             message: str,
             parse_mode: str = "HTML",
-            photo_url: Optional[str] = None) -> dict:
-        employees = self.repo.list_employees()
+            photo_url: Optional[str] = None,
+            filters: Optional[Dict[str, Any]] = None,
+            test_user_id: Optional[str] = None) -> dict:
+        if filters is None:
+            filters = {}
+        employees = self.repo.list_employees(**filters)
+        if test_user_id:
+            employees = [e for e in employees if str(e.id) == str(test_user_id)]
         success = 0
         for emp in employees:
             if not is_valid_user_id(emp.id):
                 log(f"⚠️ Skipping message — invalid or fake user_id: {emp.id}")
                 continue
+            personalized = message.format(**emp.__dict__)
             log(
-                f"[Telegram] Broadcasting to {emp.id} — text: '{message[:50]}', photo: {bool(photo_url)}"
+                f"[Telegram] Broadcasting to {emp.id} — text: '{personalized[:50]}', photo: {bool(photo_url)}"
             )
             try:
                 if photo_url:
                     await self.bot.send_photo(
                         chat_id=emp.id,
                         photo=photo_url,
-                        caption=message,
+                        caption=personalized,
                         parse_mode=parse_mode,
                     )
                 else:
                     await self.bot.send_message(
                         chat_id=emp.id,
-                        text=message,
+                        text=personalized,
                         parse_mode=parse_mode,
                     )
                 success += 1
