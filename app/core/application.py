@@ -178,10 +178,12 @@ def register_admin_handlers(app):
 
 def register_user_handlers(app):
     """Register user handlers (currently included in admin registration)."""
+    pass  # если нужны — позже допишем
 
 
 def register_fallbacks(app):
     """Register fallback handlers (currently included in admin registration)."""
+    pass
 
 
 def register_all_handlers(app):
