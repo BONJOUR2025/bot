@@ -8,6 +8,7 @@ from telegram.ext import (
 
 from ..config import TOKEN, ADMIN_ID
 from ..utils.logger import log
+from ..handlers.callback_logger import log_button_press
 from .conversations import (
     build_admin_conversation,
     build_manual_payout_conversation,
@@ -68,6 +69,11 @@ def _register_all_handlers(app):
     manual_payout_handler = build_manual_payout_conversation()
     payout_conv_handler = build_payout_conversation()
     reset_filter = filters.Regex(r"^(🏠 Домой|🔙 Назад|❌ Отмена)$")
+    # Log all callback button presses before other handlers process them
+    app.add_handler(
+        CallbackQueryHandler(log_button_press, block=False),
+        group=-1,
+    )
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         CommandHandler("salary", handle_salary_request, filters=~filters.User(ADMIN_ID))
