@@ -34,10 +34,13 @@ class BroadcastRequest(BaseModel):
 
 
 class SentMessage(BaseModel):
-    user_id: str
+    id: str
+    user_id: Optional[str] = None
     message: str
     status: str
-    message_id: int
+    message_id: Optional[int] = None
     timestamp: str
     photo_url: Optional[str] = None
     requires_ack: bool = False
+    broadcast: bool = False
+    recipients: Optional[list[dict]] = None

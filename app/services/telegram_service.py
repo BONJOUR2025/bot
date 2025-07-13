@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Sequence, List, Dict, Any
 from datetime import datetime
+from uuid import uuid4
 
 from telegram import Bot
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -40,24 +41,31 @@ class TelegramService:
         if not ADMIN_CHAT_ID:
             log("⚠️ ADMIN_CHAT_ID not configured")
 
-    def _load_log(self) -> List[Dict]:
-        """Return log records sorted by timestamp descending."""
+    def _load_log_all(self) -> List[Dict]:
         try:
             data = json.loads(self.msg_log.read_text(encoding="utf-8"))
         except Exception:
             return []
+        return data
+
+    def _load_log(self) -> List[Dict]:
+        """Return log records sorted by timestamp descending."""
+        data = self._load_log_all()
         return sorted(
             data,
-            key=lambda x: x.get(
-                "timestamp",
-                ""),
-            reverse=True)[
-            :50]
+            key=lambda x: x.get("timestamp", ""),
+            reverse=True,
+        )[:50]
 
     def _save_log(self, data: List[Dict]) -> None:
         self.msg_log.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+    def delete_log_entry(self, entry_id: str) -> None:
+        data = self._load_log_all()
+        data = [d for d in data if str(d.get("id")) != str(entry_id)]
+        self._save_log(data)
 
     @classmethod
     def update_sent_message_status(
@@ -94,6 +102,7 @@ class TelegramService:
         if test_user_id:
             employees = [e for e in employees if str(e.id) == str(test_user_id)]
         success = 0
+        recipients: List[Dict[str, Any]] = []
         for emp in employees:
             if not is_valid_user_id(emp.id):
                 log(f"⚠️ Skipping message — invalid or fake user_id: {emp.id}")
@@ -118,11 +127,26 @@ class TelegramService:
                     )
                 success += 1
                 logger.info(f"Sent to {emp.id}")
+                recipients.append({
+                    "user_id": str(emp.id),
+                    "name": emp.full_name or emp.name,
+                    "status": "отправлено",
+                })
             except BadRequest as exc:
                 log(f"❌ Failed to send broadcast to chat {emp.id} — {exc}")
                 raise
             except Exception as exc:
                 logger.warning(f"Failed for {emp.id}: {exc}")
+        log_entry = {
+            "id": str(uuid4()),
+            "broadcast": True,
+            "message": message,
+            "timestamp": datetime.utcnow().isoformat(),
+            "recipients": recipients,
+        }
+        data = self._load_log_all()
+        data.append(log_entry)
+        self._save_log(data)
         return {"success": True, "sent": success, "total": len(employees)}
 
     async def send_message_to_user(
@@ -164,6 +188,7 @@ class TelegramService:
             log(f"❌ Failed to send message to chat {user_id} — {exc}")
             raise
         log_entry = {
+            "id": str(uuid4()),
             "user_id": str(user_id),
             "message": message,
             "status": "отправлено",
@@ -172,7 +197,7 @@ class TelegramService:
             "photo_url": photo_url,
             "requires_ack": require_ack,
         }
-        data = self._load_log()
+        data = self._load_log_all()
         data.append(log_entry)
         self._save_log(data)
         return result.message_id

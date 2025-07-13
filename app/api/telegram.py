@@ -55,4 +55,9 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
     async def sent_messages() -> list[SentMessage]:
         return [SentMessage(**m) for m in service._load_log()]
 
+    @router.delete("/sent_messages/{entry_id}")
+    async def delete_sent_message(entry_id: str):
+        service.delete_log_entry(entry_id)
+        return {"status": "deleted"}
+
     return router
