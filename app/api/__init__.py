@@ -90,8 +90,10 @@ def create_app() -> FastAPI:
     app.include_router(create_incentive_router(incentive_service), prefix="/api")
 
     from .messages import create_message_router
+    from ..services.template_service import TemplateService
     message_service = MessageService(employee_repo=employee_service._repo)
-    app.include_router(create_message_router(message_service), prefix="/api")
+    template_service = TemplateService()
+    app.include_router(create_message_router(message_service, template_service), prefix="/api")
 
     from .config import create_config_router
     from ..services.config_service import ConfigService

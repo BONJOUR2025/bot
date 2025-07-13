@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List, Union
 from pydantic import BaseModel
 
 
@@ -26,6 +26,11 @@ class BroadcastRequest(BaseModel):
     message: str
     parse_mode: str = "HTML"
     photo_url: Optional[str] = None
+    status: Optional[str | list[str]] = None
+    position: Optional[str | list[str]] = None
+    birthday_today: bool = False
+    tags: Optional[list[str]] = None
+    test_user_id: Optional[str] = None
 
 
 class SentMessage(BaseModel):
