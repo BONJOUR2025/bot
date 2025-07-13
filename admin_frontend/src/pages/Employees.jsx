@@ -9,6 +9,41 @@ import {
 import api from '../api';
 import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
 
+const POSITIONS = [
+  {
+    label: 'Производство',
+    options: [
+      'Закройщик',
+      'Затяжчик',
+      'Курьер',
+      'Мастер по ремонту',
+      'Мастер по химчистке',
+      'Модельер',
+      'Художник',
+    ],
+  },
+  {
+    label: 'Администрация и продажи',
+    options: [
+      'Администратор',
+      'Менеджер по работе с клиентами',
+      'Кассир',
+      'Специалист по работе с заказами',
+      'Консультант в шоуруме',
+    ],
+  },
+  {
+    label: 'Другое',
+    options: [
+      'Стажёр',
+      'Подменный сотрудник',
+      'Удалённый сотрудник',
+      'Директор',
+      'Технолог',
+    ],
+  },
+];
+
 export default function Employees() {
   const emptyForm = {
     id: '',
@@ -282,12 +317,22 @@ export default function Employees() {
               value={form.bank}
               onChange={(e) => setForm({ ...form, bank: e.target.value })}
             />
-            <input
+            <select
               className="border p-2 w-full"
-              placeholder="Должность"
               value={form.position}
               onChange={(e) => setForm({ ...form, position: e.target.value })}
-            />
+            >
+              <option value="">Не выбрано</option>
+              {POSITIONS.map((grp) => (
+                <optgroup key={grp.label} label={grp.label}>
+                  {grp.options.map((pos) => (
+                    <option key={pos} value={pos}>
+                      {pos}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
             <input
               type="date"
               className="border p-2 w-full"
