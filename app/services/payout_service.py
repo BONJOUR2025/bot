@@ -37,6 +37,7 @@ class PayoutService:
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
     ) -> List[Payout]:
+        self._repo.reload()
         rows = self._repo.list(
             employee_id,
             payout_type,
@@ -47,6 +48,7 @@ class PayoutService:
         return [Payout(**r) for r in rows]
 
     async def create_payout(self, data: PayoutCreate) -> Payout:
+        self._repo.reload()
         payout_dict: Dict = {
             "user_id": data.user_id,
             "name": data.name,
@@ -76,6 +78,7 @@ class PayoutService:
         payout_id: str,
         update: PayoutUpdate,
     ) -> Optional[Payout]:
+        self._repo.reload()
         updates = update.model_dump(exclude_none=True)
         notify = updates.pop("notify_user", True)
         if not updates:
@@ -109,6 +112,7 @@ class PayoutService:
     async def update_status(
         self, payout_id: str, status: str, notify: bool = True
     ) -> Optional[Payout]:
+        self._repo.reload()
         updated = self._repo.update(payout_id, {"status": status})
         if not updated:
             return None
@@ -133,10 +137,12 @@ class PayoutService:
     async def delete_payouts(self, ids: List[str]) -> None:
         if not ids:
             return
+        self._repo.reload()
         self._repo.delete_many(ids)
         logger.info(f"🗑 Удалены выплаты: {', '.join(ids)}")
 
     async def delete_payout(self, payout_id: str) -> bool:
+        self._repo.reload()
         deleted = self._repo.delete(payout_id)
         if deleted:
             logger.info(f"🗑 Удалена выплата {payout_id}")
@@ -144,6 +150,7 @@ class PayoutService:
 
     async def list_active_payouts(self) -> List[Payout]:
         """Return payouts that are pending approval or already approved."""
+        self._repo.reload()
         rows = self._repo.load_all()
         active = [
             r
@@ -162,6 +169,7 @@ class PayoutService:
         to_date: Optional[str] = None,
     ) -> Optional[str]:
         from app.services.excel import export_advances_to_pdf
+        self._repo.reload()
 
         name = None
         if employee_id:
@@ -193,6 +201,8 @@ class PayoutService:
         from datetime import datetime, timedelta
         from app.config import MAX_ADVANCE_AMOUNT_PER_MONTH
         from app.services.users import load_users_map
+
+        self._repo.reload()
 
         all_rows = self._repo.load_all()
         rows = self._repo.list(

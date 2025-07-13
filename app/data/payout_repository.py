@@ -69,6 +69,22 @@ class PayoutRepository:
         if changed:
             self._save()
 
+    def reload(self) -> None:
+        """Reload payouts from disk, replacing in-memory data."""
+        self._data = self._load()
+        self._counter = 0
+        changed = False
+        for item in self._data:
+            raw_id = item.get("id")
+            if raw_id is None or not str(raw_id).isdigit():
+                self._counter += 1
+                item["id"] = str(self._counter)
+                changed = True
+            else:
+                self._counter = max(self._counter, int(raw_id))
+        if changed:
+            self._save()
+
     def _load(self) -> List[Dict[str, Any]]:
         if not self._file or not os.path.exists(self._file):
             example = (
