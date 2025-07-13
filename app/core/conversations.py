@@ -134,6 +134,9 @@ def build_admin_conversation():
                 MessageHandler(filters.Regex("^🏠 Домой$"), home_callback),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message),
             ],
+            UserStates.BROADCAST_CONFIRM: [
+                CallbackQueryHandler(handle_broadcast_confirm),
+            ],
         },
         fallbacks=[
             MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset),
