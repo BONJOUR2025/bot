@@ -4,7 +4,8 @@ import api from '../api';
 
 export default function Broadcast() {
   const [message, setMessage] = useState('');
-  const [chatId, setChatId] = useState('');
+  const [employees, setEmployees] = useState([]);
+  const [selected, setSelected] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [selectedTpl, setSelectedTpl] = useState('');
   const [status, setStatus] = useState('active');
@@ -13,9 +14,10 @@ export default function Broadcast() {
     const saved = localStorage.getItem('broadcast_draft');
     if (saved) setMessage(saved);
     api.get('messages/templates').then(r => setTemplates(r.data));
+    api.get('employees/').then(r => setEmployees(r.data));
     window.refreshPage = () => {
       setMessage('');
-      setChatId('');
+      setSelected([]);
     };
   }, []);
 
@@ -30,7 +32,7 @@ export default function Broadcast() {
       await api.post('telegram/broadcast', {
         message,
         status,
-        test_user_id: mode === 'test' ? chatId : undefined,
+        test_user_id: mode === 'test' ? selected[0] : undefined,
       });
       setMessage('');
     } catch (err) {
@@ -39,17 +41,20 @@ export default function Broadcast() {
   }
 
   async function sendOne() {
-    if (!message.trim() || !chatId.trim()) return;
-    try {
-      await api.post('telegram/send_message', {
-        user_id: chatId,
-        message,
-        require_ack: true,
-      });
-      setMessage('');
-    } catch (err) {
-      console.error(err);
+    if (!message.trim() || selected.length === 0) return;
+    for (const id of selected) {
+      try {
+        await api.post('telegram/send_message', {
+          user_id: id,
+          message,
+          require_ack: true,
+        });
+      } catch (err) {
+        console.error(err);
+      }
     }
+    setMessage('');
+    setSelected([]);
   }
 
   return (
@@ -88,18 +93,26 @@ export default function Broadcast() {
           <Send size={16} /> Отправить всем
         </button>
 
-        <input
+        <select
+          multiple
           className="flex-1 min-w-[180px] border border-gray-300 rounded px-3 py-2 shadow-sm focus:outline-none"
-          placeholder="Chat ID получателя"
-          value={chatId}
-          onChange={(e) => setChatId(e.target.value)}
-        />
+          value={selected}
+          onChange={(e) =>
+            setSelected(Array.from(e.target.selectedOptions).map((o) => o.value))
+          }
+        >
+          {employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.full_name || e.name}
+            </option>
+          ))}
+        </select>
 
         <button
           onClick={sendOne}
           className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700"
         >
-          <User size={16} /> Отправить одному
+          <User size={16} /> Отправить выбранным
         </button>
 
         <button
