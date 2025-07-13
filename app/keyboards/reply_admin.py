@@ -1,4 +1,5 @@
-from telegram import ReplyKeyboardMarkup
+from telegram import ReplyKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 from typing import List
 
 
@@ -49,3 +50,8 @@ def get_confirmation_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard, resize_keyboard=True, one_time_keyboard=False
     )
+
+
+async def send_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send the main admin menu."""
+    await update.message.reply_text("🏠 Главное меню", reply_markup=get_admin_menu())
