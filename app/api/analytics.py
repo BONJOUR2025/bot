@@ -15,7 +15,32 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
         return await service.refresh_sales()
 
     @router.get("/sales/details")
-    async def get_sales_details(period: str | None = None):
-        return await service.get_sales_details(period)
+    async def get_sales_details(
+        period: str | None = None,
+        period_from: str | None = None,
+        period_to: str | None = None,
+        employee: str | None = None,
+        item: str | None = None,
+        min_cost: float | None = None,
+        max_cost: float | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ):
+        return await service.get_sales_details(
+            period=period,
+            period_from=period_from,
+            period_to=period_to,
+            employee=employee,
+            item=item,
+            min_cost=min_cost,
+            max_cost=max_cost,
+            page=page,
+            page_size=page_size,
+        )
+
+    @router.post("/sales/details/refresh")
+    async def refresh_sales_details():
+        await service.refresh_sales_details()
+        return {"status": "ok"}
 
     return router
