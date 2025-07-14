@@ -5,7 +5,7 @@ from typing import Optional
 
 import pandas as pd
 
-from ..config import EXCEL_FILE
+from ..config import EXCEL_FILE, SALES_FILE
 from ..core.constants import MONTHS_RU
 from ..utils.logger import log
 
@@ -71,3 +71,34 @@ class AnalyticsService:
 
     async def refresh_sales(self) -> dict:
         return self._collect_sales()
+
+    def _load_sales_details(self) -> pd.DataFrame | None:
+        try:
+            df = pd.read_excel(
+                SALES_FILE,
+                header=None,
+                usecols="A,B,E,G,I",
+                names=["period", "order_number", "employee", "item", "cost"],
+            )
+            df["cost"] = pd.to_numeric(df["cost"], errors="coerce").fillna(0)
+            df.dropna(how="all", inplace=True)
+            return df
+        except Exception as exc:
+            log(f"❌ Failed to read sales details: {exc}")
+            return None
+
+    async def get_sales_details(self, period: str | None = None) -> dict:
+        df = self._load_sales_details()
+        if df is None:
+            return {"items": [], "total": 0, "count": 0, "avg": 0}
+        if period:
+            df = df[df["period"].astype(str) == str(period)]
+        total = int(df["cost"].sum())
+        count = int(len(df))
+        avg = float(total / count) if count else 0.0
+        return {
+            "items": df.to_dict(orient="records"),
+            "total": total,
+            "count": count,
+            "avg": avg,
+        }
