@@ -14,4 +14,8 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
     async def refresh_sales():
         return await service.refresh_sales()
 
+    @router.get("/sales/details")
+    async def get_sales_details(period: str | None = None):
+        return await service.get_sales_details(period)
+
     return router
