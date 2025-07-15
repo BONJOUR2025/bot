@@ -205,11 +205,26 @@ class AnalyticsService:
         if where_clause:
             where_clause = "WHERE " + where_clause
 
-        query = (
-            "SELECT doc_date, doc_number, creator_id, user_id, item_code, item_name, kredit "
-            "FROM SALES "
-            f"{where_clause} ORDER BY doc_date, doc_number OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
-        )
+        fb_version = self._fb.get_version()
+        offset_supported = False
+        try:
+            if fb_version and int(fb_version.split(".")[0]) >= 3:
+                offset_supported = True
+        except Exception:
+            offset_supported = False
+
+        if offset_supported:
+            query = (
+                "SELECT doc_date, doc_number, creator_id, user_id, item_code, item_name, kredit "
+                "FROM SALES "
+                f"{where_clause} ORDER BY doc_date, doc_number OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+            )
+        else:
+            query = (
+                "SELECT doc_date, doc_number, creator_id, user_id, item_code, item_name, kredit "
+                "FROM SALES "
+                f"{where_clause} ORDER BY doc_date, doc_number ROWS ? TO ?"
+            )
 
         count_query = f"SELECT COUNT(*) as cnt FROM SALES {where_clause}"
 
@@ -219,7 +234,12 @@ class AnalyticsService:
             page_size,
         )
 
-        params_with_pagination = params + [max(0, (page - 1) * page_size), page_size]
+        if offset_supported:
+            params_with_pagination = params + [max(0, (page - 1) * page_size), page_size]
+        else:
+            start_row = max(1, (page - 1) * page_size + 1)
+            end_row = page * page_size
+            params_with_pagination = params + [start_row, end_row]
 
         try:
             rows = await self._fb.cached_execute(key, query, params_with_pagination)
