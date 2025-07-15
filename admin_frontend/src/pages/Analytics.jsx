@@ -1,6 +1,26 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
 
+const EMPLOYEE_MAP = {
+  "Оганов А.С.0102": "Вера 0102",
+  "Оганов А.С.2602": "Анастасия 2602",
+  "Оганов А.С.7272": "Арина 7272",
+  "Оганов А.С.1505": "Александр 1505",
+  "Оганов А.С.2404": "Эмиль 2404",
+  "Оганов А.С.5984": "Полина 5984",
+  "Оганов А.С.0704": "Наталья 0704",
+  "Оганов А.С.2201": "Катя 2201",
+  "Оганов А.С.1606": "Лали 1606",
+  "Оганов А.С.0104": "Екатерина 0104",
+  "Оганов А.С.2006": "Ира 2405",
+  "Оганов А.С.1802": "Полина 1802",
+  "Оганов А.С.1996": "Вероника 1996",
+  "Оганов А.С.2405": "Ирина 2405",
+  "Оганов А.С.3007": "Юля 3007",
+  "Оганов А.С.2104": "Алекс 2104",
+  "Оганов А.С.0208": "Марина 0208",
+};
+
 export default function Analytics() {
   const [data, setData] = useState(null);
   const [details, setDetails] = useState(null);
@@ -11,7 +31,19 @@ export default function Analytics() {
     code: '',
     name: '',
     doc: '',
+    employee: '',
   });
+
+  const employeeOptions = Object.entries(EMPLOYEE_MAP).map(([code, name]) => ({
+    code,
+    name,
+  }));
+
+  function formatDateRu(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString('ru-RU');
+  }
 
   async function load(refresh = false) {
     try {
@@ -88,17 +120,29 @@ export default function Analytics() {
               value={filters.to}
               onChange={(e) => setFilters({ ...filters, to: e.target.value })}
             />
-            <input
-              className="border p-2"
-              placeholder="Код"
-              value={filters.code}
-              onChange={(e) => setFilters({ ...filters, code: e.target.value })}
-            />
-            <input
-              className="border p-2 flex-grow"
-              placeholder="Название"
-              value={filters.name}
-              onChange={(e) => setFilters({ ...filters, name: e.target.value })}
+          <input
+            className="border p-2"
+            placeholder="Код"
+            value={filters.code}
+            onChange={(e) => setFilters({ ...filters, code: e.target.value })}
+          />
+          <select
+            className="border p-2"
+            value={filters.employee}
+            onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
+          >
+            <option value="">Все сотрудники</option>
+            {employeeOptions.map((opt) => (
+              <option key={opt.code} value={opt.code}>
+                {opt.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="border p-2 flex-grow"
+            placeholder="Название"
+            value={filters.name}
+            onChange={(e) => setFilters({ ...filters, name: e.target.value })}
             />
             <input
               className="border p-2"
@@ -110,45 +154,58 @@ export default function Analytics() {
               Фильтр
             </button>
           </div>
-          <div className="text-sm text-gray-600">
-            Всего записей: {details.count} | Средняя стоимость: {details.avg.toFixed(2)} ₽
-          </div>
+          {(() => {
+            const mapped = details.items.map((raw) => ({
+              date: raw.doc_date || raw.period,
+              number: raw.doc_num || raw.doc_number || raw.order_number,
+              employee: raw.description || raw.employee || raw.creator_id,
+              code: raw.item_code || '',
+              name: raw.item_name || raw.item,
+              cost: raw.kredit ?? raw.cost,
+            }));
+            const filtered = mapped.filter((it) => !filters.employee || it.employee === filters.employee);
+            const goodsCount = filtered.filter((it) => Number(it.cost) > 0).length;
+            const totalSum = filtered.reduce((s, it) => (Number(it.cost) > 0 ? s + Number(it.cost) : s), 0);
+            return (
+              <div className="text-sm text-gray-600">
+                Всего записей: {filtered.length} | Количество товаров: {goodsCount} |
+                Общая сумма: {totalSum} ₽
+              </div>
+            );
+          })()}
           <div className="overflow-auto max-h-96">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="p-2 text-left">Дата</th>
-                  <th className="p-2 text-left">№ док.</th>
-                  <th className="p-2 text-left">Creator</th>
-                  <th className="p-2 text-left">Описание</th>
+                  <th className="p-2 text-left">№ заказа</th>
+                  <th className="p-2 text-left">Сотрудник</th>
                   <th className="p-2 text-left">Код товара</th>
                   <th className="p-2 text-left">Наименование</th>
                   <th className="p-2 text-left">Сумма</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {details.items.map((raw, idx) => {
-                  const it = {
-                    doc_date: raw.doc_date || raw.period,
-                    doc_num: raw.doc_num || raw.doc_number || raw.order_number,
-                    creator_id: raw.creator_id || raw.employee,
-                    description: raw.description || raw.item,
-                    item_code: raw.item_code || '',
-                    item_name: raw.item_name || raw.item,
-                    kredit: raw.kredit ?? raw.cost,
-                  };
-                  return (
+                {details.items
+                  .map((raw) => ({
+                    date: raw.doc_date || raw.period,
+                    number: raw.doc_num || raw.doc_number || raw.order_number,
+                    employee: raw.description || raw.employee || raw.creator_id,
+                    code: raw.item_code || '',
+                    name: raw.item_name || raw.item,
+                    cost: raw.kredit ?? raw.cost,
+                  }))
+                  .filter((it) => !filters.employee || it.employee === filters.employee)
+                  .map((it, idx) => (
                     <tr key={idx}>
-                      <td className="p-2">{it.doc_date}</td>
-                      <td className="p-2">{it.doc_num}</td>
-                      <td className="p-2">{it.creator_id}</td>
-                      <td className="p-2">{it.description}</td>
-                      <td className="p-2">{it.item_code}</td>
-                      <td className="p-2">{it.item_name}</td>
-                      <td className="p-2">{it.kredit}</td>
+                      <td className="p-2">{formatDateRu(it.date)}</td>
+                      <td className="p-2">{it.number}</td>
+                      <td className="p-2">{EMPLOYEE_MAP[it.employee] || it.employee}</td>
+                      <td className="p-2">{it.code}</td>
+                      <td className="p-2">{it.name}</td>
+                      <td className="p-2">{it.cost}</td>
                     </tr>
-                  );
-                })}
+                  ))}
               </tbody>
             </table>
           </div>
