@@ -44,3 +44,22 @@ def test_load_and_filter_sales(tmp_path, monkeypatch):
     assert result["page"] == 2
     assert result["pages"] == 2
     assert len(result["items"]) == 1
+
+
+def test_sales_rating(tmp_path, monkeypatch):
+    file = tmp_path / "sales.xlsx"
+    create_sales_file(file)
+    monkeypatch.setattr(config, "SALES_FILE", str(file))
+    from app.services import analytics
+    monkeypatch.setattr(analytics, "SALES_FILE", str(file))
+    svc = AnalyticsService()
+
+    rating = asyncio.run(svc.get_sales_rating())
+    assert rating[0]["employee"] == "Bob"
+    assert rating[0]["total"] == 200
+    assert rating[1]["employee"] == "Alice"
+    assert rating[1]["total"] == 100
+
+    rating = asyncio.run(svc.get_sales_rating(date_to="2024-01-31"))
+    assert len(rating) == 1
+    assert rating[0]["employee"] == "Alice"
