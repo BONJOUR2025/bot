@@ -145,88 +145,81 @@ class AnalyticsService:
 
     async def _firebird_details(
         self,
-        period: str | None,
-        period_from: str | None,
-        period_to: str | None,
-        creator_ids: list[str] | None,
+        date_from: str | None,
+        date_to: str | None,
+        creater_ids: list[str] | None,
         user_ids: list[str] | None,
         folder_ids: list[str],
-        item_code: str | None,
-        item_name: str | None,
-        min_cost: float | None,
-        max_cost: float | None,
-        doc_number: str | None,
+        code_substr: str | None,
+        name_substr: str | None,
+        min_kredit: float | None,
+        max_kredit: float | None,
+        doc_num_substr: str | None,
         page: int,
         page_size: int,
     ) -> dict | None:
         if not self._fb:
             return None
 
-        filters = []
+        filters = ["docs_order_history.status_id = 5"]
         params: list[Any] = []
-        if period:
-            filters.append("doc_date = ?")
-            params.append(period)
-        if period_from:
-            filters.append("doc_date >= ?")
-            params.append(period_from)
-        if period_to:
-            filters.append("doc_date <= ?")
-            params.append(period_to)
-        if creator_ids:
-            placeholders = ",".join(["?"] * len(creator_ids))
-            filters.append(f"creator_id IN ({placeholders})")
-            params.extend(creator_ids)
+        if date_from:
+            filters.append("docs.doc_date >= ?")
+            params.append(date_from)
+        if date_to:
+            filters.append("docs.doc_date <= ?")
+            params.append(date_to)
+        if creater_ids:
+            placeholders = ",".join(["?"] * len(creater_ids))
+            filters.append(f"docs_order.creater_id IN ({placeholders})")
+            params.extend(creater_ids)
         if user_ids:
             placeholders = ",".join(["?"] * len(user_ids))
-            filters.append(f"user_id IN ({placeholders})")
+            filters.append(f"users.user_id IN ({placeholders})")
             params.extend(user_ids)
         if folder_ids:
             placeholders = ",".join(["?"] * len(folder_ids))
-            filters.append(f"folder_id IN ({placeholders})")
+            filters.append(f"tovars_tbl.folder_id IN ({placeholders})")
             params.extend(folder_ids)
-        if item_code:
-            filters.append("item_code CONTAINING ?")
-            params.append(item_code)
-        if item_name:
-            filters.append("item_name CONTAINING ?")
-            params.append(item_name)
-        if min_cost is not None:
-            filters.append("kredit >= ?")
-            params.append(min_cost)
-        if max_cost is not None:
-            filters.append("kredit <= ?")
-            params.append(max_cost)
-        if doc_number:
-            filters.append("doc_number CONTAINING ?")
-            params.append(doc_number)
+        if code_substr:
+            filters.append("tovars_tbl.code CONTAINING ?")
+            params.append(code_substr)
+        if name_substr:
+            filters.append("tovars_tbl.name CONTAINING ?")
+            params.append(name_substr)
+        if min_kredit is not None:
+            filters.append("doc_order_lines.kredit >= ?")
+            params.append(min_kredit)
+        if max_kredit is not None:
+            filters.append("doc_order_lines.kredit <= ?")
+            params.append(max_kredit)
+        if doc_num_substr:
+            filters.append("docs.doc_num CONTAINING ?")
+            params.append(doc_num_substr)
 
         where_clause = " AND ".join(filters)
         if where_clause:
             where_clause = "WHERE " + where_clause
 
-        fb_version = self._fb.get_version()
-        offset_supported = False
-        try:
-            if fb_version and int(fb_version.split(".")[0]) >= 3:
-                offset_supported = True
-        except Exception:
-            offset_supported = False
+        base_from = (
+            "FROM doc_order_lines "
+            "INNER JOIN docs_order ON doc_order_lines.doc_order_id = docs_order.id "
+            "INNER JOIN docs_order_history ON docs_order.id = docs_order_history.doc_order_id "
+            "INNER JOIN docs ON docs_order.doc_id = docs.doc_id "
+            "INNER JOIN contragents ON docs.contragent_id = contragents.contr_id "
+            "INNER JOIN tovars_tbl ON doc_order_lines.tovar_id = tovars_tbl.tovar_id "
+            "INNER JOIN users ON docs_order.creater_id = users.user_id "
+        )
 
-        if offset_supported:
-            query = (
-                "SELECT doc_date, doc_number, creator_id, user_id, item_code, item_name, kredit "
-                "FROM SALES "
-                f"{where_clause} ORDER BY doc_date, doc_number OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
-            )
-        else:
-            query = (
-                "SELECT doc_date, doc_number, creator_id, user_id, item_code, item_name, kredit "
-                "FROM SALES "
-                f"{where_clause} ORDER BY doc_date, doc_number ROWS ? TO ?"
-            )
+        query = (
+            "SELECT docs.doc_date AS doc_date, docs.doc_num AS doc_number, "
+            "docs_order.creater_id AS creator_id, users.user_id AS user_id, "
+            "users.description AS description, tovars_tbl.code AS item_code, "
+            "tovars_tbl.name AS item_name, doc_order_lines.kredit AS kredit "
+            f"{base_from} {where_clause} ORDER BY docs.doc_date, docs.doc_num ROWS ? TO ?"
+        )
 
-        count_query = f"SELECT COUNT(*) as cnt FROM SALES {where_clause}"
+        count_query = f"SELECT COUNT(*) as cnt {base_from} {where_clause}"
 
         key = (
             tuple(params),
@@ -234,12 +227,9 @@ class AnalyticsService:
             page_size,
         )
 
-        if offset_supported:
-            params_with_pagination = params + [max(0, (page - 1) * page_size), page_size]
-        else:
-            start_row = max(1, (page - 1) * page_size + 1)
-            end_row = page * page_size
-            params_with_pagination = params + [start_row, end_row]
+        start_row = max(1, (page - 1) * page_size + 1)
+        end_row = page * page_size
+        params_with_pagination = params + [start_row, end_row]
 
         try:
             rows = await self._fb.cached_execute(key, query, params_with_pagination)
@@ -270,34 +260,31 @@ class AnalyticsService:
 
     async def get_sales_details(
         self,
-        period: str | None = None,
-        period_from: str | None = None,
-        period_to: str | None = None,
-        creator_ids: list[str] | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        creater_ids: list[str] | None = None,
         user_ids: list[str] | None = None,
         folder_ids: list[str] | None = None,
-        item_code: str | None = None,
-        employee: str | None = None,
-        item: str | None = None,
-        min_cost: float | None = None,
-        max_cost: float | None = None,
-        doc_number: str | None = None,
+        code_substr: str | None = None,
+        name_substr: str | None = None,
+        min_kredit: float | None = None,
+        max_kredit: float | None = None,
+        doc_num_substr: str | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> dict:
         if self._fb:
             return await self._firebird_details(
-                period,
-                period_from,
-                period_to,
-                creator_ids or [],
+                date_from,
+                date_to,
+                creater_ids or [],
                 user_ids or [],
                 folder_ids or [],
-                item_code,
-                item,
-                min_cost,
-                max_cost,
-                doc_number,
+                code_substr,
+                name_substr,
+                min_kredit,
+                max_kredit,
+                doc_num_substr,
                 page,
                 page_size,
             ) or {
@@ -321,40 +308,36 @@ class AnalyticsService:
             }
 
         filtered = df
-        if period:
-            dt = pd.to_datetime(period, errors="coerce", dayfirst=True)
-            if not pd.isna(dt):
-                filtered = filtered[filtered["period"] == dt]
-            else:
-                filtered = filtered.iloc[0:0]
-
-        if period_from:
-            dt_from = pd.to_datetime(period_from, errors="coerce", dayfirst=True)
+        if date_from:
+            dt_from = pd.to_datetime(date_from, errors="coerce", dayfirst=True)
             if not pd.isna(dt_from):
                 filtered = filtered[filtered["period"] >= dt_from]
 
-        if period_to:
-            dt_to = pd.to_datetime(period_to, errors="coerce", dayfirst=True)
+        if date_to:
+            dt_to = pd.to_datetime(date_to, errors="coerce", dayfirst=True)
             if not pd.isna(dt_to):
                 filtered = filtered[filtered["period"] <= dt_to]
 
-        if employee:
+        if name_substr:
             filtered = filtered[
-                filtered["employee"]
-                .astype(str)
-                .str.contains(employee, case=False, na=False)
+                filtered["item"].astype(str).str.contains(name_substr, case=False, na=False)
             ]
 
-        if item:
+        if code_substr:
             filtered = filtered[
-                filtered["item"].astype(str).str.contains(item, case=False, na=False)
+                filtered["employee"].astype(str).str.contains(code_substr, case=False, na=False)
             ]
 
-        if min_cost is not None:
-            filtered = filtered[filtered["cost"] >= float(min_cost)]
+        if doc_num_substr:
+            filtered = filtered[
+                filtered["order_number"].astype(str).str.contains(doc_num_substr, case=False, na=False)
+            ]
 
-        if max_cost is not None:
-            filtered = filtered[filtered["cost"] <= float(max_cost)]
+        if min_kredit is not None:
+            filtered = filtered[filtered["cost"] >= float(min_kredit)]
+
+        if max_kredit is not None:
+            filtered = filtered[filtered["cost"] <= float(max_kredit)]
 
         page_size = max(1, min(50, int(page_size)))
         page = max(1, int(page))
