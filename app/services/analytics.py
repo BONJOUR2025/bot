@@ -403,3 +403,110 @@ class AnalyticsService:
             "page": page,
             "pages": total_pages,
         }
+
+    async def _firebird_rating(
+        self,
+        date_from: str | None,
+        date_to: str | None,
+        creater_ids: list[str] | None,
+        user_ids: list[str] | None,
+        folder_ids: list[str],
+    ) -> list[dict] | None:
+        """Return aggregated sales by employee from Firebird."""
+        if not self._fb:
+            return None
+
+        filters = ["docs_order_history.status_id = 5"]
+        params: list[Any] = []
+        if date_from:
+            filters.append("docs.doc_date >= ?")
+            params.append(date_from)
+        if date_to:
+            filters.append("docs.doc_date <= ?")
+            params.append(date_to)
+        if creater_ids:
+            placeholders = ",".join(["?"] * len(creater_ids))
+            filters.append(f"docs_order.creater_id IN ({placeholders})")
+            params.extend(creater_ids)
+        if user_ids:
+            placeholders = ",".join(["?"] * len(user_ids))
+            filters.append(f"users.user_id IN ({placeholders})")
+            params.extend(user_ids)
+        if folder_ids:
+            placeholders = ",".join(["?"] * len(folder_ids))
+            filters.append(f"tovars_tbl.folder_id IN ({placeholders})")
+            params.extend(folder_ids)
+
+        where_clause = " AND ".join(filters)
+        if where_clause:
+            where_clause = "WHERE " + where_clause
+
+        base_from = (
+            "FROM doc_order_lines "
+            "INNER JOIN docs_order ON doc_order_lines.doc_order_id = docs_order.id "
+            "INNER JOIN docs_order_history ON docs_order.id = docs_order_history.doc_order_id "
+            "INNER JOIN docs ON docs_order.doc_id = docs.doc_id "
+            "INNER JOIN contragents ON docs.contragent_id = contragents.contr_id "
+            "INNER JOIN tovars_tbl ON doc_order_lines.tovar_id = tovars_tbl.tovar_id "
+            "INNER JOIN users ON docs_order.creater_id = users.user_id "
+        )
+
+        query = (
+            "SELECT users.description AS description, "
+            "SUM(doc_order_lines.kredit) AS total "
+            f"{base_from} {where_clause} GROUP BY users.description ORDER BY total DESC"
+        )
+
+        try:
+            rows = await self._fb.cached_execute(tuple(params), query, params)
+        except Exception as exc:
+            log(f"❌ Firebird rating query failed: {exc}")
+            return None
+
+        for row in rows:
+            row["description"] = map_employee_by_code(row.get("description"))
+            row["total"] = int(row.get("total") or 0)
+
+        return rows
+
+    async def get_sales_rating(
+        self,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        creater_ids: list[str] | None = None,
+        user_ids: list[str] | None = None,
+        folder_ids: list[str] | None = None,
+    ) -> list[dict]:
+        """Return rating of employees by sales amount."""
+        if self._fb:
+            return await self._firebird_rating(
+                date_from,
+                date_to,
+                creater_ids or [],
+                user_ids or [],
+                folder_ids or [],
+            ) or []
+
+        df = await self._ensure_details_df()
+        if df is None:
+            return []
+
+        filtered = df
+        if date_from:
+            dt_from = pd.to_datetime(date_from, errors="coerce", dayfirst=True)
+            if not pd.isna(dt_from):
+                filtered = filtered[filtered["period"] >= dt_from]
+
+        if date_to:
+            dt_to = pd.to_datetime(date_to, errors="coerce", dayfirst=True)
+            if not pd.isna(dt_to):
+                filtered = filtered[filtered["period"] <= dt_to]
+
+        grouped = (
+            filtered.groupby("employee")["cost"].sum().reset_index().rename(columns={"cost": "total"})
+        )
+
+        grouped["total"] = grouped["total"].astype(int)
+        grouped = grouped.sort_values("total", ascending=False)
+
+        return grouped.to_dict(orient="records")

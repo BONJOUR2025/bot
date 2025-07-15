@@ -37,6 +37,9 @@ export default function Analytics() {
   const [data, setData] = useState(null);
   const [details, setDetails] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [rating, setRating] = useState([]);
+  const [ratingRange, setRatingRange] = useState({ from: '', to: '' });
+  const [sort, setSort] = useState('');
   const [filters, setFilters] = useState({
     from: '',
     to: '',
@@ -86,6 +89,19 @@ export default function Analytics() {
     }
   }
 
+  async function loadRating() {
+    try {
+      const params = {
+        date_from: ratingRange.from || undefined,
+        date_to: ratingRange.to || undefined,
+      };
+      const res = await api.get('analytics/sales/rating', { params });
+      setRating(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   useEffect(() => {
     load();
     window.refreshPage = load;
@@ -111,6 +127,13 @@ export default function Analytics() {
   const filteredDetails = filters.employee
     ? mappedDetails.filter((item) => item.employee === filters.employee)
     : mappedDetails;
+
+  const sortedDetails = [...filteredDetails];
+  if (sort === 'employee') {
+    sortedDetails.sort((a, b) => a.employee.localeCompare(b.employee));
+  } else if (sort === 'cost') {
+    sortedDetails.sort((a, b) => Number(b.cost) - Number(a.cost));
+  }
 
   // Итоги
   const goodsCount = filteredDetails.filter((item) => Number(item.cost) > 0).length;
@@ -204,6 +227,15 @@ export default function Analytics() {
               value={filters.doc}
               onChange={(e) => setFilters({ ...filters, doc: e.target.value })}
             />
+            <select
+              className="border p-2"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+            >
+              <option value="">Без сортировки</option>
+              <option value="employee">По сотруднику</option>
+              <option value="cost">По сумме</option>
+            </select>
             <button
               className="bg-blue-600 text-white px-3 py-2 rounded"
               onClick={loadDetails}
@@ -229,7 +261,7 @@ export default function Analytics() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredDetails.map((it, idx) => (
+                {sortedDetails.map((it, idx) => (
                   <tr key={idx}>
                     <td className="p-2">{formatDateRu(it.date)}</td>
                     <td className="p-2">{it.number}</td>
@@ -241,6 +273,53 @@ export default function Analytics() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <h3 className="font-semibold">Рейтинг сотрудников</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                className="border p-2"
+                value={ratingRange.from}
+                onChange={(e) =>
+                  setRatingRange({ ...ratingRange, from: e.target.value })
+                }
+              />
+              <input
+                type="date"
+                className="border p-2"
+                value={ratingRange.to}
+                onChange={(e) =>
+                  setRatingRange({ ...ratingRange, to: e.target.value })
+                }
+              />
+              <button
+                className="bg-blue-600 text-white px-3 py-2 rounded"
+                onClick={loadRating}
+              >
+                Показать
+              </button>
+            </div>
+
+            <div className="overflow-auto max-h-60">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="p-2 text-left">Сотрудник</th>
+                    <th className="p-2 text-left">Сумма</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {rating.map((r, idx) => (
+                    <tr key={idx}>
+                      <td className="p-2">{mapEmployee(r.description || r.employee)}</td>
+                      <td className="p-2">{r.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

@@ -49,4 +49,20 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
         await service.refresh_sales_details()
         return {"status": "ok"}
 
+    @router.get("/sales/rating")
+    async def get_sales_rating(
+        date_from: str | None = None,
+        date_to: str | None = None,
+        creater_ids: str | None = None,
+        user_ids: str | None = None,
+        folder_ids: str | None = None,
+    ):
+        return await service.get_sales_rating(
+            date_from=date_from,
+            date_to=date_to,
+            creater_ids=creater_ids.split(",") if creater_ids else None,
+            user_ids=user_ids.split(",") if user_ids else None,
+            folder_ids=folder_ids.split(",") if folder_ids else None,
+        )
+
     return router
