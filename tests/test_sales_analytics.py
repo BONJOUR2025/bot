@@ -36,9 +36,9 @@ def test_load_and_filter_sales(tmp_path, monkeypatch):
     assert result["items"][0]["employee"] == "Alice"
     assert result["items"][1]["cost"] == 200
 
-    result = asyncio.run(svc.get_sales_details(employee="bob"))
+    result = asyncio.run(svc.get_sales_details(name_substr="cond"))
     assert result["count"] == 1
-    assert result["items"][0]["employee"] == "Bob"
+    assert result["items"][0]["item"] == "Conditioner"
 
     result = asyncio.run(svc.get_sales_details(page=2, page_size=1))
     assert result["page"] == 2
