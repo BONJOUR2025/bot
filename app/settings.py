@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field("dummy", env="TELEGRAM_BOT_TOKEN")
     excel_file: str = Field("data.xlsx", env="EXCEL_FILE")
     sales_file: str = Field("telegram_bot/Парсинг/товары.xlsx", env="SALES_FILE")
+    firebird_db: str | None = Field(None, env="FIREBIRD_DB")
+    firebird_user: str | None = Field(None, env="FIREBIRD_USER")
+    firebird_password: str | None = Field(None, env="FIREBIRD_PASSWORD")
     users_file: str = Field("user.json", env="USERS_FILE")
     advance_requests_file: str = Field(
         "advance_requests.json", env="ADVANCE_REQUESTS_FILE"
@@ -25,15 +28,12 @@ class Settings(BaseSettings):
     user_login: str = Field("user", env="USER_LOGIN")
     user_password: str | None = Field(None, env="USER_PASSWORD")
     admin_token: str | None = Field(None, env="ADMIN_TOKEN")
-    font_path: str = Field(
-        "fonts/DejaVuSans.ttf",
-        env="FONT_PATH")
-    card_dispatch_chat_id: int = Field(-1002667932339,
-                                       env="CARD_DISPATCH_CHAT_ID")
+    font_path: str = Field("fonts/DejaVuSans.ttf", env="FONT_PATH")
+    card_dispatch_chat_id: int = Field(-1002667932339, env="CARD_DISPATCH_CHAT_ID")
     max_advance_amount_per_month: int = Field(
-        500000000, env="MAX_ADVANCE_AMOUNT_PER_MONTH")
+        500000000, env="MAX_ADVANCE_AMOUNT_PER_MONTH"
+    )
     secret_key: str = Field("change_me", env="SECRET_KEY")
-
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -2,13 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any, List
 import asyncio
 import os
 
 import pandas as pd
 
-from ..config import EXCEL_FILE, SALES_FILE
+from ..config import (
+    EXCEL_FILE,
+    SALES_FILE,
+    FIREBIRD_DB,
+    FIREBIRD_USER,
+    FIREBIRD_PASSWORD,
+)
+from .firebird_service import FirebirdService
 from ..core.constants import MONTHS_RU
 from ..utils.logger import log
 
@@ -16,11 +23,17 @@ from ..utils.logger import log
 class AnalyticsService:
     """Load sales analytics from the salary Excel workbook."""
 
-    def __init__(self) -> None:
+    def __init__(self, fb_service: FirebirdService | None = None) -> None:
         self._data: Optional[dict] = None
         self._updated_at: Optional[datetime] = None
         self._details_df: Optional[pd.DataFrame] = None
         self._details_mtime: float = 0.0
+        if fb_service:
+            self._fb = fb_service
+        elif FIREBIRD_DB and FIREBIRD_USER and FIREBIRD_PASSWORD:
+            self._fb = FirebirdService(FIREBIRD_DB, FIREBIRD_USER, FIREBIRD_PASSWORD)
+        else:
+            self._fb = None
 
     def _collect_sales(self) -> dict:
         try:
@@ -130,18 +143,152 @@ class AnalyticsService:
         log(f"✅ Loaded {len(df)} sales details in {elapsed:.2f}s")
         return df
 
+    async def _firebird_details(
+        self,
+        period: str | None,
+        period_from: str | None,
+        period_to: str | None,
+        creator_ids: list[str] | None,
+        user_ids: list[str] | None,
+        folder_ids: list[str],
+        item_code: str | None,
+        item_name: str | None,
+        min_cost: float | None,
+        max_cost: float | None,
+        doc_number: str | None,
+        page: int,
+        page_size: int,
+    ) -> dict | None:
+        if not self._fb:
+            return None
+
+        filters = []
+        params: list[Any] = []
+        if period:
+            filters.append("doc_date = ?")
+            params.append(period)
+        if period_from:
+            filters.append("doc_date >= ?")
+            params.append(period_from)
+        if period_to:
+            filters.append("doc_date <= ?")
+            params.append(period_to)
+        if creator_ids:
+            placeholders = ",".join(["?"] * len(creator_ids))
+            filters.append(f"creator_id IN ({placeholders})")
+            params.extend(creator_ids)
+        if user_ids:
+            placeholders = ",".join(["?"] * len(user_ids))
+            filters.append(f"user_id IN ({placeholders})")
+            params.extend(user_ids)
+        if folder_ids:
+            placeholders = ",".join(["?"] * len(folder_ids))
+            filters.append(f"folder_id IN ({placeholders})")
+            params.extend(folder_ids)
+        if item_code:
+            filters.append("item_code CONTAINING ?")
+            params.append(item_code)
+        if item_name:
+            filters.append("item_name CONTAINING ?")
+            params.append(item_name)
+        if min_cost is not None:
+            filters.append("kredit >= ?")
+            params.append(min_cost)
+        if max_cost is not None:
+            filters.append("kredit <= ?")
+            params.append(max_cost)
+        if doc_number:
+            filters.append("doc_number CONTAINING ?")
+            params.append(doc_number)
+
+        where_clause = " AND ".join(filters)
+        if where_clause:
+            where_clause = "WHERE " + where_clause
+
+        query = (
+            "SELECT doc_date, doc_number, creator_id, user_id, item_code, item_name, kredit "
+            "FROM SALES "
+            f"{where_clause} ORDER BY doc_date, doc_number OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+        )
+
+        count_query = f"SELECT COUNT(*) as cnt FROM SALES {where_clause}"
+
+        key = (
+            tuple(params),
+            page,
+            page_size,
+        )
+
+        params_with_pagination = params + [max(0, (page - 1) * page_size), page_size]
+
+        try:
+            rows = await self._fb.cached_execute(key, query, params_with_pagination)
+            count_rows = await self._fb.cached_execute(
+                ("count", *key[0]), count_query, params
+            )
+        except Exception as exc:
+            log(f"❌ Firebird query failed: {exc}")
+            return None
+
+        total_count = int(count_rows[0]["cnt"]) if count_rows else 0
+        total_pages = int((total_count + page_size - 1) / page_size)
+
+        log(f"🔎 Firebird {total_count} records (page {page}/{total_pages})")
+
+        return {
+            "items": rows,
+            "total": sum(int(r.get("kredit") or 0) for r in rows),
+            "count": total_count,
+            "avg": (
+                float(sum(int(r.get("kredit") or 0) for r in rows) / len(rows))
+                if rows
+                else 0
+            ),
+            "page": page,
+            "pages": total_pages,
+        }
+
     async def get_sales_details(
         self,
         period: str | None = None,
         period_from: str | None = None,
         period_to: str | None = None,
+        creator_ids: list[str] | None = None,
+        user_ids: list[str] | None = None,
+        folder_ids: list[str] | None = None,
+        item_code: str | None = None,
         employee: str | None = None,
         item: str | None = None,
         min_cost: float | None = None,
         max_cost: float | None = None,
+        doc_number: str | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> dict:
+        if self._fb:
+            return await self._firebird_details(
+                period,
+                period_from,
+                period_to,
+                creator_ids or [],
+                user_ids or [],
+                folder_ids or [],
+                item_code,
+                item,
+                min_cost,
+                max_cost,
+                doc_number,
+                page,
+                page_size,
+            ) or {
+                "items": [],
+                "total": 0,
+                "count": 0,
+                "avg": 0,
+                "page": page,
+                "pages": 0,
+            }
+
         df = await self._ensure_details_df()
         if df is None:
             return {
@@ -173,7 +320,9 @@ class AnalyticsService:
 
         if employee:
             filtered = filtered[
-                filtered["employee"].astype(str).str.contains(employee, case=False, na=False)
+                filtered["employee"]
+                .astype(str)
+                .str.contains(employee, case=False, na=False)
             ]
 
         if item:
@@ -201,9 +350,7 @@ class AnalyticsService:
         total_cost = int(filtered["cost"].sum())
         avg = float(total_cost / total_count) if total_count else 0.0
 
-        log(
-            f"🔎 Filtered {total_count} records (page {page}/{total_pages})"
-        )
+        log(f"🔎 Filtered {total_count} records (page {page}/{total_pages})")
 
         return {
             "items": page_df.to_dict(orient="records"),
@@ -213,4 +360,3 @@ class AnalyticsService:
             "page": page,
             "pages": total_pages,
         }
-

@@ -4,7 +4,12 @@ from fastapi.staticfiles import StaticFiles
 from telegram import Update
 from pathlib import Path
 
-from ..config import TOKEN
+from ..config import (
+    TOKEN,
+    FIREBIRD_DB,
+    FIREBIRD_USER,
+    FIREBIRD_PASSWORD,
+)
 from ..core.application import create_application
 from .employees import create_employee_router
 from .salary import create_salary_router
@@ -52,6 +57,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     if telegram_app is not None:
+
         @app.on_event("startup")
         async def startup():
             await telegram_app.initialize()
@@ -76,50 +82,53 @@ def create_app() -> FastAPI:
     payout_service = PayoutService(telegram_service=telegram_service)
     app.include_router(create_payout_router(payout_service), prefix="/api")
 
-
     vacation_service = VacationService()
     app.include_router(create_vacation_router(vacation_service), prefix="/api")
 
     adjustment_service = AdjustmentService()
-    app.include_router(create_adjustment_router(
-        adjustment_service), prefix="/api")
+    app.include_router(create_adjustment_router(adjustment_service), prefix="/api")
 
     from .incentives import create_incentive_router
     from ..services.incentive_service import IncentiveService
+
     incentive_service = IncentiveService()
     app.include_router(create_incentive_router(incentive_service), prefix="/api")
 
     from .messages import create_message_router
     from ..services.template_service import TemplateService
+
     message_service = MessageService(employee_repo=employee_service._repo)
     template_service = TemplateService()
-    app.include_router(create_message_router(message_service, template_service), prefix="/api")
+    app.include_router(
+        create_message_router(message_service, template_service), prefix="/api"
+    )
 
     from .config import create_config_router
     from ..services.config_service import ConfigService
+
     config_service = ConfigService()
     app.include_router(create_config_router(config_service), prefix="/api")
 
     from .analytics import create_analytics_router
-    analytics_service = AnalyticsService()
+    from ..services.firebird_service import FirebirdService
+
+    fb_service = None
+    if FIREBIRD_DB and FIREBIRD_USER and FIREBIRD_PASSWORD:
+        fb_service = FirebirdService(FIREBIRD_DB, FIREBIRD_USER, FIREBIRD_PASSWORD)
+    analytics_service = AnalyticsService(fb_service)
     app.include_router(create_analytics_router(analytics_service), prefix="/api")
 
     app.include_router(create_birthday_router(), prefix="/api")
 
-    app.include_router(
-        create_telegram_router(
-            employee_service._repo),
-        prefix="/api")
-
+    app.include_router(create_telegram_router(employee_service._repo), prefix="/api")
 
     frontend_path = (
-        Path(__file__).resolve().parent.parent.parent
-        / "admin_frontend"
-        / "dist"
+        Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )
     app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
     if frontend_path.exists():
+
         @app.get("/{full_path:path}", include_in_schema=False)
         async def spa_fallback(full_path: str, request: Request):
             file_path = frontend_path / full_path
@@ -131,6 +140,7 @@ def create_app() -> FastAPI:
             return Response(status_code=404)
 
     if telegram_app is not None:
+
         @app.post("/webhook")
         async def webhook(request: Request):
             data = await request.json()
