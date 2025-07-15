@@ -44,7 +44,7 @@ export default function Analytics() {
   });
 
   const employeeOptions = Object.entries(EMPLOYEE_MAP).map(([code, name]) => ({
-    code: normalizeEmployee(code),
+    code,
     name,
   }));
 
@@ -72,6 +72,7 @@ export default function Analytics() {
         code_substr: filters.code || undefined,
         name_substr: filters.name || undefined,
         doc_num_substr: filters.doc || undefined,
+        employee: filters.employee || undefined,
       };
       const res = await api.get('analytics/sales/details', { params });
       setDetails(res.data);
@@ -86,11 +87,50 @@ export default function Analytics() {
     window.refreshPage = load;
   }, []);
 
+  // Подготовка данных с нормализацией сотрудников
+  const mappedDetails = details?.items
+    ? details.items.map((raw) => {
+        const empRaw = raw.description || raw.employee || '';
+        const empKey = normalizeEmployee(empRaw);
+        return {
+          date: raw.doc_date || raw.period,
+          number: raw.doc_num || raw.doc_number || raw.order_number,
+          employee: empKey,
+          code: raw.item_code || '',
+          name: raw.item_name || raw.item,
+          cost: raw.kredit ?? raw.cost,
+        };
+      })
+    : [];
+
+  // Фильтрация по сотруднику
+  const filteredDetails = filters.employee
+    ? mappedDetails.filter((item) => item.employee === filters.employee)
+    : mappedDetails;
+
+  // Итоги
+  const goodsCount = filteredDetails.filter((item) => Number(item.cost) > 0).length;
+  const totalSum = filteredDetails.reduce(
+    (sum, item) => (Number(item.cost) > 0 ? sum + Number(item.cost) : sum),
+    0
+  );
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Аналитика продаж</h1>
-      <button className="bg-blue-600 text-white px-3 py-2 rounded" onClick={() => load(true)}>Обновить</button>
-      <button className="bg-indigo-600 text-white px-3 py-2 rounded ml-2" onClick={loadDetails}>Аналитика продаж</button>
+      <button
+        className="bg-blue-600 text-white px-3 py-2 rounded"
+        onClick={() => load(true)}
+      >
+        Обновить
+      </button>
+      <button
+        className="bg-indigo-600 text-white px-3 py-2 rounded ml-2"
+        onClick={loadDetails}
+      >
+        Аналитика продаж
+      </button>
+
       {data && (
         <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded shadow">
           <div>
@@ -114,7 +154,8 @@ export default function Analytics() {
           </div>
         </div>
       )}
-      {showDetails && details && (
+
+      {showDetails && (
         <div className="space-y-2 bg-white p-4 rounded shadow">
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -129,29 +170,29 @@ export default function Analytics() {
               value={filters.to}
               onChange={(e) => setFilters({ ...filters, to: e.target.value })}
             />
-          <input
-            className="border p-2"
-            placeholder="Код"
-            value={filters.code}
-            onChange={(e) => setFilters({ ...filters, code: e.target.value })}
-          />
-          <select
-            className="border p-2"
-            value={filters.employee}
-            onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
-          >
-            <option value="">Все сотрудники</option>
-            {employeeOptions.map((opt) => (
-              <option key={opt.code} value={opt.code}>
-                {opt.name}
-              </option>
-            ))}
-          </select>
-          <input
-            className="border p-2 flex-grow"
-            placeholder="Название"
-            value={filters.name}
-            onChange={(e) => setFilters({ ...filters, name: e.target.value })}
+            <input
+              className="border p-2"
+              placeholder="Код"
+              value={filters.code}
+              onChange={(e) => setFilters({ ...filters, code: e.target.value })}
+            />
+            <select
+              className="border p-2"
+              value={filters.employee}
+              onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
+            >
+              <option value="">Все сотрудники</option>
+              {employeeOptions.map((opt) => (
+                <option key={opt.code} value={normalizeEmployee(opt.code)}>
+                  {opt.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className="border p-2 flex-grow"
+              placeholder="Название"
+              value={filters.name}
+              onChange={(e) => setFilters({ ...filters, name: e.target.value })}
             />
             <input
               className="border p-2"
@@ -159,33 +200,18 @@ export default function Analytics() {
               value={filters.doc}
               onChange={(e) => setFilters({ ...filters, doc: e.target.value })}
             />
-            <button className="bg-blue-600 text-white px-3 py-2 rounded" onClick={loadDetails}>
+            <button
+              className="bg-blue-600 text-white px-3 py-2 rounded"
+              onClick={loadDetails}
+            >
               Фильтр
             </button>
           </div>
-          {(() => {
-            const mapped = details.items.map((raw) => {
-              const empRaw = raw.description || raw.employee || '';
-              const empKey = normalizeEmployee(empRaw);
-              return {
-                date: raw.doc_date || raw.period,
-                number: raw.doc_num || raw.doc_number || raw.order_number,
-                employee: empKey,
-                code: raw.item_code || '',
-                name: raw.item_name || raw.item,
-                cost: raw.kredit ?? raw.cost,
-              };
-            });
-            const filtered = mapped.filter((it) => !filters.employee || it.employee === filters.employee);
-            const goodsCount = filtered.filter((it) => Number(it.cost) > 0).length;
-            const totalSum = filtered.reduce((s, it) => (Number(it.cost) > 0 ? s + Number(it.cost) : s), 0);
-            return (
-              <div className="text-sm text-gray-600">
-                Всего записей: {filtered.length} | Количество товаров: {goodsCount} |
-                Общая сумма: {totalSum} ₽
-              </div>
-            );
-          })()}
+
+          <div className="text-sm text-gray-600">
+            Всего записей: {filteredDetails.length} | Количество товаров: {goodsCount} | Общая сумма: {totalSum} ₽
+          </div>
+
           <div className="overflow-auto max-h-96">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50">
@@ -199,30 +225,16 @@ export default function Analytics() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {details.items
-                  .map((raw) => {
-                    const empRaw = raw.description || raw.employee || '';
-                    const empKey = normalizeEmployee(empRaw);
-                    return {
-                      date: raw.doc_date || raw.period,
-                      number: raw.doc_num || raw.doc_number || raw.order_number,
-                      employee: empKey,
-                      code: raw.item_code || '',
-                      name: raw.item_name || raw.item,
-                      cost: raw.kredit ?? raw.cost,
-                    };
-                  })
-                  .filter((it) => !filters.employee || it.employee === filters.employee)
-                  .map((it, idx) => (
-                    <tr key={idx}>
-                      <td className="p-2">{formatDateRu(it.date)}</td>
-                      <td className="p-2">{it.number}</td>
-                      <td className="p-2">{mapEmployee(it.employee)}</td>
-                      <td className="p-2">{it.code}</td>
-                      <td className="p-2">{it.name}</td>
-                      <td className="p-2">{it.cost}</td>
-                    </tr>
-                  ))}
+                {filteredDetails.map((it, idx) => (
+                  <tr key={idx}>
+                    <td className="p-2">{formatDateRu(it.date)}</td>
+                    <td className="p-2">{it.number}</td>
+                    <td className="p-2">{mapEmployee(it.employee)}</td>
+                    <td className="p-2">{it.code}</td>
+                    <td className="p-2">{it.name}</td>
+                    <td className="p-2">{it.cost}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
