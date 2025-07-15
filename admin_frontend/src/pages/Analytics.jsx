@@ -59,8 +59,9 @@ export default function Analytics() {
 
   async function load(refresh = false) {
     try {
-      const url = refresh ? 'analytics/sales/refresh' : 'analytics/sales';
-      const res = await api.get(url);
+      const res = refresh
+        ? await api.post('analytics/sales/refresh')
+        : await api.get('analytics/sales');
       setData(res.data);
     } catch (err) {
       console.error(err);
