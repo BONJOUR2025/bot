@@ -15,6 +15,7 @@ class FirebirdService:
         self.user = user
         self.password = password
         self._cache: Dict[Tuple[Any, ...], Tuple[datetime, Any]] = {}
+        self._version: str | None = None
 
     def _connect(self) -> fdb.Connection:
         return fdb.connect(dsn=self.dsn, user=self.user, password=self.password)
@@ -49,3 +50,21 @@ class FirebirdService:
         rows = await self.execute(query, params)
         self._cache[key] = (now, rows)
         return rows
+
+    def get_version(self) -> str | None:
+        """Return Firebird server version string if available."""
+        if self._version is not None:
+            return self._version
+        try:
+            with self._connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') FROM rdb$database"
+                )
+                row = cur.fetchone()
+                if row and row[0]:
+                    self._version = str(row[0])
+        except Exception as exc:
+            log(f"❌ Failed to get Firebird version: {exc}")
+            self._version = None
+        return self._version
