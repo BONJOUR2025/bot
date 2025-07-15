@@ -18,6 +18,39 @@ from ..config import (
 from .firebird_service import FirebirdService
 from ..core.constants import MONTHS_RU
 from ..utils.logger import log
+import re
+
+# Mapping of 4 digit codes to employee names used in sales analytics
+EMPLOYEE_CODE_MAP = {
+    "0102": "Вера 0102",
+    "2602": "Анастасия 2602",
+    "7272": "Арина 7272",
+    "1505": "Александр 1505",
+    "2404": "Эмиль 2404",
+    "5984": "Полина 5984",
+    "0704": "Наталья 0704",
+    "2201": "Катя 2201",
+    "1606": "Лали 1606",
+    "0104": "Екатерина 0104",
+    "2006": "Ира 2405",
+    "1802": "Полина 1802",
+    "1996": "Вероника 1996",
+    "2405": "Ирина 2405",
+    "3007": "Юля 3007",
+    "2104": "Алекс 2104",
+    "0208": "Марина 0208",
+}
+
+
+def map_employee_by_code(description: str | None) -> str:
+    """Return employee name by the last 4 digits in the description."""
+    if not description:
+        return description or ""
+    match = re.search(r"(\d{4})\s*$", str(description))
+    if match:
+        code = match.group(1)
+        return EMPLOYEE_CODE_MAP.get(code, str(description))
+    return str(description)
 
 
 class AnalyticsService:
@@ -137,6 +170,9 @@ class AnalyticsService:
             log(f"⚠️ Dropped {dropped} rows with invalid period")
         df = df.dropna(subset=["period"]).reset_index(drop=True)
 
+        # Replace employee field with mapped name if possible
+        df["employee"] = df["employee"].apply(map_employee_by_code)
+
         self._details_df = df
         self._details_mtime = mtime
         elapsed = (datetime.utcnow() - start).total_seconds()
@@ -239,6 +275,10 @@ class AnalyticsService:
         except Exception as exc:
             log(f"❌ Firebird query failed: {exc}")
             return None
+
+        # Normalize employee descriptions using the 4 digit code map
+        for row in rows:
+            row["description"] = map_employee_by_code(row.get("description"))
 
         total_count = int(count_rows[0]["cnt"]) if count_rows else 0
         total_pages = int((total_count + page_size - 1) / page_size)

@@ -2,32 +2,35 @@ import { useEffect, useState } from 'react';
 import api from '../api';
 
 const EMPLOYEE_MAP = {
-  "Оганов А.С.0102": "Вера 0102",
-  "Оганов А.С.2602": "Анастасия 2602",
-  "Оганов А.С.7272": "Арина 7272",
-  "Оганов А.С.1505": "Александр 1505",
-  "Оганов А.С.2404": "Эмиль 2404",
-  "Оганов А.С.5984": "Полина 5984",
-  "Оганов А.С.0704": "Наталья 0704",
-  "Оганов А.С.2201": "Катя 2201",
-  "Оганов А.С.1606": "Лали 1606",
-  "Оганов А.С.0104": "Екатерина 0104",
-  "Оганов А.С.2006": "Ира 2405",
-  "Оганов А.С.1802": "Полина 1802",
-  "Оганов А.С.1996": "Вероника 1996",
-  "Оганов А.С.2405": "Ирина 2405",
-  "Оганов А.С.3007": "Юля 3007",
-  "Оганов А.С.2104": "Алекс 2104",
-  "Оганов А.С.0208": "Марина 0208",
+  '0102': 'Вера 0102',
+  '2602': 'Анастасия 2602',
+  '7272': 'Арина 7272',
+  '1505': 'Александр 1505',
+  '2404': 'Эмиль 2404',
+  '5984': 'Полина 5984',
+  '0704': 'Наталья 0704',
+  '2201': 'Катя 2201',
+  '1606': 'Лали 1606',
+  '0104': 'Екатерина 0104',
+  '2006': 'Ира 2405',
+  '1802': 'Полина 1802',
+  '1996': 'Вероника 1996',
+  '2405': 'Ирина 2405',
+  '3007': 'Юля 3007',
+  '2104': 'Алекс 2104',
+  '0208': 'Марина 0208',
 };
 
-function normalizeEmployee(value) {
-  return (value || '').replace(/\s+/g, '');
+function mapEmployeeByCode(value) {
+  const match = String(value || '').match(/(\d{4})\s*$/);
+  if (match) {
+    return EMPLOYEE_MAP[match[1]] || value;
+  }
+  return value;
 }
 
 function mapEmployee(value) {
-  const key = normalizeEmployee(value);
-  return EMPLOYEE_MAP[key] || value;
+  return mapEmployeeByCode(value);
 }
 
 export default function Analytics() {
@@ -87,15 +90,15 @@ export default function Analytics() {
     window.refreshPage = load;
   }, []);
 
-  // Подготовка данных с нормализацией сотрудников
+  // Подготовка данных с преобразованием сотрудников по коду
   const mappedDetails = details?.items
     ? details.items.map((raw) => {
         const empRaw = raw.description || raw.employee || '';
-        const empKey = normalizeEmployee(empRaw);
+        const empName = mapEmployeeByCode(empRaw);
         return {
           date: raw.doc_date || raw.period,
           number: raw.doc_num || raw.doc_number || raw.order_number,
-          employee: empKey,
+          employee: empName,
           code: raw.item_code || '',
           name: raw.item_name || raw.item,
           cost: raw.kredit ?? raw.cost,
@@ -183,7 +186,7 @@ export default function Analytics() {
             >
               <option value="">Все сотрудники</option>
               {employeeOptions.map((opt) => (
-                <option key={opt.code} value={normalizeEmployee(opt.code)}>
+                <option key={opt.code} value={opt.name}>
                   {opt.name}
                 </option>
               ))}
