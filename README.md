@@ -61,6 +61,13 @@ Several JSON files are used as a simple storage backend and are expected to be p
 
 Example files are provided and will be created automatically if missing.
 
+## Firebird sales analytics
+
+If the application is configured with `FIREBIRD_DB`, `FIREBIRD_USER` and
+`FIREBIRD_PASSWORD`, sales details will be loaded from the specified Firebird
+database instead of Excel files. Queries to the database are executed
+asynchronously and cached for 60 seconds.
+
 
 ## Requesting payouts via the bot
 
