@@ -379,7 +379,7 @@ class AnalyticsService:
         if max_kredit is not None:
             filtered = filtered[filtered["cost"] <= float(max_kredit)]
 
-        page_size = max(1, min(50, int(page_size)))
+        page_size = max(1, min(500, int(page_size)))
         page = max(1, int(page))
         total_count = int(len(filtered))
         total_pages = int((total_count + page_size - 1) / page_size)
