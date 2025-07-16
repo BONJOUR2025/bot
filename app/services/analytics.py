@@ -510,3 +510,114 @@ class AnalyticsService:
         grouped = grouped.sort_values("total", ascending=False)
 
         return grouped.to_dict(orient="records")
+
+    async def get_employee_detailed(
+        self, date_from: str | None = None, date_to: str | None = None
+    ) -> dict:
+        """Return aggregated employee stats for the period."""
+
+        shift_counts: dict[str, int] = {}
+
+        from datetime import date, timedelta
+        from .salary_service import SalaryService
+
+        if date_from and date_to:
+            try:
+                start = date.fromisoformat(date_from)
+                end = date.fromisoformat(date_to)
+            except Exception:
+                start = end = None
+        else:
+            start = end = None
+
+        months: set[str] = set()
+        if start and end:
+            cur = start.replace(day=1)
+            while cur <= end:
+                months.add(MONTHS_RU[cur.month - 1])
+                cur = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+        salary_service = SalaryService()
+        for m in months:
+            rows = await salary_service.get_salary(month=m)
+            for r in rows:
+                name = map_employee_by_code(r.name)
+                shift_counts[name] = shift_counts.get(name, 0) + r.shifts_total
+
+        df = await self._ensure_details_df()
+        if df is None:
+            cosmetics: dict[str, float] = {}
+        else:
+            filtered = df
+            if date_from:
+                dt_from = pd.to_datetime(date_from, errors="coerce", dayfirst=True)
+                if not pd.isna(dt_from):
+                    filtered = filtered[filtered["period"] >= dt_from]
+            if date_to:
+                dt_to = pd.to_datetime(date_to, errors="coerce", dayfirst=True)
+                if not pd.isna(dt_to):
+                    filtered = filtered[filtered["period"] <= dt_to]
+            cosmetics = filtered.groupby("employee")["cost"].sum().to_dict()
+
+        repair: dict[str, float] = {}
+        shoes_sum: dict[str, float] = {}
+        shoes_cnt: dict[str, int] = {}
+        if self._fb:
+            repair_query = (
+                "SELECT users.description AS description, "
+                "SUM(doc_order_services.kredit) AS total "
+                "FROM docs_order "
+                "INNER JOIN doc_order_services ON docs_order.id = doc_order_services.doc_order_id "
+                "INNER JOIN tovars_tbl ON doc_order_services.tovar_id = tovars_tbl.tovar_id "
+                "INNER JOIN docs ON docs_order.doc_id = docs.doc_id "
+                "INNER JOIN users ON docs_order.creater_id = users.user_id "
+                "WHERE docs.doc_date BETWEEN ? AND ? "
+                "AND tovars_tbl.folder_id IN (215,216,217,221,326,327,328,329,330,416,417,418,419,108401,108402,110409,110410,110411,210266,210267,210268,210269,210270,210271,210272,210273,210274,210275,210276,210277,210278,210279,210280,210281,210282,210283,210284,210285,210286,210287,210288,210289,210290,210291,210292,210293,210294,210295,210296,210297,210298,210299,210300,210301,210302,210303,210304,210305,210306,210307,210308,210309,210310,210311,210312,210313,210314,210315,210316,210317,210318,210319,210320,210321,210322,210323,210324,210325,210326,210327,210328,210329,210330,210331,210332,210333,210334,210335,210336,210337,210338,210339,210340,210341,210342,210343,210344,210345,210346,210347,210348,210349,210350,210351,210352,210353,210355,210356,210357,210358,210359,210360,210361,210363,210364,210365,210366,210377,210378,210379,210380,210381,210382,210383,210384,210385,210386,210387,210388,210389,210390,210391,210392,210393,210394,210395,210396,210397,210399) "
+                "GROUP BY users.description"
+            )
+            rows = await self._fb.execute(repair_query, [date_from, date_to])
+            for row in rows:
+                name = map_employee_by_code(row.get("description"))
+                repair[name] = float(row.get("total") or 0)
+
+            shoes_query = (
+                "SELECT users.description AS description, "
+                "SUM(doc_order_services.kredit) AS total, COUNT(*) AS cnt "
+                "FROM doc_order_services "
+                "INNER JOIN docs_order ON doc_order_services.doc_order_id = docs_order.id "
+                "INNER JOIN docs ON docs_order.doc_id = docs.doc_id "
+                "INNER JOIN tovars_tbl ON doc_order_services.tovar_id = tovars_tbl.tovar_id "
+                "INNER JOIN users ON docs_order.creater_id = users.user_id "
+                "WHERE docs_order.date_out_fact BETWEEN ? AND ? AND tovars_tbl.code = '1' "
+                "GROUP BY users.description"
+            )
+            rows = await self._fb.execute(shoes_query, [date_from, date_to])
+            for row in rows:
+                name = map_employee_by_code(row.get("description"))
+                shoes_sum[name] = float(row.get("total") or 0)
+                shoes_cnt[name] = int(row.get("cnt") or 0)
+
+        employees = set(shift_counts) | set(cosmetics) | set(repair) | set(shoes_sum)
+        result = []
+        for name in employees:
+            shifts = shift_counts.get(name, 0)
+            cos_total = cosmetics.get(name, 0.0)
+            rep_total = repair.get(name, 0.0)
+            sh_sum = shoes_sum.get(name, 0.0)
+            sh_cnt = shoes_cnt.get(name, 0)
+            result.append(
+                {
+                    "employee": name,
+                    "shifts": shifts,
+                    "cosmetics_total": cos_total,
+                    "cosmetics_avg": (cos_total / shifts if shifts else 0.0),
+                    "repair_total": rep_total,
+                    "repair_avg": (rep_total / shifts if shifts else 0.0),
+                    "shoes_sum": sh_sum,
+                    "shoes_count": sh_cnt,
+                    "revenue_total": cos_total + rep_total + sh_sum,
+                }
+            )
+
+        return {"items": result}
+
