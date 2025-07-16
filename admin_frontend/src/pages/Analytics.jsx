@@ -40,6 +40,7 @@ export default function Analytics() {
   const [rating, setRating] = useState([]);
   const [ratingRange, setRatingRange] = useState({ from: '', to: '' });
   const [sort, setSort] = useState('');
+  const [pageSize, setPageSize] = useState(50);
   const [filters, setFilters] = useState({
     from: '',
     to: '',
@@ -71,7 +72,7 @@ export default function Analytics() {
     }
   }
 
-  async function loadDetails() {
+  async function loadDetails(size = pageSize) {
     try {
       const params = {
         date_from: filters.from || undefined,
@@ -80,6 +81,7 @@ export default function Analytics() {
         name_substr: filters.name || undefined,
         doc_num_substr: filters.doc || undefined,
         employee: filters.employee || undefined,
+        page_size: size,
       };
       const res = await api.get('analytics/sales/details', { params });
       setDetails(res.data);
@@ -227,6 +229,21 @@ export default function Analytics() {
               value={filters.doc}
               onChange={(e) => setFilters({ ...filters, doc: e.target.value })}
             />
+            <select
+              className="border p-2"
+              value={pageSize}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setPageSize(val);
+                loadDetails(val);
+              }}
+            >
+              {[50, 100, 150, 200, 500].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
             <select
               className="border p-2"
               value={sort}
