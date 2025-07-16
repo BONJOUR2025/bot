@@ -65,4 +65,13 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
             folder_ids=folder_ids.split(",") if folder_ids else None,
         )
 
+    @router.get("/detailed")
+    async def get_detailed(
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ):
+        return await service.get_employee_detailed(
+            date_from=date_from, date_to=date_to
+        )
+
     return router
