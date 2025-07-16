@@ -15,6 +15,7 @@ from ..config import (
     FIREBIRD_USER,
     FIREBIRD_PASSWORD,
 )
+from openpyxl import load_workbook
 from .firebird_service import FirebirdService
 from ..core.constants import MONTHS_RU
 from ..utils.logger import log
@@ -40,6 +41,62 @@ EMPLOYEE_CODE_MAP = {
     "2104": "Алекс 2104",
     "0208": "Марина 0208",
 }
+
+
+def _count_shifts_from_excel(months: list[str]) -> dict[str, int]:
+    """Return mapping of employee name to shift count for the given months."""
+    counts: dict[str, int] = {}
+    if not os.path.exists(EXCEL_FILE):
+        return counts
+    try:
+        wb = load_workbook(EXCEL_FILE, data_only=True)
+    except Exception as exc:
+        log(f"❌ Failed to read Excel for shifts: {exc}")
+        return counts
+
+    CODES = {"Ц", "Ох", "М", "А", "Оз", "П", "Р"}
+
+    for month in months:
+        sheet = None
+        for title in wb.sheetnames:
+            if title.upper().startswith(month.upper()):
+                sheet = wb[title]
+                break
+        if sheet is None:
+            continue
+
+        start_col = None
+        for col in range(1, sheet.max_column + 1):
+            val = sheet.cell(row=1, column=col).value
+            if isinstance(val, (int, float)) and int(val) == 1:
+                start_col = col
+                break
+        if start_col is None:
+            continue
+
+        day_cols: list[int] = []
+        col = start_col
+        while col <= sheet.max_column:
+            val = sheet.cell(row=1, column=col).value
+            if isinstance(val, (int, float)) and 1 <= int(val) <= 31:
+                day_cols.append(col)
+                col += 1
+            else:
+                break
+
+        for row in range(3, sheet.max_row + 1):
+            name_cell = sheet.cell(row=row, column=1).value
+            if not name_cell:
+                continue
+            name = map_employee_by_code(str(name_cell).strip())
+            cnt = 0
+            for c in day_cols:
+                val = sheet.cell(row=row, column=c).value
+                if str(val).strip() in CODES:
+                    cnt += 1
+            counts[name] = counts.get(name, 0) + cnt
+
+    return counts
 
 
 def map_employee_by_code(description: str | None) -> str:
@@ -519,7 +576,6 @@ class AnalyticsService:
         shift_counts: dict[str, int] = {}
 
         from datetime import date, timedelta
-        from .salary_service import SalaryService
 
         if date_from and date_to:
             try:
@@ -537,12 +593,8 @@ class AnalyticsService:
                 months.add(MONTHS_RU[cur.month - 1])
                 cur = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
 
-        salary_service = SalaryService()
-        for m in months:
-            rows = await salary_service.get_salary(month=m)
-            for r in rows:
-                name = map_employee_by_code(r.name)
-                shift_counts[name] = shift_counts.get(name, 0) + r.shifts_total
+        if months:
+            shift_counts = _count_shifts_from_excel(list(months))
 
         df = await self._ensure_details_df()
         if df is None:
