@@ -155,7 +155,7 @@ export default function Analytics() {
       </button>
       <button
         className="bg-indigo-600 text-white px-3 py-2 rounded ml-2"
-        onClick={loadDetails}
+        onClick={() => loadDetails()}
       >
         Аналитика продаж
       </button>
@@ -255,7 +255,7 @@ export default function Analytics() {
             </select>
             <button
               className="bg-blue-600 text-white px-3 py-2 rounded"
-              onClick={loadDetails}
+              onClick={() => loadDetails()}
             >
               Фильтр
             </button>
