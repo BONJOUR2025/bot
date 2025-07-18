@@ -94,6 +94,12 @@ def create_app() -> FastAPI:
     incentive_service = IncentiveService()
     app.include_router(create_incentive_router(incentive_service), prefix="/api")
 
+    from .uniforms import create_uniform_router
+    from ..services.uniform_service import UniformService
+
+    uniform_service = UniformService()
+    app.include_router(create_uniform_router(uniform_service), prefix="/api")
+
     from .messages import create_message_router
     from ..services.template_service import TemplateService
 

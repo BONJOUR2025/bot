@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     bonuses_penalties_file: str = Field(
         "bonuses_penalties.json", env="BONUSES_PENALTIES_FILE"
     )
+    uniforms_file: str = Field("uniforms.json", env="UNIFORMS_FILE")
     admin_id: int = Field(0, env="ADMIN_ID")
     admin_chat_id: int = Field(5495663985, env="ADMIN_CHAT_ID")
     admin_login: str = Field("admin", env="ADMIN_LOGIN")
