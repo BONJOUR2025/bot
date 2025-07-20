@@ -9,7 +9,6 @@ const navStructure = [
       { to: '/admin/employees', label: 'Сотрудники' },
       { to: '/admin/vacations', label: 'Отпуска' },
       { to: '/admin/birthdays', label: 'Дни рождения' },
-      { to: '/admin/uniforms', label: 'Одежда' },
       { to: '/admin/assets', label: 'Имущество' },
     ],
   },

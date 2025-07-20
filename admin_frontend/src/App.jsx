@@ -10,7 +10,6 @@ import AnalyticsDetails from './pages/AnalyticsDetails';
 import Vacations from './pages/Vacations';
 import Birthdays from './pages/Birthdays';
 import Settings from './pages/Settings';
-import Uniforms from './pages/Uniforms';
 import Assets from './pages/Assets';
 import Dictionary from './pages/Dictionary';
 import Navigation from './components/Navigation.jsx';
@@ -31,7 +30,6 @@ export default function App() {
           <Route path="/admin/birthdays" element={<Birthdays />} />
           <Route path="/admin/analytics" element={<Analytics />} />
           <Route path="/admin/analytics-details" element={<AnalyticsDetails />} />
-          <Route path="/admin/uniforms" element={<Uniforms />} />
           <Route path="/admin/assets" element={<Assets />} />
           <Route path="/admin/dictionary" element={<Dictionary />} />
           <Route path="/admin/settings" element={<Settings />} />

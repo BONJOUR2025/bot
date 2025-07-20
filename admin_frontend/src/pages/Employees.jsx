@@ -311,7 +311,7 @@ export default function Employees() {
             </select>
             <input
               className="border p-2 w-full"
-              placeholder="Размер одежды"
+              placeholder="Размер формы"
               value={form.clothing_size}
               onChange={(e) => setForm({ ...form, clothing_size: e.target.value })}
             />

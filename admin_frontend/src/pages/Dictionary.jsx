@@ -21,8 +21,6 @@ const FIELDS = {
   asset_sizes: 'Размеры имущества',
   asset_statuses: 'Статусы имущества',
   asset_issuers: 'Ответственные за выдачу',
-  uniform_items: 'Предметы формы',
-  uniform_sizes: 'Размеры формы',
 };
 
 export default function Dictionary() {
