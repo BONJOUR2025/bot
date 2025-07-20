@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 
 from app.schemas.uniform import Uniform, UniformCreate, UniformUpdate
 from app.services.uniform_service import UniformService
+from app.services.employee_service import EmployeeService
 
 
-def create_uniform_router(service: UniformService) -> APIRouter:
+def create_uniform_router(service: UniformService, employee_service: EmployeeService) -> APIRouter:
     router = APIRouter(prefix="/uniforms", tags=["Uniforms"])
 
     @router.get("/", response_model=list[Uniform])
@@ -26,5 +27,11 @@ def create_uniform_router(service: UniformService) -> APIRouter:
     async def delete_uniform(item_id: str):
         await service.delete_uniform(item_id)
         return {"status": "deleted"}
+
+    @router.post("/kit")
+    async def create_kit(employee_ids: list[str] = Body(...)):
+        employees = [employee_service.service.get_employee(eid) for eid in employee_ids]
+        employees = [e for e in employees if e]
+        return await service.calculate_kit(employees)
 
     return router

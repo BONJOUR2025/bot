@@ -16,6 +16,8 @@ export default function Uniforms() {
   };
 
   const [list, setList] = useState([]);
+  const [itemOptions, setItemOptions] = useState([]);
+  const [sizeOptions, setSizeOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [filters, setFilters] = useState({ employee: '' });
   const [form, setForm] = useState(emptyForm);
@@ -40,6 +42,8 @@ export default function Uniforms() {
       const params = { employee_id: filters.employee || undefined };
       const res = await api.get('uniforms/', { params });
       setList(res.data);
+      setItemOptions(Array.from(new Set(res.data.map((i) => i.item).filter(Boolean))));
+      setSizeOptions(Array.from(new Set(res.data.map((i) => i.size).filter(Boolean))));
     } catch (err) {
       console.error(err);
     }
@@ -178,17 +182,29 @@ export default function Uniforms() {
               ))}
             </select>
             <input
+              list="uniform-items"
               className="border p-2 w-full"
               placeholder="Предмет"
               value={form.item}
               onChange={(e) => setForm({ ...form, item: e.target.value })}
             />
+            <datalist id="uniform-items">
+              {itemOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
             <input
+              list="uniform-sizes"
               className="border p-2 w-full"
               placeholder="Размер"
               value={form.size}
               onChange={(e) => setForm({ ...form, size: e.target.value })}
             />
+            <datalist id="uniform-sizes">
+              {sizeOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
             <input
               type="number"
               className="border p-2 w-full"

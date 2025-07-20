@@ -21,6 +21,13 @@ export default function Assets() {
   };
 
   const [list, setList] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [itemOptions, setItemOptions] = useState([]);
+  const [positionOptions, setPositionOptions] = useState([]);
+  const [departmentOptions, setDepartmentOptions] = useState([]);
+  const [sizeOptions, setSizeOptions] = useState([]);
+  const [statusOptions, setStatusOptions] = useState([]);
+  const [issuerOptions, setIssuerOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [filters, setFilters] = useState({ search: '', categories: [], dateFrom: '', dateTo: '' });
   const [form, setForm] = useState(emptyForm);
@@ -45,6 +52,13 @@ export default function Assets() {
       const params = { employee_id: filters.employee || undefined };
       const res = await api.get('assets/', { params });
       setList(res.data);
+      setCategoryOptions(Array.from(new Set(res.data.map((i) => i.category).filter(Boolean))));
+      setItemOptions(Array.from(new Set(res.data.map((i) => i.item_name).filter(Boolean))));
+      setPositionOptions(Array.from(new Set(res.data.map((i) => i.position).filter(Boolean))));
+      setDepartmentOptions(Array.from(new Set(res.data.map((i) => i.department).filter(Boolean))));
+      setSizeOptions(Array.from(new Set(res.data.map((i) => i.size).filter(Boolean))));
+      setStatusOptions(Array.from(new Set(res.data.map((i) => i.status).filter(Boolean))));
+      setIssuerOptions(Array.from(new Set(res.data.map((i) => i.issuer).filter(Boolean))));
     } catch (err) {
       console.error(err);
     }
@@ -221,17 +235,52 @@ export default function Assets() {
                 </option>
               ))}
             </select>
-            <input className="border p-2 w-full" placeholder="Должность" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
-            <input className="border p-2 w-full" placeholder="Подразделение" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-            <input className="border p-2 w-full" placeholder="Категория" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-            <input className="border p-2 w-full" placeholder="Предмет" value={form.item_name} onChange={(e) => setForm({ ...form, item_name: e.target.value })} />
-            <input className="border p-2 w-full" placeholder="Размер" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+            <input list="asset-positions" className="border p-2 w-full" placeholder="Должность" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+            <datalist id="asset-positions">
+              {positionOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+            <input list="asset-deps" className="border p-2 w-full" placeholder="Подразделение" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+            <datalist id="asset-deps">
+              {departmentOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+            <input list="asset-cats" className="border p-2 w-full" placeholder="Категория" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+            <datalist id="asset-cats">
+              {categoryOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+            <input list="asset-items" className="border p-2 w-full" placeholder="Предмет" value={form.item_name} onChange={(e) => setForm({ ...form, item_name: e.target.value })} />
+            <datalist id="asset-items">
+              {itemOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+            <input list="asset-sizes" className="border p-2 w-full" placeholder="Размер" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+            <datalist id="asset-sizes">
+              {sizeOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
             <input type="number" className="border p-2 w-full" placeholder="Количество" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
             <input type="date" className="border p-2 w-full" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} />
             <input type="date" className="border p-2 w-full" value={form.return_date} onChange={(e) => setForm({ ...form, return_date: e.target.value })} />
             <input type="number" className="border p-2 w-full" placeholder="Срок службы (мес.)" value={form.service_life} onChange={(e) => setForm({ ...form, service_life: Number(e.target.value) })} />
-            <input className="border p-2 w-full" placeholder="Статус" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} />
-            <input className="border p-2 w-full" placeholder="Ответственный" value={form.issuer} onChange={(e) => setForm({ ...form, issuer: e.target.value })} />
+            <input list="asset-status" className="border p-2 w-full" placeholder="Статус" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} />
+            <datalist id="asset-status">
+              {statusOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+            <input list="asset-issuer" className="border p-2 w-full" placeholder="Ответственный" value={form.issuer} onChange={(e) => setForm({ ...form, issuer: e.target.value })} />
+            <datalist id="asset-issuer">
+              {issuerOptions.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
             <div className="flex justify-end gap-2 pt-2">
               <button className="bg-gray-300 px-3 py-1 rounded" onClick={() => setShowForm(false)}>
                 Отмена
