@@ -1,6 +1,13 @@
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+from app.data.employee_repository import EmployeeRepository
+from app.data.payout_repository import PayoutRepository
+from app.data.vacation_repository import VacationRepository
+from app.data.incentive_repository import IncentiveRepository
+from app.data.asset_repository import AssetRepository
+from app.data.uniform_repository import UniformRepository
 
 
 class DictionaryService:
@@ -10,14 +17,69 @@ class DictionaryService:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
+    def _collect_dynamic(self) -> Dict[str, List[str]]:
+        """Gather unique values from existing system records."""
+        dynamic: Dict[str, List[str]] = {}
+
+        employees = EmployeeRepository().list_employees()
+        dynamic["positions"] = [e.position for e in employees if e.position]
+        dynamic["employee_statuses"] = [e.status.value for e in employees]
+
+        payouts = PayoutRepository().load_all()
+        dynamic["payout_types"] = [
+            p.get("payout_type") for p in payouts if p.get("payout_type")
+        ]
+        dynamic["payout_methods"] = [
+            p.get("method") for p in payouts if p.get("method")
+        ]
+        dynamic["payout_statuses"] = [
+            p.get("status") for p in payouts if p.get("status")
+        ]
+
+        vacations = VacationRepository().list()
+        dynamic["vacation_types"] = [v.get("type") for v in vacations if v.get("type")]
+
+        incentives = IncentiveRepository().list()
+        dynamic["incentive_types"] = [
+            i.get("type") for i in incentives if i.get("type")
+        ]
+
+        assets = AssetRepository().list()
+        dynamic["asset_categories"] = [
+            a.get("category") for a in assets if a.get("category")
+        ]
+        dynamic["asset_items"] = [
+            a.get("item_name") for a in assets if a.get("item_name")
+        ]
+        dynamic["asset_departments"] = [
+            a.get("department") for a in assets if a.get("department")
+        ]
+        dynamic["asset_sizes"] = [a.get("size") for a in assets if a.get("size")]
+        dynamic["asset_statuses"] = [a.get("status") for a in assets if a.get("status")]
+        dynamic["asset_issuers"] = [a.get("issuer") for a in assets if a.get("issuer")]
+
+        uniforms = UniformRepository().list()
+        dynamic["uniform_items"] = [u.get("item") for u in uniforms if u.get("item")]
+        dynamic["uniform_sizes"] = [u.get("size") for u in uniforms if u.get("size")]
+
+        return dynamic
+
     def load(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {}
         if self.path.exists():
             try:
                 with self.path.open("r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
             except Exception:
-                return {}
-        return {}
+                data = {}
+
+        dynamic = self._collect_dynamic()
+        for key, values in dynamic.items():
+            existing = set(data.get(key, []))
+            existing.update([v for v in values if v])
+            data[key] = sorted(existing)
+
+        return data
 
     def save(self, data: Dict[str, Any]) -> Dict[str, Any]:
         with self.path.open("w", encoding="utf-8") as f:
