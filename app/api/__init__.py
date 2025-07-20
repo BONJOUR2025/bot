@@ -123,6 +123,12 @@ def create_app() -> FastAPI:
     config_service = ConfigService()
     app.include_router(create_config_router(config_service), prefix="/api")
 
+    from .dictionary import create_dictionary_router
+    from ..services.dictionary_service import DictionaryService
+
+    dictionary_service = DictionaryService()
+    app.include_router(create_dictionary_router(dictionary_service), prefix="/api")
+
     from .analytics import create_analytics_router
     from ..services.firebird_service import FirebirdService
 

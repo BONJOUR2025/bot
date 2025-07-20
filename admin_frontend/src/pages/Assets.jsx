@@ -36,6 +36,7 @@ export default function Assets() {
   useEffect(() => {
     loadEmployees();
     load();
+    loadDictionary();
   }, []);
 
   async function loadEmployees() {
@@ -54,11 +55,19 @@ export default function Assets() {
       setList(res.data);
       setCategoryOptions(Array.from(new Set(res.data.map((i) => i.category).filter(Boolean))));
       setItemOptions(Array.from(new Set(res.data.map((i) => i.item_name).filter(Boolean))));
-      setPositionOptions(Array.from(new Set(res.data.map((i) => i.position).filter(Boolean))));
       setDepartmentOptions(Array.from(new Set(res.data.map((i) => i.department).filter(Boolean))));
       setSizeOptions(Array.from(new Set(res.data.map((i) => i.size).filter(Boolean))));
       setStatusOptions(Array.from(new Set(res.data.map((i) => i.status).filter(Boolean))));
       setIssuerOptions(Array.from(new Set(res.data.map((i) => i.issuer).filter(Boolean))));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadDictionary() {
+    try {
+      const res = await api.get('dictionary/');
+      setPositionOptions(res.data.positions || []);
     } catch (err) {
       console.error(err);
     }

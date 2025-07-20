@@ -9,41 +9,6 @@ import {
 import api from '../api';
 import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
 
-const POSITIONS = [
-  {
-    label: 'Производство',
-    options: [
-      'Закройщик',
-      'Затяжчик',
-      'Курьер',
-      'Мастер по ремонту',
-      'Мастер по химчистке',
-      'Модельер',
-      'Художник',
-    ],
-  },
-  {
-    label: 'Администрация и продажи',
-    options: [
-      'Администратор',
-      'Менеджер по работе с клиентами',
-      'Кассир',
-      'Специалист по работе с заказами',
-      'Консультант в шоуруме',
-    ],
-  },
-  {
-    label: 'Другое',
-    options: [
-      'Стажёр',
-      'Подменный сотрудник',
-      'Удалённый сотрудник',
-      'Директор',
-      'Технолог',
-    ],
-  },
-];
-
 export default function Employees() {
   const emptyForm = {
     id: '',
@@ -64,6 +29,7 @@ export default function Employees() {
   };
 
   const [employees, setEmployees] = useState([]);
+  const [positions, setPositions] = useState([]);
   const [filterName, setFilterName] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
   const [selected, setSelected] = useState([]);
@@ -72,12 +38,22 @@ export default function Employees() {
 
   useEffect(() => {
     load();
+    loadPositions();
   }, []);
 
   async function load() {
     try {
       const res = await api.get('employees/');
       setEmployees(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadPositions() {
+    try {
+      const res = await api.get('dictionary/');
+      setPositions(res.data.positions || []);
     } catch (err) {
       console.error(err);
     }
@@ -327,14 +303,10 @@ export default function Employees() {
               onChange={(e) => setForm({ ...form, position: e.target.value })}
             >
               <option value="">Не выбрано</option>
-              {POSITIONS.map((grp) => (
-                <optgroup key={grp.label} label={grp.label}>
-                  {grp.options.map((pos) => (
-                    <option key={pos} value={pos}>
-                      {pos}
-                    </option>
-                  ))}
-                </optgroup>
+              {positions.map((pos) => (
+                <option key={pos} value={pos}>
+                  {pos}
+                </option>
               ))}
             </select>
             <input
