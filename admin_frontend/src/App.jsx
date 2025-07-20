@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Employees from './pages/Employees';
 import Payouts from './pages/Payouts';
 import PayoutsControl from './pages/PayoutsControl';
@@ -13,27 +13,13 @@ import Settings from './pages/Settings';
 import Uniforms from './pages/Uniforms';
 import Assets from './pages/Assets';
 import Dictionary from './pages/Dictionary';
+import Navigation from './components/Navigation.jsx';
 
 export default function App() {
   return (
     <Router>
       <div className="container mx-auto p-4 space-y-6">
-        <nav className="flex flex-wrap gap-2 mb-4 bg-white p-3 rounded shadow">
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/employees">Сотрудники</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/payouts">Выплаты</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/payouts-control">Контроль выплат</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/incentives">Штрафы и премии</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/vacations">Отпуска</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/birthdays">Дни рождения</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/reports">Отчёты</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/broadcast">Рассылка</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/analytics">Аналитика</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/analytics-details">Подробная аналитика</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/uniforms">Одежда</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/assets">Имущество</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/dictionary">Словарь</Link>
-          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/settings">Настройки</Link>
-        </nav>
+        <Navigation />
         <Routes>
           <Route path="/admin/employees" element={<Employees />} />
           <Route path="/admin/payouts" element={<Payouts />} />
