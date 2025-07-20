@@ -52,6 +52,7 @@ export default function Employees() {
     phone: '',
     card_number: '',
     bank: '',
+    clothing_size: '',
     birthdate: '',
     note: '',
     status: 'active',
@@ -122,6 +123,7 @@ export default function Employees() {
       phone: form.phone,
       card_number: form.card_number || '',
       bank: form.bank || '',
+      clothing_size: form.clothing_size || '',
       birthdate: form.birthdate || null,
       note: form.note || '',
       status: form.status || 'active',
@@ -205,6 +207,7 @@ export default function Employees() {
               <th className="p-2 text-left">Телефон</th>
               <th className="p-2 text-left">День рождения</th>
               <th className="p-2 text-left">Должность</th>
+              <th className="p-2 text-left">Размер</th>
               <th className="p-2 text-left">Роль</th>
               <th className="p-2 text-left">Создан</th>
               <th className="p-2 text-left">История</th>
@@ -246,6 +249,7 @@ export default function Employees() {
                 <td className="p-2">{e.phone}</td>
                 <td className="p-2">{formatDateRu(e.birthdate)}</td>
                 <td className="p-2">{e.position}</td>
+                <td className="p-2">{e.clothing_size}</td>
                 <td className="p-2">{e.is_admin ? 'Админ' : 'Пользователь'}</td>
                 <td className="p-2">{new Date(e.created_at).toLocaleDateString()}</td>
                 <td className="p-2">
@@ -333,6 +337,12 @@ export default function Employees() {
                 </optgroup>
               ))}
             </select>
+            <input
+              className="border p-2 w-full"
+              placeholder="Размер одежды"
+              value={form.clothing_size}
+              onChange={(e) => setForm({ ...form, clothing_size: e.target.value })}
+            />
             <input
               type="date"
               className="border p-2 w-full"

@@ -98,7 +98,9 @@ def create_app() -> FastAPI:
     from ..services.uniform_service import UniformService
 
     uniform_service = UniformService()
-    app.include_router(create_uniform_router(uniform_service), prefix="/api")
+    app.include_router(
+        create_uniform_router(uniform_service, employee_service), prefix="/api"
+    )
 
     from .assets import create_asset_router
     from ..services.asset_service import AssetService

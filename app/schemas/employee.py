@@ -12,6 +12,7 @@ class EmployeeBase(BaseModel):
     is_admin: bool = False
     card_number: Optional[str] = ""
     bank: Optional[str] = ""
+    clothing_size: Optional[str] = ""
     birthdate: Optional[date] = None
     note: Optional[str] = ""
     photo_url: Optional[str] = ""
@@ -38,6 +39,7 @@ class Employee(BaseModel):
     name: str
     phone: str
     position: str = ""
+    clothing_size: str = ""
     is_admin: bool = False
     note: Optional[str] = None
     photo_url: Optional[str] = None
