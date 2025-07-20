@@ -11,6 +11,7 @@ import Vacations from './pages/Vacations';
 import Birthdays from './pages/Birthdays';
 import Settings from './pages/Settings';
 import Uniforms from './pages/Uniforms';
+import Assets from './pages/Assets';
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
           <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/analytics">Аналитика</Link>
           <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/analytics-details">Подробная аналитика</Link>
           <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/uniforms">Одежда</Link>
+          <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/assets">Имущество</Link>
           <Link className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded" to="/admin/settings">Настройки</Link>
         </nav>
         <Routes>
@@ -42,6 +44,7 @@ export default function App() {
           <Route path="/admin/analytics" element={<Analytics />} />
           <Route path="/admin/analytics-details" element={<AnalyticsDetails />} />
           <Route path="/admin/uniforms" element={<Uniforms />} />
+          <Route path="/admin/assets" element={<Assets />} />
           <Route path="/admin/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/admin/employees" replace />} />
         </Routes>
