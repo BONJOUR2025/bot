@@ -2,6 +2,29 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import api from '../api';
 
+const FIELDS = {
+  positions: 'Должности',
+  employee_statuses: 'Статусы сотрудников',
+  payout_types: 'Типы выплат',
+  payout_methods: 'Способы выплат',
+  payout_statuses: 'Статусы выплат',
+  payout_control_types: 'Типы заявок на выплаты',
+  payout_control_methods: 'Способы заявок на выплаты',
+  vacation_types: 'Типы отпусков',
+  incentive_types: 'Типы штрафов и премий',
+  broadcast_statuses: 'Статусы рассылки',
+  analytics_leader_options: 'Поля лидеров аналитики',
+  analytics_sort_options: 'Поля сортировки аналитики',
+  asset_categories: 'Категории имущества',
+  asset_items: 'Предметы имущества',
+  asset_departments: 'Подразделения',
+  asset_sizes: 'Размеры имущества',
+  asset_statuses: 'Статусы имущества',
+  asset_issuers: 'Ответственные за выдачу',
+  uniform_items: 'Предметы формы',
+  uniform_sizes: 'Размеры формы',
+};
+
 export default function Dictionary() {
   const { register, handleSubmit, reset } = useForm({ defaultValues: {} });
   const [loaded, setLoaded] = useState(false);
@@ -13,7 +36,11 @@ export default function Dictionary() {
   async function load() {
     try {
       const res = await api.get('dictionary/');
-      reset({ positions: (res.data.positions || []).join(', ') });
+      const defaults = {};
+      Object.keys(FIELDS).forEach((key) => {
+        defaults[key] = (res.data[key] || []).join(', ');
+      });
+      reset(defaults);
       setLoaded(true);
     } catch (err) {
       console.error(err);
@@ -21,12 +48,13 @@ export default function Dictionary() {
   }
 
   async function save(values) {
-    const payload = {
-      positions: values.positions
+    const payload = {};
+    Object.keys(FIELDS).forEach((key) => {
+      payload[key] = values[key]
         .split(',')
         .map((s) => s.trim())
-        .filter(Boolean),
-    };
+        .filter(Boolean);
+    });
     try {
       await api.patch('dictionary/', payload);
       alert('Сохранено');
@@ -44,14 +72,16 @@ export default function Dictionary() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <h2 className="text-2xl font-semibold">Словарь</h2>
       <form onSubmit={handleSubmit(save)} className="space-y-4">
-        <section className="border rounded p-3 space-y-2">
-          <h3 className="font-semibold">Должности</h3>
-          <textarea
-            className="border p-2 w-full"
-            placeholder="Должности, через запятую"
-            {...register('positions')}
-          />
-        </section>
+        {Object.entries(FIELDS).map(([key, label]) => (
+          <section key={key} className="border rounded p-3 space-y-2">
+            <h3 className="font-semibold">{label}</h3>
+            <textarea
+              className="border p-2 w-full"
+              placeholder={`${label}, через запятую`}
+              {...register(key)}
+            />
+          </section>
+        ))}
         <button type="submit" className="bg-blue-600 text-white px-3 py-2 rounded">
           Сохранить
         </button>

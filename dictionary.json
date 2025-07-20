@@ -17,5 +17,67 @@
     "Удалённый сотрудник",
     "Директор",
     "Технолог"
-  ]
+  ],
+  "employee_statuses": [
+    "active",
+    "inactive"
+  ],
+  "payout_types": [
+    "Аванс",
+    "Зарплата"
+  ],
+  "payout_methods": [
+    "💳 На карту",
+    "🏦 Из кассы",
+    "🤝 Наличными"
+  ],
+  "payout_statuses": [
+    "Ожидает",
+    "Одобрено",
+    "Отклонено",
+    "Выплачено"
+  ],
+  "payout_control_types": [
+    "advance",
+    "final",
+    "compensation"
+  ],
+  "payout_control_methods": [
+    "card",
+    "cash",
+    "account"
+  ],
+  "vacation_types": [
+    "Отпуск",
+    "Больничный"
+  ],
+  "incentive_types": [
+    "bonus",
+    "penalty"
+  ],
+  "broadcast_statuses": [
+    "active",
+    "inactive"
+  ],
+  "analytics_leader_options": [
+    "По косметике (среднее в день)",
+    "По косметике (общая сумма)",
+    "По ремонту (среднее в день)",
+    "По ремонту (общая сумма)",
+    "По обуви (общая сумма)",
+    "По обуви (количество)",
+    "По совокупной выручке"
+  ],
+  "analytics_sort_options": [
+    "По сотруднику",
+    "По сумме"
+  ],
+  "asset_categories": [],
+  "asset_items": [],
+  "asset_departments": [],
+  "asset_sizes": [],
+  "asset_statuses": [],
+  "asset_issuers": [],
+  "uniform_items": [],
+  "uniform_sizes": []
 }
