@@ -7,7 +7,6 @@ from app.data.payout_repository import PayoutRepository
 from app.data.vacation_repository import VacationRepository
 from app.data.incentive_repository import IncentiveRepository
 from app.data.asset_repository import AssetRepository
-from app.data.uniform_repository import UniformRepository
 from app.core.enums import EmployeeStatus, PAYOUT_STATUSES
 from app.core.constants import PAYOUT_METHODS, PAYOUT_TYPES
 
@@ -69,9 +68,6 @@ class DictionaryService:
         dynamic["asset_statuses"] = [a.get("status") for a in assets if a.get("status")]
         dynamic["asset_issuers"] = [a.get("issuer") for a in assets if a.get("issuer")]
 
-        uniforms = UniformRepository().list()
-        dynamic["uniform_items"] = [u.get("item") for u in uniforms if u.get("item")]
-        dynamic["uniform_sizes"] = [u.get("size") for u in uniforms if u.get("size")]
 
         return dynamic
 
