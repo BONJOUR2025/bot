@@ -16,7 +16,7 @@ export default function Assets() {
     issue_date: new Date().toISOString().slice(0, 10),
     return_date: '',
     service_life: '',
-    status: 'issued',
+    status: '',
     issuer: '',
   };
 
@@ -235,36 +235,66 @@ export default function Assets() {
                 </option>
               ))}
             </select>
-            <input list="asset-positions" className="border p-2 w-full" placeholder="Должность" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
-            <datalist id="asset-positions">
+            <select
+              className="border p-2 w-full"
+              value={form.position}
+              onChange={(e) => setForm({ ...form, position: e.target.value })}
+            >
+              <option value="">Должность</option>
               {positionOptions.map((o) => (
-                <option key={o} value={o} />
+                <option key={o} value={o}>
+                  {o}
+                </option>
               ))}
-            </datalist>
-            <input list="asset-deps" className="border p-2 w-full" placeholder="Подразделение" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-            <datalist id="asset-deps">
+            </select>
+            <select
+              className="border p-2 w-full"
+              value={form.department}
+              onChange={(e) => setForm({ ...form, department: e.target.value })}
+            >
+              <option value="">Подразделение</option>
               {departmentOptions.map((o) => (
-                <option key={o} value={o} />
+                <option key={o} value={o}>
+                  {o}
+                </option>
               ))}
-            </datalist>
-            <input list="asset-cats" className="border p-2 w-full" placeholder="Категория" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-            <datalist id="asset-cats">
+            </select>
+            <select
+              className="border p-2 w-full"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            >
+              <option value="">Категория</option>
               {categoryOptions.map((o) => (
-                <option key={o} value={o} />
+                <option key={o} value={o}>
+                  {o}
+                </option>
               ))}
-            </datalist>
-            <input list="asset-items" className="border p-2 w-full" placeholder="Предмет" value={form.item_name} onChange={(e) => setForm({ ...form, item_name: e.target.value })} />
-            <datalist id="asset-items">
+            </select>
+            <select
+              className="border p-2 w-full"
+              value={form.item_name}
+              onChange={(e) => setForm({ ...form, item_name: e.target.value })}
+            >
+              <option value="">Предмет</option>
               {itemOptions.map((o) => (
-                <option key={o} value={o} />
+                <option key={o} value={o}>
+                  {o}
+                </option>
               ))}
-            </datalist>
-            <input list="asset-sizes" className="border p-2 w-full" placeholder="Размер" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
-            <datalist id="asset-sizes">
+            </select>
+            <select
+              className="border p-2 w-full"
+              value={form.size}
+              onChange={(e) => setForm({ ...form, size: e.target.value })}
+            >
+              <option value="">Размер</option>
               {sizeOptions.map((o) => (
-                <option key={o} value={o} />
+                <option key={o} value={o}>
+                  {o}
+                </option>
               ))}
-            </datalist>
+            </select>
             <input type="number" className="border p-2 w-full" placeholder="Количество" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
             <input type="date" className="border p-2 w-full" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} />
             <input type="date" className="border p-2 w-full" value={form.return_date} onChange={(e) => setForm({ ...form, return_date: e.target.value })} />
