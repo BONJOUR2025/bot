@@ -71,5 +71,13 @@
   "analytics_sort_options": [
     "По сотруднику",
     "По сумме"
-  ]
+  ],
+  "asset_categories": [],
+  "asset_items": [],
+  "asset_departments": [],
+  "asset_sizes": [],
+  "asset_statuses": [],
+  "asset_issuers": [],
+  "uniform_items": [],
+  "uniform_sizes": []
 }

@@ -15,6 +15,14 @@ const FIELDS = {
   broadcast_statuses: 'Статусы рассылки',
   analytics_leader_options: 'Поля лидеров аналитики',
   analytics_sort_options: 'Поля сортировки аналитики',
+  asset_categories: 'Категории имущества',
+  asset_items: 'Предметы имущества',
+  asset_departments: 'Подразделения',
+  asset_sizes: 'Размеры имущества',
+  asset_statuses: 'Статусы имущества',
+  asset_issuers: 'Ответственные за выдачу',
+  uniform_items: 'Предметы формы',
+  uniform_sizes: 'Размеры формы',
 };
 
 export default function Dictionary() {
