@@ -138,3 +138,9 @@ class EmployeeAPIService:
             raise HTTPException(status_code=404, detail="Employee not found")
         self.service.remove_employee(employee_id)
         return {"status": "deleted"}
+
+    async def export_employees_pdf(self) -> bytes:
+        employees = self.service.list_employees()
+        from app.services.pdf_profile import generate_employees_list_pdf
+
+        return generate_employees_list_pdf(employees)
