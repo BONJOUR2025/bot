@@ -33,6 +33,7 @@ export default function Employees() {
   const [positions, setPositions] = useState([]);
   const [filterName, setFilterName] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
+  const [sort, setSort] = useState('');
   const [selected, setSelected] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
@@ -135,11 +136,32 @@ export default function Employees() {
     }
   }
 
+  async function downloadPdf() {
+    try {
+      const res = await api.get('employees/export.pdf', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'employees.pdf');
+      document.body.appendChild(link);
+      link.click();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   const filtered = employees.filter(
     (e) =>
       e.full_name.toLowerCase().includes(filterName.toLowerCase()) &&
       e.phone.toLowerCase().includes(filterPhone.toLowerCase())
   );
+
+  const sortedList = [...filtered];
+  if (sort === 'name') {
+    sortedList.sort((a, b) => a.full_name.localeCompare(b.full_name));
+  } else if (sort === 'position') {
+    sortedList.sort((a, b) => a.position.localeCompare(b.position));
+  }
 
   return (
     <div className="space-y-6 max-w-full mx-auto">
@@ -158,6 +180,21 @@ export default function Employees() {
           value={filterPhone}
           onChange={(e) => setFilterPhone(e.target.value)}
         />
+        <select
+          className="border p-2"
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+        >
+          <option value="">Без сортировки</option>
+          <option value="name">По имени</option>
+          <option value="position">По должности</option>
+        </select>
+        <button
+          className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-1"
+          onClick={downloadPdf}
+        >
+          <FileDown size={16} /> Экспорт PDF
+        </button>
         <button
           className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-1"
           onClick={startCreate}
@@ -191,7 +228,7 @@ export default function Employees() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {filtered.map((e) => (
+            {sortedList.map((e) => (
               <tr
                 key={e.id}
                 className={`${e.is_admin ? 'bg-orange-50' : ''} ${

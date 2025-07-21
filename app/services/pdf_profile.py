@@ -63,3 +63,33 @@ def generate_employee_pdf(
         pdf.cell(0, 10, safe(f"{status}: {count}"), ln=True)
 
     return pdf.output(dest="S").encode("latin-1")
+
+
+def generate_employees_list_pdf(employees) -> bytes:
+    """Generate a PDF listing all employees."""
+
+    pdf = FPDF()
+    pdf.add_page()
+
+    font_path = "fonts/DejaVuSans.ttf"
+
+    def safe(text: str) -> str:
+        if os.path.exists(font_path):
+            return str(text)
+        return str(text).encode("ascii", "ignore").decode("ascii")
+
+    if os.path.exists(font_path):
+        pdf.add_font("DejaVu", style="", fname=font_path, uni=True)
+        pdf.set_font("DejaVu", size=12)
+    else:
+        pdf.set_font("Helvetica", size=12)
+
+    pdf.cell(0, 10, safe("EMPLOYEE LIST"), ln=True)
+
+    for emp in employees:
+        line = safe(
+            f"{getattr(emp, 'full_name', '')} | {emp.position} | {emp.phone}"
+        )
+        pdf.cell(0, 10, line, ln=True)
+
+    return pdf.output(dest="S").encode("latin-1")
