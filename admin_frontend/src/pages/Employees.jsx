@@ -250,7 +250,7 @@ export default function Employees() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan="10" className="p-4 text-center text-gray-500">
+                <td colSpan="12" className="p-4 text-center text-gray-500">
                   Нет сотрудников
                 </td>
               </tr>
