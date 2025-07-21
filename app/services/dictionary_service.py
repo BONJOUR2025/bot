@@ -58,14 +58,8 @@ class DictionaryService:
         ]
 
         assets = AssetRepository().list()
-        dynamic["asset_categories"] = [
-            a.get("category") for a in assets if a.get("category")
-        ]
         dynamic["asset_items"] = [
             a.get("item_name") for a in assets if a.get("item_name")
-        ]
-        dynamic["asset_departments"] = [
-            a.get("department") for a in assets if a.get("department")
         ]
         dynamic["asset_sizes"] = [a.get("size") for a in assets if a.get("size")]
         dynamic["asset_statuses"] = [a.get("status") for a in assets if a.get("status")]

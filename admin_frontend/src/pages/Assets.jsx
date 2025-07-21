@@ -8,8 +8,6 @@ export default function Assets() {
     employee_id: '',
     employee_name: '',
     position: '',
-    department: '',
-    category: '',
     item_name: '',
     size: '',
     quantity: 1,
@@ -21,15 +19,13 @@ export default function Assets() {
   };
 
   const [list, setList] = useState([]);
-  const [categoryOptions, setCategoryOptions] = useState([]);
   const [itemOptions, setItemOptions] = useState([]);
   const [positionOptions, setPositionOptions] = useState([]);
-  const [departmentOptions, setDepartmentOptions] = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
   const [statusOptions, setStatusOptions] = useState([]);
   const [issuerOptions, setIssuerOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [filters, setFilters] = useState({ search: '', categories: [], dateFrom: '', dateTo: '' });
+  const [filters, setFilters] = useState({ search: '', employee: '', dateFrom: '', dateTo: '' });
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
 
@@ -53,9 +49,7 @@ export default function Assets() {
       const params = { employee_id: filters.employee || undefined };
       const res = await api.get('assets/', { params });
       setList(res.data);
-      setCategoryOptions(Array.from(new Set(res.data.map((i) => i.category).filter(Boolean))));
       setItemOptions(Array.from(new Set(res.data.map((i) => i.item_name).filter(Boolean))));
-      setDepartmentOptions(Array.from(new Set(res.data.map((i) => i.department).filter(Boolean))));
       setSizeOptions(Array.from(new Set(res.data.map((i) => i.size).filter(Boolean))));
       setStatusOptions(Array.from(new Set(res.data.map((i) => i.status).filter(Boolean))));
       setIssuerOptions(Array.from(new Set(res.data.map((i) => i.issuer).filter(Boolean))));
@@ -116,20 +110,22 @@ export default function Assets() {
   function handleSelect(id) {
     const emp = employees.find((e) => String(e.id) === String(id));
     if (emp) {
-      setForm((f) => ({ ...f, employee_id: emp.id, employee_name: emp.full_name || emp.name }));
+      setForm((f) => ({
+        ...f,
+        employee_id: emp.id,
+        employee_name: emp.full_name || emp.name,
+        position: emp.position || '',
+        size: emp.clothing_size || '',
+      }));
     }
   }
 
-  const categories = Array.from(new Set(list.map((i) => i.category)));
-
   const aggregated = {
-    totalByCategory: {},
     employeesWithAssets: new Set(),
     needReplacement: 0,
     overdue: 0,
   };
   for (const item of list) {
-    aggregated.totalByCategory[item.category] = (aggregated.totalByCategory[item.category] || 0) + item.quantity;
     aggregated.employeesWithAssets.add(item.employee_id);
     if (item.status === 'replace') aggregated.needReplacement += 1;
     if (item.status === 'overdue') aggregated.overdue += 1;
@@ -169,8 +165,6 @@ export default function Assets() {
             <tr>
               <th className="p-2 text-left">ФИО</th>
               <th className="p-2 text-left">Должность</th>
-              <th className="p-2 text-left">Подразделение</th>
-              <th className="p-2 text-left">Категория</th>
               <th className="p-2 text-left">Наименование</th>
               <th className="p-2 text-left">Размер</th>
               <th className="p-2 text-left">Кол-во</th>
@@ -187,8 +181,6 @@ export default function Assets() {
               <tr key={u.id} className="hover:bg-gray-50">
                 <td className="p-2">{u.employee_name}</td>
                 <td className="p-2">{u.position}</td>
-                <td className="p-2">{u.department}</td>
-                <td className="p-2">{u.category}</td>
                 <td className="p-2">{u.item_name}</td>
                 <td className="p-2">{u.size}</td>
                 <td className="p-2">{u.quantity}</td>
@@ -209,7 +201,7 @@ export default function Assets() {
             ))}
             {list.length === 0 && (
               <tr>
-                <td colSpan="13" className="p-4 text-center text-gray-500">
+                <td colSpan="11" className="p-4 text-center text-gray-500">
                   Нет данных
                 </td>
               </tr>
@@ -221,11 +213,6 @@ export default function Assets() {
       <div className="border rounded p-3 space-y-2">
         <h3 className="font-semibold">Агрегированная информация</h3>
         <ul className="list-disc pl-4">
-          {Object.entries(aggregated.totalByCategory).map(([k, v]) => (
-            <li key={k}>
-              {k}: {v}
-            </li>
-          ))}
           <li>Сотрудников с имуществом: {aggregated.employeesWithAssets.size}</li>
           <li>Требует замены: {aggregated.needReplacement}</li>
           <li>Просрочено: {aggregated.overdue}</li>
@@ -251,30 +238,6 @@ export default function Assets() {
             >
               <option value="">Должность</option>
               {positionOptions.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-            <select
-              className="border p-2 w-full"
-              value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
-            >
-              <option value="">Подразделение</option>
-              {departmentOptions.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-            <select
-              className="border p-2 w-full"
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-            >
-              <option value="">Категория</option>
-              {categoryOptions.map((o) => (
                 <option key={o} value={o}>
                   {o}
                 </option>
