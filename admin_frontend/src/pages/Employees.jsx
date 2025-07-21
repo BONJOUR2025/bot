@@ -12,6 +12,7 @@ import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
 export default function Employees() {
   const emptyForm = {
     id: '',
+    id_original: '',
     name: '',
     full_name: '',
     phone: '',
@@ -65,12 +66,12 @@ export default function Employees() {
   }
 
   function startCreate() {
-    setForm(emptyForm);
+    setForm({ ...emptyForm, id_original: '' });
     setShowForm(true);
   }
 
   function startEdit(emp) {
-    setForm({ ...emp, id: emp.id });
+    setForm({ ...emp, id: emp.id, id_original: emp.id });
     setShowForm(true);
   }
 
@@ -107,8 +108,8 @@ export default function Employees() {
       is_admin: form.is_admin,
     };
     try {
-      if (form.id) {
-        await api.put(`employees/${form.id}`, payload);
+      if (form.id_original) {
+        await api.put(`employees/${form.id_original}`, { id: form.id, ...payload });
       } else {
         payload.id = form.id || Date.now().toString();
         await api.post('employees/', payload);
@@ -269,7 +270,6 @@ export default function Employees() {
               className="border p-2 w-full"
               placeholder="ID"
               value={form.id}
-              disabled={!!form.id}
               onChange={(e) => setForm({ ...form, id: e.target.value })}
             />
             <input

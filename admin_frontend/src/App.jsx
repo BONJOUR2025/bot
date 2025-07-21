@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
 import Payouts from './pages/Payouts';
 import PayoutsControl from './pages/PayoutsControl';
@@ -20,6 +21,7 @@ export default function App() {
       <div className="mx-auto max-w-full p-4 space-y-6">
         <Navigation />
         <Routes>
+          <Route path="/admin" element={<Dashboard />} />
           <Route path="/admin/employees" element={<Employees />} />
           <Route path="/admin/payouts" element={<Payouts />} />
           <Route path="/admin/payouts-control" element={<PayoutsControl />} />
@@ -33,7 +35,7 @@ export default function App() {
           <Route path="/admin/assets" element={<Assets />} />
           <Route path="/admin/dictionary" element={<Dictionary />} />
           <Route path="/admin/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/admin/employees" replace />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
         </Routes>
       </div>
     </Router>
