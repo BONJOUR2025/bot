@@ -17,7 +17,7 @@ import Navigation from './components/Navigation.jsx';
 export default function App() {
   return (
     <Router>
-      <div className="container mx-auto p-4 space-y-6">
+      <div className="mx-auto max-w-full p-4 space-y-6">
         <Navigation />
         <Routes>
           <Route path="/admin/employees" element={<Employees />} />

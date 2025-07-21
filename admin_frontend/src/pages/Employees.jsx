@@ -141,7 +141,7 @@ export default function Employees() {
   );
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-full mx-auto">
       <h2 className="text-2xl font-semibold">Сотрудники</h2>
       <UpcomingBirthdays />
       <div className="flex flex-wrap gap-2 items-center">
