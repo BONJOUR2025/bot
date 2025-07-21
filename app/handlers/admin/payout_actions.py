@@ -128,10 +128,11 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Editing message is optional; continue without raising
 
     if request_to_approve["method"] == "💳 На карту":
+        card = request_to_approve.get("card_number") or request_to_approve.get("phone", "")
         cashier_text = (
             f"📤 Запрос на перевод:\n\n"
             f"👤 {request_to_approve['name']}\n"
-            f"📱 {request_to_approve['phone']}\n"
+            f"💳 {card}\n"
             f"🏦 {request_to_approve['bank']}\n"
             f"💰 {request_to_approve['amount']} ₽\n"
             f"📂 {payout_type}"

@@ -41,6 +41,13 @@ async def request_payout_start(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return ConversationHandler.END
 
+    if not user.get("card_number"):
+        await update.message.reply_text(
+            "❌ У вас не указан номер карты. Пожалуйста, обратитесь к администратору.",
+            reply_markup=ReplyKeyboardMarkup([["🏠 Домой"]], resize_keyboard=True),
+        )
+        return ConversationHandler.END
+
     context.user_data["payout_data"] = {
         "user_id": user_id,
         "name": user.get("name", ""),
@@ -159,6 +166,7 @@ async def confirm_card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         data.get("user_id"),
         data.get("name", ""),
         data.get("phone", ""),
+        data.get("card_number", ""),
         data.get("bank", ""),
         data.get("amount"),
         data.get("method"),

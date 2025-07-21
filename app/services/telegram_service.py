@@ -207,7 +207,7 @@ class TelegramService:
         text = (
             "📥 Новый запрос на выплату:\n\n"
             f"👤 {payout['name']}\n"
-            f"📱 {payout['phone']}\n"
+            f"💳 {payout.get('card_number', payout.get('phone', ''))}\n"
             f"🏦 {payout['bank']}\n"
             f"💰 Сумма: {payout['amount']} ₽\n"
             f"💳 Метод: {payout['method']}\n"
