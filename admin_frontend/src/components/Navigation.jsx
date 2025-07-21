@@ -52,10 +52,18 @@ export default function Navigation() {
       >
         {open ? <X size={20} /> : <Menu size={20} />}
       </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/50 sm:hidden"
+          onClick={close}
+        />
+      )}
+
       <nav
         className={`${
-          open ? 'block' : 'hidden'
-        } sm:flex flex-wrap gap-2 bg-white p-3 rounded shadow`}
+          open ? 'translate-x-0' : '-translate-x-full'
+        } sm:translate-x-0 transition-transform sm:flex flex-wrap gap-2 fixed sm:static top-0 left-0 h-full sm:h-auto w-64 sm:w-auto bg-white p-3 rounded sm:rounded-none shadow`}
       >
         {navStructure.map((cat) => (
           <div key={cat.name} className="relative group">
