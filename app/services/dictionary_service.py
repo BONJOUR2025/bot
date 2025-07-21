@@ -33,6 +33,7 @@ class DictionaryService:
 
         employees = EmployeeRepository().list_employees()
         dynamic["positions"] = [e.position for e in employees if e.position]
+        dynamic["workplaces"] = [e.workplace for e in employees if e.workplace]
         dynamic["employee_statuses"] = [e.status.value for e in employees]
 
         payouts = PayoutRepository().load_all()

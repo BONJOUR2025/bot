@@ -18,6 +18,7 @@
     "Директор",
     "Технолог"
   ],
+  "workplaces": [],
   "employee_statuses": [
     "active",
     "inactive"

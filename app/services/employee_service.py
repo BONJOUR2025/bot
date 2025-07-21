@@ -92,6 +92,7 @@ class EmployeeAPIService:
             full_name=data.full_name or "",
             phone=data.phone or "",
             position=data.position or "",
+            workplace=data.workplace or "",
             is_admin=data.is_admin or False,
             card_number=data.card_number or "",
             bank=data.bank or "",

@@ -9,6 +9,7 @@ class EmployeeBase(BaseModel):
     full_name: Optional[str] = ""
     phone: Optional[str] = ""
     position: Optional[str] = ""
+    workplace: Optional[str] = ""
     is_admin: bool = False
     card_number: Optional[str] = ""
     bank: Optional[str] = ""
@@ -39,7 +40,9 @@ class Employee(BaseModel):
     name: str
     phone: str
     position: str = ""
+    workplace: str = ""
     clothing_size: str = ""
     is_admin: bool = False
     note: Optional[str] = None
     photo_url: Optional[str] = None
+

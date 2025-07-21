@@ -88,7 +88,7 @@ def generate_employees_list_pdf(employees) -> bytes:
 
     for emp in employees:
         line = safe(
-            f"{getattr(emp, 'full_name', '')} | {emp.position} | {emp.phone}"
+            f"{getattr(emp, 'full_name', '')} | {emp.position} | {emp.workplace} | {emp.phone}"
         )
         pdf.cell(0, 10, line, ln=True)
 

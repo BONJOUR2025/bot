@@ -71,6 +71,7 @@ class EmployeeRepository:
                 "full_name": data.get("full_name", ""),
                 "phone": data.get("phone", ""),
                 "position": data.get("position", ""),
+                "workplace": data.get("workplace", ""),
                 "is_admin": data.get("is_admin", False),
                 "card_number": data.get("card_number", ""),
                 "bank": data.get("bank", ""),
