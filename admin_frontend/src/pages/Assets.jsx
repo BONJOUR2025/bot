@@ -62,6 +62,10 @@ export default function Assets() {
     try {
       const res = await api.get('dictionary/');
       setPositionOptions(res.data.positions || []);
+      setItemOptions((prev) => Array.from(new Set([...(prev || []), ...((res.data.asset_items || []))])));
+      setSizeOptions((prev) => Array.from(new Set([...(prev || []), ...((res.data.asset_sizes || []))])));
+      setStatusOptions((prev) => Array.from(new Set([...(prev || []), ...((res.data.asset_statuses || []))])));
+      setIssuerOptions((prev) => Array.from(new Set([...(prev || []), ...((res.data.asset_issuers || []))])));
     } catch (err) {
       console.error(err);
     }
