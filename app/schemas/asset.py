@@ -7,8 +7,6 @@ class Asset(BaseModel):
     employee_id: str
     employee_name: str
     position: Optional[str] = ""
-    department: Optional[str] = ""
-    category: str
     item_name: str
     size: Optional[str] = ""
     quantity: int = 1
@@ -23,8 +21,6 @@ class AssetCreate(BaseModel):
     employee_id: str
     employee_name: str
     position: Optional[str] = ""
-    department: Optional[str] = ""
-    category: str
     item_name: str
     size: Optional[str] = ""
     quantity: int = 1
@@ -39,8 +35,6 @@ class AssetUpdate(BaseModel):
     employee_id: Optional[str] = None
     employee_name: Optional[str] = None
     position: Optional[str] = None
-    department: Optional[str] = None
-    category: Optional[str] = None
     item_name: Optional[str] = None
     size: Optional[str] = None
     quantity: Optional[int] = None
