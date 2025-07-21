@@ -20,6 +20,7 @@ class Employee:
     is_admin: bool = False
     card_number: str = ""
     bank: str = ""
+    work_place: str = ""
     clothing_size: str = ""
     birthdate: Optional[date] = None
     note: str = ""

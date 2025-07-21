@@ -74,6 +74,7 @@ class EmployeeRepository:
                 "is_admin": data.get("is_admin", False),
                 "card_number": data.get("card_number", ""),
                 "bank": data.get("bank", ""),
+                "work_place": data.get("work_place", ""),
                 "clothing_size": data.get("clothing_size", ""),
                 "birthdate": self._parse_date(data.get("birthdate")),
                 "note": data.get("note", ""),

@@ -12,7 +12,8 @@
     "photo_url": "",
     "status": "inactive",
     "created_at": "2025-07-01T13:10:51.486069",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "5111123471": {
     "name": "Анастасия 2602",
@@ -27,7 +28,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486078",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "1565339213": {
     "name": "Александр 1505",
@@ -42,7 +44,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486082",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "501393726": {
     "name": "Полина 5984",
@@ -57,7 +60,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486086",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "831200791": {
     "name": "Полина 1802",
@@ -72,7 +76,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486089",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "1765220057": {
     "name": "Эмиль 2404",
@@ -87,7 +92,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486093",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "1782368094": {
     "name": "Вероника 1996",
@@ -102,7 +108,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486096",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "7385498306": {
     "name": "Екатерина 0104",
@@ -117,7 +124,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486099",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "432793033": {
     "name": "Арина 7272",
@@ -132,7 +140,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486102",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "1674595510": {
     "name": "Ирина 2006",
@@ -147,7 +156,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486105",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "805091546": {
     "name": "Юля 3007",
@@ -162,7 +172,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486109",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "948256529": {
     "name": "Наталья 0704",
@@ -177,7 +188,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486112",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "462581912": {
     "name": "Ира 2405",
@@ -192,7 +204,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486115",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "6270418859": {
     "name": "Катя 2201",
@@ -207,7 +220,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486118",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "1586122212": {
     "name": "Алекс 2104",
@@ -222,7 +236,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486122",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "30000": {
     "name": "Мария",
@@ -237,7 +252,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486125",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "20456189804": {
     "name": "Рудем",
@@ -252,7 +268,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486128",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "2045618984": {
     "name": "Никита",
@@ -267,7 +284,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486132",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "1279494125": {
     "name": "Валентина",
@@ -282,7 +300,8 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486135",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   },
   "1037475044": {
     "name": "Карина",
@@ -297,6 +316,7 @@
     "photo_url": "",
     "status": "active",
     "created_at": "2025-07-01T13:10:51.486139",
-    "clothing_size": ""
+    "clothing_size": "",
+    "work_place": ""
   }
 }
