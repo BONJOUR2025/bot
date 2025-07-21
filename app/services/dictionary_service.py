@@ -62,8 +62,6 @@ class DictionaryService:
             a.get("item_name") for a in assets if a.get("item_name")
         ]
         dynamic["asset_sizes"] = [a.get("size") for a in assets if a.get("size")]
-        dynamic["asset_statuses"] = [a.get("status") for a in assets if a.get("status")]
-        dynamic["asset_issuers"] = [a.get("issuer") for a in assets if a.get("issuer")]
 
 
         return dynamic

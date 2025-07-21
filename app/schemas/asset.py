@@ -13,8 +13,6 @@ class Asset(BaseModel):
     issue_date: str
     return_date: Optional[str] = None
     service_life: Optional[int] = None
-    status: str = "issued"
-    issuer: Optional[str] = ""
 
 
 class AssetCreate(BaseModel):
@@ -27,8 +25,6 @@ class AssetCreate(BaseModel):
     issue_date: str
     return_date: Optional[str] = None
     service_life: Optional[int] = None
-    status: str = "issued"
-    issuer: Optional[str] = ""
 
 
 class AssetUpdate(BaseModel):
@@ -41,5 +37,4 @@ class AssetUpdate(BaseModel):
     issue_date: Optional[str] = None
     return_date: Optional[str] = None
     service_life: Optional[int] = None
-    status: Optional[str] = None
-    issuer: Optional[str] = None
+
