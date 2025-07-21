@@ -18,8 +18,6 @@ const FIELDS = {
   analytics_sort_options: 'Поля сортировки аналитики',
   asset_items: 'Предметы имущества',
   asset_sizes: 'Размеры имущества',
-  asset_statuses: 'Статусы имущества',
-  asset_issuers: 'Ответственные за выдачу',
 };
 
 export default function Dictionary() {

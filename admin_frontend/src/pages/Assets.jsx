@@ -14,16 +14,12 @@ export default function Assets() {
     issue_date: new Date().toISOString().slice(0, 10),
     return_date: '',
     service_life: '',
-    status: '',
-    issuer: '',
   };
 
   const [list, setList] = useState([]);
   const [itemOptions, setItemOptions] = useState([]);
   const [positionOptions, setPositionOptions] = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
-  const [statusOptions, setStatusOptions] = useState([]);
-  const [issuerOptions, setIssuerOptions] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [filters, setFilters] = useState({ search: '', employee: '', dateFrom: '', dateTo: '' });
   const [form, setForm] = useState(emptyForm);
@@ -51,8 +47,7 @@ export default function Assets() {
       setList(res.data);
       setItemOptions(Array.from(new Set(res.data.map((i) => i.item_name).filter(Boolean))));
       setSizeOptions(Array.from(new Set(res.data.map((i) => i.size).filter(Boolean))));
-      setStatusOptions(Array.from(new Set(res.data.map((i) => i.status).filter(Boolean))));
-      setIssuerOptions(Array.from(new Set(res.data.map((i) => i.issuer).filter(Boolean))));
+      
     } catch (err) {
       console.error(err);
     }
@@ -64,8 +59,6 @@ export default function Assets() {
       setPositionOptions(res.data.positions || []);
       setItemOptions((prev) => Array.from(new Set([...(prev || []), ...((res.data.asset_items || []))])));
       setSizeOptions((prev) => Array.from(new Set([...(prev || []), ...((res.data.asset_sizes || []))])));
-      setStatusOptions((prev) => Array.from(new Set([...(prev || []), ...((res.data.asset_statuses || []))])));
-      setIssuerOptions((prev) => Array.from(new Set([...(prev || []), ...((res.data.asset_issuers || []))])));
     } catch (err) {
       console.error(err);
     }
@@ -126,13 +119,9 @@ export default function Assets() {
 
   const aggregated = {
     employeesWithAssets: new Set(),
-    needReplacement: 0,
-    overdue: 0,
   };
   for (const item of list) {
     aggregated.employeesWithAssets.add(item.employee_id);
-    if (item.status === 'replace') aggregated.needReplacement += 1;
-    if (item.status === 'overdue') aggregated.overdue += 1;
   }
 
   return (
@@ -175,8 +164,6 @@ export default function Assets() {
               <th className="p-2 text-left">Выдано</th>
               <th className="p-2 text-left">Возврат</th>
               <th className="p-2 text-left">Срок службы</th>
-              <th className="p-2 text-left">Статус</th>
-              <th className="p-2 text-left">Ответственный</th>
               <th className="p-2"></th>
             </tr>
           </thead>
@@ -191,8 +178,6 @@ export default function Assets() {
                 <td className="p-2">{u.issue_date}</td>
                 <td className="p-2">{u.return_date || ''}</td>
                 <td className="p-2">{u.service_life || ''}</td>
-                <td className="p-2">{u.status}</td>
-                <td className="p-2">{u.issuer}</td>
                 <td className="p-2 space-x-1 text-right">
                   <button className="text-blue-600" onClick={() => startEdit(u)}>
                     <Pencil size={16} />
@@ -205,7 +190,7 @@ export default function Assets() {
             ))}
             {list.length === 0 && (
               <tr>
-                <td colSpan="11" className="p-4 text-center text-gray-500">
+                <td colSpan="9" className="p-4 text-center text-gray-500">
                   Нет данных
                 </td>
               </tr>
@@ -218,8 +203,6 @@ export default function Assets() {
         <h3 className="font-semibold">Агрегированная информация</h3>
         <ul className="list-disc pl-4">
           <li>Сотрудников с имуществом: {aggregated.employeesWithAssets.size}</li>
-          <li>Требует замены: {aggregated.needReplacement}</li>
-          <li>Просрочено: {aggregated.overdue}</li>
         </ul>
       </div>
 
@@ -275,18 +258,6 @@ export default function Assets() {
             <input type="date" className="border p-2 w-full" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} />
             <input type="date" className="border p-2 w-full" value={form.return_date} onChange={(e) => setForm({ ...form, return_date: e.target.value })} />
             <input type="number" className="border p-2 w-full" placeholder="Срок службы (мес.)" value={form.service_life} onChange={(e) => setForm({ ...form, service_life: Number(e.target.value) })} />
-            <input list="asset-status" className="border p-2 w-full" placeholder="Статус" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} />
-            <datalist id="asset-status">
-              {statusOptions.map((o) => (
-                <option key={o} value={o} />
-              ))}
-            </datalist>
-            <input list="asset-issuer" className="border p-2 w-full" placeholder="Ответственный" value={form.issuer} onChange={(e) => setForm({ ...form, issuer: e.target.value })} />
-            <datalist id="asset-issuer">
-              {issuerOptions.map((o) => (
-                <option key={o} value={o} />
-              ))}
-            </datalist>
             <div className="flex justify-end gap-2 pt-2">
               <button className="bg-gray-300 px-3 py-1 rounded" onClick={() => setShowForm(false)}>
                 Отмена
