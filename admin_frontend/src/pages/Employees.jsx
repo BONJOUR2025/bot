@@ -141,7 +141,7 @@ export default function Employees() {
   );
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-full mx-auto">
       <h2 className="text-2xl font-semibold">Сотрудники</h2>
       <UpcomingBirthdays />
       <div className="flex flex-wrap gap-2 items-center">
@@ -176,7 +176,6 @@ export default function Employees() {
           <thead className="bg-gray-50">
             <tr>
               <th className="p-2"></th>
-              <th className="p-2 text-left">ID</th>
               <th className="p-2 text-left">Фото</th>
               <th className="p-2 text-left">Имя</th>
               <th className="p-2 text-left">ФИО</th>
@@ -205,7 +204,6 @@ export default function Employees() {
                     onChange={(ev) => toggleSelect(e.id, ev.target.checked)}
                   />
                 </td>
-                <td className="p-2">{e.id}</td>
                 <td className="p-2">
                   {e.photo_url ? (
                     <img
@@ -252,7 +250,7 @@ export default function Employees() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan="11" className="p-4 text-center text-gray-500">
+                <td colSpan="10" className="p-4 text-center text-gray-500">
                   Нет сотрудников
                 </td>
               </tr>
@@ -267,6 +265,13 @@ export default function Employees() {
             <h2 className="text-lg font-bold mb-2">
               {form.id ? 'Редактирование' : 'Новый сотрудник'}
             </h2>
+            <input
+              className="border p-2 w-full"
+              placeholder="ID"
+              value={form.id}
+              disabled={!!form.id}
+              onChange={(e) => setForm({ ...form, id: e.target.value })}
+            />
             <input
               className="border p-2 w-full"
               placeholder="Имя"
