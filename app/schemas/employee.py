@@ -24,7 +24,7 @@ class EmployeeCreate(EmployeeBase):
 
 
 class EmployeeUpdate(EmployeeBase):
-    pass
+    id: Optional[str] = None
 
 
 class EmployeeOut(EmployeeBase):

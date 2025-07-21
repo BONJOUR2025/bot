@@ -48,10 +48,20 @@ class EmployeeService:
         emp = self.get_employee(employee_id)
         if not emp:
             return None
+        new_id = updates.pop("id", None)
         for key, value in updates.items():
             if hasattr(emp, key) and value is not None:
                 setattr(emp, key, value)
-        self._repo.update_employee(emp)
+        if new_id and new_id != emp.id:
+            if any(e.id == str(new_id) for e in self._employees):
+                raise ValueError("employee_exists")
+            self._repo.delete_employee_by_id(emp.id)
+            emp.id = str(new_id)
+            if str(emp.id).isdigit():
+                self._counter = max(self._counter, int(emp.id))
+            self._repo.add_employee(emp)
+        else:
+            self._repo.update_employee(emp)
         return emp
 
     def remove_employee(self, employee_id: str) -> None:
@@ -101,7 +111,10 @@ class EmployeeAPIService:
             self,
             employee_id: str,
             data: EmployeeUpdate) -> EmployeeOut:
-        emp = self.service.update_employee(employee_id, **data.dict())
+        try:
+            emp = self.service.update_employee(employee_id, **data.dict())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Employee already exists")
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         return EmployeeOut(**emp.__dict__)

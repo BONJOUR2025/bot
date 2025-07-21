@@ -4,6 +4,10 @@ import { Menu, X } from 'lucide-react';
 
 const navStructure = [
   {
+    name: 'Обзор',
+    items: [{ to: '/admin', label: 'Дашборд' }],
+  },
+  {
     name: 'Персонал',
     items: [
       { to: '/admin/employees', label: 'Сотрудники' },
