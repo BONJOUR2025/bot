@@ -95,6 +95,7 @@ class EmployeeAPIService:
             is_admin=data.is_admin or False,
             card_number=data.card_number or "",
             bank=data.bank or "",
+            work_place=data.work_place or "",
             clothing_size=data.clothing_size or "",
             birthdate=data.birthdate,
             note=data.note or "",

@@ -4,6 +4,7 @@ import api from '../api';
 
 const FIELDS = {
   positions: 'Должности',
+  work_places: 'Места работы',
   employee_statuses: 'Статусы сотрудников',
   payout_types: 'Типы выплат',
   payout_methods: 'Способы выплат',

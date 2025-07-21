@@ -18,6 +18,7 @@ export default function Employees() {
     phone: '',
     card_number: '',
     bank: '',
+    work_place: '',
     clothing_size: '',
     birthdate: '',
     note: '',
@@ -31,6 +32,7 @@ export default function Employees() {
 
   const [employees, setEmployees] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [workPlaces, setWorkPlaces] = useState([]);
   const [filterName, setFilterName] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
   const [sort, setSort] = useState('');
@@ -56,6 +58,7 @@ export default function Employees() {
     try {
       const res = await api.get('dictionary/');
       setPositions(res.data.positions || []);
+      setWorkPlaces(res.data.work_places || []);
     } catch (err) {
       console.error(err);
     }
@@ -101,6 +104,7 @@ export default function Employees() {
       phone: form.phone,
       card_number: form.card_number || '',
       bank: form.bank || '',
+      work_place: form.work_place || '',
       clothing_size: form.clothing_size || '',
       birthdate: form.birthdate || null,
       note: form.note || '',
@@ -220,6 +224,7 @@ export default function Employees() {
               <th className="p-2 text-left">Телефон</th>
               <th className="p-2 text-left">День рождения</th>
               <th className="p-2 text-left">Должность</th>
+              <th className="p-2 text-left">Место</th>
               <th className="p-2 text-left">Размер</th>
               <th className="p-2 text-left">Роль</th>
               <th className="p-2 text-left">Создан</th>
@@ -261,6 +266,7 @@ export default function Employees() {
                 <td className="p-2">{e.phone}</td>
                 <td className="p-2">{formatDateRu(e.birthdate)}</td>
                 <td className="p-2">{e.position}</td>
+                <td className="p-2">{e.work_place}</td>
                 <td className="p-2">{e.clothing_size}</td>
                 <td className="p-2">{e.is_admin ? 'Админ' : 'Пользователь'}</td>
                 <td className="p-2">{new Date(e.created_at).toLocaleDateString()}</td>
@@ -288,7 +294,7 @@ export default function Employees() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan="12" className="p-4 text-center text-gray-500">
+                <td colSpan="13" className="p-4 text-center text-gray-500">
                   Нет сотрудников
                 </td>
               </tr>
@@ -348,6 +354,18 @@ export default function Employees() {
               {positions.map((pos) => (
                 <option key={pos} value={pos}>
                   {pos}
+                </option>
+              ))}
+            </select>
+            <select
+              className="border p-2 w-full"
+              value={form.work_place}
+              onChange={(e) => setForm({ ...form, work_place: e.target.value })}
+            >
+              <option value="">Не выбрано</option>
+              {workPlaces.map((wp) => (
+                <option key={wp} value={wp}>
+                  {wp}
                 </option>
               ))}
             </select>
