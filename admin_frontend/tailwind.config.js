@@ -6,11 +6,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: colors.indigo,
-        secondary: colors.pink,
+        primary: '#FF6600',
+        secondary: '#666666',
       },
       fontFamily: {
-        sans: ['Inter', ...fontFamily.sans],
+        sans: ['Roboto', ...fontFamily.sans],
       },
     },
   },
