@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
+import Card from '../components/ui/Card';
 
 export default function Dashboard() {
   const [birthday, setBirthday] = useState(null);
@@ -37,25 +38,20 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <h2 className="text-2xl font-semibold">Дашборд</h2>
-      <div className="space-y-2">
-        <h3 className="text-xl font-semibold">Ближайший день рождения</h3>
+      <Card title="Ближайший день рождения">
         {birthday ? (
-          <div className="bg-white border rounded shadow p-3">
+          <div>
             <div>{birthday.full_name}</div>
             <div>{formatDateRu(birthday.birthdate)}</div>
           </div>
         ) : (
           <div>Нет данных</div>
         )}
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-xl font-semibold">Продажи косметики сегодня</h3>
-        <div className="bg-white border rounded shadow p-3">
-          {cosmetics} ₽
-        </div>
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-xl font-semibold">Сотрудники в отпуске</h3>
+      </Card>
+      <Card title="Продажи косметики сегодня">
+        <div>{cosmetics} ₽</div>
+      </Card>
+      <Card title="Сотрудники в отпуске">
         {vacations.length ? (
           <ul className="list-disc ml-4">
             {vacations.map((v) => (
@@ -65,9 +61,8 @@ export default function Dashboard() {
         ) : (
           <div>Нет</div>
         )}
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-xl font-semibold">Активные запросы на выплату</h3>
+      </Card>
+      <Card title="Активные запросы на выплату">
         {payouts.length ? (
           <ul className="list-disc ml-4">
             {payouts.map((p) => (
@@ -79,7 +74,7 @@ export default function Dashboard() {
         ) : (
           <div>Нет</div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
