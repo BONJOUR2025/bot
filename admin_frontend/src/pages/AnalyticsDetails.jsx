@@ -49,7 +49,7 @@ export default function AnalyticsDetails() {
           value={period.to}
           onChange={(e) => setPeriod({ ...period, to: e.target.value })}
         />
-        <button onClick={load} className="bg-blue-600 text-white px-3 py-2 rounded">
+        <button onClick={load} className="btn">
           Показать
         </button>
       </div>

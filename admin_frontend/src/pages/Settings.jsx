@@ -109,8 +109,8 @@ export default function Settings() {
           <input className="border p-2 w-full" placeholder="Vacations" {...register('vacations_file_path')} />
         </section>
         <div className="flex gap-3">
-          <button type="submit" className="bg-blue-600 text-white px-3 py-2 rounded">Сохранить</button>
-          <button type="button" className="bg-gray-300 px-3 py-2 rounded" onClick={downloadConfig}>Скачать</button>
+          <button type="submit" className="btn">Сохранить</button>
+          <button type="button" className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={downloadConfig}>Скачать</button>
           <input type="file" onChange={uploadConfig} />
         </div>
       </form>

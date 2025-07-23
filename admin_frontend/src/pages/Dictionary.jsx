@@ -77,7 +77,7 @@ export default function Dictionary() {
             />
           </section>
         ))}
-        <button type="submit" className="bg-blue-600 text-white px-3 py-2 rounded">
+        <button type="submit" className="btn">
           Сохранить
         </button>
       </form>

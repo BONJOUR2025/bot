@@ -86,10 +86,7 @@ export default function Broadcast() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <button
-          onClick={() => sendAll()}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700"
-        >
+        <button onClick={() => sendAll()} className="btn shadow">
           <Send size={16} /> Отправить всем
         </button>
 
@@ -108,17 +105,11 @@ export default function Broadcast() {
           ))}
         </select>
 
-        <button
-          onClick={sendOne}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700"
-        >
+        <button onClick={sendOne} className="btn bg-green-600 hover:bg-green-700 shadow">
           <User size={16} /> Отправить выбранным
         </button>
 
-        <button
-          onClick={() => sendAll('test')}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded shadow hover:bg-purple-700"
-        >
+        <button onClick={() => sendAll('test')} className="btn bg-purple-600 hover:bg-purple-700 shadow">
           <Send size={16} /> Тест
         </button>
       </div>

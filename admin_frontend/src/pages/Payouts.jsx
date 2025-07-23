@@ -455,19 +455,13 @@ export default function Payouts() {
           value={filters.to}
           onChange={(e) => setFilters({ ...filters, to: e.target.value })}
         />
-        <button className="bg-blue-600 text-white px-3 py-2 rounded" onClick={load}>
+        <button className="btn" onClick={load}>
           Применить
         </button>
-        <button
-          className="bg-gray-300 px-3 py-2 rounded"
-          onClick={resetFilters}
-        >
+        <button className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={resetFilters}>
           Сбросить
         </button>
-        <button
-          className="bg-indigo-600 text-white px-3 py-2 rounded ml-auto"
-          onClick={openCreate}
-        >
+        <button className="btn ml-auto" onClick={openCreate}>
           ➕ Новая
         </button>
       </div>
@@ -562,10 +556,7 @@ export default function Payouts() {
       </div>
 
       <div className="flex gap-3 items-center">
-        <button
-          onClick={exportPdf}
-          className="bg-green-600 text-white px-3 py-2 rounded flex items-center gap-1"
-        >
+        <button onClick={exportPdf} className="btn bg-green-600 hover:bg-green-700 flex items-center gap-1">
           <Download size={16} /> PDF
         </button>
       </div>
@@ -677,7 +668,7 @@ export default function Payouts() {
             </label>
             <div className="flex justify-end space-x-2 pt-2">
               <button
-                className="bg-gray-300 px-3 py-1 rounded"
+                className="btn bg-gray-300 text-gray-700 hover:bg-gray-400"
                 onClick={() => {
                   setShowEditor(false);
                   setForm(emptyForm);
@@ -685,10 +676,7 @@ export default function Payouts() {
               >
                 Отмена
               </button>
-              <button
-                className="bg-blue-600 text-white px-3 py-1 rounded"
-                onClick={saveForm}
-              >
+              <button className="btn" onClick={saveForm}>
                 Сохранить
               </button>
             </div>

@@ -52,7 +52,7 @@ export default function Navigation() {
       <button
         type="button"
         onClick={toggle}
-        className="sm:hidden p-2 mb-2 bg-white rounded shadow"
+        className="sm:hidden p-2 mb-2 bg-primary-600 text-white rounded shadow-lg"
       >
         {open ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -67,21 +67,21 @@ export default function Navigation() {
       <nav
         className={`${
           open ? 'translate-x-0' : '-translate-x-full'
-        } sm:translate-x-0 transition-transform sm:flex flex-wrap gap-2 fixed sm:static top-0 left-0 h-full sm:h-auto w-64 sm:w-auto bg-white p-3 rounded sm:rounded-none shadow`}
+        } sm:translate-x-0 transition-transform sm:flex flex-wrap gap-2 fixed sm:static top-0 left-0 h-full sm:h-auto w-64 sm:w-auto bg-white/80 backdrop-blur-lg p-4 rounded sm:rounded-none shadow-lg`}
       >
         {navStructure.map((cat) => (
           <div key={cat.name} className="relative group">
             <button
               type="button"
-              className="px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded flex items-center"
+              className="px-3 py-2 rounded flex items-center text-gray-700 hover:bg-primary-50 transition-colors"
             >
               {cat.name}
             </button>
-            <div className="absolute z-10 hidden group-hover:block bg-white border rounded shadow mt-1">
+            <div className="absolute z-10 hidden group-hover:block bg-white/90 backdrop-blur border rounded shadow mt-1">
               {cat.items.map((item) => (
                 <Link
                   key={item.to}
-                  className="block px-3 py-2 whitespace-nowrap hover:bg-blue-100"
+                  className="block px-3 py-2 whitespace-nowrap hover:bg-primary-50"
                   to={item.to}
                   onClick={close}
                 >

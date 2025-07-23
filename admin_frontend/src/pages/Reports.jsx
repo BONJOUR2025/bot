@@ -21,10 +21,7 @@ export default function Reports() {
       <h2 className="text-2xl font-semibold tracking-tight text-gray-800 flex items-center gap-2">
         <Download size={24} /> Отчёты
       </h2>
-      <button
-        onClick={downloadReport}
-        className="bg-indigo-600 text-white px-4 py-2 rounded"
-      >
+      <button onClick={downloadReport} className="btn">
         📄 Скачать отчёт
       </button>
     </div>

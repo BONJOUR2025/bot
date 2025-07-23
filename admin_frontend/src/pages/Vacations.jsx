@@ -179,10 +179,10 @@ export default function Vacations() {
           value={filters.query}
           onChange={(e) => setFilters({ ...filters, query: e.target.value })}
         />
-        <button className="bg-blue-600 text-white px-3 py-2 rounded" onClick={load}>
+        <button className="btn" onClick={load}>
           Применить
         </button>
-        <button className="bg-indigo-600 text-white px-3 py-2 rounded ml-auto" onClick={startCreate}>
+        <button className="btn ml-auto" onClick={startCreate}>
           <Plus size={16} /> Добавить запись
         </button>
       </div>
@@ -376,10 +376,10 @@ export default function Vacations() {
               onChange={(e) => setForm({ ...form, comment: e.target.value })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="bg-gray-300 px-3 py-1 rounded" onClick={() => setShowForm(false)}>
+              <button className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
-              <button className="bg-blue-600 text-white px-3 py-1 rounded" onClick={saveForm}>
+              <button className="btn" onClick={saveForm}>
                 Сохранить
               </button>
             </div>
