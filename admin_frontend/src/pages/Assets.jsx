@@ -144,10 +144,10 @@ export default function Assets() {
         </select>
         <input type="date" className="border p-2" value={filters.dateFrom} onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })} />
         <input type="date" className="border p-2" value={filters.dateTo} onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })} />
-        <button className="bg-blue-600 text-white px-3 py-2 rounded" onClick={load}>
+        <button className="btn" onClick={load}>
           Применить
         </button>
-        <button className="bg-indigo-600 text-white px-3 py-2 rounded ml-auto" onClick={startCreate}>
+        <button className="btn ml-auto" onClick={startCreate}>
           <Plus size={16} /> Добавить запись
         </button>
       </div>
@@ -259,10 +259,10 @@ export default function Assets() {
             <input type="date" className="border p-2 w-full" value={form.return_date} onChange={(e) => setForm({ ...form, return_date: e.target.value })} />
             <input type="number" className="border p-2 w-full" placeholder="Срок службы (мес.)" value={form.service_life} onChange={(e) => setForm({ ...form, service_life: Number(e.target.value) })} />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="bg-gray-300 px-3 py-1 rounded" onClick={() => setShowForm(false)}>
+              <button className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
-              <button className="bg-blue-600 text-white px-3 py-1 rounded" onClick={saveForm}>
+              <button className="btn" onClick={saveForm}>
                 Сохранить
               </button>
             </div>

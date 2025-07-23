@@ -173,19 +173,19 @@ export default function Employees() {
       <UpcomingBirthdays />
       <div className="flex flex-wrap gap-2 items-center">
         <input
-          className="border p-2 flex-grow"
+          className="input flex-grow"
           placeholder="Фильтр по ФИО"
           value={filterName}
           onChange={(e) => setFilterName(e.target.value)}
         />
         <input
-          className="border p-2 flex-grow"
+          className="input flex-grow"
           placeholder="Фильтр по телефону"
           value={filterPhone}
           onChange={(e) => setFilterPhone(e.target.value)}
         />
         <select
-          className="border p-2"
+          className="input"
           value={sort}
           onChange={(e) => setSort(e.target.value)}
         >
@@ -193,20 +193,14 @@ export default function Employees() {
           <option value="name">По имени</option>
           <option value="position">По должности</option>
         </select>
-        <button
-          className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-1"
-          onClick={downloadPdf}
-        >
+        <button className="btn" onClick={downloadPdf}>
           <FileDown size={16} /> Экспорт PDF
         </button>
-        <button
-          className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-1"
-          onClick={startCreate}
-        >
+        <button className="btn" onClick={startCreate}>
           <UserPlus size={16} /> Добавить сотрудника
         </button>
         <button
-          className="bg-red-600 text-white px-4 py-2 rounded-xl flex items-center gap-1 disabled:opacity-50"
+          className="btn bg-red-600 hover:bg-red-700 disabled:opacity-50"
           disabled={!selected.length}
           onClick={deleteSelected}
         >
@@ -305,48 +299,48 @@ export default function Employees() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-4 space-y-2 rounded shadow w-80">
+          <div className="card space-y-2 w-80">
             <h2 className="text-lg font-bold mb-2">
               {form.id ? 'Редактирование' : 'Новый сотрудник'}
             </h2>
             <input
-              className="border p-2 w-full"
+              className="input w-full"
               placeholder="ID"
               value={form.id}
               onChange={(e) => setForm({ ...form, id: e.target.value })}
             />
             <input
-              className="border p-2 w-full"
+              className="input w-full"
               placeholder="Имя"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
             <input
-              className="border p-2 w-full"
+              className="input w-full"
               placeholder="ФИО"
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
             />
             <input
-              className="border p-2 w-full"
+              className="input w-full"
               placeholder="Телефон"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
             />
             <input
-              className="border p-2 w-full"
+              className="input w-full"
               placeholder="Номер карты"
               value={form.card_number}
               onChange={(e) => setForm({ ...form, card_number: e.target.value })}
             />
             <input
-              className="border p-2 w-full"
+              className="input w-full"
               placeholder="Банк"
               value={form.bank}
               onChange={(e) => setForm({ ...form, bank: e.target.value })}
             />
             <select
-              className="border p-2 w-full"
+              className="input w-full"
               value={form.position}
               onChange={(e) => setForm({ ...form, position: e.target.value })}
             >
@@ -358,7 +352,7 @@ export default function Employees() {
               ))}
             </select>
             <select
-              className="border p-2 w-full"
+              className="input w-full"
               value={form.work_place}
               onChange={(e) => setForm({ ...form, work_place: e.target.value })}
             >
@@ -370,25 +364,25 @@ export default function Employees() {
               ))}
             </select>
             <input
-              className="border p-2 w-full"
+              className="input w-full"
               placeholder="Размер формы"
               value={form.clothing_size}
               onChange={(e) => setForm({ ...form, clothing_size: e.target.value })}
             />
             <input
               type="date"
-              className="border p-2 w-full"
+              className="input w-full"
               value={form.birthdate}
               onChange={(e) => setForm({ ...form, birthdate: e.target.value })}
             />
             <textarea
-              className="border p-2 w-full"
+              className="input w-full"
               placeholder="Заметка"
               value={form.note}
               onChange={(e) => setForm({ ...form, note: e.target.value })}
             />
             <select
-              className="border p-2 w-full"
+              className="input w-full"
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
             >
@@ -415,10 +409,10 @@ export default function Employees() {
             </label>
             <input type="file" onChange={handleFile} />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="bg-gray-300 px-3 py-1 rounded-xl" onClick={() => setShowForm(false)}>
+              <button className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
-              <button className="bg-blue-600 text-white px-3 py-1 rounded-xl" onClick={saveForm}>
+              <button className="btn" onClick={saveForm}>
                 Сохранить
               </button>
             </div>

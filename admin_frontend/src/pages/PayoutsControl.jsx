@@ -117,10 +117,7 @@ export default function PayoutsControl() {
           value={filters.to}
           onChange={(e) => setFilters({ ...filters, to: e.target.value })}
         />
-        <button
-          className="bg-blue-600 text-white px-3 py-2 rounded"
-          onClick={load}
-        >
+        <button className="btn" onClick={load}>
           Применить
         </button>
         <div className="flex flex-wrap gap-2 border border-gray-300 rounded p-2 bg-gray-50 text-xs">

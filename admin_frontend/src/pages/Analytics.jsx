@@ -147,16 +147,10 @@ export default function Analytics() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Аналитика продаж</h1>
-      <button
-        className="bg-blue-600 text-white px-3 py-2 rounded"
-        onClick={() => load(true)}
-      >
+      <button className="btn" onClick={() => load(true)}>
         Обновить
       </button>
-      <button
-        className="bg-indigo-600 text-white px-3 py-2 rounded ml-2"
-        onClick={() => loadDetails()}
-      >
+      <button className="btn ml-2" onClick={() => loadDetails()}>
         Аналитика продаж
       </button>
 
@@ -253,10 +247,7 @@ export default function Analytics() {
               <option value="employee">По сотруднику</option>
               <option value="cost">По сумме</option>
             </select>
-            <button
-              className="bg-blue-600 text-white px-3 py-2 rounded"
-              onClick={() => loadDetails()}
-            >
+            <button className="btn" onClick={() => loadDetails()}>
               Фильтр
             </button>
           </div>
@@ -311,10 +302,7 @@ export default function Analytics() {
                   setRatingRange({ ...ratingRange, to: e.target.value })
                 }
               />
-              <button
-                className="bg-blue-600 text-white px-3 py-2 rounded"
-                onClick={loadRating}
-              >
+              <button className="btn" onClick={loadRating}>
                 Показать
               </button>
             </div>

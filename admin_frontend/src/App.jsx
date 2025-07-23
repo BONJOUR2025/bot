@@ -18,7 +18,7 @@ import Navigation from './components/Navigation.jsx';
 export default function App() {
   return (
     <Router>
-      <div className="mx-auto max-w-full p-4 space-y-6">
+      <div className="mx-auto max-w-7xl p-6 space-y-8">
         <Navigation />
         <Routes>
           <Route path="/admin" element={<Dashboard />} />
