@@ -4,8 +4,8 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.constants import PAYMENT_REQUEST_PATTERN, PayoutStates
-from telegram import Bot, Message, Update, CallbackQuery
-from telegram.ext import ConversationHandler
+from telegram_stub import Bot, Message, Update, CallbackQuery
+from telegram_stub.ext import ConversationHandler
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 import types
@@ -78,7 +78,7 @@ def test_payment_request_pattern_triggers_start():
             application=types.SimpleNamespace(chat_data={}), user_data={}
         )
         with (
-        patch("telegram.Message.reply_text", new=AsyncMock()) as reply,
+        patch("telegram_stub.Message.reply_text", new=AsyncMock()) as reply,
         patch("app.handlers.user.payout.load_users_map", return_value={"1": {
             "name": "Test",
             "phone": "123",
@@ -105,8 +105,8 @@ def test_full_payout_conversation_creates_record():
             application=types.SimpleNamespace(chat_data={}), user_data={}
         )
         with (
-            patch("telegram.Message.reply_text", new=AsyncMock()),
-            patch("telegram.Bot.edit_message_text", new=AsyncMock()),
+            patch("telegram_stub.Message.reply_text", new=AsyncMock()),
+            patch("telegram_stub.Bot.edit_message_text", new=AsyncMock()),
             patch(
                 "app.handlers.user.payout.TelegramService.send_payout_request_to_admin",
                 new=AsyncMock(),
