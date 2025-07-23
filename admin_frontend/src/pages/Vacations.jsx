@@ -25,6 +25,18 @@ export default function Vacations() {
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [todayCount, setTodayCount] = useState(0);
+  const [monthView, setMonthView] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d;
+  });
+
+  function formatDateRange(start, end) {
+    const opts = { day: '2-digit', month: '2-digit', year: 'numeric' };
+    const s = new Date(start).toLocaleDateString('ru-RU', opts);
+    const e = new Date(end).toLocaleDateString('ru-RU', opts);
+    return `${s} – ${e}`;
+  }
 
   useEffect(() => {
     loadEmployees();
@@ -54,6 +66,7 @@ export default function Vacations() {
         const q = filters.query.toLowerCase();
         list = list.filter((v) => v.name.toLowerCase().includes(q));
       }
+      list.sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
       setVacations(list);
       const activeRes = await api.get('vacations/active');
       setTodayCount(activeRes.data.length);
@@ -114,6 +127,13 @@ export default function Vacations() {
       setForm((f) => ({ ...f, employee_id: emp.id, name: emp.full_name || emp.name }));
     }
   }
+
+  const year = monthView.getFullYear();
+  const month = monthView.getMonth();
+  const daysCount = new Date(year, month + 1, 0).getDate();
+  const days = Array.from({ length: daysCount }, (_, i) => i + 1);
+  const empIds = [...new Set(vacations.map((v) => v.employee_id))];
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -185,7 +205,7 @@ export default function Vacations() {
                 <td className="p-2">{v.name}</td>
                 <td className="p-2">{v.type}</td>
                 <td className="p-2">
-                  {v.start_date} – {v.end_date}
+                  {formatDateRange(v.start_date, v.end_date)}
                 </td>
                 <td className="p-2">{duration(v.start_date, v.end_date)} дней</td>
                 <td className="p-2 whitespace-pre-wrap">{v.comment}</td>
@@ -216,6 +236,99 @@ export default function Vacations() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            className="px-2"
+            onClick={() =>
+              setMonthView(
+                (m) => new Date(m.getFullYear(), m.getMonth() - 1, 1)
+              )
+            }
+          >
+            ←
+          </button>
+          <span className="font-semibold">
+            {monthView.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
+          </span>
+          <button
+            className="px-2"
+            onClick={() =>
+              setMonthView(
+                (m) => new Date(m.getFullYear(), m.getMonth() + 1, 1)
+              )
+            }
+          >
+            →
+          </button>
+        </div>
+        <div className="overflow-auto border rounded shadow bg-white">
+          <table className="min-w-full text-xs">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="p-1 text-left sticky left-0 bg-gray-50 z-10">Сотрудник</th>
+                {days.map((d) => (
+                  <th key={d} className="p-1 w-6 text-center">
+                    {d}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {empIds.map((eid) => {
+                const emp = employees.find((e) => String(e.id) === String(eid));
+                const name = emp ? emp.full_name || emp.name : '';
+                return (
+                  <tr key={eid} className="hover:bg-gray-50">
+                    <th className="p-2 text-left sticky left-0 bg-white z-10">
+                      {name}
+                    </th>
+                    {days.map((d) => {
+                      const dateStr = new Date(year, month, d)
+                        .toISOString()
+                        .slice(0, 10);
+                      const vac = vacations.find(
+                        (v) =>
+                          String(v.employee_id) === String(eid) &&
+                          v.start_date <= dateStr &&
+                          v.end_date >= dateStr
+                      );
+                      let cls = '';
+                      let title = '';
+                      if (vac) {
+                        title = `${formatDateRange(vac.start_date, vac.end_date)}${
+                          vac.comment ? ' ' + vac.comment : ''
+                        }`;
+                        if (vac.end_date < todayStr) cls = 'bg-gray-300';
+                        else if (
+                          vac.start_date <= todayStr &&
+                          vac.end_date >= todayStr
+                        )
+                          cls = 'bg-yellow-200';
+                        else cls = 'bg-green-200';
+                      } else {
+                        const dow = new Date(year, month, d).getDay();
+                        if (dow === 0 || dow === 6) cls = 'bg-gray-50';
+                      }
+                      return (
+                        <td key={d} className={`border p-1 ${cls}`} title={title} />
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+              {empIds.length === 0 && (
+                <tr>
+                  <td colSpan={days.length + 1} className="p-4 text-center text-gray-500">
+                    Нет данных
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {showForm && (
