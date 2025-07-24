@@ -107,7 +107,11 @@ class TelegramService:
             if not is_valid_user_id(emp.id):
                 log(f"⚠️ Skipping message — invalid or fake user_id: {emp.id}")
                 continue
-            personalized = message.format(**emp.__dict__)
+            try:
+                personalized = message.format(**emp.__dict__)
+            except (KeyError, ValueError) as exc:
+                logger.error(f"Failed to format message for {emp.id}: {exc}")
+                continue
             log(
                 f"[Telegram] Broadcasting to {emp.id} — text: '{personalized[:50]}', photo: {bool(photo_url)}"
             )
