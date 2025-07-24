@@ -11,6 +11,8 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
 
     @router.post("/send_message")
     async def send_message(data: MessageRequest):
+        if service.bot is None:
+            raise HTTPException(status_code=400, detail="Telegram token not configured")
         try:
             message_id = await service.send_message_to_user(
                 data.user_id,
@@ -31,6 +33,8 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
 
     @router.post("/broadcast")
     async def broadcast(data: BroadcastRequest):
+        if service.bot is None:
+            raise HTTPException(status_code=400, detail="Telegram token not configured")
         try:
             filters = {
                 "status": data.status,

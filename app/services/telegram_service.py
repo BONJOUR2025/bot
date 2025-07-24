@@ -101,6 +101,10 @@ class TelegramService:
         employees = self.repo.list_employees(**filters)
         if test_user_id:
             employees = [e for e in employees if str(e.id) == str(test_user_id)]
+        if self.bot is None:
+            log("⚠️ Telegram bot not configured; cannot broadcast")
+            raise RuntimeError("Telegram bot not configured")
+
         success = 0
         recipients: List[Dict[str, Any]] = []
         for emp in employees:
@@ -161,6 +165,9 @@ class TelegramService:
             photo_url: Optional[str] = None,
             require_ack: bool = False,
     ) -> int:
+        if self.bot is None:
+            log("⚠️ Telegram bot not configured; cannot send message")
+            raise RuntimeError("Telegram bot not configured")
         if not is_valid_user_id(user_id):
             log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
             return 0
@@ -208,6 +215,10 @@ class TelegramService:
 
     async def send_payout_request_to_admin(self, payout: Dict[str, Any]) -> None:
         """Notify the admin chat about a payout request."""
+        if self.bot is None:
+            log("⚠️ Telegram bot not configured; cannot notify admin")
+            raise RuntimeError("Telegram bot not configured")
+
         text = (
             "📥 Новый запрос на выплату:\n\n"
             f"👤 {payout['name']}\n"
