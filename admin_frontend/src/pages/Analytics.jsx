@@ -48,6 +48,7 @@ export default function Analytics() {
     name: '',
     doc: '',
     employee: '',
+    type: 'all',
   });
 
   const employeeOptions = Object.entries(EMPLOYEE_MAP).map(([code, name]) => ({
@@ -81,6 +82,7 @@ export default function Analytics() {
         name_substr: filters.name || undefined,
         doc_num_substr: filters.doc || undefined,
         employee: filters.employee || undefined,
+        item_type: filters.type !== 'all' ? filters.type : undefined,
         page_size: size,
       };
       const res = await api.get('analytics/sales/details', { params });
@@ -96,6 +98,7 @@ export default function Analytics() {
       const params = {
         date_from: ratingRange.from || undefined,
         date_to: ratingRange.to || undefined,
+        item_type: filters.type !== 'all' ? filters.type : undefined,
       };
       const res = await api.get('analytics/sales/rating', { params });
       setRating(res.data);
@@ -121,6 +124,7 @@ export default function Analytics() {
           code: raw.item_code || '',
           name: raw.item_name || raw.item,
           cost: raw.kredit ?? raw.cost,
+          type: raw.item_type || 'cosmetics',
         };
       })
     : [];
@@ -210,6 +214,15 @@ export default function Analytics() {
                   {opt.name}
                 </option>
               ))}
+            </select>
+            <select
+              className="border p-2"
+              value={filters.type}
+              onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+            >
+              <option value="all">Все</option>
+              <option value="cosmetics">Косметика</option>
+              <option value="services">Услуги</option>
             </select>
             <input
               className="border p-2 flex-grow"

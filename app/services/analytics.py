@@ -248,6 +248,7 @@ class AnalyticsService:
         min_kredit: float | None,
         max_kredit: float | None,
         doc_num_substr: str | None,
+        item_type: str | None,
         page: int,
         page_size: int,
     ) -> dict | None:
@@ -294,7 +295,7 @@ class AnalyticsService:
         if where_clause:
             where_clause = "WHERE " + where_clause
 
-        base_from = (
+        lines_from = (
             "FROM doc_order_lines "
             "INNER JOIN docs_order ON doc_order_lines.doc_order_id = docs_order.id "
             "INNER JOIN docs_order_history ON docs_order.id = docs_order_history.doc_order_id "
@@ -304,30 +305,62 @@ class AnalyticsService:
             "INNER JOIN users ON docs_order.creater_id = users.user_id "
         )
 
-        query = (
+        services_from = (
+            "FROM doc_order_services "
+            "INNER JOIN docs_order ON doc_order_services.doc_order_id = docs_order.id "
+            "INNER JOIN docs_order_history ON docs_order.id = docs_order_history.doc_order_id "
+            "INNER JOIN docs ON docs_order.doc_id = docs.doc_id "
+            "INNER JOIN contragents ON docs.contragent_id = contragents.contr_id "
+            "INNER JOIN tovars_tbl ON doc_order_services.tovar_id = tovars_tbl.tovar_id "
+            "INNER JOIN users ON docs_order.creater_id = users.user_id "
+        )
+
+        lines_where = f"{where_clause} {'AND' if where_clause else 'WHERE'} doc_order_lines.kredit <> 0"
+        services_where = f"{where_clause} {'AND' if where_clause else 'WHERE'} doc_order_services.kredit <> 0"
+
+        lines_select = (
             "SELECT docs.doc_date AS doc_date, docs.doc_num AS doc_number, "
             "docs_order.creater_id AS creator_id, users.user_id AS user_id, "
             "users.description AS description, tovars_tbl.code AS item_code, "
-            "tovars_tbl.name AS item_name, doc_order_lines.kredit AS kredit "
-            f"{base_from} {where_clause} ORDER BY docs.doc_date, docs.doc_num ROWS ? TO ?"
+            "tovars_tbl.name AS item_name, doc_order_lines.kredit AS kredit, 'cosmetics' AS item_type "
+            f"{lines_from} {lines_where}"
         )
 
-        count_query = f"SELECT COUNT(*) as cnt {base_from} {where_clause}"
-
-        key = (
-            tuple(params),
-            page,
-            page_size,
+        services_select = (
+            "SELECT docs.doc_date AS doc_date, docs.doc_num AS doc_number, "
+            "docs_order.creater_id AS creator_id, users.user_id AS user_id, "
+            "users.description AS description, tovars_tbl.code AS item_code, "
+            "tovars_tbl.name AS item_name, doc_order_services.kredit AS kredit, 'service' AS item_type "
+            f"{services_from} {services_where}"
         )
 
         start_row = max(1, (page - 1) * page_size + 1)
         end_row = page * page_size
-        params_with_pagination = params + [start_row, end_row]
+
+        if item_type == 'cosmetics':
+            final_query = f"{lines_select} ORDER BY doc_date, doc_number ROWS ? TO ?"
+            final_count_query = f"SELECT COUNT(*) as cnt {lines_from} {lines_where}"
+            query_params = params + [start_row, end_row]
+            count_params = params
+            cache_key = ("cosmetics", tuple(params), page, page_size)
+        elif item_type == 'services':
+            final_query = f"{services_select} ORDER BY doc_date, doc_number ROWS ? TO ?"
+            final_count_query = f"SELECT COUNT(*) as cnt {services_from} {services_where}"
+            query_params = params + [start_row, end_row]
+            count_params = params
+            cache_key = ("services", tuple(params), page, page_size)
+        else:
+            union_select = f"{lines_select} UNION ALL {services_select}"
+            final_query = f"SELECT * FROM ({union_select}) ORDER BY doc_date, doc_number ROWS ? TO ?"
+            final_count_query = f"SELECT COUNT(*) as cnt FROM ({union_select})"
+            query_params = params + params + [start_row, end_row]
+            count_params = params + params
+            cache_key = ("all", tuple(params), page, page_size)
 
         try:
-            rows = await self._fb.cached_execute(key, query, params_with_pagination)
+            rows = await self._fb.cached_execute(cache_key, final_query, query_params)
             count_rows = await self._fb.cached_execute(
-                ("count", *key[0]), count_query, params
+                ("count", *cache_key[1:]), final_count_query, count_params
             )
         except Exception as exc:
             log(f"❌ Firebird query failed: {exc}")
@@ -367,6 +400,7 @@ class AnalyticsService:
         min_kredit: float | None = None,
         max_kredit: float | None = None,
         doc_num_substr: str | None = None,
+        item_type: str | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> dict:
@@ -382,6 +416,7 @@ class AnalyticsService:
                 min_kredit,
                 max_kredit,
                 doc_num_substr,
+                item_type,
                 page,
                 page_size,
             ) or {
@@ -468,6 +503,7 @@ class AnalyticsService:
         creater_ids: list[str] | None,
         user_ids: list[str] | None,
         folder_ids: list[str],
+        item_type: str | None,
     ) -> list[dict] | None:
         """Return aggregated sales by employee from Firebird."""
         if not self._fb:
@@ -498,7 +534,7 @@ class AnalyticsService:
         if where_clause:
             where_clause = "WHERE " + where_clause
 
-        base_from = (
+        lines_from = (
             "FROM doc_order_lines "
             "INNER JOIN docs_order ON doc_order_lines.doc_order_id = docs_order.id "
             "INNER JOIN docs_order_history ON docs_order.id = docs_order_history.doc_order_id "
@@ -508,14 +544,50 @@ class AnalyticsService:
             "INNER JOIN users ON docs_order.creater_id = users.user_id "
         )
 
-        query = (
-            "SELECT users.description AS description, "
-            "SUM(doc_order_lines.kredit) AS total "
-            f"{base_from} {where_clause} GROUP BY users.description ORDER BY total DESC"
+        services_from = (
+            "FROM doc_order_services "
+            "INNER JOIN docs_order ON doc_order_services.doc_order_id = docs_order.id "
+            "INNER JOIN docs_order_history ON docs_order.id = docs_order_history.doc_order_id "
+            "INNER JOIN docs ON docs_order.doc_id = docs.doc_id "
+            "INNER JOIN contragents ON docs.contragent_id = contragents.contr_id "
+            "INNER JOIN tovars_tbl ON doc_order_services.tovar_id = tovars_tbl.tovar_id "
+            "INNER JOIN users ON docs_order.creater_id = users.user_id "
         )
 
+        lines_where = f"{where_clause} {'AND' if where_clause else 'WHERE'} doc_order_lines.kredit <> 0"
+        services_where = f"{where_clause} {'AND' if where_clause else 'WHERE'} doc_order_services.kredit <> 0"
+
+        lines_select = (
+            "SELECT users.description AS description, "
+            "SUM(doc_order_lines.kredit) AS total "
+            f"{lines_from} {lines_where} GROUP BY users.description"
+        )
+
+        services_select = (
+            "SELECT users.description AS description, "
+            "SUM(doc_order_services.kredit) AS total "
+            f"{services_from} {services_where} GROUP BY users.description"
+        )
+
+        if item_type == 'cosmetics':
+            final_query = f"{lines_select} ORDER BY total DESC"
+            query_params = params
+            cache_key = ("cosmetics", tuple(params))
+        elif item_type == 'services':
+            final_query = f"{services_select} ORDER BY total DESC"
+            query_params = params
+            cache_key = ("services", tuple(params))
+        else:
+            union_select = f"{lines_select} UNION ALL {services_select}"
+            final_query = (
+                "SELECT description, SUM(total) AS total FROM (" + union_select + ") "
+                "GROUP BY description ORDER BY total DESC"
+            )
+            query_params = params + params
+            cache_key = ("all", tuple(params))
+
         try:
-            rows = await self._fb.cached_execute(tuple(params), query, params)
+            rows = await self._fb.cached_execute(cache_key, final_query, query_params)
         except Exception as exc:
             log(f"❌ Firebird rating query failed: {exc}")
             return None
@@ -533,6 +605,7 @@ class AnalyticsService:
         creater_ids: list[str] | None = None,
         user_ids: list[str] | None = None,
         folder_ids: list[str] | None = None,
+        item_type: str | None = None,
     ) -> list[dict]:
         """Return rating of employees by sales amount."""
         if self._fb:
@@ -542,6 +615,7 @@ class AnalyticsService:
                 creater_ids or [],
                 user_ids or [],
                 folder_ids or [],
+                item_type,
             ) or []
 
         df = await self._ensure_details_df()
