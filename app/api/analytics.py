@@ -26,6 +26,7 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
         min_kredit: float | None = None,
         max_kredit: float | None = None,
         doc_num_substr: str | None = None,
+        item_type: str | None = None,
         page: int = 1,
         page_size: int = 50,
     ):
@@ -40,6 +41,7 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
             min_kredit=min_kredit,
             max_kredit=max_kredit,
             doc_num_substr=doc_num_substr,
+            item_type=item_type,
             page=page,
             page_size=page_size,
         )
@@ -56,6 +58,7 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
         creater_ids: str | None = None,
         user_ids: str | None = None,
         folder_ids: str | None = None,
+        item_type: str | None = None,
     ):
         return await service.get_sales_rating(
             date_from=date_from,
@@ -63,6 +66,7 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
             creater_ids=creater_ids.split(",") if creater_ids else None,
             user_ids=user_ids.split(",") if user_ids else None,
             folder_ids=folder_ids.split(",") if folder_ids else None,
+            item_type=item_type,
         )
 
     @router.get("/detailed")
