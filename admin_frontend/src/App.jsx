@@ -13,31 +13,33 @@ import Birthdays from './pages/Birthdays';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
 import Dictionary from './pages/Dictionary';
-import Navigation from './components/Navigation.jsx';
+import MainLayout from './layouts/MainLayout.jsx';
+import PlainLayout from './layouts/PlainLayout.jsx';
 
 export default function App() {
   return (
     <Router>
-      <div className="mx-auto max-w-7xl p-6 space-y-8">
-        <Navigation />
-        <Routes>
-          <Route path="/admin" element={<Dashboard />} />
-          <Route path="/admin/employees" element={<Employees />} />
-          <Route path="/admin/payouts" element={<Payouts />} />
-          <Route path="/admin/payouts-control" element={<PayoutsControl />} />
-          <Route path="/admin/incentives" element={<Incentives />} />
-          <Route path="/admin/reports" element={<Reports />} />
-          <Route path="/admin/broadcast" element={<Broadcast />} />
-          <Route path="/admin/vacations" element={<Vacations />} />
-          <Route path="/admin/birthdays" element={<Birthdays />} />
-          <Route path="/admin/analytics" element={<Analytics />} />
-          <Route path="/admin/analytics-details" element={<AnalyticsDetails />} />
-          <Route path="/admin/assets" element={<Assets />} />
-          <Route path="/admin/dictionary" element={<Dictionary />} />
-          <Route path="/admin/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/admin" replace />} />
-        </Routes>
-      </div>
+      <Routes>
+        <Route path="/admin" element={<MainLayout />}> 
+          <Route index element={<Dashboard />} />
+          <Route path="employees" element={<Employees />} />
+          <Route path="payouts" element={<Payouts />} />
+          <Route path="payouts-control" element={<PayoutsControl />} />
+          <Route path="incentives" element={<Incentives />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="broadcast" element={<Broadcast />} />
+          <Route path="vacations" element={<Vacations />} />
+          <Route path="birthdays" element={<Birthdays />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="analytics-details" element={<AnalyticsDetails />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="dictionary" element={<Dictionary />} />
+          <Route path="settings" element={<Settings />} />
+        </Route>
+        <Route path="*" element={<PlainLayout />}> 
+          <Route index element={<Navigate to="/admin" replace />} />
+        </Route>
+      </Routes>
     </Router>
   );
 }

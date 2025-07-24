@@ -25,6 +25,11 @@ body {
   line-height: 1.5;
 }
 
+body.dark {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
 h1,
 h2,
 h3 {

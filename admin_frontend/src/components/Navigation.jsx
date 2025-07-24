@@ -52,7 +52,7 @@ export default function Navigation() {
       <button
         type="button"
         onClick={toggle}
-        className="sm:hidden p-2 mb-2 bg-primary-600 text-white rounded shadow-lg"
+        className="sm:hidden p-2 mb-2 bg-brand text-white rounded shadow-lg"
       >
         {open ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -73,7 +73,7 @@ export default function Navigation() {
           <div key={cat.name} className="relative group">
             <button
               type="button"
-              className="px-3 py-2 rounded flex items-center text-gray-700 hover:bg-primary-50 transition-colors"
+              className="px-3 py-2 rounded flex items-center text-gray-700 hover:bg-muted/20 transition-colors"
             >
               {cat.name}
             </button>
@@ -81,7 +81,7 @@ export default function Navigation() {
               {cat.items.map((item) => (
                 <Link
                   key={item.to}
-                  className="block px-3 py-2 whitespace-nowrap hover:bg-primary-50"
+                  className="block px-3 py-2 whitespace-nowrap hover:bg-muted/20"
                   to={item.to}
                   onClick={close}
                 >
