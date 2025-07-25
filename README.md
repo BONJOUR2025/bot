@@ -17,14 +17,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-2. Install the Node dependencies used by the admin interface:
+
 
 ```bash
 cd admin_frontend
 npm install
-
-# `npm run build` requires Node and `vite` available after installation
-```
 
 3. (Optional) create a `.env` or `config.json` file in the project root to override the default settings defined in `app/settings.py`. Important options include:
 
