@@ -1,0 +1,19 @@
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">Настройки</h1>
+    <div class="flex gap-2">
+      <button onclick="refreshPage()" class="bg-blue-500 text-white px-4 py-2 rounded">🔄 Обновить</button>
+      <button onclick="resetStorage()" class="bg-red-500 text-white px-4 py-2 rounded">Сбросить user.json</button>
+    </div>
+  </div>
+</div>
+<script>
+async function resetStorage() {
+  try {
+    await axios.post('/api/employees/reset');
+    alert('user.json сброшен');
+  } catch (err) {
+    console.error(err);
+  }
+}
+</script>
