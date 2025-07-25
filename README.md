@@ -9,7 +9,7 @@ This project provides a Telegram bot with a FastAPI based HTTP API. The server c
 
 ## Installation
 
-1. Create a virtual environment and install the dependencies:
+1. Create a virtual environment and install the Python packages:
 
 ```bash
 python -m venv .venv
@@ -17,7 +17,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-2. (Optional) create a `.env` or `config.json` file in the project root to override the default settings defined in `app/settings.py`. Important options include:
+2. Install the Node dependencies for the admin frontend:
+
+```bash
+cd admin_frontend
+npm install
+```
+
+After installation you can build the frontend with:
+
+```bash
+npm run build
+```
+
+The build command requires Node and the `vite` CLI which are provided once the dependencies are installed.
+
+3. (Optional) create a `.env` or `config.json` file in the project root to override the default settings defined in `app/settings.py`. Important options include:
 
 - `TELEGRAM_BOT_TOKEN` – Telegram bot token
 - `ADMIN_TOKEN` – token required for admin API calls
