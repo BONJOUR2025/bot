@@ -138,13 +138,18 @@ def create_app() -> FastAPI:
     frontend_path = (
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+    app.mount("/admin", StaticFiles(directory=frontend_path, html=True), name="frontend")
+    app.mount("/assets", StaticFiles(directory=frontend_path / "assets"), name="assets")
+
+    @app.get("/vite.svg", include_in_schema=False)
+    async def vite_logo():
+        return FileResponse(frontend_path / "vite.svg")
 
     if frontend_path.exists():
 
-        @app.get("/{full_path:path}", include_in_schema=False)
+        @app.get("/admin{full_path:path}", include_in_schema=False)
         async def spa_fallback(full_path: str, request: Request):
-            file_path = frontend_path / full_path
+            file_path = frontend_path / full_path.lstrip("/")
             if file_path.is_file():
                 return FileResponse(str(file_path))
             index_path = frontend_path / "index.html"
