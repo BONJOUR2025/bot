@@ -13,6 +13,7 @@ import Birthdays from './pages/Birthdays';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
 import Dictionary from './pages/Dictionary';
+import RefDashboard from './pages/RefDashboard';
 import MainLayout from './layouts/MainLayout.jsx';
 import PlainLayout from './layouts/PlainLayout.jsx';
 
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="assets" element={<Assets />} />
           <Route path="dictionary" element={<Dictionary />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="ref" element={<RefDashboard />} />
         </Route>
         <Route path="*" element={<PlainLayout />}> 
           <Route index element={<Navigate to="/admin" replace />} />
