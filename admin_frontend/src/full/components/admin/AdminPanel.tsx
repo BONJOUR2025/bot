@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -39,80 +39,87 @@ import {
   ShieldAlert,
   PlusCircle
 } from 'lucide-react';
+import {
+  getEmployees,
+  getActivePayouts,
+  getActiveVacations,
+  getBirthdays,
+  getSales,
+} from '../../../api';
 
 // Компонент Dashboard
 const Dashboard: React.FC = () => {
-  const stats = [
-    {
-      title: 'Продажи косметики сегодня',
-      value: '256,400 ₽',
-      change: '+18%',
-      icon: <TrendingUp className="h-5 w-5" />,
-      color: 'text-success'
-    },
-    {
-      title: 'Активные запросы на выплату',
-      value: '12',
-      change: '+3',
-      icon: <DollarSign className="h-5 w-5" />,
-      color: 'text-warning'
-    },
-    {
-      title: 'Сотрудники в отпуске',
-      value: '5',
-      change: '+1',
-      icon: <Users className="h-5 w-5" />,
-      color: 'text-primary'
-    },
-    {
-      title: 'Общее количество сотрудников',
-      value: '89',
-      change: '+2',
-      icon: <Users className="h-5 w-5" />,
-      color: 'text-success'
+  const [stats, setStats] = useState<any[]>([]);
+  const [recentRequests, setRecentRequests] = useState<any[]>([]);
+  const [upcomingBirthdays, setUpcomingBirthdays] = useState<any[]>([]);
+  const [employeesOnLeave, setEmployeesOnLeave] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [employees, payouts, vacations, birthdays, sales] = await Promise.all([
+          getEmployees(),
+          getActivePayouts(),
+          getActiveVacations(),
+          getBirthdays(7),
+          getSales(),
+        ]);
+
+        setRecentRequests(payouts);
+        setUpcomingBirthdays(
+          birthdays.map((b: any) => ({
+            name: b.full_name,
+            date: new Date(b.birthdate).toLocaleDateString('ru-RU', {
+              day: '2-digit',
+              month: 'long',
+            }),
+            department: b.phone ?? '',
+          }))
+        );
+        setEmployeesOnLeave(
+          vacations.map((v: any) => ({
+            name: v.name,
+            period: `${v.start_date} - ${v.end_date}`,
+            type: v.type,
+          }))
+        );
+
+        setStats([
+          {
+            title: 'Продажи косметики сегодня',
+            value: `${sales.cosmetics_sum} ₽`,
+            change: '',
+            icon: <TrendingUp className="h-5 w-5" />,
+            color: 'text-success',
+          },
+          {
+            title: 'Активные запросы на выплату',
+            value: String(payouts.length),
+            change: '',
+            icon: <DollarSign className="h-5 w-5" />,
+            color: 'text-warning',
+          },
+          {
+            title: 'Сотрудники в отпуске',
+            value: String(vacations.length),
+            change: '',
+            icon: <Users className="h-5 w-5" />,
+            color: 'text-primary',
+          },
+          {
+            title: 'Общее количество сотрудников',
+            value: String(employees.length),
+            change: '',
+            icon: <Users className="h-5 w-5" />,
+            color: 'text-success',
+          },
+        ]);
+      } catch (err) {
+        console.error(err);
+      }
     }
-  ];
-
-  const recentRequests = [
-    {
-      id: 1,
-      employee: 'Алексей Иванов',
-      amount: 2500,
-      status: 'waiting' as const,
-      time: '14:32',
-      type: 'Аванс',
-      priority: 'normal'
-    },
-    {
-      id: 2,
-      employee: 'Мария Петрова',
-      amount: 1800,
-      status: 'approved' as const,
-      time: '13:15',
-      type: 'Премия',
-      priority: 'normal'
-    },
-    {
-      id: 3,
-      employee: 'Дмитрий Сидоров',
-      amount: 3200,
-      status: 'waiting' as const,
-      time: '12:45',
-      type: 'Зарплата',
-      priority: 'high'
-    }
-  ];
-
-  const upcomingBirthdays = [
-    { name: 'Анна Смирнова', date: '27 июля', department: 'Отдел продаж' },
-    { name: 'Петр Козлов', date: '30 июля', department: 'Склад' },
-    { name: 'Елена Васильева', date: '2 августа', department: 'Администрация' }
-  ];
-
-  const employeesOnLeave = [
-    { name: 'Олег Михайлов', period: '25 июля - 10 августа', type: 'Отпуск' },
-    { name: 'Светлана Кузнецова', period: '20 июля - 27 июля', type: 'Больничный' }
-  ];
+    load();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -269,40 +276,18 @@ const Dashboard: React.FC = () => {
 // Компонент управления пользователями
 const UsersManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [users, setUsers] = useState<any[]>([]);
 
-  const users = [
-    {
-      id: 1,
-      name: 'Алексей Иванов',
-      email: 'alexey@example.com',
-      status: 'active' as const,
-      shifts: 12,
-      earnings: 45600,
-      store: 'ТЦ Мега'
-    },
-    {
-      id: 2,
-      name: 'Мария Петрова',
-      email: 'maria@example.com',
-      status: 'active' as const,
-      shifts: 8,
-      earnings: 28400,
-      store: 'ТЦ Европолис'
-    },
-    {
-      id: 3,
-      name: 'Дмитрий Сидоров',
-      email: 'dmitry@example.com',
-      status: 'inactive' as const,
-      shifts: 4,
-      earnings: 12800,
-      store: 'ТЦ Атлас'
-    }
-  ];
+  useEffect(() => {
+    getEmployees()
+      .then(setUsers)
+      .catch((err) => console.error(err));
+  }, []);
 
-  const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = users.filter(
+    (user) =>
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.full_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -342,19 +327,14 @@ const UsersManagement: React.FC = () => {
                   </div>
                   <div>
                     <p className="font-medium">{user.name}</p>
-                    <p className="text-sm text-text-secondary">{user.email}</p>
-                    <p className="text-sm text-text-secondary">{user.store}</p>
+                    <p className="text-sm text-text-secondary">{user.position}</p>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-6">
                   <div className="text-center">
-                    <p className="text-sm text-text-secondary">Смены</p>
-                    <p className="font-semibold">{user.shifts}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-text-secondary">Заработок</p>
-                    <p className="font-semibold">{user.earnings.toLocaleString()} ₽</p>
+                    <p className="text-sm text-text-secondary">{user.phone}</p>
+                    <p className="text-sm text-text-secondary">{user.work_place}</p>
                   </div>
                   <StatusBadge status={user.status} />
                   <div className="flex gap-2">
