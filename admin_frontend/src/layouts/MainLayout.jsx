@@ -3,10 +3,10 @@ import Navigation from '../components/Navigation.jsx';
 
 export default function MainLayout() {
   return (
-    <div className="flex min-h-screen bg-surface text-gray-900 dark:bg-gray-900 dark:text-white">
-      <aside className="w-64 shrink-0 p-4 border-r border-muted/20">
+    <div className="min-h-screen flex flex-col bg-surface text-gray-900 dark:bg-gray-900 dark:text-white">
+      <header className="bg-white shadow p-4">
         <Navigation />
-      </aside>
+      </header>
       <main className="flex-1 p-6">
         <Outlet />
       </main>
