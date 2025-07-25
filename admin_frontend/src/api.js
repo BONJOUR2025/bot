@@ -6,11 +6,15 @@ const api = axios.create({
 
 api.interceptors.response.use(
   (response) => {
-    console.log('API', response.config?.url, response.data);
+    if (import.meta.env.DEV) {
+      console.log('API', response.config?.url, response.data);
+    }
     return response;
   },
   (error) => {
-    console.error('API', error.config?.url, error.message);
+    if (import.meta.env.DEV) {
+      console.error('API', error.config?.url, error.message);
+    }
     return Promise.reject(error);
   }
 );
