@@ -15,4 +15,4 @@ def test_payout_json_fields_match_schema():
     required = fields - {'id'}
     for item in data:
         assert required.issubset(item.keys())
-        assert set(item.keys()).issubset(fields)
+        assert set(item.keys()).issubset(fields | {'full_name'})

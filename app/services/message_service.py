@@ -24,7 +24,7 @@ class MessageService:
             data.user_id,
             data.message,
             parse_mode=data.parse_mode,
-            photo_url=None,
+            photo_url=data.photo_url,
             require_ack=data.require_ack,
         )
         emp = next((e for e in self._employees.list_employees()
@@ -33,7 +33,7 @@ class MessageService:
             "user_id": data.user_id,
             "name": emp.full_name if emp else data.user_id,
             "text": data.message,
-            "photo": None,
+            "photo": data.photo_url,
             "status": "Отправлено",
             "accepted": False,
             "timestamp": datetime.utcnow().isoformat(),
