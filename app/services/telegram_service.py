@@ -110,6 +110,11 @@ class TelegramService:
         for emp in employees:
             if not is_valid_user_id(emp.id):
                 log(f"⚠️ Skipping message — invalid or fake user_id: {emp.id}")
+                recipients.append({
+                    "user_id": str(emp.id),
+                    "name": emp.full_name or emp.name,
+                    "status": "невалидный id",
+                })
                 continue
             try:
                 personalized = message.format(**emp.__dict__)
@@ -142,9 +147,18 @@ class TelegramService:
                 })
             except BadRequest as exc:
                 log(f"❌ Failed to send broadcast to chat {emp.id} — {exc}")
-                raise
+                recipients.append({
+                    "user_id": str(emp.id),
+                    "name": emp.full_name or emp.name,
+                    "status": f"ошибка: {exc}",
+                })
             except Exception as exc:
                 logger.warning(f"Failed for {emp.id}: {exc}")
+                recipients.append({
+                    "user_id": str(emp.id),
+                    "name": emp.full_name or emp.name,
+                    "status": f"ошибка: {exc}",
+                })
         log_entry = {
             "id": str(uuid4()),
             "broadcast": True,
