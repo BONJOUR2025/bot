@@ -14,6 +14,7 @@ export default function Broadcast() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [tplName, setTplName] = useState('');
   const [tplText, setTplText] = useState('');
+  const [openBroadcast, setOpenBroadcast] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('broadcast_draft');
@@ -208,29 +209,61 @@ export default function Broadcast() {
       </div>
 
       <div className="mt-8">
-        <h3 className="text-xl font-semibold mb-2">Отправленные сообщения</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xl font-semibold">Отправленные сообщения</h3>
+          <button onClick={fetchSent} className="btn">Обновить</button>
+        </div>
         <ul className="space-y-2">
           {sent.map((m) => (
-            <li
-              key={m.id}
-              className="p-3 border rounded flex justify-between items-start gap-2"
-            >
-              <div>
-                <div className="font-medium whitespace-pre-wrap">{m.message}</div>
-                <div className="text-xs text-gray-500">
-                  {new Date(m.timestamp).toLocaleString()} —
-                  {" "}
-                  {m.broadcast
-                    ? `broadcast (${m.recipients?.length || 0})`
-                    : m.status}
+            <li key={m.id} className="p-3 border rounded">
+              <div className="flex justify-between items-start gap-2">
+                <div className="flex-1">
+                  {m.broadcast ? (
+                    <button
+                      onClick={() =>
+                        setOpenBroadcast((prev) => (prev === m.id ? null : m.id))
+                      }
+                      className="font-medium text-blue-600 underline"
+                    >
+                      {`Рассылка ${new Date(m.timestamp).toLocaleString()}`}
+                    </button>
+                  ) : (
+                    <>
+                      <div className="font-medium whitespace-pre-wrap">{m.message}</div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(m.timestamp).toLocaleString()} — {m.status}
+                      </div>
+                    </>
+                  )}
                 </div>
+                <button
+                  onClick={() => deleteMessage(m.id)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => deleteMessage(m.id)}
-                className="text-red-600 hover:text-red-800"
-              >
-                <Trash2 size={16} />
-              </button>
+              {m.broadcast && openBroadcast === m.id && (
+                <div className="mt-2">
+                  <div className="font-medium whitespace-pre-wrap mb-2">{m.message}</div>
+                  <table className="w-full text-sm border">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="text-left p-1 border">Получатель</th>
+                        <th className="text-left p-1 border">Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {m.recipients?.map((r) => (
+                        <tr key={r.user_id}>
+                          <td className="p-1 border">{r.name}</td>
+                          <td className="p-1 border">{r.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </li>
           ))}
         </ul>
