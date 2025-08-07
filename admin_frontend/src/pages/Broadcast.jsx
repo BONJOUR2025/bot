@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Send, User, MessageSquare } from 'lucide-react';
+import { Send, User, MessageSquare, Check, RefreshCw } from 'lucide-react';
 import api from '../api';
 
 export default function Broadcast() {
@@ -9,12 +9,14 @@ export default function Broadcast() {
   const [templates, setTemplates] = useState([]);
   const [selectedTpl, setSelectedTpl] = useState('');
   const [status, setStatus] = useState('active');
+  const [history, setHistory] = useState([]);
 
   useEffect(() => {
     const saved = localStorage.getItem('broadcast_draft');
     if (saved) setMessage(saved);
     api.get('messages/templates').then(r => setTemplates(r.data));
     api.get('employees/').then(r => setEmployees(r.data));
+    loadHistory();
     window.refreshPage = () => {
       setMessage('');
       setSelected([]);
@@ -35,6 +37,7 @@ export default function Broadcast() {
         test_user_id: mode === 'test' ? selected[0] : undefined,
       });
       setMessage('');
+      loadHistory();
     } catch (err) {
       console.error(err);
     }
@@ -55,6 +58,37 @@ export default function Broadcast() {
     }
     setMessage('');
     setSelected([]);
+    loadHistory();
+  }
+
+  async function loadHistory() {
+    try {
+      const r = await api.get('messages/');
+      setHistory(r.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function accept(id) {
+    try {
+      await api.post(`messages/${id}/accept`);
+      loadHistory();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function resend(m) {
+    try {
+      await api.post('telegram/send_message', {
+        user_id: m.user_id,
+        message: m.text,
+        require_ack: true,
+      });
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   return (
@@ -113,6 +147,43 @@ export default function Broadcast() {
           <Send size={16} /> Тест
         </button>
       </div>
+
+      <h3 className="text-lg font-medium mt-8">История сообщений</h3>
+      {history.length > 0 ? (
+        <table className="w-full text-sm mt-2 border">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="text-left px-2 py-1">Текст</th>
+              <th className="px-2 py-1">Время</th>
+              <th className="px-2 py-1">Статус</th>
+              <th className="px-2 py-1">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((m) => (
+              <tr key={m.id} className="border-t">
+                <td className="px-2 py-1 break-words max-w-[200px]">{m.text}</td>
+                <td className="px-2 py-1 whitespace-nowrap">{new Date(m.timestamp).toLocaleString()}</td>
+                <td className="px-2 py-1">{m.status}</td>
+                <td className="px-2 py-1">
+                  <div className="flex gap-2">
+                    {!m.accepted && (
+                      <button onClick={() => accept(m.id)} className="btn px-2 py-1">
+                        <Check size={14} />
+                      </button>
+                    )}
+                    <button onClick={() => resend(m)} className="btn px-2 py-1">
+                      <RefreshCw size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="text-sm text-gray-500 mt-2">История сообщений пуста</p>
+      )}
     </div>
   );
 }
