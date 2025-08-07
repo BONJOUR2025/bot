@@ -24,7 +24,7 @@ class MessageService:
             data.user_id,
             data.message,
             parse_mode=data.parse_mode,
-            photo_url=None,
+            photo_url=data.photo_url,
             require_ack=data.require_ack,
         )
         emp = next((e for e in self._employees.list_employees()

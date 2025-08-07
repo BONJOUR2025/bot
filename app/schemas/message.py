@@ -7,6 +7,7 @@ class MessageRequest(BaseModel):
     message: str
     parse_mode: str = "HTML"
     require_ack: bool = False
+    photo_url: Optional[str] = None
 
 
 class MessageOut(BaseModel):
