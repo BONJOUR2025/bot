@@ -148,21 +148,29 @@ export default function Broadcast() {
         </button>
       </div>
 
-      {history.length > 0 && (
-        <table className="w-full text-sm mt-6 border">
-          <thead className="bg-gray-100">
+      <table className="w-full text-sm mt-6 border">
+        <thead className="bg-gray-100">
+          <tr>
+            <th className="text-left px-2 py-1">Текст</th>
+            <th className="px-2 py-1">Время</th>
+            <th className="px-2 py-1">Статус</th>
+            <th className="px-2 py-1">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {history.length === 0 ? (
             <tr>
-              <th className="text-left px-2 py-1">Текст</th>
-              <th className="px-2 py-1">Время</th>
-              <th className="px-2 py-1">Статус</th>
-              <th className="px-2 py-1">Действия</th>
+              <td className="px-2 py-1 text-center" colSpan={4}>
+                История пуста
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {history.map((m) => (
+          ) : (
+            history.map((m) => (
               <tr key={m.id} className="border-t">
                 <td className="px-2 py-1 break-words max-w-[200px]">{m.text}</td>
-                <td className="px-2 py-1 whitespace-nowrap">{new Date(m.timestamp).toLocaleString()}</td>
+                <td className="px-2 py-1 whitespace-nowrap">
+                  {new Date(m.timestamp).toLocaleString()}
+                </td>
                 <td className="px-2 py-1">{m.status}</td>
                 <td className="px-2 py-1">
                   <div className="flex gap-2">
@@ -177,10 +185,10 @@ export default function Broadcast() {
                   </div>
                 </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
