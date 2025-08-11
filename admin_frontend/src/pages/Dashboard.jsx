@@ -22,9 +22,9 @@ export default function Dashboard() {
       });
       setCosmetics(sRes.data.total || 0);
       const vRes = await api.get('vacations/active');
-      setVacations(vRes.data);
+      setVacations(Array.isArray(vRes.data) ? vRes.data : []);
       const pRes = await api.get('payouts/active');
-      setPayouts(pRes.data);
+      setPayouts(Array.isArray(pRes.data) ? pRes.data : []);
     } catch (err) {
       console.error(err);
     }
