@@ -1,0 +1,14 @@
+﻿:root {
+  --bg:#0b0d12; --panel:#121620; --surface:#151a26; --txt:#e7eaf0; --muted:#9aa3b2;
+  --primary:#5b8cff; --success:#3ecf8e; --warning:#f5b759; --danger:#ff6b6b; --info:#6fb3ff;
+  --radius-xs:6px; --radius-sm:10px; --radius-md:14px; --radius-lg:18px;
+  --gap-1:4px; --gap-2:8px; --gap-3:12px; --gap-4:16px; --gap-6:24px; --gap-8:32px;
+  --shadow-sm:0 4px 12px rgba(0,0,0,.18); --shadow-md:0 8px 24px rgba(0,0,0,.22); --shadow-lg:0 16px 40px rgba(0,0,0,.28);
+  --transition-fast:120ms ease; --transition:180ms ease; --transition-slow:260ms ease;
+  --control-h:44px; --control-r:12px; --border:1px solid rgba(255,255,255,.06);
+}
+.theme-light {
+  --bg:#f6f7fb; --panel:#fff; --surface:#f2f4f8; --txt:#1b2430; --muted:#6b7483;
+  --primary:#3d6bff; --success:#1dbd7d; --warning:#e5a84a; --danger:#ef5454; --info:#3e8eff;
+  --border:1px solid rgba(0,0,0,.08);
+}

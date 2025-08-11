@@ -1,0 +1,9 @@
+﻿*{box-sizing:border-box} html,body,#root{height:100%}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,""Helvetica Neue"",Arial,""Noto Sans"",""Apple Color Emoji"",""Segoe UI Emoji"";-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.app-container{max-width:1440px;margin:0 auto;padding:var(--gap-6)}
+.panel{background:var(--panel);border:var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm)}
+.h1{font-size:28px;font-weight:600;line-height:1.2} .h2{font-size:22px;font-weight:600;line-height:1.25} .muted{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:var(--control-h);border-radius:var(--control-r);padding:0 var(--gap-4);gap:var(--gap-2);font-weight:600;cursor:pointer;border:none;transition:transform var(--transition-fast),opacity var(--transition-fast),box-shadow var(--transition)}
+.btn:disabled{opacity:.6;pointer-events:none}
+.badge{display:inline-flex;align-items:center;gap:6px;height:24px;border-radius:999px;padding:0 10px;font-size:12px;font-weight:600;letter-spacing:.2px}
+.row{display:flex;gap:var(--gap-3);align-items:center} .grid{display:grid;gap:var(--gap-4)} .shadow-hover:hover{box-shadow:var(--shadow-md)}

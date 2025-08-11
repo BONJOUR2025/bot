@@ -1,20 +1,14 @@
-from typing import List
-
 from fastapi import APIRouter, Query
 
-from app.schemas.birthday import BirthdayOut
-from app.services.birthday_service import BirthdayService
+from app.schemas.birthday import Birthday
+from app.services.birthday_service import get_upcoming_birthdays
 
 
-def create_birthdays_router(service: BirthdayService) -> APIRouter:
+def create_birthday_router() -> APIRouter:
     router = APIRouter(prefix="/birthdays", tags=["Birthdays"])
 
-    @router.get("/", response_model=List[BirthdayOut])
-    async def list_all():
-        return await service.all_birthdays()
-
-    @router.get("/upcoming", response_model=List[BirthdayOut])
-    async def upcoming(days_ahead: int = Query(30)):
-        return await service.upcoming_birthdays(days_ahead)
+    @router.get("/", response_model=list[Birthday])
+    async def list_upcoming(days: int = Query(1, ge=0, le=365)):
+        return get_upcoming_birthdays(days)
 
     return router

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from enum import Enum
-from datetime import date
+from datetime import date, datetime
 from typing import List
 
 from app.core.types import Employee, EmployeeStatus
 from app.utils.config import DATA_FILE
+from app.utils.logger import log
 from .json_storage import JsonStorage
 
 
@@ -27,7 +28,11 @@ class EmployeeRepository:
 
     def __init__(self, storage: JsonStorage | None = None) -> None:
         self._storage = storage or JsonStorage(DATA_FILE)
+        log(f"📂 Loading employees from {self._storage.path}")
         self._data: dict[str, dict] = self._storage.load() or {}
+        log(f"✅ Loaded employees: {len(self._data)}")
+        if not self._data:
+            log("⚠️ EmployeeRepository loaded no employees")
 
     def _save(self) -> None:
         self._storage.save(self._data)
@@ -43,7 +48,19 @@ class EmployeeRepository:
         except Exception:
             return None
 
-    def list_employees(self) -> List[Employee]:
+    @staticmethod
+    def _parse_datetime(value) -> datetime | None:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value))
+        except Exception:
+            return None
+
+    def list_employees(self, **filters) -> List[Employee]:
+        """Return employees optionally filtered by provided criteria."""
         employees: List[Employee] = []
         for uid, data in self._data.items():
             if not isinstance(data, dict):
@@ -53,14 +70,37 @@ class EmployeeRepository:
                 "name": data.get("name", ""),
                 "full_name": data.get("full_name", ""),
                 "phone": data.get("phone", ""),
+                "position": data.get("position", ""),
+                "is_admin": data.get("is_admin", False),
                 "card_number": data.get("card_number", ""),
                 "bank": data.get("bank", ""),
+                "work_place": data.get("work_place", ""),
+                "clothing_size": data.get("clothing_size", ""),
                 "birthdate": self._parse_date(data.get("birthdate")),
                 "note": data.get("note", ""),
                 "photo_url": data.get("photo_url", ""),
                 "status": EmployeeStatus(data.get("status", "active")),
+                "created_at": self._parse_datetime(data.get("created_at"))
+                or datetime.utcnow(),
+                "tags": data.get("tags", []),
             }
-            employees.append(Employee(**record))
+            emp = Employee(**record)
+            if filters:
+                status = filters.get("status")
+                if status and emp.status.value not in (status if isinstance(status, list) else [status]):
+                    continue
+                position = filters.get("position")
+                if position and emp.position not in (position if isinstance(position, list) else [position]):
+                    continue
+                birthday_today = filters.get("birthday_today")
+                if birthday_today:
+                    if not emp.birthdate or emp.birthdate.timetuple()[1:3] != datetime.utcnow().date().timetuple()[1:3]:
+                        continue
+                tags = filters.get("tags")
+                if tags:
+                    if not set(tags).intersection(set(emp.tags)):
+                        continue
+            employees.append(emp)
         return employees
 
     def add_employee(self, employee: Employee) -> None:

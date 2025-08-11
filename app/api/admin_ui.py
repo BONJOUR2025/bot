@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 
 templates = Jinja2Templates(directory="app/templates")
 
-router = APIRouter()
+router = APIRouter(prefix="/admin")
 
 
 @router.get("/", include_in_schema=False)
@@ -34,10 +34,11 @@ async def admin_reports(request: Request):
         "admin/reports.html", {"request": request})
 
 
-@router.get("/birthdays", response_class=HTMLResponse)
-async def admin_birthdays(request: Request):
+@router.get("/analytics/sales", response_class=HTMLResponse)
+async def admin_sales(request: Request):
     return templates.TemplateResponse(
-        "admin/birthdays.html", {"request": request})
+        "admin/analytics_sales.html", {"request": request})
+
 
 
 @router.get("/broadcasts", response_class=HTMLResponse)

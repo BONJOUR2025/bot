@@ -1,8 +1,8 @@
-export default function Card({ title, children }) {
+export default function Card({ children, style, ...rest }) {
   return (
-    <div className="bg-surface rounded-2xl shadow p-6 space-y-4 dark:bg-gray-800">
-      {title && <h3 className="text-lg font-semibold tracking-tight">{title}</h3>}
+    <div className="panel" style={{ padding: "16px", ...style }} {...rest}>
       {children}
     </div>
   );
 }
+

@@ -6,7 +6,7 @@ from typing import Optional
 from ...utils.image import create_combined_table_image
 from ...services.report import generate_employee_report
 from ...services.excel import load_data
-from ...services.users import load_users
+from ...services.users import load_users_map
 from ...utils.logger import log
 
 
@@ -59,7 +59,7 @@ async def handle_salary_request(
         )
         return
 
-    users = load_users()
+    users = load_users_map()
     user = users.get(user_id)
     if not user:
         await loading_message.edit_text(

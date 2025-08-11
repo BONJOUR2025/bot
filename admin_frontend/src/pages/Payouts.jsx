@@ -633,8 +633,7 @@ export default function Payouts() {
                 <input
                   type="checkbox"
                   checked={form.notify_user}
-                  onChange={(e) =>
-                    setForm({ ...form, notify_user: e.target.checked })
+                  onChange={(e) => setForm({ ...form, notify_user: e.target.checked })
                   }
                 />
                 Уведомить сотрудника
@@ -650,8 +649,7 @@ export default function Payouts() {
               <input
                 type="checkbox"
                 checked={form.show_note_in_bot}
-                onChange={(e) =>
-                  setForm({ ...form, show_note_in_bot: e.target.checked })
+                onChange={(e) => setForm({ ...form, show_note_in_bot: e.target.checked })
                 }
               />
               Показывать примечание в боте
@@ -660,8 +658,7 @@ export default function Payouts() {
               <input
                 type="checkbox"
                 checked={form.sync_to_bot}
-                onChange={(e) =>
-                  setForm({ ...form, sync_to_bot: e.target.checked })
+                onChange={(e) => setForm({ ...form, sync_to_bot: e.target.checked })
                 }
               />
               Отразить в боте
@@ -686,3 +683,9 @@ export default function Payouts() {
     </div>
   );
 }
+
+
+
+
+
+

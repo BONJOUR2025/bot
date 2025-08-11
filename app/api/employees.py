@@ -43,4 +43,12 @@ def create_employee_router(service: EmployeeAPIService) -> APIRouter:
                         media_type="application/pdf",
                         headers=headers)
 
+    @router.get("/export.pdf", response_class=Response)
+    async def export_employees_pdf():
+        pdf_bytes = await service.export_employees_pdf()
+        headers = {"Content-Disposition": "inline; filename=employees.pdf"}
+        return Response(content=pdf_bytes,
+                        media_type="application/pdf",
+                        headers=headers)
+
     return router

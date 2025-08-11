@@ -1,7 +1,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from ...utils.logger import log
-from ...services.users import load_users
+from ...services.users import load_users_map
 from ...keyboards.reply_user import get_main_menu
 
 
@@ -9,7 +9,7 @@ async def get_user_info_user(update: Update,
                              context: ContextTypes.DEFAULT_TYPE) -> None:
     """Выводит главное меню сотрудника."""
     user_id = str(update.effective_user.id)
-    users = load_users()
+    users = load_users_map()
     user = users.get(user_id)
     if not user:
         if update.message:
@@ -26,9 +26,12 @@ async def get_user_info_user(update: Update,
 
 async def home_handler_user(update: Update,
                             context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_id = update.effective_chat.id
+    state = context.application.chat_data.get(chat_id, {}).get("conversation")
+    log(f"[FSM] state before entry: {state}")
     log(
-        f"DEBUG [home_handler] Получено сообщение: '{
-            update.message.text if update.message else ''}'")
+        f"DEBUG [home_handler] Получено сообщение: '{update.message.text if update.message else ''}'"
+    )
     context.user_data.clear()
     if update.message:
         await update.message.reply_text(

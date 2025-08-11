@@ -8,21 +8,24 @@ from telegram.ext import (
 
 from ..constants import (
     UserStates,
-    PayoutStates,
     AdvanceReportStates,
     ManualPayoutStates,
+    PayoutStates,
+    PAYMENT_REQUEST_PATTERN,
 )
 from ..config import ADMIN_ID
 from ..handlers.user import (
-    request_payout_user,
-    handle_payout_type_user,
-    handle_payout_amount_user,
-    payout_method_user,
-    handle_card_confirmation,
     home_handler_user,
     view_salary_user,
     view_schedule_user,
     personal_cabinet,
+)
+from ..handlers.user.payout import (
+    request_payout_start,
+    select_type,
+    enter_amount,
+    select_method,
+    confirm_card,
 )
 from ..handlers.admin import (
     admin,
@@ -34,7 +37,6 @@ from ..handlers.admin import (
     deny_payout,
     home_callback,
     reset_payout_request,
-    show_birthdays,
     view_payouts,
     select_payout_type,
     select_period,
@@ -59,6 +61,7 @@ from ..handlers.admin import (
     enter_end_date,
     report_select_status,
 )
+from ..handlers.reset import global_reset
 
 
 def invalid_data_type(update, context):
@@ -71,76 +74,6 @@ def invalid_data_type(update, context):
     )
 
 
-def build_payout_conversation():
-    return ConversationHandler(
-        entry_points=[
-            MessageHandler(
-                filters.Regex(r"^💰 Запросить выплату$") & ~filters.User(ADMIN_ID),
-                request_payout_user,
-            ),
-            MessageHandler(
-                filters.Regex(r"^📄 Просмотр ЗП$") & ~filters.User(ADMIN_ID),
-                view_salary_user,
-            ),
-            MessageHandler(
-                filters.Regex(r"^📅 Просмотр расписания$") & ~filters.User(ADMIN_ID),
-                view_schedule_user,
-            ),
-            MessageHandler(
-                filters.Regex(r"^👤 Личный кабинет$") & ~filters.User(ADMIN_ID),
-                personal_cabinet,
-            ),
-            MessageHandler(
-                filters.Regex(r"^🏠 Домой$") & ~filters.User(ADMIN_ID),
-                home_handler_user,
-            ),
-        ],
-        states={
-            PayoutStates.SELECT_TYPE: [
-                MessageHandler(
-                    filters.Regex(r"^(Аванс|Зарплата|🏠 Домой)$")
-                    & ~filters.User(ADMIN_ID),
-                    handle_payout_type_user,
-                ),
-            ],
-            PayoutStates.ENTER_AMOUNT: [
-                MessageHandler(
-                    filters.TEXT & ~filters.COMMAND & ~filters.User(ADMIN_ID),
-                    handle_payout_amount_user,
-                ),
-            ],
-            PayoutStates.SELECT_METHOD: [
-                MessageHandler(
-                    filters.Regex(r"^(🏦 Из кассы|🤝 Наличными|💳 На карту|🏠 Домой)$")
-                    & ~filters.User(ADMIN_ID),
-                    payout_method_user,
-                ),
-            ],
-            PayoutStates.CONFIRM_CARD: [
-                CallbackQueryHandler(
-                    handle_card_confirmation, pattern=r"^(confirm_card|cancel_card)$"
-                ),
-            ],
-        },
-        fallbacks=[
-            MessageHandler(
-                filters.Regex(r"^🏠 Домой$") & ~filters.User(ADMIN_ID),
-                home_handler_user,
-            ),
-            MessageHandler(
-                filters.Regex(r"^📄 Просмотр ЗП$") & ~filters.User(ADMIN_ID),
-                view_salary_user,
-            ),
-            MessageHandler(
-                filters.Regex(r"^📅 Просмотр расписания$") & ~filters.User(ADMIN_ID),
-                view_schedule_user,
-            ),
-            MessageHandler(
-                filters.Regex(r"^👤 Личный кабинет$") & ~filters.User(ADMIN_ID),
-                personal_cabinet,
-            ),
-        ],
-    )
 
 
 def build_admin_conversation():
@@ -151,7 +84,6 @@ def build_admin_conversation():
             MessageHandler(filters.Regex("💸 Просмотр выплат"), view_payouts),
             MessageHandler(filters.Regex("📢 Рассылка"), handle_broadcast_start),
             MessageHandler(filters.Regex("🔄 Сбросить запросы"), reset_payout_request),
-            MessageHandler(filters.Regex("🎂 Дни рождения"), show_birthdays),
             MessageHandler(filters.Regex("📈 Отчёт по авансам"), report_start),
             MessageHandler(filters.Regex("🏠 Домой"), home_callback),
         ],
@@ -160,7 +92,6 @@ def build_admin_conversation():
                 MessageHandler(filters.Regex("^🏠 Домой$"), home_callback),
                 MessageHandler(filters.Regex("^📅 Расписание$"), select_data_type),
                 MessageHandler(filters.Regex("^💰 Зарплаты$"), select_data_type),
-                MessageHandler(filters.Regex("^🎂 Дни рождения$"), show_birthdays),
                 MessageHandler(filters.Regex("^📈 Отчёт по авансам$"), report_start),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, invalid_data_type),
             ],
@@ -203,11 +134,15 @@ def build_admin_conversation():
                 MessageHandler(filters.Regex("^🏠 Домой$"), home_callback),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_broadcast_message),
             ],
+            UserStates.BROADCAST_CONFIRM: [
+                CallbackQueryHandler(handle_broadcast_confirm),
+            ],
         },
         fallbacks=[
-            MessageHandler(filters.Regex("🏠 Домой"), home_callback),
+            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset),
             CommandHandler("cancel", cancel_payouts),
         ],
+        per_chat=True,
     )
 
 
@@ -233,12 +168,41 @@ def build_manual_payout_conversation():
                 CallbackQueryHandler(manual_payout_finalize, pattern="^manual_")
             ],
         },
-        fallbacks=[MessageHandler(filters.Regex("🏠 Домой"), home_callback)],
+        fallbacks=[
+            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset)
+        ],
+        per_chat=True,
+    )
+
+
+def build_payout_conversation():
+    return ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(PAYMENT_REQUEST_PATTERN), request_payout_start)
+        ],
+        states={
+            PayoutStates.SELECT_TYPE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, select_type)
+            ],
+            PayoutStates.ENTER_AMOUNT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_amount)
+            ],
+            PayoutStates.SELECT_METHOD: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, select_method)
+            ],
+            PayoutStates.CONFIRM_CARD: [
+                CallbackQueryHandler(confirm_card, pattern="^payout_")
+            ],
+        },
+        fallbacks=[
+            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset)
+        ],
+        per_chat=True,
     )
 
 
 __all__ = [
-    "build_payout_conversation",
     "build_admin_conversation",
     "build_manual_payout_conversation",
+    "build_payout_conversation",
 ]

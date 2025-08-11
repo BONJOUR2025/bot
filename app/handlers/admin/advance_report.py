@@ -8,6 +8,7 @@ from telegram import (
 from telegram.ext import ContextTypes, ConversationHandler
 
 from ...constants import AdvanceReportStates
+from ...core.enums import PAYOUT_STATUSES
 from ...config import ADMIN_ID
 from ...keyboards.reply_admin import get_admin_menu
 from ...services.advance_report import (
@@ -17,6 +18,9 @@ from ...services.advance_report import (
 
 
 async def report_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    state = context.application.chat_data.get(chat_id, {}).get("conversation")
+    log(f"[FSM] state before entry: {state}")
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ У вас нет прав администратора.")
         return ConversationHandler.END
@@ -64,8 +68,8 @@ async def enter_end_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["report_end_date"] = end_date
     keyboard = [
-        ["Ожидает", "Одобрено"],
-        ["Отклонено", "Отменено"],
+        PAYOUT_STATUSES[:2],
+        [PAYOUT_STATUSES[2], "Отменено"],
         ["Все статусы"],
     ]
     await update.message.reply_text(
@@ -79,7 +83,7 @@ async def enter_end_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def select_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status = update.message.text.strip()
-    valid = {"Ожидает", "Одобрено", "Отклонено", "Отменено", "Все статусы"}
+    valid = set(PAYOUT_STATUSES + ["Отменено", "Все статусы"])
     if status not in valid:
         await update.message.reply_text("❌ Выберите вариант из списка.")
         return AdvanceReportStates.SELECT_STATUS

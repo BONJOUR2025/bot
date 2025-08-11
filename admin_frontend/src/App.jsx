@@ -1,3 +1,7 @@
+import "./styles/tokens.css";
+import "./styles/globals.css";
+import ThemeProvider from "./providers/ThemeProvider.jsx";
+import ThemeSwitch from "./components/ThemeSwitch.jsx";
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
@@ -43,3 +47,7 @@ export default function App() {
     </Router>
   );
 }
+
+
+
+

@@ -9,7 +9,7 @@ from ...config import (
     USERS_FILE,
     MAX_ADVANCE_AMOUNT_PER_MONTH,
 )
-from ...services.users import load_users, save_users, add_user, update_user, delete_user
+from ...services.users import load_users_map, save_users, add_user, update_user, delete_user
 from ...services.advance_requests import load_advance_requests
 from ...keyboards.reply_user import get_cabinet_menu, get_main_menu
 from ...utils.logger import log
@@ -18,8 +18,11 @@ from ...utils.logger import log
 async def personal_cabinet(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    state = context.application.chat_data.get(chat_id, {}).get("conversation")
+    log(f"[FSM] state before entry: {state}")
     user_id = str(update.effective_user.id)
-    users = load_users()
+    users = load_users_map()
     user = users.get(user_id)
     if not user:
         await update.message.reply_text(
@@ -39,7 +42,7 @@ async def view_user_info(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = str(update.effective_user.id)
-    users = load_users()
+    users = load_users_map()
     user = users.get(user_id)
     if not user:
         await update.message.reply_text(
@@ -96,9 +99,8 @@ async def handle_edit_selection(update: Update,
         return
     context.user_data["awaiting_new_value"] = True
     log(
-        f"DEBUG [handle_edit_selection] Установлены edit_field: {
-            context.user_data.get('edit_field')}, awaiting_new_value: {
-            context.user_data.get('awaiting_new_value')}")
+        f"DEBUG [handle_edit_selection] Установлены edit_field: {context.user_data.get('edit_field')}, awaiting_new_value: {context.user_data.get('awaiting_new_value')}"
+    )
 
 
 async def save_new_value(
@@ -106,12 +108,11 @@ async def save_new_value(
         context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.user_data.get("payout_request"):
         return
-    log(
-        f"DEBUG [save_new_value] Текст: '{
-            update.message.text if update.message else ''}', context.user_data: {
-            context.user_data}")
     if not context.user_data.get("awaiting_new_value"):
         return
+    log(
+        f"DEBUG [save_new_value] Текст: '{update.message.text if update.message else ''}', context.user_data: {context.user_data}"
+    )
     new_value = update.message.text.strip()
     field = context.user_data.get("edit_field")
     if field == "phone":
@@ -162,7 +163,7 @@ async def handle_edit_confirmation(
     if data.startswith("confirm_"):
         _, field, new_value = data.split("_", 2)
         user_id = str(query.from_user.id)
-        users = load_users()
+        users = load_users_map()
         if user_id not in users:
             await query.edit_message_text("❌ Ваши данные не найдены.", reply_markup=None)
             context.user_data.clear()
@@ -212,7 +213,7 @@ async def handle_admin_change_response(
     data = query.data
     if data.startswith("approve_change_"):
         user_id = data.split("_")[-1]
-        users = load_users()
+        users = load_users_map()
         if user_id not in users:
             await query.edit_message_text("❌ Пользователь не найден.")
             return
@@ -239,7 +240,7 @@ async def handle_admin_change_response(
         )
     elif data.startswith("reject_change_"):
         user_id = data.split("_")[-1]
-        users = load_users()
+        users = load_users_map()
         if user_id not in users:
             await query.edit_message_text("❌ Пользователь не найден.")
             return
@@ -312,19 +313,11 @@ async def view_request_history(update: Update,
             "Отменено": "🚫 Отменено",
         }.get(req["status"], "Неизвестно")
         history_text += (
-            f"Тип: {
-                req.get(
-                    'payout_type',
-                    'Не указано')} ({
-                req.get(
-                    'method',
-                    'Не указано')})\n" f"Сумма: {
-                        req.get(
-                            'amount',
-                            'Не указано')} ₽\n" f"Статус: {status_text}\n" f"Дата: {
-                                req.get(
-                                    'timestamp',
-                                    'Не указана')}\n\n")
+            f"Тип: {req.get('payout_type', 'Не указано')} ({req.get('method', 'Не указано')})\n"
+            f"Сумма: {req.get('amount', 'Не указано')} ₽\n"
+            f"Статус: {status_text}\n"
+            f"Дата: {req.get('timestamp', 'Не указана')}\n\n"
+        )
     history_text += f"Авансы за {current_month}: {total_advance_amount} ₽ из {MAX_ADVANCE_AMOUNT_PER_MONTH} ₽\nОстаток: {remaining_amount} ₽"
     await update.message.reply_text(
         history_text.strip(), reply_markup=get_cabinet_menu()

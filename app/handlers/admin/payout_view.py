@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from ...constants import UserStates
 from ...core.constants import MONTHS_RU, PAYOUT_TYPES
+from ...core.enums import PAYOUT_STATUSES
 from ...config import ADMIN_ID
 from ...keyboards.reply_admin import get_admin_menu
 from ...services.advance_requests import load_advance_requests
@@ -27,6 +28,9 @@ __all__ = [
 
 async def view_payouts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало сценария просмотра выплат."""
+    chat_id = update.effective_chat.id
+    state = context.application.chat_data.get(chat_id, {}).get("conversation")
+    log(f"[FSM] state before entry: {state}")
     if update.effective_user.id != ADMIN_ID:
         return ConversationHandler.END
 
@@ -99,8 +103,8 @@ async def select_period(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["period_filter"] = period_filter
 
     keyboard = [
-        ["Ожидает", "Одобрено"],
-        ["Отклонено", "Отменено"],
+        PAYOUT_STATUSES[:2],
+        [PAYOUT_STATUSES[2], "Отменено"],
         ["Все статусы"],
         ["🏠 Домой"],
     ]
@@ -123,9 +127,9 @@ async def select_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     status_map = {
-        "Ожидает": "Ожидает",
-        "Одобрено": "Одобрено",
-        "Отклонено": "Отклонено",
+        PAYOUT_STATUSES[0]: PAYOUT_STATUSES[0],
+        PAYOUT_STATUSES[1]: PAYOUT_STATUSES[1],
+        PAYOUT_STATUSES[2]: PAYOUT_STATUSES[2],
         "Отменено": "Отменено",
     }
     if status not in status_map and status != "Все статусы":
@@ -143,9 +147,9 @@ async def select_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_employee_keyboard(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    from ...services.users import load_users
+    from ...services.users import load_users_map
 
-    users = load_users()
+    users = load_users_map()
     employees = sorted(
         {u.get("name", "").strip() for u in users.values() if u.get("name")}
     )
@@ -166,9 +170,9 @@ async def show_employee_keyboard(
 async def select_employee_filter(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    from ...services.users import load_users
+    from ...services.users import load_users_map
 
-    users = load_users()
+    users = load_users_map()
     employees = {
         u.get("name", "").strip() for u in users.values() if u.get("name")
     }
@@ -286,9 +290,9 @@ async def show_payouts_page(
     end_idx = min(start_idx + items_per_page, len(filtered_requests))
     page_requests = filtered_requests[start_idx:end_idx]
 
-    from ...services.users import load_users
+    from ...services.users import load_users_map
 
-    users = load_users()
+    users = load_users_map()
 
     lines = []
     for req in page_requests:

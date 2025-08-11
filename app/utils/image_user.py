@@ -30,7 +30,7 @@ def create_schedule_image(tables, filename="salary_report.png"):
     line_spacing = 15
 
     if not tables or all(len(table) < 2 for table in tables):
-        print("❌ Error: Empty list of tables provided!")
+        log("❌ Error: Empty list of tables provided!")
         return None
 
     key_lengths = [
@@ -66,7 +66,7 @@ def create_schedule_image(tables, filename="salary_report.png"):
     )
     img_height = total_height
 
-    print(f"Размеры изображения: ширина={img_width}, высота={img_height}")
+    log(f"Размеры изображения: ширина={img_width}, высота={img_height}")
 
     img = Image.new("RGB", (img_width, img_height), "white")
     draw = ImageDraw.Draw(img)
@@ -92,9 +92,9 @@ def create_schedule_image(tables, filename="salary_report.png"):
 
         for row in table[1:]:
             if len(row) != 2:
-                print(
-                    f"❌ Error: row {row} has {
-                        len(row)} elements (expected 2). Skipping!")
+                log(
+                    f"❌ Error: row {row} has {len(row)} elements (expected 2). Skipping!"
+                )
                 continue
             key, value = row
             value_lines = value.split("\n")
@@ -129,9 +129,8 @@ def create_schedule_image(tables, filename="salary_report.png"):
 
 def create_schedule_image_user(data, employee_name, sheet_name):
     employee_row = data[data["ИМЯ"] == employee_name]
-
     if employee_row.empty:
-        print(f"⚠️ Нет данных для сотрудника {employee_name}")
+        log(f"⚠️ Нет данных для сотрудника {employee_name}")
         return None
 
     last_day = None
@@ -141,7 +140,7 @@ def create_schedule_image_user(data, employee_name, sheet_name):
             break
 
     if last_day is None:
-        print("⚠️ Нет подходящего столбца дня месяца")
+        log("⚠️ Нет подходящего столбца дня месяца")
         return None
 
     days = [str(day) for day in range(1, last_day + 1)]

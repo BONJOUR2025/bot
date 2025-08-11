@@ -10,6 +10,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+import os
+
+from app.utils.logger import log
 
 from typing import TYPE_CHECKING
 
@@ -62,16 +65,25 @@ class EmployeeReportService:
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=A4)
 
-        font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        bold_font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        pdfmetrics.registerFont(TTFont("DejaVu", font))
-        pdfmetrics.registerFont(TTFont("DejaVu-Bold", bold_font))
+        from app.config import FONT_PATH
+        font = FONT_PATH
+        bold_font = FONT_PATH.replace(".ttf", "-Bold.ttf")
+        if os.path.exists(font):
+            pdfmetrics.registerFont(TTFont("DejaVu", font))
+            if os.path.exists(bold_font):
+                pdfmetrics.registerFont(TTFont("DejaVu-Bold", bold_font))
+            font_name = "DejaVu"
+            bold_name = "DejaVu-Bold" if os.path.exists(bold_font) else "DejaVu"
+        else:
+            log(f"⚠️ Font not found: {font}. Using built-in Helvetica")
+            font_name = "Helvetica"
+            bold_name = "Helvetica-Bold"
 
         y = 800
-        pdf.setFont("DejaVu-Bold", 16)
+        pdf.setFont(bold_name, 16)
         pdf.drawString(40, y, "👤 PERSONAL DETAILS")
         y -= 24
-        pdf.setFont("DejaVu", 12)
+        pdf.setFont(font_name, 12)
         pdf.drawString(50, y, f"Full name: {employee.full_name}")
         y -= 15
         pdf.drawString(50, y, f"Telegram ID: {employee.id}")
@@ -82,10 +94,10 @@ class EmployeeReportService:
         pdf.drawString(50, y, f"Code: {employee.name}")
         y -= 30
 
-        pdf.setFont("DejaVu-Bold", 14)
+        pdf.setFont(bold_name, 14)
         pdf.drawString(40, y, "💸 PAYOUT HISTORY")
         y -= 20
-        pdf.setFont("DejaVu", 12)
+        pdf.setFont(font_name, 12)
         for p in payouts:
             line = (
                 f"{p.get('timestamp','')} | {p.get('amount')} ₽ | "
@@ -96,12 +108,12 @@ class EmployeeReportService:
             if y < 60:
                 pdf.showPage()
                 y = 800
-                pdf.setFont("DejaVu", 12)
+                pdf.setFont(font_name, 12)
 
-        pdf.setFont("DejaVu-Bold", 14)
+        pdf.setFont(bold_name, 14)
         pdf.drawString(40, y, "📅 VACATION")
         y -= 20
-        pdf.setFont("DejaVu", 12)
+        pdf.setFont(font_name, 12)
         for v in vacations:
             line = f"{v.get('start_date')} → {v.get('end_date')}"
             pdf.drawString(50, y, line)
@@ -109,19 +121,19 @@ class EmployeeReportService:
             if y < 60:
                 pdf.showPage()
                 y = 800
-                pdf.setFont("DejaVu", 12)
+                pdf.setFont(font_name, 12)
 
-        pdf.setFont("DejaVu-Bold", 14)
+        pdf.setFont(bold_name, 14)
         pdf.drawString(40, y, "📊 STATS")
         y -= 20
-        pdf.setFont("DejaVu", 12)
+        pdf.setFont(font_name, 12)
         for status, count in status_counts.items():
             pdf.drawString(50, y, f"{status}: {count}")
             y -= 15
             if y < 60:
                 pdf.showPage()
                 y = 800
-                pdf.setFont("DejaVu", 12)
+                pdf.setFont(font_name, 12)
         pdf.drawString(50, y - 10, f"📆 Generated: {datetime.now().strftime('%Y-%m-%d')}")
         pdf.showPage()
         pdf.save()

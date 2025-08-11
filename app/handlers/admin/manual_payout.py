@@ -9,7 +9,7 @@ from telegram import (
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.error import BadRequest
 
-from ...services.users import load_users
+from ...services.users import load_users_map
 from ...keyboards.reply_admin import get_admin_menu
 from ...services.advance_requests import log_new_request
 from ...constants import ManualPayoutStates
@@ -19,7 +19,10 @@ from ...utils.logger import log
 async def manual_payout_start(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    users = load_users()
+    chat_id = update.effective_chat.id
+    state = context.application.chat_data.get(chat_id, {}).get("conversation")
+    log(f"[FSM] state before entry: {state}")
+    users = load_users_map()
     employee_names = sorted(
         {u.get("name") for u in users.values() if u.get("name")}
     )
@@ -90,19 +93,17 @@ async def manual_payout_method(
     method = update.message.text
     context.user_data["manual_payout"]["method"] = method
     data = context.user_data["manual_payout"]
-    users = load_users()
+    users = load_users_map()
     user = users.get(data["user_id"], {})
     data["phone"] = user.get("phone", "—")
     data["bank"] = user.get("bank", "—")
+    data["card_number"] = user.get("card_number", "—")
 
     msg = (
-        f"📤 Создать запрос от имени:\n" f"👤 {
-            data['name']}\n📱 {
-            data['phone']}\n🏦 {
-                data['bank']}\n\n" f"Тип: {
-                    data['payout_type']}\nСумма: {
-                        data['amount']} ₽\nМетод: {
-                            data['method']}")
+        f"📤 Создать запрос от имени:\n"
+        f"👤 {data['name']}\n💳 {data['card_number']}\n🏦 {data['bank']}\n\n"
+        f"Тип: {data['payout_type']}\nСумма: {data['amount']} ₽\nМетод: {data['method']}"
+    )
     keyboard = InlineKeyboardMarkup(
         [
             [
@@ -153,6 +154,7 @@ async def manual_payout_finalize(
         data["user_id"],
         data["name"],
         data["phone"],
+        data["card_number"],
         data["bank"],
         data["amount"],
         data["method"],

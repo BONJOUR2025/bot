@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from ...config import EXCEL_FILE
-from ...services.users import load_users
+from ...services.users import load_users_map
 from ...keyboards.reply_user import get_month_keyboard_user, get_main_menu
 from ...utils.image import create_schedule_image, create_combined_table_image
 from ...services.excel import load_data
@@ -16,6 +16,9 @@ async def view_salary_user(
         update: Update,
         context: ContextTypes.DEFAULT_TYPE) -> None:
     """Запрашивает месяц для просмотра зарплаты."""
+    chat_id = update.effective_chat.id
+    state = context.application.chat_data.get(chat_id, {}).get("conversation")
+    log(f"[FSM] state before entry: {state}")
     context.user_data["requested_data"] = "salary"
     if update.message:
         await update.message.reply_text(
@@ -28,6 +31,9 @@ async def view_salary_user(
 async def view_schedule_user(update: Update,
                              context: ContextTypes.DEFAULT_TYPE) -> None:
     """Запрашивает месяц для просмотра расписания."""
+    chat_id = update.effective_chat.id
+    state = context.application.chat_data.get(chat_id, {}).get("conversation")
+    log(f"[FSM] state before entry: {state}")
     context.user_data["requested_data"] = "schedule"
     if update.message:
         await update.message.reply_text(
@@ -71,7 +77,7 @@ async def handle_selected_month_user(
     loading_message = await update.message.reply_text("⏳ Загружаю данные...")
     await context.bot.send_chat_action(chat_id=update.message.chat_id, action="typing")
 
-    users = load_users()
+    users = load_users_map()
     user = users.get(user_id)
     if not user:
         await loading_message.edit_text(
@@ -192,7 +198,7 @@ async def handle_schedule_request(
         context: ContextTypes.DEFAULT_TYPE):
     """Отправляет расписание на текущий выбранный месяц."""
     user_id = update.effective_user.id
-    users = load_users()
+    users = load_users_map()
     user_info = users.get(str(user_id))
     if not user_info or not user_info.get("name"):
         await update.message.reply_text(

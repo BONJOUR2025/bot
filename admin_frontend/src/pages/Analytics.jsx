@@ -303,16 +303,14 @@ export default function Analytics() {
                 type="date"
                 className="border p-2"
                 value={ratingRange.from}
-                onChange={(e) =>
-                  setRatingRange({ ...ratingRange, from: e.target.value })
+                onChange={(e) => setRatingRange({ ...ratingRange, from: e.target.value })
                 }
               />
               <input
                 type="date"
                 className="border p-2"
                 value={ratingRange.to}
-                onChange={(e) =>
-                  setRatingRange({ ...ratingRange, to: e.target.value })
+                onChange={(e) => setRatingRange({ ...ratingRange, to: e.target.value })
                 }
               />
               <button className="btn" onClick={loadRating}>
@@ -344,3 +342,9 @@ export default function Analytics() {
     </div>
   );
 }
+
+
+
+
+
+

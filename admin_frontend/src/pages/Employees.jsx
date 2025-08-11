@@ -245,13 +245,12 @@ export default function Employees() {
                   {e.photo_url ? (
                     <img
                       src={e.photo_url}
-                      alt=""
-                      className="w-8 h-8 rounded-full object-cover cursor-pointer"
+                      alt="" className="w-8 h-8 rounded-full object-cover cursor-pointer"
                       onClick={() => window.open(e.photo_url, '_blank')}
                     />
                   ) : (
                     <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                      <Camera size={14} className="text-gray-500" />
+                      <span className="text-gray-500 text-xs">No photo</span>
                     </div>
                   )}
                 </td>
@@ -393,8 +392,7 @@ export default function Employees() {
               <input
                 type="checkbox"
                 checked={form.sync_to_bot}
-                onChange={(e) =>
-                  setForm({ ...form, sync_to_bot: e.target.checked })
+                onChange={(e) => setForm({ ...form, sync_to_bot: e.target.checked })
                 }
               />
               Отразить в боте
@@ -422,3 +420,11 @@ export default function Employees() {
     </div>
   );
 }
+
+
+
+
+
+
+
+

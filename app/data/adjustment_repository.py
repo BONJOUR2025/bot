@@ -3,12 +3,15 @@ import os
 from typing import List, Dict, Any, Optional
 
 from app.config import ADJUSTMENTS_FILE
+from app.utils.logger import log
 
 
 class AdjustmentRepository:
     def __init__(self, file_path: Optional[str] = None) -> None:
         self._file = file_path or ADJUSTMENTS_FILE
         self._data: List[Dict[str, Any]] = self._load()
+        if not self._data:
+            log("⚠️ AdjustmentRepository loaded no adjustments")
         self._counter = max(
             (int(
                 item.get(
@@ -19,12 +22,33 @@ class AdjustmentRepository:
 
     def _load(self) -> List[Dict[str, Any]]:
         if not os.path.exists(self._file):
+            example = self._file.replace('.json', '.example.json')
+            if os.path.exists(example):
+                try:
+                    with open(example, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    with open(self._file, 'w', encoding='utf-8') as out:
+                        json.dump(data, out, ensure_ascii=False, indent=2)
+                    return data
+                except Exception:
+                    return []
             return []
         try:
             with open(self._file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
         except Exception:
-            return []
+            data = []
+        if not data:
+            example = self._file.replace('.json', '.example.json')
+            if os.path.exists(example):
+                try:
+                    with open(example, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    with open(self._file, 'w', encoding='utf-8') as out:
+                        json.dump(data, out, ensure_ascii=False, indent=2)
+                except Exception:
+                    data = []
+        return data
 
     def _save(self) -> None:
         with open(self._file, 'w', encoding='utf-8') as f:

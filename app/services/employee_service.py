@@ -35,6 +35,8 @@ class EmployeeService:
             # keep counter in sync if numeric ids are provided
             if str(employee.id).isdigit():
                 self._counter = max(self._counter, int(employee.id))
+        if any(e.id == str(employee.id) for e in self._employees):
+            raise ValueError("employee_exists")
         self._employees.append(employee)
         self._repo.add_employee(employee)
         return employee
@@ -46,10 +48,20 @@ class EmployeeService:
         emp = self.get_employee(employee_id)
         if not emp:
             return None
+        new_id = updates.pop("id", None)
         for key, value in updates.items():
             if hasattr(emp, key) and value is not None:
                 setattr(emp, key, value)
-        self._repo.update_employee(emp)
+        if new_id and new_id != emp.id:
+            if any(e.id == str(new_id) for e in self._employees):
+                raise ValueError("employee_exists")
+            self._repo.delete_employee_by_id(emp.id)
+            emp.id = str(new_id)
+            if str(emp.id).isdigit():
+                self._counter = max(self._counter, int(emp.id))
+            self._repo.add_employee(emp)
+        else:
+            self._repo.update_employee(emp)
         return emp
 
     def remove_employee(self, employee_id: str) -> None:
@@ -75,25 +87,35 @@ class EmployeeAPIService:
 
     async def create_employee(self, data: EmployeeCreate) -> EmployeeOut:
         employee = Employee(
-            id=data.id,
+            id=data.id or "",
             name=data.name,
-            full_name=data.full_name,
-            phone=data.phone,
-            card_number=data.card_number,
-            bank=data.bank,
+            full_name=data.full_name or "",
+            phone=data.phone or "",
+            position=data.position or "",
+            is_admin=data.is_admin or False,
+            card_number=data.card_number or "",
+            bank=data.bank or "",
+            work_place=data.work_place or "",
+            clothing_size=data.clothing_size or "",
             birthdate=data.birthdate,
             note=data.note or "",
             photo_url=data.photo_url or "",
-            status=EmployeeStatus(data.status),
+            status=EmployeeStatus(data.status or "active"),
         )
-        created = self.service.add_employee(employee)
+        try:
+            created = self.service.add_employee(employee)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Employee already exists")
         return EmployeeOut(**created.__dict__)
 
     async def update_employee(
             self,
             employee_id: str,
             data: EmployeeUpdate) -> EmployeeOut:
-        emp = self.service.update_employee(employee_id, **data.dict())
+        try:
+            emp = self.service.update_employee(employee_id, **data.dict())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Employee already exists")
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         return EmployeeOut(**emp.__dict__)
@@ -117,3 +139,9 @@ class EmployeeAPIService:
             raise HTTPException(status_code=404, detail="Employee not found")
         self.service.remove_employee(employee_id)
         return {"status": "deleted"}
+
+    async def export_employees_pdf(self) -> bytes:
+        employees = self.service.list_employees()
+        from app.services.pdf_profile import generate_employees_list_pdf
+
+        return generate_employees_list_pdf(employees)

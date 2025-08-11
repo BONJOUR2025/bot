@@ -6,22 +6,26 @@ from pydantic import BaseModel
 
 class EmployeeBase(BaseModel):
     name: str
-    full_name: str
-    phone: str
-    card_number: str
-    bank: str
-    birthdate: Optional[date]
-    note: Optional[str]
-    photo_url: Optional[str]
-    status: str
+    full_name: Optional[str] = ""
+    phone: Optional[str] = ""
+    position: Optional[str] = ""
+    is_admin: bool = False
+    card_number: Optional[str] = ""
+    bank: Optional[str] = ""
+    work_place: Optional[str] = ""
+    clothing_size: Optional[str] = ""
+    birthdate: Optional[date] = None
+    note: Optional[str] = ""
+    photo_url: Optional[str] = ""
+    status: str = "active"
 
 
 class EmployeeCreate(EmployeeBase):
-    id: str
+    id: Optional[str] = ""
 
 
 class EmployeeUpdate(EmployeeBase):
-    pass
+    id: Optional[str] = None
 
 
 class EmployeeOut(EmployeeBase):
@@ -35,5 +39,9 @@ class Employee(BaseModel):
     id: str
     name: str
     phone: str
+    position: str = ""
+    work_place: str = ""
+    clothing_size: str = ""
+    is_admin: bool = False
     note: Optional[str] = None
     photo_url: Optional[str] = None

@@ -1,4 +1,5 @@
-from telegram import ReplyKeyboardMarkup
+from telegram import ReplyKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 from typing import List
 
 
@@ -7,7 +8,8 @@ def get_main_menu() -> ReplyKeyboardMarkup:
     Возвращает главное меню для обычного сотрудника.
     """
     keyboard: List[List[str]] = [
-        ["📄 Просмотр ЗП", "💰 Запросить выплату"],
+        ["📄 Просмотр ЗП"],
+        ["💰 Запросить выплату"],
         ["📅 Просмотр расписания", "👤 Личный кабинет"],
     ]
     return ReplyKeyboardMarkup(
@@ -37,7 +39,8 @@ def get_cabinet_menu() -> ReplyKeyboardMarkup:
     """
     keyboard: List[List[str]] = [
         ["📋 Мои данные", "✏️ Изменить данные"],
-        ["📜 История запросов", "🏠 Домой"],
+        ["💰 Запросить выплату", "📜 История запросов"],
+        ["🏠 Домой"],
     ]
     return ReplyKeyboardMarkup(
         keyboard, resize_keyboard=True, one_time_keyboard=False
@@ -48,4 +51,11 @@ def get_edit_keyboard():
     keyboard = [["📱 Изменить телефон"], ["🏦 Изменить банк"], ["🏠 Домой"]]
     return ReplyKeyboardMarkup(
         keyboard, resize_keyboard=True, one_time_keyboard=True
+    )
+
+
+async def send_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send the main user menu."""
+    await update.message.reply_text(
+        "🏠 Вы вернулись в главное меню.", reply_markup=get_main_menu()
     )

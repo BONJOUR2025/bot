@@ -1,18 +1,24 @@
-"""Access payout requests via the REST API instead of local JSON files."""
+"""Payout request helpers using the local repository."""
 
-import time
-from dataclasses import asdict
 from typing import Any, Dict, List
+from datetime import datetime
+import logging
 
-import requests
-
+from app.data.payout_repository import (
+    PayoutRepository,
+    load_advance_requests as repo_load_advance_requests,
+)
+from app.schemas.payout import Payout
 from ..utils.logger import log
-from ..models import PayoutRequest
+from ..core.enums import PAYOUT_STATUSES
 
-# Base URL of the local API
-API_URL = "http://localhost:8000/api"
+logger = logging.getLogger(__name__)
 
-# Соответствие статусов на английском и русском языках
+_repo = PayoutRepository()
+
+# statuses considered pending (awaiting admin decision)
+PENDING_STATUSES = {PAYOUT_STATUSES[0]}
+
 STATUS_TRANSLATIONS = {
     "approved": "Одобрено",
     "rejected": "Отклонено",
@@ -22,144 +28,103 @@ STATUS_TRANSLATIONS = {
 
 
 def load_advance_requests() -> List[Dict[str, Any]]:
-    """Fetch payout requests from the local API."""
-    try:
-        resp = requests.get(f"{API_URL}/payouts/")
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        log(f"❌ Ошибка загрузки выплат через API: {e}")
-        return []
+    path = _repo._file
+    log(f"📂 Загрузка заявок из: {path}")
+    data = repo_load_advance_requests(path)
+    log(f"✅ Загружено заявок: {len(data)}")
+    return data
 
 
 def save_advance_requests(_requests_list: List[Dict[str, Any]]) -> None:
-    """Deprecated helper kept for backward compatibility."""
-    log("⚠️ save_advance_requests is deprecated when using the API")
+    log("⚠️ save_advance_requests is deprecated when using repository")
 
 
-def load_requests_dataclass() -> List[PayoutRequest]:
-    """Возвращает список запросов как объекты PayoutRequest."""
-    return [PayoutRequest(**d) for d in load_advance_requests()]
+def load_requests_dataclass() -> List[Payout]:
+    return [Payout(**r) for r in _repo.load_all()]
 
 
-def save_requests_dataclass(requests: List[PayoutRequest]) -> None:
-    """Сохраняет список объектов PayoutRequest."""
-    save_advance_requests([asdict(r) for r in requests])
+def save_requests_dataclass(requests: List[Payout]) -> None:
+    for r in requests:
+        _repo.update(r.id, r.model_dump(exclude_none=True))
 
 
 def log_new_request(
     user_id: Any,
     name: str,
     phone: str,
+    card_number: str,
     bank: str,
     amount: Any,
     payout_method: str,
     payout_type: str | None = None,
-) -> None:
-    """Send a new payout request to the API."""
+) -> Dict[str, Any]:
     payload = {
         "user_id": str(user_id),
         "name": name,
         "phone": phone,
+        "card_number": card_number,
         "bank": bank,
         "amount": int(amount),
         "method": payout_method,
         "payout_type": payout_type,
+        "status": "Ожидает",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    try:
-        requests.post(f"{API_URL}/payouts/", json=payload)
-        log(f"📝 Новый запрос выплаты: {payload}")
-    except Exception as e:
-        log(f"❌ Ошибка создания запроса выплаты через API: {e}")
+    record = _repo.create(payload)
+    log(f"📝 Новый запрос выплаты: {record}")
+    return record
 
 
 def check_pending_request(user_id: Any) -> bool:
-    """Check via API if user has a pending payout request."""
-    try:
-        resp = requests.get(
-            f"{API_URL}/payouts/",
-            params={"employee_id": user_id, "status": "В ожидании"},
-        )
-        resp.raise_for_status()
-        return len(resp.json()) > 0
-    except Exception as e:
-        log(f"❌ Ошибка проверки запроса выплаты через API: {e}")
+    requests = _repo.list(employee_id=user_id)
+    return any(r.get("status") in PENDING_STATUSES for r in requests)
+
+
+def update_request_status(payout_id: Any, status: str) -> bool:
+    record = next(
+        (r for r in _repo.load_all() if str(r.get("id")) == str(payout_id)),
+        None,
+    )
+    if not record:
+        log(f"⚠️ [update_request_status] Запрос {payout_id} не найден")
         return False
-
-
-def update_request_status(user_id: Any, status: str) -> None:
-    """Update the last pending request for a user via the API."""
-    try:
-        resp = requests.get(
-            f"{API_URL}/payouts/",
-            params={"employee_id": user_id, "status": "В ожидании"},
-        )
-        resp.raise_for_status()
-        items = resp.json()
-        if not items:
-            log(
-                f"⚠️ [update_request_status] Не найдено активных запросов для user_id {user_id}"
-            )
-            return
-        payout_id = items[0]["id"]
-        status_ru = STATUS_TRANSLATIONS.get(status.lower(), status)
-        requests.put(
-            f"{API_URL}/payouts/{payout_id}",
-            json={
-                "status": status_ru})
-        log(f"✅ Статус запроса для user_id {user_id} обновлён на '{status}'")
-    except Exception as e:
-        log(f"❌ Ошибка обновления статуса выплаты через API: {e}")
+    if record.get("status") not in PENDING_STATUSES:
+        log(f"⚠️ [update_request_status] Запрос {payout_id} не в ожидающем статусе")
+        return False
+    status_ru = STATUS_TRANSLATIONS.get(status.lower(), status)
+    updates = {"status": status_ru}
+    if not record.get("timestamp"):
+        updates["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    updated = _repo.update(str(payout_id), updates)
+    if updated:
+        log(f"✅ Статус запроса {payout_id} обновлён на '{status_ru}'")
+        return True
+    log(f"⚠️ [update_request_status] Не удалось обновить запрос {payout_id}")
+    return False
 
 
 def delete_request(user_id: Any) -> None:
-    """Delete all requests for a user via the API."""
-    try:
-        resp = requests.get(
-            f"{API_URL}/payouts/",
-            params={"employee_id": user_id},
-        )
-        resp.raise_for_status()
-        ids = [str(item["id"]) for item in resp.json()]
-        if ids:
-            requests.delete(
-                f"{API_URL}/payouts/", params={"ids": ",".join(ids)}
-            )
-            log(f"✅ Запросы пользователя {user_id} удалены")
-    except Exception as e:
-        log(f"❌ Ошибка удаления запросов через API: {e}")
+    items = _repo.list(employee_id=user_id)
+    ids = [str(i["id"]) for i in items]
+    if ids:
+        _repo.delete_many(ids)
+        log(f"✅ Запросы пользователя {user_id} удалены")
 
 
 def edit_request(user_id: Any, updates: Dict[str, Any]) -> None:
-    """Edit the first request of a user via the API."""
-    try:
-        resp = requests.get(
-            f"{API_URL}/payouts/", params={"employee_id": user_id}
-        )
-        resp.raise_for_status()
-        items = resp.json()
-        if not items:
-            return
-        payout_id = items[0]["id"]
-        requests.put(f"{API_URL}/payouts/{payout_id}", json=updates)
-        log(f"✅ Запрос пользователя {user_id} обновлён: {updates}")
-    except Exception as e:
-        log(f"❌ Ошибка редактирования запроса через API: {e}")
+    items = _repo.list(employee_id=user_id)
+    if not items:
+        return
+    payout_id = items[0]["id"]
+    _repo.update(payout_id, updates)
+    log(f"✅ Запрос пользователя {user_id} обновлён: {updates}")
 
 
 def delete_request_by_index(index: str) -> None:
-    """Delete a request by its id via the API."""
-    try:
-        requests.delete(f"{API_URL}/payouts/{index}")
-        log(f"✅ Запрос №{index} удалён")
-    except Exception as e:
-        log(f"❌ Ошибка удаления запроса через API: {e}")
+    _repo.delete(index)
+    log(f"✅ Запрос №{index} удалён")
 
 
 def edit_request_by_index(index: str, updates: Dict[str, Any]) -> None:
-    """Edit a request by id via the API."""
-    try:
-        requests.put(f"{API_URL}/payouts/{index}", json=updates)
-        log(f"✅ Запрос №{index} обновлён: {updates}")
-    except Exception as e:
-        log(f"❌ Ошибка обновления запроса через API: {e}")
+    _repo.update(index, updates)
+    log(f"✅ Запрос №{index} обновлён: {updates}")

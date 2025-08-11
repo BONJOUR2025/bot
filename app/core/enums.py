@@ -6,3 +6,7 @@ class EmployeeStatus(Enum):
 
     ACTIVE = "active"
     INACTIVE = "inactive"
+
+
+# Unified payout status list used across backend and frontend
+PAYOUT_STATUSES = ["Ожидает", "Одобрено", "Отклонено", "Выплачено"]

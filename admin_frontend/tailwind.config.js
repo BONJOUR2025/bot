@@ -6,7 +6,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: { DEFAULT: '#2E75FF', dark: '#1f5fcc' },
+        brand: { DEFAULT: '#FF6600', dark: '#cc5200' },
         surface: '#F9FAFB',
         muted: '#6B7280',
         success: '#10B981',

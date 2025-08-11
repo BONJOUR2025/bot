@@ -11,13 +11,13 @@
   <header class="bg-white dark:bg-gray-900 shadow">
     <nav class="container mx-auto flex justify-between items-center p-4">
       <div class="flex gap-4">
-        <a href="#" onclick="loadPage('/employees')" class="hover:text-blue-600">Сотрудники</a>
-        <a href="#" onclick="loadPage('/payouts')" class="hover:text-blue-600">Выплаты</a>
-        <a href="#" onclick="loadPage('/vacations')" class="hover:text-blue-600">Отпуска</a>
-        <a href="#" onclick="loadPage('/reports')" class="hover:text-blue-600">Отчёты</a>
-        <a href="#" onclick="loadPage('/birthdays')" class="hover:text-blue-600">Дни рождения</a>
-        <a href="#" onclick="loadPage('/broadcasts')" class="hover:text-blue-600">Рассылки</a>
-        <a href="#" onclick="loadPage('/settings')" class="hover:text-blue-600">Настройки</a>
+        <a href="#" onclick="loadPage('/admin/employees')" class="hover:text-blue-600">Сотрудники</a>
+        <a href="#" onclick="loadPage('/admin/payouts')" class="hover:text-blue-600">Выплаты</a>
+        <a href="#" onclick="loadPage('/admin/vacations')" class="hover:text-blue-600">Отпуска</a>
+        <a href="#" onclick="loadPage('/admin/reports')" class="hover:text-blue-600">Отчёты</a>
+        <a href="#" onclick="loadPage('/admin/analytics/sales')" class="hover:text-blue-600">Аналитика</a>
+        <a href="#" onclick="loadPage('/admin/broadcasts')" class="hover:text-blue-600">Рассылки</a>
+        <a href="#" onclick="loadPage('/admin/settings')" class="hover:text-blue-600">Настройки</a>
       </div>
       <button onclick="document.documentElement.classList.toggle('dark')" class="text-sm">🌙</button>
     </nav>
@@ -26,7 +26,7 @@
     <div id="page-content"></div>
   </main>
   <script>
-    let currentUrl = '/employees';
+    let currentUrl = '/admin/employees';
 
     function loadPage(url) {
       currentUrl = url;
@@ -58,7 +58,7 @@
       loadPage(currentUrl);
     }
 
-    window.onload = () => loadPage('/employees');
+    window.onload = () => loadPage('/admin/employees');
   </script>
 </body>
 </html>

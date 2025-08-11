@@ -34,7 +34,7 @@ def create_combined_table_image(tables, filename="salary_report.png"):
     line_spacing = 15
 
     if not tables or all(len(table) < 2 for table in tables):
-        print("❌ Error: Empty list of tables provided!")
+        log("❌ Error: Empty list of tables provided!")
         return None
 
     key_lengths = [
@@ -70,7 +70,7 @@ def create_combined_table_image(tables, filename="salary_report.png"):
     )
     img_height = total_height
 
-    print(f"Размеры изображения: ширина={img_width}, высота={img_height}")
+    log(f"Размеры изображения: ширина={img_width}, высота={img_height}")
 
     img = Image.new("RGB", (img_width, img_height), "white")
     draw = ImageDraw.Draw(img)
@@ -96,9 +96,9 @@ def create_combined_table_image(tables, filename="salary_report.png"):
 
         for row in table[1:]:
             if len(row) != 2:
-                print(
-                    f"❌ Error: row {row} has {
-                        len(row)} elements (expected 2). Skipping!")
+                log(
+                    f"❌ Error: row {row} has {len(row)} elements (expected 2). Skipping!"
+                )
                 continue
             key, value = row
             value_lines = value.split("\n")
@@ -142,8 +142,8 @@ def create_schedule_image(data, employee_name, sheet_name, weekdays):
         return None
     employee_row = employee_rows.iloc[0]
     log(
-        f"DEBUG [create_schedule_image] Данные сотрудника: {
-            employee_row.to_dict()}")
+        f"DEBUG [create_schedule_image] Данные сотрудника: {employee_row.to_dict()}"
+    )
 
     valid_day_cols = []
     for col in data.columns[2:]:

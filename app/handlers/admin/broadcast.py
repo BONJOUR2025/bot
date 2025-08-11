@@ -9,13 +9,11 @@ from telegram import (
 )
 from telegram.ext import Application, ContextTypes, ConversationHandler
 from telegram.error import BadRequest
-import requests
 
-from ...services.advance_requests import API_URL
 from ...utils import is_valid_user_id
 
 from ...config import ADMIN_ID
-from ...services.users import load_users
+from ...services.users import load_users_map
 from ...utils.logger import log
 from ...constants import UserStates
 from ...keyboards.reply_admin import get_home_button, get_admin_menu
@@ -33,15 +31,17 @@ async def send_message(
         return
     try:
         if message.text:
-            requests.post(
-                f"{API_URL}/telegram/send_message",
-                json={"user_id": str(user_id), "message": message.text},
+            await app.bot.send_message(
+                chat_id=user_id,
+                text=message.text,
+                parse_mode="HTML",
             )
         elif message.photo:
             await app.bot.send_photo(
                 chat_id=user_id,
                 photo=message.photo[-1].file_id,
                 caption=message.caption or "",
+                parse_mode="HTML",
             )
         log(f"✅ [send_message] Сообщение отправлено пользователю {user_id}")
     except BadRequest as e:
@@ -65,6 +65,9 @@ async def handle_broadcast_start(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
     """Запускает процесс рассылки."""
+    chat_id = update.effective_chat.id
+    state = context.application.chat_data.get(chat_id, {}).get("conversation")
+    log(f"[FSM] state before entry: {state}")
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
         await update.message.reply_text("❌ У вас нет прав для рассылки.")
@@ -193,7 +196,7 @@ async def handle_broadcast_send(
         f"📢 [handle_broadcast_send] Отправка рассылки от {user_id}: {message_text}"
     )
 
-    users = load_users()
+    users = load_users_map()
     user_ids = [int(uid) for uid in users.keys()]
 
     message = update.message
@@ -208,6 +211,6 @@ async def handle_broadcast_send(
         reply_markup=get_admin_menu(),
     )
     log(
-        f"✅ [handle_broadcast_send] Рассылка завершена для {
-            len(user_ids)} пользователей")
+        f"✅ [handle_broadcast_send] Рассылка завершена для {len(user_ids)} пользователей"
+    )
     return ConversationHandler.END

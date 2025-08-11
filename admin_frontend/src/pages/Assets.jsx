@@ -142,8 +142,8 @@ export default function Assets() {
             </option>
           ))}
         </select>
-        <input type="date" className="border p-2" value={filters.dateFrom} onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })} />
-        <input type="date" className="border p-2" value={filters.dateTo} onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })} />
+        <input type="date" className="border p-2" value={filters?.dateFrom ?? ""} onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })} />
+        <input type="date" className="border p-2" value={filters?.dateTo ?? ""} onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })} />
         <button className="btn" onClick={load}>
           Применить
         </button>
@@ -272,3 +272,14 @@ export default function Assets() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+

@@ -43,3 +43,7 @@ export default function UpcomingBirthdays({ days = 30 }) {
     </div>
   );
 }
+
+
+
+
