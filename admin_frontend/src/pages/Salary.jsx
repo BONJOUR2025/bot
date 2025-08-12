@@ -38,7 +38,7 @@ export default function Salary() {
         employee_id: filters.employee || undefined,
       };
       const res = await api.get('salary/', { params });
-
+      setList(res.data || []);
     } catch (err) {
       console.error(err);
     }
@@ -70,7 +70,7 @@ export default function Salary() {
           <option value="">Все сотрудники</option>
           {employees.map((e) => (
             <option key={e.id} value={e.id}>
-              {e.full_name || e.name}
+              {e.name}
             </option>
           ))}
         </select>
@@ -96,7 +96,10 @@ export default function Salary() {
               <tr key={r.employee_id}>
                 <td className="px-4 py-2">{r.name}</td>
                 <td className="px-4 py-2 text-right">{r.shifts_total}</td>
-
+                <td className="px-4 py-2 text-right">{r.salary_total}</td>
+                <td className="px-4 py-2 text-right">{r.advance}</td>
+                <td className="px-4 py-2 text-right">{r.deduction}</td>
+                <td className="px-4 py-2 text-right">{r.final_amount}</td>
                 <td className="px-4 py-2">{r.comment}</td>
               </tr>
             ))}
@@ -111,10 +114,21 @@ export default function Salary() {
           {list.length > 0 && (
             <tfoot className="bg-gray-50">
               <tr>
-                <td className="px-4 py-2 text-right font-semibold" colSpan="5">
+                <td className="px-4 py-2 text-right font-semibold" colSpan="2">
                   Итого
                 </td>
-
+                <td className="px-4 py-2 text-right font-semibold">
+                  {list.reduce((sum, r) => sum + r.salary_total, 0).toLocaleString('ru-RU')}
+                </td>
+                <td className="px-4 py-2 text-right font-semibold">
+                  {list.reduce((sum, r) => sum + r.advance, 0).toLocaleString('ru-RU')}
+                </td>
+                <td className="px-4 py-2 text-right font-semibold">
+                  {list.reduce((sum, r) => sum + r.deduction, 0).toLocaleString('ru-RU')}
+                </td>
+                <td className="px-4 py-2 text-right font-semibold">
+                  {list.reduce((sum, r) => sum + r.final_amount, 0).toLocaleString('ru-RU')}
+                </td>
                 <td></td>
               </tr>
             </tfoot>
