@@ -17,6 +17,7 @@ import Birthdays from './pages/Birthdays';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
 import Dictionary from './pages/Dictionary';
+import Salary from './pages/Salary';
 import MainLayout from './layouts/MainLayout.jsx';
 import PlainLayout from './layouts/PlainLayout.jsx';
 
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="payouts" element={<Payouts />} />
           <Route path="payouts-control" element={<PayoutsControl />} />
           <Route path="incentives" element={<Incentives />} />
+          <Route path="salary" element={<Salary />} />
           <Route path="reports" element={<Reports />} />
           <Route path="broadcast" element={<Broadcast />} />
           <Route path="vacations" element={<Vacations />} />
