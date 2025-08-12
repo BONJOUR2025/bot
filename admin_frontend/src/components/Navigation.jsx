@@ -22,6 +22,7 @@ const navStructure = [
       { to: '/admin/payouts', label: 'Выплаты' },
       { to: '/admin/payouts-control', label: 'Контроль выплат' },
       { to: '/admin/incentives', label: 'Штрафы и премии' },
+      { to: '/admin/salary', label: 'Расчёт ЗП' },
     ],
   },
   {
