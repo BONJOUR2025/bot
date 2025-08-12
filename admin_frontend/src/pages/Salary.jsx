@@ -38,24 +38,13 @@ export default function Salary() {
         employee_id: filters.employee || undefined,
       };
       const res = await api.get('salary/', { params });
-      const rows = (res.data || []).filter(
-        (r) => r.name && String(r.name).toLowerCase() !== 'nan'
-      );
-      setList(rows);
+
     } catch (err) {
       console.error(err);
     }
   }
 
-  const total = list.reduce(
-    (sum, r) => sum + Number(r.final_amount || 0),
-    0
-  );
 
-  const formatAmount = (value) => {
-    const num = Math.round(Number(value) || 0);
-    return `${num.toLocaleString('ru-RU')} ₽`;
-  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -107,18 +96,7 @@ export default function Salary() {
               <tr key={r.employee_id}>
                 <td className="px-4 py-2">{r.name}</td>
                 <td className="px-4 py-2 text-right">{r.shifts_total}</td>
-                <td className="px-4 py-2 text-right">
-                  {formatAmount(r.salary_total)}
-                </td>
-                <td className="px-4 py-2 text-right">
-                  {formatAmount(r.advance)}
-                </td>
-                <td className="px-4 py-2 text-right">
-                  {formatAmount(r.deduction)}
-                </td>
-                <td className="px-4 py-2 text-right font-medium">
-                  {formatAmount(r.final_amount)}
-                </td>
+
                 <td className="px-4 py-2">{r.comment}</td>
               </tr>
             ))}
@@ -136,9 +114,7 @@ export default function Salary() {
                 <td className="px-4 py-2 text-right font-semibold" colSpan="5">
                   Итого
                 </td>
-                <td className="px-4 py-2 text-right font-bold">
-                  {formatAmount(total)}
-                </td>
+
                 <td></td>
               </tr>
             </tfoot>
