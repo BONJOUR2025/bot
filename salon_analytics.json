@@ -1,0 +1,22 @@
+{
+  "mercury": [
+    {"date": "2024-01-01", "visitors": 120, "revenue": 50000, "deals": 40, "rpv": 417, "admin": "Анна"},
+    {"date": "2024-01-02", "visitors": 110, "revenue": 47000, "deals": 35, "rpv": 427, "admin": "Борис"}
+  ],
+  "okhta": [
+    {"date": "2024-01-01", "visitors": 90, "revenue": 38000, "deals": 28, "rpv": 422, "admin": "Виктор"},
+    {"date": "2024-01-02", "visitors": 95, "revenue": 40000, "deals": 30, "rpv": 421, "admin": "Галина"}
+  ],
+  "ozerki": [
+    {"date": "2024-01-01", "visitors": 75, "revenue": 30000, "deals": 20, "rpv": 400, "admin": "Дмитрий"},
+    {"date": "2024-01-02", "visitors": 80, "revenue": 32000, "deals": 22, "rpv": 400, "admin": "Елена"}
+  ],
+  "passage": [
+    {"date": "2024-01-01", "visitors": 100, "revenue": 45000, "deals": 33, "rpv": 450, "admin": "Жанна"},
+    {"date": "2024-01-02", "visitors": 105, "revenue": 46000, "deals": 34, "rpv": 438, "admin": "Зинаида"}
+  ],
+  "akpark": [
+    {"date": "2024-01-01", "visitors": 60, "revenue": 25000, "deals": 15, "rpv": 417, "admin": "Игорь"},
+    {"date": "2024-01-02", "visitors": 65, "revenue": 27000, "deals": 18, "rpv": 415, "admin": "Ксения"}
+  ]
+}
