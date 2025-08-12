@@ -2,7 +2,10 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
-import fdb
+try:
+    import fdb  # type: ignore
+except Exception:  # pragma: no cover
+    fdb = None
 
 from ..utils.logger import log
 
@@ -17,7 +20,9 @@ class FirebirdService:
         self._cache: Dict[Tuple[Any, ...], Tuple[datetime, Any]] = {}
         self._version: str | None = None
 
-    def _connect(self) -> fdb.Connection:
+    def _connect(self) -> 'fdb.Connection':
+        if fdb is None:
+            raise RuntimeError("fdb library is not installed")
         return fdb.connect(dsn=self.dsn, user=self.user, password=self.password)
 
     def test_connection(self) -> bool:

@@ -25,14 +25,15 @@ const navStructure = [
       { to: '/admin/salary', label: 'Расчёт ЗП' },
     ],
   },
-  {
-    name: 'Аналитика',
-    items: [
-      { to: '/admin/reports', label: 'Отчёты' },
-      { to: '/admin/analytics', label: 'Аналитика' },
-      { to: '/admin/analytics-details', label: 'Подробная аналитика' },
-    ],
-  },
+      {
+        name: 'Аналитика',
+        items: [
+          { to: '/admin/reports', label: 'Отчёты' },
+          { to: '/admin/analytics', label: 'Аналитика' },
+          { to: '/admin/analytics-details', label: 'Подробная аналитика' },
+          { to: '/admin/analytics-salons', label: 'Аналитика по салонам' },
+        ],
+      },
   {
     name: 'Управление',
     items: [

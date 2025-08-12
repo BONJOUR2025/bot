@@ -78,4 +78,8 @@ def create_analytics_router(service: AnalyticsService) -> APIRouter:
             date_from=date_from, date_to=date_to
         )
 
+    @router.get("/salons")
+    async def get_salon_analytics(salon: str):
+        return {"items": await service.get_salon_analytics(salon)}
+
     return router

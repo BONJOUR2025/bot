@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional, Any, List
 import asyncio
 import os
+import json
 
 import pandas as pd
 
@@ -14,6 +15,7 @@ from ..config import (
     FIREBIRD_DB,
     FIREBIRD_USER,
     FIREBIRD_PASSWORD,
+    SALON_ANALYTICS_FILE,
 )
 from openpyxl import load_workbook
 from .firebird_service import FirebirdService
@@ -746,4 +748,15 @@ class AnalyticsService:
             )
 
         return {"items": result}
+
+    async def get_salon_analytics(self, salon: str) -> list[dict[str, Any]]:
+        """Return analytics data for a given salon from JSON file."""
+        path = Path(SALON_ANALYTICS_FILE)
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        return data.get(salon, [])
 

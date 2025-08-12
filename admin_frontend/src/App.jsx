@@ -12,6 +12,7 @@ import Reports from './pages/Reports';
 import Broadcast from './pages/Broadcast';
 import Analytics from './pages/Analytics';
 import AnalyticsDetails from './pages/AnalyticsDetails';
+import AnalyticsSalons from './pages/AnalyticsSalons';
 import Vacations from './pages/Vacations';
 import Birthdays from './pages/Birthdays';
 import Settings from './pages/Settings';
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="birthdays" element={<Birthdays />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="analytics-details" element={<AnalyticsDetails />} />
+          <Route path="analytics-salons" element={<AnalyticsSalons />} />
           <Route path="assets" element={<Assets />} />
           <Route path="dictionary" element={<Dictionary />} />
           <Route path="settings" element={<Settings />} />
