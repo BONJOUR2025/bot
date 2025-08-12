@@ -38,13 +38,13 @@ export default function Salary() {
         employee_id: filters.employee || undefined,
       };
       const res = await api.get('salary/', { params });
-      setList(res.data);
+
     } catch (err) {
       console.error(err);
     }
   }
 
-  const total = list.reduce((sum, r) => sum + Number(r.final_amount || 0), 0);
+
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -96,10 +96,7 @@ export default function Salary() {
               <tr key={r.employee_id}>
                 <td className="px-4 py-2">{r.name}</td>
                 <td className="px-4 py-2 text-right">{r.shifts_total}</td>
-                <td className="px-4 py-2 text-right">{r.salary_total}</td>
-                <td className="px-4 py-2 text-right">{r.advance}</td>
-                <td className="px-4 py-2 text-right">{r.deduction}</td>
-                <td className="px-4 py-2 text-right font-medium">{r.final_amount}</td>
+
                 <td className="px-4 py-2">{r.comment}</td>
               </tr>
             ))}
@@ -117,7 +114,7 @@ export default function Salary() {
                 <td className="px-4 py-2 text-right font-semibold" colSpan="5">
                   Итого
                 </td>
-                <td className="px-4 py-2 text-right font-bold">{total}</td>
+
                 <td></td>
               </tr>
             </tfoot>
