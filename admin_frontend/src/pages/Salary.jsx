@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
 
+function formatCurrency(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '0 ₽';
+  return `${Math.round(num).toLocaleString('ru-RU')} ₽`;
+}
+
 export default function Salary() {
   const [months, setMonths] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -96,10 +102,10 @@ export default function Salary() {
               <tr key={r.employee_id}>
                 <td className="px-4 py-2">{r.name}</td>
                 <td className="px-4 py-2 text-right">{r.shifts_total}</td>
-                <td className="px-4 py-2 text-right">{r.salary_total}</td>
-                <td className="px-4 py-2 text-right">{r.advance}</td>
-                <td className="px-4 py-2 text-right">{r.deduction}</td>
-                <td className="px-4 py-2 text-right">{r.final_amount}</td>
+                <td className="px-4 py-2 text-right">{formatCurrency(r.salary_total)}</td>
+                <td className="px-4 py-2 text-right">{formatCurrency(r.advance)}</td>
+                <td className="px-4 py-2 text-right">{formatCurrency(r.deduction)}</td>
+                <td className="px-4 py-2 text-right">{formatCurrency(r.final_amount)}</td>
                 <td className="px-4 py-2">{r.comment}</td>
               </tr>
             ))}
@@ -118,16 +124,36 @@ export default function Salary() {
                   Итого
                 </td>
                 <td className="px-4 py-2 text-right font-semibold">
-                  {list.reduce((sum, r) => sum + r.salary_total, 0).toLocaleString('ru-RU')}
+                  {formatCurrency(
+                    list.reduce((sum, r) => {
+                      const val = Number(r.salary_total);
+                      return sum + (Number.isFinite(val) ? val : 0);
+                    }, 0)
+                  )}
                 </td>
                 <td className="px-4 py-2 text-right font-semibold">
-                  {list.reduce((sum, r) => sum + r.advance, 0).toLocaleString('ru-RU')}
+                  {formatCurrency(
+                    list.reduce((sum, r) => {
+                      const val = Number(r.advance);
+                      return sum + (Number.isFinite(val) ? val : 0);
+                    }, 0)
+                  )}
                 </td>
                 <td className="px-4 py-2 text-right font-semibold">
-                  {list.reduce((sum, r) => sum + r.deduction, 0).toLocaleString('ru-RU')}
+                  {formatCurrency(
+                    list.reduce((sum, r) => {
+                      const val = Number(r.deduction);
+                      return sum + (Number.isFinite(val) ? val : 0);
+                    }, 0)
+                  )}
                 </td>
                 <td className="px-4 py-2 text-right font-semibold">
-                  {list.reduce((sum, r) => sum + r.final_amount, 0).toLocaleString('ru-RU')}
+                  {formatCurrency(
+                    list.reduce((sum, r) => {
+                      const val = Number(r.final_amount);
+                      return sum + (Number.isFinite(val) ? val : 0);
+                    }, 0)
+                  )}
                 </td>
                 <td></td>
               </tr>
