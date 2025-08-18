@@ -101,6 +101,12 @@ def create_app() -> FastAPI:
     asset_service = AssetService()
     app.include_router(create_asset_router(asset_service), prefix="/api")
 
+    from .inventory import create_inventory_router
+    from ..services.inventory_service import InventoryService
+
+    inventory_service = InventoryService()
+    app.include_router(create_inventory_router(inventory_service), prefix="/api")
+
     from .messages import create_message_router
     from ..services.template_service import TemplateService
 
