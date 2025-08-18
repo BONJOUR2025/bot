@@ -27,6 +27,7 @@ VACATIONS_FILE = settings.vacations_file
 ADJUSTMENTS_FILE = settings.adjustments_file
 BONUSES_PENALTIES_FILE = settings.bonuses_penalties_file
 ASSETS_FILE = settings.assets_file
+INVENTORY_FILE = settings.inventory_file
 SALON_ANALYTICS_FILE = settings.salon_analytics_file
 ADMIN_ID = settings.admin_id
 ADMIN_CHAT_ID = settings.admin_chat_id
