@@ -22,6 +22,7 @@ class Settings(BaseSettings):
         "bonuses_penalties.json", env="BONUSES_PENALTIES_FILE"
     )
     assets_file: str = Field("assets.json", env="ASSETS_FILE")
+    inventory_file: str = Field("inventory.json", env="INVENTORY_FILE")
     salon_analytics_file: str = Field(
         "salon_analytics.json", env="SALON_ANALYTICS_FILE"
     )

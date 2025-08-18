@@ -24,6 +24,7 @@ export default function Assets() {
   const [filters, setFilters] = useState({ search: '', employee: '', dateFrom: '', dateTo: '' });
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
+  const [free, setFree] = useState(null);
 
   useEffect(() => {
     loadEmployees();
@@ -66,11 +67,13 @@ export default function Assets() {
 
   function startCreate() {
     setForm(emptyForm);
+    setFree(null);
     setShowForm(true);
   }
 
   function startEdit(item) {
     setForm({ ...item });
+    setFree(null);
     setShowForm(true);
   }
 
@@ -116,6 +119,24 @@ export default function Assets() {
       }));
     }
   }
+
+  useEffect(() => {
+    async function loadFree() {
+      if (!form.item_name) {
+        setFree(null);
+        return;
+      }
+      try {
+        const params = { item_name: form.item_name, size: form.size || undefined };
+        const res = await api.get('inventory/available', { params });
+        setFree(res.data.free);
+      } catch (err) {
+        console.error(err);
+        setFree(null);
+      }
+    }
+    loadFree();
+  }, [form.item_name, form.size]);
 
   const aggregated = {
     employeesWithAssets: new Set(),
@@ -254,7 +275,16 @@ export default function Assets() {
                 </option>
               ))}
             </select>
-            <input type="number" className="border p-2 w-full" placeholder="Количество" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
+            <input
+              type="number"
+              className="border p-2 w-full"
+              placeholder="Количество"
+              value={form.quantity}
+              onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
+            />
+            {free !== null && (
+              <div className="text-sm text-gray-500">Свободно: {free}</div>
+            )}
             <input type="date" className="border p-2 w-full" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} />
             <input type="date" className="border p-2 w-full" value={form.return_date} onChange={(e) => setForm({ ...form, return_date: e.target.value })} />
             <input type="number" className="border p-2 w-full" placeholder="Срок службы (мес.)" value={form.service_life} onChange={(e) => setForm({ ...form, service_life: Number(e.target.value) })} />
