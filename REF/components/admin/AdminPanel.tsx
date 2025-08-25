@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
-import { StatusBadge } from '../design-system/StatusBadge';
+import { StatusBadge, StatusBadgeProps } from '../design-system/StatusBadge';
 import { ActionCard } from '../design-system/ActionCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Calendar } from '../ui/calendar';
@@ -590,11 +590,40 @@ const BonusesAndPenalties: React.FC = () => {
 
 // Управление выплатами
 const PaymentsManagement: React.FC = () => {
-  const payments = [
-    { id: 1, employee: 'Алексей Иванов', type: 'Аванс', amount: 15000, status: 'waiting' as const, date: '2025-07-25', store: 'ТЦ Мега' },
-    { id: 2, employee: 'Мария Петрова', type: 'Зарплата', amount: 35000, status: 'approved' as const, date: '2025-07-24', store: 'ТЦ Европолис' },
-    { id: 3, employee: 'Дмитрий Сидоров', type: 'Премия', amount: 8000, status: 'rejected' as const, date: '2025-07-23', store: 'ТЦ Атлас' }
-  ];
+  const [payments, setPayments] = useState<Array<{
+    id: number | string;
+    employee: string;
+    type: string;
+    amount: number;
+    status: StatusBadgeProps['status'];
+    date?: string;
+    store?: string;
+  }>>([]);
+
+  const STATUS_MAP: Record<string, StatusBadgeProps['status']> = {
+    'Ожидает': 'waiting',
+    'Одобрено': 'approved',
+    'Отклонено': 'rejected',
+    'Выплачено': 'paid'
+  };
+
+  useEffect(() => {
+    fetch('/advance_requests.json')
+      .then((res) => res.json())
+      .then((data) => {
+        const mapped = data.map((p: any) => ({
+          id: p.id,
+          employee: p.name,
+          type: p.payout_type,
+          amount: p.amount,
+          status: STATUS_MAP[p.status] || 'waiting',
+          date: p.timestamp,
+          store: p.method
+        }));
+        setPayments(mapped);
+      })
+      .catch((err) => console.error('Failed to load payouts', err));
+  }, []);
 
   return (
     <div className="space-y-6">

@@ -3,7 +3,14 @@ import { Badge } from '../ui/badge';
 import { cn } from '../ui/utils';
 
 export interface StatusBadgeProps {
-  status: 'approved' | 'rejected' | 'waiting' | 'active' | 'inactive' | 'processing';
+  status:
+    | 'approved'
+    | 'rejected'
+    | 'waiting'
+    | 'active'
+    | 'inactive'
+    | 'processing'
+    | 'paid';
   size?: 'sm' | 'md' | 'lg';
   variant?: 'default' | 'outline';
 }
@@ -38,6 +45,11 @@ const statusConfig = {
     label: 'Обработка',
     className: 'bg-primary text-primary-foreground border-primary',
     emoji: '🔄'
+  },
+  paid: {
+    label: 'Выплачено',
+    className: 'bg-primary text-primary-foreground border-primary',
+    emoji: '📤'
   },
 };
 
