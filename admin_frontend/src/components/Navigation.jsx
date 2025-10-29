@@ -36,6 +36,7 @@ const navStructure = [
     name: 'Управление',
     items: [
       { to: '/admin/broadcast', label: 'Рассылка' },
+      { to: '/admin/messages', label: 'История сообщений' },
       { to: '/admin/dictionary', label: 'Словарь' },
       { to: '/admin/settings', label: 'Настройки' },
     ],
