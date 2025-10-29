@@ -61,3 +61,4 @@ Several JSON files are used as a simple storage backend and are expected to be p
 
 Example files are provided and will be created automatically if missing.
 
+# bot
