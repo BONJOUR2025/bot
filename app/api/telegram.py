@@ -1,7 +1,12 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from app.schemas.message import MessageRequest, BroadcastRequest, SentMessage
-from app.services.telegram_service import TelegramService
+from app.services.telegram_service import (
+    TelegramAPIError,
+    TelegramNotConfiguredError,
+    InvalidTelegramUserIdError,
+    TelegramService,
+)
 from app.data.employee_repository import EmployeeRepository
 
 
@@ -26,10 +31,38 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
                 "sent_at": datetime.utcnow().isoformat(),
                 "message_id": message_id,
             }
-        except Exception as exc:
+        except InvalidTelegramUserIdError as exc:
             raise HTTPException(
                 status_code=400,
-                detail=f"Ошибка отправки: {exc}")
+                detail={
+                    "code": "invalid_user_id",
+                    "message": str(exc),
+                },
+            ) from exc
+        except TelegramAPIError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "telegram_bad_request",
+                    "message": str(exc),
+                },
+            ) from exc
+        except TelegramNotConfiguredError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "telegram_not_configured",
+                    "message": str(exc),
+                },
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "unexpected_error",
+                    "message": str(exc),
+                },
+            ) from exc
 
     @router.post("/broadcast")
     async def broadcast(data: BroadcastRequest):
@@ -50,10 +83,30 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
                 test_user_id=data.test_user_id,
             )
             return result
-        except Exception as exc:
+        except TelegramNotConfiguredError as exc:
             raise HTTPException(
                 status_code=400,
-                detail=f"Ошибка рассылки: {exc}")
+                detail={
+                    "code": "telegram_not_configured",
+                    "message": str(exc),
+                },
+            ) from exc
+        except TelegramAPIError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "telegram_bad_request",
+                    "message": str(exc),
+                },
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "unexpected_error",
+                    "message": str(exc),
+                },
+            ) from exc
 
     @router.get("/sent_messages", response_model=list[SentMessage])
     async def sent_messages() -> list[SentMessage]:
