@@ -34,14 +34,24 @@ class BroadcastRequest(BaseModel):
     test_user_id: Optional[str] = None
 
 
+class SentMessageSummary(BaseModel):
+    total: int = 0
+    success: int = 0
+    errors: int = 0
+    invalid: int = 0
+    pending: int = 0
+    other: int = 0
+
+
 class SentMessage(BaseModel):
     id: str
     user_id: Optional[str] = None
     message: str
-    status: str
+    status: Optional[str] = None
     message_id: Optional[int] = None
     timestamp: str
     photo_url: Optional[str] = None
     requires_ack: bool = False
     broadcast: bool = False
     recipients: Optional[list[dict]] = None
+    summary: Optional[SentMessageSummary] = None

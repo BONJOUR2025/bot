@@ -27,6 +27,22 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 
+class TelegramServiceError(RuntimeError):
+    """Base class for Telegram service errors."""
+
+
+class TelegramNotConfiguredError(TelegramServiceError):
+    """Raised when the Telegram bot token is not configured."""
+
+
+class InvalidTelegramUserIdError(TelegramServiceError):
+    """Raised when an invalid Telegram user id is supplied."""
+
+
+class TelegramAPIError(TelegramServiceError):
+    """Raised when Telegram API returns an error."""
+
+
 class TelegramService:
     def __init__(self, repo: EmployeeRepository) -> None:
         self.repo = repo
@@ -103,7 +119,7 @@ class TelegramService:
             employees = [e for e in employees if str(e.id) == str(test_user_id)]
         if self.bot is None:
             log("⚠️ Telegram bot not configured; cannot broadcast")
-            raise RuntimeError("Telegram bot not configured")
+            raise TelegramNotConfiguredError("Telegram bot not configured")
 
         success = 0
         recipients: List[Dict[str, Any]] = []
@@ -181,10 +197,12 @@ class TelegramService:
     ) -> int:
         if self.bot is None:
             log("⚠️ Telegram bot not configured; cannot send message")
-            raise RuntimeError("Telegram bot not configured")
+            raise TelegramNotConfiguredError("Telegram bot not configured")
         if not is_valid_user_id(user_id):
             log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
-            return 0
+            raise InvalidTelegramUserIdError(
+                f"Invalid Telegram user id supplied: {user_id}"
+            )
         reply_markup = None
         if require_ack:
             reply_markup = InlineKeyboardMarkup(
@@ -211,7 +229,7 @@ class TelegramService:
                 )
         except BadRequest as exc:
             log(f"❌ Failed to send message to chat {user_id} — {exc}")
-            raise
+            raise TelegramAPIError(str(exc)) from exc
         log_entry = {
             "id": str(uuid4()),
             "user_id": str(user_id),
@@ -231,7 +249,7 @@ class TelegramService:
         """Notify the admin chat about a payout request."""
         if self.bot is None:
             log("⚠️ Telegram bot not configured; cannot notify admin")
-            raise RuntimeError("Telegram bot not configured")
+            raise TelegramNotConfiguredError("Telegram bot not configured")
 
         text = (
             "📥 Новый запрос на выплату:\n\n"
@@ -264,4 +282,4 @@ class TelegramService:
             )
         except BadRequest as exc:
             log(f"❌ Failed to send message to chat {ADMIN_CHAT_ID} — {exc}")
-            raise
+            raise TelegramAPIError(str(exc)) from exc

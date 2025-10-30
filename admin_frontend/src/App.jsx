@@ -10,6 +10,7 @@ import PayoutsControl from './pages/PayoutsControl';
 import Incentives from './pages/Incentives';
 import Reports from './pages/Reports';
 import Broadcast from './pages/Broadcast';
+import MessageHistory from './pages/MessageHistory';
 import Analytics from './pages/Analytics';
 import AnalyticsDetails from './pages/AnalyticsDetails';
 import Vacations from './pages/Vacations';
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="incentives" element={<Incentives />} />
           <Route path="reports" element={<Reports />} />
           <Route path="broadcast" element={<Broadcast />} />
+          <Route path="messages" element={<MessageHistory />} />
           <Route path="vacations" element={<Vacations />} />
           <Route path="birthdays" element={<Birthdays />} />
           <Route path="analytics" element={<Analytics />} />
