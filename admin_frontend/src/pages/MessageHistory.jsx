@@ -8,20 +8,97 @@ const typeFilters = [
   { value: 'broadcast', label: 'Рассылки' },
 ];
 
-function StatusBadge({ status }) {
-  const normalized = (status || '').toLowerCase();
-  let color = 'bg-gray-200 text-gray-700';
-  if (normalized.includes('ошибка') || normalized.includes('error')) {
-    color = 'bg-red-100 text-red-700';
-  } else if (normalized.includes('отправлено') || normalized.includes('успех')) {
-    color = 'bg-green-100 text-green-700';
-  } else if (normalized.includes('ожид') || normalized.includes('pending')) {
-    color = 'bg-yellow-100 text-yellow-700';
+const STATUS_MAP = {
+  success: {
+    match: (value) => /принят|успех|отправ|delivered|success/i.test(value),
+    className: 'bg-green-100 text-green-700',
+    label: 'Успешно',
+  },
+  warning: {
+    match: (value) => /ожид|pending|wait|жд|не достав/i.test(value),
+    className: 'bg-yellow-100 text-yellow-700',
+    label: 'Ожидает',
+  },
+  error: {
+    match: (value) => /ошиб|fail|невалид|откл|error/i.test(value),
+    className: 'bg-red-100 text-red-700',
+    label: 'Ошибка',
+  },
+};
+
+function getStatusVariant(status) {
+  const normalized = (status || '').trim();
+  if (!normalized) {
+    return { className: 'bg-gray-200 text-gray-700', label: 'Неизвестно' };
   }
+  const entry = Object.values(STATUS_MAP).find((item) => item.match(normalized));
+  if (entry) {
+    return entry;
+  }
+  return { className: 'bg-gray-200 text-gray-700', label: normalized };
+}
+
+function StatusBadge({ status }) {
+  const variant = getStatusVariant(status);
   return (
-    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${color}`}>
-      {status || '—'}
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${variant.className}`}>
+      {status || variant.label}
     </span>
+  );
+}
+
+function StatusSummary({ recipients }) {
+  const summary = useMemo(() => {
+    const result = {
+      success: 0,
+      warning: 0,
+      error: 0,
+    };
+    (recipients || []).forEach((recipient) => {
+      const status = (recipient.status || '').trim();
+      if (!status) {
+        return;
+      }
+      if (STATUS_MAP.success.match(status)) {
+        result.success += 1;
+      } else if (STATUS_MAP.error.match(status)) {
+        result.error += 1;
+      } else if (STATUS_MAP.warning.match(status)) {
+        result.warning += 1;
+      }
+    });
+    return result;
+  }, [recipients]);
+
+  const total = (recipients || []).length;
+  if (!total) {
+    return null;
+  }
+
+  const items = [
+    { key: 'success', label: 'Успех', className: 'bg-green-100 text-green-700' },
+    { key: 'warning', label: 'Ожидает', className: 'bg-yellow-100 text-yellow-700' },
+    { key: 'error', label: 'Ошибки', className: 'bg-red-100 text-red-700' },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">
+        Всего получателей: {total}
+      </span>
+      {items
+        .filter((item) => summary[item.key] > 0)
+        .map((item) => (
+          <span key={item.key} className={`rounded px-2 py-0.5 font-medium ${item.className}`}>
+            {item.label}: {summary[item.key]}
+          </span>
+        ))}
+      {summary.success + summary.warning + summary.error < total && (
+        <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">
+          Без статуса: {total - (summary.success + summary.warning + summary.error)}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -159,7 +236,8 @@ export default function MessageHistory() {
             )}
 
             {entry.broadcast && (
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 space-y-3">
+                <StatusSummary recipients={entry.recipients} />
                 <button
                   type="button"
                   onClick={() => toggleExpanded(entry.id)}
