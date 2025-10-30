@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 from app.services.telegram_service import TelegramService
 from app.core.types import Employee
+from app.schemas.message import SentMessage
 
 
 class DummyRepo:
@@ -22,3 +23,18 @@ def test_broadcast_unknown_placeholder_does_not_crash():
         assert svc.bot.send_message.call_count == 0
 
     asyncio.run(_run())
+
+
+def test_sent_message_schema_allows_broadcast_without_status():
+    entry = {
+        "id": "123",
+        "broadcast": True,
+        "message": "Test broadcast",
+        "timestamp": "2024-01-01T00:00:00",
+        "recipients": [],
+    }
+
+    model = SentMessage(**entry)
+
+    assert model.broadcast is True
+    assert model.status is None
