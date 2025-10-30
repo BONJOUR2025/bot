@@ -38,7 +38,7 @@ class SentMessage(BaseModel):
     id: str
     user_id: Optional[str] = None
     message: str
-    status: str
+    status: Optional[str] = None
     message_id: Optional[int] = None
     timestamp: str
     photo_url: Optional[str] = None
