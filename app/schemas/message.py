@@ -45,3 +45,5 @@ class SentMessage(BaseModel):
     requires_ack: bool = False
     broadcast: bool = False
     recipients: Optional[list[dict]] = None
+    accepted: bool = False
+    timestamp_accept: Optional[str] = None

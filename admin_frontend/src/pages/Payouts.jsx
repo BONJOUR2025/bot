@@ -6,6 +6,9 @@ import {
   RefreshCw,
   Trash2,
   XCircle,
+  CheckCircle2,
+  Clock,
+  Hourglass,
 } from 'lucide-react';
 import api from '../api';
 
@@ -73,9 +76,31 @@ function MessageHistory() {
               ) : (
                 <tr key={m.id}>
                   <td className="px-2 py-1">{m.user_id}</td>
-                  <td className="px-2 py-1 whitespace-pre-wrap">{m.message}</td>
-                  <td className="px-2 py-1 text-xs">
-                    {m.timestamp && new Date(m.timestamp).toLocaleString()}
+                  <td className="px-2 py-1 whitespace-pre-wrap">
+                    <div>{m.message}</div>
+                    {m.requires_ack && !m.accepted && (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-yellow-700">
+                        <Hourglass size={14} />
+                        Требуется подтверждение
+                      </div>
+                    )}
+                    {m.accepted && (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-green-700">
+                        <CheckCircle2 size={14} />
+                        Принято
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-xs space-y-1">
+                    <div>
+                      {m.timestamp && new Date(m.timestamp).toLocaleString()}
+                    </div>
+                    {m.accepted && m.timestamp_accept && (
+                      <div className="flex items-center gap-1 text-green-600">
+                        <Clock size={14} />
+                        {new Date(m.timestamp_accept).toLocaleString()}
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-1">
                     <button
