@@ -9,6 +9,8 @@ This project provides a Telegram bot with a FastAPI based HTTP API. The server c
 
 ## Installation
 
+### From source
+
 1. Create a virtual environment and install the dependencies:
 
 ```bash
@@ -27,6 +29,39 @@ pip install -r requirements.txt
 - `ADMIN_ID`, `ADMIN_CHAT_ID` – Telegram identifiers for the administrator
 
 If no configuration is provided, default values will be used and the project will look for JSON files such as `user.json`, `advance_requests.json`, `vacations.json` and others located in the repository root.
+
+### As an installable package
+
+The repository ships a standard Python package declaration in `pyproject.toml`. You can install the bot directly from GitHub via pip:
+
+```bash
+pip install git+https://github.com/your-account/bot.git
+```
+
+The installation exposes two entry points:
+
+* `telegram-salary-bot` – starts the Telegram bot in polling mode (equivalent to `python -m app.main`).
+* `telegram-salary-bot-api` – launches the FastAPI application via Uvicorn (equivalent to `python -m app`).
+
+To build distributable artifacts locally run:
+
+```bash
+python -m build
+```
+
+This command generates `.whl` and `.tar.gz` files under the `dist/` directory that can be published to PyPI or GitHub Packages. When targeting GitHub Packages make sure to:
+
+1. Create a Personal Access Token with the `write:packages` and `read:packages` scopes.
+2. Configure `~/.pypirc` with a section that points to the GitHub Packages upload endpoint and uses the generated token as the password. GitHub's documentation contains a ready-to-use template.
+3. Upload the build using `twine upload --repository <section-name> dist/*`.
+
+Once published, machines with access to the registry can install the package with:
+
+```bash
+pip install --extra-index-url https://pip.pkg.github.com/<OWNER> telegram-salary-bot
+```
+
+Replace `<OWNER>` with your GitHub username or organization.
 
 ## Running the FastAPI server
 
