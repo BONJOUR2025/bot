@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MessageCircle, Users, AlertCircle, Clock, RefreshCcw, Trash2 } from 'lucide-react';
+import {
+  MessageCircle,
+  Users,
+  AlertCircle,
+  Clock,
+  RefreshCcw,
+  Trash2,
+  CheckCircle2,
+  Hourglass,
+} from 'lucide-react';
 import api from '../api';
 
 const typeFilters = [
@@ -207,10 +216,28 @@ export default function MessageHistory() {
                       Требуется подтверждение
                     </span>
                   )}
+                  {entry.accepted && (
+                    <span className="flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <CheckCircle2 size={14} />
+                      Принято
+                    </span>
+                  )}
+                  {entry.requires_ack && !entry.accepted && (
+                    <span className="flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+                      <Hourglass size={14} />
+                      Ожидает подтверждения
+                    </span>
+                  )}
                   {entry.user_id && !entry.broadcast && (
                     <span className="text-xs text-gray-500">ID получателя: {entry.user_id}</span>
                   )}
                 </div>
+                {entry.accepted && entry.timestamp_accept && (
+                  <div className="flex items-center gap-2 text-xs text-green-600">
+                    <Clock size={14} />
+                    Подтверждено: {new Date(entry.timestamp_accept).toLocaleString()}
+                  </div>
+                )}
               </div>
               <div className="flex flex-col items-end gap-2">
                 <span className="text-xs uppercase tracking-wide text-gray-400">

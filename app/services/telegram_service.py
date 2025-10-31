@@ -94,12 +94,19 @@ class TelegramService:
             data = json.loads(log_file.read_text(encoding="utf-8"))
         except Exception:
             return
+        accepted_at = None
+        normalized_status = status.lower() if isinstance(status, str) else ""
+        if "принят" in normalized_status:
+            accepted_at = datetime.utcnow().isoformat()
         for item in data:
             if (
                 str(item.get("user_id")) == str(user_id)
                 and item.get("message_id") == message_id
             ):
                 item["status"] = status
+                if accepted_at:
+                    item["accepted"] = True
+                    item["timestamp_accept"] = accepted_at
                 break
         log_file.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -239,6 +246,8 @@ class TelegramService:
             "timestamp": datetime.utcnow().isoformat(),
             "photo_url": photo_url,
             "requires_ack": require_ack,
+            "accepted": False,
+            "timestamp_accept": None,
         }
         data = self._load_log_all()
         data.append(log_entry)
