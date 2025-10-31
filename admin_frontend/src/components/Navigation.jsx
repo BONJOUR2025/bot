@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
 const navStructure = [
@@ -44,9 +44,23 @@ const navStructure = [
 ];
 
 export default function Navigation() {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const toggle = () => setOpen((o) => !o);
   const close = () => setOpen(false);
+
+  const itemsByCategory = useMemo(
+    () =>
+      navStructure.map((category) => ({
+        ...category,
+        items: category.items.map((item) => ({
+          ...item,
+          active:
+            location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+        })),
+      })),
+    [location.pathname],
+  );
 
   return (
     <div className="relative mb-4">
@@ -68,30 +82,33 @@ export default function Navigation() {
       <nav
         className={`${
           open ? 'translate-x-0' : '-translate-x-full'
-        } sm:translate-x-0 transition-transform sm:flex flex-wrap gap-2 fixed sm:static top-0 left-0 h-full sm:h-auto w-64 sm:w-auto bg-white/80 backdrop-blur-lg p-4 rounded sm:rounded-none shadow-lg`}
+        } sm:translate-x-0 transition-transform fixed sm:static top-0 left-0 h-full sm:h-auto w-64 bg-white/90 backdrop-blur-lg p-4 rounded sm:rounded-none shadow-lg sm:shadow-none overflow-y-auto`}
       >
-        {navStructure.map((cat) => (
-          <div key={cat.name} className="relative group">
-            <button
-              type="button"
-              className="px-3 py-2 rounded flex items-center text-gray-700 hover:bg-muted/20 transition-colors"
-            >
-              {cat.name}
-            </button>
-            <div className="absolute z-10 hidden group-hover:block bg-white/90 backdrop-blur border rounded shadow mt-1">
-              {cat.items.map((item) => (
-                <Link
-                  key={item.to}
-                  className="block px-3 py-2 whitespace-nowrap hover:bg-muted/20"
-                  to={item.to}
-                  onClick={close}
-                >
-                  {item.label}
-                </Link>
-              ))}
+        <div className="space-y-6">
+          {itemsByCategory.map((category) => (
+            <div key={category.name}>
+              <div className="px-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {category.name}
+              </div>
+              <div className="mt-2 space-y-1">
+                {category.items.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={close}
+                    className={`block rounded px-3 py-2 text-sm transition-colors ${
+                      item.active
+                        ? 'bg-brand/10 text-brand font-semibold'
+                        : 'text-gray-700 hover:bg-muted/20'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </nav>
     </div>
   );
