@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telegram-salary-bot"
+version = "0.1.0"
+description = "Telegram bot and FastAPI backend for managing employee payouts and schedules."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Your Team" }]
+license = { text = "Proprietary" }
+keywords = ["telegram", "fastapi", "bot", "employees", "payouts"]
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "python-telegram-bot>=20",
+    "pandas",
+    "openpyxl",
+    "fpdf",
+    "pillow",
+    "reportlab",
+    "python-dateutil",
+    "pydantic",
+    "pydantic-settings",
+    "sqlalchemy",
+    "jinja2",
+    "numpy",
+    "python-multipart",
+]
+
+[project.scripts]
+telegram-salary-bot = "app.main:main"
+telegram-salary-bot-api = "app.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/your-account/bot"
+
+[tool.setuptools]
+packages = { find = { include = ["app", "app.*"] } }
+include-package-data = true
+
+[tool.setuptools.package-data]
+"app" = ["templates/**/*.html"]
