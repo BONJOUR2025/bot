@@ -5,7 +5,7 @@ const AuthContext = createContext({
   user: null,
   loading: true,
   login: async () => {},
-  logout: () => {},
+  logout: async () => {},
   refresh: async () => {},
 });
 
@@ -14,31 +14,63 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    api
-      .get('auth/me')
-      .then((res) => setUser(res.data))
-      .catch(() => {
-        localStorage.removeItem('auth_token');
-        setUser(null);
-      })
-      .finally(() => setLoading(false));
+    let active = true;
+
+    const loadProfile = async () => {
+      try {
+        const res = await api.get('auth/me');
+        if (active) {
+          setUser(res.data);
+        }
+      } catch (err) {
+        if (localStorage.getItem('auth_token')) {
+          localStorage.removeItem('auth_token');
+        }
+        if (active) {
+          setUser(null);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const login = async (loginName, password) => {
     const res = await api.post('auth/login', { login: loginName, password });
     localStorage.setItem('auth_token', res.data.token);
     setUser(res.data.user);
+    try {
+      await fetch('/session/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: loginName, password }),
+        credentials: 'include',
+      });
+    } catch (err) {
+      /* ignore */
+    }
     return res.data.user;
   };
 
-  const logout = () => {
+  const logout = async () => {
     localStorage.removeItem('auth_token');
     setUser(null);
+    try {
+      await fetch('/session/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (err) {
+      /* ignore */
+    }
   };
 
   const refresh = async () => {
