@@ -8,7 +8,6 @@ from app.data.payout_repository import (
     PayoutRepository,
     load_advance_requests as repo_load_advance_requests,
 )
-from app.schemas.payout import Payout
 from ..utils.logger import log
 from ..core.enums import PAYOUT_STATUSES
 
@@ -37,15 +36,6 @@ def load_advance_requests() -> List[Dict[str, Any]]:
 
 def save_advance_requests(_requests_list: List[Dict[str, Any]]) -> None:
     log("⚠️ save_advance_requests is deprecated when using repository")
-
-
-def load_requests_dataclass() -> List[Payout]:
-    return [Payout(**r) for r in _repo.load_all()]
-
-
-def save_requests_dataclass(requests: List[Payout]) -> None:
-    for r in requests:
-        _repo.update(r.id, r.model_dump(exclude_none=True))
 
 
 def log_new_request(
@@ -101,30 +91,3 @@ def update_request_status(payout_id: Any, status: str) -> bool:
         return True
     log(f"⚠️ [update_request_status] Не удалось обновить запрос {payout_id}")
     return False
-
-
-def delete_request(user_id: Any) -> None:
-    items = _repo.list(employee_id=user_id)
-    ids = [str(i["id"]) for i in items]
-    if ids:
-        _repo.delete_many(ids)
-        log(f"✅ Запросы пользователя {user_id} удалены")
-
-
-def edit_request(user_id: Any, updates: Dict[str, Any]) -> None:
-    items = _repo.list(employee_id=user_id)
-    if not items:
-        return
-    payout_id = items[0]["id"]
-    _repo.update(payout_id, updates)
-    log(f"✅ Запрос пользователя {user_id} обновлён: {updates}")
-
-
-def delete_request_by_index(index: str) -> None:
-    _repo.delete(index)
-    log(f"✅ Запрос №{index} удалён")
-
-
-def edit_request_by_index(index: str, updates: Dict[str, Any]) -> None:
-    _repo.update(index, updates)
-    log(f"✅ Запрос №{index} обновлён: {updates}")

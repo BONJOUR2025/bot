@@ -1,13 +1,17 @@
-import os
-import pandas as pd
+from __future__ import annotations
+
 import json
-from fpdf import FPDF
-from openpyxl import load_workbook
-from ..config import EXCEL_FILE, ADVANCE_REQUESTS_FILE
-from datetime import datetime
-from ..utils.logger import log
+import os
 import re
 import textwrap
+from datetime import datetime
+
+import pandas as pd
+from fpdf import FPDF
+from openpyxl import load_workbook
+
+from ..config import ADVANCE_REQUESTS_FILE, EXCEL_FILE
+from ..utils.logger import log
 
 
 def unmerge_cells(sheet):
@@ -77,31 +81,6 @@ def load_data(sheet_name=None):
     except Exception as e:
         log(f"❌ Ошибка при загрузке Excel: {e}")
         return None
-
-
-def update_cell(sheet_name, cell, value):
-    """Обновляет ячейку в Excel."""
-    try:
-        workbook = load_workbook(EXCEL_FILE)
-        sheet = workbook[sheet_name]
-        if cell not in sheet:
-            return False
-        sheet[cell] = value
-        workbook.save(EXCEL_FILE)
-        return True
-    except Exception as e:
-        log(f"Error updating cell: {e}")
-        return False
-
-
-def export_to_csv(sheet_name="ЯНВАРЬ"):
-    """Экспортирует данные в CSV."""
-    data = load_data(sheet_name)
-    if data is not None:
-        filename = f"data_{sheet_name}.csv"
-        data.to_csv(filename, index=False, encoding="utf-8-sig")
-        return filename
-    return None
 
 
 def export_to_pdf(sheet_name="ЯНВАРЬ"):

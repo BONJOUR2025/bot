@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 export default function Login() {
   const { login } = useAuth();
@@ -11,6 +12,7 @@ export default function Login() {
   const [form, setForm] = useState({ login: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { isMobile } = useViewport();
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -33,48 +35,39 @@ export default function Login() {
   };
 
   return (
-    <div className="max-w-sm mx-auto mt-24 p-8 bg-white shadow-xl rounded-lg space-y-6">
-      <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-semibold text-gray-900">Вход в систему</h1>
-        <p className="text-gray-500 text-sm">Введите логин и пароль администратора</p>
+    <div className={`auth-card ${isMobile ? 'auth-card--mobile' : ''}`}>
+      <div className="auth-card__logo">HR</div>
+      <div className="auth-card__header">
+        <h1>Добро пожаловать</h1>
+        <p>Введите логин и пароль администратора, чтобы войти в панель управления</p>
       </div>
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-gray-700" htmlFor="login">
-            Логин
-          </label>
+      <form className="auth-card__form" onSubmit={handleSubmit}>
+        <label className="form-field">
+          <span>Логин</span>
           <input
             id="login"
             name="login"
-            className="input w-full"
             value={form.login}
             onChange={handleChange}
             autoComplete="username"
             required
           />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-gray-700" htmlFor="password">
-            Пароль
-          </label>
+        </label>
+        <label className="form-field">
+          <span>Пароль</span>
           <input
             id="password"
             type="password"
             name="password"
-            className="input w-full"
             value={form.password}
             onChange={handleChange}
             autoComplete="current-password"
             required
           />
-        </div>
-        {error && <div className="text-sm text-red-600">{error}</div>}
-        <button
-          type="submit"
-          className="btn w-full"
-          disabled={loading}
-        >
-          {loading ? 'Вход...' : 'Войти'}
+        </label>
+        {error && <div className="form-error">{error}</div>}
+        <button type="submit" className="btn btn--primary" disabled={loading}>
+          {loading ? 'Вход…' : 'Войти'}
         </button>
       </form>
     </div>

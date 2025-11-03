@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { X } from 'lucide-react';
+
 import { useAuth } from '../providers/AuthProvider.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const navStructure = [
   {
@@ -38,13 +40,22 @@ const navStructure = [
   },
 ];
 
-export default function Navigation() {
+export default function Navigation({ onNavigate }) {
   const location = useLocation();
   const { user } = useAuth();
+  const { isMobile } = useViewport();
   const allowed = useMemo(() => new Set(user?.permissions || []), [user?.permissions]);
-  const [open, setOpen] = useState(false);
-  const toggle = () => setOpen((o) => !o);
-  const close = () => setOpen(false);
+  const handleNavigate = () => {
+    if (isMobile && typeof onNavigate === 'function') {
+      onNavigate();
+    }
+  };
+
+  const handleClose = () => {
+    if (typeof onNavigate === 'function') {
+      onNavigate();
+    }
+  };
 
   const itemsByCategory = useMemo(
     () =>
@@ -64,53 +75,39 @@ export default function Navigation() {
   );
 
   return (
-    <div className="relative mb-4">
-      <button
-        type="button"
-        onClick={toggle}
-        className="sm:hidden p-2 mb-2 bg-brand text-white rounded shadow-lg"
-      >
-        {open ? <X size={20} /> : <Menu size={20} />}
-      </button>
-
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/50 sm:hidden"
-          onClick={close}
-        />
-      )}
-
-      <nav
-        className={`${
-          open ? 'translate-x-0' : '-translate-x-full'
-        } sm:translate-x-0 transition-transform fixed sm:static top-0 left-0 h-full sm:h-auto w-64 bg-white/90 backdrop-blur-lg p-4 rounded sm:rounded-none shadow-lg sm:shadow-none overflow-y-auto`}
-      >
-        <div className="space-y-6">
-          {itemsByCategory.map((category) => (
-            <div key={category.name}>
-              <div className="px-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                {category.name}
-              </div>
-              <div className="mt-2 space-y-1">
-                {category.items.map((item) => (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    onClick={close}
-                    className={`block rounded px-3 py-2 text-sm transition-colors ${
-                      item.active
-                        ? 'bg-brand/10 text-brand font-semibold'
-                        : 'text-gray-700 hover:bg-muted/20'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
+    <nav className="sidebar">
+      <div className="sidebar__header">
+        <div className="sidebar__badge">HR</div>
+        <div className="sidebar__title">
+          <div className="sidebar__title-main">Админ-панель</div>
+          <div className="sidebar__title-sub">Управление персоналом</div>
         </div>
-      </nav>
-    </div>
+        {isMobile && (
+          <button type="button" className="icon-button icon-button--ghost" onClick={handleClose} aria-label="Закрыть меню">
+            <X size={18} />
+          </button>
+        )}
+      </div>
+
+      <div className="sidebar__sections">
+        {itemsByCategory.map((category) => (
+          <div key={category.name} className="sidebar__section">
+            <div className="sidebar__section-label">{category.name}</div>
+            <div className="sidebar__links">
+              {category.items.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={handleNavigate}
+                  className={`sidebar__link ${item.active ? 'is-active' : ''}`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </nav>
   );
 }
