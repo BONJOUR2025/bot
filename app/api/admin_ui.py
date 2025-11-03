@@ -34,13 +34,6 @@ async def admin_reports(request: Request):
         "admin/reports.html", {"request": request})
 
 
-@router.get("/analytics/sales", response_class=HTMLResponse)
-async def admin_sales(request: Request):
-    return templates.TemplateResponse(
-        "admin/analytics_sales.html", {"request": request})
-
-
-
 @router.get("/broadcasts", response_class=HTMLResponse)
 async def admin_broadcasts(request: Request):
     return templates.TemplateResponse(

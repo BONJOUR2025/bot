@@ -14,8 +14,6 @@ const FIELDS = {
   vacation_types: 'Типы отпусков',
   incentive_types: 'Типы штрафов и премий',
   broadcast_statuses: 'Статусы рассылки',
-  analytics_leader_options: 'Поля лидеров аналитики',
-  analytics_sort_options: 'Поля сортировки аналитики',
   asset_items: 'Предметы имущества',
   asset_sizes: 'Размеры имущества',
 };

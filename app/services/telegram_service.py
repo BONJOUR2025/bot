@@ -218,6 +218,12 @@ class TelegramService:
         log(
             f"[Telegram] Sending personal message to {user_id} — text: '{message[:50]}'"
         )
+        employee = None
+        if hasattr(self.repo, "get_employee"):
+            try:
+                employee = self.repo.get_employee(str(user_id))
+            except Exception as exc:
+                log(f"⚠️ Failed to resolve employee name for {user_id}: {exc}")
         try:
             if photo_url:
                 result = await self.bot.send_photo(
@@ -240,6 +246,9 @@ class TelegramService:
         log_entry = {
             "id": str(uuid4()),
             "user_id": str(user_id),
+            "user_name": (getattr(employee, "full_name", "") or getattr(employee, "name", ""))
+            if employee
+            else None,
             "message": message,
             "status": "отправлено",
             "message_id": result.message_id,

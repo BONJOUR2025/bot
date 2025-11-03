@@ -37,6 +37,7 @@ class BroadcastRequest(BaseModel):
 class SentMessage(BaseModel):
     id: str
     user_id: Optional[str] = None
+    user_name: Optional[str] = None
     message: str
     status: Optional[str] = None
     message_id: Optional[int] = None

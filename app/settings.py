@@ -8,10 +8,6 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = Field("dummy", env="TELEGRAM_BOT_TOKEN")
     excel_file: str = Field("data.xlsx", env="EXCEL_FILE")
-    sales_file: str = Field("telegram_bot/Парсинг/товары.xlsx", env="SALES_FILE")
-    firebird_db: str | None = Field(None, env="FIREBIRD_DB")
-    firebird_user: str | None = Field(None, env="FIREBIRD_USER")
-    firebird_password: str | None = Field(None, env="FIREBIRD_PASSWORD")
     users_file: str = Field("user.json", env="USERS_FILE")
     advance_requests_file: str = Field(
         "advance_requests.json", env="ADVANCE_REQUESTS_FILE"

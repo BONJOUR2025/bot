@@ -15,13 +15,13 @@ async def get_user_info_user(update: Update,
         if update.message:
             await update.message.reply_text(
                 "Информация о пользователе не найдена. Обратитесь к администратору.",
-                reply_markup=get_main_menu(),
+                reply_markup=get_main_menu(user_id),
             )
         return
     name = user.get("name", "Пользователь")
     greeting_text = f"Приветствую тебя, {name}!\n\nВыберите действие:"
     if update.message:
-        await update.message.reply_text(greeting_text, reply_markup=get_main_menu())
+        await update.message.reply_text(greeting_text, reply_markup=get_main_menu(user_id))
 
 
 async def home_handler_user(update: Update,
@@ -36,6 +36,6 @@ async def home_handler_user(update: Update,
     if update.message:
         await update.message.reply_text(
             "🏠 Вы вернулись в главное меню.",
-            reply_markup=get_main_menu(),
+            reply_markup=get_main_menu(str(update.effective_user.id)),
         )
     return ConversationHandler.END

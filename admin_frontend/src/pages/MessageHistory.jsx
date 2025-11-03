@@ -118,6 +118,16 @@ export default function MessageHistory() {
   const [error, setError] = useState(null);
   const [typeFilter, setTypeFilter] = useState('all');
 
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    try {
+      return new Date(value).toLocaleString('ru-RU');
+    } catch (err) {
+      console.error('Failed to format date', err);
+      return value;
+    }
+  };
+
   const loadEntries = async () => {
     setLoading(true);
     try {
@@ -204,9 +214,17 @@ export default function MessageHistory() {
           <article key={entry.id} className="rounded border border-gray-200 bg-white p-4 shadow-sm">
             <header className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Clock size={16} />
-                  {new Date(entry.timestamp).toLocaleString()}
+                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <Clock size={16} />
+                    <span>Отправлено: {formatDateTime(entry.timestamp)}</span>
+                  </span>
+                  {entry.timestamp_accept && (
+                    <span className="flex items-center gap-1 text-green-600">
+                      <CheckCircle2 size={16} />
+                      <span>Принято: {formatDateTime(entry.timestamp_accept)}</span>
+                    </span>
+                  )}
                 </div>
                 <p className="whitespace-pre-wrap text-gray-900">{entry.message}</p>
                 <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
@@ -228,16 +246,12 @@ export default function MessageHistory() {
                       Ожидает подтверждения
                     </span>
                   )}
-                  {entry.user_id && !entry.broadcast && (
-                    <span className="text-xs text-gray-500">ID получателя: {entry.user_id}</span>
+                  {(!entry.broadcast && (entry.user_name || entry.user_id)) && (
+                    <span className="text-xs text-gray-500">
+                      Получатель: {entry.user_name || entry.user_id}
+                    </span>
                   )}
                 </div>
-                {entry.accepted && entry.timestamp_accept && (
-                  <div className="flex items-center gap-2 text-xs text-green-600">
-                    <Clock size={14} />
-                    Подтверждено: {new Date(entry.timestamp_accept).toLocaleString()}
-                  </div>
-                )}
               </div>
               <div className="flex flex-col items-end gap-2">
                 <span className="text-xs uppercase tracking-wide text-gray-400">
