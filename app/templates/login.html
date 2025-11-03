@@ -183,19 +183,6 @@
         }
       });
 
-      async function redirectWithCookieSession() {
-        try {
-          const response = await fetch('/api/auth/me', {
-            credentials: 'include',
-          });
-          if (response.ok) {
-            window.location.href = '/admin';
-          }
-        } catch (err) {
-          /* ignore */
-        }
-      }
-
       (function autoRedirect() {
         const token = localStorage.getItem('auth_token');
         if (token) {
@@ -208,9 +195,7 @@
               }
             })
             .catch(() => {});
-          return;
         }
-        redirectWithCookieSession();
       })();
     </script>
   </body>
