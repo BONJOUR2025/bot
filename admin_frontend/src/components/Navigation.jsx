@@ -6,16 +6,11 @@ import { useAuth } from '../providers/AuthProvider.jsx';
 const navStructure = [
   {
     name: 'Обзор',
-    items: [{ to: '/', label: 'Дашборд', permission: 'dashboard' }],
     items: [{ to: '/admin', label: 'Дашборд', permission: 'dashboard' }],
   },
   {
     name: 'Персонал',
     items: [
-      { to: '/employees', label: 'Сотрудники', permission: 'employees' },
-      { to: '/vacations', label: 'Отпуска', permission: 'vacations' },
-      { to: '/birthdays', label: 'Дни рождения', permission: 'birthdays' },
-      { to: '/assets', label: 'Имущество', permission: 'assets' },
       { to: '/admin/employees', label: 'Сотрудники', permission: 'employees' },
       { to: '/admin/vacations', label: 'Отпуска', permission: 'vacations' },
       { to: '/admin/birthdays', label: 'Дни рождения', permission: 'birthdays' },
@@ -25,10 +20,6 @@ const navStructure = [
   {
     name: 'Финансы',
     items: [
-      { to: '/payouts', label: 'Выплаты', permission: 'payouts' },
-      { to: '/payouts-control', label: 'Контроль выплат', permission: 'payouts-control' },
-      { to: '/incentives', label: 'Штрафы и премии', permission: 'incentives' },
-      { to: '/reports', label: 'Отчёты', permission: 'reports' },
       { to: '/admin/payouts', label: 'Выплаты', permission: 'payouts' },
       { to: '/admin/payouts-control', label: 'Контроль выплат', permission: 'payouts-control' },
       { to: '/admin/incentives', label: 'Штрафы и премии', permission: 'incentives' },
@@ -38,11 +29,6 @@ const navStructure = [
   {
     name: 'Управление',
     items: [
-      { to: '/broadcast', label: 'Рассылка', permission: 'broadcast' },
-      { to: '/messages', label: 'История сообщений', permission: 'messages' },
-      { to: '/dictionary', label: 'Словарь', permission: 'dictionary' },
-      { to: '/settings', label: 'Настройки', permission: 'settings' },
-      { to: '/access', label: 'Доступ', permission: 'access' },
       { to: '/admin/broadcast', label: 'Рассылка', permission: 'broadcast' },
       { to: '/admin/messages', label: 'История сообщений', permission: 'messages' },
       { to: '/admin/dictionary', label: 'Словарь', permission: 'dictionary' },
