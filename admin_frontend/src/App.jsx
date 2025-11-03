@@ -1,26 +1,30 @@
 import "./styles/tokens.css";
 import "./styles/globals.css";
+
 import ThemeProvider from "./providers/ThemeProvider.jsx";
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Dashboard from './pages/Dashboard';
-import Employees from './pages/Employees';
-import Payouts from './pages/Payouts';
-import PayoutsControl from './pages/PayoutsControl';
-import Incentives from './pages/Incentives';
-import Reports from './pages/Reports';
-import Broadcast from './pages/Broadcast';
-import MessageHistory from './pages/MessageHistory';
-import Vacations from './pages/Vacations';
-import Birthdays from './pages/Birthdays';
-import Settings from './pages/Settings';
-import Assets from './pages/Assets';
-import Dictionary from './pages/Dictionary';
-import AccessControl from './pages/AccessControl';
-import MainLayout from './layouts/MainLayout.jsx';
-import PlainLayout from './layouts/PlainLayout.jsx';
-import { AuthProvider } from './providers/AuthProvider.jsx';
-import RequireAuth from './components/RequireAuth.jsx';
-import Login from './pages/Login.jsx';
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+
+import MainLayout from "./layouts/MainLayout.jsx";
+import PlainLayout from "./layouts/PlainLayout.jsx";
+
+import { AuthProvider } from "./providers/AuthProvider.jsx";
+import RequireAuth from "./components/RequireAuth.jsx";
+
+import Login from "./pages/Login.jsx";
+import Dashboard from "./pages/Dashboard";
+import Employees from "./pages/Employees";
+import Payouts from "./pages/Payouts";
+import PayoutsControl from "./pages/PayoutsControl";
+import Incentives from "./pages/Incentives";
+import Reports from "./pages/Reports";
+import Broadcast from "./pages/Broadcast";
+import MessageHistory from "./pages/MessageHistory";
+import Vacations from "./pages/Vacations";
+import Birthdays from "./pages/Birthdays";
+import Settings from "./pages/Settings";
+import Assets from "./pages/Assets";
+import Dictionary from "./pages/Dictionary";
+import AccessControl from "./pages/AccessControl";
 
 export default function App() {
   return (
@@ -29,17 +33,19 @@ export default function App() {
         <AuthProvider>
           <Router>
             <Routes>
+              {/* Публичная зона: логин */}
               <Route path="/login" element={<PlainLayout />}>
                 <Route index element={<Login />} />
               </Route>
-              <Route path="/" element={<Navigate to="/login" replace />} />
+
+              {/* Приватная зона: всё под /admin защищено RequireAuth */}
               <Route
                 path="/admin"
-                element={(
+                element={
                   <RequireAuth>
                     <MainLayout />
                   </RequireAuth>
-                )}
+                }
               >
                 <Route index element={<Dashboard />} />
                 <Route path="employees" element={<Employees />} />
@@ -56,7 +62,11 @@ export default function App() {
                 <Route path="settings" element={<Settings />} />
                 <Route path="access" element={<AccessControl />} />
               </Route>
-              <Route path="*" element={<Navigate to="/login" replace />} />
+
+              {/* Фолбэк: всё прочее редиректим в /admin */}
+              <Route path="*" element={<PlainLayout />}>
+                <Route index element={<Navigate to="/admin" replace />} />
+              </Route>
             </Routes>
           </Router>
         </AuthProvider>
@@ -64,7 +74,3 @@ export default function App() {
     </ThemeProvider>
   );
 }
-
-
-
-
