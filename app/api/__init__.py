@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse, Response, FileResponse, RedirectResponse
 from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from telegram import Update
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
         create_incentive_router(incentive_service), prefix="/api", dependencies=protected
     )
 
+
     from .assets import create_asset_router
     from ..services.asset_service import AssetService
 
@@ -158,11 +160,15 @@ def create_app() -> FastAPI:
     frontend_path = (
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+    app.mount("/admin", StaticFiles(directory=frontend_path, html=True), name="frontend")
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        return RedirectResponse(url="/admin", status_code=307)
 
     if frontend_path.exists():
 
-        @app.get("/{full_path:path}", include_in_schema=False)
+        @app.get("/admin/{full_path:path}", include_in_schema=False)
         async def spa_fallback(full_path: str, request: Request):
             file_path = frontend_path / full_path
             if file_path.is_file():
