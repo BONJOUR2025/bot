@@ -27,7 +27,7 @@ async def personal_cabinet(
     if not user:
         await update.message.reply_text(
             "❌ Ваши данные не найдены. Обратитесь к администратору.",
-            reply_markup=get_main_menu(),
+            reply_markup=get_main_menu(user_id),
         )
         return
     name = user.get("name", "Не указано")
@@ -46,7 +46,7 @@ async def view_user_info(
     user = users.get(user_id)
     if not user:
         await update.message.reply_text(
-            "❌ Ваши данные не найдены.", reply_markup=get_main_menu()
+            "❌ Ваши данные не найдены.", reply_markup=get_main_menu(user_id)
         )
         return
     info_text = (
@@ -170,7 +170,7 @@ async def handle_edit_confirmation(
             await context.bot.send_message(
                 chat_id=user_id,
                 text="Вы вернулись в главное меню.",
-                reply_markup=get_main_menu(),
+                reply_markup=get_main_menu(user_id),
             )
             return
         users[user_id]["pending_change"] = {"field": field, "value": new_value}

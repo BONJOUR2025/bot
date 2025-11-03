@@ -1,0 +1,36 @@
+{
+  "roles": [
+    {
+      "id": "owner",
+      "name": "Владелец",
+      "permissions": [
+        "*"
+      ],
+      "bot_buttons": [
+        "*"
+      ]
+    },
+    {
+      "id": "employee",
+      "name": "Сотрудник",
+      "permissions": [],
+      "bot_buttons": [
+        "user.view_salary",
+        "user.request_payout",
+        "user.view_schedule",
+        "user.profile"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "admin",
+      "login": "admin",
+      "role_id": "owner",
+      "permissions": null,
+      "bot_buttons": null,
+      "salt": "bc71d33b389416c86a597e20ccde790e",
+      "password_hash": "3bfe4c56f3c399ba5b818881b0773e47c560f94b4872c2c0b3e5b12e92ec264b"
+    }
+  ]
+}

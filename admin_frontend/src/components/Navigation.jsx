@@ -1,58 +1,66 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
+import { useAuth } from '../providers/AuthProvider.jsx';
 
 const navStructure = [
   {
     name: 'Обзор',
-    items: [{ to: '/admin', label: 'Дашборд' }],
+    items: [{ to: '/admin', label: 'Дашборд', permission: 'dashboard' }],
   },
   {
     name: 'Персонал',
     items: [
-      { to: '/admin/employees', label: 'Сотрудники' },
-      { to: '/admin/vacations', label: 'Отпуска' },
-      { to: '/admin/birthdays', label: 'Дни рождения' },
-      { to: '/admin/assets', label: 'Имущество' },
+      { to: '/admin/employees', label: 'Сотрудники', permission: 'employees' },
+      { to: '/admin/vacations', label: 'Отпуска', permission: 'vacations' },
+      { to: '/admin/birthdays', label: 'Дни рождения', permission: 'birthdays' },
+      { to: '/admin/assets', label: 'Имущество', permission: 'assets' },
     ],
   },
   {
     name: 'Финансы',
     items: [
-      { to: '/admin/payouts', label: 'Выплаты' },
-      { to: '/admin/payouts-control', label: 'Контроль выплат' },
-      { to: '/admin/incentives', label: 'Штрафы и премии' },
-      { to: '/admin/reports', label: 'Отчёты' },
+      { to: '/admin/payouts', label: 'Выплаты', permission: 'payouts' },
+      { to: '/admin/payouts-control', label: 'Контроль выплат', permission: 'payouts-control' },
+      { to: '/admin/incentives', label: 'Штрафы и премии', permission: 'incentives' },
+      { to: '/admin/reports', label: 'Отчёты', permission: 'reports' },
     ],
   },
   {
     name: 'Управление',
     items: [
-      { to: '/admin/broadcast', label: 'Рассылка' },
-      { to: '/admin/messages', label: 'История сообщений' },
-      { to: '/admin/dictionary', label: 'Словарь' },
-      { to: '/admin/settings', label: 'Настройки' },
+      { to: '/admin/broadcast', label: 'Рассылка', permission: 'broadcast' },
+      { to: '/admin/messages', label: 'История сообщений', permission: 'messages' },
+      { to: '/admin/dictionary', label: 'Словарь', permission: 'dictionary' },
+      { to: '/admin/settings', label: 'Настройки', permission: 'settings' },
+      { to: '/admin/access', label: 'Доступ', permission: 'access' },
     ],
   },
 ];
 
 export default function Navigation() {
   const location = useLocation();
+  const { user } = useAuth();
+  const allowed = useMemo(() => new Set(user?.permissions || []), [user?.permissions]);
   const [open, setOpen] = useState(false);
   const toggle = () => setOpen((o) => !o);
   const close = () => setOpen(false);
 
   const itemsByCategory = useMemo(
     () =>
-      navStructure.map((category) => ({
-        ...category,
-        items: category.items.map((item) => ({
-          ...item,
-          active:
-            location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
-        })),
-      })),
-    [location.pathname],
+      navStructure
+        .map((category) => ({
+          ...category,
+          items: category.items
+            .filter((item) => !item.permission || allowed.has(item.permission))
+            .map((item) => ({
+              ...item,
+              active:
+                location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+            })),
+        }))
+        .filter((category) => category.items.length > 0),
+    [location.pathname, allowed],
   );
 
   return (
@@ -106,7 +114,3 @@ export default function Navigation() {
     </div>
   );
 }
-
-
-
-

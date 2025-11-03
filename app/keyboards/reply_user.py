@@ -1,17 +1,14 @@
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
-from typing import List
+
+from app.services.access_control_service import get_access_control_service
 
 
-def get_main_menu() -> ReplyKeyboardMarkup:
-    """
-    Возвращает главное меню для обычного сотрудника.
-    """
-    keyboard: List[List[str]] = [
-        ["📄 Просмотр ЗП"],
-        ["💰 Запросить выплату"],
-        ["📅 Просмотр расписания", "👤 Личный кабинет"],
-    ]
+def get_main_menu(user_id: str | None = None) -> ReplyKeyboardMarkup:
+    """Возвращает главное меню для сотрудника с учётом его настроек."""
+    service = get_access_control_service()
+    buttons = service.get_bot_button_texts(user_id)
+    keyboard = [[text] for text in buttons]
     return ReplyKeyboardMarkup(
         keyboard, resize_keyboard=True, one_time_keyboard=False
     )
@@ -56,6 +53,7 @@ def get_edit_keyboard():
 
 async def send_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send the main user menu."""
+    user_id = str(update.effective_user.id) if update.effective_user else None
     await update.message.reply_text(
-        "🏠 Вы вернулись в главное меню.", reply_markup=get_main_menu()
+        "🏠 Вы вернулись в главное меню.", reply_markup=get_main_menu(user_id)
     )

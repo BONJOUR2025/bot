@@ -70,7 +70,7 @@ async def handle_selected_month_user(
     if month not in valid_months:
         await update.message.reply_text(
             "❌ Неверный месяц. Выберите из предложенных.",
-            reply_markup=get_main_menu(),
+            reply_markup=get_main_menu(user_id),
         )
         return
 
@@ -82,7 +82,7 @@ async def handle_selected_month_user(
     if not user:
         await loading_message.edit_text(
             "❌ Информация о пользователе не найдена. Обратитесь к администратору.",
-            reply_markup=get_main_menu(),
+            reply_markup=get_main_menu(user_id),
         )
         return
     user_name = user.get("name", "").strip()
@@ -97,14 +97,14 @@ async def handle_selected_month_user(
                     f"❌ [handle_selected_month_user] Неверная структура данных для {month}")
                 await loading_message.edit_text(
                     f"❌ Ошибка загрузки данных для {month}.",
-                    reply_markup=get_main_menu(),
+                    reply_markup=get_main_menu(user_id),
                 )
                 return
         except Exception as e:
             log(f"❌ [handle_selected_month_user] Ошибка чтения Excel: {e}")
             await loading_message.edit_text(
                 f"❌ Ошибка загрузки данных для {month}: {e}",
-                reply_markup=get_main_menu(),
+                reply_markup=get_main_menu(user_id),
             )
             return
 
@@ -113,7 +113,7 @@ async def handle_selected_month_user(
         if employee_data.empty:
             await loading_message.edit_text(
                 f"❌ Данные за {month} для {user_name} не найдены. Обратитесь к руководителю.",
-                reply_markup=get_main_menu(),
+                reply_markup=get_main_menu(user_id),
             )
             return
 
@@ -132,12 +132,12 @@ async def handle_selected_month_user(
                 await update.message.reply_photo(
                     photo=photo,
                     caption="Ваш отчет о зарплате",
-                    reply_markup=get_main_menu(),
+                    reply_markup=get_main_menu(user_id),
                 )
         else:
             await loading_message.edit_text(
                 "❌ Не удалось создать изображение отчёта.",
-                reply_markup=get_main_menu(),
+                reply_markup=get_main_menu(user_id),
             )
     elif requested_data == "schedule":
         try:
@@ -145,14 +145,14 @@ async def handle_selected_month_user(
             if raw_data.shape[0] < 2 or raw_data.shape[1] < 3:
                 await loading_message.edit_text(
                     f"❌ Неверная структура данных в Excel для {month}.",
-                    reply_markup=get_main_menu(),
+                    reply_markup=get_main_menu(user_id),
                 )
                 return
         except Exception as e:
             log(f"❌ [handle_selected_month_user] Ошибка чтения Excel: {e}")
             await loading_message.edit_text(
                 f"❌ Ошибка загрузки данных для {month}: {e}",
-                reply_markup=get_main_menu(),
+                reply_markup=get_main_menu(user_id),
             )
             return
         first_row = raw_data.iloc[0].tolist()
@@ -164,7 +164,7 @@ async def handle_selected_month_user(
         if employee_data.empty:
             await loading_message.edit_text(
                 f"❌ Данные за {month} для {user_name} не найдены. Обратитесь к руководителю.",
-                reply_markup=get_main_menu(),
+                reply_markup=get_main_menu(user_id),
             )
             return
         filename = create_schedule_image(
@@ -179,17 +179,17 @@ async def handle_selected_month_user(
                 await update.message.reply_photo(
                     photo=photo,
                     caption="Ваше расписание",
-                    reply_markup=get_main_menu(),
+                    reply_markup=get_main_menu(user_id),
                 )
         else:
             await loading_message.edit_text(
                 "❌ Не удалось создать изображение расписания.",
-                reply_markup=get_main_menu(),
+                reply_markup=get_main_menu(user_id),
             )
     else:
         await loading_message.edit_text(
             "❌ Неизвестный тип запроса пользователя.",
-            reply_markup=get_main_menu(),
+            reply_markup=get_main_menu(user_id),
         )
 
 
