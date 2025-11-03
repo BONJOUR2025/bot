@@ -1,16 +1,22 @@
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Cookie, Depends, FastAPI, Request, status
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
+    JSONResponse,
     RedirectResponse,
     Response,
 )
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from telegram import Update
 
-from app.services.access_control_service import get_access_control_service
+from app.services.access_control_service import (
+    TOKEN_TTL_SECONDS,
+    get_access_control_service,
+)
+from app.schemas.auth import LoginRequest
 
 from ..config import TOKEN
 from ..core.application import create_application
@@ -37,6 +43,8 @@ from .salary import create_salary_router
 from .schedule import create_schedule_router
 from .telegram import create_telegram_router
 from .vacations import create_vacation_router
+
+templates = Jinja2Templates(directory="app/templates")
 
 
 def create_app() -> FastAPI:
@@ -80,6 +88,44 @@ def create_app() -> FastAPI:
 
     access_service = get_access_control_service()
     app.include_router(create_auth_router(access_service), prefix="/api")
+
+    @app.get("/", include_in_schema=False, response_class=HTMLResponse)
+    async def login_page(
+        request: Request, access_token: str | None = Cookie(default=None)
+    ) -> HTMLResponse:
+        if access_token:
+            try:
+                access_service.verify_token(access_token)
+                return RedirectResponse(url="/admin", status_code=307)
+            except ValueError:
+                pass
+        return templates.TemplateResponse(request, "login.html")
+
+    @app.post("/session/login", include_in_schema=False)
+    async def session_login(payload: LoginRequest) -> JSONResponse:
+        resolved = access_service.authenticate(payload.login, payload.password)
+        if not resolved:
+            return JSONResponse(
+                {"detail": "invalid_credentials"},
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+        token = access_service.issue_token(resolved.id)
+        response = JSONResponse({"status": "ok", "token": token})
+        response.set_cookie(
+            "access_token",
+            token,
+            max_age=TOKEN_TTL_SECONDS,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+        )
+        return response
+
+    @app.post("/session/logout", include_in_schema=False)
+    async def session_logout() -> JSONResponse:
+        response = JSONResponse({"status": "ok"})
+        response.delete_cookie("access_token")
+        return response
 
     protected = [Depends(get_current_user)]
 
@@ -166,10 +212,6 @@ def create_app() -> FastAPI:
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )
     app.mount("/admin", StaticFiles(directory=frontend_path, html=True), name="frontend")
-
-    @app.get("/", include_in_schema=False)
-    async def root_redirect():
-        return RedirectResponse(url="/admin", status_code=307)
 
     if frontend_path.exists():
 
