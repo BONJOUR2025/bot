@@ -1,31 +1,42 @@
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse, Response, FileResponse, RedirectResponse
-from fastapi.responses import HTMLResponse, Response, FileResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from telegram import Update
-from pathlib import Path
+
+from app.services.access_control_service import get_access_control_service
 
 from ..config import TOKEN
 from ..core.application import create_application
-from .employees import create_employee_router
-from .salary import create_salary_router
-from .schedule import create_schedule_router
-from .payouts import create_payout_router
-from .telegram import create_telegram_router
-from ..services.employee_service import EmployeeService, EmployeeAPIService
+from ..services.adjustment_service import AdjustmentService
+from ..services.employee_service import EmployeeAPIService, EmployeeService
+from ..services.message_service import MessageService
+from ..services.payout_service import PayoutService
 from ..services.salary_service import SalaryService
 from ..services.schedule_service import ScheduleService
-from ..services.payout_service import PayoutService
 from ..services.telegram_service import TelegramService
 from ..services.vacation_service import VacationService
-from ..services.adjustment_service import AdjustmentService
-from ..services.message_service import MessageService
-from .vacations import create_vacation_router
 from .adjustments import create_adjustment_router
-from .birthdays import create_birthday_router
+from .assets import create_asset_router
 from .auth import create_auth_router
+from .birthdays import create_birthday_router
+from .config import create_config_router
 from .dependencies import get_current_user
-from app.services.access_control_service import get_access_control_service
+from .dictionary import create_dictionary_router
+from .employees import create_employee_router
+from .incentives import create_incentive_router
+from .messages import create_message_router
+from .payouts import create_payout_router
+from .salary import create_salary_router
+from .schedule import create_schedule_router
+from .telegram import create_telegram_router
+from .vacations import create_vacation_router
 
 
 def create_app() -> FastAPI:
@@ -104,7 +115,6 @@ def create_app() -> FastAPI:
         create_adjustment_router(adjustment_service), prefix="/api", dependencies=protected
     )
 
-    from .incentives import create_incentive_router
     from ..services.incentive_service import IncentiveService
 
     incentive_service = IncentiveService()
@@ -112,8 +122,6 @@ def create_app() -> FastAPI:
         create_incentive_router(incentive_service), prefix="/api", dependencies=protected
     )
 
-
-    from .assets import create_asset_router
     from ..services.asset_service import AssetService
 
     asset_service = AssetService()
@@ -121,7 +129,6 @@ def create_app() -> FastAPI:
         create_asset_router(asset_service), prefix="/api", dependencies=protected
     )
 
-    from .messages import create_message_router
     from ..services.template_service import TemplateService
 
     message_service = MessageService(employee_repo=employee_service._repo)
@@ -132,7 +139,6 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
-    from .config import create_config_router
     from ..services.config_service import ConfigService
 
     config_service = ConfigService()
@@ -140,7 +146,6 @@ def create_app() -> FastAPI:
         create_config_router(config_service), prefix="/api", dependencies=protected
     )
 
-    from .dictionary import create_dictionary_router
     from ..services.dictionary_service import DictionaryService
 
     dictionary_service = DictionaryService()
