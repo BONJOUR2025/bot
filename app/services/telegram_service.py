@@ -64,9 +64,27 @@ class TelegramService:
             return []
         return data
 
+    def _get_employee_lookup(self) -> Dict[str, str]:
+        """Return a mapping of user id to employee display name."""
+        try:
+            employees = self.repo.list_employees()
+        except Exception:
+            return {}
+        lookup: Dict[str, str] = {}
+        for emp in employees:
+            name = getattr(emp, "full_name", None) or getattr(emp, "name", None)
+            if name:
+                lookup[str(getattr(emp, "id", ""))] = name
+        return lookup
+
     def _load_log(self) -> List[Dict]:
         """Return log records sorted by timestamp descending."""
         data = self._load_log_all()
+        lookup = self._get_employee_lookup()
+        for item in data:
+            user_id = item.get("user_id")
+            if user_id and not item.get("user_name"):
+                item["user_name"] = lookup.get(str(user_id))
         return sorted(
             data,
             key=lambda x: x.get("timestamp", ""),
@@ -94,12 +112,19 @@ class TelegramService:
             data = json.loads(log_file.read_text(encoding="utf-8"))
         except Exception:
             return
+        accepted_at = None
+        normalized_status = status.lower() if isinstance(status, str) else ""
+        if "принят" in normalized_status:
+            accepted_at = datetime.utcnow().isoformat()
         for item in data:
             if (
                 str(item.get("user_id")) == str(user_id)
                 and item.get("message_id") == message_id
             ):
                 item["status"] = status
+                if accepted_at:
+                    item["accepted"] = True
+                    item["timestamp_accept"] = accepted_at
                 break
         log_file.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -230,15 +255,19 @@ class TelegramService:
         except BadRequest as exc:
             log(f"❌ Failed to send message to chat {user_id} — {exc}")
             raise TelegramAPIError(str(exc)) from exc
+        user_lookup = self._get_employee_lookup()
         log_entry = {
             "id": str(uuid4()),
             "user_id": str(user_id),
+            "user_name": user_lookup.get(str(user_id)),
             "message": message,
             "status": "отправлено",
             "message_id": result.message_id,
             "timestamp": datetime.utcnow().isoformat(),
             "photo_url": photo_url,
             "requires_ack": require_ack,
+            "accepted": False,
+            "timestamp_accept": None,
         }
         data = self._load_log_all()
         data.append(log_entry)

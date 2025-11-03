@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MessageCircle, Users, AlertCircle, Clock, RefreshCcw, Trash2 } from 'lucide-react';
+import {
+  MessageCircle,
+  Users,
+  AlertCircle,
+  Clock,
+  RefreshCcw,
+  Trash2,
+  CheckCircle2,
+  Hourglass,
+  User,
+} from 'lucide-react';
 import api from '../api';
 
 const typeFilters = [
@@ -195,10 +205,36 @@ export default function MessageHistory() {
           <article key={entry.id} className="rounded border border-gray-200 bg-white p-4 shadow-sm">
             <header className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Clock size={16} />
-                  {new Date(entry.timestamp).toLocaleString()}
+                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <Clock size={14} />
+                    <span>Отправлено: {new Date(entry.timestamp).toLocaleString()}</span>
+                  </span>
+                  {entry.requires_ack && (
+                    <span
+                      className={`flex items-center gap-1 ${
+                        entry.accepted ? 'text-green-600' : 'text-yellow-700'
+                      }`}
+                    >
+                      {entry.accepted ? <CheckCircle2 size={14} /> : <Hourglass size={14} />}
+                      <span>
+                        Принято:{' '}
+                        {entry.timestamp_accept
+                          ? new Date(entry.timestamp_accept).toLocaleString()
+                          : '—'}
+                      </span>
+                    </span>
+                  )}
                 </div>
+                {entry.user_id && !entry.broadcast && (
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <User size={14} />
+                    <span className="text-gray-600">Получатель:</span>
+                    <span className="font-medium text-gray-700">
+                      {entry.user_name || entry.user_id}
+                    </span>
+                  </div>
+                )}
                 <p className="whitespace-pre-wrap text-gray-900">{entry.message}</p>
                 <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
                   <StatusBadge status={entry.status} />
@@ -207,8 +243,17 @@ export default function MessageHistory() {
                       Требуется подтверждение
                     </span>
                   )}
-                  {entry.user_id && !entry.broadcast && (
-                    <span className="text-xs text-gray-500">ID получателя: {entry.user_id}</span>
+                  {entry.accepted && (
+                    <span className="flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <CheckCircle2 size={14} />
+                      Принято
+                    </span>
+                  )}
+                  {entry.requires_ack && !entry.accepted && (
+                    <span className="flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+                      <Hourglass size={14} />
+                      Ожидает подтверждения
+                    </span>
                   )}
                 </div>
               </div>
