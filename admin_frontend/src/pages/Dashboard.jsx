@@ -4,7 +4,6 @@ import Card from '../components/ui/Card';
 
 export default function Dashboard() {
   const [birthday, setBirthday] = useState(null);
-  const [cosmetics, setCosmetics] = useState(0);
   const [vacations, setVacations] = useState([]);
   const [payouts, setPayouts] = useState([]);
 
@@ -16,11 +15,6 @@ export default function Dashboard() {
     try {
       const bRes = await api.get('birthdays/', { params: { days: 365 } });
       setBirthday(bRes.data[0] || null);
-      const today = new Date().toISOString().slice(0, 10);
-      const sRes = await api.get('analytics/sales/details', {
-        params: { date_from: today, date_to: today, page_size: 1 },
-      });
-      setCosmetics(sRes.data.total || 0);
       const vRes = await api.get('vacations/active');
       setVacations(vRes.data);
       const pRes = await api.get('payouts/active');
@@ -47,9 +41,6 @@ export default function Dashboard() {
         ) : (
           <div>Нет данных</div>
         )}
-      </Card>
-      <Card title="Продажи косметики сегодня">
-        <div>{cosmetics} ₽</div>
       </Card>
       <Card title="Сотрудники в отпуске">
         {vacations.length ? (
