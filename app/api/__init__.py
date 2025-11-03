@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, Response, FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from telegram import Update
 from pathlib import Path
@@ -38,7 +39,8 @@ def create_app() -> FastAPI:
     telegram_app = None
     if TOKEN and TOKEN != "dummy":
         telegram_app = create_application()
-    # Mount static files for admin UI and React frontend
+
+    # Статика для админки/React
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
     @app.get("/status", response_class=HTMLResponse)
@@ -154,6 +156,7 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # SPA фронтенд (Vite/React)
     frontend_path = (
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )

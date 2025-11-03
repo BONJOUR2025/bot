@@ -7,6 +7,7 @@ const navStructure = [
   {
     name: 'Обзор',
     items: [{ to: '/', label: 'Дашборд', permission: 'dashboard' }],
+    items: [{ to: '/admin', label: 'Дашборд', permission: 'dashboard' }],
   },
   {
     name: 'Персонал',
@@ -15,6 +16,10 @@ const navStructure = [
       { to: '/vacations', label: 'Отпуска', permission: 'vacations' },
       { to: '/birthdays', label: 'Дни рождения', permission: 'birthdays' },
       { to: '/assets', label: 'Имущество', permission: 'assets' },
+      { to: '/admin/employees', label: 'Сотрудники', permission: 'employees' },
+      { to: '/admin/vacations', label: 'Отпуска', permission: 'vacations' },
+      { to: '/admin/birthdays', label: 'Дни рождения', permission: 'birthdays' },
+      { to: '/admin/assets', label: 'Имущество', permission: 'assets' },
     ],
   },
   {
@@ -24,6 +29,10 @@ const navStructure = [
       { to: '/payouts-control', label: 'Контроль выплат', permission: 'payouts-control' },
       { to: '/incentives', label: 'Штрафы и премии', permission: 'incentives' },
       { to: '/reports', label: 'Отчёты', permission: 'reports' },
+      { to: '/admin/payouts', label: 'Выплаты', permission: 'payouts' },
+      { to: '/admin/payouts-control', label: 'Контроль выплат', permission: 'payouts-control' },
+      { to: '/admin/incentives', label: 'Штрафы и премии', permission: 'incentives' },
+      { to: '/admin/reports', label: 'Отчёты', permission: 'reports' },
     ],
   },
   {
@@ -34,6 +43,11 @@ const navStructure = [
       { to: '/dictionary', label: 'Словарь', permission: 'dictionary' },
       { to: '/settings', label: 'Настройки', permission: 'settings' },
       { to: '/access', label: 'Доступ', permission: 'access' },
+      { to: '/admin/broadcast', label: 'Рассылка', permission: 'broadcast' },
+      { to: '/admin/messages', label: 'История сообщений', permission: 'messages' },
+      { to: '/admin/dictionary', label: 'Словарь', permission: 'dictionary' },
+      { to: '/admin/settings', label: 'Настройки', permission: 'settings' },
+      { to: '/admin/access', label: 'Доступ', permission: 'access' },
     ],
   },
 ];
@@ -114,7 +128,3 @@ export default function Navigation() {
     </div>
   );
 }
-
-
-
-
