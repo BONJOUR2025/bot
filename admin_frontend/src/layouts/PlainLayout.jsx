@@ -1,9 +1,15 @@
 import { Outlet } from 'react-router-dom';
 
+import { useViewport } from '../providers/ViewportProvider.jsx';
+
 export default function PlainLayout() {
+  const { isMobile } = useViewport();
+
   return (
-    <main className="p-6 min-h-screen bg-surface text-gray-900 dark:bg-gray-900 dark:text-white">
-      <Outlet />
+    <main className={`auth-layout ${isMobile ? 'auth-layout--mobile' : ''}`}>
+      <div className="auth-layout__surface">
+        <Outlet />
+      </div>
     </main>
   );
 }

@@ -2,6 +2,7 @@ import "./styles/tokens.css";
 import "./styles/globals.css";
 
 import ThemeProvider from "./providers/ThemeProvider.jsx";
+import { ViewportProvider } from "./providers/ViewportProvider.jsx";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
 import MainLayout from "./layouts/MainLayout.jsx";
@@ -28,11 +29,12 @@ import AccessControl from "./pages/AccessControl";
 
 export default function App() {
   return (
-    <ThemeProvider>
-      {() => (
-        <AuthProvider>
-          <Router>
-            <Routes>
+    <ViewportProvider>
+      <ThemeProvider>
+        {() => (
+          <AuthProvider>
+            <Router>
+              <Routes>
               {/* Публичная зона: логин */}
               <Route path="/admin/login" element={<PlainLayout />}>
                 <Route index element={<Login />} />
@@ -67,10 +69,11 @@ export default function App() {
               <Route path="*" element={<PlainLayout />}>
                 <Route index element={<Navigate to="/admin" replace />} />
               </Route>
-            </Routes>
-          </Router>
-        </AuthProvider>
-      )}
-    </ThemeProvider>
+              </Routes>
+            </Router>
+          </AuthProvider>
+        )}
+      </ThemeProvider>
+    </ViewportProvider>
   );
 }
