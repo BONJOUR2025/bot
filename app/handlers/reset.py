@@ -26,12 +26,13 @@ async def global_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     )
     context.user_data.clear()
 
+    user_id = str(update.effective_user.id) if update.effective_user else None
     if update.effective_user.id == ADMIN_ID:
         await update.message.reply_text(
             "🏠 Главное меню", reply_markup=get_admin_menu()
         )
     else:
         await update.message.reply_text(
-            "🏠 Вы вернулись в главное меню.", reply_markup=get_main_menu()
+            "🏠 Вы вернулись в главное меню.", reply_markup=get_main_menu(user_id)
         )
     return ConversationHandler.END

@@ -1,15 +1,10 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from telegram import Update
 from pathlib import Path
 
-from ..config import (
-    TOKEN,
-    FIREBIRD_DB,
-    FIREBIRD_USER,
-    FIREBIRD_PASSWORD,
-)
+from ..config import TOKEN
 from ..core.application import create_application
 from .employees import create_employee_router
 from .salary import create_salary_router
@@ -24,10 +19,12 @@ from ..services.telegram_service import TelegramService
 from ..services.vacation_service import VacationService
 from ..services.adjustment_service import AdjustmentService
 from ..services.message_service import MessageService
-from ..services.analytics import AnalyticsService
 from .vacations import create_vacation_router
 from .adjustments import create_adjustment_router
 from .birthdays import create_birthday_router
+from .auth import create_auth_router
+from .dependencies import get_current_user
+from app.services.access_control_service import get_access_control_service
 
 
 def create_app() -> FastAPI:
@@ -68,38 +65,59 @@ def create_app() -> FastAPI:
             await telegram_app.stop()
             await telegram_app.shutdown()
 
+    access_service = get_access_control_service()
+    app.include_router(create_auth_router(access_service), prefix="/api")
+
+    protected = [Depends(get_current_user)]
+
     employee_service = EmployeeService()
     employee_api = EmployeeAPIService(employee_service)
-    app.include_router(create_employee_router(employee_api), prefix="/api")
+    app.include_router(
+        create_employee_router(employee_api), prefix="/api", dependencies=protected
+    )
 
     salary_service = SalaryService(employee_service._repo)
-    app.include_router(create_salary_router(salary_service), prefix="/api")
+    app.include_router(
+        create_salary_router(salary_service), prefix="/api", dependencies=protected
+    )
 
     schedule_service = ScheduleService()
-    app.include_router(create_schedule_router(schedule_service), prefix="/api")
+    app.include_router(
+        create_schedule_router(schedule_service), prefix="/api", dependencies=protected
+    )
 
     telegram_service = TelegramService(employee_service._repo)
     payout_service = PayoutService(telegram_service=telegram_service)
-    app.include_router(create_payout_router(payout_service), prefix="/api")
+    app.include_router(
+        create_payout_router(payout_service), prefix="/api", dependencies=protected
+    )
 
     vacation_service = VacationService()
-    app.include_router(create_vacation_router(vacation_service), prefix="/api")
+    app.include_router(
+        create_vacation_router(vacation_service), prefix="/api", dependencies=protected
+    )
 
     adjustment_service = AdjustmentService()
-    app.include_router(create_adjustment_router(adjustment_service), prefix="/api")
+    app.include_router(
+        create_adjustment_router(adjustment_service), prefix="/api", dependencies=protected
+    )
 
     from .incentives import create_incentive_router
     from ..services.incentive_service import IncentiveService
 
     incentive_service = IncentiveService()
-    app.include_router(create_incentive_router(incentive_service), prefix="/api")
+    app.include_router(
+        create_incentive_router(incentive_service), prefix="/api", dependencies=protected
+    )
 
 
     from .assets import create_asset_router
     from ..services.asset_service import AssetService
 
     asset_service = AssetService()
-    app.include_router(create_asset_router(asset_service), prefix="/api")
+    app.include_router(
+        create_asset_router(asset_service), prefix="/api", dependencies=protected
+    )
 
     from .messages import create_message_router
     from ..services.template_service import TemplateService
@@ -107,33 +125,34 @@ def create_app() -> FastAPI:
     message_service = MessageService(employee_repo=employee_service._repo)
     template_service = TemplateService()
     app.include_router(
-        create_message_router(message_service, template_service), prefix="/api"
+        create_message_router(message_service, template_service),
+        prefix="/api",
+        dependencies=protected,
     )
 
     from .config import create_config_router
     from ..services.config_service import ConfigService
 
     config_service = ConfigService()
-    app.include_router(create_config_router(config_service), prefix="/api")
+    app.include_router(
+        create_config_router(config_service), prefix="/api", dependencies=protected
+    )
 
     from .dictionary import create_dictionary_router
     from ..services.dictionary_service import DictionaryService
 
     dictionary_service = DictionaryService()
-    app.include_router(create_dictionary_router(dictionary_service), prefix="/api")
+    app.include_router(
+        create_dictionary_router(dictionary_service), prefix="/api", dependencies=protected
+    )
 
-    from .analytics import create_analytics_router
-    from ..services.firebird_service import FirebirdService
+    app.include_router(create_birthday_router(), prefix="/api", dependencies=protected)
 
-    fb_service = None
-    if FIREBIRD_DB and FIREBIRD_USER and FIREBIRD_PASSWORD:
-        fb_service = FirebirdService(FIREBIRD_DB, FIREBIRD_USER, FIREBIRD_PASSWORD)
-    analytics_service = AnalyticsService(fb_service)
-    app.include_router(create_analytics_router(analytics_service), prefix="/api")
-
-    app.include_router(create_birthday_router(), prefix="/api")
-
-    app.include_router(create_telegram_router(employee_service._repo), prefix="/api")
+    app.include_router(
+        create_telegram_router(employee_service._repo),
+        prefix="/api",
+        dependencies=protected,
+    )
 
     frontend_path = (
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
