@@ -17,10 +17,6 @@ settings = _load_settings()
 
 TOKEN = settings.telegram_bot_token
 EXCEL_FILE = settings.excel_file
-SALES_FILE = settings.sales_file
-FIREBIRD_DB = settings.firebird_db
-FIREBIRD_USER = settings.firebird_user
-FIREBIRD_PASSWORD = settings.firebird_password
 USERS_FILE = settings.users_file
 ADVANCE_REQUESTS_FILE = settings.advance_requests_file
 VACATIONS_FILE = settings.vacations_file
