@@ -11,8 +11,6 @@ import Incentives from './pages/Incentives';
 import Reports from './pages/Reports';
 import Broadcast from './pages/Broadcast';
 import MessageHistory from './pages/MessageHistory';
-import Analytics from './pages/Analytics';
-import AnalyticsDetails from './pages/AnalyticsDetails';
 import Vacations from './pages/Vacations';
 import Birthdays from './pages/Birthdays';
 import Settings from './pages/Settings';
@@ -36,8 +34,6 @@ export default function App() {
           <Route path="messages" element={<MessageHistory />} />
           <Route path="vacations" element={<Vacations />} />
           <Route path="birthdays" element={<Birthdays />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="analytics-details" element={<AnalyticsDetails />} />
           <Route path="assets" element={<Assets />} />
           <Route path="dictionary" element={<Dictionary />} />
           <Route path="settings" element={<Settings />} />

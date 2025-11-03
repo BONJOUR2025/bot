@@ -4,12 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from telegram import Update
 from pathlib import Path
 
-from ..config import (
-    TOKEN,
-    FIREBIRD_DB,
-    FIREBIRD_USER,
-    FIREBIRD_PASSWORD,
-)
+from ..config import TOKEN
 from ..core.application import create_application
 from .employees import create_employee_router
 from .salary import create_salary_router
@@ -24,7 +19,6 @@ from ..services.telegram_service import TelegramService
 from ..services.vacation_service import VacationService
 from ..services.adjustment_service import AdjustmentService
 from ..services.message_service import MessageService
-from ..services.analytics import AnalyticsService
 from .vacations import create_vacation_router
 from .adjustments import create_adjustment_router
 from .birthdays import create_birthday_router
@@ -121,15 +115,6 @@ def create_app() -> FastAPI:
 
     dictionary_service = DictionaryService()
     app.include_router(create_dictionary_router(dictionary_service), prefix="/api")
-
-    from .analytics import create_analytics_router
-    from ..services.firebird_service import FirebirdService
-
-    fb_service = None
-    if FIREBIRD_DB and FIREBIRD_USER and FIREBIRD_PASSWORD:
-        fb_service = FirebirdService(FIREBIRD_DB, FIREBIRD_USER, FIREBIRD_PASSWORD)
-    analytics_service = AnalyticsService(fb_service)
-    app.include_router(create_analytics_router(analytics_service), prefix="/api")
 
     app.include_router(create_birthday_router(), prefix="/api")
 
