@@ -60,16 +60,6 @@ def save_users(users: Dict[str, Any]) -> None:
             )
         )
     _repo.save_employees(employees)
-
-
-def load_users_dataclass() -> Dict[str, Employee]:
-    return {e.id: e for e in _repo.list_employees()}
-
-
-def save_users_dataclass(users: Dict[str, Employee]) -> None:
-    _repo.save_employees(list(users.values()))
-
-
 def add_user(user_id: str, user_data: Dict[str, Any]) -> None:
     employee = Employee(
         id=str(user_id),

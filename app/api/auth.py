@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.schemas.auth import (
     AccessConfigResponse,
@@ -15,6 +15,7 @@ from app.schemas.auth import (
     UserUpdate,
 )
 from app.services.access_control_service import (
+    TOKEN_TTL_SECONDS,
     AccessControlService,
     ResolvedUser,
     get_access_control_service,
@@ -57,11 +58,19 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
     router = APIRouter(prefix="/auth", tags=["Auth"])
 
     @router.post("/login", response_model=LoginResponse)
-    async def login(payload: LoginRequest) -> LoginResponse:
+    async def login(payload: LoginRequest, response: Response) -> LoginResponse:
         resolved = service.authenticate(payload.login, payload.password)
         if not resolved:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
         token = service.issue_token(resolved.id)
+        response.set_cookie(
+            "access_token",
+            token,
+            max_age=TOKEN_TTL_SECONDS,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+        )
         return LoginResponse(token=token, user=_to_auth_user(resolved))
 
     @router.get("/me", response_model=AuthUser)
@@ -69,8 +78,8 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         return _to_auth_user(current)
 
     @router.post("/logout")
-    async def logout() -> dict[str, str]:
-        # Stateless tokens are cleared client-side
+    async def logout(response: Response) -> dict[str, str]:
+        response.delete_cookie("access_token")
         return {"status": "ok"}
 
     @router.get("/access", response_model=AccessConfigResponse)
