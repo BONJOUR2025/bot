@@ -1,7 +1,13 @@
 from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, Request, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from telegram import Update
@@ -87,13 +93,13 @@ def create_app() -> FastAPI:
     async def login_page(
         request: Request, access_token: str | None = Cookie(default=None)
     ) -> HTMLResponse:
-        response = templates.TemplateResponse(request, "login.html")
         if access_token:
             try:
                 access_service.verify_token(access_token)
+                return RedirectResponse(url="/admin", status_code=307)
             except ValueError:
-                response.delete_cookie("access_token")
-        return response
+                pass
+        return templates.TemplateResponse(request, "login.html")
 
     @app.post("/session/login", include_in_schema=False)
     async def session_login(payload: LoginRequest) -> JSONResponse:
