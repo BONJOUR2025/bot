@@ -1,31 +1,50 @@
-from fastapi import Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse, Response, FileResponse, RedirectResponse
-from fastapi.responses import HTMLResponse, Response, FileResponse
-from fastapi.staticfiles import StaticFiles
-from telegram import Update
 from pathlib import Path
+
+from fastapi import Cookie, Depends, FastAPI, Request, status
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from telegram import Update
+
+from app.services.access_control_service import (
+    TOKEN_TTL_SECONDS,
+    get_access_control_service,
+)
+from app.schemas.auth import LoginRequest
 
 from ..config import TOKEN
 from ..core.application import create_application
-from .employees import create_employee_router
-from .salary import create_salary_router
-from .schedule import create_schedule_router
-from .payouts import create_payout_router
-from .telegram import create_telegram_router
-from ..services.employee_service import EmployeeService, EmployeeAPIService
+from ..services.adjustment_service import AdjustmentService
+from ..services.employee_service import EmployeeAPIService, EmployeeService
+from ..services.message_service import MessageService
+from ..services.payout_service import PayoutService
 from ..services.salary_service import SalaryService
 from ..services.schedule_service import ScheduleService
-from ..services.payout_service import PayoutService
 from ..services.telegram_service import TelegramService
 from ..services.vacation_service import VacationService
-from ..services.adjustment_service import AdjustmentService
-from ..services.message_service import MessageService
-from .vacations import create_vacation_router
 from .adjustments import create_adjustment_router
-from .birthdays import create_birthday_router
+from .assets import create_asset_router
 from .auth import create_auth_router
+from .birthdays import create_birthday_router
+from .config import create_config_router
 from .dependencies import get_current_user
-from app.services.access_control_service import get_access_control_service
+from .dictionary import create_dictionary_router
+from .employees import create_employee_router
+from .incentives import create_incentive_router
+from .messages import create_message_router
+from .payouts import create_payout_router
+from .salary import create_salary_router
+from .schedule import create_schedule_router
+from .telegram import create_telegram_router
+from .vacations import create_vacation_router
+
+templates = Jinja2Templates(directory="app/templates")
 
 
 def create_app() -> FastAPI:
@@ -70,6 +89,44 @@ def create_app() -> FastAPI:
     access_service = get_access_control_service()
     app.include_router(create_auth_router(access_service), prefix="/api")
 
+    @app.get("/", include_in_schema=False, response_class=HTMLResponse)
+    async def login_page(
+        request: Request, access_token: str | None = Cookie(default=None)
+    ) -> HTMLResponse:
+        if access_token:
+            try:
+                access_service.verify_token(access_token)
+                return RedirectResponse(url="/admin", status_code=307)
+            except ValueError:
+                pass
+        return templates.TemplateResponse(request, "login.html")
+
+    @app.post("/session/login", include_in_schema=False)
+    async def session_login(payload: LoginRequest) -> JSONResponse:
+        resolved = access_service.authenticate(payload.login, payload.password)
+        if not resolved:
+            return JSONResponse(
+                {"detail": "invalid_credentials"},
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+        token = access_service.issue_token(resolved.id)
+        response = JSONResponse({"status": "ok", "token": token})
+        response.set_cookie(
+            "access_token",
+            token,
+            max_age=TOKEN_TTL_SECONDS,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+        )
+        return response
+
+    @app.post("/session/logout", include_in_schema=False)
+    async def session_logout() -> JSONResponse:
+        response = JSONResponse({"status": "ok"})
+        response.delete_cookie("access_token")
+        return response
+
     protected = [Depends(get_current_user)]
 
     employee_service = EmployeeService()
@@ -104,7 +161,6 @@ def create_app() -> FastAPI:
         create_adjustment_router(adjustment_service), prefix="/api", dependencies=protected
     )
 
-    from .incentives import create_incentive_router
     from ..services.incentive_service import IncentiveService
 
     incentive_service = IncentiveService()
@@ -112,8 +168,6 @@ def create_app() -> FastAPI:
         create_incentive_router(incentive_service), prefix="/api", dependencies=protected
     )
 
-
-    from .assets import create_asset_router
     from ..services.asset_service import AssetService
 
     asset_service = AssetService()
@@ -121,7 +175,6 @@ def create_app() -> FastAPI:
         create_asset_router(asset_service), prefix="/api", dependencies=protected
     )
 
-    from .messages import create_message_router
     from ..services.template_service import TemplateService
 
     message_service = MessageService(employee_repo=employee_service._repo)
@@ -132,7 +185,6 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
-    from .config import create_config_router
     from ..services.config_service import ConfigService
 
     config_service = ConfigService()
@@ -140,7 +192,6 @@ def create_app() -> FastAPI:
         create_config_router(config_service), prefix="/api", dependencies=protected
     )
 
-    from .dictionary import create_dictionary_router
     from ..services.dictionary_service import DictionaryService
 
     dictionary_service = DictionaryService()
@@ -161,10 +212,6 @@ def create_app() -> FastAPI:
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )
     app.mount("/admin", StaticFiles(directory=frontend_path, html=True), name="frontend")
-
-    @app.get("/", include_in_schema=False)
-    async def root_redirect():
-        return RedirectResponse(url="/admin", status_code=307)
 
     if frontend_path.exists():
 
