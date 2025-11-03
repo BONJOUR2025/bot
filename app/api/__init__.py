@@ -38,7 +38,8 @@ def create_app() -> FastAPI:
     telegram_app = None
     if TOKEN and TOKEN != "dummy":
         telegram_app = create_application()
-    # Mount static files for admin UI and React frontend
+
+    # Статика для админки/React
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
     @app.get("/status", response_class=HTMLResponse)
@@ -110,7 +111,6 @@ def create_app() -> FastAPI:
         create_incentive_router(incentive_service), prefix="/api", dependencies=protected
     )
 
-
     from .assets import create_asset_router
     from ..services.asset_service import AssetService
 
@@ -154,6 +154,7 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # SPA фронтенд (Vite/React)
     frontend_path = (
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )
