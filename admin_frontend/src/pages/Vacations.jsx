@@ -332,13 +332,13 @@ export default function Vacations() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-4 space-y-2 rounded shadow w-80">
-            <h2 className="text-lg font-bold mb-2">
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-md">
+            <h2 className="text-xl font-semibold">
               {form.id ? 'Редактирование' : 'Новая запись'}
             </h2>
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.employee_id}
               onChange={(e) => handleSelect(e.target.value)}
             >
@@ -350,7 +350,7 @@ export default function Vacations() {
               ))}
             </select>
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value })}
             >
@@ -359,24 +359,24 @@ export default function Vacations() {
             </select>
             <input
               type="date"
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.start_date}
               onChange={(e) => setForm({ ...form, start_date: e.target.value })}
             />
             <input
               type="date"
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.end_date}
               onChange={(e) => setForm({ ...form, end_date: e.target.value })}
             />
             <textarea
-              className="border p-2 w-full"
+              className="modal-control"
               placeholder="Комментарий"
               value={form.comment}
               onChange={(e) => setForm({ ...form, comment: e.target.value })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={() => setShowForm(false)}>
+              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
               <button className="btn" onClick={saveForm}>

@@ -207,10 +207,10 @@ export default function Assets() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-4 space-y-2 rounded shadow w-96">
-            <h2 className="text-lg font-bold mb-2">{form.id ? 'Редактирование' : 'Новая запись'}</h2>
-            <select className="border p-2 w-full" value={form.employee_id} onChange={(e) => handleSelect(e.target.value)}>
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-xl">
+            <h2 className="text-xl font-semibold">{form.id ? 'Редактирование' : 'Новая запись'}</h2>
+            <select className="modal-control" value={form.employee_id} onChange={(e) => handleSelect(e.target.value)}>
               <option value="">Сотрудник</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -219,7 +219,7 @@ export default function Assets() {
               ))}
             </select>
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.position}
               onChange={(e) => setForm({ ...form, position: e.target.value })}
             >
@@ -231,7 +231,7 @@ export default function Assets() {
               ))}
             </select>
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.item_name}
               onChange={(e) => setForm({ ...form, item_name: e.target.value })}
             >
@@ -243,7 +243,7 @@ export default function Assets() {
               ))}
             </select>
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.size}
               onChange={(e) => setForm({ ...form, size: e.target.value })}
             >
@@ -254,12 +254,12 @@ export default function Assets() {
                 </option>
               ))}
             </select>
-            <input type="number" className="border p-2 w-full" placeholder="Количество" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
-            <input type="date" className="border p-2 w-full" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} />
-            <input type="date" className="border p-2 w-full" value={form.return_date} onChange={(e) => setForm({ ...form, return_date: e.target.value })} />
-            <input type="number" className="border p-2 w-full" placeholder="Срок службы (мес.)" value={form.service_life} onChange={(e) => setForm({ ...form, service_life: Number(e.target.value) })} />
+            <input type="number" className="modal-control" placeholder="Количество" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
+            <input type="date" className="modal-control" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} />
+            <input type="date" className="modal-control" value={form.return_date} onChange={(e) => setForm({ ...form, return_date: e.target.value })} />
+            <input type="number" className="modal-control" placeholder="Срок службы (мес.)" value={form.service_life} onChange={(e) => setForm({ ...form, service_life: Number(e.target.value) })} />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={() => setShowForm(false)}>
+              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
               <button className="btn" onClick={saveForm}>
