@@ -269,9 +269,9 @@ export default function Broadcast() {
         </ul>
       </div>
       {showTemplates && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-20">
-          <div className="bg-white p-4 rounded shadow w-96 max-h-[80vh] overflow-auto">
-            <h3 className="text-lg font-semibold mb-2">Шаблоны</h3>
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-lg">
+            <h3 className="text-xl font-semibold">Шаблоны</h3>
             <ul className="space-y-1 mb-4 max-h-40 overflow-auto">
               {templates.map((t) => (
                 <li
@@ -290,13 +290,13 @@ export default function Broadcast() {
             </ul>
             <form onSubmit={createTemplate} className="space-y-2">
               <input
-                className="w-full border p-2 rounded"
+                className="modal-control"
                 placeholder="Название"
                 value={tplName}
                 onChange={(e) => setTplName(e.target.value)}
               />
               <textarea
-                className="w-full border p-2 rounded"
+                className="modal-control"
                 placeholder="Текст"
                 value={tplText}
                 onChange={(e) => setTplText(e.target.value)}
@@ -310,7 +310,7 @@ export default function Broadcast() {
             </form>
             <button
               onClick={() => setShowTemplates(false)}
-              className="btn w-full mt-3"
+              className="btn w-full mt-1 bg-gray-200 text-gray-700 hover:bg-gray-300"
             >
               Закрыть
             </button>

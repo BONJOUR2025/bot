@@ -424,26 +424,31 @@ a:hover {
   font-weight: 500;
 }
 
-.input {
+.input,
+.modal-control {
   width: 100%;
-  padding: 0.7rem 1rem;
+  padding: 0.75rem 1rem;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(8, 15, 31, 0.35);
-  color: var(--color-text);
+  border: 1px solid var(--color-control-border);
+  background: var(--color-control-bg);
+  color: var(--color-control-text);
   font-size: 0.95rem;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
 }
 
-.input:focus {
+.input:focus,
+.modal-control:focus {
   outline: none;
-  border-color: rgba(90, 123, 255, 0.6);
-  box-shadow: 0 0 0 4px rgba(90, 123, 255, 0.12);
-  background: rgba(8, 15, 31, 0.55);
+  border-color: var(--color-control-border-strong);
+  box-shadow: 0 0 0 4px rgba(65, 88, 246, 0.18);
+  background: var(--color-control-bg-hover);
+  color: var(--color-control-text);
 }
 
-.input::placeholder {
-  color: rgba(154, 165, 191, 0.75);
+.input::placeholder,
+.modal-control::placeholder {
+  color: var(--color-control-placeholder);
 }
 
 .form-field input,
@@ -452,27 +457,122 @@ a:hover {
   width: 100%;
   padding: 0.75rem 1rem;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(8, 15, 31, 0.35);
-  color: var(--color-text);
+  border: 1px solid var(--color-control-border);
+  background: var(--color-control-bg);
+  color: var(--color-control-text);
   font-size: 0.95rem;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
 }
 
 .form-field input:focus,
 .form-field select:focus,
 .form-field textarea:focus {
   outline: none;
-  border-color: rgba(90, 123, 255, 0.6);
-  box-shadow: 0 0 0 4px rgba(90, 123, 255, 0.15);
-  background: rgba(8, 15, 31, 0.55);
+  border-color: var(--color-control-border-strong);
+  box-shadow: 0 0 0 4px rgba(65, 88, 246, 0.18);
+  background: var(--color-control-bg-hover);
+  color: var(--color-control-text);
+}
+
+.form-field textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+select {
+  appearance: none;
+  background-color: var(--color-control-bg);
+  color: var(--color-control-text);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-control-border);
+  padding: 0.65rem 1rem !important;
+  line-height: 1.4;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-control-text) 50%),
+    linear-gradient(135deg, var(--color-control-text) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% - 5px), calc(100% - 12px) calc(50% - 5px);
+  background-size: 7px 7px, 7px 7px;
+  background-repeat: no-repeat;
+  padding-right: 2.5rem !important;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--color-control-border-strong);
+  box-shadow: 0 0 0 4px rgba(65, 88, 246, 0.18);
+  background-color: var(--color-control-bg-hover);
+  color: var(--color-control-text);
+}
+
+select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(8px);
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  max-height: min(90vh, 800px);
+  overflow-y: auto;
+  background: var(--color-modal-bg);
+  color: var(--color-modal-text);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 40px 90px rgba(15, 23, 42, 0.32);
+  padding: 1.75rem 2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.modal-card h1,
+.modal-card h2,
+.modal-card h3 {
+  margin: 0;
+  color: var(--color-modal-text);
+}
+
+.modal-card p,
+.modal-card span,
+.modal-card li {
+  color: var(--color-modal-text);
+}
+
+.modal-card label {
+  color: rgba(15, 23, 42, 0.78);
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modal-card .helper-text {
+  color: rgba(71, 85, 105, 0.9);
+  font-size: 0.85rem;
+}
+
+.modal-card input[type='file'] {
+  padding: 0.4rem 0;
+  color: var(--color-modal-text);
 }
 
 select,
 option,
 textarea {
-  color: inherit;
-  background-color: rgba(8, 15, 31, 0.4);
+  color: var(--color-control-text);
+  background-color: var(--color-control-bg);
 }
 
 .form-error {
