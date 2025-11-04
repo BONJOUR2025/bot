@@ -529,15 +529,21 @@ textarea {
 table {
   width: 100%;
   border-collapse: collapse;
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 23, 42, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg);
   overflow: hidden;
   color: var(--color-text);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 20px 45px rgba(8, 15, 31, 0.35);
 }
 
 thead {
-  background: rgba(90, 123, 255, 0.18);
+  background: linear-gradient(
+    135deg,
+    rgba(90, 123, 255, 0.28) 0%,
+    rgba(61, 107, 255, 0.18) 100%
+  );
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.75rem;
@@ -546,20 +552,24 @@ thead {
 th,
 td {
   padding: 0.9rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 th {
   font-weight: 600;
-  color: #fff;
+  color: #f1f5ff;
 }
 
 td {
-  color: var(--color-text-muted);
+  color: var(--color-text);
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 tbody tr:hover {
-  background: rgba(90, 123, 255, 0.1);
+  background: rgba(90, 123, 255, 0.18);
 }
 
 tbody tr:last-child td {
@@ -568,7 +578,9 @@ tbody tr:last-child td {
 
 /* Harmonise legacy utility classes with the new palette */
 .bg-white {
-  background-color: rgba(15, 23, 42, 0.55) !important;
+  background-color: rgba(15, 23, 42, 0.32) !important;
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .bg-gray-50 {
