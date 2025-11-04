@@ -424,26 +424,31 @@ a:hover {
   font-weight: 500;
 }
 
-.input {
+.input,
+.modal-control {
   width: 100%;
-  padding: 0.7rem 1rem;
+  padding: 0.75rem 1rem;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(8, 15, 31, 0.35);
-  color: var(--color-text);
+  border: 1px solid var(--color-control-border);
+  background: var(--color-control-bg);
+  color: var(--color-control-text);
   font-size: 0.95rem;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
 }
 
-.input:focus {
+.input:focus,
+.modal-control:focus {
   outline: none;
-  border-color: rgba(90, 123, 255, 0.6);
-  box-shadow: 0 0 0 4px rgba(90, 123, 255, 0.12);
-  background: rgba(8, 15, 31, 0.55);
+  border-color: var(--color-control-border-strong);
+  box-shadow: 0 0 0 4px rgba(65, 88, 246, 0.18);
+  background: var(--color-control-bg-hover);
+  color: var(--color-control-text);
 }
 
-.input::placeholder {
-  color: rgba(154, 165, 191, 0.75);
+.input::placeholder,
+.modal-control::placeholder {
+  color: var(--color-control-placeholder);
 }
 
 .form-field input,
@@ -452,27 +457,122 @@ a:hover {
   width: 100%;
   padding: 0.75rem 1rem;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(8, 15, 31, 0.35);
-  color: var(--color-text);
+  border: 1px solid var(--color-control-border);
+  background: var(--color-control-bg);
+  color: var(--color-control-text);
   font-size: 0.95rem;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
 }
 
 .form-field input:focus,
 .form-field select:focus,
 .form-field textarea:focus {
   outline: none;
-  border-color: rgba(90, 123, 255, 0.6);
-  box-shadow: 0 0 0 4px rgba(90, 123, 255, 0.15);
-  background: rgba(8, 15, 31, 0.55);
+  border-color: var(--color-control-border-strong);
+  box-shadow: 0 0 0 4px rgba(65, 88, 246, 0.18);
+  background: var(--color-control-bg-hover);
+  color: var(--color-control-text);
+}
+
+.form-field textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+select {
+  appearance: none;
+  background-color: var(--color-control-bg);
+  color: var(--color-control-text);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-control-border);
+  padding: 0.65rem 1rem !important;
+  line-height: 1.4;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-control-text) 50%),
+    linear-gradient(135deg, var(--color-control-text) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% - 5px), calc(100% - 12px) calc(50% - 5px);
+  background-size: 7px 7px, 7px 7px;
+  background-repeat: no-repeat;
+  padding-right: 2.5rem !important;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--color-control-border-strong);
+  box-shadow: 0 0 0 4px rgba(65, 88, 246, 0.18);
+  background-color: var(--color-control-bg-hover);
+  color: var(--color-control-text);
+}
+
+select option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(8px);
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  max-height: min(90vh, 800px);
+  overflow-y: auto;
+  background: var(--color-modal-bg);
+  color: var(--color-modal-text);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 40px 90px rgba(15, 23, 42, 0.32);
+  padding: 1.75rem 2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.modal-card h1,
+.modal-card h2,
+.modal-card h3 {
+  margin: 0;
+  color: var(--color-modal-text);
+}
+
+.modal-card p,
+.modal-card span,
+.modal-card li {
+  color: var(--color-modal-text);
+}
+
+.modal-card label {
+  color: rgba(15, 23, 42, 0.78);
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modal-card .helper-text {
+  color: rgba(71, 85, 105, 0.9);
+  font-size: 0.85rem;
+}
+
+.modal-card input[type='file'] {
+  padding: 0.4rem 0;
+  color: var(--color-modal-text);
 }
 
 select,
 option,
 textarea {
-  color: inherit;
-  background-color: rgba(8, 15, 31, 0.4);
+  color: var(--color-control-text);
+  background-color: var(--color-control-bg);
 }
 
 .form-error {
@@ -529,21 +629,17 @@ textarea {
 table {
   width: 100%;
   border-collapse: collapse;
-  background: rgba(15, 23, 42, 0.38);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--color-table-bg);
+  border: 1px solid var(--color-table-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  color: var(--color-text);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 20px 45px rgba(8, 15, 31, 0.35);
+  color: var(--color-table-text);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.14);
 }
 
 thead {
-  background: linear-gradient(
-    135deg,
-    rgba(90, 123, 255, 0.28) 0%,
-    rgba(61, 107, 255, 0.18) 100%
-  );
+  background: var(--color-table-header-bg);
+  color: var(--color-table-header-text);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.75rem;
@@ -552,24 +648,24 @@ thead {
 th,
 td {
   padding: 0.9rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-table-border);
 }
 
 th {
   font-weight: 600;
-  color: #f1f5ff;
+  color: var(--color-table-header-text);
 }
 
 td {
-  color: var(--color-text);
+  color: var(--color-table-text);
 }
 
 tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--color-table-stripe);
 }
 
 tbody tr:hover {
-  background: rgba(90, 123, 255, 0.18);
+  background: var(--color-table-hover);
 }
 
 tbody tr:last-child td {
@@ -578,33 +674,34 @@ tbody tr:last-child td {
 
 /* Harmonise legacy utility classes with the new palette */
 .bg-white {
-  background-color: rgba(15, 23, 42, 0.32) !important;
-  backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: var(--color-table-bg) !important;
+  color: var(--color-table-text) !important;
+  border: 1px solid var(--color-table-border);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
 }
 
 .bg-gray-50 {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-color: rgba(15, 23, 42, 0.03) !important;
 }
 
 .bg-gray-100 {
-  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(15, 23, 42, 0.05) !important;
 }
 
 .bg-gray-200 {
-  background-color: rgba(255, 255, 255, 0.12) !important;
+  background-color: rgba(15, 23, 42, 0.08) !important;
 }
 
 .bg-gray-300 {
-  background-color: rgba(255, 255, 255, 0.18) !important;
+  background-color: rgba(15, 23, 42, 0.12) !important;
 }
 
 .hover\:bg-gray-50:hover {
-  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(61, 107, 255, 0.08) !important;
 }
 
 .hover\:bg-gray-400:hover {
-  background-color: rgba(255, 255, 255, 0.24) !important;
+  background-color: rgba(61, 107, 255, 0.16) !important;
 }
 
 .bg-green-600,
@@ -662,7 +759,7 @@ tbody tr:last-child td {
 .border-gray-100,
 .border-gray-200,
 .border-gray-300 {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--color-table-border) !important;
 }
 
 .text-gray-500,
@@ -693,7 +790,7 @@ tbody tr:last-child td {
 
 .divide-y > :not([hidden]) ~ :not([hidden]),
 .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--color-table-border) !important;
 }
 
 @media (max-width: 1024px) {
