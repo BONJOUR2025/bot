@@ -18,6 +18,8 @@ class AuthUser(BaseModel):
     permissions: List[str] = Field(default_factory=list)
     bot_buttons: List[str] = Field(default_factory=list)
     display_name: Optional[str] = None
+    allowed_employee_ids: Optional[List[str]] = None
+    allowed_departments: Optional[List[str]] = None
 
 
 class LoginResponse(BaseModel):
@@ -56,6 +58,10 @@ class UserOut(BaseModel):
     resolved_bot_buttons: List[str] = Field(default_factory=list)
     resolved_bot_button_labels: List[str] = Field(default_factory=list)
     display_name: Optional[str] = None
+    allowed_employee_ids: Optional[List[str]] = None
+    allowed_departments: Optional[List[str]] = None
+    resolved_employee_names: List[str] = Field(default_factory=list)
+    resolved_departments: List[str] = Field(default_factory=list)
 
 
 class UserCreate(BaseModel):
@@ -65,6 +71,8 @@ class UserCreate(BaseModel):
     role_id: Optional[str] = None
     permissions: Optional[List[str]] = None
     bot_buttons: Optional[List[str]] = None
+    allowed_employee_ids: Optional[List[str]] = None
+    allowed_departments: Optional[List[str]] = None
 
 
 class UserUpdate(BaseModel):
@@ -73,6 +81,8 @@ class UserUpdate(BaseModel):
     role_id: Optional[str] = None
     permissions: Optional[List[str]] = None
     bot_buttons: Optional[List[str]] = None
+    allowed_employee_ids: Optional[List[str]] = None
+    allowed_departments: Optional[List[str]] = None
 
 
 class AccessConfigResponse(BaseModel):
@@ -80,3 +90,5 @@ class AccessConfigResponse(BaseModel):
     roles: List[RoleOut]
     available_permissions: List[dict]
     available_bot_buttons: List[dict]
+    available_employees: List[dict]
+    available_departments: List[str]
