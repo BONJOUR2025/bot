@@ -529,21 +529,17 @@ textarea {
 table {
   width: 100%;
   border-collapse: collapse;
-  background: rgba(15, 23, 42, 0.38);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--color-table-bg);
+  border: 1px solid var(--color-table-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  color: var(--color-text);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 20px 45px rgba(8, 15, 31, 0.35);
+  color: var(--color-table-text);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.14);
 }
 
 thead {
-  background: linear-gradient(
-    135deg,
-    rgba(90, 123, 255, 0.28) 0%,
-    rgba(61, 107, 255, 0.18) 100%
-  );
+  background: var(--color-table-header-bg);
+  color: var(--color-table-header-text);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.75rem;
@@ -552,24 +548,24 @@ thead {
 th,
 td {
   padding: 0.9rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-table-border);
 }
 
 th {
   font-weight: 600;
-  color: #f1f5ff;
+  color: var(--color-table-header-text);
 }
 
 td {
-  color: var(--color-text);
+  color: var(--color-table-text);
 }
 
 tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--color-table-stripe);
 }
 
 tbody tr:hover {
-  background: rgba(90, 123, 255, 0.18);
+  background: var(--color-table-hover);
 }
 
 tbody tr:last-child td {
@@ -578,33 +574,34 @@ tbody tr:last-child td {
 
 /* Harmonise legacy utility classes with the new palette */
 .bg-white {
-  background-color: rgba(15, 23, 42, 0.32) !important;
-  backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: var(--color-table-bg) !important;
+  color: var(--color-table-text) !important;
+  border: 1px solid var(--color-table-border);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
 }
 
 .bg-gray-50 {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-color: rgba(15, 23, 42, 0.03) !important;
 }
 
 .bg-gray-100 {
-  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(15, 23, 42, 0.05) !important;
 }
 
 .bg-gray-200 {
-  background-color: rgba(255, 255, 255, 0.12) !important;
+  background-color: rgba(15, 23, 42, 0.08) !important;
 }
 
 .bg-gray-300 {
-  background-color: rgba(255, 255, 255, 0.18) !important;
+  background-color: rgba(15, 23, 42, 0.12) !important;
 }
 
 .hover\:bg-gray-50:hover {
-  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(61, 107, 255, 0.08) !important;
 }
 
 .hover\:bg-gray-400:hover {
-  background-color: rgba(255, 255, 255, 0.24) !important;
+  background-color: rgba(61, 107, 255, 0.16) !important;
 }
 
 .bg-green-600,
@@ -662,7 +659,7 @@ tbody tr:last-child td {
 .border-gray-100,
 .border-gray-200,
 .border-gray-300 {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--color-table-border) !important;
 }
 
 .text-gray-500,
@@ -693,7 +690,7 @@ tbody tr:last-child td {
 
 .divide-y > :not([hidden]) ~ :not([hidden]),
 .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--color-table-border) !important;
 }
 
 @media (max-width: 1024px) {
