@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
 from pathlib import Path
 from typing import Optional
 
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+
+from app.core.enums import PAYOUT_STATUSES
 from app.schemas.payout import Payout, PayoutCreate, PayoutUpdate
 from app.services.payout_service import PayoutService
-from app.core.enums import PAYOUT_STATUSES
 
 
 def create_payout_router(service: PayoutService) -> APIRouter:
@@ -52,7 +53,8 @@ def create_payout_router(service: PayoutService) -> APIRouter:
             method="",
             payout_type="",
             status="",
-            timestamp=None)
+            timestamp=None,
+        )
 
     @router.put("/{payout_id}/status", response_model=Payout)
     async def set_status(payout_id: str, body: PayoutUpdate):

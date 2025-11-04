@@ -1,13 +1,15 @@
-export default function Badge({ children, tone = "neutral", style }) {
-  const tones = {
-    neutral: { background: "rgba(255,255,255,.08)", color: "var(--txt)" },
-    success: { background: "rgba(62,207,142,.18)",  color: "var(--success)" },
-    warning: { background: "rgba(245,183,89,.18)",  color: "var(--warning)" },
-    danger:  { background: "rgba(255,107,107,.18)", color: "var(--danger)" },
-    info:    { background: "rgba(111,179,255,.18)", color: "var(--info)" },
-  }[tone] || {};
+export default function Badge({ children, tone = 'neutral', style }) {
+  const paletteMap = {
+    neutral: { background: 'rgba(255, 255, 255, 0.08)', color: 'var(--color-text)' },
+    success: { background: 'rgba(62, 207, 142, 0.15)', color: 'var(--color-success)' },
+    warning: { background: 'rgba(249, 185, 90, 0.15)', color: 'var(--color-warning)' },
+    danger: { background: 'rgba(255, 107, 107, 0.15)', color: 'var(--color-danger)' },
+    info: { background: 'rgba(61, 213, 243, 0.16)', color: 'var(--color-accent)' },
+  };
+  const palette = paletteMap[tone] || paletteMap.neutral;
+
   return (
-    <span className="badge" style={{ ...tones, ...style }}>
+    <span className="badge" style={{ ...palette, ...style }}>
       {children}
     </span>
   );

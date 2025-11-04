@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Вход в панель управления</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f4f6fb;
+        color: #101728;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #f6f9ff 0%, #e7edff 100%);
+        padding: 24px;
+      }
+      .card {
+        width: min(440px, 100%);
+        background: #ffffff;
+        border: 1px solid #d8deeb;
+        border-radius: 18px;
+        padding: 40px 36px;
+        box-shadow: 0 26px 80px rgba(16, 23, 40, 0.12);
+      }
+      h1 {
+        margin: 0 0 24px;
+        font-size: 26px;
+        font-weight: 600;
+        text-align: center;
+        color: #101728;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #5c6c86;
+      }
+      input[type="text"],
+      input[type="password"] {
+        width: 100%;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid #ccd4e5;
+        background: #ffffff;
+        color: #101728;
+        font-size: 16px;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+      input[type="text"]:focus,
+      input[type="password"]:focus {
+        outline: none;
+        border-color: #3f64ff;
+        box-shadow: 0 0 0 3px #dfe5ff;
+      }
+      button {
+        width: 100%;
+        margin-top: 24px;
+        padding: 14px 16px;
+        font-size: 16px;
+        font-weight: 600;
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #3f64ff, #2248e6);
+        color: #ffffff;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        box-shadow: 0 16px 36px rgba(63, 100, 255, 0.24);
+      }
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 20px 44px rgba(63, 100, 255, 0.28);
+      }
+      .error {
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #fee2e2;
+        color: #b91c1c;
+        font-size: 14px;
+        display: none;
+      }
+      .success {
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #dcfce7;
+        color: #15803d;
+        font-size: 14px;
+        display: none;
+      }
+      .caption {
+        margin-top: 28px;
+        font-size: 13px;
+        color: #7b8aa4;
+        text-align: center;
+      }
+      @media (max-width: 480px) {
+        .card {
+          padding: 32px 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Панель управления</h1>
+      <form id="login-form">
+        <label for="login">Логин</label>
+        <input id="login" name="login" type="text" autocomplete="username" required />
+        <label for="password" style="margin-top: 16px">Пароль</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button type="submit">Войти</button>
+      </form>
+      <div id="error" class="error"></div>
+      <div id="success" class="success">Вход выполнен, перенаправляем…</div>
+      <p class="caption">Используйте корпоративные учетные данные.</p>
+    </div>
+    <script>
+      const form = document.getElementById('login-form');
+      const errorBox = document.getElementById('error');
+      const successBox = document.getElementById('success');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorBox.style.display = 'none';
+        successBox.style.display = 'none';
+        const data = Object.fromEntries(new FormData(form).entries());
+
+        try {
+          const response = await fetch('/session/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+          });
+
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({ detail: 'invalid_credentials' }));
+            throw new Error(payload.detail || 'invalid_credentials');
+          }
+
+          const payload = await response.json();
+          if (payload.token) {
+            localStorage.setItem('auth_token', payload.token);
+          }
+
+          successBox.style.display = 'block';
+          setTimeout(() => {
+            window.location.href = '/admin';
+          }, 500);
+        } catch (err) {
+          errorBox.textContent = err.message === 'invalid_credentials'
+            ? 'Неверный логин или пароль'
+            : 'Не удалось выполнить вход. Попробуйте снова';
+          errorBox.style.display = 'block';
+        }
+      });
+
+      async function redirectWithCookieSession() {
+        try {
+          const response = await fetch('/api/auth/me', {
+            credentials: 'include',
+          });
+          if (response.ok) {
+            window.location.href = '/admin';
+          }
+        } catch (err) {
+          /* ignore */
+        }
+      }
+
+      (function autoRedirect() {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          fetch('/api/auth/me', {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => {
+              if (res.ok) {
+                window.location.href = '/admin';
+              }
+            })
+            .catch(() => {});
+          return;
+        }
+        redirectWithCookieSession();
+      })();
+    </script>
+  </body>
+</html>
