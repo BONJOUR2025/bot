@@ -1,18 +1,18 @@
 :root {
-  --color-bg: #f4f6fb;
-  --color-bg-alt: #ffffff;
-  --color-surface: #ffffff;
-  --color-panel: #ffffff;
-  --color-primary: #3f64ff;
-  --color-primary-strong: #2248e6;
-  --color-accent: #0d8acb;
-  --color-success: #1f8f4d;
-  --color-warning: #f59e0b;
-  --color-danger: #e64646;
-  --color-text: #101728;
-  --color-text-muted: #5c6c86;
-  --color-border: #d8deeb;
-  --color-border-strong: #7c90ff;
+  --color-bg: #050b17;
+  --color-bg-alt: #0d1628;
+  --color-surface: rgba(20, 33, 54, 0.72);
+  --color-panel: rgba(15, 23, 42, 0.9);
+  --color-primary: #5a7bff;
+  --color-primary-strong: #4158f6;
+  --color-accent: #3dd5f3;
+  --color-success: #3ecf8e;
+  --color-warning: #f9b95a;
+  --color-danger: #ff6b6b;
+  --color-text: #f1f5ff;
+  --color-text-muted: #9aa5bf;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(90, 123, 255, 0.35);
 
   /* Legacy aliases */
   --bg: var(--color-bg);
@@ -33,9 +33,9 @@
   --radius-lg: 18px;
   --radius-xl: 24px;
 
-  --shadow-sm: 0 10px 26px rgba(16, 23, 40, 0.08);
-  --shadow-md: 0 18px 44px rgba(16, 23, 40, 0.1);
-  --shadow-lg: 0 32px 86px rgba(16, 23, 40, 0.12);
+  --shadow-sm: 0 8px 20px rgba(5, 11, 23, 0.32);
+  --shadow-md: 0 16px 40px rgba(5, 11, 23, 0.38);
+  --shadow-lg: 0 32px 80px rgba(5, 11, 23, 0.5);
 
   --transition-fast: 140ms ease;
   --transition: 220ms ease;
@@ -48,18 +48,18 @@
 .theme-light {
   --color-bg: #f4f6fb;
   --color-bg-alt: #ffffff;
-  --color-surface: #ffffff;
-  --color-panel: #ffffff;
-  --color-primary: #3f64ff;
-  --color-primary-strong: #2248e6;
-  --color-accent: #0d8acb;
-  --color-success: #1f8f4d;
+  --color-surface: rgba(255, 255, 255, 0.86);
+  --color-panel: rgba(255, 255, 255, 0.94);
+  --color-primary: #3d6bff;
+  --color-primary-strong: #1f4de3;
+  --color-accent: #0891b2;
+  --color-success: #16a34a;
   --color-warning: #f59e0b;
-  --color-danger: #e64646;
-  --color-text: #101728;
-  --color-text-muted: #5c6c86;
-  --color-border: #d8deeb;
-  --color-border-strong: #7c90ff;
+  --color-danger: #ef4444;
+  --color-text: #0f172a;
+  --color-text-muted: #475569;
+  --color-border: rgba(15, 23, 42, 0.08);
+  --color-border-strong: rgba(61, 107, 255, 0.35);
 
   --bg: var(--color-bg);
   --surface: var(--color-surface);
