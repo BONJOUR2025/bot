@@ -40,9 +40,9 @@
   --radius-lg: 18px;
   --radius-xl: 24px;
 
-  --shadow-sm: 0 8px 20px rgba(5, 11, 23, 0.32);
-  --shadow-md: 0 16px 40px rgba(5, 11, 23, 0.38);
-  --shadow-lg: 0 32px 80px rgba(5, 11, 23, 0.5);
+  --shadow-sm: 0 6px 16px rgba(5, 11, 23, 0.28);
+  --shadow-md: 0 12px 28px rgba(5, 11, 23, 0.34);
+  --shadow-lg: 0 22px 60px rgba(5, 11, 23, 0.42);
 
   --transition-fast: 140ms ease;
   --transition: 220ms ease;
@@ -50,6 +50,24 @@
 
   --sidebar-width: 280px;
   --max-content-width: 1280px;
+
+
+  
+/* forms / modals */
+--color-control-bg: rgba(255, 255, 255, 0.06);
+--color-control-bg-hover: rgba(255, 255, 255, 0.09);
+--color-control-border: rgba(255, 255, 255, 0.12);
+--color-control-border-strong: var(--color-primary-strong);
+--color-control-text: var(--color-text);
+--color-control-placeholder: rgba(154, 165, 191, 0.8);
+
+--color-modal-bg: var(--color-panel);
+--color-modal-text: var(--color-text);
+
+/* focus/outline & borders */
+--ring-color: rgba(65, 88, 246, 0.25);
+--border-soft: 1px solid var(--color-border);
+--border-strong: 1px solid var(--color-border-strong);
 }
 
 .theme-light {
@@ -86,4 +104,16 @@
   --danger: var(--color-danger);
   --info: var(--color-accent);
   --border: 1px solid var(--color-border);
+
+
+  
+--color-control-bg: rgba(15, 23, 42, 0.03);
+--color-control-bg-hover: rgba(15, 23, 42, 0.06);
+--color-control-border: rgba(15, 23, 42, 0.12);
+--color-control-border-strong: var(--color-primary-strong);
+--color-control-text: var(--color-text);
+--color-control-placeholder: rgba(71, 85, 105, 0.9);
+
+--color-modal-bg: var(--color-panel);
+--color-modal-text: var(--color-text);
 }
