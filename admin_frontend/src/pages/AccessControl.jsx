@@ -11,6 +11,10 @@ const emptyUser = {
   bot_buttons: [],
   inheritPermissions: true,
   inheritButtons: true,
+  limitByEmployees: false,
+  limitByDepartments: false,
+  allowed_employee_ids: [],
+  allowed_departments: [],
 };
 
 export default function AccessControl() {
@@ -48,6 +52,21 @@ export default function AccessControl() {
       acc[scope].push(btn);
       return acc;
     }, {});
+  }, [data]);
+
+  const employeesByDepartment = useMemo(() => {
+    if (!data) return {};
+    return data.available_employees.reduce((acc, employee) => {
+      const key = employee.department || 'Без отдела';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(employee);
+      return acc;
+    }, {});
+  }, [data]);
+
+  const availableDepartments = useMemo(() => {
+    if (!data) return [];
+    return data.available_departments;
   }, [data]);
 
   function startRoleCreate() {
@@ -122,6 +141,8 @@ export default function AccessControl() {
 
   function startUserEdit(user) {
     setIsUserNew(false);
+    const employeeScope = user.allowed_employee_ids ?? null;
+    const departmentScope = user.allowed_departments ?? null;
     setUserForm({
       id: user.id,
       login: user.login,
@@ -131,6 +152,10 @@ export default function AccessControl() {
       bot_buttons: user.bot_buttons ?? [],
       inheritPermissions: user.permissions === null || user.permissions === undefined,
       inheritButtons: user.bot_buttons === null || user.bot_buttons === undefined,
+      limitByEmployees: Array.isArray(employeeScope) && employeeScope.length > 0,
+      limitByDepartments: Array.isArray(departmentScope) && departmentScope.length > 0,
+      allowed_employee_ids: Array.isArray(employeeScope) ? [...employeeScope] : [],
+      allowed_departments: Array.isArray(departmentScope) ? [...departmentScope] : [],
     });
   }
 
@@ -147,6 +172,12 @@ export default function AccessControl() {
       role_id: userForm.role_id || undefined,
       permissions: userForm.inheritPermissions ? null : userForm.permissions,
       bot_buttons: userForm.inheritButtons ? null : userForm.bot_buttons,
+      allowed_employee_ids: userForm.limitByEmployees
+        ? userForm.allowed_employee_ids
+        : null,
+      allowed_departments: userForm.limitByDepartments
+        ? userForm.allowed_departments
+        : null,
     };
     try {
       if (isUserNew) {
@@ -188,6 +219,22 @@ export default function AccessControl() {
       if (list.has(buttonId)) list.delete(buttonId);
       else list.add(buttonId);
       return { ...prev, bot_buttons: Array.from(list) };
+    });
+  }
+
+  function handleEmployeeScopeChange(event) {
+    const options = Array.from(event.target.selectedOptions || []);
+    const selected = options.map((option) => option.value);
+    setUserForm((prev) => ({ ...prev, allowed_employee_ids: selected }));
+  }
+
+  function handleDepartmentScopeChange(event) {
+    const { value, checked } = event.target;
+    setUserForm((prev) => {
+      const next = new Set(prev.allowed_departments || []);
+      if (checked) next.add(value);
+      else next.delete(value);
+      return { ...prev, allowed_departments: Array.from(next) };
     });
   }
 
@@ -336,6 +383,20 @@ export default function AccessControl() {
                   <p className="text-sm">
                     Кнопки в боте: {user.resolved_bot_button_labels.length ? user.resolved_bot_button_labels.join(', ') : 'по умолчанию'}
                   </p>
+                  {user.resolved_employee_names.length > 0 ? (
+                    <p className="text-sm">
+                      Доступ к сотрудникам: {user.resolved_employee_names.join(', ')}
+                    </p>
+                  ) : (
+                    <p className="text-sm">
+                      Доступ к сотрудникам: {user.resolved_departments.length ? 'по отделам' : 'все'}
+                    </p>
+                  )}
+                  {user.resolved_departments.length > 0 && (
+                    <p className="text-sm">
+                      Доступные отделы: {user.resolved_departments.join(', ')}
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
@@ -445,7 +506,12 @@ export default function AccessControl() {
                   type="checkbox"
                   id="inherit-buttons"
                   checked={userForm.inheritButtons}
-                  onChange={(e) => setUserForm((prev) => ({ ...prev, inheritButtons: e.target.checked }))}
+                  onChange={(e) =>
+                    setUserForm((prev) => ({
+                      ...prev,
+                      inheritButtons: e.target.checked,
+                    }))
+                  }
                 />
                 <label htmlFor="inherit-buttons" className="text-sm">
                   Использовать настройки кнопок роли
@@ -472,6 +538,83 @@ export default function AccessControl() {
                         ))}
                       </div>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="limit-employees"
+                  checked={userForm.limitByEmployees}
+                  onChange={(e) =>
+                    setUserForm((prev) => ({
+                      ...prev,
+                      limitByEmployees: e.target.checked,
+                      allowed_employee_ids: e.target.checked ? prev.allowed_employee_ids : [],
+                    }))
+                  }
+                />
+                <label htmlFor="limit-employees" className="text-sm">
+                  Ограничить доступ по конкретным сотрудникам
+                </label>
+              </div>
+              {userForm.limitByEmployees && (
+                <div className="space-y-2">
+                  <select
+                    multiple
+                    className="input w-full h-40"
+                    value={userForm.allowed_employee_ids}
+                    onChange={handleEmployeeScopeChange}
+                  >
+                    {Object.entries(employeesByDepartment).map(([dept, employees]) => (
+                      <optgroup key={dept} label={dept}>
+                        {employees.map((employee) => (
+                          <option key={employee.id} value={employee.id}>
+                            {employee.name}
+                            {employee.department ? ` · ${employee.department}` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500">
+                    Выбранные сотрудники будут доступны во всех разделах интерфейса.
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="limit-departments"
+                  checked={userForm.limitByDepartments}
+                  onChange={(e) =>
+                    setUserForm((prev) => ({
+                      ...prev,
+                      limitByDepartments: e.target.checked,
+                      allowed_departments: e.target.checked ? prev.allowed_departments : [],
+                    }))
+                  }
+                />
+                <label htmlFor="limit-departments" className="text-sm">
+                  Ограничить доступ по отделам
+                </label>
+              </div>
+              {userForm.limitByDepartments && (
+                <div className="grid md:grid-cols-2 gap-2">
+                  {availableDepartments.map((dept) => (
+                    <label key={dept} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        value={dept}
+                        checked={userForm.allowed_departments.includes(dept)}
+                        onChange={handleDepartmentScopeChange}
+                      />
+                      {dept}
+                    </label>
                   ))}
                 </div>
               )}

@@ -148,6 +148,15 @@ class PayoutService:
             logger.info(f"🗑 Удалена выплата {payout_id}")
         return deleted
 
+    def get_payout_employee(self, payout_id: str) -> Optional[str]:
+        """Return employee identifier associated with the payout."""
+        self._repo.reload()
+        for item in self._repo.load_all():
+            if str(item.get("id")) == str(payout_id):
+                user_id = item.get("user_id")
+                return str(user_id) if user_id is not None else None
+        return None
+
     async def list_active_payouts(self) -> List[Payout]:
         """Return payouts that are pending approval or already approved."""
         self._repo.reload()
@@ -265,6 +274,7 @@ class PayoutService:
             result.append(
                 {
                     "id": str(item.get("id")),
+                    "user_id": uid,
                     "name": item.get("name"),
                     "amount": float(item.get("amount") or 0),
                     "date": ts_str,

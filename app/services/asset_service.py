@@ -22,3 +22,10 @@ class AssetService:
 
     async def delete_asset(self, item_id: str) -> None:
         self._repo.delete(item_id)
+
+    def get_asset_employee(self, item_id: str) -> Optional[str]:
+        for item in self._repo.list():
+            if str(item.get("id")) == str(item_id):
+                employee_id = item.get("employee_id")
+                return str(employee_id) if employee_id is not None else None
+        return None
