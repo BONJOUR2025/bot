@@ -1,4 +1,8 @@
-from typing import Any
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Iterable, ClassVar
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -57,7 +61,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    _json_files: tuple[str | Path, ...] = ("config.json",)
+    _json_files: ClassVar[tuple[str, ...]] = ("config.json",)
 
     @classmethod
     def settings_customise_sources(
