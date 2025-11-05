@@ -22,6 +22,8 @@ from ...config import (
     ADMIN_ID,
     ADMIN_CHAT_ID,
     CARD_DISPATCH_CHAT_ID,
+    CARD_DISPATCH_CHATS,
+    DEFAULT_CARD_DISPATCH_CHAT_KEY,
 )
 from ...services.users import load_users_map
 from ...keyboards.reply_admin import get_admin_menu
@@ -46,6 +48,38 @@ if not audit_logger.handlers:
     audit_logger.setLevel(logging.INFO)
 
 PENDING_STATUSES = {PAYOUT_STATUSES[0]}
+
+
+def _resolve_cashier_chat(
+    user_id: str, users: dict[str, dict] | None
+) -> tuple[int | None, str, str | None]:
+    """Return target cashier chat id, display name and key for the user."""
+    user_info = users.get(str(user_id), {}) if isinstance(users, dict) else {}
+    key = user_info.get("payout_chat_key") if isinstance(user_info, dict) else None
+
+    if key:
+        for chat in CARD_DISPATCH_CHATS:
+            if str(chat.get("key")) == str(key):
+                name = chat.get("name") or str(key)
+                try:
+                    chat_id = int(chat.get("chat_id"))
+                except (TypeError, ValueError):
+                    continue
+                return chat_id, str(name), str(key)
+
+    if CARD_DISPATCH_CHATS:
+        default_chat = CARD_DISPATCH_CHATS[0]
+        name = default_chat.get("name") or str(default_chat.get("key"))
+        try:
+            chat_id = int(default_chat.get("chat_id"))
+        except (TypeError, ValueError):
+            chat_id = None
+        return chat_id, str(name), str(default_chat.get("key"))
+
+    if CARD_DISPATCH_CHAT_ID:
+        return CARD_DISPATCH_CHAT_ID, "Основной кассир", DEFAULT_CARD_DISPATCH_CHAT_KEY
+
+    return None, "", None
 
 
 async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -96,6 +130,15 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
     payout_type = request_to_approve.get("payout_type") or "Не указано"
+    cashier_chat_id: int | None = None
+    cashier_chat_name = ""
+    cashier_chat_key: str | None = None
+    if request_to_approve["method"] == "💳 На карту":
+        users_map = load_users_map()
+        cashier_chat_id, cashier_chat_name, cashier_chat_key = _resolve_cashier_chat(
+            user_id, users_map
+        )
+
     user_message = (
         f"✅ Ваш запрос на выплату одобрен!\n"
         f"Тип: {payout_type}\n"
@@ -116,6 +159,16 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n✅ Одобрено"
+    if request_to_approve["method"] == "💳 На карту":
+        if cashier_chat_name:
+            display_name = cashier_chat_name
+            if cashier_chat_key and cashier_chat_key != cashier_chat_name:
+                display_name = f"{cashier_chat_name} ({cashier_chat_key})"
+            updated_text += f"\n📬 Чат кассира: {display_name}"
+        elif cashier_chat_key:
+            updated_text += f"\n📬 Чат кассира: {cashier_chat_key}"
+        elif not cashier_chat_id:
+            updated_text += "\n⚠️ Чат кассира не настроен"
     log(
         f"[Telegram] editing message {query.message.message_id} in {query.message.chat.id}"
     )
@@ -129,8 +182,13 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if request_to_approve["method"] == "💳 На карту":
         card = request_to_approve.get("card_number") or request_to_approve.get("phone", "")
+        header = "📤 Запрос на перевод"
+        if cashier_chat_name:
+            header += f" — {cashier_chat_name}"
+        elif cashier_chat_key:
+            header += f" — {cashier_chat_key}"
         cashier_text = (
-            f"📤 Запрос на перевод:\n\n"
+            f"{header}:\n\n"
             f"👤 {request_to_approve['name']}\n"
             f"💳 {card}\n"
             f"🏦 {request_to_approve['bank']}\n"
@@ -146,23 +204,31 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 ]
             ]
         )
-        log(
-            f"[Telegram] sending cashier notice to {CARD_DISPATCH_CHAT_ID} — text: '{cashier_text[:50]}'"
-        )
-        try:
-            await context.bot.send_message(
-                chat_id=CARD_DISPATCH_CHAT_ID,
-                text=cashier_text,
-                reply_markup=cashier_buttons,
-            )
+        target_label = cashier_chat_name or cashier_chat_key or str(cashier_chat_id)
+        if not cashier_chat_id:
             log(
-                f"📨 [allow_payout] Сообщение кассиру отправлено для user_id: {user_id}"
+                f"⚠️ [allow_payout] Не указан чат кассира для пользователя {user_id}; уведомление не отправлено"
             )
-        except BadRequest as e:
-            log(f"❌ Failed to send message to chat {CARD_DISPATCH_CHAT_ID} — {e}")
-            # Continue even if the cashier chat is missing
-        except Exception as e:
-            log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")
+        else:
+            log(
+                f"[Telegram] sending cashier notice to {target_label} — text: '{cashier_text[:50]}'"
+            )
+            try:
+                await context.bot.send_message(
+                    chat_id=cashier_chat_id,
+                    text=cashier_text,
+                    reply_markup=cashier_buttons,
+                )
+                log(
+                    f"📨 [allow_payout] Сообщение кассиру отправлено для user_id: {user_id}"
+                )
+            except BadRequest as e:
+                log(
+                    f"❌ Failed to send message to chat {cashier_chat_id} — {e}"
+                )
+                # Continue even if the cashier chat is missing
+            except Exception as e:
+                log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")
 
 
 async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

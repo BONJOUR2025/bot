@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import JsonConfigSettingsSource
@@ -41,6 +43,9 @@ class Settings(BaseSettings):
     font_path: str = Field("fonts/DejaVuSans.ttf", validation_alias="FONT_PATH")
     card_dispatch_chat_id: int = Field(
         -1002667932339, validation_alias="CARD_DISPATCH_CHAT_ID"
+    )
+    card_dispatch_chats: list[dict[str, Any]] = Field(
+        default_factory=list, validation_alias="CARD_DISPATCH_CHATS"
     )
     max_advance_amount_per_month: int = Field(
         500000000,

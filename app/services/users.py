@@ -28,6 +28,7 @@ def load_users() -> List[Dict[str, Any]]:
                 "note": emp.note,
                 "photo_url": emp.photo_url,
                 "status": emp.status.value,
+                "payout_chat_key": getattr(emp, "payout_chat_key", None),
             }
         )
     log(f"✅ Загружено сотрудников: {len(result)}")
@@ -57,9 +58,11 @@ def save_users(users: Dict[str, Any]) -> None:
                 note=data.get("note", ""),
                 photo_url=data.get("photo_url", ""),
                 status=EmployeeStatus(data.get("status", "active")),
+                payout_chat_key=data.get("payout_chat_key"),
             )
         )
     _repo.save_employees(employees)
+
 def add_user(user_id: str, user_data: Dict[str, Any]) -> None:
     employee = Employee(
         id=str(user_id),
@@ -74,6 +77,7 @@ def add_user(user_id: str, user_data: Dict[str, Any]) -> None:
         note=user_data.get("note", ""),
         photo_url=user_data.get("photo_url", ""),
         status=EmployeeStatus(user_data.get("status", "active")),
+        payout_chat_key=user_data.get("payout_chat_key"),
     )
     _repo.add_employee(employee)
 
@@ -97,6 +101,7 @@ def update_user(user_id: str, fields: Dict[str, Any]) -> None:
         note=emp_dict.get("note", ""),
         photo_url=emp_dict.get("photo_url", ""),
         status=EmployeeStatus(emp_dict.get("status", "active")),
+        payout_chat_key=emp_dict.get("payout_chat_key"),
     )
     _repo.update_employee(employee)
 
