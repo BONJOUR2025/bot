@@ -6,7 +6,11 @@ export default function RequireAuth({ children }) {
   const location = useLocation();
 
   if (loading) {
-    return <div className="text-center mt-10">Загрузка...</div>;
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-sm text-[color:var(--muted-foreground)]">
+        Загрузка панели…
+      </div>
+    );
   }
 
   if (!user) {

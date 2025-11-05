@@ -44,6 +44,8 @@ def _to_auth_user(resolved: ResolvedUser) -> AuthUser:
         permissions=resolved.permissions,
         bot_buttons=resolved.bot_buttons,
         display_name=resolved.display_name,
+        allowed_employee_ids=resolved.allowed_employee_ids,
+        allowed_departments=resolved.allowed_departments,
     )
 
 
@@ -93,6 +95,8 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
             roles=roles,
             available_permissions=service.available_permissions(),
             available_bot_buttons=service.available_bot_buttons(),
+            available_employees=service.available_employees(),
+            available_departments=service.available_departments(),
         )
 
     @router.post("/roles", response_model=RoleOut)
@@ -152,6 +156,12 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
             "resolved_bot_buttons": resolved.bot_buttons,
             "resolved_bot_button_labels": service.button_labels(resolved.bot_buttons),
             "display_name": resolved.display_name,
+            "allowed_employee_ids": record.get("allowed_employee_ids"),
+            "allowed_departments": record.get("allowed_departments"),
+            "resolved_employee_names": service._employee_names(
+                record.get("allowed_employee_ids")
+            ),
+            "resolved_departments": record.get("allowed_departments") or [],
         })
 
     @router.patch("/users/{user_id}", response_model=UserOut)
@@ -178,6 +188,12 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
             "resolved_bot_buttons": resolved.bot_buttons,
             "resolved_bot_button_labels": service.button_labels(resolved.bot_buttons),
             "display_name": resolved.display_name,
+            "allowed_employee_ids": record.get("allowed_employee_ids"),
+            "allowed_departments": record.get("allowed_departments"),
+            "resolved_employee_names": service._employee_names(
+                record.get("allowed_employee_ids")
+            ),
+            "resolved_departments": record.get("allowed_departments") or [],
         })
 
     @router.delete("/users/{user_id}")

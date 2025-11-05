@@ -192,11 +192,11 @@ export default function Incentives() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-4 space-y-2 rounded shadow w-80">
-            <h2 className="text-lg font-bold mb-2">{form.id ? 'Редактирование' : 'Новая запись'}</h2>
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-md">
+            <h2 className="text-xl font-semibold">{form.id ? 'Редактирование' : 'Новая запись'}</h2>
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.employee_id}
               onChange={(e) => {
                 const id = e.target.value;
@@ -216,12 +216,12 @@ export default function Incentives() {
             </select>
             <input
               type="date"
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.date}
               onChange={(e) => setForm({ ...form, date: e.target.value })}
             />
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value })}
             >
@@ -229,20 +229,20 @@ export default function Incentives() {
               <option value="penalty">Штраф</option>
             </select>
             <input
-              className="border p-2 w-full"
+              className="modal-control"
               placeholder="Сумма"
               type="number"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
             />
             <textarea
-              className="border p-2 w-full"
+              className="modal-control"
               placeholder="Причина"
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={() => setShowForm(false)}>
+              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
               <button className="btn" onClick={saveForm}>
