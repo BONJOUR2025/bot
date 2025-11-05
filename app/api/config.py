@@ -1,5 +1,7 @@
+import json
+
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.services.config_service import ConfigService
 
@@ -30,6 +32,15 @@ def create_config_router(service: ConfigService) -> APIRouter:
 
     @router.get("/download/", response_class=FileResponse)
     async def download_config():
-        return FileResponse(service.path, filename="config.json")
+        if service.path.exists():
+            return FileResponse(service.path, filename="config.json")
+        data = service.load()
+        return Response(
+            content=json.dumps(data, ensure_ascii=False, indent=2),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": 'attachment; filename="config.json"'
+            },
+        )
 
     return router

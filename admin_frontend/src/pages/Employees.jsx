@@ -28,11 +28,13 @@ export default function Employees() {
     sync_to_bot: false,
     photo_file: null,
     photo_url: '',
+    payout_chat_key: '',
   };
 
   const [employees, setEmployees] = useState([]);
   const [positions, setPositions] = useState([]);
   const [workPlaces, setWorkPlaces] = useState([]);
+  const [cashierChats, setCashierChats] = useState([]);
   const [filterName, setFilterName] = useState('');
   const [filterPhone, setFilterPhone] = useState('');
   const [sort, setSort] = useState('');
@@ -43,12 +45,49 @@ export default function Employees() {
   useEffect(() => {
     load();
     loadPositions();
+    loadCashierChats();
   }, []);
 
   async function load() {
     try {
       const res = await api.get('employees/');
       setEmployees(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadCashierChats() {
+    try {
+      const res = await api.get('config/');
+      const data = res.data || {};
+      const rawChats = Array.isArray(data.card_dispatch_chats)
+        ? data.card_dispatch_chats
+        : [];
+      const fallbackId = data.card_dispatch_chat_id;
+      const normalized = rawChats
+        .map((chat, idx) => {
+          if (typeof chat !== 'object' || chat === null) return null;
+          const chatId = Number(chat.chat_id ?? chat.id);
+          if (!Number.isFinite(chatId)) return null;
+          const key = String(chat.key ?? chat.id ?? `chat_${idx + 1}`);
+          const name = String(chat.name ?? `Кассир ${idx + 1}`);
+          return { key, name, chat_id: chatId };
+        })
+        .filter(Boolean);
+      const fallbackNumber = Number(fallbackId);
+      if (
+        !normalized.length &&
+        Number.isFinite(fallbackNumber) &&
+        fallbackNumber !== 0
+      ) {
+        normalized.push({
+          key: 'default',
+          name: 'Основной кассир',
+          chat_id: fallbackNumber,
+        });
+      }
+      setCashierChats(normalized);
     } catch (err) {
       console.error(err);
     }
@@ -64,6 +103,21 @@ export default function Employees() {
     }
   }
 
+  function resolveChatName(key) {
+    if (!cashierChats.length) {
+      return key ? key : '';
+    }
+    if (!key) {
+      const first = cashierChats[0];
+      return first ? `По умолчанию — ${first.name}` : 'По умолчанию';
+    }
+    const found = cashierChats.find((chat) => chat.key === key);
+    if (found) {
+      return found.name;
+    }
+    return key ? `Неизвестный чат (${key})` : '';
+  }
+
   function formatDateRu(value) {
     if (!value) return '';
     return new Date(value).toLocaleDateString('ru-RU');
@@ -75,7 +129,7 @@ export default function Employees() {
   }
 
   function startEdit(emp) {
-    setForm({ ...emp, id: emp.id, id_original: emp.id });
+    setForm({ ...emp, id: emp.id, id_original: emp.id, payout_chat_key: emp.payout_chat_key || '' });
     setShowForm(true);
   }
 
@@ -111,6 +165,7 @@ export default function Employees() {
       status: form.status || 'active',
       position: form.position || '',
       is_admin: form.is_admin,
+      payout_chat_key: form.payout_chat_key || null,
     };
     try {
       if (form.id_original) {
@@ -220,6 +275,7 @@ export default function Employees() {
               <th className="p-2 text-left">Должность</th>
               <th className="p-2 text-left">Место</th>
               <th className="p-2 text-left">Размер</th>
+              <th className="p-2 text-left">Чат кассира</th>
               <th className="p-2 text-left">Роль</th>
               <th className="p-2 text-left">Создан</th>
               <th className="p-2 text-left">История</th>
@@ -261,6 +317,7 @@ export default function Employees() {
                 <td className="p-2">{e.position}</td>
                 <td className="p-2">{e.work_place}</td>
                 <td className="p-2">{e.clothing_size}</td>
+                <td className="p-2">{resolveChatName(e.payout_chat_key)}</td>
                 <td className="p-2">{e.is_admin ? 'Админ' : 'Пользователь'}</td>
                 <td className="p-2">{new Date(e.created_at).toLocaleDateString()}</td>
                 <td className="p-2">
@@ -287,7 +344,7 @@ export default function Employees() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan="13" className="p-4 text-center text-gray-500">
+                <td colSpan="14" className="p-4 text-center text-gray-500">
                   Нет сотрудников
                 </td>
               </tr>
@@ -380,6 +437,22 @@ export default function Employees() {
               value={form.note}
               onChange={(e) => setForm({ ...form, note: e.target.value })}
             />
+            <select
+              className="modal-control"
+              value={form.payout_chat_key}
+              onChange={(e) => setForm({ ...form, payout_chat_key: e.target.value })}
+            >
+              <option value="">
+                {cashierChats.length
+                  ? `По умолчанию — ${cashierChats[0].name}`
+                  : 'По умолчанию'}
+              </option>
+              {cashierChats.map((chat) => (
+                <option key={chat.key} value={chat.key}>
+                  {chat.name} — {chat.chat_id}
+                </option>
+              ))}
+            </select>
             <select
               className="modal-control"
               value={form.status}

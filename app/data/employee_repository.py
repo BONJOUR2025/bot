@@ -56,6 +56,7 @@ class EmployeeRepository:
             "created_at": self._parse_datetime(data.get("created_at"))
             or datetime.utcnow(),
             "tags": data.get("tags", []),
+            "payout_chat_key": data.get("payout_chat_key"),
         }
         return Employee(**record)
 
