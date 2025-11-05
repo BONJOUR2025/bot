@@ -50,7 +50,7 @@ class EmployeeService:
             return None
         new_id = updates.pop("id", None)
         for key, value in updates.items():
-            if hasattr(emp, key) and value is not None:
+            if hasattr(emp, key):
                 setattr(emp, key, value)
         if new_id and new_id != emp.id:
             if any(e.id == str(new_id) for e in self._employees):
@@ -101,6 +101,7 @@ class EmployeeAPIService:
             note=data.note or "",
             photo_url=data.photo_url or "",
             status=EmployeeStatus(data.status or "active"),
+            payout_chat_key=data.payout_chat_key,
         )
         try:
             created = self.service.add_employee(employee)

@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Iterable, ClassVar
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic_settings.sources import JsonConfigSettingsSource
 
 
 class Settings(BaseSettings):
@@ -42,6 +47,9 @@ class Settings(BaseSettings):
     card_dispatch_chat_id: int = Field(
         -1002667932339, validation_alias="CARD_DISPATCH_CHAT_ID"
     )
+    card_dispatch_chats: list[dict[str, Any]] = Field(
+        default_factory=list, validation_alias="CARD_DISPATCH_CHATS"
+    )
     max_advance_amount_per_month: int = Field(
         500000000,
         validation_alias="MAX_ADVANCE_AMOUNT_PER_MONTH",
@@ -50,9 +58,10 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        json_file="config.json",
         extra="ignore",
     )
+
+    _json_files: ClassVar[tuple[str, ...]] = ("config.json",)
 
     @classmethod
     def settings_customise_sources(
@@ -63,13 +72,52 @@ class Settings(BaseSettings):
         dotenv_settings,
         file_secret_settings,
     ):
+        json_files = cls._resolve_json_files(cls._json_files)
+
+        def json_config_settings_source(
+            _settings: BaseSettings | None = None,
+        ) -> dict[str, Any]:
+            data: dict[str, Any] = {}
+            for path in json_files:
+                try:
+                    raw = path.read_bytes()
+                except FileNotFoundError:
+                    continue
+                if not raw:
+                    continue
+                try:
+                    payload = json.loads(raw.decode("utf-8"))
+                except UnicodeDecodeError:
+                    try:
+                        payload = json.loads(raw.decode("utf-8-sig"))
+                    except UnicodeDecodeError:
+                        continue
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(payload, dict):
+                    data.update(payload)
+            return data
+
         return (
             init_settings,
             env_settings,
             dotenv_settings,
-            JsonConfigSettingsSource(settings_cls),
+            json_config_settings_source,
             file_secret_settings,
         )
+
+    @staticmethod
+    def _resolve_json_files(config_value: Any) -> list[Path]:
+        paths: list[Path] = []
+        if not config_value:
+            return paths
+        if isinstance(config_value, (str, Path)):
+            return [Path(config_value)]
+        if isinstance(config_value, Iterable):
+            for item in config_value:
+                if isinstance(item, (str, Path)):
+                    paths.append(Path(item))
+        return paths
 
 
 settings = Settings()

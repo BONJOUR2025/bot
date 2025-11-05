@@ -132,7 +132,16 @@ export default function MessageHistory() {
     setLoading(true);
     try {
       const response = await api.get('telegram/sent_messages');
-      setEntries(response.data);
+      const normalized = (response.data || []).map((entry) => {
+        const status = entry.status || '';
+        const accepted = entry.accepted || /принят/i.test(status || '');
+        return {
+          ...entry,
+          status,
+          accepted,
+        };
+      });
+      setEntries(normalized);
       setError(null);
     } catch (err) {
       console.error(err);
@@ -160,7 +169,7 @@ export default function MessageHistory() {
     if (!window.confirm('Удалить запись из истории?')) return;
     try {
       await api.delete(`telegram/sent_messages/${id}`);
-      setEntries((prev) => prev.filter((entry) => entry.id !== id));
+      await loadEntries();
     } catch (err) {
       console.error(err);
       setError('Не удалось удалить запись');
@@ -246,9 +255,12 @@ export default function MessageHistory() {
                       Ожидает подтверждения
                     </span>
                   )}
-                  {(!entry.broadcast && (entry.user_name || entry.user_id)) && (
-                    <span className="text-xs text-gray-500">
-                      Получатель: {entry.user_name || entry.user_id}
+                  {!entry.broadcast && (entry.user_name || entry.user_id) && (
+                    <span
+                      className="text-xs text-gray-500"
+                      title={entry.user_id ? `ID: ${entry.user_id}` : undefined}
+                    >
+                      Получатель: {entry.user_name || '—'}
                     </span>
                   )}
                 </div>
@@ -300,7 +312,12 @@ export default function MessageHistory() {
                         {(entry.recipients || []).map((recipient) => (
                           <tr key={`${recipient.user_id}-${recipient.status}`}>
                             <td className="px-3 py-2 text-gray-700">
-                              {recipient.name || recipient.user_id || '—'}
+                              <div className="flex flex-col">
+                                <span>{recipient.name || '—'}</span>
+                                {recipient.user_id && (
+                                  <span className="text-xs text-gray-400">ID: {recipient.user_id}</span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-3 py-2">
                               <StatusBadge status={recipient.status} />
