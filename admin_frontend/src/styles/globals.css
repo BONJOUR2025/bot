@@ -799,55 +799,68 @@ tbody tr:last-child td {
     padding: 1.25rem 1.5rem;
   }
 
-  .app-shell__content {
-    padding: 1.5rem 1.75rem 2.5rem;
-  }
-
-  .app-card {
-    padding: 1.5rem 1.6rem;
+  body {
+    @apply bg-background text-foreground;
   }
 }
 
-@media (max-width: 768px) {
-  .app-shell__header {
-    padding: 1rem 1.25rem;
-  }
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=' text-']), :not(:has([class^='text-'])))) {
+    h1 {
+      font-size: var(--text-2xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  .app-shell__brand {
-    font-size: 1rem;
-  }
+    h2 {
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  .app-shell__user-name {
-    display: none;
-  }
+    h3 {
+      font-size: var(--text-lg);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  .app-shell__content {
-    padding: 1.25rem 1.25rem 2.25rem;
-  }
+    h4 {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  .sidebar {
-    padding: 1.25rem;
-  }
+    p {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
 
-  .auth-layout {
-    padding: 3rem 1rem;
+    label {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    button {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    input {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
   }
 }
 
-@media (max-width: 480px) {
-  .auth-card {
-    padding: 1.75rem 1.4rem 2rem;
-    gap: 1.5rem;
-  }
-
-  .auth-card__logo {
-    width: 52px;
-    height: 52px;
-  }
-
-  .btn--md {
-    width: 100%;
-  }
+html {
+  font-size: var(--font-size);
 }
 
 .btn:hover {
