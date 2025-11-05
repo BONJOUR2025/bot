@@ -45,6 +45,7 @@ export default function Navigation({ onNavigate }) {
   const { user } = useAuth();
   const { isMobile } = useViewport();
   const allowed = useMemo(() => new Set(user?.permissions || []), [user?.permissions]);
+
   const handleNavigate = () => {
     if (isMobile && typeof onNavigate === 'function') {
       onNavigate();
@@ -75,38 +76,60 @@ export default function Navigation({ onNavigate }) {
   );
 
   return (
-    <nav className="sidebar">
-      <div className="sidebar__header">
-        <div className="sidebar__badge">HR</div>
-        <div className="sidebar__title">
-          <div className="sidebar__title-main">Админ-панель</div>
-          <div className="sidebar__title-sub">Управление персоналом</div>
+    <nav className="flex h-full min-h-screen w-full flex-col bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] shadow-xl sm:w-[280px]">
+      <div className="flex items-center gap-4 px-6 pb-5 pt-7">
+        <div className="grid h-11 w-11 place-items-center rounded-xl bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+          HR
+        </div>
+        <div className="flex flex-col text-sm">
+          <span className="text-base font-semibold leading-tight">Админ-панель</span>
+          <span className="text-[13px] text-[color:var(--color-muted-foreground)]">
+            Управление персоналом
+          </span>
         </div>
         {isMobile && (
-          <button type="button" className="icon-button icon-button--ghost" onClick={handleClose} aria-label="Закрыть меню">
+          <button
+            type="button"
+            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--color-sidebar-border)] bg-transparent text-[color:var(--color-sidebar-foreground)] transition hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)]"
+            onClick={handleClose}
+            aria-label="Закрыть меню"
+          >
             <X size={18} />
           </button>
         )}
       </div>
 
-      <div className="sidebar__sections">
+      <div className="flex-1 space-y-7 overflow-y-auto px-6 pb-8">
         {itemsByCategory.map((category) => (
-          <div key={category.name} className="sidebar__section">
-            <div className="sidebar__section-label">{category.name}</div>
-            <div className="sidebar__links">
-              {category.items.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={handleNavigate}
-                  className={`sidebar__link ${item.active ? 'is-active' : ''}`}
-                >
-                  {item.label}
-                </Link>
-              ))}
+          <div key={category.name} className="space-y-3">
+            <div className="text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
+              {category.name}
+            </div>
+            <div className="space-y-1">
+              {category.items.map((item) => {
+                const activeClasses = item.active
+                  ? 'bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[0_18px_38px_rgba(3,2,19,0.22)]'
+                  : 'text-[color:var(--color-sidebar-foreground)] opacity-75 hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)] hover:opacity-100';
+
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={handleNavigate}
+                    className={`flex items-center justify-between rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition-all duration-150 ${activeClasses}`}
+                  >
+                    <span>{item.label}</span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-current opacity-40" />
+                  </Link>
+                );
+              })}
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="border-t border-[color:var(--color-sidebar-border)] px-6 py-5 text-xs text-[color:var(--color-muted-foreground)] opacity-90">
+        © {new Date().getFullYear()} HR Platform
       </div>
     </nav>
   );
