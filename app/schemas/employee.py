@@ -18,6 +18,7 @@ class EmployeeBase(BaseModel):
     note: Optional[str] = ""
     photo_url: Optional[str] = ""
     status: str = "active"
+    payout_chat_key: Optional[str] = None
 
 
 class EmployeeCreate(EmployeeBase):
@@ -45,3 +46,4 @@ class Employee(BaseModel):
     is_admin: bool = False
     note: Optional[str] = None
     photo_url: Optional[str] = None
+    payout_chat_key: Optional[str] = None

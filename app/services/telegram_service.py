@@ -62,7 +62,7 @@ class TelegramService:
             data = json.loads(self.msg_log.read_text(encoding="utf-8"))
         except Exception:
             return []
-        return data
+        return self._enrich_log_entries(data)
 
     def _load_log(self) -> List[Dict]:
         """Return log records sorted by timestamp descending."""
@@ -72,6 +72,59 @@ class TelegramService:
             key=lambda x: x.get("timestamp", ""),
             reverse=True,
         )[:50]
+
+    def _resolve_employee_name(self, user_id: str | int | None) -> str | None:
+        if not user_id:
+            return None
+        try:
+            employee = self.repo.get_employee(str(user_id))
+        except Exception as exc:
+            log(f"⚠️ Failed to resolve employee {user_id}: {exc}")
+            return None
+        if not employee:
+            return None
+        return getattr(employee, "full_name", None) or getattr(employee, "name", None)
+
+    def _enrich_log_entries(self, data: List[Dict]) -> List[Dict]:
+        changed = False
+
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+
+            if entry.get("user_id") and not entry.get("user_name"):
+                name = self._resolve_employee_name(entry.get("user_id"))
+                if name:
+                    entry["user_name"] = name
+                    changed = True
+
+            if "broadcast" not in entry:
+                entry["broadcast"] = False
+                changed = True
+
+            status = entry.get("status")
+            if isinstance(status, str) and "принят" in status.lower():
+                if not entry.get("accepted"):
+                    entry["accepted"] = True
+                    changed = True
+
+            recipients = entry.get("recipients") or []
+            for recipient in recipients:
+                if not isinstance(recipient, dict):
+                    continue
+                if recipient.get("user_id") and not recipient.get("name"):
+                    name = self._resolve_employee_name(recipient.get("user_id"))
+                    if name:
+                        recipient["name"] = name
+                        changed = True
+
+        if changed:
+            try:
+                self._save_log(data)
+            except Exception as exc:
+                log(f"⚠️ Failed to persist enriched log entries: {exc}")
+
+        return data
 
     def _save_log(self, data: List[Dict]) -> None:
         self.msg_log.write_text(
@@ -257,6 +310,7 @@ class TelegramService:
             "requires_ack": require_ack,
             "accepted": False,
             "timestamp_accept": None,
+            "broadcast": False,
         }
         data = self._load_log_all()
         data.append(log_entry)
