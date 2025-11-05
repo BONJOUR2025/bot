@@ -1,17 +1,40 @@
-export default function Badge({ children, tone = 'neutral', style }) {
-  const paletteMap = {
-    neutral: { background: 'rgba(255, 255, 255, 0.08)', color: 'var(--color-text)' },
-    success: { background: 'rgba(62, 207, 142, 0.15)', color: 'var(--color-success)' },
-    warning: { background: 'rgba(249, 185, 90, 0.15)', color: 'var(--color-warning)' },
-    danger: { background: 'rgba(255, 107, 107, 0.15)', color: 'var(--color-danger)' },
-    info: { background: 'rgba(61, 213, 243, 0.16)', color: 'var(--color-accent)' },
-  };
-  const palette = paletteMap[tone] || paletteMap.neutral;
+const palette = {
+  neutral: {
+    backgroundColor: 'var(--muted)',
+    background: 'color-mix(in srgb, var(--muted) 40%, transparent)',
+    color: 'var(--muted-foreground)',
+  },
+  info: {
+    backgroundColor: 'var(--accent)',
+    background: 'color-mix(in srgb, var(--accent) 38%, transparent)',
+    color: 'var(--accent-foreground)',
+  },
+  success: {
+    backgroundColor: 'var(--chart-2)',
+    background: 'color-mix(in srgb, var(--chart-2) 30%, transparent)',
+    color: 'var(--chart-2)',
+  },
+  warning: {
+    backgroundColor: 'var(--chart-4)',
+    background: 'color-mix(in srgb, var(--chart-4) 32%, transparent)',
+    color: 'var(--chart-4)',
+  },
+  danger: {
+    backgroundColor: 'var(--destructive)',
+    background: 'color-mix(in srgb, var(--destructive) 32%, transparent)',
+    color: 'var(--destructive)',
+  },
+};
+
+export default function Badge({ children, tone = 'neutral', className = '', style }) {
+  const colors = palette[tone] || palette.neutral;
 
   return (
-    <span className="badge" style={{ ...palette, ...style }}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium tracking-wide ${className}`.trim()}
+      style={{ ...colors, ...style }}
+    >
       {children}
     </span>
   );
 }
-

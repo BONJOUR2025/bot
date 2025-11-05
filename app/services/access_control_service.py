@@ -84,6 +84,8 @@ class ResolvedUser:
     permissions: list[str]
     bot_buttons: list[str]
     display_name: str | None
+    allowed_employee_ids: list[str] | None
+    allowed_departments: list[str] | None
 
 
 class AccessControlService:
@@ -136,6 +138,8 @@ class AccessControlService:
                     "bot_buttons": None,
                     "salt": salt,
                     "password_hash": password_hash,
+                    "allowed_employee_ids": None,
+                    "allowed_departments": None,
                 }
             )
             changed = True
@@ -167,6 +171,44 @@ class AccessControlService:
             return ["*"]
         filtered = [btn_id for btn_id in button_ids if btn_id in valid_ids]
         return filtered
+
+    def _validate_employee_ids(
+        self, employee_ids: Iterable[str] | None
+    ) -> list[str] | None:
+        if employee_ids is None:
+            return None
+        known_ids = {emp.id for emp in self.employee_repo.list_employees()}
+        result = []
+        for value in employee_ids:
+            if value is None:
+                continue
+            emp_id = str(value)
+            if emp_id in known_ids and emp_id not in result:
+                result.append(emp_id)
+        return result
+
+    def _validate_departments(
+        self, departments: Iterable[str] | None
+    ) -> list[str] | None:
+        if departments is None:
+            return None
+        known_departments = {
+            emp.work_place.strip()
+            for emp in self.employee_repo.list_employees()
+            if emp.work_place
+        }
+        result: list[str] = []
+        for raw in departments:
+            if not raw:
+                continue
+            department = str(raw).strip()
+            if not department:
+                continue
+            if known_departments and department not in known_departments:
+                continue
+            if department not in result:
+                result.append(department)
+        return result
 
     def _get_role(self, role_id: str | None) -> dict[str, Any] | None:
         if not role_id:
@@ -210,6 +252,8 @@ class AccessControlService:
             resolved = self.resolve_user(user.get("id"))
             if not resolved:
                 continue
+            allowed_ids = self._validate_employee_ids(user.get("allowed_employee_ids"))
+            allowed_departments = self._validate_departments(user.get("allowed_departments"))
             result.append(
                 {
                     "id": resolved.id,
@@ -222,6 +266,10 @@ class AccessControlService:
                     "resolved_bot_buttons": resolved.bot_buttons,
                     "resolved_bot_button_labels": self.button_labels(resolved.bot_buttons),
                     "display_name": resolved.display_name,
+                    "allowed_employee_ids": allowed_ids,
+                    "allowed_departments": allowed_departments,
+                    "resolved_employee_names": self._employee_names(allowed_ids),
+                    "resolved_departments": allowed_departments or [],
                 }
             )
         return result
@@ -296,6 +344,12 @@ class AccessControlService:
             "bot_buttons": self._validate_buttons(data.get("bot_buttons")),
             "salt": salt,
             "password_hash": password_hash,
+            "allowed_employee_ids": self._validate_employee_ids(
+                data.get("allowed_employee_ids")
+            ),
+            "allowed_departments": self._validate_departments(
+                data.get("allowed_departments")
+            ),
         }
         self._data.setdefault("users", []).append(user_record)
         self._persist()
@@ -319,6 +373,14 @@ class AccessControlService:
             user["permissions"] = self._validate_permissions(data.get("permissions"))
         if "bot_buttons" in data:
             user["bot_buttons"] = self._validate_buttons(data.get("bot_buttons"))
+        if "allowed_employee_ids" in data:
+            user["allowed_employee_ids"] = self._validate_employee_ids(
+                data.get("allowed_employee_ids")
+            )
+        if "allowed_departments" in data:
+            user["allowed_departments"] = self._validate_departments(
+                data.get("allowed_departments")
+            )
         if data.get("password"):
             user["salt"], user["password_hash"] = self._hash_password(data["password"])
         self._persist()
@@ -386,6 +448,7 @@ class AccessControlService:
         display_name: str | None = None
         if employee:
             display_name = employee.full_name or employee.name
+        allowed_employee_ids, allowed_departments = self._resolve_scope(record, role)
         return ResolvedUser(
             id=user_id,
             login=record.get("login", ""),
@@ -394,6 +457,8 @@ class AccessControlService:
             permissions=permissions,
             bot_buttons=buttons,
             display_name=display_name,
+            allowed_employee_ids=allowed_employee_ids,
+            allowed_departments=allowed_departments,
         )
 
     def _resolve_permissions(
@@ -425,6 +490,100 @@ class AccessControlService:
         if "common.home" not in resolved:
             resolved.append("common.home")
         return resolved
+
+    def _resolve_scope(
+        self, record: dict[str, Any], role: dict[str, Any] | None
+    ) -> tuple[list[str] | None, list[str] | None]:
+        employee_ids = record.get("allowed_employee_ids")
+        if employee_ids is None and role:
+            employee_ids = role.get("allowed_employee_ids")
+        departments = record.get("allowed_departments")
+        if departments is None and role:
+            departments = role.get("allowed_departments")
+        return (
+            self._validate_employee_ids(employee_ids),
+            self._validate_departments(departments),
+        )
+
+    def _employee_names(self, employee_ids: Iterable[str] | None) -> list[str]:
+        if not employee_ids:
+            return []
+        names: list[str] = []
+        for emp_id in employee_ids:
+            employee = self.employee_repo.get_employee(str(emp_id))
+            if not employee:
+                continue
+            name = employee.full_name or employee.name or str(emp_id)
+            names.append(name)
+        return names
+
+    # ------------------------------------------------------------------
+    # scope helpers
+    # ------------------------------------------------------------------
+    def available_employees(self) -> list[dict[str, str]]:
+        employees = self.employee_repo.list_employees()
+        items = [
+            {
+                "id": emp.id,
+                "name": emp.full_name or emp.name or emp.id,
+                "department": emp.work_place or "",
+            }
+            for emp in employees
+        ]
+        items.sort(key=lambda item: item["name"].lower())
+        return items
+
+    def available_departments(self) -> list[str]:
+        departments = {
+            emp.work_place.strip()
+            for emp in self.employee_repo.list_employees()
+            if emp.work_place and emp.work_place.strip()
+        }
+        return sorted(departments)
+
+    def user_employee_scope(self, user: ResolvedUser) -> set[str] | None:
+        if user.allowed_employee_ids is None:
+            return None
+        return set(user.allowed_employee_ids)
+
+    def user_department_scope(self, user: ResolvedUser) -> set[str] | None:
+        if user.allowed_departments is None:
+            return None
+        return set(user.allowed_departments)
+
+    def is_employee_visible(
+        self,
+        user: ResolvedUser,
+        employee_id: str | None,
+        department: str | None = None,
+    ) -> bool:
+        employee_scope = self.user_employee_scope(user)
+        department_scope = self.user_department_scope(user)
+        if employee_scope is not None:
+            if not employee_id or str(employee_id) not in employee_scope:
+                return False
+            return True
+        if department_scope is not None:
+            if department and department in department_scope:
+                return True
+            if employee_id:
+                employee = self.employee_repo.get_employee(str(employee_id))
+                if employee and employee.work_place in department_scope:
+                    return True
+            return False
+        return True
+
+    def visible_employee_ids(self, user: ResolvedUser) -> set[str] | None:
+        employee_scope = self.user_employee_scope(user)
+        department_scope = self.user_department_scope(user)
+        if not employee_scope and not department_scope:
+            return None
+        visible: set[str] = set(employee_scope or [])
+        if department_scope:
+            for employee in self.employee_repo.list_employees():
+                if employee.work_place in department_scope:
+                    visible.add(employee.id)
+        return visible
 
     # ------------------------------------------------------------------
     # bot integration helpers

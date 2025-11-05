@@ -591,9 +591,9 @@ export default function Payouts() {
       <MessageHistory />
 
       {showEditor && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-4 space-y-2 rounded shadow w-80">
-            <h2 className="text-lg font-bold mb-2">
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-lg">
+            <h2 className="text-xl font-semibold">
               {form.id ? 'Редактирование' : 'Новая выплата'}
             </h2>
             <label className="flex items-center gap-1 text-sm">
@@ -605,7 +605,7 @@ export default function Payouts() {
               Использовать ФИО
             </label>
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.user_id}
               onChange={(e) => handleSelect(e.target.value)}
             >
@@ -617,14 +617,14 @@ export default function Payouts() {
               ))}
             </select>
             <input
-              className="border p-2 w-full"
+              className="modal-control"
               placeholder="Сумма"
               type="number"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
             />
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.payout_type}
               onChange={(e) => setForm({ ...form, payout_type: e.target.value })}
             >
@@ -632,7 +632,7 @@ export default function Payouts() {
               <option value="Зарплата">Зарплата</option>
             </select>
             <select
-              className="border p-2 w-full"
+              className="modal-control"
               value={form.method}
               onChange={(e) => setForm({ ...form, method: e.target.value })}
             >
@@ -642,7 +642,7 @@ export default function Payouts() {
             </select>
             {form.id && (
               <select
-                className="border p-2 w-full"
+                className="modal-control"
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
               >
@@ -665,7 +665,7 @@ export default function Payouts() {
               </label>
             )}
             <textarea
-              className="border p-2 w-full"
+              className="modal-control"
               placeholder="Примечание"
               value={form.note}
               onChange={(e) => setForm({ ...form, note: e.target.value })}
@@ -690,7 +690,7 @@ export default function Payouts() {
             </label>
             <div className="flex justify-end space-x-2 pt-2">
               <button
-                className="btn bg-gray-300 text-gray-700 hover:bg-gray-400"
+                className="btn bg-gray-200 text-gray-700 hover:bg-gray-300"
                 onClick={() => {
                   setShowEditor(false);
                   setForm(emptyForm);

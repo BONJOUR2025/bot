@@ -132,12 +132,16 @@ def create_app() -> FastAPI:
     employee_service = EmployeeService()
     employee_api = EmployeeAPIService(employee_service)
     app.include_router(
-        create_employee_router(employee_api), prefix="/api", dependencies=protected
+        create_employee_router(employee_api, access_service),
+        prefix="/api",
+        dependencies=protected,
     )
 
     salary_service = SalaryService(employee_service._repo)
     app.include_router(
-        create_salary_router(salary_service), prefix="/api", dependencies=protected
+        create_salary_router(salary_service, access_service),
+        prefix="/api",
+        dependencies=protected,
     )
 
     schedule_service = ScheduleService()
@@ -148,12 +152,16 @@ def create_app() -> FastAPI:
     telegram_service = TelegramService(employee_service._repo)
     payout_service = PayoutService(telegram_service=telegram_service)
     app.include_router(
-        create_payout_router(payout_service), prefix="/api", dependencies=protected
+        create_payout_router(payout_service, access_service),
+        prefix="/api",
+        dependencies=protected,
     )
 
     vacation_service = VacationService()
     app.include_router(
-        create_vacation_router(vacation_service), prefix="/api", dependencies=protected
+        create_vacation_router(vacation_service, access_service),
+        prefix="/api",
+        dependencies=protected,
     )
 
     adjustment_service = AdjustmentService()
@@ -165,14 +173,18 @@ def create_app() -> FastAPI:
 
     incentive_service = IncentiveService()
     app.include_router(
-        create_incentive_router(incentive_service), prefix="/api", dependencies=protected
+        create_incentive_router(incentive_service, access_service),
+        prefix="/api",
+        dependencies=protected,
     )
 
     from ..services.asset_service import AssetService
 
     asset_service = AssetService()
     app.include_router(
-        create_asset_router(asset_service), prefix="/api", dependencies=protected
+        create_asset_router(asset_service, access_service),
+        prefix="/api",
+        dependencies=protected,
     )
 
     from ..services.template_service import TemplateService

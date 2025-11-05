@@ -50,6 +50,13 @@ class VacationService:
         rows = self._repo.list_tomorrow()
         return [Vacation(**r) for r in rows]
 
+    def get_vacation_employee(self, vac_id: str) -> Optional[str]:
+        for item in self._repo.list():
+            if str(item.get("id")) == str(vac_id):
+                employee_id = item.get("employee_id")
+                return str(employee_id) if employee_id is not None else None
+        return None
+
     @staticmethod
     def _validate_dates(start: str, end: str) -> None:
         if start and end and start > end:
