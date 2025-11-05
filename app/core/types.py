@@ -28,3 +28,4 @@ class Employee:
     status: EmployeeStatus = EmployeeStatus.ACTIVE
     created_at: datetime = field(default_factory=datetime.utcnow)
     tags: List[str] = field(default_factory=list)
+    payout_chat_key: Optional[str] = None
