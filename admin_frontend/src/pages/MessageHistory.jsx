@@ -167,23 +167,24 @@ function combineBatchMessages(entries) {
   const aggregatedEntries = [];
   const batchGroups = new Map();
   const legacyCandidates = [];
+function combineBatchMessages(entries) {
+  if (!Array.isArray(entries)) return [];
+
+  const directEntries = [];
+  const batchGroups = new Map();
 
   entries.forEach((entry) => {
     if (!entry || typeof entry !== 'object') {
       return;
     }
-    if (entry.batch_id) {
-      if (!batchGroups.has(entry.batch_id)) {
-        batchGroups.set(entry.batch_id, []);
-      }
-      batchGroups.get(entry.batch_id).push(entry);
+    if (entry.broadcast || !entry.batch_id) {
+      directEntries.push(entry);
       return;
     }
-    if (entry.broadcast && Array.isArray(entry.recipients) && entry.recipients.length > 0) {
-      aggregatedEntries.push(normalizeExistingBroadcastEntry(entry));
-      return;
+    if (!batchGroups.has(entry.batch_id)) {
+      batchGroups.set(entry.batch_id, []);
     }
-    legacyCandidates.push(entry);
+    batchGroups.get(entry.batch_id).push(entry);
   });
 
   batchGroups.forEach((group) => {
@@ -191,85 +192,77 @@ function combineBatchMessages(entries) {
       return;
     }
     if (group.length === 1) {
-      aggregatedEntries.push(group[0]);
+      directEntries.push(group[0]);
       return;
     }
-    const aggregatedEntry = buildAggregatedEntry(group, { id: `batch-${group[0].batch_id}` });
-    if (aggregatedEntry) {
-      aggregatedEntries.push(aggregatedEntry);
-    }
-  });
 
-  const sortedCandidates = legacyCandidates
-    .map((entry, index) => ({ entry, index }))
-    .sort((a, b) => {
-      const aTime = a.entry.timestamp ? new Date(a.entry.timestamp).getTime() : 0;
-      const bTime = b.entry.timestamp ? new Date(b.entry.timestamp).getTime() : 0;
+    const sortedGroup = [...group].sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
       return aTime - bTime;
     });
 
-  const used = new Set();
-  const LEGACY_WINDOW_MS = 60000;
-  for (let i = 0; i < sortedCandidates.length; i += 1) {
-    if (used.has(i)) {
-      continue;
-    }
-    const current = sortedCandidates[i].entry;
-    const group = [current];
-    const currentTime = current.timestamp ? new Date(current.timestamp).getTime() : Number.NaN;
-    if (Number.isNaN(currentTime)) {
-      aggregatedEntries.push(current);
-      continue;
-    }
+    const recipients = sortedGroup.map((item) => ({
+      user_id: item.user_id,
+      name: item.user_name || item.user_id,
+      status: item.status,
+      timestamp_accept: item.timestamp_accept,
+    }));
 
-    for (let j = i + 1; j < sortedCandidates.length; j += 1) {
-      if (used.has(j)) {
-        continue;
-      }
-      const candidate = sortedCandidates[j].entry;
-      const candidateTime = candidate.timestamp ? new Date(candidate.timestamp).getTime() : Number.NaN;
-      if (Number.isNaN(candidateTime)) {
-        continue;
-      }
-      if (candidateTime - currentTime > LEGACY_WINDOW_MS) {
-        break;
-      }
-      if ((candidate.message || '').trim() !== (current.message || '').trim()) {
-        continue;
-      }
-      if ((candidate.photo_url || '') !== (current.photo_url || '')) {
-        continue;
-      }
-      if (Boolean(candidate.requires_ack) !== Boolean(current.requires_ack)) {
-        continue;
-      }
+    const statusCodes = recipients.map((recipient) => classifyStatus(recipient.status));
+    const hasError = statusCodes.includes('error');
+    const hasWarning = statusCodes.includes('warning');
+    const hasSuccess = statusCodes.includes('success');
+    const allSuccess = statusCodes.length > 0 && statusCodes.every((code) => code === 'success');
 
-      group.push(candidate);
-      used.add(j);
-    }
-
-    if (group.length > 1) {
-      used.add(i);
-      const aggregatedEntry = buildAggregatedEntry(group, {
-        id: `legacy-${group.map((item) => item.id).filter(Boolean).sort().join('-')}`,
-      });
-      if (aggregatedEntry) {
-        aggregatedEntries.push(aggregatedEntry);
-      }
+    let aggregatedStatus = '';
+    if (hasError) {
+      aggregatedStatus = 'ошибка';
+    } else if (hasWarning) {
+      aggregatedStatus = 'ожидает подтверждения';
+    } else if (allSuccess) {
+      aggregatedStatus = 'принято';
+    } else if (hasSuccess) {
+      aggregatedStatus = 'отправлено';
     } else {
-      aggregatedEntries.push(current);
+      aggregatedStatus = 'групповое сообщение';
     }
-  }
 
-  const result = aggregatedEntries
-    .filter(Boolean)
-    .sort((a, b) => {
-      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      return bTime - aTime;
-    });
+    const latestAccept = allSuccess
+      ? recipients.reduce((latest, recipient) => {
+          const value = recipient.timestamp_accept;
+          if (!value) return latest;
+          if (!latest || value > latest) {
+            return value;
+          }
+          return latest;
+        }, null)
+      : null;
 
-  return result;
+    const aggregatedEntry = {
+      ...sortedGroup[0],
+      id: `batch-${sortedGroup[0].batch_id}`,
+      broadcast: true,
+      recipients,
+      batchEntryIds: sortedGroup.map((item) => item.id),
+      user_id: null,
+      user_name: null,
+      message_id: null,
+      status: aggregatedStatus,
+      accepted: allSuccess,
+      timestamp: sortedGroup[0].timestamp,
+      timestamp_accept: latestAccept,
+      requires_ack: sortedGroup.some((item) => item.requires_ack),
+    };
+
+    directEntries.push(aggregatedEntry);
+  });
+
+  return directEntries.sort((a, b) => {
+    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return bTime - aTime;
+  });
 }
 
 function getStatusVariant(status) {
