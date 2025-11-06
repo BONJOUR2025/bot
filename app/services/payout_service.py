@@ -28,6 +28,22 @@ class PayoutService:
         self._repo = repo or PayoutRepository()
         self._telegram = telegram_service
 
+    @staticmethod
+    def _serialize_timestamp(value: datetime | str) -> str:
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(value, str):
+            cleaned = value.strip()
+            try:
+                parsed = datetime.fromisoformat(cleaned)
+            except ValueError:
+                try:
+                    parsed = datetime.fromisoformat(cleaned.replace(" ", "T"))
+                except ValueError:
+                    return cleaned
+            return parsed.strftime("%Y-%m-%d %H:%M:%S")
+        raise TypeError("Unsupported timestamp type")
+
     async def list_payouts(
         self,
         employee_id: Optional[str] = None,
@@ -58,10 +74,11 @@ class PayoutService:
             "method": data.method,
             "payout_type": data.payout_type,
             "status": PAYOUT_STATUSES[0],
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "note": data.note or "",
             "show_note_in_bot": data.show_note_in_bot,
         }
+        timestamp_value = data.timestamp or datetime.now()
+        payout_dict["timestamp"] = self._serialize_timestamp(timestamp_value)
         created = self._repo.create(payout_dict)
         logger.info(
             f"🆕 Выплата '{created['payout_type']}' на {created['amount']} ₽ для user_id {created['user_id']} — статус: {created['status']}"
@@ -81,6 +98,8 @@ class PayoutService:
         self._repo.reload()
         updates = update.model_dump(exclude_none=True)
         notify = updates.pop("notify_user", True)
+        if "timestamp" in updates:
+            updates["timestamp"] = self._serialize_timestamp(updates["timestamp"])
         if not updates:
             return None
         updated = self._repo.update(payout_id, updates)
