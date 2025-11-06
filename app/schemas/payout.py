@@ -29,6 +29,7 @@ class PayoutCreate(BaseModel):
     sync_to_bot: bool = False
     note: Optional[str] = None
     show_note_in_bot: bool = False
+    timestamp: Optional[datetime] = None
 
 
 class PayoutUpdate(BaseModel):
@@ -43,6 +44,7 @@ class PayoutUpdate(BaseModel):
     notify_user: Optional[bool] = None
     note: Optional[str] = None
     show_note_in_bot: Optional[bool] = None
+    timestamp: Optional[datetime] = None
 
 
 class PayoutControlItem(BaseModel):

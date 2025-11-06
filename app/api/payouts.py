@@ -12,6 +12,9 @@ from app.services.access_control_service import AccessControlService, ResolvedUs
 from .dependencies import get_current_user
 
 
+MANAGE_DATES_PERMISSION = "payouts-manage-dates"
+
+
 def create_payout_router(
     service: PayoutService, access_service: AccessControlService
 ) -> APIRouter:
@@ -72,6 +75,10 @@ def create_payout_router(
     ):
         if not access_service.is_employee_visible(current, data.user_id):
             raise HTTPException(status_code=403, detail="forbidden")
+        if data.timestamp is not None and not access_service.user_has_permission(
+            current, MANAGE_DATES_PERMISSION
+        ):
+            raise HTTPException(status_code=403, detail="forbidden")
         return await service.create_payout(data)
 
     @router.put("/{payout_id}", response_model=Payout)
@@ -81,6 +88,10 @@ def create_payout_router(
         current: ResolvedUser = Depends(get_current_user),
     ):
         _ensure_access(payout_id, current)
+        if update.timestamp is not None and not access_service.user_has_permission(
+            current, MANAGE_DATES_PERMISSION
+        ):
+            raise HTTPException(status_code=403, detail="forbidden")
         if update.user_id and not access_service.is_employee_visible(
             current, update.user_id
         ):

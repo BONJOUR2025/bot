@@ -18,6 +18,10 @@ AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
     {"id": "dashboard", "label": "Дашборд"},
     {"id": "employees", "label": "Сотрудники"},
     {"id": "payouts", "label": "Выплаты"},
+    {
+        "id": "payouts-manage-dates",
+        "label": "Выплаты: изменять дату и создавать задним числом",
+    },
     {"id": "payouts-control", "label": "Контроль выплат"},
     {"id": "incentives", "label": "Штрафы и премии"},
     {"id": "reports", "label": "Отчёты"},
@@ -288,6 +292,10 @@ class AccessControlService:
 
     def available_bot_buttons(self) -> list[dict[str, Any]]:
         return BOT_BUTTON_CATALOG
+
+    def user_has_permission(self, user: ResolvedUser, permission: str) -> bool:
+        permissions = user.permissions or []
+        return "*" in permissions or permission in permissions
 
     def create_role(self, data: dict[str, Any]) -> dict[str, Any]:
         role_id = data.get("id") or secrets.token_hex(6)

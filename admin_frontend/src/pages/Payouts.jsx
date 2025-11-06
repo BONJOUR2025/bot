@@ -8,9 +8,41 @@ import {
   XCircle,
 } from 'lucide-react';
 import api from '../api';
+import { useAuth } from '../providers/AuthProvider.jsx';
 
 const MAX_AMOUNT = 100000;
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
+const MANAGE_DATES_PERMISSION = 'payouts-manage-dates';
+
+const pad = (value) => String(value).padStart(2, '0');
+
+function toInputTimestamp(value) {
+  if (!value) return '';
+  const source = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(source.getTime())) {
+    if (typeof value === 'string') {
+      const fallback = new Date(value.replace(' ', 'T'));
+      if (!Number.isNaN(fallback.getTime())) {
+        return toInputTimestamp(fallback);
+      }
+    }
+    return '';
+  }
+  return (
+    `${source.getFullYear()}-${pad(source.getMonth() + 1)}-${pad(source.getDate())}` +
+    `T${pad(source.getHours())}:${pad(source.getMinutes())}:${pad(source.getSeconds())}`
+  );
+}
+
+function toPayloadTimestamp(value) {
+  if (!value) return undefined;
+  if (!value.includes('T')) {
+    return value;
+  }
+  const [datePart, timePart] = value.split('T');
+  const [hours = '00', minutes = '00', seconds = '00'] = timePart.split(':');
+  return `${datePart} ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
 
 function Toast({ message, type = 'info', onClose }) {
   useEffect(() => {
@@ -92,6 +124,10 @@ function formatDateTime(value) {
 }
 
 export default function Payouts() {
+  const { user } = useAuth();
+  const canManageDates = Boolean(
+    user?.permissions?.includes('*') || user?.permissions?.includes(MANAGE_DATES_PERMISSION),
+  );
   const emptyForm = {
     id: null,
     user_id: '',
@@ -106,6 +142,7 @@ export default function Payouts() {
     notify_user: true,
     note: '',
     show_note_in_bot: false,
+    timestamp: '',
   };
 
   const [payouts, setPayouts] = useState([]);
@@ -207,13 +244,18 @@ export default function Payouts() {
   }
 
   function openCreate() {
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      timestamp: canManageDates ? toInputTimestamp(new Date()) : '',
+    });
     setShowEditor(true);
   }
 
   function openEdit(p) {
     setForm({
+      ...emptyForm,
       ...p,
+      timestamp: canManageDates ? toInputTimestamp(p.timestamp) : '',
       notify_user: true,
       note: p.note || '',
       show_note_in_bot: p.show_note_in_bot || false,
@@ -229,6 +271,11 @@ export default function Payouts() {
       return;
     }
     const payload = { ...form, amount };
+    if (canManageDates && form.timestamp) {
+      payload.timestamp = toPayloadTimestamp(form.timestamp);
+    } else {
+      delete payload.timestamp;
+    }
     try {
       if (form.id) {
         await api.put(`payouts/${form.id}`, payload);
@@ -520,6 +567,20 @@ export default function Payouts() {
               <option value="🏦 Из кассы">Из кассы</option>
               <option value="🤝 Наличными">Наличными</option>
             </select>
+            {canManageDates && (
+              <div className="w-full">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Дата выплаты
+                </label>
+                <input
+                  type="datetime-local"
+                  step="1"
+                  className="modal-control"
+                  value={form.timestamp}
+                  onChange={(e) => setForm({ ...form, timestamp: e.target.value })}
+                />
+              </div>
+            )}
             {form.id && (
               <select
                 className="modal-control"
