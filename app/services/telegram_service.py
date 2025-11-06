@@ -141,6 +141,7 @@ class TelegramService:
         message_id: int | None = None,
         photo_url: str | None = None,
         require_ack: bool = False,
+        batch_id: str | None = None,
         extra: Optional[Dict[str, Any]] = None,
     ) -> None:
         entry: Dict[str, Any] = {
@@ -157,6 +158,8 @@ class TelegramService:
             "timestamp_accept": None,
             "broadcast": False,
         }
+        if batch_id:
+            entry["batch_id"] = batch_id
         if extra:
             entry.update(extra)
         data = self._load_log_all()
@@ -286,6 +289,7 @@ class TelegramService:
             parse_mode: str = "HTML",
             photo_url: Optional[str] = None,
             require_ack: bool = False,
+            batch_id: Optional[str] = None,
     ) -> int:
         employee = None
         if hasattr(self.repo, "get_employee"):
@@ -308,6 +312,7 @@ class TelegramService:
                 status=f"ошибка: {exc}",
                 photo_url=photo_url,
                 require_ack=require_ack,
+                batch_id=batch_id,
             )
             raise exc
         if not is_valid_user_id(user_id):
@@ -322,6 +327,7 @@ class TelegramService:
                 status=f"ошибка: {exc}",
                 photo_url=photo_url,
                 require_ack=require_ack,
+                batch_id=batch_id,
             )
             raise exc
         reply_markup = None
@@ -357,6 +363,7 @@ class TelegramService:
                 status=f"ошибка: {exc}",
                 photo_url=photo_url,
                 require_ack=require_ack,
+                batch_id=batch_id,
                 extra={"error": str(exc)},
             )
             raise TelegramAPIError(str(exc)) from exc
@@ -369,6 +376,7 @@ class TelegramService:
                 status=f"ошибка: {exc}",
                 photo_url=photo_url,
                 require_ack=require_ack,
+                batch_id=batch_id,
                 extra={"error": str(exc)},
             )
             raise
@@ -380,6 +388,7 @@ class TelegramService:
             message_id=result.message_id,
             photo_url=photo_url,
             require_ack=require_ack,
+            batch_id=batch_id,
         )
         return result.message_id
 

@@ -35,6 +35,243 @@ const STATUS_MAP = {
   },
 };
 
+function classifyStatus(value) {
+  if (!value) return 'unknown';
+  if (STATUS_MAP.success.match(value)) return 'success';
+  if (STATUS_MAP.error.match(value)) return 'error';
+  if (STATUS_MAP.warning.match(value)) return 'warning';
+  return 'unknown';
+}
+
+
+function normalizeRecipients(items) {
+  return (items || [])
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      user_id: item.user_id,
+      name: item.name || item.user_name || item.user_id,
+      status: item.status,
+      timestamp_accept: item.timestamp_accept,
+    }));
+}
+
+function calculateAggregatedStatus(recipients) {
+  const statusCodes = recipients.map((recipient) => classifyStatus(recipient.status));
+  const hasError = statusCodes.includes('error');
+  const hasWarning = statusCodes.includes('warning');
+  const hasSuccess = statusCodes.includes('success');
+  const allSuccess = statusCodes.length > 0 && statusCodes.every((code) => code === 'success');
+
+  let aggregatedStatus = '';
+  if (hasError) {
+    aggregatedStatus = 'ошибка';
+  } else if (hasWarning) {
+    aggregatedStatus = 'ожидает подтверждения';
+  } else if (allSuccess) {
+    aggregatedStatus = 'принято';
+  } else if (hasSuccess) {
+    aggregatedStatus = 'отправлено';
+  } else {
+    aggregatedStatus = 'групповое сообщение';
+  }
+
+  const latestAccept = recipients.reduce((latest, recipient) => {
+    const value = recipient.timestamp_accept;
+    if (!value) return latest;
+    if (!latest || value > latest) {
+      return value;
+    }
+    return latest;
+  }, null);
+
+  return { aggregatedStatus, allSuccess, latestAccept };
+}
+
+function buildAggregatedEntry(group, { id } = {}) {
+  const validGroup = (group || []).filter((item) => item && typeof item === 'object');
+  if (validGroup.length === 0) {
+    return null;
+  }
+
+  const sortedGroup = [...validGroup].sort((a, b) => {
+    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return aTime - bTime;
+  });
+
+  const recipients = sortedGroup.map((item) => ({
+    user_id: item.user_id,
+    name: item.user_name || item.user_id,
+    status: item.status,
+    timestamp_accept: item.timestamp_accept,
+  }));
+
+  const { aggregatedStatus, allSuccess, latestAccept } = calculateAggregatedStatus(recipients);
+
+  const first = sortedGroup[0];
+  const timestamp = sortedGroup.reduce((earliest, item) => {
+    if (!item.timestamp) return earliest;
+    if (!earliest) return item.timestamp;
+    const current = new Date(item.timestamp).getTime();
+    const existing = new Date(earliest).getTime();
+    if (Number.isNaN(current) || Number.isNaN(existing)) {
+      return earliest;
+    }
+    return current < existing ? item.timestamp : earliest;
+  }, first.timestamp);
+
+  return {
+    ...first,
+    id:
+      id ||
+      (first.batch_id
+        ? `batch-${first.batch_id}`
+        : `legacy-${sortedGroup.map((item) => item.id).filter(Boolean).sort().join('-')}`),
+    broadcast: true,
+    recipients,
+    batchEntryIds: sortedGroup.map((item) => item.id).filter(Boolean),
+    user_id: null,
+    user_name: null,
+    message_id: null,
+    status: aggregatedStatus,
+    accepted: allSuccess,
+    timestamp,
+    timestamp_accept: allSuccess ? latestAccept : null,
+    requires_ack: sortedGroup.some((item) => item.requires_ack),
+  };
+}
+
+function normalizeExistingBroadcastEntry(entry) {
+  const recipients = normalizeRecipients(entry.recipients);
+  const { aggregatedStatus, allSuccess, latestAccept } = calculateAggregatedStatus(recipients);
+
+  return {
+    ...entry,
+    id:
+      entry.id ||
+      (entry.batch_id
+        ? `batch-${entry.batch_id}`
+        : `legacy-${new Date(entry.timestamp || Date.now()).getTime()}`),
+    broadcast: true,
+    recipients,
+    batchEntryIds: entry.batchEntryIds || [],
+    status: aggregatedStatus || entry.status,
+    accepted: entry.accepted ?? allSuccess,
+    timestamp_accept: entry.timestamp_accept || (allSuccess ? latestAccept : null),
+  };
+}
+
+function combineBatchMessages(entries) {
+  if (!Array.isArray(entries)) return [];
+
+  const aggregatedEntries = [];
+  const batchGroups = new Map();
+  const legacyCandidates = [];
+
+  entries.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    if (entry.batch_id) {
+      if (!batchGroups.has(entry.batch_id)) {
+        batchGroups.set(entry.batch_id, []);
+      }
+      batchGroups.get(entry.batch_id).push(entry);
+      return;
+    }
+    if (entry.broadcast && Array.isArray(entry.recipients) && entry.recipients.length > 0) {
+      aggregatedEntries.push(normalizeExistingBroadcastEntry(entry));
+      return;
+    }
+    legacyCandidates.push(entry);
+  });
+
+  batchGroups.forEach((group) => {
+    if (!group || group.length === 0) {
+      return;
+    }
+    if (group.length === 1) {
+      aggregatedEntries.push(group[0]);
+      return;
+    }
+    const aggregatedEntry = buildAggregatedEntry(group, { id: `batch-${group[0].batch_id}` });
+    if (aggregatedEntry) {
+      aggregatedEntries.push(aggregatedEntry);
+    }
+  });
+
+  const sortedCandidates = legacyCandidates
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => {
+      const aTime = a.entry.timestamp ? new Date(a.entry.timestamp).getTime() : 0;
+      const bTime = b.entry.timestamp ? new Date(b.entry.timestamp).getTime() : 0;
+      return aTime - bTime;
+    });
+
+  const used = new Set();
+  const LEGACY_WINDOW_MS = 60000;
+  for (let i = 0; i < sortedCandidates.length; i += 1) {
+    if (used.has(i)) {
+      continue;
+    }
+    const current = sortedCandidates[i].entry;
+    const group = [current];
+    const currentTime = current.timestamp ? new Date(current.timestamp).getTime() : Number.NaN;
+    if (Number.isNaN(currentTime)) {
+      aggregatedEntries.push(current);
+      continue;
+    }
+
+    for (let j = i + 1; j < sortedCandidates.length; j += 1) {
+      if (used.has(j)) {
+        continue;
+      }
+      const candidate = sortedCandidates[j].entry;
+      const candidateTime = candidate.timestamp ? new Date(candidate.timestamp).getTime() : Number.NaN;
+      if (Number.isNaN(candidateTime)) {
+        continue;
+      }
+      if (candidateTime - currentTime > LEGACY_WINDOW_MS) {
+        break;
+      }
+      if ((candidate.message || '').trim() !== (current.message || '').trim()) {
+        continue;
+      }
+      if ((candidate.photo_url || '') !== (current.photo_url || '')) {
+        continue;
+      }
+      if (Boolean(candidate.requires_ack) !== Boolean(current.requires_ack)) {
+        continue;
+      }
+
+      group.push(candidate);
+      used.add(j);
+    }
+
+    if (group.length > 1) {
+      used.add(i);
+      const aggregatedEntry = buildAggregatedEntry(group, {
+        id: `legacy-${group.map((item) => item.id).filter(Boolean).sort().join('-')}`,
+      });
+      if (aggregatedEntry) {
+        aggregatedEntries.push(aggregatedEntry);
+      }
+    } else {
+      aggregatedEntries.push(current);
+    }
+  }
+
+  const result = aggregatedEntries
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return bTime - aTime;
+    });
+
+  return result;
+}
+
 function getStatusVariant(status) {
   const normalized = (status || '').trim();
   if (!normalized) {
@@ -141,7 +378,7 @@ export default function MessageHistory() {
           accepted,
         };
       });
-      setEntries(normalized);
+      setEntries(combineBatchMessages(normalized));
       setError(null);
     } catch (err) {
       console.error(err);
@@ -165,10 +402,13 @@ export default function MessageHistory() {
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (entry) => {
     if (!window.confirm('Удалить запись из истории?')) return;
     try {
-      await api.delete(`telegram/sent_messages/${id}`);
+      const ids = entry?.batchEntryIds?.length ? entry.batchEntryIds : [entry.id];
+      for (const targetId of ids) {
+        await api.delete(`telegram/sent_messages/${targetId}`);
+      }
       await loadEntries();
     } catch (err) {
       console.error(err);
@@ -310,7 +550,7 @@ export default function MessageHistory() {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      handleDelete(entry.id);
+                      handleDelete(entry);
                     }}
                     className="text-red-600 hover:text-red-700"
                     title="Удалить запись"
