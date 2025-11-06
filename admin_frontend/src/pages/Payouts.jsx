@@ -6,126 +6,8 @@ import {
   RefreshCw,
   Trash2,
   XCircle,
-  CheckCircle2,
-  Clock,
-  Hourglass,
 } from 'lucide-react';
 import api from '../api';
-
-function MessageHistory() {
-  const [list, setList] = useState([]);
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    try {
-      const res = await api.get('telegram/sent_messages');
-      setList(res.data);
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function remove(id) {
-    if (!window.confirm('Удалить запись?')) return;
-    await api.delete(`telegram/sent_messages/${id}`);
-    load();
-  }
-
-  return (
-    <div className="space-y-2">
-      <h3 className="text-lg font-semibold">История сообщений</h3>
-      <div className="overflow-auto border rounded">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-2 py-1 text-left">Получатель</th>
-              <th className="px-2 py-1 text-left">Сообщение</th>
-              <th className="px-2 py-1 text-left">Дата</th>
-              <th className="px-2 py-1"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {list.map((m) => (
-              m.broadcast ? (
-                <tr key={m.id}>
-                  <td colSpan="4" className="px-2 py-1">
-                    <details>
-                      <summary className="cursor-pointer text-blue-600">
-                        Массовая рассылка
-                      </summary>
-                      <ul className="ml-4 list-disc">
-                        {m.recipients?.map((r) => (
-                          <li key={r.user_id}>{r.name} - {r.status}</li>
-                        ))}
-                      </ul>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {m.timestamp && new Date(m.timestamp).toLocaleString()}
-                      </div>
-                    </details>
-                    <button
-                      onClick={() => remove(m.id)}
-                      className="text-red-600 text-sm"
-                    >
-                      Удалить
-                    </button>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={m.id}>
-                  <td className="px-2 py-1">{m.user_id}</td>
-                  <td className="px-2 py-1 whitespace-pre-wrap">
-                    <div>{m.message}</div>
-                    {m.requires_ack && !m.accepted && (
-                      <div className="mt-1 flex items-center gap-1 text-xs text-yellow-700">
-                        <Hourglass size={14} />
-                        Требуется подтверждение
-                      </div>
-                    )}
-                    {m.accepted && (
-                      <div className="mt-1 flex items-center gap-1 text-xs text-green-700">
-                        <CheckCircle2 size={14} />
-                        Принято
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-2 py-1 text-xs space-y-1">
-                    <div>
-                      {m.timestamp && new Date(m.timestamp).toLocaleString()}
-                    </div>
-                    {m.accepted && m.timestamp_accept && (
-                      <div className="flex items-center gap-1 text-green-600">
-                        <Clock size={14} />
-                        {new Date(m.timestamp_accept).toLocaleString()}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-2 py-1">
-                    <button
-                      onClick={() => remove(m.id)}
-                      className="text-red-600 text-sm"
-                    >
-                      Удалить
-                    </button>
-                  </td>
-                </tr>
-              )
-            ))}
-            {list.length === 0 && (
-              <tr>
-                <td colSpan="4" className="px-2 py-2 text-center text-gray-500">
-                  Нет данных
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 const MAX_AMOUNT = 100000;
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
@@ -587,8 +469,6 @@ export default function Payouts() {
       </div>
 
       <Summary list={payouts} />
-
-      <MessageHistory />
 
       {showEditor && (
         <div className="modal-backdrop">
