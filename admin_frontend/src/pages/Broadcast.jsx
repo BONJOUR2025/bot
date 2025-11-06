@@ -32,6 +32,13 @@ export default function Broadcast() {
     localStorage.setItem('broadcast_draft', message);
   }, [message]);
 
+  const generateBatchId = () => {
+    if (window.crypto?.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+    return `batch-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
   async function refreshTemplates() {
     const r = await api.get('messages/templates');
     setTemplates(r.data);
@@ -96,12 +103,14 @@ export default function Broadcast() {
 
   async function sendOne() {
     if (!message.trim() || selected.length === 0) return;
+    const batchId = generateBatchId();
     for (const id of selected) {
       try {
         await api.post('telegram/send_message', {
           user_id: id,
           message,
           require_ack: true,
+          batch_id: batchId,
         });
       } catch (err) {
         console.error(err);

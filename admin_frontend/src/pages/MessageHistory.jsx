@@ -35,6 +35,112 @@ const STATUS_MAP = {
   },
 };
 
+function classifyStatus(value) {
+  if (!value) return 'unknown';
+  if (STATUS_MAP.success.match(value)) return 'success';
+  if (STATUS_MAP.error.match(value)) return 'error';
+  if (STATUS_MAP.warning.match(value)) return 'warning';
+  return 'unknown';
+}
+
+function combineBatchMessages(entries) {
+  if (!Array.isArray(entries)) return [];
+
+  const directEntries = [];
+  const batchGroups = new Map();
+
+  entries.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    if (entry.broadcast || !entry.batch_id) {
+      directEntries.push(entry);
+      return;
+    }
+    if (!batchGroups.has(entry.batch_id)) {
+      batchGroups.set(entry.batch_id, []);
+    }
+    batchGroups.get(entry.batch_id).push(entry);
+  });
+
+  batchGroups.forEach((group) => {
+    if (!group || group.length === 0) {
+      return;
+    }
+    if (group.length === 1) {
+      directEntries.push(group[0]);
+      return;
+    }
+
+    const sortedGroup = [...group].sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return aTime - bTime;
+    });
+
+    const recipients = sortedGroup.map((item) => ({
+      user_id: item.user_id,
+      name: item.user_name || item.user_id,
+      status: item.status,
+      timestamp_accept: item.timestamp_accept,
+    }));
+
+    const statusCodes = recipients.map((recipient) => classifyStatus(recipient.status));
+    const hasError = statusCodes.includes('error');
+    const hasWarning = statusCodes.includes('warning');
+    const hasSuccess = statusCodes.includes('success');
+    const allSuccess = statusCodes.length > 0 && statusCodes.every((code) => code === 'success');
+
+    let aggregatedStatus = '';
+    if (hasError) {
+      aggregatedStatus = 'ошибка';
+    } else if (hasWarning) {
+      aggregatedStatus = 'ожидает подтверждения';
+    } else if (allSuccess) {
+      aggregatedStatus = 'принято';
+    } else if (hasSuccess) {
+      aggregatedStatus = 'отправлено';
+    } else {
+      aggregatedStatus = 'групповое сообщение';
+    }
+
+    const latestAccept = allSuccess
+      ? recipients.reduce((latest, recipient) => {
+          const value = recipient.timestamp_accept;
+          if (!value) return latest;
+          if (!latest || value > latest) {
+            return value;
+          }
+          return latest;
+        }, null)
+      : null;
+
+    const aggregatedEntry = {
+      ...sortedGroup[0],
+      id: `batch-${sortedGroup[0].batch_id}`,
+      broadcast: true,
+      recipients,
+      batchEntryIds: sortedGroup.map((item) => item.id),
+      user_id: null,
+      user_name: null,
+      message_id: null,
+      status: aggregatedStatus,
+      accepted: allSuccess,
+      timestamp: sortedGroup[0].timestamp,
+      timestamp_accept: latestAccept,
+      requires_ack: sortedGroup.some((item) => item.requires_ack),
+    };
+
+    directEntries.push(aggregatedEntry);
+  });
+
+  return directEntries.sort((a, b) => {
+    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
 function getStatusVariant(status) {
   const normalized = (status || '').trim();
   if (!normalized) {
@@ -141,7 +247,7 @@ export default function MessageHistory() {
           accepted,
         };
       });
-      setEntries(normalized);
+      setEntries(combineBatchMessages(normalized));
       setError(null);
     } catch (err) {
       console.error(err);
@@ -165,10 +271,13 @@ export default function MessageHistory() {
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (entry) => {
     if (!window.confirm('Удалить запись из истории?')) return;
     try {
-      await api.delete(`telegram/sent_messages/${id}`);
+      const ids = entry?.batchEntryIds?.length ? entry.batchEntryIds : [entry.id];
+      for (const targetId of ids) {
+        await api.delete(`telegram/sent_messages/${targetId}`);
+      }
       await loadEntries();
     } catch (err) {
       console.error(err);
@@ -310,7 +419,7 @@ export default function MessageHistory() {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      handleDelete(entry.id);
+                      handleDelete(entry);
                     }}
                     className="text-red-600 hover:text-red-700"
                     title="Удалить запись"

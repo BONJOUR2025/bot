@@ -8,6 +8,7 @@ class MessageRequest(BaseModel):
     parse_mode: str = "HTML"
     require_ack: bool = False
     photo_url: Optional[str] = None
+    batch_id: Optional[str] = None
 
 
 class MessageOut(BaseModel):
@@ -48,3 +49,4 @@ class SentMessage(BaseModel):
     recipients: Optional[list[dict]] = None
     accepted: bool = False
     timestamp_accept: Optional[str] = None
+    batch_id: Optional[str] = None

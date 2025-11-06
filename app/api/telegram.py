@@ -26,6 +26,7 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
                 parse_mode=data.parse_mode,
                 photo_url=data.photo_url,
                 require_ack=data.require_ack,
+                batch_id=data.batch_id,
             )
             return {
                 "success": True,
