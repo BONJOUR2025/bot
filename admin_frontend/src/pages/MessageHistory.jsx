@@ -219,119 +219,147 @@ export default function MessageHistory() {
           </div>
         )}
 
-        {filteredEntries.map((entry) => (
-          <article key={entry.id} className="rounded border border-gray-200 bg-white p-4 shadow-sm">
-            <header className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <Clock size={16} />
-                    <span>Отправлено: {formatDateTime(entry.timestamp)}</span>
-                  </span>
-                  {entry.timestamp_accept && (
-                    <span className="flex items-center gap-1 text-green-600">
-                      <CheckCircle2 size={16} />
-                      <span>Принято: {formatDateTime(entry.timestamp_accept)}</span>
-                    </span>
-                  )}
-                </div>
-                <p className="whitespace-pre-wrap text-gray-900">{entry.message}</p>
-                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
-                  <StatusBadge status={entry.status} />
-                  {entry.requires_ack && (
-                    <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                      Требуется подтверждение
-                    </span>
-                  )}
-                  {entry.accepted && (
-                    <span className="flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                      <CheckCircle2 size={14} />
-                      Принято
-                    </span>
-                  )}
-                  {entry.requires_ack && !entry.accepted && (
-                    <span className="flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
-                      <Hourglass size={14} />
-                      Ожидает подтверждения
-                    </span>
-                  )}
-                  {!entry.broadcast && (entry.user_name || entry.user_id) && (
-                    <span
-                      className="text-xs text-gray-500"
-                      title={entry.user_id ? `ID: ${entry.user_id}` : undefined}
-                    >
-                      Получатель: {entry.user_name || '—'}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className="text-xs uppercase tracking-wide text-gray-400">
-                  {entry.broadcast ? 'Рассылка' : 'Персональное'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(entry.id)}
-                  className="text-red-600 hover:text-red-700"
-                  title="Удалить запись"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </header>
+        {filteredEntries.map((entry) => {
+          const isBroadcast = entry.broadcast || (entry.recipients?.length || 0) > 1;
+          const recipientsCount = entry.recipients?.length || 0;
+          const isExpanded = expandedId === entry.id;
 
-            {entry.photo_url && (
-              <img
-                src={entry.photo_url}
-                alt="Прикреплённое изображение"
-                className="mt-3 max-h-48 w-full rounded object-contain"
-              />
-            )}
+          const handleToggle = () => {
+            if (!isBroadcast) return;
+            toggleExpanded(entry.id);
+          };
 
-            {entry.broadcast && (
-              <div className="mt-4 space-y-3">
-                <StatusSummary recipients={entry.recipients} />
-                <button
-                  type="button"
-                  onClick={() => toggleExpanded(entry.id)}
-                  className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:underline"
+          const handleKeyToggle = (event) => {
+            if (!isBroadcast) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              toggleExpanded(entry.id);
+            }
+          };
+
+          return (
+            <article key={entry.id} className="rounded border border-gray-200 bg-white p-4 shadow-sm">
+              <header className="flex flex-wrap items-start justify-between gap-3">
+                <div
+                  className={`flex-1 space-y-1 ${isBroadcast ? 'cursor-pointer' : ''}`}
+                  onClick={handleToggle}
+                  onKeyDown={handleKeyToggle}
+                  role={isBroadcast ? 'button' : undefined}
+                  tabIndex={isBroadcast ? 0 : undefined}
+                  aria-expanded={isBroadcast ? isExpanded : undefined}
                 >
-                  <Users size={16} />
-                  {expandedId === entry.id ? 'Скрыть получателей' : 'Показать получателей'}
-                </button>
-                {expandedId === entry.id && (
-                  <div className="overflow-hidden rounded border">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Получатель</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Статус</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {(entry.recipients || []).map((recipient) => (
-                          <tr key={`${recipient.user_id}-${recipient.status}`}>
-                            <td className="px-3 py-2 text-gray-700">
-                              <div className="flex flex-col">
-                                <span>{recipient.name || '—'}</span>
-                                {recipient.user_id && (
-                                  <span className="text-xs text-gray-400">ID: {recipient.user_id}</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2">
-                              <StatusBadge status={recipient.status} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Clock size={16} />
+                      <span>Отправлено: {formatDateTime(entry.timestamp)}</span>
+                    </span>
+                    {entry.timestamp_accept && (
+                      <span className="flex items-center gap-1 text-green-600">
+                        <CheckCircle2 size={16} />
+                        <span>Принято: {formatDateTime(entry.timestamp_accept)}</span>
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-          </article>
-        ))}
+                  <p className="whitespace-pre-wrap text-gray-900">{entry.message}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                    <StatusBadge status={entry.status} />
+                    {entry.requires_ack && (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        Требуется подтверждение
+                      </span>
+                    )}
+                    {entry.accepted && (
+                      <span className="flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <CheckCircle2 size={14} />
+                        Принято
+                      </span>
+                    )}
+                    {entry.requires_ack && !entry.accepted && (
+                      <span className="flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+                        <Hourglass size={14} />
+                        Ожидает подтверждения
+                      </span>
+                    )}
+                    {!isBroadcast && (entry.user_name || entry.user_id) && (
+                      <span
+                        className="text-xs text-gray-500"
+                        title={entry.user_id ? `ID: ${entry.user_id}` : undefined}
+                      >
+                        Получатель: {entry.user_name || '—'}
+                      </span>
+                    )}
+                  </div>
+                  {isBroadcast && (
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-blue-600">
+                      <Users size={16} />
+                      <span>Получателей: {recipientsCount}</span>
+                      <span className="text-xs text-blue-500">
+                        {isExpanded ? 'Скрыть статусы' : 'Показать статусы'}
+                      </span>
+                    </div>
+                  )}
+                  {isBroadcast && entry.recipients?.length > 0 && (
+                    <StatusSummary recipients={entry.recipients} />
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="text-xs uppercase tracking-wide text-gray-400">
+                    {isBroadcast ? 'Рассылка' : 'Персональное'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDelete(entry.id);
+                    }}
+                    className="text-red-600 hover:text-red-700"
+                    title="Удалить запись"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </header>
+
+              {entry.photo_url && (
+                <img
+                  src={entry.photo_url}
+                  alt="Прикреплённое изображение"
+                  className="mt-3 max-h-48 w-full rounded object-contain"
+                />
+              )}
+
+              {isBroadcast && isExpanded && (
+                <div className="mt-4 overflow-hidden rounded border">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Получатель</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {(entry.recipients || []).map((recipient) => (
+                        <tr key={`${recipient.user_id}-${recipient.status}`}>
+                          <td className="px-3 py-2 text-gray-700">
+                            <div className="flex flex-col">
+                              <span>{recipient.name || '—'}</span>
+                              {recipient.user_id && (
+                                <span className="text-xs text-gray-400">ID: {recipient.user_id}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <StatusBadge status={recipient.status} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
     </div>
   );
