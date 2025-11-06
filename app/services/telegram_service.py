@@ -131,6 +131,38 @@ class TelegramService:
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
+    def _append_personal_log_entry(
+        self,
+        *,
+        user_id: str | int | None,
+        user_name: str | None,
+        message: str,
+        status: str,
+        message_id: int | None = None,
+        photo_url: str | None = None,
+        require_ack: bool = False,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        entry: Dict[str, Any] = {
+            "id": str(uuid4()),
+            "user_id": str(user_id) if user_id is not None else None,
+            "user_name": user_name,
+            "message": message,
+            "status": status,
+            "message_id": message_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "photo_url": photo_url,
+            "requires_ack": require_ack,
+            "accepted": False,
+            "timestamp_accept": None,
+            "broadcast": False,
+        }
+        if extra:
+            entry.update(extra)
+        data = self._load_log_all()
+        data.append(entry)
+        self._save_log(data)
+
     def delete_log_entry(self, entry_id: str) -> None:
         data = self._load_log_all()
         data = [d for d in data if str(d.get("id")) != str(entry_id)]
@@ -255,14 +287,43 @@ class TelegramService:
             photo_url: Optional[str] = None,
             require_ack: bool = False,
     ) -> int:
+        employee = None
+        if hasattr(self.repo, "get_employee"):
+            try:
+                employee = self.repo.get_employee(str(user_id))
+            except Exception as exc:
+                log(f"⚠️ Failed to resolve employee name for {user_id}: {exc}")
+        user_name = (
+            getattr(employee, "full_name", "") or getattr(employee, "name", "")
+            if employee
+            else None
+        )
         if self.bot is None:
             log("⚠️ Telegram bot not configured; cannot send message")
-            raise TelegramNotConfiguredError("Telegram bot not configured")
+            exc = TelegramNotConfiguredError("Telegram bot not configured")
+            self._append_personal_log_entry(
+                user_id=user_id,
+                user_name=user_name,
+                message=message,
+                status=f"ошибка: {exc}",
+                photo_url=photo_url,
+                require_ack=require_ack,
+            )
+            raise exc
         if not is_valid_user_id(user_id):
             log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
-            raise InvalidTelegramUserIdError(
+            exc = InvalidTelegramUserIdError(
                 f"Invalid Telegram user id supplied: {user_id}"
             )
+            self._append_personal_log_entry(
+                user_id=user_id,
+                user_name=user_name,
+                message=message,
+                status=f"ошибка: {exc}",
+                photo_url=photo_url,
+                require_ack=require_ack,
+            )
+            raise exc
         reply_markup = None
         if require_ack:
             reply_markup = InlineKeyboardMarkup(
@@ -271,12 +332,6 @@ class TelegramService:
         log(
             f"[Telegram] Sending personal message to {user_id} — text: '{message[:50]}'"
         )
-        employee = None
-        if hasattr(self.repo, "get_employee"):
-            try:
-                employee = self.repo.get_employee(str(user_id))
-            except Exception as exc:
-                log(f"⚠️ Failed to resolve employee name for {user_id}: {exc}")
         try:
             if photo_url:
                 result = await self.bot.send_photo(
@@ -295,26 +350,37 @@ class TelegramService:
                 )
         except BadRequest as exc:
             log(f"❌ Failed to send message to chat {user_id} — {exc}")
+            self._append_personal_log_entry(
+                user_id=user_id,
+                user_name=user_name,
+                message=message,
+                status=f"ошибка: {exc}",
+                photo_url=photo_url,
+                require_ack=require_ack,
+                extra={"error": str(exc)},
+            )
             raise TelegramAPIError(str(exc)) from exc
-        log_entry = {
-            "id": str(uuid4()),
-            "user_id": str(user_id),
-            "user_name": (getattr(employee, "full_name", "") or getattr(employee, "name", ""))
-            if employee
-            else None,
-            "message": message,
-            "status": "отправлено",
-            "message_id": result.message_id,
-            "timestamp": datetime.utcnow().isoformat(),
-            "photo_url": photo_url,
-            "requires_ack": require_ack,
-            "accepted": False,
-            "timestamp_accept": None,
-            "broadcast": False,
-        }
-        data = self._load_log_all()
-        data.append(log_entry)
-        self._save_log(data)
+        except Exception as exc:
+            log(f"❌ Unexpected error while sending message to {user_id}: {exc}")
+            self._append_personal_log_entry(
+                user_id=user_id,
+                user_name=user_name,
+                message=message,
+                status=f"ошибка: {exc}",
+                photo_url=photo_url,
+                require_ack=require_ack,
+                extra={"error": str(exc)},
+            )
+            raise
+        self._append_personal_log_entry(
+            user_id=user_id,
+            user_name=user_name,
+            message=message,
+            status="отправлено",
+            message_id=result.message_id,
+            photo_url=photo_url,
+            require_ack=require_ack,
+        )
         return result.message_id
 
     async def send_payout_request_to_admin(self, payout: Dict[str, Any]) -> None:
