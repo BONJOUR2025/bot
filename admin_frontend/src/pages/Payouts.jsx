@@ -143,6 +143,7 @@ export default function Payouts() {
     note: '',
     show_note_in_bot: false,
     timestamp: '',
+    force_notify_cashier: false,
   };
 
   const [payouts, setPayouts] = useState([]);
@@ -259,6 +260,7 @@ export default function Payouts() {
       notify_user: true,
       note: p.note || '',
       show_note_in_bot: p.show_note_in_bot || false,
+      force_notify_cashier: Boolean(p.force_notify_cashier),
     });
     setShowEditor(true);
   }
@@ -619,6 +621,16 @@ export default function Payouts() {
                 }
               />
               Показывать примечание в боте
+            </label>
+            <label className="flex items-center gap-1 text-sm">
+              <input
+                type="checkbox"
+                checked={form.force_notify_cashier}
+                onChange={(e) =>
+                  setForm({ ...form, force_notify_cashier: e.target.checked })
+                }
+              />
+              Всегда уведомлять кассира
             </label>
             <label className="flex items-center gap-1 text-sm">
               <input

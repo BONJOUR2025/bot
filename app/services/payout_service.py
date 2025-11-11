@@ -76,6 +76,7 @@ class PayoutService:
             "status": PAYOUT_STATUSES[0],
             "note": data.note or "",
             "show_note_in_bot": data.show_note_in_bot,
+            "force_notify_cashier": data.force_notify_cashier,
         }
         timestamp_value = data.timestamp or datetime.now()
         payout_dict["timestamp"] = self._serialize_timestamp(timestamp_value)

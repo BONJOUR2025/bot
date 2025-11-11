@@ -66,6 +66,9 @@ def log_new_request(
         "payout_type": payout_type,
         "status": "Ожидает",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "note": "",
+        "show_note_in_bot": False,
+        "force_notify_cashier": False,
     }
     repo = _sync_repo()
     record = repo.create(payload)
