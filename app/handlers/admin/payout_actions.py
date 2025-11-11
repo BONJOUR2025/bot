@@ -130,10 +130,13 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
     payout_type = request_to_approve.get("payout_type") or "Не указано"
+    method = request_to_approve.get("method") or ""
+    force_notify_cashier = bool(request_to_approve.get("force_notify_cashier"))
+    should_notify_cashier = method == "💳 На карту" or force_notify_cashier
     cashier_chat_id: int | None = None
     cashier_chat_name = ""
     cashier_chat_key: str | None = None
-    if request_to_approve["method"] == "💳 На карту":
+    if should_notify_cashier:
         users_map = load_users_map()
         cashier_chat_id, cashier_chat_name, cashier_chat_key = _resolve_cashier_chat(
             user_id, users_map
@@ -143,7 +146,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"✅ Ваш запрос на выплату одобрен!\n"
         f"Тип: {payout_type}\n"
         f"Сумма: {request_to_approve['amount']} ₽\n"
-        f"Метод: {request_to_approve['method']}"
+        f"Метод: {method or 'Не указан'}"
     )
     log(
         f"[Telegram] sending approval notice to {user_id} — text: '{user_message[:50]}'"
@@ -159,7 +162,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n✅ Одобрено"
-    if request_to_approve["method"] == "💳 На карту":
+    if should_notify_cashier:
         if cashier_chat_name:
             display_name = cashier_chat_name
             if cashier_chat_key and cashier_chat_key != cashier_chat_name:
@@ -180,21 +183,38 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         # Editing message is optional; continue without raising
 
-    if request_to_approve["method"] == "💳 На карту":
-        card = request_to_approve.get("card_number") or request_to_approve.get("phone", "")
+    if should_notify_cashier:
+        contact_value = (
+            request_to_approve.get("card_number")
+            or request_to_approve.get("phone")
+            or ""
+        )
+        bank_value = request_to_approve.get("bank") or ""
         header = "📤 Запрос на перевод"
         if cashier_chat_name:
             header += f" — {cashier_chat_name}"
         elif cashier_chat_key:
             header += f" — {cashier_chat_key}"
-        cashier_text = (
-            f"{header}:\n\n"
-            f"👤 {request_to_approve['name']}\n"
-            f"💳 {card}\n"
-            f"🏦 {request_to_approve['bank']}\n"
-            f"💰 {request_to_approve['amount']} ₽\n"
-            f"📂 {payout_type}"
-        )
+        lines = [
+            f"{header}:",
+            "",
+            f"👤 {request_to_approve['name']}",
+        ]
+        if contact_value:
+            contact_label = "💳" if method == "💳 На карту" else "📞"
+            lines.append(f"{contact_label} {contact_value}")
+        if bank_value:
+            lines.append(f"🏦 {bank_value}")
+        lines.append(f"💰 {request_to_approve['amount']} ₽")
+        lines.append(f"📂 {payout_type}")
+        if method:
+            lines.append(f"🔄 Способ: {method}")
+        cashier_text = "\n".join(lines)
+        if (
+            request_to_approve.get("note")
+            and request_to_approve.get("show_note_in_bot")
+        ):
+            cashier_text += f"\n\n📝 {request_to_approve['note']}"
         cashier_buttons = InlineKeyboardMarkup(
             [
                 [

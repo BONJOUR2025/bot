@@ -16,6 +16,7 @@ class Payout(BaseModel):
     timestamp: Optional[datetime] = None
     note: Optional[str] = None
     show_note_in_bot: bool = False
+    force_notify_cashier: bool = False
 
 
 class PayoutCreate(BaseModel):
@@ -30,6 +31,7 @@ class PayoutCreate(BaseModel):
     note: Optional[str] = None
     show_note_in_bot: bool = False
     timestamp: Optional[datetime] = None
+    force_notify_cashier: bool = False
 
 
 class PayoutUpdate(BaseModel):
@@ -45,6 +47,7 @@ class PayoutUpdate(BaseModel):
     note: Optional[str] = None
     show_note_in_bot: Optional[bool] = None
     timestamp: Optional[datetime] = None
+    force_notify_cashier: Optional[bool] = None
 
 
 class PayoutControlItem(BaseModel):
