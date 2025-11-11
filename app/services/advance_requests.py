@@ -4,16 +4,22 @@ from typing import Any, Dict, List
 from datetime import datetime
 import logging
 
-from app.data.payout_repository import (
-    PayoutRepository,
-    load_advance_requests as repo_load_advance_requests,
-)
+from app.data.payout_repository import PayoutRepository
 from ..utils.logger import log
 from ..core.enums import PAYOUT_STATUSES
 
 logger = logging.getLogger(__name__)
 
 _repo = PayoutRepository()
+
+
+def _sync_repo() -> PayoutRepository:
+    """Reload repository from disk when possible and return repository instance."""
+    repo = _repo
+    reload_method = getattr(repo, "reload", None)
+    if callable(reload_method):
+        reload_method()
+    return repo
 
 # statuses considered pending (awaiting admin decision)
 PENDING_STATUSES = {PAYOUT_STATUSES[0]}
@@ -27,9 +33,10 @@ STATUS_TRANSLATIONS = {
 
 
 def load_advance_requests() -> List[Dict[str, Any]]:
-    path = _repo._file
+    repo = _sync_repo()
+    path = getattr(repo, "_file", "advance_requests.json")
     log(f"📂 Загрузка заявок из: {path}")
-    data = repo_load_advance_requests(path)
+    data = repo.load_all()
     log(f"✅ Загружено заявок: {len(data)}")
     return data
 
@@ -60,19 +67,22 @@ def log_new_request(
         "status": "Ожидает",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    record = _repo.create(payload)
+    repo = _sync_repo()
+    record = repo.create(payload)
     log(f"📝 Новый запрос выплаты: {record}")
     return record
 
 
 def check_pending_request(user_id: Any) -> bool:
-    requests = _repo.list(employee_id=user_id)
+    repo = _sync_repo()
+    requests = repo.list(employee_id=user_id)
     return any(r.get("status") in PENDING_STATUSES for r in requests)
 
 
 def update_request_status(payout_id: Any, status: str) -> bool:
+    repo = _sync_repo()
     record = next(
-        (r for r in _repo.load_all() if str(r.get("id")) == str(payout_id)),
+        (r for r in repo.load_all() if str(r.get("id")) == str(payout_id)),
         None,
     )
     if not record:
@@ -85,7 +95,7 @@ def update_request_status(payout_id: Any, status: str) -> bool:
     updates = {"status": status_ru}
     if not record.get("timestamp"):
         updates["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    updated = _repo.update(str(payout_id), updates)
+    updated = repo.update(str(payout_id), updates)
     if updated:
         log(f"✅ Статус запроса {payout_id} обновлён на '{status_ru}'")
         return True
