@@ -31,7 +31,7 @@ class DictionaryService:
         """Gather unique values from existing system records."""
         dynamic: Dict[str, List[str]] = {}
 
-        employees = EmployeeRepository().list_employees()
+        employees = EmployeeRepository().list_employees(archived=False)
         dynamic["positions"] = [e.position for e in employees if e.position]
         dynamic["work_places"] = [
             getattr(e, "work_place", "") for e in employees if getattr(e, "work_place", "")

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   UserPlus,
   Trash2,
   Pencil,
-  Camera,
   FileDown,
+  Archive,
 } from 'lucide-react';
 import api from '../api';
 import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
@@ -29,6 +30,7 @@ export default function Employees() {
     photo_file: null,
     photo_url: '',
     payout_chat_key: '',
+    archived: false,
   };
 
   const [employees, setEmployees] = useState([]);
@@ -50,7 +52,7 @@ export default function Employees() {
 
   async function load() {
     try {
-      const res = await api.get('employees/');
+      const res = await api.get('employees/', { params: { archived: false } });
       setEmployees(res.data);
     } catch (err) {
       console.error(err);
@@ -145,6 +147,24 @@ export default function Employees() {
     }
     setSelected([]);
     load();
+  }
+
+  async function moveToArchive(id) {
+    const employee = employees.find((e) => e.id === id);
+    if (!employee) return;
+    if (employee.status === 'active') {
+      alert('Сначала измените статус на inactive, затем можно отправить в архив');
+      return;
+    }
+    if (!window.confirm('Перенести сотрудника в архив?')) return;
+    try {
+      await api.post(`employees/${id}/archive`);
+      setSelected((prev) => prev.filter((value) => value !== id));
+      load();
+    } catch (err) {
+      console.error(err);
+      alert('Не удалось переместить сотрудника в архив');
+    }
   }
 
   async function saveForm() {
@@ -261,6 +281,12 @@ export default function Employees() {
         >
           <Trash2 size={16} /> Удалить выбранных
         </button>
+        <Link
+          className="btn bg-gray-100 text-gray-800 hover:bg-gray-200"
+          to="/admin/archive"
+        >
+          <Archive size={16} /> Архив
+        </Link>
       </div>
       <div className="overflow-auto border rounded shadow bg-white">
         <table className="min-w-full text-sm">
@@ -339,6 +365,15 @@ export default function Employees() {
                   >
                     <FileDown size={16} />
                   </a>
+                  {e.status !== 'active' && (
+                    <button
+                      className="text-amber-600 hover:text-amber-800 ml-2"
+                      onClick={() => moveToArchive(e.id)}
+                      title="Перенести в архив"
+                    >
+                      <Archive size={16} />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

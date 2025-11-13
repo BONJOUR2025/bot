@@ -14,7 +14,7 @@ def get_upcoming_birthdays(days_ahead: int = 1) -> List[Dict[str, str]]:
     if days_ahead < 0:
         days_ahead = 0
     today = date.today()
-    employees = _repo.list_employees()
+    employees = _repo.list_employees(archived=False)
     result: List[Dict[str, str]] = []
     for emp in employees:
         if emp.status != EmployeeStatus.ACTIVE:

@@ -133,6 +133,7 @@ export default function Payouts() {
     user_id: '',
     name: '',
     phone: '',
+    card_number: '',
     bank: '',
     amount: '',
     payout_type: 'Аванс',
@@ -170,7 +171,7 @@ export default function Payouts() {
 
   async function loadEmployees() {
     try {
-      const res = await api.get('employees/');
+      const res = await api.get('employees/', { params: { archived: false } });
       setEmployees(res.data);
     } catch (err) {
       console.error(err);
@@ -305,6 +306,7 @@ export default function Payouts() {
         name: useFullName ? emp.full_name || emp.name : emp.name || emp.full_name,
         phone: emp.phone || '',
         bank: emp.bank || emp.card_number || '',
+        card_number: emp.card_number || '',
       }));
     }
   }
@@ -545,6 +547,12 @@ export default function Payouts() {
                 </option>
               ))}
             </select>
+            <div className="text-sm text-gray-600">
+              Карта: <span className="font-medium">{form.card_number || '—'}</span>
+            </div>
+            <div className="text-sm text-gray-600">
+              Банк: <span className="font-medium">{form.bank || '—'}</span>
+            </div>
             <input
               className="modal-control"
               placeholder="Сумма"

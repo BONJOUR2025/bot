@@ -1,5 +1,6 @@
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -8,6 +9,7 @@ class Payout(BaseModel):
     user_id: str
     name: str
     phone: str
+    card_number: Optional[str] = None
     bank: str
     amount: float
     method: str
@@ -23,6 +25,7 @@ class PayoutCreate(BaseModel):
     user_id: str
     name: str
     phone: str
+    card_number: Optional[str] = None
     bank: str
     amount: float
     method: str
@@ -38,6 +41,7 @@ class PayoutUpdate(BaseModel):
     user_id: Optional[str] = None
     name: Optional[str] = None
     phone: Optional[str] = None
+    card_number: Optional[str] = None
     bank: Optional[str] = None
     amount: Optional[float] = None
     method: Optional[str] = None

@@ -209,6 +209,8 @@ class TelegramService:
             test_user_id: Optional[str] = None) -> dict:
         if filters is None:
             filters = {}
+        if "archived" not in filters:
+            filters["archived"] = False
         employees = self.repo.list_employees(**filters)
         if test_user_id:
             employees = [e for e in employees if str(e.id) == str(test_user_id)]
@@ -398,10 +400,11 @@ class TelegramService:
             log("⚠️ Telegram bot not configured; cannot notify admin")
             raise TelegramNotConfiguredError("Telegram bot not configured")
 
+        card_info = payout.get("card_number") or "—"
         text = (
             "📥 Новый запрос на выплату:\n\n"
             f"👤 {payout['name']}\n"
-            f"💳 {payout.get('card_number', payout.get('phone', ''))}\n"
+            f"💳 {card_info}\n"
             f"🏦 {payout['bank']}\n"
             f"💰 Сумма: {payout['amount']} ₽\n"
             f"💳 Метод: {payout['method']}\n"
