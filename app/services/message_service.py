@@ -27,7 +27,7 @@ class MessageService:
             photo_url=data.photo_url,
             require_ack=data.require_ack,
         )
-        emp = next((e for e in self._employees.list_employees()
+        emp = next((e for e in self._employees.list_employees(archived=None)
                    if e.id == data.user_id), None)
         record = {
             "user_id": data.user_id,

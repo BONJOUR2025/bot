@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Text, DateTime
+from sqlalchemy import Column, Integer, String, Date, Text, DateTime, Boolean
 from sqlalchemy.sql import func
 from app.db.base_class import Base
 
@@ -16,3 +16,5 @@ class Employee(Base):
     photo_url = Column(String, nullable=True)
     status = Column(String, nullable=False, default="active")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    archived = Column(Boolean, nullable=False, default=False)
+    archived_at = Column(DateTime(timezone=True), nullable=True)

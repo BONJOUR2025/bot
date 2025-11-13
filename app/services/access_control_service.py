@@ -181,7 +181,9 @@ class AccessControlService:
     ) -> list[str] | None:
         if employee_ids is None:
             return None
-        known_ids = {emp.id for emp in self.employee_repo.list_employees()}
+        known_ids = {
+            emp.id for emp in self.employee_repo.list_employees(archived=False)
+        }
         result = []
         for value in employee_ids:
             if value is None:
@@ -198,7 +200,7 @@ class AccessControlService:
             return None
         known_departments = {
             emp.work_place.strip()
-            for emp in self.employee_repo.list_employees()
+            for emp in self.employee_repo.list_employees(archived=False)
             if emp.work_place
         }
         result: list[str] = []
@@ -529,7 +531,7 @@ class AccessControlService:
     # scope helpers
     # ------------------------------------------------------------------
     def available_employees(self) -> list[dict[str, str]]:
-        employees = self.employee_repo.list_employees()
+        employees = self.employee_repo.list_employees(archived=False)
         items = [
             {
                 "id": emp.id,
@@ -544,7 +546,7 @@ class AccessControlService:
     def available_departments(self) -> list[str]:
         departments = {
             emp.work_place.strip()
-            for emp in self.employee_repo.list_employees()
+            for emp in self.employee_repo.list_employees(archived=False)
             if emp.work_place and emp.work_place.strip()
         }
         return sorted(departments)
@@ -588,7 +590,7 @@ class AccessControlService:
             return None
         visible: set[str] = set(employee_scope or [])
         if department_scope:
-            for employee in self.employee_repo.list_employees():
+            for employee in self.employee_repo.list_employees(archived=False):
                 if employee.work_place in department_scope:
                     visible.add(employee.id)
         return visible

@@ -45,7 +45,7 @@ export default function Vacations() {
 
   async function loadEmployees() {
     try {
-      const res = await api.get('employees/');
+      const res = await api.get('employees/', { params: { archived: false } });
       setEmployees(res.data);
     } catch (err) {
       console.error(err);

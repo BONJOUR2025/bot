@@ -69,6 +69,7 @@ class PayoutService:
             "user_id": data.user_id,
             "name": data.name,
             "phone": data.phone,
+            "card_number": data.card_number or "",
             "bank": data.bank,
             "amount": data.amount,
             "method": data.method,

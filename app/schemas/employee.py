@@ -19,6 +19,8 @@ class EmployeeBase(BaseModel):
     photo_url: Optional[str] = ""
     status: str = "active"
     payout_chat_key: Optional[str] = None
+    archived: bool = False
+    archived_at: Optional[datetime] = None
 
 
 class EmployeeCreate(EmployeeBase):
@@ -32,6 +34,8 @@ class EmployeeUpdate(EmployeeBase):
 class EmployeeOut(EmployeeBase):
     id: str
     created_at: datetime
+    archived: bool = False
+    archived_at: Optional[datetime] = None
 
 
 class Employee(BaseModel):
@@ -47,3 +51,4 @@ class Employee(BaseModel):
     note: Optional[str] = None
     photo_url: Optional[str] = None
     payout_chat_key: Optional[str] = None
+    archived: bool = False
