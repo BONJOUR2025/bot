@@ -43,6 +43,130 @@ function classifyStatus(value) {
   return 'unknown';
 }
 
+
+function normalizeRecipients(items) {
+  return (items || [])
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      user_id: item.user_id,
+      name: item.name || item.user_name || item.user_id,
+      status: item.status,
+      timestamp_accept: item.timestamp_accept,
+    }));
+}
+
+function calculateAggregatedStatus(recipients) {
+  const statusCodes = recipients.map((recipient) => classifyStatus(recipient.status));
+  const hasError = statusCodes.includes('error');
+  const hasWarning = statusCodes.includes('warning');
+  const hasSuccess = statusCodes.includes('success');
+  const allSuccess = statusCodes.length > 0 && statusCodes.every((code) => code === 'success');
+
+  let aggregatedStatus = '';
+  if (hasError) {
+    aggregatedStatus = 'ошибка';
+  } else if (hasWarning) {
+    aggregatedStatus = 'ожидает подтверждения';
+  } else if (allSuccess) {
+    aggregatedStatus = 'принято';
+  } else if (hasSuccess) {
+    aggregatedStatus = 'отправлено';
+  } else {
+    aggregatedStatus = 'групповое сообщение';
+  }
+
+  const latestAccept = recipients.reduce((latest, recipient) => {
+    const value = recipient.timestamp_accept;
+    if (!value) return latest;
+    if (!latest || value > latest) {
+      return value;
+    }
+    return latest;
+  }, null);
+
+  return { aggregatedStatus, allSuccess, latestAccept };
+}
+
+function buildAggregatedEntry(group, { id } = {}) {
+  const validGroup = (group || []).filter((item) => item && typeof item === 'object');
+  if (validGroup.length === 0) {
+    return null;
+  }
+
+  const sortedGroup = [...validGroup].sort((a, b) => {
+    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return aTime - bTime;
+  });
+
+  const recipients = sortedGroup.map((item) => ({
+    user_id: item.user_id,
+    name: item.user_name || item.user_id,
+    status: item.status,
+    timestamp_accept: item.timestamp_accept,
+  }));
+
+  const { aggregatedStatus, allSuccess, latestAccept } = calculateAggregatedStatus(recipients);
+
+  const first = sortedGroup[0];
+  const timestamp = sortedGroup.reduce((earliest, item) => {
+    if (!item.timestamp) return earliest;
+    if (!earliest) return item.timestamp;
+    const current = new Date(item.timestamp).getTime();
+    const existing = new Date(earliest).getTime();
+    if (Number.isNaN(current) || Number.isNaN(existing)) {
+      return earliest;
+    }
+    return current < existing ? item.timestamp : earliest;
+  }, first.timestamp);
+
+  return {
+    ...first,
+    id:
+      id ||
+      (first.batch_id
+        ? `batch-${first.batch_id}`
+        : `legacy-${sortedGroup.map((item) => item.id).filter(Boolean).sort().join('-')}`),
+    broadcast: true,
+    recipients,
+    batchEntryIds: sortedGroup.map((item) => item.id).filter(Boolean),
+    user_id: null,
+    user_name: null,
+    message_id: null,
+    status: aggregatedStatus,
+    accepted: allSuccess,
+    timestamp,
+    timestamp_accept: allSuccess ? latestAccept : null,
+    requires_ack: sortedGroup.some((item) => item.requires_ack),
+  };
+}
+
+function normalizeExistingBroadcastEntry(entry) {
+  const recipients = normalizeRecipients(entry.recipients);
+  const { aggregatedStatus, allSuccess, latestAccept } = calculateAggregatedStatus(recipients);
+
+  return {
+    ...entry,
+    id:
+      entry.id ||
+      (entry.batch_id
+        ? `batch-${entry.batch_id}`
+        : `legacy-${new Date(entry.timestamp || Date.now()).getTime()}`),
+    broadcast: true,
+    recipients,
+    batchEntryIds: entry.batchEntryIds || [],
+    status: aggregatedStatus || entry.status,
+    accepted: entry.accepted ?? allSuccess,
+    timestamp_accept: entry.timestamp_accept || (allSuccess ? latestAccept : null),
+  };
+}
+
+function combineBatchMessages(entries) {
+  if (!Array.isArray(entries)) return [];
+
+  const aggregatedEntries = [];
+  const batchGroups = new Map();
+  const legacyCandidates = [];
 function combineBatchMessages(entries) {
   if (!Array.isArray(entries)) return [];
 
