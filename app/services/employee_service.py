@@ -25,6 +25,14 @@ class EmployeeService:
                 e.id).isdigit()),
             default=0)
 
+    @staticmethod
+    def _normalize_status(value: EmployeeStatus | str | None) -> EmployeeStatus:
+        if isinstance(value, EmployeeStatus):
+            return value
+        if value is None:
+            return EmployeeStatus.ACTIVE
+        return EmployeeStatus(value)
+
     def list_employees(self, archived: bool | None = False) -> List[Employee]:
         if archived is None:
             return list(self._employees)
@@ -33,6 +41,8 @@ class EmployeeService:
         ]
 
     def add_employee(self, employee: Employee) -> Employee:
+        employee.status = self._normalize_status(getattr(employee, "status", None))
+
         if not employee.id:
             self._counter += 1
             employee.id = str(self._counter)
@@ -56,7 +66,11 @@ class EmployeeService:
         if not emp:
             return None
         new_id = updates.pop("id", None)
+        emp.status = self._normalize_status(getattr(emp, "status", None))
+
         for key, value in updates.items():
+            if key == "status":
+                value = self._normalize_status(value)
             if hasattr(emp, key):
                 setattr(emp, key, value)
         if new_id and new_id != emp.id:
@@ -75,6 +89,8 @@ class EmployeeService:
         emp = self.get_employee(employee_id)
         if not emp:
             return None
+        emp.status = self._normalize_status(getattr(emp, "status", None))
+
         if emp.status != EmployeeStatus.INACTIVE:
             raise ValueError("employee_not_inactive")
         if getattr(emp, "archived", False):
