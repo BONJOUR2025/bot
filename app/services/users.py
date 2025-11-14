@@ -21,12 +21,18 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
-def load_users() -> List[Dict[str, Any]]:
-    """Return users as a list of objects suitable for frontend."""
+def load_users(archived: bool | None = False) -> List[Dict[str, Any]]:
+    """Return users as a list of objects suitable for frontend.
+
+    Args:
+        archived: Archive filter passed to the repository. ``False`` returns only
+            active employees, ``True`` returns only archived ones and ``None``
+            returns everyone.
+    """
     path = getattr(_repo, "_storage").path
     log(f"📂 Загрузка сотрудников из: {path}")
     result: List[Dict[str, Any]] = []
-    for emp in _repo.list_employees(archived=False):
+    for emp in _repo.list_employees(archived=archived):
         result.append(
             {
                 "id": int(emp.id) if str(emp.id).isdigit() else emp.id,
@@ -50,9 +56,13 @@ def load_users() -> List[Dict[str, Any]]:
     return result
 
 
-def load_users_map() -> Dict[str, Any]:
+def load_users_map(archived: bool | None = False) -> Dict[str, Any]:
     """Return users keyed by id for legacy handlers."""
-    return {str(u["id"]): {k: v for k, v in u.items() if k != "id"} for u in load_users()}
+
+    return {
+        str(u["id"]): {k: v for k, v in u.items() if k != "id"}
+        for u in load_users(archived=archived)
+    }
 
 
 def save_users(users: Dict[str, Any]) -> None:
@@ -102,11 +112,24 @@ def add_user(user_id: str, user_data: Dict[str, Any]) -> None:
 
 
 def update_user(user_id: str, fields: Dict[str, Any]) -> None:
-    emp_dict = load_users_map().get(str(user_id))
+    emp_dict = load_users_map(archived=None).get(str(user_id))
     if not emp_dict:
         log(f"⚠️ update_user: user {user_id} not found")
         return
-    emp_dict.update(fields)
+    normalized_fields = dict(fields)
+    if "archived_at" in normalized_fields:
+        value = normalized_fields["archived_at"]
+        if isinstance(value, datetime):
+            normalized_fields["archived_at"] = value.isoformat()
+        elif value is not None:
+            normalized_fields["archived_at"] = str(value)
+    emp_dict.update(normalized_fields)
+    if "archived" in normalized_fields:
+        if emp_dict.get("archived"):
+            if not emp_dict.get("archived_at"):
+                emp_dict["archived_at"] = datetime.utcnow().isoformat()
+        else:
+            emp_dict["archived_at"] = None
     employee = Employee(
         id=str(user_id),
         name=emp_dict.get("name", ""),
