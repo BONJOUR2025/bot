@@ -20,7 +20,9 @@ export default function Broadcast() {
     const saved = localStorage.getItem('broadcast_draft');
     if (saved) setMessage(saved);
     refreshTemplates();
-    api.get('employees/').then((r) => setEmployees(r.data));
+    api
+      .get('employees/', { params: { archived: false } })
+      .then((r) => setEmployees(r.data));
     fetchSent();
     window.refreshPage = () => {
       setMessage('');

@@ -20,8 +20,11 @@ def create_employee_router(
         return employee.work_place if employee else None
 
     @router.get("/", response_model=list[EmployeeOut])
-    async def list_employees(current: ResolvedUser = Depends(get_current_user)):
-        employees = await service.list_employees()
+    async def list_employees(
+        archived: bool = False,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        employees = await service.list_employees(archived=archived)
         return [
             employee
             for employee in employees
@@ -73,6 +76,26 @@ def create_employee_router(
         ):
             raise HTTPException(status_code=403, detail="forbidden")
         return await service.delete_employee(employee_id)
+
+    @router.post("/{employee_id}/archive", response_model=EmployeeOut)
+    async def archive_employee(
+        employee_id: str, current: ResolvedUser = Depends(get_current_user)
+    ):
+        if not access_service.is_employee_visible(
+            current, employee_id, _employee_department(employee_id)
+        ):
+            raise HTTPException(status_code=403, detail="forbidden")
+        return await service.archive_employee(employee_id)
+
+    @router.post("/{employee_id}/restore", response_model=EmployeeOut)
+    async def restore_employee(
+        employee_id: str, current: ResolvedUser = Depends(get_current_user)
+    ):
+        if not access_service.is_employee_visible(
+            current, employee_id, _employee_department(employee_id)
+        ):
+            raise HTTPException(status_code=403, detail="forbidden")
+        return await service.restore_employee(employee_id)
 
     @router.get("/{user_id}/profile.pdf", response_class=Response)
     async def get_employee_profile_pdf(

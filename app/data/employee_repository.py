@@ -57,6 +57,8 @@ class EmployeeRepository:
             or datetime.utcnow(),
             "tags": data.get("tags", []),
             "payout_chat_key": data.get("payout_chat_key"),
+            "archived": bool(data.get("archived", False)),
+            "archived_at": self._parse_datetime(data.get("archived_at")),
         }
         return Employee(**record)
 
@@ -85,10 +87,13 @@ class EmployeeRepository:
     def list_employees(self, **filters) -> List[Employee]:
         """Return employees optionally filtered by provided criteria."""
         employees: List[Employee] = []
+        archived_filter = filters.get("archived") if "archived" in filters else False
         for uid, data in self._data.items():
             if not isinstance(data, dict):
                 continue
             emp = self._create_employee(uid, data)
+            if archived_filter is not None and emp.archived != archived_filter:
+                continue
             if filters:
                 status = filters.get("status")
                 if status and emp.status.value not in (status if isinstance(status, list) else [status]):

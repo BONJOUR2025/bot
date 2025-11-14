@@ -40,7 +40,7 @@ class EmployeeReportService:
             return None
 
     def generate_profile_pdf(self, employee_id: str) -> bytes:
-        employees = self.employee_repo.list_employees()
+        employees = self.employee_repo.list_employees(archived=None)
         employee = next((e for e in employees if str(e.id) == str(employee_id)), None)
         if not employee:
             raise HTTPException(status_code=404, detail="Employee not found")

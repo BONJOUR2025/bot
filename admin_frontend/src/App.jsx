@@ -14,6 +14,7 @@ import RequireAuth from "./components/RequireAuth.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
+import ArchivedEmployees from "./pages/ArchivedEmployees";
 import Payouts from "./pages/Payouts";
 import PayoutsControl from "./pages/PayoutsControl";
 import Incentives from "./pages/Incentives";
@@ -51,6 +52,7 @@ export default function App() {
               >
                 <Route index element={<Dashboard />} />
                 <Route path="employees" element={<Employees />} />
+                <Route path="archive" element={<ArchivedEmployees />} />
                 <Route path="payouts" element={<Payouts />} />
                 <Route path="payouts-control" element={<PayoutsControl />} />
                 <Route path="incentives" element={<Incentives />} />

@@ -16,7 +16,7 @@ def generate_employee_pdf(
     vacation_repo: "VacationRepository",
 ) -> bytes:
     """Generate a small PDF file with basic employee information."""
-    employees = employee_repo.list_employees()
+    employees = employee_repo.list_employees(archived=None)
     employee = next((e for e in employees if str(e.id) == str(user_id)), None)
     if not employee:
         raise ValueError("Employee not found")

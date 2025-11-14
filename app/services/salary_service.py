@@ -38,7 +38,9 @@ class SalaryService:
         df = self._load_month(month)
         if df is None or "ИМЯ" not in df.columns:
             return []
-        name_map = {e.name: e.id for e in self._repo.list_employees()}
+        name_map = {
+            e.name: e.id for e in self._repo.list_employees(archived=False)
+        }
         result: List[SalaryRow] = []
         cols = {str(c).strip().lower(): c for c in df.columns}
 

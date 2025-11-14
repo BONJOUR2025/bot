@@ -29,3 +29,5 @@ class Employee:
     created_at: datetime = field(default_factory=datetime.utcnow)
     tags: List[str] = field(default_factory=list)
     payout_chat_key: Optional[str] = None
+    archived: bool = False
+    archived_at: Optional[datetime] = None

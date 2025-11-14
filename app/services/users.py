@@ -1,5 +1,7 @@
 """Employee helper functions using the local repository."""
-from typing import Dict, Any, List
+
+from datetime import datetime
+from typing import Any, Dict, List
 
 from app.core.types import Employee, EmployeeStatus
 from app.data.employee_repository import EmployeeRepository
@@ -8,12 +10,23 @@ from ..utils.logger import log
 _repo = EmployeeRepository()
 
 
+def _parse_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value))
+    except Exception:
+        return None
+
+
 def load_users() -> List[Dict[str, Any]]:
     """Return users as a list of objects suitable for frontend."""
     path = getattr(_repo, "_storage").path
     log(f"📂 Загрузка сотрудников из: {path}")
     result: List[Dict[str, Any]] = []
-    for emp in _repo.list_employees():
+    for emp in _repo.list_employees(archived=False):
         result.append(
             {
                 "id": int(emp.id) if str(emp.id).isdigit() else emp.id,
@@ -29,6 +42,8 @@ def load_users() -> List[Dict[str, Any]]:
                 "photo_url": emp.photo_url,
                 "status": emp.status.value,
                 "payout_chat_key": getattr(emp, "payout_chat_key", None),
+                "archived": getattr(emp, "archived", False),
+                "archived_at": emp.archived_at.isoformat() if emp.archived_at else None,
             }
         )
     log(f"✅ Загружено сотрудников: {len(result)}")
@@ -59,6 +74,8 @@ def save_users(users: Dict[str, Any]) -> None:
                 photo_url=data.get("photo_url", ""),
                 status=EmployeeStatus(data.get("status", "active")),
                 payout_chat_key=data.get("payout_chat_key"),
+                archived=data.get("archived", False),
+                archived_at=_parse_datetime(data.get("archived_at")),
             )
         )
     _repo.save_employees(employees)
@@ -78,6 +95,8 @@ def add_user(user_id: str, user_data: Dict[str, Any]) -> None:
         photo_url=user_data.get("photo_url", ""),
         status=EmployeeStatus(user_data.get("status", "active")),
         payout_chat_key=user_data.get("payout_chat_key"),
+        archived=user_data.get("archived", False),
+        archived_at=_parse_datetime(user_data.get("archived_at")),
     )
     _repo.add_employee(employee)
 
@@ -102,6 +121,8 @@ def update_user(user_id: str, fields: Dict[str, Any]) -> None:
         photo_url=emp_dict.get("photo_url", ""),
         status=EmployeeStatus(emp_dict.get("status", "active")),
         payout_chat_key=emp_dict.get("payout_chat_key"),
+        archived=emp_dict.get("archived", False),
+        archived_at=_parse_datetime(emp_dict.get("archived_at")),
     )
     _repo.update_employee(employee)
 

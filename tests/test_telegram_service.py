@@ -38,3 +38,26 @@ def test_sent_message_schema_allows_broadcast_without_status():
 
     assert model.broadcast is True
     assert model.status is None
+
+
+def test_send_payout_request_uses_card_number():
+    repo = DummyRepo()
+    svc = TelegramService(repo)
+    svc.bot = types.SimpleNamespace(send_message=AsyncMock())
+
+    payout = {
+        "id": "1",
+        "name": "Test",
+        "phone": "79990000000",
+        "card_number": "5555 6666 7777 8888",
+        "bank": "Т-Банк",
+        "amount": 1000,
+        "method": "💳 На карту",
+        "payout_type": "Аванс",
+    }
+
+    asyncio.run(svc.send_payout_request_to_admin(payout))
+
+    args, kwargs = svc.bot.send_message.await_args
+    assert "5555 6666 7777 8888" in kwargs["text"]
+    assert "79990000000" not in kwargs["text"]
