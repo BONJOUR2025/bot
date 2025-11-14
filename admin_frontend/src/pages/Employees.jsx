@@ -288,6 +288,10 @@ export default function Employees() {
           <Archive size={16} /> Архив
         </Link>
       </div>
+      <p className="text-sm text-gray-500">
+        Чтобы отправить сотрудника в архив, сначала переведите его в статус{' '}
+        <span className="font-medium">inactive</span>.
+      </p>
       <div className="overflow-auto border rounded shadow bg-white">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
@@ -309,13 +313,18 @@ export default function Employees() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {sortedList.map((e) => (
-              <tr
-                key={e.id}
-                className={`${e.is_admin ? 'bg-orange-50' : ''} ${
-                  e.status !== 'active' ? 'bg-neutral-100' : ''
-                }`}
-              >
+            {sortedList.map((e) => {
+              const canArchive = e.status !== 'active';
+              const archiveTitle = canArchive
+                ? 'Перенести в архив'
+                : 'Переведите сотрудника в статус inactive, чтобы архивировать';
+              return (
+                <tr
+                  key={e.id}
+                  className={`${e.is_admin ? 'bg-orange-50' : ''} ${
+                    e.status !== 'active' ? 'bg-neutral-100' : ''
+                  }`}
+                >
                 <td className="p-2">
                   <input
                     type="checkbox"
@@ -365,18 +374,26 @@ export default function Employees() {
                   >
                     <FileDown size={16} />
                   </a>
-                  {e.status !== 'active' && (
-                    <button
-                      className="text-amber-600 hover:text-amber-800 ml-2"
-                      onClick={() => moveToArchive(e.id)}
-                      title="Перенести в архив"
-                    >
-                      <Archive size={16} />
-                    </button>
-                  )}
+                  <button
+                    className={`ml-2 ${
+                      canArchive
+                        ? 'text-amber-600 hover:text-amber-800'
+                        : 'cursor-not-allowed text-gray-400'
+                    }`}
+                    onClick={() => {
+                      if (canArchive) moveToArchive(e.id);
+                    }}
+                    disabled={!canArchive}
+                    title={archiveTitle}
+                    aria-disabled={!canArchive}
+                    aria-label={archiveTitle}
+                  >
+                    <Archive size={16} className={!canArchive ? 'opacity-50' : ''} />
+                  </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {filtered.length === 0 && (
               <tr>
                 <td colSpan="14" className="p-4 text-center text-gray-500">
