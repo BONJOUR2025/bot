@@ -67,7 +67,7 @@ export default function ArchivedEmployees() {
         </div>
       </div>
       <div className="overflow-auto border rounded shadow bg-white">
-        <table className="min-w-full text-sm">
+        <table className="min-w-[900px] text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="p-2 text-left">Имя</th>

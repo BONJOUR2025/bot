@@ -425,7 +425,7 @@ export default function Payouts() {
       </div>
 
       <div className="overflow-auto border rounded shadow">
-        <table className="min-w-full divide-y divide-gray-200 bg-white text-sm">
+        <table className="min-w-[1100px] divide-y divide-gray-200 bg-white text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left">ФИО</th>

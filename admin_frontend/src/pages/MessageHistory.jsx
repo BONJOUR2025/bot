@@ -439,7 +439,7 @@ export default function MessageHistory() {
 
               {isBroadcast && isExpanded && (
                 <div className="mt-4 overflow-hidden rounded border">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <table className="min-w-[600px] divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">Получатель</th>

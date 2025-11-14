@@ -65,3 +65,19 @@ def test_archive_employee_requires_inactive_status():
 
     with pytest.raises(ValueError):
         service.archive_employee("42")
+
+
+def test_archive_employee_with_string_status_after_update():
+    repo = InMemoryEmployeeRepo([make_employee("5", EmployeeStatus.INACTIVE)])
+    service = EmployeeService(repo)
+
+    # emulate API update that passes status as a raw string
+    updated = service.update_employee("5", status="inactive")
+
+    assert updated is not None
+    assert isinstance(updated.status, EmployeeStatus)
+
+    archived = service.archive_employee("5")
+
+    assert archived is not None
+    assert archived.archived is True

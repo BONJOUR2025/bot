@@ -293,7 +293,7 @@ export default function Employees() {
         <span className="font-medium">inactive</span>.
       </p>
       <div className="overflow-auto border rounded shadow bg-white">
-        <table className="min-w-full text-sm">
+        <table className="min-w-[1400px] text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="p-2"></th>

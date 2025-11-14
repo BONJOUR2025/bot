@@ -188,7 +188,7 @@ export default function Vacations() {
       </div>
 
       <div className="overflow-auto border rounded shadow bg-white">
-        <table className="min-w-full text-sm">
+        <table className="min-w-[1100px] text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="p-2 text-left">Сотрудник</th>
@@ -265,7 +265,7 @@ export default function Vacations() {
           </button>
         </div>
         <div className="overflow-auto border rounded shadow bg-white">
-          <table className="min-w-full text-xs">
+          <table className="min-w-[900px] text-xs">
             <thead className="bg-gray-50">
               <tr>
                 <th className="p-1 text-left sticky left-0 bg-gray-50 z-10">Сотрудник</th>
