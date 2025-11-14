@@ -167,30 +167,6 @@ export default function Employees() {
     }
   }
 
-  async function archiveSelected() {
-    if (!selected.length) return;
-    const targets = employees.filter((e) => selected.includes(e.id));
-    if (!targets.length) return;
-    const activeEmployees = targets.filter((e) => e.status === 'active');
-    if (activeEmployees.length) {
-      const message =
-        activeEmployees.length === 1
-          ? `Сотрудник «${activeEmployees[0].full_name}» сейчас active. Переведите его в статус inactive, затем повторите.`
-          : 'Некоторые выбранные сотрудники сейчас active. Переведите их в статус inactive, затем повторите попытку.';
-      alert(message);
-      return;
-    }
-    if (!window.confirm('Перенести выбранных сотрудников в архив?')) return;
-    try {
-      await Promise.all(targets.map((e) => api.post(`employees/${e.id}/archive`)));
-      setSelected([]);
-      load();
-    } catch (err) {
-      console.error(err);
-      alert('Не удалось переместить выбранных сотрудников в архив');
-    }
-  }
-
   async function saveForm() {
     if (!form.name || !form.full_name || !form.phone) {
       alert('Заполните обязательные поля');
@@ -304,13 +280,6 @@ export default function Employees() {
           onClick={deleteSelected}
         >
           <Trash2 size={16} /> Удалить выбранных
-        </button>
-        <button
-          className="btn bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
-          disabled={!selected.length}
-          onClick={archiveSelected}
-        >
-          <Archive size={16} /> В архив
         </button>
         <Link
           className="btn bg-gray-100 text-gray-800 hover:bg-gray-200"
