@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     admin_password: str | None = Field(
         None, validation_alias="ADMIN_PASSWORD"
     )
+    database_url: str = Field(
+        "sqlite:///./data/bot.db", validation_alias="DATABASE_URL"
+    )
     user_login: str = Field("user", validation_alias="USER_LOGIN")
     user_password: str | None = Field(
         None, validation_alias="USER_PASSWORD"
