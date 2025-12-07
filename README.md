@@ -83,6 +83,16 @@ python -m app.main
 
 This command launches the bot and waits for commands in polling mode.
 
+## Desktop shell (pywebview)
+
+For a desktop-like experience with the React admin panel wrapped in a native window, install the optional `pywebview` dependency and run:
+
+```bash
+python -m app.desktop --host 127.0.0.1 --port 8000
+```
+
+The command starts the FastAPI application in the background and opens a `pywebview` window pointing at the `/admin` SPA. Use the `--debug` flag to enable the developer tools provided by `pywebview`.
+
 ## Data files
 
 Several JSON files are used as a simple storage backend and are expected to be present in the project root:
