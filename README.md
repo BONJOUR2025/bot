@@ -7,61 +7,121 @@ This project provides a Telegram bot with a FastAPI based HTTP API. The server c
 * Python 3.11+
 * See `requirements.txt` for the list of Python packages
 
-## Installation
+## Полная инструкция по запуску
 
-### From source
+### 1) Подготовка окружения
 
-1. Create a virtual environment and install the dependencies:
+1. Убедитесь, что установлен Python 3.11+ и Node.js 18+.
+2. Создайте виртуальное окружение и установите Python-зависимости:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+3. Для работы десктопной оболочки pywebview понадобится системный backend WebKit/GTK (Linux) или WebView2 (Windows). На macOS зависимость ставится автоматически.
+4. Если планируется собирать/редактировать админку, установите фронтенд-зависимости:
+
+   ```bash
+   cd admin_frontend
+   npm install
+   cd ..
+   ```
+
+### 2) Настройка конфигурации
+
+Основные параметры читаются из `.env` или `config.json` в корне. Базовые значения заданы в `app/settings.py`, поэтому проект стартует и без ручной конфигурации. Ключевые опции:
+
+- `TELEGRAM_BOT_TOKEN` – токен Telegram-бота; если пустой, бот не запускается, но API и админка работают.
+- `ADMIN_TOKEN` – токен для защищённых API-эндпоинтов.
+- `ADMIN_LOGIN`/`ADMIN_PASSWORD` – учётка для входа в админку (по умолчанию `admin`/`admin`).
+- `EXCEL_FILE` – путь к Excel-файлу с расчётами.
+- `USERS_FILE`, `ADVANCE_REQUESTS_FILE`, `VACATIONS_FILE`, `ADJUSTMENTS_FILE`, `BONUSES_PENALTIES_FILE`, `ASSETS_FILE` – пути к JSON-хранилищам данных.
+- `ADMIN_ID`, `ADMIN_CHAT_ID` – идентификаторы администратора в Telegram.
+
+Пример минимального `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=123:abc
+ADMIN_TOKEN=supersecret
+ADMIN_LOGIN=admin
+ADMIN_PASSWORD=change_me
 ```
 
-2. (Optional) create a `.env` or `config.json` file in the project root to override the default settings defined in `app/settings.py`. Important options include:
+### 3) Подготовка данных
 
-- `TELEGRAM_BOT_TOKEN` – Telegram bot token
-- `ADMIN_TOKEN` – token required for admin API calls
-- `EXCEL_FILE` – path to the Excel workbook with salary/schedule data
-- `USERS_FILE`, `ADVANCE_REQUESTS_FILE`, `VACATIONS_FILE`, `ADJUSTMENTS_FILE`,
-  `BONUSES_PENALTIES_FILE` – paths to data JSON files
-- `ADMIN_ID`, `ADMIN_CHAT_ID` – Telegram identifiers for the administrator
+В корне репозитория должны находиться JSON-файлы с данными. Если их нет, сервис создаст пустые заготовки при первом запуске:
 
-If no configuration is provided, default values will be used and the project will look for JSON files such as `user.json`, `advance_requests.json`, `vacations.json` and others located in the repository root.
+- `user.json` – сотрудники
+- `advance_requests.json` – заявки на авансы
+- `vacations.json` – отпуска
+- `adjustments.json` – корректировки
+- `bonuses_penalties.json` – премии и штрафы
+- `assets.json` – имущество
 
-### As an installable package
+### 4) Запуск FastAPI-сервера (с ботом)
 
-The repository ships a standard Python package declaration in `pyproject.toml`. You can install the bot directly from GitHub via pip:
+1. Активируйте виртуальное окружение.
+2. Запустите сервер:
+
+   ```bash
+   uvicorn app.server:app --host 0.0.0.0 --port 8000
+   ```
+
+3. Админка доступна на `http://127.0.0.1:8000/admin` (логин/пароль по умолчанию `admin`/`admin`).
+4. Swagger UI с REST-эндпоинтами — `http://127.0.0.1:8000/docs`.
+5. Если указан `TELEGRAM_BOT_TOKEN`, бот стартует автоматически вместе с API.
+
+### 5) Десктопная оболочка (pywebview)
+
+Для самостоятельного окна с встроенным API выполните:
+
+```bash
+python -m app.desktop --host 127.0.0.1 --port 8000
+```
+
+Параметры `--title` меняет заголовок окна, `--debug` включает devtools. Закрытие окна корректно останавливает Uvicorn.
+
+### 6) Режим разработки админки
+
+1. Поднимите бэкенд как описано выше.
+2. В отдельном терминале запустите Vite c прокси на API:
+
+   ```bash
+   cd admin_frontend
+   npm run dev -- --host --port 5173
+   ```
+
+3. Откройте `http://127.0.0.1:5173/admin/`. Все запросы `/api` и `/session` автоматически уходят на работающий бекенд `127.0.0.1:8000`.
+4. После внесения правок пересоберите статические файлы, чтобы FastAPI отдавал актуальную версию:
+
+   ```bash
+   npm run build
+   ```
+
+Собранные файлы появляются в `admin_frontend/dist` и автоматически раздаются сервером по пути `/admin`.
+
+### 7) Установка как пакета
+
+Репозиторий содержит `pyproject.toml`, так что его можно поставить напрямую из git:
 
 ```bash
 pip install git+https://github.com/your-account/bot.git
 ```
 
-The installation exposes two entry points:
+Будут доступны два CLI-скрипта:
 
-* `telegram-salary-bot` – starts the Telegram bot in polling mode (equivalent to `python -m app.main`).
-* `telegram-salary-bot-api` – launches the FastAPI application via Uvicorn (equivalent to `python -m app`).
+- `telegram-salary-bot` — запуск бота в polling-режиме (аналог `python -m app.main`).
+- `telegram-salary-bot-api` — запуск FastAPI через Uvicorn (аналог `python -m app`).
 
-To build distributable artifacts locally run:
+Для сборки wheel/tar.gz локально:
 
 ```bash
 python -m build
 ```
 
-This command generates `.whl` and `.tar.gz` files under the `dist/` directory that can be published to PyPI or GitHub Packages. When targeting GitHub Packages make sure to:
-
-1. Create a Personal Access Token with the `write:packages` and `read:packages` scopes.
-2. Configure `~/.pypirc` with a section that points to the GitHub Packages upload endpoint and uses the generated token as the password. GitHub's documentation contains a ready-to-use template.
-3. Upload the build using `twine upload --repository <section-name> dist/*`.
-
-Once published, machines with access to the registry can install the package with:
-
-```bash
-pip install --extra-index-url https://pip.pkg.github.com/<OWNER> telegram-salary-bot
-```
-
-Replace `<OWNER>` with your GitHub username or organization.
+Публикация на PyPI или GitHub Packages потребует настроенного `~/.pypirc` и `twine upload --repository <section-name> dist/*`.
 
 ## Running the FastAPI server
 
@@ -82,6 +142,16 @@ python -m app.main
 ```
 
 This command launches the bot and waits for commands in polling mode.
+
+## Desktop shell (pywebview)
+
+For a desktop-like experience with the React admin panel wrapped in a native window, install the optional `pywebview` dependency and run:
+
+```bash
+python -m app.desktop --host 127.0.0.1 --port 8000
+```
+
+The command starts the FastAPI application in the background and opens a `pywebview` window pointing at the `/admin` SPA. Use the `--debug` flag to enable the developer tools provided by `pywebview`.
 
 ## Data files
 
