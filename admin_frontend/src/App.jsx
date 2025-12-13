@@ -27,6 +27,7 @@ import Settings from "./pages/Settings";
 import Assets from "./pages/Assets";
 import Dictionary from "./pages/Dictionary";
 import AccessControl from "./pages/AccessControl";
+import { Toaster } from "sonner";
 
 export default function App() {
   return (
@@ -73,6 +74,7 @@ export default function App() {
               </Route>
               </Routes>
             </Router>
+            <Toaster richColors position="top-right" />
           </AuthProvider>
         )}
       </ThemeProvider>

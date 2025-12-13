@@ -1,4 +1,12 @@
-export { default as Button } from './Button.jsx';
-export { default as Card } from './Card.jsx';
-export { default as Badge } from './Badge.jsx';
-export { default as Input } from './Input.jsx';
+export * from './badge.jsx';
+export * from './button.jsx';
+export * from './card.jsx';
+export * from './dialog.jsx';
+export * from './dropdown-menu.jsx';
+export * from './form.jsx';
+export * from './input.jsx';
+export * from './label.jsx';
+export * from './select.jsx';
+export * from './table.jsx';
+export * from './tabs.jsx';
+export * from './textarea.jsx';
