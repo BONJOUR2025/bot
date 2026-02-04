@@ -3,9 +3,14 @@ class Filter:
         self.name = name
     def __and__(self, other):
         return self
+    def __or__(self, other):
+        return self
+    def __invert__(self):
+        return self
 
 class Filters:
     TEXT = Filter('TEXT')
+    COMMAND = Filter('COMMAND')
     @staticmethod
     def Regex(pattern):
         return Filter(f'Regex({pattern})')
