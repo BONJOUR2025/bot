@@ -1,0 +1,98 @@
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-semibold">Сотрудники</h1>
+    <button onclick="refreshPage()" class="bg-blue-500 text-white px-4 py-2 rounded">🔄 Обновить</button>
+  </div>
+  <table class="min-w-full text-sm table-auto divide-y divide-gray-200 mb-4" id="employee-table"></table>
+  <form onsubmit="submitEmployee(); return false;" class="space-y-3 max-w-md">
+    <label class="block">
+      <span class="text-sm">ФИО</span>
+      <input id="full_name" class="border rounded p-2 w-full" required />
+    </label>
+    <label class="block">
+      <span class="text-sm">Телефон</span>
+      <input id="phone" class="border rounded p-2 w-full" required />
+    </label>
+    <label class="block">
+      <span class="text-sm">Примечание</span>
+      <input id="note" class="border rounded p-2 w-full" />
+    </label>
+    <label class="block">
+      <span class="text-sm">Дата рождения</span>
+      <input id="birthday" type="date" class="border rounded p-2 w-full" />
+    </label>
+    <label class="block">
+      <span class="text-sm">Фото</span>
+      <input id="photo" type="file" class="border rounded p-2 w-full" accept="image/*" />
+    </label>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">Создать</button>
+  </form>
+</div>
+<script>
+async function loadEmployees() {
+  try {
+    const res = await axios.get('/api/employees/');
+    const table = document.getElementById('employee-table');
+    table.innerHTML = `
+      <thead><tr class='bg-gray-200'>
+        <th class='p-2'>ФИО</th><th>Телефон</th><th>Прим.</th><th>Дата рождения</th><th>Фото</th><th>Действия</th>
+      </tr></thead>
+      <tbody>
+        ${res.data.map(e => `
+          <tr class='border-t odd:bg-gray-50'>
+            <td class='p-2'>${e.full_name}</td>
+            <td>${e.phone}</td>
+            <td>${e.note || ''}</td>
+            <td>${e.birthday || ''}</td>
+            <td>${e.photo_url ? `<img src="${e.photo_url}" class='h-10'>` : ''}</td>
+            <td>
+              <button onclick="openProfile('${e.id}')" class='text-blue-600 mr-2'>📄 Профиль</button>
+              <button onclick="deleteEmployee('${e.id}')" class='text-red-500'>Удалить</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>`;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function openProfile(id) {
+  window.open(`/api/employees/${id}/profile.pdf`, '_blank');
+}
+
+async function submitEmployee() {
+  const form = new FormData();
+  form.append('full_name', document.getElementById('full_name').value);
+  form.append('phone', document.getElementById('phone').value);
+  form.append('note', document.getElementById('note').value);
+  form.append('birthday', document.getElementById('birthday').value);
+  const file = document.getElementById('photo').files[0];
+  try {
+    const res = await axios.post('/api/employees/', Object.fromEntries(form), { headers: { 'Content-Type': 'application/json' } });
+    const id = res.data.id;
+    if (file) {
+      const photoForm = new FormData();
+      photoForm.append('file', file);
+      await axios.post(`/api/employees/${id}/photo`, photoForm);
+    }
+    await loadEmployees();
+    alert('Сотрудник создан');
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function deleteEmployee(id) {
+  try {
+    await axios.delete(`/api/employees/${id}`);
+    await loadEmployees();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+window.onload = () => {
+  loadEmployees();
+};
+</script>

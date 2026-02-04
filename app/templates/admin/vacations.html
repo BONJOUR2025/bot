@@ -1,0 +1,234 @@
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">👒 Управление отпусками</h1>
+    <div class="flex gap-2">
+      <button onclick="refreshPage()" class="px-3 py-1 bg-white rounded shadow text-sm">🔄 Обновить</button>
+      <button onclick="openVacationModal()" class="btn btn-success flex items-center gap-1">➕ Добавить отпуск</button>
+    </div>
+  </div>
+  <div class="space-y-2">
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="block">
+        <span class="text-sm">Сотрудник</span>
+        <select id="employeeSelect" class="border rounded p-2 w-full sm:w-48"></select>
+      </label>
+    </div>
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="block">
+        <span class="text-sm">Дата от</span>
+        <input type="date" id="startDate" class="border rounded p-2 w-full sm:w-40" />
+      </label>
+      <label class="block">
+        <span class="text-sm">до</span>
+        <input type="date" id="endDate" class="border rounded p-2 w-full sm:w-40" />
+      </label>
+      <label class="block flex-1 min-w-[8rem]">
+        <span class="text-sm">Комментарий</span>
+        <input type="text" id="commentFilter" class="border rounded p-2 w-full" placeholder="Поиск" />
+      </label>
+      <button onclick="loadVacations()" class="btn btn-success">Показать</button>
+    </div>
+  </div>
+  <div id="vac-calendar-nav" class="flex items-center justify-between mb-2"></div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm bg-white rounded shadow" id="vacation-table"></table>
+  </div>
+</div>
+
+<div id="vacation-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+  <div class="bg-white p-4 rounded shadow-xl w-full max-w-md">
+    <h2 id="vacation-modal-title" class="text-xl font-semibold mb-2">Добавление/редактирование отпуска</h2>
+    <div class="mb-2">
+      <select id="vac-emp" class="border p-2 w-full"></select>
+    </div>
+    <div class="mb-2">
+      <input type="date" id="vac-start" class="border p-2 w-full" placeholder="Начало" />
+    </div>
+    <div class="mb-2">
+      <input type="date" id="vac-end" class="border p-2 w-full" placeholder="Окончание" />
+    </div>
+    <div class="mb-2">
+      <select id="vac-type" class="border p-2 w-full">
+        <option value="Отпуск">Отпуск</option>
+        <option value="Больничный">Больничный</option>
+        <option value="Командировка">Командировка</option>
+      </select>
+    </div>
+    <div class="mb-2">
+      <textarea id="vac-comment" class="border p-2 w-full" placeholder="Комментарий"></textarea>
+    </div>
+    <div class="flex justify-between items-center pt-2">
+      <button id="vac-delete" class="text-red-600 hidden">🗑️ Удалить</button>
+      <div class="flex gap-4">
+        <button onclick="closeVacationModal()" class="px-4 py-2">Отмена</button>
+        <button id="vac-save" class="bg-blue-600 text-white px-4 py-2 rounded">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let vacations = [];
+let vacEditing = null;
+let currentMonth = new Date();
+currentMonth.setDate(1);
+let filteredVacations = [];
+
+function updateCalNav(){
+  const nav=document.getElementById('vac-calendar-nav');
+  if(!nav) return;
+  const fmt=d=>d.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+  const prev=new Date(currentMonth);prev.setMonth(prev.getMonth()-1);
+  const next=new Date(currentMonth);next.setMonth(next.getMonth()+1);
+  nav.innerHTML=`<button id="vac-prev" class="px-2">← ${fmt(prev)}</button>`+
+    `<span class="font-semibold">${fmt(currentMonth)}</span>`+
+    `<button id="vac-next" class="px-2">${fmt(next)} →</button>`+
+    `<button id="vac-today" class="border px-2 py-1 text-sm rounded ml-2">Сегодня</button>`;
+  document.getElementById('vac-prev').onclick=()=>{currentMonth.setMonth(currentMonth.getMonth()-1);renderCalendar();};
+  document.getElementById('vac-next').onclick=()=>{currentMonth.setMonth(currentMonth.getMonth()+1);renderCalendar();};
+  document.getElementById('vac-today').onclick=()=>{currentMonth=new Date();currentMonth.setDate(1);renderCalendar();};
+}
+
+function renderCalendar(){
+  const table=document.getElementById('vacation-table');
+  if(!table) return;
+  const year=currentMonth.getFullYear();
+  const month=currentMonth.getMonth();
+  const days=new Date(year,month+1,0).getDate();
+  if(!filteredVacations.length){
+    table.innerHTML='<p class="p-4 text-center text-gray-500">Нет зарегистрированных отпусков</p>';
+    updateCalNav();
+    return;
+  }
+  let head='';
+  for(let d=1;d<=days;d++) head+=`<th class="p-1 text-xs">${d}</th>`;
+  const empIds=[...new Set(filteredVacations.map(v=>v.employee_id))];
+  const todayStr=new Date().toISOString().slice(0,10);
+  let body='';
+  empIds.forEach(eid=>{
+    const name=employees.find(e=>String(e.id)===String(eid))?.full_name||employees.find(e=>String(e.id)===String(eid))?.name||'';
+    let row=`<th class="p-2 text-left sticky left-0 bg-white z-10">${name}</th>`;
+    for(let d=1;d<=days;d++){
+      const date=new Date(year,month,d).toISOString().slice(0,10);
+      const vac=filteredVacations.find(v=>String(v.employee_id)===String(eid)&&v.start_date<=date&&v.end_date>=date);
+      let cls='';
+      let title='';
+      let id='';
+      if(vac){
+        id=vac.id;
+        title=`${vac.start_date} - ${vac.end_date}${vac.comment?' '+vac.comment:''}`;
+        if(vac.end_date<todayStr) cls='bg-gray-300';
+        else if(vac.start_date<=todayStr && vac.end_date>=todayStr) cls='bg-yellow-200';
+        else cls='bg-green-200';
+      }else{
+        const dow=new Date(year,month,d).getDay();
+        if(dow===0||dow===6) cls='bg-gray-50';
+      }
+      row+=`<td class="border p-1 ${cls}" data-id="${id}" title="${title}"></td>`;
+    }
+    body+=`<tr>${row}</tr>`;
+  });
+  table.innerHTML=`<thead class="bg-gray-100 sticky top-0"><tr><th class="p-2 text-left sticky left-0 bg-gray-100 z-20">Сотрудник</th>${head}</tr></thead><tbody>${body}</tbody>`;
+  updateCalNav();
+  table.querySelectorAll('td[data-id]').forEach(td=>{if(td.dataset.id){td.onclick=()=>openVacationModal(td.dataset.id);}});
+}
+
+async function loadVacations(){
+  const res = await axios.get('/api/vacations/');
+  vacations = res.data;
+  const filterSel = document.getElementById('employeeSelect');
+  if(filterSel && !filterSel.dataset.filled){
+    filterSel.innerHTML = '<option value="">Все</option>' + employees.map(e=>`<option value="${e.id}">${e.full_name||e.name}</option>`).join('');
+    filterSel.dataset.filled='1';
+  }
+  const modalSel=document.getElementById('vac-emp');
+  if(modalSel) modalSel.innerHTML = employees.map(e=>`<option value="${e.id}">${e.full_name||e.name}</option>`).join('');
+
+  let list=[...vacations];
+  const emp=filterSel?.value;
+  const start=document.getElementById('startDate')?.value;
+  const end=document.getElementById('endDate')?.value;
+  const kw=document.getElementById('commentFilter')?.value?.toLowerCase()||'';
+  if(emp) list=list.filter(v=>String(v.employee_id)===emp);
+  if(start) list=list.filter(v=>v.start_date>=start);
+  if(end) list=list.filter(v=>v.end_date<=end);
+  if(kw) list=list.filter(v=>(v.comment||'').toLowerCase().includes(kw));
+  list.sort((a,b)=>new Date(a.start_date)-new Date(b.start_date));
+
+  filteredVacations = list;
+  renderCalendar();
+}
+
+function openVacationModal(id=null){
+  vacEditing=id;
+  document.getElementById('vacation-modal').classList.remove('hidden');
+  document.getElementById('vac-delete').classList.add('hidden');
+  document.getElementById('vac-emp').disabled=false;
+  document.querySelectorAll('#vacation-table td.highlight').forEach(td=>td.classList.remove('ring-2','ring-blue-500','highlight'));
+  if(id){
+    const v=vacations.find(x=>String(x.id)===String(id));
+    if(!v)return;
+    document.getElementById('vacation-modal-title').textContent='Редактировать отпуск';
+    document.getElementById('vac-emp').value=v.employee_id;
+    document.getElementById('vac-start').value=v.start_date;
+    document.getElementById('vac-end').value=v.end_date;
+    document.getElementById('vac-type').value=v.type;
+    document.getElementById('vac-comment').value=v.comment||'';
+    document.getElementById('vac-delete').classList.remove('hidden');
+    document.getElementById('vac-emp').disabled=true;
+    document.querySelectorAll(`#vacation-table td[data-id='${id}']`).forEach(td=>td.classList.add('ring-2','ring-blue-500','highlight'));
+  }else{
+    document.getElementById('vacation-modal-title').textContent='Добавить отпуск';
+    document.getElementById('vac-start').value='';
+    document.getElementById('vac-end').value='';
+    document.getElementById('vac-type').value='Отпуск';
+    document.getElementById('vac-comment').value='';
+  }
+}
+
+function closeVacationModal(){
+  document.getElementById('vacation-modal').classList.add('hidden');
+  document.querySelectorAll('#vacation-table td.highlight').forEach(td=>td.classList.remove('ring-2','ring-blue-500','highlight'));
+}
+
+document.getElementById('vac-save').onclick=async()=>{
+  const payload={
+    employee_id:document.getElementById('vac-emp').value,
+    name: employees.find(e=>e.id===document.getElementById('vac-emp').value)?.full_name||'',
+    start_date:document.getElementById('vac-start').value,
+    end_date:document.getElementById('vac-end').value,
+    type:document.getElementById('vac-type').value,
+    comment:document.getElementById('vac-comment').value
+  };
+  if(vacEditing){
+    await axios.put(`/api/vacations/${vacEditing}`,payload);
+  }else{
+    await axios.post('/api/vacations/',payload);
+  }
+  closeVacationModal();
+  loadVacations();
+};
+
+document.getElementById('vac-delete').onclick=async()=>{
+  if(!vacEditing)return;
+  const v=vacations.find(x=>String(x.id)===String(vacEditing));
+  if(!v)return;
+  const emp=employees.find(e=>String(e.id)===String(v.employee_id))?.full_name||'';
+  if(!confirm(`Удалить отпуск с ${v.start_date} по ${v.end_date} для ${emp}?`))return;
+  await axios.delete(`/api/vacations/${vacEditing}`);
+  closeVacationModal();
+  loadVacations();
+};
+
+async function deleteVacation(id){
+  if(!confirm('Удалить запись?'))return;
+  await axios.delete(`/api/vacations/${id}`);
+  loadVacations();
+}
+
+async function editVacation(id){
+  openVacationModal(id);
+}
+
+window.addEventListener('load',loadVacations);
+</script>

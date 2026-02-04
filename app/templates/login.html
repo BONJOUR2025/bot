@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Вход в панель управления</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #0f172a;
+        color: #f8fafc;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at top, rgba(30, 64, 175, 0.6), rgba(15, 23, 42, 0.95));
+      }
+      .card {
+        width: min(400px, 90vw);
+        background: rgba(15, 23, 42, 0.85);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 16px;
+        padding: 32px;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(18px);
+      }
+      h1 {
+        margin: 0 0 24px;
+        font-size: 24px;
+        font-weight: 600;
+        text-align: center;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #cbd5f5;
+      }
+      input[type="text"],
+      input[type="password"] {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(15, 23, 42, 0.7);
+        color: #f8fafc;
+        font-size: 16px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      input[type="text"]:focus,
+      input[type="password"]:focus {
+        outline: none;
+        border-color: rgba(96, 165, 250, 0.9);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+      }
+      button {
+        width: 100%;
+        margin-top: 20px;
+        padding: 12px 16px;
+        font-size: 16px;
+        font-weight: 600;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(120deg, #2563eb, #7c3aed);
+        color: #f8fafc;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px rgba(37, 99, 235, 0.35);
+      }
+      .error {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 10px;
+        background: rgba(239, 68, 68, 0.12);
+        color: #fecaca;
+        font-size: 14px;
+        display: none;
+      }
+      .success {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 10px;
+        background: rgba(16, 185, 129, 0.12);
+        color: #bbf7d0;
+        font-size: 14px;
+        display: none;
+      }
+      .caption {
+        margin-top: 24px;
+        font-size: 13px;
+        color: rgba(148, 163, 184, 0.7);
+        text-align: center;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          background: #f1f5f9;
+          color: #0f172a;
+        }
+        body {
+          background: radial-gradient(circle at top, rgba(191, 219, 254, 0.8), rgba(241, 245, 249, 0.95));
+        }
+        .card {
+          background: rgba(255, 255, 255, 0.9);
+          border: 1px solid rgba(203, 213, 225, 0.65);
+          box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+        }
+        label {
+          color: #475569;
+        }
+        input[type="text"],
+        input[type="password"] {
+          background: rgba(248, 250, 252, 0.9);
+          border-color: rgba(148, 163, 184, 0.35);
+          color: #0f172a;
+        }
+        .caption {
+          color: rgba(71, 85, 105, 0.8);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Панель управления</h1>
+      <form id="login-form">
+        <label for="login">Логин</label>
+        <input id="login" name="login" type="text" autocomplete="username" required />
+        <label for="password" style="margin-top: 16px">Пароль</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button type="submit">Войти</button>
+      </form>
+      <div id="error" class="error"></div>
+      <div id="success" class="success">Вход выполнен, перенаправляем…</div>
+      <p class="caption">Используйте корпоративные учетные данные.</p>
+    </div>
+    <script>
+      const form = document.getElementById('login-form');
+      const errorBox = document.getElementById('error');
+      const successBox = document.getElementById('success');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorBox.style.display = 'none';
+        successBox.style.display = 'none';
+        const data = Object.fromEntries(new FormData(form).entries());
+
+        try {
+          const response = await fetch('/session/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+          });
+
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({ detail: 'invalid_credentials' }));
+            throw new Error(payload.detail || 'invalid_credentials');
+          }
+
+          const payload = await response.json();
+          if (payload.token) {
+            localStorage.setItem('auth_token', payload.token);
+          }
+
+          successBox.style.display = 'block';
+          setTimeout(() => {
+            window.location.href = '/admin';
+          }, 500);
+        } catch (err) {
+          errorBox.textContent = err.message === 'invalid_credentials'
+            ? 'Неверный логин или пароль'
+            : 'Не удалось выполнить вход. Попробуйте снова';
+          errorBox.style.display = 'block';
+        }
+      });
+
+      (function autoRedirect() {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          fetch('/api/auth/me', {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => {
+              if (res.ok) {
+                window.location.href = '/admin';
+              }
+            })
+            .catch(() => {});
+        }
+      })();
+    </script>
+  </body>
+</html>

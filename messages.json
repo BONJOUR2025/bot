@@ -1,0 +1,26 @@
+[
+  {
+    "user_id": "2045618984",
+    "name": "Никита",
+    "text": "1",
+    "photo": null,
+    "status": "Принято",
+    "accepted": true,
+    "timestamp": "2025-06-17T16:03:13.526627",
+    "message_id": 12044,
+    "id": "1",
+    "timestamp_accept": "2025-06-17T16:08:25.583130"
+  },
+  {
+    "user_id": "2045618984",
+    "name": "Никита",
+    "text": "сучка привет",
+    "photo": null,
+    "status": "Принято",
+    "accepted": true,
+    "timestamp": "2025-06-20T10:43:23.098251",
+    "message_id": 12309,
+    "id": "2",
+    "timestamp_accept": "2025-06-23T09:29:23.945357"
+  }
+]

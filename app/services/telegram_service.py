@@ -1,0 +1,435 @@
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import Optional, Sequence, List, Dict, Any
+from datetime import datetime
+from uuid import uuid4
+
+from telegram import Bot
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
+
+from app.utils.logger import log
+from app.utils import is_valid_user_id
+
+from app.config import TOKEN, ADMIN_CHAT_ID
+from app.data.employee_repository import EmployeeRepository
+
+logger = logging.getLogger("broadcast")
+if not logger.handlers:
+    Path("logs").mkdir(exist_ok=True)
+    fh = logging.FileHandler("logs/broadcast.log", encoding="utf-8")
+    formatter = logging.Formatter("[%(asctime)s] %(message)s")
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    logger.setLevel(logging.INFO)
+
+
+class TelegramServiceError(RuntimeError):
+    """Base class for Telegram service errors."""
+
+
+class TelegramNotConfiguredError(TelegramServiceError):
+    """Raised when the Telegram bot token is not configured."""
+
+
+class InvalidTelegramUserIdError(TelegramServiceError):
+    """Raised when an invalid Telegram user id is supplied."""
+
+
+class TelegramAPIError(TelegramServiceError):
+    """Raised when Telegram API returns an error."""
+
+
+class TelegramService:
+    def __init__(self, repo: EmployeeRepository) -> None:
+        self.repo = repo
+        if TOKEN and TOKEN != "dummy":
+            self.bot = Bot(token=TOKEN)
+        else:
+            self.bot = None
+        Path("logs").mkdir(exist_ok=True)
+        self.msg_log = Path("logs/sent_messages.json")
+        if not self.msg_log.exists():
+            self.msg_log.write_text("[]", encoding="utf-8")
+        if not ADMIN_CHAT_ID:
+            log("⚠️ ADMIN_CHAT_ID not configured")
+
+    def _load_log_all(self) -> List[Dict]:
+        try:
+            data = json.loads(self.msg_log.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        return self._enrich_log_entries(data)
+
+    def _load_log(self) -> List[Dict]:
+        """Return log records sorted by timestamp descending."""
+        data = self._load_log_all()
+        return sorted(
+            data,
+            key=lambda x: x.get("timestamp", ""),
+            reverse=True,
+        )[:50]
+
+    def _resolve_employee_name(self, user_id: str | int | None) -> str | None:
+        if not user_id:
+            return None
+        try:
+            employee = self.repo.get_employee(str(user_id))
+        except Exception as exc:
+            log(f"⚠️ Failed to resolve employee {user_id}: {exc}")
+            return None
+        if not employee:
+            return None
+        return getattr(employee, "full_name", None) or getattr(employee, "name", None)
+
+    def _enrich_log_entries(self, data: List[Dict]) -> List[Dict]:
+        changed = False
+
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+
+            if entry.get("user_id") and not entry.get("user_name"):
+                name = self._resolve_employee_name(entry.get("user_id"))
+                if name:
+                    entry["user_name"] = name
+                    changed = True
+
+            if "broadcast" not in entry:
+                entry["broadcast"] = False
+                changed = True
+
+            status = entry.get("status")
+            if isinstance(status, str) and "принят" in status.lower():
+                if not entry.get("accepted"):
+                    entry["accepted"] = True
+                    changed = True
+
+            recipients = entry.get("recipients") or []
+            for recipient in recipients:
+                if not isinstance(recipient, dict):
+                    continue
+                if recipient.get("user_id") and not recipient.get("name"):
+                    name = self._resolve_employee_name(recipient.get("user_id"))
+                    if name:
+                        recipient["name"] = name
+                        changed = True
+
+        if changed:
+            try:
+                self._save_log(data)
+            except Exception as exc:
+                log(f"⚠️ Failed to persist enriched log entries: {exc}")
+
+        return data
+
+    def _save_log(self, data: List[Dict]) -> None:
+        self.msg_log.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    def _append_personal_log_entry(
+        self,
+        *,
+        user_id: str | int | None,
+        user_name: str | None,
+        message: str,
+        status: str,
+        message_id: int | None = None,
+        photo_url: str | None = None,
+        require_ack: bool = False,
+        batch_id: str | None = None,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        entry: Dict[str, Any] = {
+            "id": str(uuid4()),
+            "user_id": str(user_id) if user_id is not None else None,
+            "user_name": user_name,
+            "message": message,
+            "status": status,
+            "message_id": message_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "photo_url": photo_url,
+            "requires_ack": require_ack,
+            "accepted": False,
+            "timestamp_accept": None,
+            "broadcast": False,
+        }
+        if batch_id:
+            entry["batch_id"] = batch_id
+        if extra:
+            entry.update(extra)
+        data = self._load_log_all()
+        data.append(entry)
+        self._save_log(data)
+
+    def delete_log_entry(self, entry_id: str) -> None:
+        data = self._load_log_all()
+        data = [d for d in data if str(d.get("id")) != str(entry_id)]
+        self._save_log(data)
+
+    @classmethod
+    def update_sent_message_status(
+        cls, user_id: str, message_id: int, status: str
+    ) -> None:
+        log_file = Path("logs/sent_messages.json")
+        if not log_file.exists():
+            return
+        try:
+            data = json.loads(log_file.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        accepted_at = None
+        normalized_status = status.lower() if isinstance(status, str) else ""
+        if "принят" in normalized_status:
+            accepted_at = datetime.utcnow().isoformat()
+        for item in data:
+            if (
+                str(item.get("user_id")) == str(user_id)
+                and item.get("message_id") == message_id
+            ):
+                item["status"] = status
+                if accepted_at:
+                    item["accepted"] = True
+                    item["timestamp_accept"] = accepted_at
+                break
+        log_file.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    async def broadcast_message_to_all(
+            self,
+            message: str,
+            parse_mode: str = "HTML",
+            photo_url: Optional[str] = None,
+            filters: Optional[Dict[str, Any]] = None,
+            test_user_id: Optional[str] = None) -> dict:
+        if filters is None:
+            filters = {}
+        if "archived" not in filters:
+            filters["archived"] = False
+        employees = self.repo.list_employees(**filters)
+        if test_user_id:
+            employees = [e for e in employees if str(e.id) == str(test_user_id)]
+        if self.bot is None:
+            log("⚠️ Telegram bot not configured; cannot broadcast")
+            raise TelegramNotConfiguredError("Telegram bot not configured")
+
+        success = 0
+        recipients: List[Dict[str, Any]] = []
+        for emp in employees:
+            if not is_valid_user_id(emp.id):
+                log(f"⚠️ Skipping message — invalid or fake user_id: {emp.id}")
+                recipients.append({
+                    "user_id": str(emp.id),
+                    "name": emp.full_name or emp.name,
+                    "status": "невалидный id",
+                })
+                continue
+            try:
+                personalized = message.format(**emp.__dict__)
+            except (KeyError, ValueError) as exc:
+                logger.error(f"Failed to format message for {emp.id}: {exc}")
+                continue
+            log(
+                f"[Telegram] Broadcasting to {emp.id} — text: '{personalized[:50]}', photo: {bool(photo_url)}"
+            )
+            try:
+                if photo_url:
+                    await self.bot.send_photo(
+                        chat_id=emp.id,
+                        photo=photo_url,
+                        caption=personalized,
+                        parse_mode=parse_mode,
+                    )
+                else:
+                    await self.bot.send_message(
+                        chat_id=emp.id,
+                        text=personalized,
+                        parse_mode=parse_mode,
+                    )
+                success += 1
+                logger.info(f"Sent to {emp.id}")
+                recipients.append({
+                    "user_id": str(emp.id),
+                    "name": emp.full_name or emp.name,
+                    "status": "отправлено",
+                })
+            except BadRequest as exc:
+                log(f"❌ Failed to send broadcast to chat {emp.id} — {exc}")
+                recipients.append({
+                    "user_id": str(emp.id),
+                    "name": emp.full_name or emp.name,
+                    "status": f"ошибка: {exc}",
+                })
+            except Exception as exc:
+                logger.warning(f"Failed for {emp.id}: {exc}")
+                recipients.append({
+                    "user_id": str(emp.id),
+                    "name": emp.full_name or emp.name,
+                    "status": f"ошибка: {exc}",
+                })
+        log_entry = {
+            "id": str(uuid4()),
+            "broadcast": True,
+            "message": message,
+            "timestamp": datetime.utcnow().isoformat(),
+            "recipients": recipients,
+        }
+        data = self._load_log_all()
+        data.append(log_entry)
+        self._save_log(data)
+        return {"success": True, "sent": success, "total": len(employees)}
+
+    async def send_message_to_user(
+            self,
+            user_id: str,
+            message: str,
+            parse_mode: str = "HTML",
+            photo_url: Optional[str] = None,
+            require_ack: bool = False,
+            batch_id: Optional[str] = None,
+    ) -> int:
+        employee = None
+        if hasattr(self.repo, "get_employee"):
+            try:
+                employee = self.repo.get_employee(str(user_id))
+            except Exception as exc:
+                log(f"⚠️ Failed to resolve employee name for {user_id}: {exc}")
+        user_name = (
+            getattr(employee, "full_name", "") or getattr(employee, "name", "")
+            if employee
+            else None
+        )
+        if self.bot is None:
+            log("⚠️ Telegram bot not configured; cannot send message")
+            exc = TelegramNotConfiguredError("Telegram bot not configured")
+            self._append_personal_log_entry(
+                user_id=user_id,
+                user_name=user_name,
+                message=message,
+                status=f"ошибка: {exc}",
+                photo_url=photo_url,
+                require_ack=require_ack,
+                batch_id=batch_id,
+            )
+            raise exc
+        if not is_valid_user_id(user_id):
+            log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
+            exc = InvalidTelegramUserIdError(
+                f"Invalid Telegram user id supplied: {user_id}"
+            )
+            self._append_personal_log_entry(
+                user_id=user_id,
+                user_name=user_name,
+                message=message,
+                status=f"ошибка: {exc}",
+                photo_url=photo_url,
+                require_ack=require_ack,
+                batch_id=batch_id,
+            )
+            raise exc
+        reply_markup = None
+        if require_ack:
+            reply_markup = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("✅ Принято", callback_data=f"ack_{user_id}")]]
+            )
+        log(
+            f"[Telegram] Sending personal message to {user_id} — text: '{message[:50]}'"
+        )
+        try:
+            if photo_url:
+                result = await self.bot.send_photo(
+                    chat_id=user_id,
+                    photo=photo_url,
+                    caption=message,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+            else:
+                result = await self.bot.send_message(
+                    chat_id=user_id,
+                    text=message,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+        except BadRequest as exc:
+            log(f"❌ Failed to send message to chat {user_id} — {exc}")
+            self._append_personal_log_entry(
+                user_id=user_id,
+                user_name=user_name,
+                message=message,
+                status=f"ошибка: {exc}",
+                photo_url=photo_url,
+                require_ack=require_ack,
+                batch_id=batch_id,
+                extra={"error": str(exc)},
+            )
+            raise TelegramAPIError(str(exc)) from exc
+        except Exception as exc:
+            log(f"❌ Unexpected error while sending message to {user_id}: {exc}")
+            self._append_personal_log_entry(
+                user_id=user_id,
+                user_name=user_name,
+                message=message,
+                status=f"ошибка: {exc}",
+                photo_url=photo_url,
+                require_ack=require_ack,
+                batch_id=batch_id,
+                extra={"error": str(exc)},
+            )
+            raise
+        self._append_personal_log_entry(
+            user_id=user_id,
+            user_name=user_name,
+            message=message,
+            status="отправлено",
+            message_id=result.message_id,
+            photo_url=photo_url,
+            require_ack=require_ack,
+            batch_id=batch_id,
+        )
+        return result.message_id
+
+    async def send_payout_request_to_admin(self, payout: Dict[str, Any]) -> None:
+        """Notify the admin chat about a payout request."""
+        if self.bot is None:
+            log("⚠️ Telegram bot not configured; cannot notify admin")
+            raise TelegramNotConfiguredError("Telegram bot not configured")
+
+        card_info = payout.get("card_number") or "—"
+        text = (
+            "📥 Новый запрос на выплату:\n\n"
+            f"👤 {payout['name']}\n"
+            f"💳 {card_info}\n"
+            f"🏦 {payout['bank']}\n"
+            f"💰 Сумма: {payout['amount']} ₽\n"
+            f"💳 Метод: {payout['method']}\n"
+            f"📂 Тип: {payout['payout_type']}"
+        )
+        if payout.get("note") and payout.get("show_note_in_bot"):
+            text += f"\n\n📝 {payout['note']}"
+        markup = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("✅ Разрешить", callback_data=f"allow_payout_{payout['id']}")],
+                [InlineKeyboardButton("❌ Отклонить", callback_data=f"deny_payout_{payout['id']}")],
+            ]
+        )
+        if not ADMIN_CHAT_ID:
+            log("⚠️ ADMIN_CHAT_ID not configured; cannot notify admin")
+            return
+        log(
+            f"[Telegram] Sending payout approval request to {ADMIN_CHAT_ID} — text: '{text[:50]}'"
+        )
+        try:
+            await self.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=text,
+                reply_markup=markup,
+            )
+        except BadRequest as exc:
+            log(f"❌ Failed to send message to chat {ADMIN_CHAT_ID} — {exc}")
+            raise TelegramAPIError(str(exc)) from exc

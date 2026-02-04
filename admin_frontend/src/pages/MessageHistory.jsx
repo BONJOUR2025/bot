@@ -1,0 +1,475 @@
+import { useEffect, useMemo, useState } from 'react';
+import {
+  MessageCircle,
+  Users,
+  AlertCircle,
+  Clock,
+  RefreshCcw,
+  Trash2,
+  CheckCircle2,
+  Hourglass,
+} from 'lucide-react';
+import api from '../api';
+
+const typeFilters = [
+  { value: 'all', label: 'Все сообщения' },
+  { value: 'direct', label: 'Персональные' },
+  { value: 'broadcast', label: 'Рассылки' },
+];
+
+const STATUS_MAP = {
+  success: {
+    match: (value) => /принят|успех|отправ|delivered|success/i.test(value),
+    className: 'bg-green-100 text-green-700',
+    label: 'Успешно',
+  },
+  warning: {
+    match: (value) => /ожид|pending|wait|жд|не достав/i.test(value),
+    className: 'bg-yellow-100 text-yellow-700',
+    label: 'Ожидает',
+  },
+  error: {
+    match: (value) => /ошиб|fail|невалид|откл|error/i.test(value),
+    className: 'bg-red-100 text-red-700',
+    label: 'Ошибка',
+  },
+};
+
+function classifyStatus(value) {
+  if (!value) return 'unknown';
+  if (STATUS_MAP.success.match(value)) return 'success';
+  if (STATUS_MAP.error.match(value)) return 'error';
+  if (STATUS_MAP.warning.match(value)) return 'warning';
+  return 'unknown';
+}
+
+function combineBatchMessages(entries) {
+  if (!Array.isArray(entries)) return [];
+
+  const directEntries = [];
+  const batchGroups = new Map();
+
+  entries.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    if (entry.broadcast || !entry.batch_id) {
+      directEntries.push(entry);
+      return;
+    }
+    if (!batchGroups.has(entry.batch_id)) {
+      batchGroups.set(entry.batch_id, []);
+    }
+    batchGroups.get(entry.batch_id).push(entry);
+  });
+
+  batchGroups.forEach((group) => {
+    if (!group || group.length === 0) {
+      return;
+    }
+    if (group.length === 1) {
+      directEntries.push(group[0]);
+      return;
+    }
+
+    const sortedGroup = [...group].sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return aTime - bTime;
+    });
+
+    const recipients = sortedGroup.map((item) => ({
+      user_id: item.user_id,
+      name: item.user_name || item.user_id,
+      status: item.status,
+      timestamp_accept: item.timestamp_accept,
+    }));
+
+    const statusCodes = recipients.map((recipient) => classifyStatus(recipient.status));
+    const hasError = statusCodes.includes('error');
+    const hasWarning = statusCodes.includes('warning');
+    const hasSuccess = statusCodes.includes('success');
+    const allSuccess = statusCodes.length > 0 && statusCodes.every((code) => code === 'success');
+
+    let aggregatedStatus = '';
+    if (hasError) {
+      aggregatedStatus = 'ошибка';
+    } else if (hasWarning) {
+      aggregatedStatus = 'ожидает подтверждения';
+    } else if (allSuccess) {
+      aggregatedStatus = 'принято';
+    } else if (hasSuccess) {
+      aggregatedStatus = 'отправлено';
+    } else {
+      aggregatedStatus = 'групповое сообщение';
+    }
+
+    const latestAccept = allSuccess
+      ? recipients.reduce((latest, recipient) => {
+          const value = recipient.timestamp_accept;
+          if (!value) return latest;
+          if (!latest || value > latest) {
+            return value;
+          }
+          return latest;
+        }, null)
+      : null;
+
+    const aggregatedEntry = {
+      ...sortedGroup[0],
+      id: `batch-${sortedGroup[0].batch_id}`,
+      broadcast: true,
+      recipients,
+      batchEntryIds: sortedGroup.map((item) => item.id),
+      user_id: null,
+      user_name: null,
+      message_id: null,
+      status: aggregatedStatus,
+      accepted: allSuccess,
+      timestamp: sortedGroup[0].timestamp,
+      timestamp_accept: latestAccept,
+      requires_ack: sortedGroup.some((item) => item.requires_ack),
+    };
+
+    directEntries.push(aggregatedEntry);
+  });
+
+  return directEntries.sort((a, b) => {
+    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
+function getStatusVariant(status) {
+  const normalized = (status || '').trim();
+  if (!normalized) {
+    return { className: 'bg-gray-200 text-gray-700', label: 'Неизвестно' };
+  }
+  const entry = Object.values(STATUS_MAP).find((item) => item.match(normalized));
+  if (entry) {
+    return entry;
+  }
+  return { className: 'bg-gray-200 text-gray-700', label: normalized };
+}
+
+function StatusBadge({ status }) {
+  const variant = getStatusVariant(status);
+  return (
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${variant.className}`}>
+      {status || variant.label}
+    </span>
+  );
+}
+
+function StatusSummary({ recipients }) {
+  const summary = useMemo(() => {
+    const result = {
+      success: 0,
+      warning: 0,
+      error: 0,
+    };
+    (recipients || []).forEach((recipient) => {
+      const status = (recipient.status || '').trim();
+      if (!status) {
+        return;
+      }
+      if (STATUS_MAP.success.match(status)) {
+        result.success += 1;
+      } else if (STATUS_MAP.error.match(status)) {
+        result.error += 1;
+      } else if (STATUS_MAP.warning.match(status)) {
+        result.warning += 1;
+      }
+    });
+    return result;
+  }, [recipients]);
+
+  const total = (recipients || []).length;
+  if (!total) {
+    return null;
+  }
+
+  const items = [
+    { key: 'success', label: 'Успех', className: 'bg-green-100 text-green-700' },
+    { key: 'warning', label: 'Ожидает', className: 'bg-yellow-100 text-yellow-700' },
+    { key: 'error', label: 'Ошибки', className: 'bg-red-100 text-red-700' },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">
+        Всего получателей: {total}
+      </span>
+      {items
+        .filter((item) => summary[item.key] > 0)
+        .map((item) => (
+          <span key={item.key} className={`rounded px-2 py-0.5 font-medium ${item.className}`}>
+            {item.label}: {summary[item.key]}
+          </span>
+        ))}
+      {summary.success + summary.warning + summary.error < total && (
+        <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">
+          Без статуса: {total - (summary.success + summary.warning + summary.error)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export default function MessageHistory() {
+  const [entries, setEntries] = useState([]);
+  const [expandedId, setExpandedId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [typeFilter, setTypeFilter] = useState('all');
+
+  const formatDateTime = (value) => {
+    if (!value) return '—';
+    try {
+      return new Date(value).toLocaleString('ru-RU');
+    } catch (err) {
+      console.error('Failed to format date', err);
+      return value;
+    }
+  };
+
+  const loadEntries = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('telegram/sent_messages');
+      const normalized = (response.data || []).map((entry) => {
+        const status = entry.status || '';
+        const accepted = entry.accepted || /принят/i.test(status || '');
+        return {
+          ...entry,
+          status,
+          accepted,
+        };
+      });
+      setEntries(combineBatchMessages(normalized));
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError('Не удалось загрузить историю сообщений');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEntries();
+  }, []);
+
+  const filteredEntries = useMemo(() => {
+    if (typeFilter === 'all') return entries;
+    if (typeFilter === 'broadcast') return entries.filter((entry) => entry.broadcast);
+    return entries.filter((entry) => !entry.broadcast);
+  }, [entries, typeFilter]);
+
+  const toggleExpanded = (id) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  const handleDelete = async (entry) => {
+    if (!window.confirm('Удалить запись из истории?')) return;
+    try {
+      const ids = entry?.batchEntryIds?.length ? entry.batchEntryIds : [entry.id];
+      for (const targetId of ids) {
+        await api.delete(`telegram/sent_messages/${targetId}`);
+      }
+      await loadEntries();
+    } catch (err) {
+      console.error(err);
+      setError('Не удалось удалить запись');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-800">
+          <MessageCircle size={24} /> История сообщений
+        </h1>
+        <div className="flex items-center gap-2">
+          <select
+            className="rounded border border-gray-300 px-3 py-2 shadow-sm"
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+          >
+            {typeFilters.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={loadEntries}
+            className="btn flex items-center gap-2"
+            disabled={loading}
+          >
+            <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
+            Обновить
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <AlertCircle size={18} /> {error}
+        </div>
+      )}
+
+      <div className="grid gap-4">
+        {filteredEntries.length === 0 && !loading && (
+          <div className="rounded border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
+            Нет сообщений для отображения.
+          </div>
+        )}
+
+        {filteredEntries.map((entry) => {
+          const isBroadcast = entry.broadcast || (entry.recipients?.length || 0) > 1;
+          const recipientsCount = entry.recipients?.length || 0;
+          const isExpanded = expandedId === entry.id;
+
+          const handleToggle = () => {
+            if (!isBroadcast) return;
+            toggleExpanded(entry.id);
+          };
+
+          const handleKeyToggle = (event) => {
+            if (!isBroadcast) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              toggleExpanded(entry.id);
+            }
+          };
+
+          return (
+            <article key={entry.id} className="rounded border border-gray-200 bg-white p-4 shadow-sm">
+              <header className="flex flex-wrap items-start justify-between gap-3">
+                <div
+                  className={`flex-1 space-y-1 ${isBroadcast ? 'cursor-pointer' : ''}`}
+                  onClick={handleToggle}
+                  onKeyDown={handleKeyToggle}
+                  role={isBroadcast ? 'button' : undefined}
+                  tabIndex={isBroadcast ? 0 : undefined}
+                  aria-expanded={isBroadcast ? isExpanded : undefined}
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Clock size={16} />
+                      <span>Отправлено: {formatDateTime(entry.timestamp)}</span>
+                    </span>
+                    {entry.timestamp_accept && (
+                      <span className="flex items-center gap-1 text-green-600">
+                        <CheckCircle2 size={16} />
+                        <span>Принято: {formatDateTime(entry.timestamp_accept)}</span>
+                      </span>
+                    )}
+                  </div>
+                  <p className="whitespace-pre-wrap text-gray-900">{entry.message}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                    <StatusBadge status={entry.status} />
+                    {entry.requires_ack && (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        Требуется подтверждение
+                      </span>
+                    )}
+                    {entry.accepted && (
+                      <span className="flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <CheckCircle2 size={14} />
+                        Принято
+                      </span>
+                    )}
+                    {entry.requires_ack && !entry.accepted && (
+                      <span className="flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+                        <Hourglass size={14} />
+                        Ожидает подтверждения
+                      </span>
+                    )}
+                    {!isBroadcast && (entry.user_name || entry.user_id) && (
+                      <span
+                        className="text-xs text-gray-500"
+                        title={entry.user_id ? `ID: ${entry.user_id}` : undefined}
+                      >
+                        Получатель: {entry.user_name || '—'}
+                      </span>
+                    )}
+                  </div>
+                  {isBroadcast && (
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-blue-600">
+                      <Users size={16} />
+                      <span>Получателей: {recipientsCount}</span>
+                      <span className="text-xs text-blue-500">
+                        {isExpanded ? 'Скрыть статусы' : 'Показать статусы'}
+                      </span>
+                    </div>
+                  )}
+                  {isBroadcast && entry.recipients?.length > 0 && (
+                    <StatusSummary recipients={entry.recipients} />
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="text-xs uppercase tracking-wide text-gray-400">
+                    {isBroadcast ? 'Рассылка' : 'Персональное'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleDelete(entry);
+                    }}
+                    className="text-red-600 hover:text-red-700"
+                    title="Удалить запись"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </header>
+
+              {entry.photo_url && (
+                <img
+                  src={entry.photo_url}
+                  alt="Прикреплённое изображение"
+                  className="mt-3 max-h-48 w-full rounded object-contain"
+                />
+              )}
+
+              {isBroadcast && isExpanded && (
+                <div className="mt-4 overflow-hidden rounded border">
+                  <table className="min-w-[600px] divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Получатель</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {(entry.recipients || []).map((recipient) => (
+                        <tr key={`${recipient.user_id}-${recipient.status}`}>
+                          <td className="px-3 py-2 text-gray-700">
+                            <div className="flex flex-col">
+                              <span>{recipient.name || '—'}</span>
+                              {recipient.user_id && (
+                                <span className="text-xs text-gray-400">ID: {recipient.user_id}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <StatusBadge status={recipient.status} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

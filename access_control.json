@@ -1,0 +1,68 @@
+{
+  "roles": [
+    {
+      "id": "owner",
+      "name": "Владелец",
+      "permissions": [
+        "*"
+      ],
+      "bot_buttons": [
+        "*"
+      ]
+    },
+    {
+      "id": "employee",
+      "name": "Сотрудник",
+      "permissions": [],
+      "bot_buttons": [
+        "user.view_salary",
+        "user.request_payout",
+        "user.view_schedule",
+        "user.profile"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "admin",
+      "login": "Nick",
+      "role_id": "owner",
+      "permissions": null,
+      "bot_buttons": null,
+      "salt": "70c2e4c87c64584a1b8ec6c118dc41c1",
+      "password_hash": "3fcafd19a22e19066675326d4a4676f60d1079cc1d977fbc4be614be3e5f67f1",
+      "allowed_employee_ids": null,
+      "allowed_departments": null
+    },
+    {
+      "id": "kamil",
+      "login": "Kamil",
+      "role_id": null,
+      "permissions": [
+        "payouts",
+        "employees"
+      ],
+      "bot_buttons": [],
+      "salt": "b077acf5202f47b9c86d6228c3776f51",
+      "password_hash": "e9cacb23d7656e732f6f669db19f06538f1834d0421e3176f7065cd2c930c4e7",
+      "allowed_employee_ids": [
+        "954987497",
+        "65249+654968",
+        "30000",
+        "1762341569228"
+      ],
+      "allowed_departments": null
+    },
+    {
+      "id": "admin",
+      "login": "admin",
+      "role_id": "owner",
+      "permissions": null,
+      "bot_buttons": null,
+      "salt": "48eaf238c2ba3b19734e91677aac6bd5",
+      "password_hash": "7f1705dba0309be315eb7ae34590de4aec021e16ea9cdaa5cc19211003fae436",
+      "allowed_employee_ids": null,
+      "allowed_departments": null
+    }
+  ]
+}

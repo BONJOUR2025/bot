@@ -1,0 +1,24 @@
+<div class="bg-white rounded-xl shadow-md p-6 space-y-4">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">Отчёты</h1>
+    <div class="flex gap-2">
+      <button onclick="refreshPage()" class="bg-blue-500 text-white px-4 py-2 rounded">🔄 Обновить</button>
+      <button onclick="downloadReport()" class="bg-indigo-600 text-white px-4 py-2 rounded">📄 Скачать PDF</button>
+    </div>
+  </div>
+</div>
+<script>
+async function downloadReport() {
+  try {
+    const res = await axios.get('/reports/pdf', { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'report.pdf');
+    document.body.appendChild(link);
+    link.click();
+  } catch (err) {
+    console.error(err);
+  }
+}
+</script>

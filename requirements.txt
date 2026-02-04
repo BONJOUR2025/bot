@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-telegram-bot>=20
+pandas
+openpyxl
+fpdf
+pillow
+reportlab
+python-dateutil
+pydantic
+pydantic-settings
+SQLAlchemy
+Jinja2
+numpy
+python-multipart
