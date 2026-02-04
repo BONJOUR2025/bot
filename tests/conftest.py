@@ -54,6 +54,8 @@ if "telegram" not in sys.modules and _STUB_DIR.exists():
             async def stop(self): pass
             async def shutdown(self): pass
             async def process_update(self, u): pass
+            def add_handler(self, handler, group=0): pass
+            def add_error_handler(self, callback, block=True): pass
             bot = None
         _ext.Application = _Application
         _ext.ApplicationBuilder = _Application.Builder
