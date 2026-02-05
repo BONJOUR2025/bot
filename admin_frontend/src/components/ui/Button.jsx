@@ -1,19 +1,18 @@
-const baseClasses =
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:pointer-events-none disabled:opacity-50';
-
 const variantClasses = {
   primary:
-    'border-transparent bg-[color:var(--primary)] text-[color:var(--primary-foreground)] shadow-sm hover:-translate-y-0.5 hover:shadow-md hover:brightness-110',
+    'border-transparent bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-[0_8px_32px_rgba(99,102,241,0.25)] hover:shadow-[0_12px_40px_rgba(99,102,241,0.35)] hover:brightness-110',
   secondary:
-    'border-transparent bg-[color:var(--secondary)] text-[color:var(--secondary-foreground)] hover:-translate-y-0.5 hover:brightness-105',
+    'border-[color:var(--color-border)] bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:border-[color:var(--color-border-hover)]',
   outline:
-    'border border-border bg-[color:var(--background)] text-[color:var(--foreground)] hover:bg-[color:var(--accent)] hover:text-[color:var(--accent-foreground)]',
+    'border-[color:var(--color-border)] bg-transparent text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg)]',
   ghost:
-    'border-transparent bg-transparent text-[color:var(--muted-foreground)] hover:bg-[color:var(--accent)] hover:text-[color:var(--accent-foreground)]',
+    'border-transparent bg-transparent text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg)] hover:text-[color:var(--color-text)]',
   destructive:
-    'border-transparent bg-[color:var(--destructive)] text-[color:var(--destructive-foreground)] hover:-translate-y-0.5 hover:brightness-110',
+    'border-transparent bg-gradient-to-br from-red-500 to-red-600 text-white shadow-[0_8px_32px_rgba(239,68,68,0.2)] hover:shadow-[0_12px_40px_rgba(239,68,68,0.3)] hover:brightness-110',
   subtle:
-    'border-transparent bg-[color:var(--muted)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--accent)] hover:text-[color:var(--accent-foreground)]',
+    'border-transparent bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] hover:brightness-125',
+  success:
+    'border-transparent bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-[0_8px_32px_rgba(16,185,129,0.2)] hover:brightness-110',
 };
 
 const sizeClasses = {
@@ -23,11 +22,13 @@ const sizeClasses = {
 };
 
 export default function Button({ children, variant = 'primary', size = 'md', className = '', ...rest }) {
-  const variantClass = variantClasses[variant] || variantClasses.primary;
-  const sizeClass = sizeClasses[size] || sizeClasses.md;
+  const base =
+    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border font-medium transition-all duration-150 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring-color)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50';
+  const v = variantClasses[variant] || variantClasses.primary;
+  const s = sizeClasses[size] || sizeClasses.md;
 
   return (
-    <button className={`${baseClasses} ${variantClass} ${sizeClass} ${className}`.trim()} {...rest}>
+    <button className={`${base} ${v} ${s} ${className}`.trim()} {...rest}>
       {children}
     </button>
   );

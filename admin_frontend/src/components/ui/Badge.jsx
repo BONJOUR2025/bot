@@ -1,38 +1,19 @@
-const palette = {
-  neutral: {
-    backgroundColor: 'var(--muted)',
-    background: 'color-mix(in srgb, var(--muted) 40%, transparent)',
-    color: 'var(--muted-foreground)',
-  },
-  info: {
-    backgroundColor: 'var(--accent)',
-    background: 'color-mix(in srgb, var(--accent) 38%, transparent)',
-    color: 'var(--accent-foreground)',
-  },
-  success: {
-    backgroundColor: 'var(--chart-2)',
-    background: 'color-mix(in srgb, var(--chart-2) 30%, transparent)',
-    color: 'var(--chart-2)',
-  },
-  warning: {
-    backgroundColor: 'var(--chart-4)',
-    background: 'color-mix(in srgb, var(--chart-4) 32%, transparent)',
-    color: 'var(--chart-4)',
-  },
-  danger: {
-    backgroundColor: 'var(--destructive)',
-    background: 'color-mix(in srgb, var(--destructive) 32%, transparent)',
-    color: 'var(--destructive)',
-  },
+const toneClasses = {
+  neutral:  'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)]',
+  info:     'bg-[color:var(--color-info-muted)] text-[color:var(--color-info)]',
+  success:  'bg-[color:var(--color-success-muted)] text-[color:var(--color-success)]',
+  warning:  'bg-[color:var(--color-warning-muted)] text-[color:var(--color-warning)]',
+  danger:   'bg-[color:var(--color-danger-muted)] text-[color:var(--color-danger)]',
+  primary:  'bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)]',
 };
 
 export default function Badge({ children, tone = 'neutral', className = '', style }) {
-  const colors = palette[tone] || palette.neutral;
+  const cls = toneClasses[tone] || toneClasses.neutral;
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium tracking-wide ${className}`.trim()}
-      style={{ ...colors, ...style }}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wide ${cls} ${className}`.trim()}
+      style={style}
     >
       {children}
     </span>

@@ -1,15 +1,15 @@
 export default function Card({ title, description, actions, children, className = '', style, ...rest }) {
   return (
     <section
-      className={`rounded-2xl border border-border bg-[color:var(--card)] text-[color:var(--card-foreground)] shadow-sm transition-shadow duration-150 hover:shadow-md ${className}`.trim()}
+      className={`rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-sm backdrop-blur-sm transition-shadow duration-200 hover:shadow-md ${className}`.trim()}
       style={style}
       {...rest}
     >
       {(title || description || actions) && (
-        <header className="flex flex-col gap-2 border-b border-border px-6 pb-4 pt-6 sm:flex-row sm:items-start sm:justify-between">
+        <header className="flex flex-col gap-2 border-b border-[color:var(--color-border)] px-6 pb-4 pt-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            {title && <h3 className="text-lg font-semibold leading-tight">{title}</h3>}
-            {description && <p className="text-sm text-[color:var(--muted-foreground)]">{description}</p>}
+            {title && <h3 className="text-lg font-semibold leading-tight text-[color:var(--color-text)]">{title}</h3>}
+            {description && <p className="text-sm text-[color:var(--color-text-muted)]">{description}</p>}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </header>

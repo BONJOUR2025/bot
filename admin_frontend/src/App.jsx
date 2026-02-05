@@ -3,6 +3,7 @@ import "./styles/globals.css";
 
 import ThemeProvider from "./providers/ThemeProvider.jsx";
 import { ViewportProvider } from "./providers/ViewportProvider.jsx";
+import { ToastProvider } from "./providers/ToastProvider.jsx";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
 import MainLayout from "./layouts/MainLayout.jsx";
@@ -33,8 +34,9 @@ export default function App() {
     <ViewportProvider>
       <ThemeProvider>
         {() => (
-          <AuthProvider>
-            <Router>
+          <ToastProvider>
+            <AuthProvider>
+              <Router>
               <Routes>
               {/* Публичная зона: логин */}
               <Route path="/admin/login" element={<PlainLayout />}>
@@ -72,8 +74,9 @@ export default function App() {
                 <Route index element={<Navigate to="/admin" replace />} />
               </Route>
               </Routes>
-            </Router>
-          </AuthProvider>
+              </Router>
+            </AuthProvider>
+          </ToastProvider>
         )}
       </ThemeProvider>
     </ViewportProvider>
