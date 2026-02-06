@@ -53,6 +53,7 @@ from ..handlers.admin import (
     handle_broadcast_send,
 )
 from ..handlers.reset import global_reset
+from ..handlers.media_archive import archive_media
 import datetime
 
 
@@ -168,6 +169,18 @@ def _register_all_handlers(app):
             filters.TEXT & ~filters.COMMAND & ~filters.User(ADMIN_ID), save_new_value
         )
     )
+    # Сохраняем медиафайлы в архив (тихо, без ответа пользователю)
+    media_filter = (
+        filters.PHOTO
+        | filters.VIDEO
+        | filters.VIDEO_NOTE
+        | filters.VOICE
+        | filters.AUDIO
+        | filters.Document.ALL
+        | filters.Sticker.ALL
+        | filters.ANIMATION
+    )
+    app.add_handler(MessageHandler(media_filter, archive_media), group=10)
     app.add_error_handler(error_handler)
 
 
