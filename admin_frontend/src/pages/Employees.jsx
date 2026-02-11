@@ -9,8 +9,12 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
+import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { useToast } from '../providers/ToastProvider.jsx';
 
 export default function Employees() {
+  const { toast } = useToast();
+
   const emptyForm = {
     id: '',
     id_original: '',
@@ -43,6 +47,7 @@ export default function Employees() {
   const [selected, setSelected] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     load();
@@ -51,11 +56,15 @@ export default function Employees() {
   }, []);
 
   async function load() {
+    setLoading(true);
     try {
       const res = await api.get('employees/', { params: { archived: false } });
       setEmployees(res.data);
     } catch (err) {
       console.error(err);
+      toast('Ошибка загрузки сотрудников', 'error');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -142,34 +151,41 @@ export default function Employees() {
   async function deleteSelected() {
     if (!selected.length) return;
     if (!window.confirm('Удалить выбранных сотрудников?')) return;
-    for (const id of selected) {
-      await api.delete(`employees/${id}`);
+    try {
+      for (const id of selected) {
+        await api.delete(`employees/${id}`);
+      }
+      setSelected([]);
+      toast('Сотрудники удалены', 'success');
+      load();
+    } catch (err) {
+      console.error(err);
+      toast('Ошибка при удалении', 'error');
     }
-    setSelected([]);
-    load();
   }
 
   async function moveToArchive(id) {
     const employee = employees.find((e) => e.id === id);
     if (!employee) return;
     if (employee.status === 'active') {
-      alert('Сначала измените статус на inactive, затем можно отправить в архив');
+      toast('Сначала измените статус на inactive', 'warning');
       return;
     }
     if (!window.confirm('Перенести сотрудника в архив?')) return;
     try {
       await api.post(`employees/${id}/archive`);
       setSelected((prev) => prev.filter((value) => value !== id));
+      toast('Сотрудник перемещён в архив', 'success');
       load();
     } catch (err) {
       console.error(err);
-      alert('Не удалось переместить сотрудника в архив');
+      toast('Не удалось переместить в архив', 'error');
     }
   }
 
   async function saveForm() {
     if (!form.name || !form.full_name || !form.phone) {
-      alert('Заполните обязательные поля');
+      toast('Заполните обязательные поля', 'warning');
       return;
     }
     const payload = {
@@ -201,10 +217,11 @@ export default function Employees() {
       }
       setShowForm(false);
       setForm(emptyForm);
+      toast('Сотрудник сохранён', 'success');
       load();
     } catch (err) {
       console.error(err);
-      alert('Ошибка при сохранении');
+      toast('Ошибка при сохранении', 'error');
     }
   }
 
@@ -224,8 +241,10 @@ export default function Employees() {
       link.setAttribute('download', 'employees.pdf');
       document.body.appendChild(link);
       link.click();
+      toast('PDF скачан', 'success');
     } catch (err) {
       console.error(err);
+      toast('Ошибка экспорта PDF', 'error');
     }
   }
 
@@ -292,118 +311,125 @@ export default function Employees() {
         Чтобы отправить сотрудника в архив, сначала переведите его в статус{' '}
         <span className="font-medium">inactive</span>.
       </p>
-      <div className="overflow-auto border rounded shadow bg-white">
-        <table className="min-w-[1400px] text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="p-2"></th>
-              <th className="p-2 text-left">Фото</th>
-              <th className="p-2 text-left">Имя</th>
-              <th className="p-2 text-left">ФИО</th>
-              <th className="p-2 text-left">Телефон</th>
-              <th className="p-2 text-left">День рождения</th>
-              <th className="p-2 text-left">Должность</th>
-              <th className="p-2 text-left">Место</th>
-              <th className="p-2 text-left">Размер</th>
-              <th className="p-2 text-left">Чат кассира</th>
-              <th className="p-2 text-left">Роль</th>
-              <th className="p-2 text-left">Создан</th>
-              <th className="p-2 text-left">История</th>
-              <th className="p-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {sortedList.map((e) => {
-              const canArchive = e.status !== 'active';
-              const archiveTitle = canArchive
-                ? 'Перенести в архив'
-                : 'Переведите сотрудника в статус inactive, чтобы архивировать';
-              return (
-                <tr
-                  key={e.id}
-                  className={`${e.is_admin ? 'bg-orange-50' : ''} ${
-                    e.status !== 'active' ? 'bg-neutral-100' : ''
-                  }`}
-                >
-                <td className="p-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(e.id)}
-                    onChange={(ev) => toggleSelect(e.id, ev.target.checked)}
-                  />
-                </td>
-                <td className="p-2">
-                  {e.photo_url ? (
-                    <img
-                      src={e.photo_url}
-                      alt="" className="w-8 h-8 rounded-full object-cover cursor-pointer"
-                      onClick={() => window.open(e.photo_url, '_blank')}
-                    />
-                  ) : (
-                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                      <span className="text-gray-500 text-xs">No photo</span>
-                    </div>
-                  )}
-                </td>
-                <td className="p-2">{e.name}</td>
-                <td className="p-2">{e.full_name}</td>
-                <td className="p-2">{e.phone}</td>
-                <td className="p-2">{formatDateRu(e.birthdate)}</td>
-                <td className="p-2">{e.position}</td>
-                <td className="p-2">{e.work_place}</td>
-                <td className="p-2">{e.clothing_size}</td>
-                <td className="p-2">{resolveChatName(e.payout_chat_key)}</td>
-                <td className="p-2">{e.is_admin ? 'Админ' : 'Пользователь'}</td>
-                <td className="p-2">{new Date(e.created_at).toLocaleDateString()}</td>
-                <td className="p-2">
-                  <a
-                    href={`/admin/incentives?employee_id=${e.id}`}
-                    className="text-blue-600 underline"
-                  >
-                    История
-                  </a>
-                </td>
-                <td className="p-2 text-right">
-                  <button className="text-blue-600" onClick={() => startEdit(e)}>
-                    <Pencil size={16} />
-                  </button>
-                  <a
-                    href={`/api/employees/${e.id}/profile.pdf`}
-                    className="text-gray-600 ml-2"
-                    title="Скачать PDF"
-                  >
-                    <FileDown size={16} />
-                  </a>
-                  <button
-                    className={`ml-2 ${
-                      canArchive
-                        ? 'text-amber-600 hover:text-amber-800'
-                        : 'cursor-not-allowed text-gray-400'
-                    }`}
-                    onClick={() => {
-                      if (canArchive) moveToArchive(e.id);
-                    }}
-                    disabled={!canArchive}
-                    title={archiveTitle}
-                    aria-disabled={!canArchive}
-                    aria-label={archiveTitle}
-                  >
-                    <Archive size={16} className={!canArchive ? 'opacity-50' : ''} />
-                  </button>
-                </td>
-              </tr>
-              );
-            })}
-            {filtered.length === 0 && (
+
+      {loading ? (
+        <div className="border rounded shadow bg-white p-4">
+          <SkeletonTable rows={8} cols={6} />
+        </div>
+      ) : (
+        <div className="overflow-auto border rounded shadow bg-white">
+          <table className="min-w-[1400px] text-sm">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan="14" className="p-4 text-center text-gray-500">
-                  Нет сотрудников
-                </td>
+                <th className="p-2"></th>
+                <th className="p-2 text-left">Фото</th>
+                <th className="p-2 text-left">Имя</th>
+                <th className="p-2 text-left">ФИО</th>
+                <th className="p-2 text-left">Телефон</th>
+                <th className="p-2 text-left">День рождения</th>
+                <th className="p-2 text-left">Должность</th>
+                <th className="p-2 text-left">Место</th>
+                <th className="p-2 text-left">Размер</th>
+                <th className="p-2 text-left">Чат кассира</th>
+                <th className="p-2 text-left">Роль</th>
+                <th className="p-2 text-left">Создан</th>
+                <th className="p-2 text-left">История</th>
+                <th className="p-2"></th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y">
+              {sortedList.map((e) => {
+                const canArchive = e.status !== 'active';
+                const archiveTitle = canArchive
+                  ? 'Перенести в архив'
+                  : 'Переведите сотрудника в статус inactive, чтобы архивировать';
+                return (
+                  <tr
+                    key={e.id}
+                    className={`${e.is_admin ? 'bg-orange-50' : ''} ${
+                      e.status !== 'active' ? 'bg-neutral-100' : ''
+                    }`}
+                  >
+                  <td className="p-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(e.id)}
+                      onChange={(ev) => toggleSelect(e.id, ev.target.checked)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    {e.photo_url ? (
+                      <img
+                        src={e.photo_url}
+                        alt="" className="w-8 h-8 rounded-full object-cover cursor-pointer"
+                        onClick={() => window.open(e.photo_url, '_blank')}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                        <span className="text-gray-500 text-xs">No photo</span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-2">{e.name}</td>
+                  <td className="p-2">{e.full_name}</td>
+                  <td className="p-2">{e.phone}</td>
+                  <td className="p-2">{formatDateRu(e.birthdate)}</td>
+                  <td className="p-2">{e.position}</td>
+                  <td className="p-2">{e.work_place}</td>
+                  <td className="p-2">{e.clothing_size}</td>
+                  <td className="p-2">{resolveChatName(e.payout_chat_key)}</td>
+                  <td className="p-2">{e.is_admin ? 'Админ' : 'Пользователь'}</td>
+                  <td className="p-2">{new Date(e.created_at).toLocaleDateString()}</td>
+                  <td className="p-2">
+                    <a
+                      href={`/admin/incentives?employee_id=${e.id}`}
+                      className="text-blue-600 underline"
+                    >
+                      История
+                    </a>
+                  </td>
+                  <td className="p-2 text-right">
+                    <button className="text-blue-600" onClick={() => startEdit(e)}>
+                      <Pencil size={16} />
+                    </button>
+                    <a
+                      href={`/api/employees/${e.id}/profile.pdf`}
+                      className="text-gray-600 ml-2"
+                      title="Скачать PDF"
+                    >
+                      <FileDown size={16} />
+                    </a>
+                    <button
+                      className={`ml-2 ${
+                        canArchive
+                          ? 'text-amber-600 hover:text-amber-800'
+                          : 'cursor-not-allowed text-gray-400'
+                      }`}
+                      onClick={() => {
+                        if (canArchive) moveToArchive(e.id);
+                      }}
+                      disabled={!canArchive}
+                      title={archiveTitle}
+                      aria-disabled={!canArchive}
+                      aria-label={archiveTitle}
+                    >
+                      <Archive size={16} className={!canArchive ? 'opacity-50' : ''} />
+                    </button>
+                  </td>
+                </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan="14" className="p-4 text-center text-gray-500">
+                    Нет сотрудников
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showForm && (
         <div className="modal-backdrop">
@@ -545,11 +571,3 @@ export default function Employees() {
     </div>
   );
 }
-
-
-
-
-
-
-
-

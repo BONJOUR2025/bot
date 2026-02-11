@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
+import { useToast } from '../providers/ToastProvider.jsx';
+import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 
 const MAX_AMOUNT = 100000;
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
@@ -42,23 +44,6 @@ function toPayloadTimestamp(value) {
   const [datePart, timePart] = value.split('T');
   const [hours = '00', minutes = '00', seconds = '00'] = timePart.split(':');
   return `${datePart} ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-}
-
-function Toast({ message, type = 'info', onClose }) {
-  useEffect(() => {
-    if (!message) return undefined;
-    const id = setTimeout(onClose, 3000);
-    return () => clearTimeout(id);
-  }, [message, onClose]);
-  if (!message) return null;
-  const color = type === 'error' ? 'bg-red-600' : 'bg-green-600';
-  return (
-    <div
-      className={`fixed top-4 right-4 ${color} text-white px-3 py-2 rounded shadow`}
-    >
-      {message}
-    </div>
-  );
 }
 
 function Summary({ list }) {
@@ -125,6 +110,7 @@ function formatDateTime(value) {
 
 export default function Payouts() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const canManageDates = Boolean(
     user?.permissions?.includes('*') || user?.permissions?.includes(MANAGE_DATES_PERMISSION),
   );
@@ -160,8 +146,7 @@ export default function Payouts() {
   });
   const [showEditor, setShowEditor] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [toast, setToast] = useState(null);
-  const [toastType, setToastType] = useState('info');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     load();
@@ -179,6 +164,7 @@ export default function Payouts() {
   }
 
   async function load() {
+    setLoading(true);
     try {
       const params = {
         payout_type: filters.type || undefined,
@@ -196,6 +182,9 @@ export default function Payouts() {
       setPayouts(list);
     } catch (err) {
       console.error(err);
+      toast('Ошибка загрузки выплат', 'error');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -221,13 +210,11 @@ export default function Payouts() {
           return;
       }
       await api.post(endpoint);
-      setToast('Статус обновлён');
-      setToastType('info');
+      toast('Статус обновлён', 'success');
       load();
     } catch (err) {
       console.error(err);
-      setToast('Ошибка запроса');
-      setToastType('error');
+      toast('Ошибка обновления статуса', 'error');
     }
   }
 
@@ -235,13 +222,11 @@ export default function Payouts() {
     if (!window.confirm('Удалить выплату?')) return;
     try {
       await api.delete(`payouts/${id}`);
-      setToast('Выплата удалена');
-      setToastType('info');
+      toast('Выплата удалена', 'success');
       load();
     } catch (err) {
       console.error(err);
-      setToast('Ошибка удаления');
-      setToastType('error');
+      toast('Ошибка удаления', 'error');
     }
   }
 
@@ -269,8 +254,7 @@ export default function Payouts() {
   async function saveForm() {
     const amount = Number(form.amount || 0);
     if (!form.user_id || !amount || amount > MAX_AMOUNT) {
-      setToast('Неверные данные');
-      setToastType('error');
+      toast('Неверные данные', 'warning');
       return;
     }
     const payload = { ...form, amount };
@@ -287,13 +271,11 @@ export default function Payouts() {
       }
       setShowEditor(false);
       setForm(emptyForm);
-      setToast('Сохранено');
-      setToastType('info');
+      toast('Выплата сохранена', 'success');
       load();
     } catch (err) {
       console.error(err);
-      setToast('Ошибка сохранения');
-      setToastType('error');
+      toast('Ошибка сохранения', 'error');
     }
   }
 
@@ -326,12 +308,10 @@ export default function Payouts() {
     try {
       await api.get('payouts/unconfirmed');
       load();
-      setToast('Заявки обновлены');
-      setToastType('info');
+      toast('Заявки обновлены', 'success');
     } catch (err) {
       console.error(err);
-      setToast('Ошибка обновления');
-      setToastType('error');
+      toast('Ошибка обновления', 'error');
     }
   }
 
@@ -350,8 +330,6 @@ export default function Payouts() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <Toast message={toast} type={toastType} onClose={() => setToast(null)} />
-
       <h2 className="text-2xl font-semibold tracking-tight text-gray-800 flex items-center gap-2">
         Выплаты
         <button
@@ -365,13 +343,13 @@ export default function Payouts() {
 
       <div className="flex flex-wrap gap-2 items-end">
         <input
-          className="border p-2 flex-grow"
+          className="border p-2 flex-grow rounded"
           placeholder="Поиск по ФИО"
           value={filters.query}
           onChange={(e) => setFilters({ ...filters, query: e.target.value })}
         />
         <select
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.type}
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
         >
@@ -380,7 +358,7 @@ export default function Payouts() {
           <option value="Зарплата">Зарплата</option>
         </select>
         <select
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.status}
           onChange={(e) => setFilters({ ...filters, status: e.target.value })}
         >
@@ -392,7 +370,7 @@ export default function Payouts() {
           ))}
         </select>
         <select
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.method}
           onChange={(e) => setFilters({ ...filters, method: e.target.value })}
         >
@@ -403,13 +381,13 @@ export default function Payouts() {
         </select>
         <input
           type="date"
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.from}
           onChange={(e) => setFilters({ ...filters, from: e.target.value })}
         />
         <input
           type="date"
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.to}
           onChange={(e) => setFilters({ ...filters, to: e.target.value })}
         />
@@ -424,94 +402,100 @@ export default function Payouts() {
         </button>
       </div>
 
-      <div className="overflow-auto border rounded shadow">
-        <table className="min-w-[1100px] divide-y divide-gray-200 bg-white text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left">ФИО</th>
-              <th className="px-4 py-2 text-left">Тип</th>
-              <th className="px-4 py-2 text-left">Способ</th>
-              <th className="px-4 py-2 text-left">Сумма</th>
-              <th className="px-4 py-2 text-left">Статус</th>
-              <th className="px-4 py-2 text-left">Дата</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {payouts.map((p) => (
-              <tr key={p.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2">{p.name}</td>
-                <td className="px-4 py-2">{p.payout_type}</td>
-                <td className="px-4 py-2">{p.method}</td>
-                <td className="px-4 py-2 text-blue-800 font-medium">
-                  {p.amount} ₽
-                </td>
-                <td className="px-4 py-2">
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${statusColor(p.status)}`}
-                  >
-                    {p.status}
-                  </span>
-                </td>
-                <td className="px-4 py-2 text-xs">{formatDateTime(p.timestamp)}</td>
-                <td className="px-4 py-2 space-x-1 whitespace-nowrap">
-                  <button
-                    onClick={() => openEdit(p)}
-                    className="text-blue-600 hover:text-blue-800"
-                    title="Редактировать"
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  {p.status === 'Ожидает' && (
-                    <button
-                      onClick={() => updateStatus(p.id, 'Одобрено')}
-                      className="text-green-600 hover:text-green-800"
-                      title="Одобрить"
-                    >
-                      <CheckCircle size={16} />
-                    </button>
-                  )}
-                  {p.status === 'Ожидает' && (
-                    <button
-                      onClick={() => updateStatus(p.id, 'Отклонено')}
-                      className="text-red-600 hover:text-red-800"
-                      title="Отказать"
-                    >
-                      <XCircle size={16} />
-                    </button>
-                  )}
-                  {p.status === 'Одобрено' && (
-                    <button
-                      onClick={() => updateStatus(p.id, 'Выплачено')}
-                      className="text-indigo-600 hover:text-indigo-800"
-                      title="Отметить выплаченным"
-                    >
-                      <Download size={16} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => remove(p.id)}
-                    className="text-gray-500 hover:text-gray-800"
-                    title="Удалить"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {payouts.length === 0 && (
+      {loading ? (
+        <div className="border rounded shadow bg-white p-4">
+          <SkeletonTable rows={8} cols={7} />
+        </div>
+      ) : (
+        <div className="overflow-auto border rounded shadow">
+          <table className="min-w-[1100px] divide-y divide-gray-200 bg-white text-sm">
+            <thead className="bg-gray-50">
               <tr>
-                <td
-                  colSpan="7"
-                  className="px-4 py-3 text-center text-gray-500 italic"
-                >
-                  Нет данных
-                </td>
+                <th className="px-4 py-2 text-left">ФИО</th>
+                <th className="px-4 py-2 text-left">Тип</th>
+                <th className="px-4 py-2 text-left">Способ</th>
+                <th className="px-4 py-2 text-left">Сумма</th>
+                <th className="px-4 py-2 text-left">Статус</th>
+                <th className="px-4 py-2 text-left">Дата</th>
+                <th className="px-4 py-2"></th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {payouts.map((p) => (
+                <tr key={p.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-2">{p.name}</td>
+                  <td className="px-4 py-2">{p.payout_type}</td>
+                  <td className="px-4 py-2">{p.method}</td>
+                  <td className="px-4 py-2 text-blue-800 font-medium">
+                    {p.amount} ₽
+                  </td>
+                  <td className="px-4 py-2">
+                    <span
+                      className={`px-2 py-1 rounded text-xs ${statusColor(p.status)}`}
+                    >
+                      {p.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-xs">{formatDateTime(p.timestamp)}</td>
+                  <td className="px-4 py-2 space-x-1 whitespace-nowrap">
+                    <button
+                      onClick={() => openEdit(p)}
+                      className="text-blue-600 hover:text-blue-800"
+                      title="Редактировать"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    {p.status === 'Ожидает' && (
+                      <button
+                        onClick={() => updateStatus(p.id, 'Одобрено')}
+                        className="text-green-600 hover:text-green-800"
+                        title="Одобрить"
+                      >
+                        <CheckCircle size={16} />
+                      </button>
+                    )}
+                    {p.status === 'Ожидает' && (
+                      <button
+                        onClick={() => updateStatus(p.id, 'Отклонено')}
+                        className="text-red-600 hover:text-red-800"
+                        title="Отказать"
+                      >
+                        <XCircle size={16} />
+                      </button>
+                    )}
+                    {p.status === 'Одобрено' && (
+                      <button
+                        onClick={() => updateStatus(p.id, 'Выплачено')}
+                        className="text-indigo-600 hover:text-indigo-800"
+                        title="Отметить выплаченным"
+                      >
+                        <Download size={16} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => remove(p.id)}
+                      className="text-gray-500 hover:text-gray-800"
+                      title="Удалить"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {payouts.length === 0 && (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="px-4 py-3 text-center text-gray-500 italic"
+                  >
+                    Нет данных
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="flex gap-3 items-center">
         <button onClick={exportPdf} className="btn bg-green-600 hover:bg-green-700 flex items-center gap-1">
@@ -669,9 +653,3 @@ export default function Payouts() {
     </div>
   );
 }
-
-
-
-
-
-

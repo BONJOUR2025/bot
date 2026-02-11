@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import api from '../api';
+import { useToast } from '../providers/ToastProvider.jsx';
+import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 
 export default function Vacations() {
+  const { toast } = useToast();
+
   const emptyForm = {
     id: null,
     employee_id: '',
@@ -25,6 +29,7 @@ export default function Vacations() {
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [todayCount, setTodayCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [monthView, setMonthView] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -53,6 +58,7 @@ export default function Vacations() {
   }
 
   async function load() {
+    setLoading(true);
     try {
       const params = {
         employee_id: filters.employee || undefined,
@@ -72,6 +78,9 @@ export default function Vacations() {
       setTodayCount(activeRes.data.length);
     } catch (err) {
       console.error(err);
+      toast('Ошибка загрузки данных', 'error');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -93,7 +102,7 @@ export default function Vacations() {
 
   async function saveForm() {
     if (!form.employee_id || !form.start_date || !form.end_date) {
-      alert('Заполните обязательные поля');
+      toast('Заполните обязательные поля', 'warning');
       return;
     }
     try {
@@ -104,10 +113,11 @@ export default function Vacations() {
       }
       setShowForm(false);
       setForm(emptyForm);
+      toast('Запись сохранена', 'success');
       load();
     } catch (err) {
       console.error(err);
-      alert('Ошибка сохранения');
+      toast('Ошибка сохранения', 'error');
     }
   }
 
@@ -115,9 +125,11 @@ export default function Vacations() {
     if (!window.confirm('Удалить запись?')) return;
     try {
       await api.delete(`vacations/${id}`);
+      toast('Запись удалена', 'success');
       load();
     } catch (err) {
       console.error(err);
+      toast('Ошибка удаления', 'error');
     }
   }
 
@@ -141,7 +153,7 @@ export default function Vacations() {
       <div className="text-sm text-gray-600">Сегодня в отпуске — {todayCount} сотрудника</div>
       <div className="flex flex-wrap gap-2 items-end">
         <select
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.type}
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
         >
@@ -150,7 +162,7 @@ export default function Vacations() {
           <option value="Больничный">Больничный</option>
         </select>
         <select
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.employee}
           onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
         >
@@ -163,18 +175,18 @@ export default function Vacations() {
         </select>
         <input
           type="date"
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.from}
           onChange={(e) => setFilters({ ...filters, from: e.target.value })}
         />
         <input
           type="date"
-          className="border p-2"
+          className="border p-2 rounded"
           value={filters.to}
           onChange={(e) => setFilters({ ...filters, to: e.target.value })}
         />
         <input
-          className="border p-2 flex-grow"
+          className="border p-2 flex-grow rounded"
           placeholder="Поиск по ФИО"
           value={filters.query}
           onChange={(e) => setFilters({ ...filters, query: e.target.value })}
@@ -187,56 +199,62 @@ export default function Vacations() {
         </button>
       </div>
 
-      <div className="overflow-auto border rounded shadow bg-white">
-        <table className="min-w-[1100px] text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="p-2 text-left">Сотрудник</th>
-              <th className="p-2 text-left">Тип</th>
-              <th className="p-2 text-left">Даты</th>
-              <th className="p-2 text-left">Длительность</th>
-              <th className="p-2 text-left">Комментарий</th>
-              <th className="p-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {vacations.map((v) => (
-              <tr key={v.id} className="hover:bg-gray-50">
-                <td className="p-2">{v.name}</td>
-                <td className="p-2">{v.type}</td>
-                <td className="p-2">
-                  {formatDateRange(v.start_date, v.end_date)}
-                </td>
-                <td className="p-2">{duration(v.start_date, v.end_date)} дней</td>
-                <td className="p-2 whitespace-pre-wrap">{v.comment}</td>
-                <td className="p-2 space-x-1 text-right">
-                  <button
-                    className="text-blue-600 hover:text-blue-800"
-                    onClick={() => startEdit(v)}
-                    title="Редактировать"
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    className="text-gray-600 hover:text-gray-800"
-                    onClick={() => remove(v.id)}
-                    title="Удалить"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {vacations.length === 0 && (
+      {loading ? (
+        <div className="border rounded shadow bg-white p-4">
+          <SkeletonTable rows={6} cols={6} />
+        </div>
+      ) : (
+        <div className="overflow-auto border rounded shadow bg-white">
+          <table className="min-w-[1100px] text-sm">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan="6" className="p-4 text-center text-gray-500">
-                  Нет данных
-                </td>
+                <th className="p-2 text-left">Сотрудник</th>
+                <th className="p-2 text-left">Тип</th>
+                <th className="p-2 text-left">Даты</th>
+                <th className="p-2 text-left">Длительность</th>
+                <th className="p-2 text-left">Комментарий</th>
+                <th className="p-2"></th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y">
+              {vacations.map((v) => (
+                <tr key={v.id} className="hover:bg-gray-50">
+                  <td className="p-2">{v.name}</td>
+                  <td className="p-2">{v.type}</td>
+                  <td className="p-2">
+                    {formatDateRange(v.start_date, v.end_date)}
+                  </td>
+                  <td className="p-2">{duration(v.start_date, v.end_date)} дней</td>
+                  <td className="p-2 whitespace-pre-wrap">{v.comment}</td>
+                  <td className="p-2 space-x-1 text-right">
+                    <button
+                      className="text-blue-600 hover:text-blue-800"
+                      onClick={() => startEdit(v)}
+                      title="Редактировать"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      className="text-gray-600 hover:text-gray-800"
+                      onClick={() => remove(v.id)}
+                      title="Удалить"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {vacations.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="p-4 text-center text-gray-500">
+                    Нет данных
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="space-y-2">
         <div className="flex items-center gap-2">
@@ -389,8 +407,3 @@ export default function Vacations() {
     </div>
   );
 }
-
-
-
-
-
