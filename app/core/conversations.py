@@ -62,6 +62,20 @@ from ..handlers.admin import (
     report_select_status,
 )
 from ..handlers.reset import global_reset
+from ..handlers.user.start import start as start_handler
+
+
+async def reset_and_start(update, context):
+    """Reset all conversation states and return to start menu."""
+    # Clear conversation states for this user
+    app = context.application
+    for handler, conversations in app._conversation_handler_conversations.items():
+        key = handler._get_key(update)
+        if key in conversations:
+            conversations.pop(key)
+    context.user_data.clear()
+    # Return to start
+    return await start_handler(update, context)
 
 
 def invalid_data_type(update, context):
@@ -139,6 +153,7 @@ def build_admin_conversation():
             ],
         },
         fallbacks=[
+            CommandHandler("start", reset_and_start),
             MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset),
             CommandHandler("cancel", cancel_payouts),
         ],
@@ -169,13 +184,18 @@ def build_manual_payout_conversation():
             ],
         },
         fallbacks=[
-            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset)
+            CommandHandler("start", reset_and_start),
+            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset),
         ],
         per_chat=True,
     )
 
 
 def build_payout_conversation():
+    # Pattern for main menu buttons that should exit payout flow
+    menu_buttons = filters.Regex(
+        r"^(📄 Просмотр ЗП|📅 Просмотр расписания|👤 Личный кабинет)$"
+    )
     return ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex(PAYMENT_REQUEST_PATTERN), request_payout_start)
@@ -195,7 +215,12 @@ def build_payout_conversation():
             ],
         },
         fallbacks=[
-            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена)$"), global_reset)
+            CommandHandler("start", reset_and_start),
+            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена|❌ Отмена|🔙 Назад)$"), global_reset),
+            # Allow re-entering the payout flow
+            MessageHandler(filters.Regex(PAYMENT_REQUEST_PATTERN), request_payout_start),
+            # Exit to menu items
+            MessageHandler(menu_buttons, global_reset),
         ],
         per_chat=True,
     )
