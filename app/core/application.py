@@ -54,11 +54,19 @@ from ..handlers.admin import (
 )
 from ..handlers.reset import global_reset
 from ..handlers.media_archive import archive_media
+from telegram.request import HTTPXRequest
 import datetime
 
 
 def create_application():
-    app = ApplicationBuilder().token(TOKEN).build()
+    # Увеличенные таймауты для медленных соединений
+    request = HTTPXRequest(
+        connect_timeout=30.0,
+        read_timeout=30.0,
+        write_timeout=30.0,
+        pool_timeout=30.0,
+    )
+    app = ApplicationBuilder().token(TOKEN).request(request).build()
     register_all_handlers(app)
     register_jobs(app)
 
