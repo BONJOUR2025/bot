@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     )
     secret_key: str = Field("change_me", validation_alias="SECRET_KEY")
 
+    # Proxy для Telegram API (например: "socks5://127.0.0.1:1080" или "http://127.0.0.1:8080")
+    telegram_proxy: str | None = Field(None, validation_alias="TELEGRAM_PROXY")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

@@ -7,6 +7,7 @@ from telegram.ext import (
 )
 
 from ..config import TOKEN, ADMIN_ID
+from ..settings import settings
 from ..utils.logger import log
 from ..handlers.callback_logger import log_button_press
 from .conversations import (
@@ -59,13 +60,19 @@ import datetime
 
 
 def create_application():
-    # Увеличенные таймауты для медленных соединений
-    request = HTTPXRequest(
-        connect_timeout=30.0,
-        read_timeout=30.0,
-        write_timeout=30.0,
-        pool_timeout=30.0,
-    )
+    # Настройка прокси и таймаутов
+    proxy_url = settings.telegram_proxy
+    request_kwargs = {
+        "connect_timeout": 30.0,
+        "read_timeout": 30.0,
+        "write_timeout": 30.0,
+        "pool_timeout": 30.0,
+    }
+    if proxy_url:
+        request_kwargs["proxy"] = proxy_url
+        log(f"🌐 Using proxy for Telegram API: {proxy_url}")
+
+    request = HTTPXRequest(**request_kwargs)
     app = ApplicationBuilder().token(TOKEN).request(request).build()
     register_all_handlers(app)
     register_jobs(app)
