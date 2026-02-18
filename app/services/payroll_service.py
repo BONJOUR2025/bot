@@ -241,12 +241,12 @@ class PayrollService:
     # Advances                                                             #
     # ------------------------------------------------------------------ #
 
-    def _get_advances_for_month(self, year: int, month: int) -> dict[str, float]:
+    def _get_advances_after_last_salary(self) -> dict[str, float]:
         """
-        Rule (from reference payroll_app):
+        Rule:
         - Find the LAST record with payout_type == "Зарплата" for each employee
-        - Sum all payout_type == "Аванс" records that are AFTER that date
-          and fall within the target year/month
+        - Sum ALL payout_type == "Аванс" records that are AFTER that date
+          (regardless of month - these are unpaid advances that need to be deducted)
         """
         if not self.advance_requests_file.exists():
             return {}
@@ -277,10 +277,16 @@ class PayrollService:
                     last_salary_dt = _parse_dt(_dt_field(r))
 
             if last_salary_dt is None:
-                out[code] = 0.0
+                # No salary payment yet - sum ALL advances
+                total = sum(
+                    float(r.get("amount") or 0)
+                    for r in items_sorted
+                    if r.get("payout_type") == "Аванс"
+                )
+                out[code] = total
                 continue
 
-            # Sum advances after last salary in target month
+            # Sum ALL advances after last salary (no month filter)
             total = 0.0
             for r in items_sorted:
                 if r.get("payout_type") != "Аванс":
@@ -288,8 +294,7 @@ class PayrollService:
                 dt = _parse_dt(_dt_field(r))
                 if dt <= last_salary_dt:
                     continue
-                if dt.year == year and dt.month == month:
-                    total += float(r.get("amount") or 0)
+                total += float(r.get("amount") or 0)
 
             out[code] = total
 
@@ -387,7 +392,7 @@ class PayrollService:
             logger.error(f"Firebird error: {e}")
             sales_data = {}
 
-        advances_map = self._get_advances_for_month(year, month_num)
+        advances_map = self._get_advances_after_last_salary()
         bonuses_map, penalties_map = self._get_bonuses_penalties_for_month(year, month_num)
         plans_map = self.plans_repo.get_plans_map()
 

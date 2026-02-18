@@ -31,20 +31,21 @@ function SummaryBar({ rows }) {
   const totalSalary = rows.reduce((s, r) => s + (r.base_salary || 0), 0);
   const totalCommission = rows.reduce((s, r) => s + (r.total_commission || 0), 0);
   const totalBonuses = rows.reduce((s, r) => s + (r.bonuses || 0), 0);
-  const totalDeductions = rows.reduce((s, r) => s + (r.total_deductions || 0), 0);
-  const avgNet = rows.length ? totalNet / rows.length : 0;
+  const totalAdvances = rows.reduce((s, r) => s + (r.advances || 0), 0);
+  const totalPenalties = rows.reduce((s, r) => s + (r.penalties || 0), 0);
 
   const stats = [
     { label: 'Сотрудников', value: rows.length, accent: false },
     { label: 'Оклады', value: fmtMoney(totalSalary), accent: false },
     { label: 'Комиссии', value: fmtMoney(totalCommission), accent: false },
     { label: 'Премии', value: fmtMoney(totalBonuses), accent: false },
-    { label: 'Удержания', value: fmtMoney(totalDeductions), accent: true },
+    { label: 'Авансы', value: fmtMoney(totalAdvances), accent: true },
+    { label: 'Штрафы', value: fmtMoney(totalPenalties), accent: true },
     { label: 'К выплате', value: fmtMoney(totalNet), accent: false },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
       {stats.map((s) => (
         <div key={s.label} className="app-card p-4 text-center">
           <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{s.label}</div>
@@ -449,7 +450,10 @@ export default function Payroll() {
                 <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Комиссия</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Премии</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-danger)]">
-                  Удержания
+                  Авансы
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-danger)]">
+                  Штрафы
                 </th>
                 <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-primary)]">
                   К выплате
@@ -486,7 +490,10 @@ export default function Payroll() {
                       {row.bonuses > 0 ? `+${fmtMoney(row.bonuses)}` : '—'}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap text-[color:var(--color-danger)]">
-                      {row.total_deductions > 0 ? `-${fmtMoney(row.total_deductions)}` : '—'}
+                      {row.advances > 0 ? `-${fmtMoney(row.advances)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap text-[color:var(--color-danger)]">
+                      {row.penalties > 0 ? `-${fmtMoney(row.penalties)}` : '—'}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap font-semibold text-[color:var(--color-primary)]">
                       {fmtMoney(row.total_net)}
@@ -520,7 +527,10 @@ export default function Payroll() {
                   +{fmtMoney(filtered.reduce((s, r) => s + r.bonuses, 0))}
                 </td>
                 <td className="px-3 py-2.5 text-right text-[color:var(--color-danger)]">
-                  -{fmtMoney(filtered.reduce((s, r) => s + r.total_deductions, 0))}
+                  -{fmtMoney(filtered.reduce((s, r) => s + r.advances, 0))}
+                </td>
+                <td className="px-3 py-2.5 text-right text-[color:var(--color-danger)]">
+                  -{fmtMoney(filtered.reduce((s, r) => s + r.penalties, 0))}
                 </td>
                 <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">
                   {fmtMoney(filtered.reduce((s, r) => s + r.total_net, 0))}
