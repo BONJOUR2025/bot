@@ -17,6 +17,7 @@ from app.data.json_storage import JsonStorage
 AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
     {"id": "dashboard", "label": "Дашборд"},
     {"id": "employees", "label": "Сотрудники"},
+    {"id": "payroll", "label": "Расчёт зарплаты"},
     {"id": "payouts", "label": "Выплаты"},
     {
         "id": "payouts-manage-dates",
