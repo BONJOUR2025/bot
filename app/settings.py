@@ -60,12 +60,14 @@ class Settings(BaseSettings):
     telegram_proxy: str | None = Field(None, validation_alias="TELEGRAM_PROXY")
 
     # Firebird database для расчёта зарплаты (продажи)
+    firebird_host: str = Field("localhost", validation_alias="FIREBIRD_HOST")
+    firebird_port: int = Field(3050, validation_alias="FIREBIRD_PORT")
     firebird_database: str = Field(
         r"C:\Agbis\DB\ARM_13.fdb", validation_alias="FIREBIRD_DATABASE"
     )
     firebird_user: str = Field("SYSDBA", validation_alias="FIREBIRD_USER")
     firebird_password: str = Field("masterkey", validation_alias="FIREBIRD_PASSWORD")
-    firebird_charset: str = Field("WIN1251", validation_alias="FIREBIRD_CHARSET")
+    firebird_charset: str = Field("UTF8", validation_alias="FIREBIRD_CHARSET")
 
     # Excel файл с окладами
     payroll_excel_file: str = Field(
