@@ -121,6 +121,7 @@ class PayrollService:
         plans_repo: SalesPlansRepository | None = None,
         advance_requests_file: str | None = None,
         bonuses_penalties_file: str | None = None,
+        users_file: str | None = None,
     ) -> None:
         self.excel_path = Path(excel_path or settings.payroll_excel_file)
         self.firebird = firebird_service or get_firebird_service()
@@ -131,7 +132,40 @@ class PayrollService:
         self.bonuses_penalties_file = Path(
             bonuses_penalties_file or settings.bonuses_penalties_file
         )
+        self.users_file = Path(users_file or settings.users_file)
         self._excel_cache: dict[str, pd.DataFrame] = {}
+
+        # Mappings for employee lookup
+        self._code_to_user_id: dict[str, str] = {}
+        self._user_id_to_code: dict[str, str] = {}
+        self._full_name_to_code: dict[str, str] = {}
+        self._load_user_mappings()
+
+    def _load_user_mappings(self) -> None:
+        """Load user.json and build mappings between code, user_id, full_name."""
+        if not self.users_file.exists():
+            logger.warning(f"Users file not found: {self.users_file}")
+            return
+
+        try:
+            with open(self.users_file, "r", encoding="utf-8") as f:
+                users = json.load(f)
+
+            for user_id, data in users.items():
+                name = data.get("name", "")  # "Вера 0102"
+                full_name = data.get("full_name", "")  # "Кочетова Вера Алексеевна"
+
+                code = self._extract_employee_code(name)
+                if code:
+                    self._code_to_user_id[code] = user_id
+                    self._user_id_to_code[user_id] = code
+                    if full_name:
+                        # Normalize full name for lookup
+                        self._full_name_to_code[full_name.strip().lower()] = code
+
+            logger.info(f"Loaded {len(self._code_to_user_id)} employee mappings")
+        except Exception as e:
+            logger.error(f"Error loading user mappings: {e}")
 
     def _extract_employee_code(self, name: str) -> str | None:
         """Extract 4-digit code from employee name like 'Имя 1234'."""
@@ -143,9 +177,20 @@ class PayrollService:
             return match.group(1)
         return None
 
+    def _get_code_from_user_id(self, user_id: str) -> str | None:
+        """Get employee code from Telegram user_id."""
+        return self._user_id_to_code.get(str(user_id))
+
+    def _get_code_from_full_name(self, full_name: str) -> str | None:
+        """Get employee code from full name."""
+        if not full_name:
+            return None
+        return self._full_name_to_code.get(full_name.strip().lower())
+
     def list_months(self) -> list[str]:
         """List available months from Excel file."""
         if not self.excel_path.exists():
+            logger.warning(f"Excel file not found: {self.excel_path}")
             return []
         try:
             xl = pd.ExcelFile(self.excel_path)
@@ -248,51 +293,54 @@ class PayrollService:
             logger.error(f"Error loading advance requests: {e}")
             return []
 
+    def _parse_timestamp(self, ts: str) -> datetime | None:
+        """Parse timestamp from various formats."""
+        if not ts:
+            return None
+        try:
+            return datetime.fromisoformat(ts.replace(" ", "T"))
+        except:
+            try:
+                return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            except:
+                return None
+
     def _get_advances_for_period(
         self, employee_code: str, date_from: date, date_to: date
     ) -> float:
         """
         Get total advances for an employee in a period.
-        Looks for advances after the last "Зарплата" payout.
+        Sums all advances with status "Выплачено" in the date range.
         """
         requests = self._load_advance_requests()
 
-        # Find requests matching employee code
-        employee_requests = []
+        total = 0.0
         for req in requests:
+            # Match by employee code from name field
             name = req.get("name", "")
             code = self._extract_employee_code(name)
-            if code == employee_code:
-                employee_requests.append(req)
 
-        if not employee_requests:
-            return 0.0
+            # Also try matching by user_id
+            if not code or code != employee_code:
+                user_id = req.get("user_id", "")
+                code = self._get_code_from_user_id(user_id)
 
-        # Sort by timestamp
-        def parse_timestamp(ts: str) -> datetime:
-            try:
-                return datetime.fromisoformat(ts.replace(" ", "T"))
-            except:
-                return datetime.min
+            if code != employee_code:
+                continue
 
-        employee_requests.sort(key=lambda x: parse_timestamp(x.get("timestamp", "")))
-
-        # Find last salary payout
-        last_salary_idx = -1
-        for i, req in enumerate(employee_requests):
-            if req.get("payout_type") == "Зарплата":
-                ts = parse_timestamp(req.get("timestamp", ""))
-                if date_from <= ts.date() <= date_to:
-                    last_salary_idx = i
-
-        # Sum advances after last salary (or all advances in period if no salary)
-        total = 0.0
-        for i, req in enumerate(employee_requests):
+            # Only count advances
             if req.get("payout_type") != "Аванс":
                 continue
-            if last_salary_idx >= 0 and i <= last_salary_idx:
+
+            # Only count paid advances
+            if req.get("status") != "Выплачено":
                 continue
-            ts = parse_timestamp(req.get("timestamp", ""))
+
+            # Check date
+            ts = self._parse_timestamp(req.get("timestamp", ""))
+            if not ts:
+                continue
+
             if date_from <= ts.date() <= date_to:
                 total += float(req.get("amount", 0))
 
@@ -323,8 +371,20 @@ class PayrollService:
         penalties = 0.0
 
         for item in items:
-            name = item.get("name", "")
-            code = self._extract_employee_code(name)
+            # Try to match by employee_id (Telegram user_id)
+            employee_id = item.get("employee_id", "")
+            code = self._get_code_from_user_id(employee_id)
+
+            # Also try matching by full name
+            if not code:
+                full_name = item.get("name", "")
+                code = self._get_code_from_full_name(full_name)
+
+            # Also try extracting code directly from name (if it has format "Имя ХХХХ")
+            if not code:
+                name = item.get("name", "")
+                code = self._extract_employee_code(name)
+
             if code != employee_code:
                 continue
 
@@ -395,7 +455,11 @@ class PayrollService:
             return []
 
         # Get sales data from Firebird
-        sales_data = self.firebird.get_all_sales(date_from, date_to)
+        try:
+            sales_data = self.firebird.get_all_sales(date_from, date_to)
+        except Exception as e:
+            logger.error(f"Error getting sales data: {e}")
+            sales_data = {}
 
         # Get plans
         plans_map = self.plans_repo.get_plans_map()
