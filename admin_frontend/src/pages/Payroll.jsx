@@ -1,34 +1,46 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Download, Search, X } from 'lucide-react';
+import { Download, Search, X, Settings, ChevronDown, ChevronUp, Percent } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 
 const fmt = (v) => {
-  if (!v || v === 0) return '—';
+  if (v === null || v === undefined || v === 0) return '—';
   return Number(v).toLocaleString('ru-RU');
 };
 
 const fmtMoney = (v) => {
-  if (!v || v === 0) return '—';
+  if (v === null || v === undefined || v === 0) return '—';
   return `${Number(v).toLocaleString('ru-RU')} ₽`;
 };
 
+const fmtPercent = (v) => {
+  if (v === null || v === undefined) return '—';
+  return `${(v * 100).toFixed(0)}%`;
+};
+
+const fmtRate = (v) => {
+  if (v === null || v === undefined) return '—';
+  return `${(v * 100).toFixed(0)}%`;
+};
+
 function SummaryBar({ rows }) {
-  const total = rows.reduce((s, r) => s + (r.final_amount || 0), 0);
-  const totalFund = rows.reduce((s, r) => s + (r.salary_total || 0), 0);
-  const totalAdvance = rows.reduce((s, r) => s + (r.advance || 0), 0);
-  const totalDeduction = rows.reduce((s, r) => s + (r.deduction || 0), 0);
-  const avg = rows.length ? total / rows.length : 0;
+  const totalNet = rows.reduce((s, r) => s + (r.total_net || 0), 0);
+  const totalGross = rows.reduce((s, r) => s + (r.total_gross || 0), 0);
+  const totalSalary = rows.reduce((s, r) => s + (r.base_salary || 0), 0);
+  const totalCommission = rows.reduce((s, r) => s + (r.total_commission || 0), 0);
+  const totalBonuses = rows.reduce((s, r) => s + (r.bonuses || 0), 0);
+  const totalDeductions = rows.reduce((s, r) => s + (r.total_deductions || 0), 0);
+  const avgNet = rows.length ? totalNet / rows.length : 0;
 
   const stats = [
     { label: 'Сотрудников', value: rows.length, accent: false },
-    { label: 'Фонд оплаты', value: fmtMoney(totalFund), accent: false },
-    { label: 'Удержания', value: fmtMoney(totalDeduction), accent: true },
-    { label: 'Авансы', value: fmtMoney(totalAdvance), accent: false },
-    { label: 'К выплате', value: fmtMoney(total), accent: false },
-    { label: 'Средняя ЗП', value: fmtMoney(Math.round(avg)), accent: false },
+    { label: 'Оклады', value: fmtMoney(totalSalary), accent: false },
+    { label: 'Комиссии', value: fmtMoney(totalCommission), accent: false },
+    { label: 'Премии', value: fmtMoney(totalBonuses), accent: false },
+    { label: 'Удержания', value: fmtMoney(totalDeductions), accent: true },
+    { label: 'К выплате', value: fmtMoney(totalNet), accent: false },
   ];
 
   return (
@@ -49,28 +61,225 @@ function SummaryBar({ rows }) {
   );
 }
 
+function PlanModal({ employee, plans, onSave, onClose }) {
+  const existing = plans.find((p) => p.employee_code === employee.employee_code);
+  const [form, setForm] = useState({
+    repair_plan: existing?.repair_plan || 0,
+    cosmetics_plan: existing?.cosmetics_plan || 0,
+    shoes_plan: existing?.shoes_plan || 0,
+  });
+
+  const handleSave = () => {
+    onSave({
+      employee_code: employee.employee_code,
+      employee_name: employee.employee_name,
+      repair_plan: parseFloat(form.repair_plan) || 0,
+      cosmetics_plan: parseFloat(form.cosmetics_plan) || 0,
+      shoes_plan: parseFloat(form.shoes_plan) || 0,
+    });
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card max-w-md">
+        <h3 className="text-lg font-semibold mb-4">
+          План продаж: {employee.employee_name}
+        </h3>
+        <p className="text-sm text-[color:var(--color-muted-foreground)] mb-4">
+          Код: {employee.employee_code}
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">План по ремонту/химчистке</label>
+            <input
+              type="number"
+              className="input w-full"
+              placeholder="0"
+              value={form.repair_plan}
+              onChange={(e) => setForm({ ...form, repair_plan: e.target.value })}
+            />
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+              ≥80% плана → 2%, иначе 1%
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">План по косметике</label>
+            <input
+              type="number"
+              className="input w-full"
+              placeholder="0"
+              value={form.cosmetics_plan}
+              onChange={(e) => setForm({ ...form, cosmetics_plan: e.target.value })}
+            />
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+              ≥80% плана → 8%, иначе 5%
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">План по обуви</label>
+            <input
+              type="number"
+              className="input w-full"
+              placeholder="0"
+              value={form.shoes_plan}
+              onChange={(e) => setForm({ ...form, shoes_plan: e.target.value })}
+            />
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+              ≥80% плана → 5%, иначе 3%
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={onClose}>
+            Отмена
+          </button>
+          <button className="btn btn--primary" onClick={handleSave}>
+            Сохранить
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FulfillmentBadge({ value, threshold = 0.8 }) {
+  if (value === null || value === undefined || value === 0) {
+    return <span className="text-[color:var(--color-muted-foreground)]">—</span>;
+  }
+  const pct = (value * 100).toFixed(0);
+  const color = value >= threshold
+    ? 'bg-green-100 text-green-800'
+    : value >= threshold * 0.5
+    ? 'bg-yellow-100 text-yellow-800'
+    : 'bg-red-100 text-red-800';
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${color}`}>
+      {pct}%
+    </span>
+  );
+}
+
+function ExpandedRow({ row }) {
+  return (
+    <tr className="bg-[color:var(--color-bg-secondary)]">
+      <td colSpan="100%" className="px-4 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          {/* Ремонт */}
+          <div className="app-card p-3">
+            <div className="font-medium mb-2">Ремонт / Химчистка</div>
+            <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
+              <div className="flex justify-between">
+                <span>Продажи:</span>
+                <span className="font-medium text-[color:var(--color-text-primary)]">{fmtMoney(row.repair_sales)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>План:</span>
+                <span>{fmtMoney(row.repair_plan)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Выполнение:</span>
+                <FulfillmentBadge value={row.repair_fulfillment} />
+              </div>
+              <div className="flex justify-between">
+                <span>Ставка:</span>
+                <span>{fmtRate(row.repair_rate)}</span>
+              </div>
+              <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
+                <span>Комиссия:</span>
+                <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.repair_commission)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Косметика */}
+          <div className="app-card p-3">
+            <div className="font-medium mb-2">Косметика</div>
+            <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
+              <div className="flex justify-between">
+                <span>Продажи:</span>
+                <span className="font-medium text-[color:var(--color-text-primary)]">{fmtMoney(row.cosmetics_sales)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>План:</span>
+                <span>{fmtMoney(row.cosmetics_plan)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Выполнение:</span>
+                <FulfillmentBadge value={row.cosmetics_fulfillment} />
+              </div>
+              <div className="flex justify-between">
+                <span>Ставка:</span>
+                <span>{fmtRate(row.cosmetics_rate)}</span>
+              </div>
+              <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
+                <span>Комиссия:</span>
+                <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.cosmetics_commission)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Обувь */}
+          <div className="app-card p-3">
+            <div className="font-medium mb-2">Обувь</div>
+            <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
+              <div className="flex justify-between">
+                <span>Продажи:</span>
+                <span className="font-medium text-[color:var(--color-text-primary)]">{fmtMoney(row.shoes_sales)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>План:</span>
+                <span>{fmtMoney(row.shoes_plan)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Выполнение:</span>
+                <FulfillmentBadge value={row.shoes_fulfillment} />
+              </div>
+              <div className="flex justify-between">
+                <span>Ставка:</span>
+                <span>{fmtRate(row.shoes_rate)}</span>
+              </div>
+              <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
+                <span>Комиссия:</span>
+                <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.shoes_commission)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 export default function Payroll() {
   const { toast } = useToast();
   const [months, setMonths] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState('');
   const [rows, setRows] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingMonths, setLoadingMonths] = useState(true);
   const [query, setQuery] = useState('');
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [editingPlan, setEditingPlan] = useState(null);
 
   useEffect(() => {
     loadMonths();
+    loadPlans();
   }, []);
 
   useEffect(() => {
-    if (selectedMonth) loadSalary(selectedMonth);
+    if (selectedMonth) loadPayroll(selectedMonth);
     else setRows([]);
   }, [selectedMonth]);
 
   async function loadMonths() {
     setLoadingMonths(true);
     try {
-      const res = await api.get('salary/months');
+      const res = await api.get('payroll/months');
       const list = res.data || [];
       setMonths(list);
       if (list.length > 0) setSelectedMonth(list[0]);
@@ -82,10 +291,19 @@ export default function Payroll() {
     }
   }
 
-  async function loadSalary(month) {
+  async function loadPlans() {
+    try {
+      const res = await api.get('payroll/plans');
+      setPlans(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadPayroll(month) {
     setLoading(true);
     try {
-      const res = await api.get('salary/', { params: { month } });
+      const res = await api.get('payroll/calculate', { params: { month } });
       setRows(res.data || []);
     } catch (err) {
       console.error(err);
@@ -95,37 +313,39 @@ export default function Payroll() {
     }
   }
 
+  async function savePlan(planData) {
+    try {
+      await api.put('payroll/plans', planData);
+      toast('План сохранён', 'success');
+      setEditingPlan(null);
+      loadPlans();
+      if (selectedMonth) loadPayroll(selectedMonth);
+    } catch (err) {
+      console.error(err);
+      toast('Ошибка сохранения плана', 'error');
+    }
+  }
+
   function exportPdf() {
     if (!selectedMonth) return;
+    // Using the old salary report endpoint for PDF
     window.open(`/api/salary/report?month=${selectedMonth}`, '_blank');
   }
+
+  const toggleRow = (code) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;
     const q = query.toLowerCase();
-    return rows.filter((r) => r.name?.toLowerCase().includes(q));
+    return rows.filter((r) => r.employee_name?.toLowerCase().includes(q));
   }, [rows, query]);
-
-  const columns = [
-    { key: 'name', label: 'ФИО', render: (r) => r.name, sticky: true },
-    { key: 'shifts_main', label: 'Осн.', render: (r) => fmt(r.shifts_main) },
-    { key: 'shifts_extra', label: 'Доп.', render: (r) => fmt(r.shifts_extra) },
-    { key: 'shifts_total', label: 'Смен', render: (r) => fmt(r.shifts_total) },
-    { key: 'salary_fixed', label: 'Оклад', render: (r) => fmtMoney(r.salary_fixed) },
-    { key: 'salary_repair', label: 'Ремонт', render: (r) => fmtMoney(r.salary_repair) },
-    { key: 'salary_cosmetics', label: 'Косметика', render: (r) => fmtMoney(r.salary_cosmetics) },
-    { key: 'salary_shoes', label: 'Обувь', render: (r) => fmtMoney(r.salary_shoes) },
-    { key: 'salary_accessories', label: 'Аксес.', render: (r) => fmtMoney(r.salary_accessories) },
-    { key: 'salary_keys', label: 'Ключи', render: (r) => fmtMoney(r.salary_keys) },
-    { key: 'salary_slippers', label: 'Тапки', render: (r) => fmtMoney(r.salary_slippers) },
-    { key: 'salary_workshop', label: 'Цех', render: (r) => fmtMoney(r.salary_workshop) },
-    { key: 'salary_bonus', label: 'Бонус', render: (r) => fmtMoney(r.salary_bonus) },
-    { key: 'salary_total', label: 'Итого', render: (r) => fmtMoney(r.salary_total), highlight: true },
-    { key: 'deduction', label: 'Удерж.', render: (r) => fmtMoney(r.deduction), danger: true },
-    { key: 'advance', label: 'Аванс', render: (r) => fmtMoney(r.advance) },
-    { key: 'final_amount', label: 'К выплате', render: (r) => fmtMoney(r.final_amount), highlight: true },
-    { key: 'comment', label: 'Коммент.', render: (r) => r.comment || '—' },
-  ];
 
   return (
     <div className="space-y-6 max-w-full">
@@ -187,6 +407,22 @@ export default function Payroll() {
       {/* Summary */}
       {!loading && rows.length > 0 && <SummaryBar rows={filtered} />}
 
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 text-xs text-[color:var(--color-muted-foreground)]">
+        <div className="flex items-center gap-1">
+          <Percent size={12} />
+          <span>Ремонт: ≥80% → 2%, иначе 1%</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Percent size={12} />
+          <span>Косметика: ≥80% → 8%, иначе 5%</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Percent size={12} />
+          <span>Обувь: ≥80% → 5%, иначе 3%</span>
+        </div>
+      </div>
+
       {/* Table */}
       {!selectedMonth && !loadingMonths ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
@@ -194,7 +430,7 @@ export default function Payroll() {
         </div>
       ) : loading ? (
         <div className="app-card p-4">
-          <SkeletonTable rows={8} cols={10} />
+          <SkeletonTable rows={8} cols={8} />
         </div>
       ) : filtered.length === 0 ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
@@ -205,77 +441,105 @@ export default function Payroll() {
           <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
             <thead>
               <tr className="bg-[color:var(--color-table-header)]">
-                {columns.map((col) => (
-                  <th
-                    key={col.key}
-                    className={`px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap
-                      ${col.sticky ? 'sticky left-0 z-10 bg-[color:var(--color-table-header)]' : ''}
-                      ${col.highlight ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-muted-foreground)]'}
-                      ${col.danger ? 'text-[color:var(--color-danger)]' : ''}
-                    `}
-                  >
-                    {col.label}
-                  </th>
-                ))}
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide w-10"></th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide sticky left-0 bg-[color:var(--color-table-header)]">
+                  ФИО
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Оклад</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Комиссия</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Премии</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-danger)]">
+                  Удержания
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-primary)]">
+                  К выплате
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide">План</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--color-border)]">
               {filtered.map((row, i) => (
-                <tr
-                  key={row.employee_id || row.name}
-                  className={`transition-colors hover:bg-[color:var(--color-table-row-hover)] ${
-                    i % 2 === 0 ? '' : 'bg-[color:var(--color-table-row-alt)]'
-                  }`}
-                >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`px-3 py-2.5 whitespace-nowrap
-                        ${col.sticky ? 'sticky left-0 bg-[color:var(--color-table-bg)] font-medium' : ''}
-                        ${col.highlight ? 'font-semibold text-[color:var(--color-primary)]' : ''}
-                        ${col.danger ? 'text-[color:var(--color-danger)]' : ''}
-                        ${col.key === 'comment' ? 'max-w-[160px] truncate whitespace-nowrap' : ''}
-                      `}
-                      title={col.key === 'comment' ? col.render(row) : undefined}
-                    >
-                      {col.render(row)}
+                <>
+                  <tr
+                    key={row.employee_code}
+                    className={`transition-colors hover:bg-[color:var(--color-table-row-hover)] cursor-pointer ${
+                      i % 2 === 0 ? '' : 'bg-[color:var(--color-table-row-alt)]'
+                    }`}
+                    onClick={() => toggleRow(row.employee_code)}
+                  >
+                    <td className="px-3 py-2.5 text-center">
+                      {expandedRows.has(row.employee_code) ? (
+                        <ChevronUp size={16} className="text-[color:var(--color-muted-foreground)]" />
+                      ) : (
+                        <ChevronDown size={16} className="text-[color:var(--color-muted-foreground)]" />
+                      )}
                     </td>
-                  ))}
-                </tr>
+                    <td className="px-3 py-2.5 sticky left-0 bg-[color:var(--color-table-bg)] font-medium">
+                      <div>{row.employee_name}</div>
+                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                        {row.employee_code}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtMoney(row.base_salary)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtMoney(row.total_commission)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap text-green-600">
+                      {row.bonuses > 0 ? `+${fmtMoney(row.bonuses)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap text-[color:var(--color-danger)]">
+                      {row.total_deductions > 0 ? `-${fmtMoney(row.total_deductions)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap font-semibold text-[color:var(--color-primary)]">
+                      {fmtMoney(row.total_net)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingPlan(row);
+                        }}
+                        className="p-1.5 rounded hover:bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text-primary)]"
+                        title="Настроить план"
+                      >
+                        <Settings size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedRows.has(row.employee_code) && <ExpandedRow row={row} />}
+                </>
               ))}
             </tbody>
             <tfoot>
               <tr className="bg-[color:var(--color-table-header)] font-semibold">
+                <td className="px-3 py-2.5"></td>
                 <td className="px-3 py-2.5 sticky left-0 bg-[color:var(--color-table-header)]">
                   Итого: {filtered.length}
                 </td>
-                {columns.slice(1, -1).map((col) => {
-                  const numericKeys = [
-                    'salary_fixed','salary_repair','salary_cosmetics','salary_shoes',
-                    'salary_accessories','salary_keys','salary_slippers','salary_workshop',
-                    'salary_bonus','salary_total','deduction','advance','final_amount',
-                  ];
-                  if (numericKeys.includes(col.key)) {
-                    const sum = filtered.reduce((s, r) => s + (r[col.key] || 0), 0);
-                    return (
-                      <td
-                        key={col.key}
-                        className={`px-3 py-2.5 whitespace-nowrap
-                          ${col.highlight ? 'text-[color:var(--color-primary)]' : ''}
-                          ${col.danger ? 'text-[color:var(--color-danger)]' : ''}
-                        `}
-                      >
-                        {sum ? fmtMoney(sum) : '—'}
-                      </td>
-                    );
-                  }
-                  return <td key={col.key} className="px-3 py-2.5">—</td>;
-                })}
-                <td className="px-3 py-2.5" />
+                <td className="px-3 py-2.5 text-right">{fmtMoney(filtered.reduce((s, r) => s + r.base_salary, 0))}</td>
+                <td className="px-3 py-2.5 text-right">{fmtMoney(filtered.reduce((s, r) => s + r.total_commission, 0))}</td>
+                <td className="px-3 py-2.5 text-right text-green-600">
+                  +{fmtMoney(filtered.reduce((s, r) => s + r.bonuses, 0))}
+                </td>
+                <td className="px-3 py-2.5 text-right text-[color:var(--color-danger)]">
+                  -{fmtMoney(filtered.reduce((s, r) => s + r.total_deductions, 0))}
+                </td>
+                <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">
+                  {fmtMoney(filtered.reduce((s, r) => s + r.total_net, 0))}
+                </td>
+                <td className="px-3 py-2.5"></td>
               </tr>
             </tfoot>
           </table>
         </div>
+      )}
+
+      {/* Plan Modal */}
+      {editingPlan && (
+        <PlanModal
+          employee={editingPlan}
+          plans={plans}
+          onSave={savePlan}
+          onClose={() => setEditingPlan(null)}
+        />
       )}
     </div>
   );

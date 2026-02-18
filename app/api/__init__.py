@@ -43,6 +43,7 @@ from .salary import create_salary_router
 from .schedule import create_schedule_router
 from .telegram import create_telegram_router
 from .vacations import create_vacation_router
+from .payroll import create_payroll_router
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -212,6 +213,18 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(create_birthday_router(), prefix="/api", dependencies=protected)
+
+    # Payroll calculation router
+    from ..services.payroll_service import get_payroll_service
+    from ..data.sales_plans_repository import get_sales_plans_repository
+
+    payroll_service = get_payroll_service()
+    plans_repo = get_sales_plans_repository()
+    app.include_router(
+        create_payroll_router(payroll_service, plans_repo, access_service),
+        prefix="/api",
+        dependencies=protected,
+    )
 
     app.include_router(
         create_telegram_router(employee_service._repo),

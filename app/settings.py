@@ -59,6 +59,25 @@ class Settings(BaseSettings):
     # Proxy для Telegram API (например: "socks5://127.0.0.1:1080" или "http://127.0.0.1:8080")
     telegram_proxy: str | None = Field(None, validation_alias="TELEGRAM_PROXY")
 
+    # Firebird database для расчёта зарплаты (продажи)
+    firebird_database: str = Field(
+        r"C:\Agbis\DB\ARM_13.fdb", validation_alias="FIREBIRD_DATABASE"
+    )
+    firebird_user: str = Field("SYSDBA", validation_alias="FIREBIRD_USER")
+    firebird_password: str = Field("masterkey", validation_alias="FIREBIRD_PASSWORD")
+    firebird_charset: str = Field("WIN1251", validation_alias="FIREBIRD_CHARSET")
+
+    # Excel файл с окладами
+    payroll_excel_file: str = Field(
+        r"C:\Users\hrbon\Desktop\telegram_bot\ФОТ админы 2026.xlsx",
+        validation_alias="PAYROLL_EXCEL_FILE"
+    )
+
+    # Файл для хранения планов продаж сотрудников
+    sales_plans_file: str = Field(
+        "sales_plans.json", validation_alias="SALES_PLANS_FILE"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

@@ -13,3 +13,4 @@ SQLAlchemy
 Jinja2
 numpy
 python-multipart
+fdb
