@@ -30,7 +30,7 @@ function SummaryBar({ rows }) {
   const totalGross = rows.reduce((s, r) => s + (r.total_gross || 0), 0);
   const totalSalary = rows.reduce((s, r) => s + (r.base_salary || 0), 0);
   const totalCommission = rows.reduce((s, r) => s + (r.total_commission || 0), 0);
-  const totalBonuses = rows.reduce((s, r) => s + (r.bonuses || 0), 0);
+  const totalBonuses = rows.reduce((s, r) => s + (r.bonuses || 0) + (r.excel_bonus || 0), 0);
   const totalAdvances = rows.reduce((s, r) => s + (r.advances || 0), 0);
   const totalPenalties = rows.reduce((s, r) => s + (r.penalties || 0), 0);
 
@@ -68,6 +68,7 @@ function PlanModal({ employee, plans, onSave, onClose }) {
     repair_plan: existing?.repair_plan || 0,
     cosmetics_plan: existing?.cosmetics_plan || 0,
     shoes_plan: existing?.shoes_plan || 0,
+    ignore_kpi: existing?.ignore_kpi || false,
   });
 
   const handleSave = () => {
@@ -77,6 +78,7 @@ function PlanModal({ employee, plans, onSave, onClose }) {
       repair_plan: parseFloat(form.repair_plan) || 0,
       cosmetics_plan: parseFloat(form.cosmetics_plan) || 0,
       shoes_plan: parseFloat(form.shoes_plan) || 0,
+      ignore_kpi: form.ignore_kpi,
     });
   };
 
@@ -130,6 +132,21 @@ function PlanModal({ employee, plans, onSave, onClose }) {
             />
             <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
               ≥80% плана → 5%, иначе 3%
+            </p>
+          </div>
+
+          <div className="border-t border-[color:var(--color-border)] pt-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded border-gray-300 text-[color:var(--color-primary)] focus:ring-[color:var(--color-primary)]"
+                checked={form.ignore_kpi}
+                onChange={(e) => setForm({ ...form, ignore_kpi: e.target.checked })}
+              />
+              <span className="text-sm font-medium">Не учитывать KPI</span>
+            </label>
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1 ml-7">
+              Комиссии по всем категориям будут обнулены
             </p>
           </div>
         </div>
@@ -485,9 +502,15 @@ export default function Payroll() {
                       </div>
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtMoney(row.base_salary)}</td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtMoney(row.total_commission)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {row.ignore_kpi ? (
+                        <span className="text-[color:var(--color-muted-foreground)]" title="KPI не учитывается">—</span>
+                      ) : (
+                        fmtMoney(row.total_commission)
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap text-green-600">
-                      {row.bonuses > 0 ? `+${fmtMoney(row.bonuses)}` : '—'}
+                      {(row.bonuses + row.excel_bonus) > 0 ? `+${fmtMoney(row.bonuses + row.excel_bonus)}` : '—'}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap text-[color:var(--color-danger)]">
                       {row.advances > 0 ? `-${fmtMoney(row.advances)}` : '—'}
@@ -524,7 +547,7 @@ export default function Payroll() {
                 <td className="px-3 py-2.5 text-right">{fmtMoney(filtered.reduce((s, r) => s + r.base_salary, 0))}</td>
                 <td className="px-3 py-2.5 text-right">{fmtMoney(filtered.reduce((s, r) => s + r.total_commission, 0))}</td>
                 <td className="px-3 py-2.5 text-right text-green-600">
-                  +{fmtMoney(filtered.reduce((s, r) => s + r.bonuses, 0))}
+                  +{fmtMoney(filtered.reduce((s, r) => s + r.bonuses + r.excel_bonus, 0))}
                 </td>
                 <td className="px-3 py-2.5 text-right text-[color:var(--color-danger)]">
                   -{fmtMoney(filtered.reduce((s, r) => s + r.advances, 0))}

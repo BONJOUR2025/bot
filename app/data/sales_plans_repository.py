@@ -17,6 +17,7 @@ class SalesPlan:
     repair_plan: float = 0.0  # Repair/dry cleaning sales plan
     cosmetics_plan: float = 0.0  # Cosmetics sales plan
     shoes_plan: float = 0.0  # Shoes sales plan
+    ignore_kpi: bool = False  # If True, zero out all commissions for this employee
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -25,6 +26,7 @@ class SalesPlan:
             "repair_plan": self.repair_plan,
             "cosmetics_plan": self.cosmetics_plan,
             "shoes_plan": self.shoes_plan,
+            "ignore_kpi": self.ignore_kpi,
         }
 
     @classmethod
@@ -35,6 +37,7 @@ class SalesPlan:
             repair_plan=float(data.get("repair_plan", 0)),
             cosmetics_plan=float(data.get("cosmetics_plan", 0)),
             shoes_plan=float(data.get("shoes_plan", 0)),
+            ignore_kpi=bool(data.get("ignore_kpi", False)),
         )
 
 
@@ -75,6 +78,7 @@ class SalesPlansRepository:
         repair_plan: float | None = None,
         cosmetics_plan: float | None = None,
         shoes_plan: float | None = None,
+        ignore_kpi: bool | None = None,
     ) -> SalesPlan:
         """Create or update a sales plan."""
         existing = self._plans.get(employee_code)
@@ -85,6 +89,8 @@ class SalesPlansRepository:
                 existing.cosmetics_plan = cosmetics_plan
             if shoes_plan is not None:
                 existing.shoes_plan = shoes_plan
+            if ignore_kpi is not None:
+                existing.ignore_kpi = ignore_kpi
             existing.employee_name = employee_name
             plan = existing
         else:
@@ -94,6 +100,7 @@ class SalesPlansRepository:
                 repair_plan=repair_plan or 0.0,
                 cosmetics_plan=cosmetics_plan or 0.0,
                 shoes_plan=shoes_plan or 0.0,
+                ignore_kpi=ignore_kpi or False,
             )
             self._plans[employee_code] = plan
 

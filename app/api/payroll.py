@@ -22,6 +22,7 @@ class SalesPlanInput(BaseModel):
     repair_plan: float | None = None
     cosmetics_plan: float | None = None
     shoes_plan: float | None = None
+    ignore_kpi: bool | None = None
 
 
 class SalesPlanOutput(BaseModel):
@@ -31,6 +32,7 @@ class SalesPlanOutput(BaseModel):
     repair_plan: float
     cosmetics_plan: float
     shoes_plan: float
+    ignore_kpi: bool
 
 
 class PayrollRowOutput(BaseModel):
@@ -60,8 +62,10 @@ class PayrollRowOutput(BaseModel):
     shoes_commission: float
 
     bonuses: float
+    excel_bonus: float
     penalties: float
     advances: float
+    ignore_kpi: bool
 
     total_commission: float
     total_gross: float
@@ -130,6 +134,7 @@ def create_payroll_router(
                 repair_plan=p.repair_plan,
                 cosmetics_plan=p.cosmetics_plan,
                 shoes_plan=p.shoes_plan,
+                ignore_kpi=p.ignore_kpi,
             )
             for p in plans
         ]
@@ -150,6 +155,7 @@ def create_payroll_router(
             repair_plan=plan.repair_plan,
             cosmetics_plan=plan.cosmetics_plan,
             shoes_plan=plan.shoes_plan,
+            ignore_kpi=plan.ignore_kpi,
         )
 
     @router.put("/plans", response_model=SalesPlanOutput)
@@ -165,6 +171,7 @@ def create_payroll_router(
             repair_plan=data.repair_plan,
             cosmetics_plan=data.cosmetics_plan,
             shoes_plan=data.shoes_plan,
+            ignore_kpi=data.ignore_kpi,
         )
         return SalesPlanOutput(
             employee_code=plan.employee_code,
@@ -172,6 +179,7 @@ def create_payroll_router(
             repair_plan=plan.repair_plan,
             cosmetics_plan=plan.cosmetics_plan,
             shoes_plan=plan.shoes_plan,
+            ignore_kpi=plan.ignore_kpi,
         )
 
     @router.delete("/plans/{employee_code}")

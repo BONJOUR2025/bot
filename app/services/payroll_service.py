@@ -99,9 +99,11 @@ class PayrollRow:
     cosmetics_commission: float
     shoes_commission: float
 
-    bonuses: float
+    bonuses: float  # from bonuses_penalties.json
+    excel_bonus: float  # from Excel column BW
     penalties: float
     advances: float
+    ignore_kpi: bool  # if True, commissions were zeroed
 
     total_commission: float
     total_gross: float
@@ -129,8 +131,10 @@ class PayrollRow:
             "cosmetics_commission": self.cosmetics_commission,
             "shoes_commission": self.shoes_commission,
             "bonuses": self.bonuses,
+            "excel_bonus": self.excel_bonus,
             "penalties": self.penalties,
             "advances": self.advances,
+            "ignore_kpi": self.ignore_kpi,
             "total_commission": self.total_commission,
             "total_gross": self.total_gross,
             "total_deductions": self.total_deductions,
@@ -200,8 +204,9 @@ class PayrollService:
     def _get_employees_from_excel(self, month: str) -> list[dict[str, Any]]:
         """
         Read employees from Excel sheet.
-        A3:A21  - name with code (e.g. "Вера 0102")
+        A3:A21   - name with code (e.g. "Вера 0102")
         AU3:AU21 - base salary
+        BW3:BW21 - bonus from Excel
         """
         if not self.excel_path.exists():
             return []
@@ -220,6 +225,7 @@ class PayrollService:
             for row in range(3, 22):  # rows 3..21
                 name = ws[f"A{row}"].value
                 oklad = ws[f"AU{row}"].value
+                excel_bonus = ws[f"BW{row}"].value
                 if not name:
                     continue
                 code = _extract_code(str(name))
@@ -229,7 +235,16 @@ class PayrollService:
                     salary = float(oklad or 0)
                 except (TypeError, ValueError):
                     salary = 0.0
-                employees.append({"name": str(name).strip(), "code": code, "salary": salary})
+                try:
+                    bonus = float(excel_bonus or 0)
+                except (TypeError, ValueError):
+                    bonus = 0.0
+                employees.append({
+                    "name": str(name).strip(),
+                    "code": code,
+                    "salary": salary,
+                    "excel_bonus": bonus,
+                })
 
             wb.close()
             return employees
@@ -401,6 +416,7 @@ class PayrollService:
             code = emp["code"]
             name = emp["name"]
             base_salary = emp["salary"]
+            excel_bonus = emp.get("excel_bonus", 0.0)
 
             emp_sales = sales_data.get(code, {})
             repair_sales = emp_sales.get("repair", 0.0)
@@ -411,6 +427,7 @@ class PayrollService:
             repair_plan = plan.repair_plan if plan else 0.0
             cosmetics_plan = plan.cosmetics_plan if plan else 0.0
             shoes_plan = plan.shoes_plan if plan else 0.0
+            ignore_kpi = plan.ignore_kpi if plan else False
 
             repair_fulfillment, repair_rate, repair_commission = self._commission(
                 repair_sales, repair_plan, REPAIR_RATE_HIGH, REPAIR_RATE_LOW
@@ -422,12 +439,18 @@ class PayrollService:
                 shoes_sales, shoes_plan, SHOES_RATE_HIGH, SHOES_RATE_LOW
             )
 
+            # If ignore_kpi is set, zero out all commissions
+            if ignore_kpi:
+                repair_commission = 0.0
+                cosmetics_commission = 0.0
+                shoes_commission = 0.0
+
             bonuses = bonuses_map.get(code, 0.0)
             penalties = penalties_map.get(code, 0.0)
             advances = advances_map.get(code, 0.0)
 
             total_commission = repair_commission + cosmetics_commission + shoes_commission
-            total_gross = base_salary + total_commission + bonuses
+            total_gross = base_salary + total_commission + bonuses + excel_bonus
             total_deductions = advances + penalties
             total_net = total_gross - total_deductions
 
@@ -451,8 +474,10 @@ class PayrollService:
                 cosmetics_commission=cosmetics_commission,
                 shoes_commission=shoes_commission,
                 bonuses=bonuses,
+                excel_bonus=excel_bonus,
                 penalties=penalties,
                 advances=advances,
+                ignore_kpi=ignore_kpi,
                 total_commission=total_commission,
                 total_gross=total_gross,
                 total_deductions=total_deductions,
