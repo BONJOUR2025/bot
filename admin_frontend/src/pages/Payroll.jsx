@@ -182,6 +182,9 @@ function FulfillmentBadge({ value, threshold = 0.8 }) {
 }
 
 function ExpandedRow({ row }) {
+  const [showOrders, setShowOrders] = useState(false);
+  const orders = row.shoes_orders || [];
+
   return (
     <tr className="bg-[color:var(--color-bg-secondary)]">
       <td colSpan="100%" className="px-4 py-4">
@@ -262,8 +265,35 @@ function ExpandedRow({ row }) {
               </div>
               <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
                 <span>Комиссия:</span>
-                <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.shoes_commission)}</span>
+                <button
+                  className="font-semibold text-[color:var(--color-primary)] flex items-center gap-1 hover:underline"
+                  onClick={(e) => { e.stopPropagation(); setShowOrders((v) => !v); }}
+                  title={orders.length ? 'Показать заказы' : 'Нет заказов'}
+                >
+                  {fmtMoney(row.shoes_commission)}
+                  {orders.length > 0 && (
+                    showOrders ? <ChevronUp size={13} /> : <ChevronDown size={13} />
+                  )}
+                </button>
               </div>
+
+              {showOrders && orders.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-[color:var(--color-border)]">
+                  <div className="text-xs font-medium mb-1">
+                    Заказы ({orders.length}):
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {orders.map((num) => (
+                      <span
+                        key={num}
+                        className="px-1.5 py-0.5 rounded bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] text-xs font-mono"
+                      >
+                        {num}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -66,6 +66,7 @@ class PayrollRowOutput(BaseModel):
     penalties: float
     advances: float
     ignore_kpi: bool
+    shoes_orders: list[str]
 
     total_commission: float
     total_gross: float

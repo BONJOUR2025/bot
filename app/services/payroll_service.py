@@ -104,6 +104,7 @@ class PayrollRow:
     penalties: float
     advances: float
     ignore_kpi: bool  # if True, commissions were zeroed
+    shoes_orders: list  # unique order numbers (DOC_NUM) for shoes sales
 
     total_commission: float
     total_gross: float
@@ -135,6 +136,7 @@ class PayrollRow:
             "penalties": self.penalties,
             "advances": self.advances,
             "ignore_kpi": self.ignore_kpi,
+            "shoes_orders": self.shoes_orders,
             "total_commission": self.total_commission,
             "total_gross": self.total_gross,
             "total_deductions": self.total_deductions,
@@ -422,6 +424,7 @@ class PayrollService:
             repair_sales = emp_sales.get("repair", 0.0)
             cosmetics_sales = emp_sales.get("cosmetics", 0.0)
             shoes_sales = emp_sales.get("shoes", 0.0)
+            shoes_orders = emp_sales.get("shoes_orders", [])
 
             plan = plans_map.get(code)
             repair_plan = plan.repair_plan if plan else 0.0
@@ -478,6 +481,7 @@ class PayrollService:
                 penalties=penalties,
                 advances=advances,
                 ignore_kpi=ignore_kpi,
+                shoes_orders=shoes_orders,
                 total_commission=total_commission,
                 total_gross=total_gross,
                 total_deductions=total_deductions,

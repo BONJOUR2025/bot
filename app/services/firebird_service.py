@@ -213,14 +213,57 @@ class FirebirdService:
 
         return out
 
-    def get_all_sales(self, year: int, month: int) -> dict[str, dict[str, float]]:
+    def get_shoes_orders(self, year: int, month: int) -> dict[str, list[str]]:
         """
-        Get all sales data for a month.
-        Returns: {employee_code: {repair: X, cosmetics: Y, shoes: Z}}
+        Get unique order numbers (DOC_NUM) for shoes sales by employee for a given month.
+        Returns dict: {employee_code: [doc_num, ...]} — no duplicate order numbers.
+        """
+        if not FIREBIRD_AVAILABLE:
+            return {}
+
+        start, end = _month_range(year, month)
+
+        sql = """
+            SELECT DISTINCT
+                users.description AS DESCRIPTION,
+                docs.doc_num AS DOC_NUM
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE
+                docs.doc_date >= ?
+                AND docs.doc_date < ?
+                AND tovars_tbl.code IN ('1', '147.10', '147.5')
+        """
+
+        out: dict[str, list[str]] = {}
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, (start, end))
+                for desc, doc_num in cur.fetchall():
+                    code = _code_from_description(desc)
+                    if code and doc_num is not None:
+                        out.setdefault(code, []).append(str(doc_num))
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching shoes orders: {e}")
+
+        return out
+
+    def get_all_sales(self, year: int, month: int) -> dict[str, dict]:
+        """
+        Get all sales data for a month including shoes order numbers.
+        Returns: {employee_code: {repair: X, cosmetics: Y, shoes: Z, shoes_orders: [...]}}
         """
         repair = self.get_repair_sales(year, month)
         cosmetics = self.get_cosmetics_sales(year, month)
         shoes = self.get_shoes_sales(year, month)
+        shoes_orders = self.get_shoes_orders(year, month)
 
         all_codes = set(repair) | set(cosmetics) | set(shoes)
         return {
@@ -228,6 +271,7 @@ class FirebirdService:
                 "repair": repair.get(code, 0.0),
                 "cosmetics": cosmetics.get(code, 0.0),
                 "shoes": shoes.get(code, 0.0),
+                "shoes_orders": shoes_orders.get(code, []),
             }
             for code in all_codes
         }
