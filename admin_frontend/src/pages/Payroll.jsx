@@ -282,11 +282,11 @@ function ExpandedRow({ row }) {
                   <div className="text-xs font-medium mb-1">
                     Заказы ({orders.length}):
                   </div>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
                     {orders.map((num) => (
                       <span
                         key={num}
-                        className="px-1.5 py-0.5 rounded bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] text-xs font-mono"
+                        className="text-xs font-mono text-[color:var(--color-text-primary)]"
                       >
                         {num}
                       </span>

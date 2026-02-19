@@ -147,6 +147,7 @@ export default function Payouts() {
   const [showEditor, setShowEditor] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(new Set());
 
   useEffect(() => {
     load();
@@ -165,13 +166,14 @@ export default function Payouts() {
 
   async function load() {
     setLoading(true);
+    setSelected(new Set());
     try {
       const params = {
         payout_type: filters.type || undefined,
         status: filters.status || undefined,
         method: filters.method || undefined,
-        date_from: filters.from || undefined,
-        date_to: filters.to || undefined,
+        from_date: filters.from || undefined,
+        to_date: filters.to || undefined,
       };
       const res = await api.get('payouts/', { params });
       let list = res.data;
@@ -228,6 +230,46 @@ export default function Payouts() {
       console.error(err);
       toast('Ошибка удаления', 'error');
     }
+  }
+
+  function toggleSelect(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === payouts.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(payouts.map((p) => p.id)));
+    }
+  }
+
+  async function bulkDelete() {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Удалить ${selected.size} выплат?`)) return;
+    let deleted = 0;
+    let failed = 0;
+    for (const id of selected) {
+      try {
+        await api.delete(`payouts/${id}`);
+        deleted++;
+      } catch (err) {
+        console.error(err);
+        failed++;
+      }
+    }
+    setSelected(new Set());
+    if (failed > 0) {
+      toast(`Удалено: ${deleted}, ошибок: ${failed}`, 'warning');
+    } else {
+      toast(`Удалено: ${deleted}`, 'success');
+    }
+    load();
   }
 
   function openCreate() {
@@ -402,6 +444,27 @@ export default function Payouts() {
         </button>
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 p-3 rounded border border-blue-200">
+          <span className="text-sm text-blue-800">
+            Выбрано: <strong>{selected.size}</strong>
+          </span>
+          <button
+            className="btn bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1"
+            onClick={bulkDelete}
+          >
+            <Trash2 size={14} className="inline mr-1" />
+            Удалить выбранные
+          </button>
+          <button
+            className="text-sm text-gray-600 hover:text-gray-800 underline"
+            onClick={() => setSelected(new Set())}
+          >
+            Снять выделение
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="border rounded shadow bg-white p-4">
           <SkeletonTable rows={8} cols={7} />
@@ -411,6 +474,13 @@ export default function Payouts() {
           <table className="min-w-[1100px] divide-y divide-gray-200 bg-white text-sm">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-2 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    checked={payouts.length > 0 && selected.size === payouts.length}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <th className="px-4 py-2 text-left">ФИО</th>
                 <th className="px-4 py-2 text-left">Тип</th>
                 <th className="px-4 py-2 text-left">Способ</th>
@@ -422,7 +492,14 @@ export default function Payouts() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {payouts.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50">
+                <tr key={p.id} className={`hover:bg-gray-50 ${selected.has(p.id) ? 'bg-blue-50' : ''}`}>
+                  <td className="px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(p.id)}
+                      onChange={() => toggleSelect(p.id)}
+                    />
+                  </td>
                   <td className="px-4 py-2">{p.name}</td>
                   <td className="px-4 py-2">{p.payout_type}</td>
                   <td className="px-4 py-2">{p.method}</td>
@@ -485,7 +562,7 @@ export default function Payouts() {
               {payouts.length === 0 && (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="8"
                     className="px-4 py-3 text-center text-gray-500 italic"
                   >
                     Нет данных
