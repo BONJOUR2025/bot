@@ -264,6 +264,7 @@ class PayrollService:
         - Find the LAST record with payout_type == "Зарплата" for each employee
         - Sum ALL payout_type == "Аванс" records that are AFTER that date
           (regardless of month - these are unpaid advances that need to be deducted)
+        - Only count advances with status "Одобрено" or "Выплачено"
         """
         if not self.advance_requests_file.exists():
             return {}
@@ -272,6 +273,9 @@ class PayrollService:
         except Exception as e:
             logger.error(f"Error reading advance requests: {e}")
             return {}
+
+        # Valid statuses for counting advances
+        VALID_STATUSES = {"Одобрено", "Выплачено"}
 
         # Group by employee code (code is at end of "name" field)
         ops: dict[str, list[dict]] = {}
@@ -294,19 +298,21 @@ class PayrollService:
                     last_salary_dt = _parse_dt(_dt_field(r))
 
             if last_salary_dt is None:
-                # No salary payment yet - sum ALL advances
+                # No salary payment yet - sum ALL advances with valid status
                 total = sum(
                     float(r.get("amount") or 0)
                     for r in items_sorted
-                    if r.get("payout_type") == "Аванс"
+                    if r.get("payout_type") == "Аванс" and r.get("status") in VALID_STATUSES
                 )
                 out[code] = total
                 continue
 
-            # Sum ALL advances after last salary (no month filter)
+            # Sum ALL advances after last salary with valid status (no month filter)
             total = 0.0
             for r in items_sorted:
                 if r.get("payout_type") != "Аванс":
+                    continue
+                if r.get("status") not in VALID_STATUSES:
                     continue
                 dt = _parse_dt(_dt_field(r))
                 if dt <= last_salary_dt:
