@@ -447,8 +447,9 @@ class PayrollService:
                 cosmetics_sales, cosmetics_plan, COSMETICS_RATE_HIGH, COSMETICS_RATE_LOW
             )
 
-            # Shoes: flat per-order commission, no plan/rate model
-            # 1000 ₽ if total KREDIT per DOC_NUM > 11000, else 500 ₽
+            # Shoes: flat per-pair commission, no plan/rate model
+            # pairs = count of CODE='1' per DOC_NUM
+            # 1000 ₽ × pairs if total KREDIT per DOC_NUM > 11000, else 500 ₽ × pairs
             shoes_fulfillment = 0.0
             shoes_rate = 0.0
 
@@ -459,7 +460,7 @@ class PayrollService:
                 shoes_commission = 0.0
             else:
                 shoes_commission = sum(
-                    1000 if o["kredit"] > 11000 else 500
+                    (1000 if o["kredit"] > 11000 else 500) * o.get("pairs", 1)
                     for o in shoes_order_items
                     if isinstance(o, dict)
                 )

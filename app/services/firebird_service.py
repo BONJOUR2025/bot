@@ -181,11 +181,12 @@ class FirebirdService:
         """
         Get shoes sales per DOC_NUM by employee for a given month.
         Filters by docs_order.date_out_fact (actual delivery date) and STATUS_ID=5.
-        Returns: {employee_code: [{doc_num: str, kredit: float}, ...]}
+        Returns: {employee_code: [{doc_num: str, kredit: float, pairs: int}, ...]}
 
         Commission rule (applied in payroll_service):
-          - kredit per DOC_NUM > 11000 → 1000 ₽
-          - kredit per DOC_NUM <= 11000 → 500 ₽
+          - pairs = count of CODE='1' records per DOC_NUM
+          - kredit per DOC_NUM > 11000 → 1000 ₽ × pairs
+          - kredit per DOC_NUM <= 11000 → 500 ₽ × pairs
         """
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty shoes data")
@@ -198,7 +199,8 @@ class FirebirdService:
             SELECT
                 users.description AS DESCRIPTION,
                 docs.doc_num AS DOC_NUM,
-                SUM(doc_order_services.kredit) AS SUM_KREDIT
+                SUM(doc_order_services.kredit) AS SUM_KREDIT,
+                SUM(CASE WHEN tovars_tbl.code = '1' THEN 1 ELSE 0 END) AS PAIR_COUNT
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
@@ -219,12 +221,13 @@ class FirebirdService:
             try:
                 cur = con.cursor()
                 cur.execute(sql, (start, end, *SHOES_CODES))
-                for desc, doc_num, kredit in cur.fetchall():
+                for desc, doc_num, kredit, pairs in cur.fetchall():
                     code = _code_from_description(desc)
                     if code and doc_num is not None:
                         out.setdefault(code, []).append({
                             "doc_num": str(doc_num),
                             "kredit": float(kredit or 0),
+                            "pairs": int(pairs or 0),
                         })
             finally:
                 con.close()
