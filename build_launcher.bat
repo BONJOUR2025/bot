@@ -5,7 +5,7 @@ echo ============================================
 echo.
 
 REM Check if PyInstaller is installed
-python -m pyinstaller --version >nul 2>&1
+pyinstaller --version >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Installing PyInstaller...
     pip install pyinstaller
@@ -14,7 +14,7 @@ if errorlevel 1 (
 echo [INFO] Building launcher.exe...
 echo.
 
-python -m pyinstaller ^
+pyinstaller ^
     --onefile ^
     --windowed ^
     --name "Launcher" ^
