@@ -9,7 +9,6 @@ from fastapi.responses import (
     Response,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from telegram import Update
 
 from app.services.access_control_service import (
@@ -44,9 +43,6 @@ from .schedule import create_schedule_router
 from .telegram import create_telegram_router
 from .vacations import create_vacation_router
 from .payroll import create_payroll_router
-
-templates = Jinja2Templates(directory="app/templates")
-
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -90,17 +86,17 @@ def create_app() -> FastAPI:
     access_service = get_access_control_service()
     app.include_router(create_auth_router(access_service), prefix="/api")
 
-    @app.get("/", include_in_schema=False, response_class=HTMLResponse)
-    async def login_page(
+    @app.get("/", include_in_schema=False)
+    async def root_redirect(
         request: Request, access_token: str | None = Cookie(default=None)
-    ) -> HTMLResponse:
+    ):
         if access_token:
             try:
                 access_service.verify_token(access_token)
-                return RedirectResponse(url="/admin", status_code=307)
+                return RedirectResponse(url="/admin", status_code=302)
             except ValueError:
                 pass
-        return templates.TemplateResponse(request, "login.html")
+        return RedirectResponse(url="/admin/login", status_code=302)
 
     @app.post("/session/login", include_in_schema=False)
     async def session_login(payload: LoginRequest) -> JSONResponse:
@@ -233,22 +229,29 @@ def create_app() -> FastAPI:
     )
 
     # SPA фронтенд (Vite/React)
+    # NOTE: We use explicit routes instead of app.mount() so that SPA routes
+    # like /admin/login are served correctly (mount intercepts and returns 404
+    # for paths that don't correspond to real files).
     frontend_path = (
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )
-    app.mount("/admin", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
-    if frontend_path.exists():
+    @app.get("/admin", include_in_schema=False)
+    async def admin_root(request: Request):
+        index_path = frontend_path / "index.html"
+        if index_path.exists():
+            return HTMLResponse(index_path.read_text(encoding="utf-8"))
+        return Response(status_code=404)
 
-        @app.get("/admin/{full_path:path}", include_in_schema=False)
-        async def spa_fallback(full_path: str, request: Request):
-            file_path = frontend_path / full_path
-            if file_path.is_file():
-                return FileResponse(str(file_path))
-            index_path = frontend_path / "index.html"
-            if index_path.exists():
-                return HTMLResponse(index_path.read_text())
-            return Response(status_code=404)
+    @app.get("/admin/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str, request: Request):
+        file_path = frontend_path / full_path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        index_path = frontend_path / "index.html"
+        if index_path.exists():
+            return HTMLResponse(index_path.read_text(encoding="utf-8"))
+        return Response(status_code=404)
 
     if telegram_app is not None:
 
