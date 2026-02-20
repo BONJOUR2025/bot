@@ -179,28 +179,28 @@ class FirebirdService:
 
     def get_shoes_data(self, year: int, month: int) -> dict[str, list[dict]]:
         """
-        Get shoes sales per DOC_NUM by employee for a given month.
+        Get shoes sales per PAIR by employee for a given month.
+        Each record with CODE='1' is one pair of shoes.
         Filters by docs_order.date_out_fact (actual delivery date) and STATUS_ID=5.
-        Returns: {employee_code: [{doc_num: str, kredit: float, pairs: int}, ...]}
+        Returns: {employee_code: [{doc_num: str, kredit: float}, ...]}
 
         Commission rule (applied in payroll_service):
-          - pairs = count of CODE='1' records per DOC_NUM
-          - kredit per DOC_NUM > 11000 → 1000 ₽ × pairs
-          - kredit per DOC_NUM <= 11000 → 500 ₽ × pairs
+          - Each row = 1 pair with its own KREDIT
+          - kredit > 11000 → 1000 ₽
+          - kredit <= 11000 → 500 ₽
         """
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty shoes data")
             return {}
 
         start, end = _month_range(year, month)
-        placeholders = ','.join(['?'] * len(SHOES_CODES))
 
-        sql = f"""
+        # Select each pair (CODE='1') individually, no grouping
+        sql = """
             SELECT
                 users.description AS DESCRIPTION,
                 docs.doc_num AS DOC_NUM,
-                SUM(doc_order_services.kredit) AS SUM_KREDIT,
-                SUM(CASE WHEN tovars_tbl.code = '1' THEN 1 ELSE 0 END) AS PAIR_COUNT
+                doc_order_services.kredit AS KREDIT
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
@@ -210,9 +210,8 @@ class FirebirdService:
             WHERE
                 docs_order.date_out_fact >= ?
                 AND docs_order.date_out_fact < ?
-                AND tovars_tbl.code IN ({placeholders})
+                AND tovars_tbl.code = '1'
                 AND docs_order_history.status_id = 5
-            GROUP BY users.description, docs.doc_num
         """
 
         out: dict[str, list[dict]] = {}
@@ -220,14 +219,13 @@ class FirebirdService:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql, (start, end, *SHOES_CODES))
-                for desc, doc_num, kredit, pairs in cur.fetchall():
+                cur.execute(sql, (start, end))
+                for desc, doc_num, kredit in cur.fetchall():
                     code = _code_from_description(desc)
                     if code and doc_num is not None:
                         out.setdefault(code, []).append({
                             "doc_num": str(doc_num),
                             "kredit": float(kredit or 0),
-                            "pairs": int(pairs or 0),
                         })
             finally:
                 con.close()

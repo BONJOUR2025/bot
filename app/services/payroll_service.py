@@ -448,8 +448,8 @@ class PayrollService:
             )
 
             # Shoes: flat per-pair commission, no plan/rate model
-            # pairs = count of CODE='1' per DOC_NUM
-            # 1000 ₽ × pairs if total KREDIT per DOC_NUM > 11000, else 500 ₽ × pairs
+            # Each record = 1 pair with its own KREDIT
+            # kredit > 11000 → 1000 ₽, else 500 ₽
             shoes_fulfillment = 0.0
             shoes_rate = 0.0
 
@@ -460,7 +460,7 @@ class PayrollService:
                 shoes_commission = 0.0
             else:
                 shoes_commission = sum(
-                    (1000 if o["kredit"] > 11000 else 500) * o.get("pairs", 1)
+                    1000 if o["kredit"] > 11000 else 500
                     for o in shoes_order_items
                     if isinstance(o, dict)
                 )
