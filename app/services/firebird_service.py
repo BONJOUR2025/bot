@@ -44,6 +44,14 @@ def _connect():
     )
 
 
+SHOES_CODES = (
+    '1',
+    '147.1', '147.2', '147.3', '147.4', '147.5', '147.6', '147.7',
+    '147.8', '147.9', '147.10', '147.11', '147.12', '147.13', '147.14',
+    '147.15', '147.16', '147.17', '147.18', '147.19', '147.20', '147.21', '147.22',
+)
+
+
 class FirebirdService:
     """Service for connecting to Firebird database and querying sales data."""
 
@@ -169,109 +177,85 @@ class FirebirdService:
 
         return out
 
-    def get_shoes_sales(self, year: int, month: int) -> dict[str, float]:
+    def get_shoes_data(self, year: int, month: int) -> dict[str, list[dict]]:
         """
-        Get shoes sales by employee for a given month.
-        Returns dict: {employee_code: total_sales}
+        Get shoes sales per DOC_NUM by employee for a given month.
+        Only orders with STATUS_ID=5 are counted.
+        Returns: {employee_code: [{doc_num: str, kredit: float}, ...]}
+
+        Commission rule (applied in payroll_service):
+          - kredit per DOC_NUM > 11000 → 1000 ₽
+          - kredit per DOC_NUM <= 11000 → 500 ₽
         """
         if not FIREBIRD_AVAILABLE:
-            logger.warning("fdb library not installed - returning empty shoes sales")
+            logger.warning("fdb library not installed - returning empty shoes data")
             return {}
 
         start, end = _month_range(year, month)
+        placeholders = ','.join(['?'] * len(SHOES_CODES))
 
-        sql = """
+        sql = f"""
             SELECT
                 users.description AS DESCRIPTION,
+                docs.doc_num AS DOC_NUM,
                 SUM(doc_order_services.kredit) AS SUM_KREDIT
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
+                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
             WHERE
                 docs.doc_date >= ?
                 AND docs.doc_date < ?
-                AND tovars_tbl.code IN ('1', '147.10', '147.5')
-            GROUP BY users.description
+                AND tovars_tbl.code IN ({placeholders})
+                AND docs_order_history.status_id = 5
+            GROUP BY users.description, docs.doc_num
         """
 
-        out: dict[str, float] = {}
+        out: dict[str, list[dict]] = {}
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql, (start, end))
-                for desc, s in cur.fetchall():
-                    code = _code_from_description(desc)
-                    if code:
-                        out[code] = float(s or 0)
-            finally:
-                con.close()
-        except Exception as e:
-            logger.error(f"Error fetching shoes sales: {e}")
-
-        return out
-
-    def get_shoes_orders(self, year: int, month: int) -> dict[str, list[str]]:
-        """
-        Get unique order numbers (DOC_NUM) for shoes sales by employee for a given month.
-        Returns dict: {employee_code: [doc_num, ...]} — no duplicate order numbers.
-        """
-        if not FIREBIRD_AVAILABLE:
-            return {}
-
-        start, end = _month_range(year, month)
-
-        sql = """
-            SELECT DISTINCT
-                users.description AS DESCRIPTION,
-                docs.doc_num AS DOC_NUM
-            FROM docs_order
-                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
-                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
-                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
-                INNER JOIN users ON (docs_order.creater_id = users.user_id)
-            WHERE
-                docs.doc_date >= ?
-                AND docs.doc_date < ?
-                AND tovars_tbl.code IN ('1', '147.10', '147.5')
-        """
-
-        out: dict[str, list[str]] = {}
-        try:
-            con = _connect()
-            try:
-                cur = con.cursor()
-                cur.execute(sql, (start, end))
-                for desc, doc_num in cur.fetchall():
+                cur.execute(sql, (start, end, *SHOES_CODES))
+                for desc, doc_num, kredit in cur.fetchall():
                     code = _code_from_description(desc)
                     if code and doc_num is not None:
-                        out.setdefault(code, []).append(str(doc_num))
+                        out.setdefault(code, []).append({
+                            "doc_num": str(doc_num),
+                            "kredit": float(kredit or 0),
+                        })
             finally:
                 con.close()
         except Exception as e:
-            logger.error(f"Error fetching shoes orders: {e}")
+            logger.error(f"Error fetching shoes data: {e}")
 
         return out
 
     def get_all_sales(self, year: int, month: int) -> dict[str, dict]:
         """
-        Get all sales data for a month including shoes order numbers.
-        Returns: {employee_code: {repair: X, cosmetics: Y, shoes: Z, shoes_orders: [...]}}
+        Get all sales data for a month including per-DOC_NUM shoes data.
+        Returns: {employee_code: {repair: X, cosmetics: Y, shoes: Z, shoes_orders: [{doc_num, kredit}, ...]}}
+        shoes_orders items: {"doc_num": str, "kredit": float}
         """
         repair = self.get_repair_sales(year, month)
         cosmetics = self.get_cosmetics_sales(year, month)
-        shoes = self.get_shoes_sales(year, month)
-        shoes_orders = self.get_shoes_orders(year, month)
+        shoes_data = self.get_shoes_data(year, month)
 
-        all_codes = set(repair) | set(cosmetics) | set(shoes)
+        # Total KREDIT per employee (for display)
+        shoes_totals = {
+            code: sum(o["kredit"] for o in orders)
+            for code, orders in shoes_data.items()
+        }
+
+        all_codes = set(repair) | set(cosmetics) | set(shoes_data)
         return {
             code: {
                 "repair": repair.get(code, 0.0),
                 "cosmetics": cosmetics.get(code, 0.0),
-                "shoes": shoes.get(code, 0.0),
-                "shoes_orders": shoes_orders.get(code, []),
+                "shoes": shoes_totals.get(code, 0.0),
+                "shoes_orders": shoes_data.get(code, []),
             }
             for code in all_codes
         }

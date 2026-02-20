@@ -430,7 +430,9 @@ class PayrollService:
             repair_sales = emp_sales.get("repair", 0.0)
             cosmetics_sales = emp_sales.get("cosmetics", 0.0)
             shoes_sales = emp_sales.get("shoes", 0.0)
-            shoes_orders = emp_sales.get("shoes_orders", [])
+            # shoes_orders is list of {doc_num: str, kredit: float}
+            shoes_order_items = emp_sales.get("shoes_orders", [])
+            shoes_orders = [o["doc_num"] for o in shoes_order_items if isinstance(o, dict)]
 
             plan = plans_map.get(code)
             repair_plan = plan.repair_plan if plan else 0.0
@@ -444,15 +446,23 @@ class PayrollService:
             cosmetics_fulfillment, cosmetics_rate, cosmetics_commission = self._commission(
                 cosmetics_sales, cosmetics_plan, COSMETICS_RATE_HIGH, COSMETICS_RATE_LOW
             )
-            shoes_fulfillment, shoes_rate, shoes_commission = self._commission(
-                shoes_sales, shoes_plan, SHOES_RATE_HIGH, SHOES_RATE_LOW
-            )
+
+            # Shoes: flat per-order commission, no plan/rate model
+            # 1000 ₽ if total KREDIT per DOC_NUM > 11000, else 500 ₽
+            shoes_fulfillment = 0.0
+            shoes_rate = 0.0
 
             # If ignore_kpi is set, zero out all commissions
             if ignore_kpi:
                 repair_commission = 0.0
                 cosmetics_commission = 0.0
                 shoes_commission = 0.0
+            else:
+                shoes_commission = sum(
+                    1000 if o["kredit"] > 11000 else 500
+                    for o in shoes_order_items
+                    if isinstance(o, dict)
+                )
 
             bonuses = bonuses_map.get(code, 0.0)
             penalties = penalties_map.get(code, 0.0)
