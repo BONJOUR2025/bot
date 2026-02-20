@@ -180,7 +180,7 @@ class FirebirdService:
     def get_shoes_data(self, year: int, month: int) -> dict[str, list[dict]]:
         """
         Get shoes sales per DOC_NUM by employee for a given month.
-        Only orders with STATUS_ID=5 are counted.
+        Filters by docs_order.date_out_fact (actual delivery date) and STATUS_ID=5.
         Returns: {employee_code: [{doc_num: str, kredit: float}, ...]}
 
         Commission rule (applied in payroll_service):
@@ -206,8 +206,8 @@ class FirebirdService:
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
                 INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
             WHERE
-                docs.doc_date >= ?
-                AND docs.doc_date < ?
+                docs_order.date_out_fact >= ?
+                AND docs_order.date_out_fact < ?
                 AND tovars_tbl.code IN ({placeholders})
                 AND docs_order_history.status_id = 5
             GROUP BY users.description, docs.doc_num
