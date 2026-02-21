@@ -180,27 +180,34 @@ class FirebirdService:
     def get_shoes_data(self, year: int, month: int) -> dict[str, list[dict]]:
         """
         Get shoes sales per PAIR by employee for a given month.
-        Each record with CODE='1' is one pair of shoes.
-        Filters by docs_order.date_out_fact (actual delivery date) and STATUS_ID=5.
+
+        Structure in DB:
+          - CODE='1' (kredit=0) marks start of a pair
+          - Following CODE='147.x' records contain the actual kredit
+          - All 147.x until next CODE='1' belong to that pair
+
+        Filters by docs_order.date_out_fact and STATUS_ID=5.
         Returns: {employee_code: [{doc_num: str, kredit: float}, ...]}
 
         Commission rule (applied in payroll_service):
-          - Each row = 1 pair with its own KREDIT
-          - kredit > 11000 → 1000 ₽
-          - kredit <= 11000 → 500 ₽
+          - Sum of 147.x kredit per pair > 11000 → 1000 ₽
+          - Sum of 147.x kredit per pair <= 11000 → 500 ₽
         """
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty shoes data")
             return {}
 
         start, end = _month_range(year, month)
+        placeholders = ','.join(['?'] * len(SHOES_CODES))
 
-        # Select each pair (CODE='1') individually, no grouping
-        sql = """
+        # Get all shoe-related records, ordered by ID to preserve sequence
+        sql = f"""
             SELECT
                 users.description AS DESCRIPTION,
                 docs.doc_num AS DOC_NUM,
-                doc_order_services.kredit AS KREDIT
+                tovars_tbl.code AS CODE,
+                doc_order_services.kredit AS KREDIT,
+                doc_order_services.id AS SERVICE_ID
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
@@ -210,27 +217,61 @@ class FirebirdService:
             WHERE
                 docs_order.date_out_fact >= ?
                 AND docs_order.date_out_fact < ?
-                AND tovars_tbl.code = '1'
+                AND tovars_tbl.code IN ({placeholders})
                 AND docs_order_history.status_id = 5
+            ORDER BY users.description, docs.doc_num, doc_order_services.id
         """
 
-        out: dict[str, list[dict]] = {}
+        # Collect raw records grouped by (employee, doc_num)
+        raw: dict[str, dict[str, list[tuple]]] = {}
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql, (start, end))
-                for desc, doc_num, kredit in cur.fetchall():
-                    code = _code_from_description(desc)
-                    if code and doc_num is not None:
-                        out.setdefault(code, []).append({
-                            "doc_num": str(doc_num),
-                            "kredit": float(kredit or 0),
-                        })
+                cur.execute(sql, (start, end, *SHOES_CODES))
+                for desc, doc_num, code, kredit, svc_id in cur.fetchall():
+                    emp_code = _code_from_description(desc)
+                    if emp_code and doc_num is not None:
+                        raw.setdefault(emp_code, {}).setdefault(str(doc_num), []).append(
+                            (code, float(kredit or 0))
+                        )
             finally:
                 con.close()
         except Exception as e:
             logger.error(f"Error fetching shoes data: {e}")
+            return {}
+
+        # Parse into pairs: CODE='1' starts a pair, sum following 147.x until next '1'
+        out: dict[str, list[dict]] = {}
+        for emp_code, orders in raw.items():
+            for doc_num, items in orders.items():
+                pairs = []
+                current_kredit = 0.0
+                in_pair = False
+
+                for code, kredit in items:
+                    if code == '1':
+                        # Save previous pair if exists
+                        if in_pair:
+                            pairs.append(current_kredit)
+                        # Start new pair
+                        current_kredit = 0.0
+                        in_pair = True
+                    else:
+                        # CODE='147.x' - add to current pair
+                        if in_pair:
+                            current_kredit += kredit
+
+                # Don't forget last pair
+                if in_pair:
+                    pairs.append(current_kredit)
+
+                # Add each pair as separate entry
+                for pair_kredit in pairs:
+                    out.setdefault(emp_code, []).append({
+                        "doc_num": doc_num,
+                        "kredit": pair_kredit,
+                    })
 
         return out
 
