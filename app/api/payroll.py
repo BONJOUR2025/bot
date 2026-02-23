@@ -23,6 +23,8 @@ class SalesPlanInput(BaseModel):
     cosmetics_plan: float | None = None
     shoes_plan: float | None = None
     ignore_kpi: bool | None = None
+    force_max: list = []
+    force_min: list = []
 
 
 class SalesPlanOutput(BaseModel):
@@ -33,6 +35,8 @@ class SalesPlanOutput(BaseModel):
     cosmetics_plan: float
     shoes_plan: float
     ignore_kpi: bool
+    force_max: list = []
+    force_min: list = []
 
 
 class PayrollRowOutput(BaseModel):
@@ -66,6 +70,8 @@ class PayrollRowOutput(BaseModel):
     penalties: float
     advances: float
     ignore_kpi: bool
+    force_max: list = []
+    force_min: list = []
     shoes_orders: list[str]
 
     total_commission: float
@@ -136,6 +142,8 @@ def create_payroll_router(
                 cosmetics_plan=p.cosmetics_plan,
                 shoes_plan=p.shoes_plan,
                 ignore_kpi=p.ignore_kpi,
+                force_max=p.force_max,
+                force_min=p.force_min,
             )
             for p in plans
         ]
@@ -157,6 +165,8 @@ def create_payroll_router(
             cosmetics_plan=plan.cosmetics_plan,
             shoes_plan=plan.shoes_plan,
             ignore_kpi=plan.ignore_kpi,
+            force_max=plan.force_max,
+            force_min=plan.force_min,
         )
 
     @router.put("/plans", response_model=SalesPlanOutput)
@@ -173,6 +183,8 @@ def create_payroll_router(
             cosmetics_plan=data.cosmetics_plan,
             shoes_plan=data.shoes_plan,
             ignore_kpi=data.ignore_kpi,
+            force_max=data.force_max,
+            force_min=data.force_min,
         )
         return SalesPlanOutput(
             employee_code=plan.employee_code,
@@ -181,6 +193,8 @@ def create_payroll_router(
             cosmetics_plan=plan.cosmetics_plan,
             shoes_plan=plan.shoes_plan,
             ignore_kpi=plan.ignore_kpi,
+            force_max=plan.force_max,
+            force_min=plan.force_min,
         )
 
     @router.delete("/plans/{employee_code}")

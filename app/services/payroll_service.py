@@ -104,6 +104,8 @@ class PayrollRow:
     penalties: float
     advances: float
     ignore_kpi: bool  # if True, commissions were zeroed
+    force_max: list  # categories always at max rate: ["repair","cosmetics","shoes"]
+    force_min: list  # categories always at min rate: ["repair","cosmetics","shoes"]
     shoes_orders: list  # unique order numbers (DOC_NUM) for shoes sales
 
     total_commission: float
@@ -136,6 +138,8 @@ class PayrollRow:
             "penalties": self.penalties,
             "advances": self.advances,
             "ignore_kpi": self.ignore_kpi,
+            "force_max": self.force_max,
+            "force_min": self.force_min,
             "shoes_orders": self.shoes_orders,
             "total_commission": self.total_commission,
             "total_gross": self.total_gross,
@@ -439,17 +443,41 @@ class PayrollService:
             cosmetics_plan = plan.cosmetics_plan if plan else 0.0
             shoes_plan = plan.shoes_plan if plan else 0.0
             ignore_kpi = plan.ignore_kpi if plan else False
+            force_max = plan.force_max if plan else []
+            force_min = plan.force_min if plan else []
 
-            repair_fulfillment, repair_rate, repair_commission = self._commission(
-                repair_sales, repair_plan, REPAIR_RATE_HIGH, REPAIR_RATE_LOW
-            )
-            cosmetics_fulfillment, cosmetics_rate, cosmetics_commission = self._commission(
-                cosmetics_sales, cosmetics_plan, COSMETICS_RATE_HIGH, COSMETICS_RATE_LOW
-            )
+            # Repair commission (with force_max/force_min override)
+            if "repair" in force_max:
+                repair_fulfillment = 1.0
+                repair_rate = REPAIR_RATE_HIGH
+                repair_commission = repair_sales * REPAIR_RATE_HIGH
+            elif "repair" in force_min:
+                repair_fulfillment = 0.0
+                repair_rate = REPAIR_RATE_LOW
+                repair_commission = repair_sales * REPAIR_RATE_LOW
+            else:
+                repair_fulfillment, repair_rate, repair_commission = self._commission(
+                    repair_sales, repair_plan, REPAIR_RATE_HIGH, REPAIR_RATE_LOW
+                )
+
+            # Cosmetics commission (with force_max/force_min override)
+            if "cosmetics" in force_max:
+                cosmetics_fulfillment = 1.0
+                cosmetics_rate = COSMETICS_RATE_HIGH
+                cosmetics_commission = cosmetics_sales * COSMETICS_RATE_HIGH
+            elif "cosmetics" in force_min:
+                cosmetics_fulfillment = 0.0
+                cosmetics_rate = COSMETICS_RATE_LOW
+                cosmetics_commission = cosmetics_sales * COSMETICS_RATE_LOW
+            else:
+                cosmetics_fulfillment, cosmetics_rate, cosmetics_commission = self._commission(
+                    cosmetics_sales, cosmetics_plan, COSMETICS_RATE_HIGH, COSMETICS_RATE_LOW
+                )
 
             # Shoes: flat per-pair commission, no plan/rate model
             # Each record = 1 pair with its own KREDIT
             # kredit > 11000 → 1000 ₽, else 500 ₽
+            # force_max → always 1000 ₽ per pair; force_min → always 500 ₽ per pair
             shoes_fulfillment = 0.0
             shoes_rate = 0.0
 
@@ -459,11 +487,16 @@ class PayrollService:
                 cosmetics_commission = 0.0
                 shoes_commission = 0.0
             else:
-                shoes_commission = sum(
-                    1000 if o["kredit"] > 11000 else 500
-                    for o in shoes_order_items
-                    if isinstance(o, dict)
-                )
+                if "shoes" in force_max:
+                    shoes_commission = 1000.0 * sum(1 for o in shoes_order_items if isinstance(o, dict))
+                elif "shoes" in force_min:
+                    shoes_commission = 500.0 * sum(1 for o in shoes_order_items if isinstance(o, dict))
+                else:
+                    shoes_commission = sum(
+                        1000 if o["kredit"] > 11000 else 500
+                        for o in shoes_order_items
+                        if isinstance(o, dict)
+                    )
 
             bonuses = bonuses_map.get(code, 0.0)
             penalties = penalties_map.get(code, 0.0)
@@ -498,6 +531,8 @@ class PayrollService:
                 penalties=penalties,
                 advances=advances,
                 ignore_kpi=ignore_kpi,
+                force_max=force_max,
+                force_min=force_min,
                 shoes_orders=shoes_orders,
                 total_commission=total_commission,
                 total_gross=total_gross,

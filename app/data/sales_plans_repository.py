@@ -18,6 +18,8 @@ class SalesPlan:
     cosmetics_plan: float = 0.0  # Cosmetics sales plan
     shoes_plan: float = 0.0  # Shoes sales plan
     ignore_kpi: bool = False  # If True, zero out all commissions for this employee
+    force_max: list = field(default_factory=list)  # Categories always at max rate: ["repair","cosmetics","shoes"]
+    force_min: list = field(default_factory=list)  # Categories always at min rate: ["repair","cosmetics","shoes"]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -27,6 +29,8 @@ class SalesPlan:
             "cosmetics_plan": self.cosmetics_plan,
             "shoes_plan": self.shoes_plan,
             "ignore_kpi": self.ignore_kpi,
+            "force_max": self.force_max,
+            "force_min": self.force_min,
         }
 
     @classmethod
@@ -38,6 +42,8 @@ class SalesPlan:
             cosmetics_plan=float(data.get("cosmetics_plan", 0)),
             shoes_plan=float(data.get("shoes_plan", 0)),
             ignore_kpi=bool(data.get("ignore_kpi", False)),
+            force_max=list(data.get("force_max") or []),
+            force_min=list(data.get("force_min") or []),
         )
 
 
@@ -79,6 +85,8 @@ class SalesPlansRepository:
         cosmetics_plan: float | None = None,
         shoes_plan: float | None = None,
         ignore_kpi: bool | None = None,
+        force_max: list | None = None,
+        force_min: list | None = None,
     ) -> SalesPlan:
         """Create or update a sales plan."""
         existing = self._plans.get(employee_code)
@@ -91,6 +99,10 @@ class SalesPlansRepository:
                 existing.shoes_plan = shoes_plan
             if ignore_kpi is not None:
                 existing.ignore_kpi = ignore_kpi
+            if force_max is not None:
+                existing.force_max = force_max
+            if force_min is not None:
+                existing.force_min = force_min
             existing.employee_name = employee_name
             plan = existing
         else:
@@ -101,6 +113,8 @@ class SalesPlansRepository:
                 cosmetics_plan=cosmetics_plan or 0.0,
                 shoes_plan=shoes_plan or 0.0,
                 ignore_kpi=ignore_kpi or False,
+                force_max=force_max or [],
+                force_min=force_min or [],
             )
             self._plans[employee_code] = plan
 

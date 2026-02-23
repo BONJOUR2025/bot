@@ -62,6 +62,40 @@ function SummaryBar({ rows }) {
   );
 }
 
+const PLAN_CATEGORIES = [
+  { key: 'repair', label: 'Ремонт' },
+  { key: 'cosmetics', label: 'Косметика' },
+  { key: 'shoes', label: 'Обувь' },
+];
+
+function MultiCategorySelect({ label, description, value, onChange }) {
+  const toggle = (key) => {
+    const next = value.includes(key) ? value.filter((k) => k !== key) : [...value, key];
+    onChange(next);
+  };
+  return (
+    <div>
+      <div className="text-sm font-medium mb-1">{label}</div>
+      <div className="flex gap-3">
+        {PLAN_CATEGORIES.map(({ key, label: catLabel }) => (
+          <label key={key} className="flex items-center gap-1.5 cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-gray-300"
+              checked={value.includes(key)}
+              onChange={() => toggle(key)}
+            />
+            {catLabel}
+          </label>
+        ))}
+      </div>
+      {description && (
+        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{description}</p>
+      )}
+    </div>
+  );
+}
+
 function PlanModal({ employee, plans, onSave, onClose }) {
   const existing = plans.find((p) => p.employee_code === employee.employee_code);
   const [form, setForm] = useState({
@@ -69,6 +103,8 @@ function PlanModal({ employee, plans, onSave, onClose }) {
     cosmetics_plan: existing?.cosmetics_plan || 0,
     shoes_plan: existing?.shoes_plan || 0,
     ignore_kpi: existing?.ignore_kpi || false,
+    force_max: existing?.force_max || [],
+    force_min: existing?.force_min || [],
   });
 
   const handleSave = () => {
@@ -79,6 +115,8 @@ function PlanModal({ employee, plans, onSave, onClose }) {
       cosmetics_plan: parseFloat(form.cosmetics_plan) || 0,
       shoes_plan: parseFloat(form.shoes_plan) || 0,
       ignore_kpi: form.ignore_kpi,
+      force_max: form.force_max,
+      force_min: form.force_min,
     });
   };
 
@@ -135,7 +173,7 @@ function PlanModal({ employee, plans, onSave, onClose }) {
             </p>
           </div>
 
-          <div className="border-t border-[color:var(--color-border)] pt-4">
+          <div className="border-t border-[color:var(--color-border)] pt-4 space-y-3">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -145,9 +183,23 @@ function PlanModal({ employee, plans, onSave, onClose }) {
               />
               <span className="text-sm font-medium">Не учитывать KPI</span>
             </label>
-            <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1 ml-7">
+            <p className="text-xs text-[color:var(--color-muted-foreground)] ml-7 -mt-2">
               Комиссии по всем категориям будут обнулены
             </p>
+
+            <MultiCategorySelect
+              label="Свести в максимум"
+              description="Комиссия всегда по максимальной ставке (независимо от выполнения плана)"
+              value={form.force_max}
+              onChange={(v) => setForm({ ...form, force_max: v, force_min: form.force_min.filter((k) => !v.includes(k)) })}
+            />
+
+            <MultiCategorySelect
+              label="Свести в минимум"
+              description="Комиссия всегда по минимальной ставке (независимо от выполнения плана)"
+              value={form.force_min}
+              onChange={(v) => setForm({ ...form, force_min: v, force_max: form.force_max.filter((k) => !v.includes(k)) })}
+            />
           </div>
         </div>
 
@@ -205,6 +257,14 @@ function ExpandedRow({ row }) {
                 <span>Выполнение:</span>
                 <FulfillmentBadge value={row.repair_fulfillment} />
               </div>
+              {row.repair_plan > 0 && (
+                <div className="flex justify-between">
+                  <span>{row.repair_sales >= row.repair_plan ? 'Перевыполнен на:' : 'Осталось до выполнения:'}</span>
+                  <span className={`font-medium ${row.repair_sales >= row.repair_plan ? 'text-green-600' : 'text-amber-600'}`}>
+                    {fmtMoney(Math.abs(row.repair_plan - row.repair_sales))}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Ставка:</span>
                 <span>{fmtRate(row.repair_rate)}</span>
@@ -232,6 +292,14 @@ function ExpandedRow({ row }) {
                 <span>Выполнение:</span>
                 <FulfillmentBadge value={row.cosmetics_fulfillment} />
               </div>
+              {row.cosmetics_plan > 0 && (
+                <div className="flex justify-between">
+                  <span>{row.cosmetics_sales >= row.cosmetics_plan ? 'Перевыполнен на:' : 'Осталось до выполнения:'}</span>
+                  <span className={`font-medium ${row.cosmetics_sales >= row.cosmetics_plan ? 'text-green-600' : 'text-amber-600'}`}>
+                    {fmtMoney(Math.abs(row.cosmetics_plan - row.cosmetics_sales))}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Ставка:</span>
                 <span>{fmtRate(row.cosmetics_rate)}</span>
