@@ -17,115 +17,194 @@ COLORS = {
 }
 
 
+def _load_fonts():
+    """Try to load fonts, fall back gracefully."""
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+        "arial.ttf",
+    ]
+    regular_path = next((p for p in candidates if os.path.exists(p) and "Bold" not in p), None)
+    bold_path = next((p for p in candidates if os.path.exists(p) and "Bold" in p), None)
+
+    try:
+        font_regular = ImageFont.truetype(regular_path, 16) if regular_path else ImageFont.load_default()
+        font_bold = ImageFont.truetype(bold_path, 16) if bold_path else font_regular
+        font_header = ImageFont.truetype(bold_path or regular_path, 17) if (bold_path or regular_path) else font_regular
+        font_small = ImageFont.truetype(regular_path, 13) if regular_path else font_regular
+    except Exception:
+        font_regular = ImageFont.load_default()
+        font_bold = font_regular
+        font_header = font_regular
+        font_small = font_regular
+
+    return font_regular, font_bold, font_header, font_small
+
+
+# Highlighted rows (key names that get special treatment)
+_HIGHLIGHT_TOTAL = {"ИТОГО"}
+_HIGHLIGHT_NET = {"К выплате"}
+_HIGHLIGHT_DEDUCT = {"Удержание", "Аванс"}
+
+# Design constants
+_BG = "#F5F7FA"
+_CARD_BG = "#FFFFFF"
+_SEC_HEADER_BG = "#1E3A5F"
+_SEC_HEADER_TEXT = "#FFFFFF"
+_ROW_ALT = "#EEF4FF"
+_ROW_TOTAL = "#FFF8E1"
+_ROW_NET = "#E8F5E9"
+_ROW_DEDUCT = "#FFF0F0"
+_KEY_COLOR = "#555566"
+_VAL_COLOR = "#1A1A2E"
+_VAL_TOTAL = "#E65100"
+_VAL_NET = "#2E7D32"
+_VAL_DEDUCT = "#C62828"
+_BORDER = "#C8D0DC"
+_SIDE_PAD = 24
+_ROW_H = 38
+_SEC_H = 44
+_TABLE_GAP = 16
+_BOTTOM_PAD = 24
+
+
 def create_combined_table_image(tables, filename="salary_report.png"):
     """
-    Генерирует изображение с таблицами отчёта.
-    Заголовки таблиц центрируются, ключи выравниваются вправо, значения — влево.
+    Generates a styled salary report image with proper height calculation.
     """
-    try:
-        font = ImageFont.truetype("arial.ttf", 18)
-    except IOError:
-        font = ImageFont.load_default()
-
-    padding = 40
-    column_spacing = 20
-    row_height = 40
-    header_height = 50
-    line_spacing = 15
-
     if not tables or all(len(table) < 2 for table in tables):
         log("❌ Error: Empty list of tables provided!")
         return None
 
-    key_lengths = [
-        len(row[0]) for table in tables for row in table[1:] if len(row) == 2
-    ]
-    value_lengths = [
-        max(len(line) for line in row[1].split("\n"))
-        for table in tables
-        for row in table[1:]
-        if len(row) == 2
-    ]
+    font_regular, font_bold, font_header, font_small = _load_fonts()
 
-    max_key_width = max(key_lengths) * 12 if key_lengths else 100
-    max_value_width = max(value_lengths) * 12 if value_lengths else 100
+    # --- measure column widths ---
+    dummy_img = Image.new("RGB", (1, 1))
+    dummy_draw = ImageDraw.Draw(dummy_img)
 
-    total_height = (
-        sum(
-            (
-                header_height
-                + sum(
-                    (len(row[1].split("\n")) if len(row) == 2 else 1)
-                    * row_height
-                    for row in table[1:]
-                )
-            )
-            for table in tables
-        )
-        + padding
-    )
-
-    img_width = (
-        max_key_width + column_spacing + max_value_width + (2 * padding)
-    )
-    img_height = total_height
-
-    log(f"Размеры изображения: ширина={img_width}, высота={img_height}")
-
-    img = Image.new("RGB", (img_width, img_height), "white")
-    draw = ImageDraw.Draw(img)
-    y_offset = padding
-
+    max_key_w = 0
+    max_val_w = 0
     for table in tables:
-        draw.rectangle(
-            [
-                (padding, y_offset),
-                (img_width - padding, y_offset + header_height),
-            ],
-            fill="lightgray",
-            outline="black",
-        )
-        text_width = draw.textlength(table[0][0], font=font)
-        draw.text(
-            ((img_width - text_width) / 2, y_offset + 15),
-            table[0][0],
-            fill="black",
-            font=font,
-        )
-        y_offset += header_height
-
         for row in table[1:]:
             if len(row) != 2:
-                log(
-                    f"❌ Error: row {row} has {len(row)} elements (expected 2). Skipping!"
-                )
+                continue
+            key, value = row
+            kw = dummy_draw.textlength(key, font=font_regular)
+            if kw > max_key_w:
+                max_key_w = kw
+            for line in value.split("\n"):
+                vw = dummy_draw.textlength(line, font=font_bold)
+                if vw > max_val_w:
+                    max_val_w = vw
+
+    max_key_w = max(int(max_key_w) + 8, 120)
+    max_val_w = max(int(max_val_w) + 8, 120)
+
+    img_width = _SIDE_PAD + max_key_w + 16 + max_val_w + _SIDE_PAD
+    img_width = max(img_width, 420)
+
+    # --- calculate exact total height ---
+    total_height = _SIDE_PAD  # top padding
+    for table in tables:
+        total_height += _SEC_H  # section header
+        for row in table[1:]:
+            if len(row) != 2:
+                continue
+            lines = row[1].split("\n")
+            total_height += _ROW_H * len(lines)
+        total_height += _TABLE_GAP  # gap after table
+    total_height += _BOTTOM_PAD  # bottom padding
+
+    log(f"Размеры изображения: ширина={img_width}, высота={total_height}")
+
+    img = Image.new("RGB", (img_width, total_height), _BG)
+    draw = ImageDraw.Draw(img)
+
+    y = _SIDE_PAD
+
+    for table in tables:
+        section_title = table[0][0]
+
+        # Section header bar
+        draw.rectangle(
+            [(0, y), (img_width, y + _SEC_H)],
+            fill=_SEC_HEADER_BG,
+        )
+        title_w = draw.textlength(section_title, font=font_header)
+        draw.text(
+            ((img_width - title_w) / 2, y + (_SEC_H - 17) // 2),
+            section_title,
+            fill=_SEC_HEADER_TEXT,
+            font=font_header,
+        )
+        y += _SEC_H
+
+        # Card background behind all rows
+        rows_data = [r for r in table[1:] if len(r) == 2]
+        total_rows_h = sum(_ROW_H * len(r[1].split("\n")) for r in rows_data)
+        draw.rectangle(
+            [(0, y), (img_width, y + total_rows_h)],
+            fill=_CARD_BG,
+        )
+
+        row_idx = 0
+        for row in table[1:]:
+            if len(row) != 2:
                 continue
             key, value = row
             value_lines = value.split("\n")
-            key_x = padding + max_key_width - draw.textlength(key, font=font)
-            value_x = padding + max_key_width + column_spacing
-            draw.line(
-                [(padding, y_offset), (img_width - padding, y_offset)],
-                fill="black",
-                width=2,
-            )
-            draw.text((key_x, y_offset + 10), key, fill="black", font=font)
-            draw.text(
-                (value_x, y_offset + 10),
-                value_lines[0],
-                fill="black",
-                font=font,
-            )
-            y_offset += row_height
-            for line in value_lines[1:]:
-                draw.text((value_x, y_offset), line, fill="black", font=font)
-                y_offset += row_height - line_spacing
-        draw.line(
-            [(padding, y_offset), (img_width - padding, y_offset)],
-            fill="black",
-            width=3,
-        )
-        y_offset += 15
+            row_total_h = _ROW_H * len(value_lines)
+
+            # Row background
+            if key in _HIGHLIGHT_NET:
+                row_bg = _ROW_NET
+            elif key in _HIGHLIGHT_TOTAL:
+                row_bg = _ROW_TOTAL
+            elif key in _HIGHLIGHT_DEDUCT:
+                row_bg = _ROW_DEDUCT
+            elif row_idx % 2 == 1:
+                row_bg = _ROW_ALT
+            else:
+                row_bg = _CARD_BG
+
+            draw.rectangle([(0, y), (img_width, y + row_total_h)], fill=row_bg)
+
+            # Separator line
+            draw.line([(0, y), (img_width, y)], fill=_BORDER, width=1)
+
+            # Key (right-aligned in key column)
+            key_w = draw.textlength(key, font=font_regular)
+            key_x = _SIDE_PAD + max_key_w - key_w
+            key_y = y + (_ROW_H - 16) // 2
+            draw.text((key_x, key_y), key, fill=_KEY_COLOR, font=font_regular)
+
+            # Value (left-aligned, bold, colored by row type)
+            if key in _HIGHLIGHT_NET:
+                val_color = _VAL_NET
+                val_font = font_bold
+            elif key in _HIGHLIGHT_TOTAL:
+                val_color = _VAL_TOTAL
+                val_font = font_bold
+            elif key in _HIGHLIGHT_DEDUCT:
+                val_color = _VAL_DEDUCT
+                val_font = font_regular
+            else:
+                val_color = _VAL_COLOR
+                val_font = font_regular
+
+            val_x = _SIDE_PAD + max_key_w + 16
+            for i, line in enumerate(value_lines):
+                line_y = y + (_ROW_H - 16) // 2 + i * _ROW_H
+                draw.text((val_x, line_y), line, fill=val_color, font=val_font)
+
+            y += row_total_h
+            row_idx += 1
+
+        # Bottom border of section
+        draw.line([(0, y), (img_width, y)], fill=_BORDER, width=1)
+        y += _TABLE_GAP
 
     img.save(filename)
     return filename
