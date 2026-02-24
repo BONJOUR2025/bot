@@ -17,28 +17,72 @@ COLORS = {
 }
 
 
-def _load_fonts():
-    """Try to load fonts, fall back gracefully."""
-    candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-        "arial.ttf",
-    ]
-    regular_path = next((p for p in candidates if os.path.exists(p) and "Bold" not in p), None)
-    bold_path = next((p for p in candidates if os.path.exists(p) and "Bold" in p), None)
-
+def _try_font(path: str, size: int):
+    """Try to load a font, return None on failure."""
     try:
-        font_regular = ImageFont.truetype(regular_path, 16) if regular_path else ImageFont.load_default()
-        font_bold = ImageFont.truetype(bold_path, 16) if bold_path else font_regular
-        font_header = ImageFont.truetype(bold_path or regular_path, 17) if (bold_path or regular_path) else font_regular
-        font_small = ImageFont.truetype(regular_path, 13) if regular_path else font_regular
+        return ImageFont.truetype(path, size)
     except Exception:
+        return None
+
+
+def _load_fonts():
+    """Load fonts with Cyrillic support. Tries common paths for Windows and Linux."""
+    size_regular = 16
+    size_header = 17
+
+    # Ordered preference: Windows system fonts first (PIL resolves them automatically),
+    # then absolute Linux paths. Each entry is tried via ImageFont.truetype directly.
+    # Priority: fonts that support both Cyrillic AND ₽ (ruble sign U+20BD)
+    # Arial (Windows auto-resolved by PIL) and DejaVu both have full support.
+    # Liberation Sans lacks the ₽ glyph, so it comes last.
+    regular_candidates = [
+        "arial.ttf",          # Windows: PIL resolves automatically from system fonts
+        "calibri.ttf",        # Windows fallback
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/calibri.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    bold_candidates = [
+        "arialbd.ttf",        # Windows bold Arial
+        "calibrib.ttf",       # Windows bold Calibri
+        "C:/Windows/Fonts/arialbd.ttf",
+        "C:/Windows/Fonts/calibrib.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
+
+    font_regular = None
+    for path in regular_candidates:
+        font_regular = _try_font(path, size_regular)
+        if font_regular:
+            log(f"Font regular: {path}")
+            break
+
+    font_bold = None
+    for path in bold_candidates:
+        font_bold = _try_font(path, size_regular)
+        if font_bold:
+            log(f"Font bold: {path}")
+            break
+
+    font_header = None
+    for path in bold_candidates:
+        font_header = _try_font(path, size_header)
+        if font_header:
+            break
+
+    # Ultimate fallback (no Cyrillic, but at least won't crash)
+    if not font_regular:
         font_regular = ImageFont.load_default()
+    if not font_bold:
         font_bold = font_regular
+    if not font_header:
         font_header = font_regular
-        font_small = font_regular
+
+    font_small = _try_font("arial.ttf", 13) or font_regular
 
     return font_regular, font_bold, font_header, font_small
 
