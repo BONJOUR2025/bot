@@ -34,21 +34,22 @@ def get_cell_comment(sheet_name, row_index, column_letter):
         log(f"❌ Error: File {EXCEL_FILE} not found!")
         return "File error"
     try:
-        workbook = load_workbook(EXCEL_FILE, data_only=False)
+        # read_only=False, data_only=False to get comments
+        workbook = load_workbook(EXCEL_FILE, read_only=False, data_only=False)
         if sheet_name not in workbook.sheetnames:
             log(f"❌ Error: Sheet {sheet_name} not found!")
+            workbook.close()
             return "Sheet error"
         sheet = workbook[sheet_name]
+        # row_index is pandas index (0-based from row 3 in Excel)
+        # Excel row = row_index + 3 (header on row 2, data starts row 3)
         cell_ref = f"{column_letter}{row_index + 3}"
         cell = sheet[cell_ref]
-        if cell.comment:
-            return cell.comment.text.strip()
-        else:
-            return "No comment"
+        comment_text = cell.comment.text.strip() if cell.comment else "No comment"
+        workbook.close()
+        return comment_text
     except Exception as e:
-        log(
-            f"❌ Error loading comment from {column_letter}{row_index + 1}: {e}"
-        )
+        log(f"❌ Error loading comment from {column_letter}{row_index + 3}: {e}")
         return "Error"
 
 
@@ -63,21 +64,25 @@ def load_data(sheet_name=None):
         return None
 
     try:
-        xls = pd.ExcelFile(EXCEL_FILE)
-        log(
-            f"📂 Доступные листы в файле: {xls.sheet_names}"
-        )  # ✅ Логируем все листы
-
+        # Read fresh each time - no caching
         if sheet_name is None:
-            return xls.sheet_names  # Если `None`, возвращаем список листов
+            # Just get sheet names
+            xls = pd.ExcelFile(EXCEL_FILE, engine='openpyxl')
+            sheets = xls.sheet_names
+            xls.close()
+            log(f"📂 Доступные листы в файле: {sheets}")
+            return sheets
 
-        if sheet_name not in xls.sheet_names:
-            log(
-                f"❌ Ошибка: Лист '{sheet_name}' не найден! Доступные листы: {xls.sheet_names}"
-            )
-            return None
-
-        return pd.read_excel(xls, sheet_name=sheet_name, header=1)
+        # Read specific sheet directly (no ExcelFile caching)
+        log(f"📖 Читаю лист '{sheet_name}' из {EXCEL_FILE}")
+        df = pd.read_excel(
+            EXCEL_FILE,
+            sheet_name=sheet_name,
+            header=1,
+            engine='openpyxl'
+        )
+        log(f"✅ Загружено {len(df)} строк, колонки: {list(df.columns)[:10]}...")
+        return df
     except Exception as e:
         log(f"❌ Ошибка при загрузке Excel: {e}")
         return None
