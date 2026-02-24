@@ -1,6 +1,7 @@
 import pandas as pd
 from pandas import DataFrame
 from .excel import get_cell_comment
+from ..utils.logger import log
 
 
 def generate_employee_report(
@@ -8,22 +9,52 @@ def generate_employee_report(
 ):
     """Возвращает структуру данных для отчёта по сотруднику."""
 
-    def get_value(
-        column: str,
-        currency: bool = False,
-        unit: str = "",
-        round_value: bool = True,
-    ):
-        if column in data.columns:
-            value = data.at[row_index, column]
+    columns = list(data.columns)
+
+    def find_column_index(name: str) -> int:
+        """Find column index by name."""
+        for i, col in enumerate(columns):
+            if isinstance(col, str) and col.strip() == name:
+                return i
+        return -1
+
+    def get_value_by_offset(base_col: str, offset: int = 0, currency: bool = False, unit: str = "", round_value: bool = True):
+        """
+        Get value from column with offset.
+        For merged Excel headers, the actual value might be in offset column.
+        offset=0 means the named column itself.
+        """
+        idx = find_column_index(base_col)
+        if idx < 0:
+            return "Нет данных"
+
+        # Try the offset column first, then fall back to base column
+        target_idx = idx + offset
+        if target_idx >= len(columns):
+            target_idx = idx
+
+        try:
+            value = data.iat[row_index, target_idx]
             if pd.isna(value):
-                return "Нет данных"
-            if isinstance(value, str) and "error" in value.lower():
-                return "Ошибка данных"
-            try:
-                value = float(value)
-            except (ValueError, TypeError):
-                return str(value)
+                # Try base column if offset gave NaN
+                if offset != 0:
+                    value = data.iat[row_index, idx]
+                    if pd.isna(value):
+                        return "Нет данных"
+                else:
+                    return "Нет данных"
+            if isinstance(value, str):
+                if "error" in value.lower():
+                    return "Ошибка данных"
+                # Try to extract number from string like "1 365 ₽"
+                clean = value.replace(" ", "").replace("₽", "").replace("Р", "").replace("-", "").strip()
+                if not clean:
+                    return "0 ₽" if currency else "0"
+                try:
+                    value = float(clean)
+                except ValueError:
+                    return value
+            value = float(value)
             if round_value:
                 value = int(round(value))
             if currency:
@@ -31,10 +62,34 @@ def generate_employee_report(
             if unit:
                 return f"{value} {unit}"
             return str(value)
-        return "Нет данных"
+        except Exception as e:
+            log(f"Error reading {base_col}+{offset}: {e}")
+            return "Нет данных"
+
+    def get_value(column: str, currency: bool = False, unit: str = "", round_value: bool = True):
+        """Get value - tries offset 0 first, then offset 1-3 for merged cells."""
+        # First try direct column
+        result = get_value_by_offset(column, 0, currency, unit, round_value)
+        if result not in ("Нет данных", "0 ₽", "0"):
+            return result
+
+        # Try offsets 1-3 for merged cell structures (4 columns per category)
+        for offset in [1, 2, 3]:
+            result = get_value_by_offset(column, offset, currency, unit, round_value)
+            if result not in ("Нет данных", "0 ₽", "0"):
+                return result
+
+        # Return whatever we got from offset 0
+        return get_value_by_offset(column, 0, currency, unit, round_value)
 
     def format_kpi(value, num1, text1, num2, text2):
         try:
+            # Handle string values like "1%"
+            if isinstance(value, str):
+                clean = value.replace("%", "").replace(",", ".").strip()
+                if not clean:
+                    return "не начисляется"
+                value = float(clean) / 100 if float(clean) > 1 else float(clean)
             value = float(value)
         except (ValueError, TypeError):
             return "не начисляется"
