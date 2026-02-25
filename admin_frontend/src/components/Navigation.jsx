@@ -44,6 +44,7 @@ const navStructure = [
     name: 'Инструменты',
     items: [
       { to: '/admin/tasks', label: 'Задачи', permission: 'tasks' },
+      { to: '/admin/passwords', label: 'Пароли', permission: 'passwords' },
     ],
   },
 ];

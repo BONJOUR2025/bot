@@ -44,6 +44,7 @@ from .telegram import create_telegram_router
 from .vacations import create_vacation_router
 from .payroll import create_payroll_router
 from .tasks import create_task_router
+from .passwords import create_password_router
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -235,6 +236,16 @@ def create_app() -> FastAPI:
     task_service = TaskService()
     app.include_router(
         create_task_router(task_service),
+        prefix="/api",
+        dependencies=protected,
+    )
+
+    # Password vault
+    from ..services.password_service import PasswordService
+
+    password_service = PasswordService()
+    app.include_router(
+        create_password_router(password_service),
         prefix="/api",
         dependencies=protected,
     )
