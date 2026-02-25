@@ -10,11 +10,13 @@ from uuid import uuid4
 from telegram import Bot
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
+from telegram.request import HTTPXRequest
 
 from app.utils.logger import log
 from app.utils import is_valid_user_id
 
 from app.config import TOKEN, ADMIN_CHAT_ID
+from app.settings import settings
 from app.data.employee_repository import EmployeeRepository
 
 logger = logging.getLogger("broadcast")
@@ -49,7 +51,7 @@ class TelegramService:
         if bot is not None:
             self.bot = bot
         elif TOKEN and TOKEN != "dummy":
-            self.bot = Bot(token=TOKEN)
+            self.bot = self._create_bot_with_proxy()
         else:
             self.bot = None
         Path("logs").mkdir(exist_ok=True)
@@ -58,6 +60,22 @@ class TelegramService:
             self.msg_log.write_text("[]", encoding="utf-8")
         if not ADMIN_CHAT_ID:
             log("⚠️ ADMIN_CHAT_ID not configured")
+
+    @staticmethod
+    def _create_bot_with_proxy() -> Bot:
+        """Create a Bot instance with proxy settings if configured."""
+        request_kwargs = {
+            "connect_timeout": 30.0,
+            "read_timeout": 30.0,
+            "write_timeout": 30.0,
+            "pool_timeout": 30.0,
+        }
+        proxy_url = settings.telegram_proxy
+        if proxy_url:
+            request_kwargs["proxy"] = proxy_url
+            log(f"🌐 TelegramService using proxy: {proxy_url}")
+        request = HTTPXRequest(**request_kwargs)
+        return Bot(token=TOKEN, request=request)
 
     def _load_log_all(self) -> List[Dict]:
         try:
