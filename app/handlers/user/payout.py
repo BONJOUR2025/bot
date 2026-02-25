@@ -173,7 +173,7 @@ async def confirm_card(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         data.get("payout_type"),
     )
 
-    telegram_service = TelegramService(EmployeeRepository())
+    telegram_service = TelegramService(EmployeeRepository(), bot=context.application.bot)
     try:
         await telegram_service.send_payout_request_to_admin(record)
     except Exception as exc:

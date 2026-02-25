@@ -44,9 +44,11 @@ class TelegramAPIError(TelegramServiceError):
 
 
 class TelegramService:
-    def __init__(self, repo: EmployeeRepository) -> None:
+    def __init__(self, repo: EmployeeRepository, bot: Optional[Bot] = None) -> None:
         self.repo = repo
-        if TOKEN and TOKEN != "dummy":
+        if bot is not None:
+            self.bot = bot
+        elif TOKEN and TOKEN != "dummy":
             self.bot = Bot(token=TOKEN)
         else:
             self.bot = None
