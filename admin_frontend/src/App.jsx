@@ -29,6 +29,7 @@ import Assets from "./pages/Assets";
 import Dictionary from "./pages/Dictionary";
 import AccessControl from "./pages/AccessControl";
 import Payroll from "./pages/Payroll";
+import Tasks from "./pages/Tasks";
 
 export default function App() {
   return (
@@ -69,6 +70,7 @@ export default function App() {
                 <Route path="settings" element={<Settings />} />
                 <Route path="access" element={<AccessControl />} />
                 <Route path="payroll" element={<Payroll />} />
+                <Route path="tasks" element={<Tasks />} />
               </Route>
 
               {/* Фолбэк: всё прочее редиректим в /admin */}

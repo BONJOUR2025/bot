@@ -43,6 +43,7 @@ from .schedule import create_schedule_router
 from .telegram import create_telegram_router
 from .vacations import create_vacation_router
 from .payroll import create_payroll_router
+from .tasks import create_task_router
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -224,6 +225,16 @@ def create_app() -> FastAPI:
 
     app.include_router(
         create_telegram_router(employee_service._repo),
+        prefix="/api",
+        dependencies=protected,
+    )
+
+    # Task manager
+    from ..services.task_service import TaskService
+
+    task_service = TaskService()
+    app.include_router(
+        create_task_router(task_service),
         prefix="/api",
         dependencies=protected,
     )

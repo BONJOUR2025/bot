@@ -40,6 +40,12 @@ const navStructure = [
       { to: '/admin/access', label: 'Доступ', permission: 'access' },
     ],
   },
+  {
+    name: 'Инструменты',
+    items: [
+      { to: '/admin/tasks', label: 'Задачи', permission: 'tasks' },
+    ],
+  },
 ];
 
 export default function Navigation({ onNavigate }) {
