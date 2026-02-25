@@ -508,7 +508,7 @@ export default function Passwords() {
 
       {/* Entry Form Modal */}
       {showEntryForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-semibold mb-4">
               {entryForm.id ? 'Редактировать запись' : 'Новая запись'}
@@ -632,7 +632,7 @@ export default function Passwords() {
 
       {/* Password Generator Modal */}
       {showGenerator && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-[60]" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-md">
             <h3 className="text-xl font-semibold mb-4">Генератор паролей</h3>
 
@@ -742,7 +742,7 @@ export default function Passwords() {
 
       {/* Category Form Modal */}
       {showCategoryForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-[60]" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-md">
             <h3 className="text-xl font-semibold mb-4">
               {categoryForm.id ? 'Редактировать категорию' : 'Новая категория'}
@@ -818,7 +818,7 @@ export default function Passwords() {
 
       {/* Category Manager Modal */}
       {showCategoryManager && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold">Управление категориями</h3>
