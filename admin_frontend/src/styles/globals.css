@@ -332,6 +332,7 @@ a:hover { text-decoration: underline; }
    Inputs / Controls
    ================================================================ */
 .input,
+.input-field,
 .modal-control,
 .form-field input,
 .form-field select,
@@ -347,6 +348,7 @@ a:hover { text-decoration: underline; }
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
 .input:focus,
+.input-field:focus,
 .modal-control:focus,
 .form-field input:focus,
 .form-field select:focus,
@@ -357,6 +359,7 @@ a:hover { text-decoration: underline; }
   background: var(--color-control-bg-hover);
 }
 .input::placeholder,
+.input-field::placeholder,
 .modal-control::placeholder { color: var(--color-control-placeholder); }
 .form-field textarea { resize: vertical; min-height: 100px; }
 
