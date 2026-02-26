@@ -509,7 +509,7 @@ export default function Passwords() {
 
       {/* Entry Form Modal */}
       <Modal isOpen={showEntryForm}>
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="modal-card" style={{ maxWidth: '32rem' }}>
             <h3 className="text-xl font-semibold mb-4">
               {entryForm.id ? 'Редактировать запись' : 'Новая запись'}
             </h3>
@@ -631,7 +631,7 @@ export default function Passwords() {
 
       {/* Password Generator Modal */}
       <Modal isOpen={showGenerator}>
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-md">
+        <div className="modal-card" style={{ maxWidth: '28rem' }}>
             <h3 className="text-xl font-semibold mb-4">Генератор паролей</h3>
 
             <div className="space-y-4">
@@ -739,7 +739,7 @@ export default function Passwords() {
 
       {/* Category Form Modal */}
       <Modal isOpen={showCategoryForm}>
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-md">
+        <div className="modal-card" style={{ maxWidth: '28rem' }}>
             <h3 className="text-xl font-semibold mb-4">
               {categoryForm.id ? 'Редактировать категорию' : 'Новая категория'}
             </h3>
@@ -813,7 +813,7 @@ export default function Passwords() {
 
       {/* Category Manager Modal */}
       <Modal isOpen={showCategoryManager}>
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
+        <div className="modal-card" style={{ maxWidth: '32rem' }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold">Управление категориями</h3>
               <button

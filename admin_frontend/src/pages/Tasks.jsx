@@ -578,7 +578,7 @@ export default function Tasks() {
 
       {/* Create/Edit Modal */}
       <Modal isOpen={showForm}>
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="modal-card" style={{ maxWidth: '32rem' }}>
             <h3 className="text-xl font-semibold mb-4">
               {form.id ? 'Редактировать задачу' : 'Новая задача'}
             </h3>
