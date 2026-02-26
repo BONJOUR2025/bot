@@ -18,6 +18,7 @@ import {
   Grip,
 } from 'lucide-react';
 import api from '../api';
+import Modal from '../components/Modal';
 
 const DEFAULT_CATEGORY_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
@@ -507,9 +508,8 @@ export default function Passwords() {
       </div>
 
       {/* Entry Form Modal */}
-      {showEntryForm && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <Modal isOpen={showEntryForm}>
+        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-semibold mb-4">
               {entryForm.id ? 'Редактировать запись' : 'Новая запись'}
             </h3>
@@ -627,13 +627,11 @@ export default function Passwords() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Password Generator Modal */}
-      {showGenerator && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 z-[60]" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-md">
+      <Modal isOpen={showGenerator}>
+        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-md">
             <h3 className="text-xl font-semibold mb-4">Генератор паролей</h3>
 
             <div className="space-y-4">
@@ -737,13 +735,11 @@ export default function Passwords() {
               )}
             </div>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Category Form Modal */}
-      {showCategoryForm && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 z-[60]" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-md">
+      <Modal isOpen={showCategoryForm}>
+        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-md">
             <h3 className="text-xl font-semibold mb-4">
               {categoryForm.id ? 'Редактировать категорию' : 'Новая категория'}
             </h3>
@@ -813,13 +809,11 @@ export default function Passwords() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Category Manager Modal */}
-      {showCategoryManager && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
+      <Modal isOpen={showCategoryManager}>
+        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold">Управление категориями</h3>
               <button
@@ -882,8 +876,7 @@ export default function Passwords() {
               Добавить категорию
             </button>
           </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }
