@@ -1,4 +1,4 @@
-"""Repository for employee sales plans."""
+"""Repository for employee sales plans (per-month or global)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -11,20 +11,22 @@ from app.settings import settings
 
 @dataclass
 class SalesPlan:
-    """Sales plan for an employee."""
-    employee_code: str  # 4-digit code from employee name
-    employee_name: str  # Full name for display
-    repair_plan: float = 0.0  # Repair/dry cleaning sales plan
-    cosmetics_plan: float = 0.0  # Cosmetics sales plan
-    shoes_plan: float = 0.0  # Shoes sales plan
-    ignore_kpi: bool = False  # If True, zero out all commissions for this employee
-    force_max: list = field(default_factory=list)  # Categories always at max rate: ["repair","cosmetics","shoes"]
-    force_min: list = field(default_factory=list)  # Categories always at min rate: ["repair","cosmetics","shoes"]
+    """Sales plan for an employee, optionally tied to a specific month."""
+    employee_code: str
+    employee_name: str
+    month_key: str | None = None   # e.g. "ЯНВАРЬ_2025"; None = global fallback
+    repair_plan: float = 0.0
+    cosmetics_plan: float = 0.0
+    shoes_plan: float = 0.0
+    ignore_kpi: bool = False
+    force_max: list = field(default_factory=list)
+    force_min: list = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "employee_code": self.employee_code,
             "employee_name": self.employee_name,
+            "month_key": self.month_key,
             "repair_plan": self.repair_plan,
             "cosmetics_plan": self.cosmetics_plan,
             "shoes_plan": self.shoes_plan,
@@ -38,6 +40,7 @@ class SalesPlan:
         return cls(
             employee_code=str(data.get("employee_code", "")),
             employee_name=str(data.get("employee_name", "")),
+            month_key=data.get("month_key") or None,
             repair_plan=float(data.get("repair_plan", 0)),
             cosmetics_plan=float(data.get("cosmetics_plan", 0)),
             shoes_plan=float(data.get("shoes_plan", 0)),
@@ -47,8 +50,16 @@ class SalesPlan:
         )
 
 
+def _plan_key(month_key: str | None, employee_code: str) -> str:
+    if month_key:
+        return f"{month_key}|{employee_code}"
+    return employee_code
+
+
 class SalesPlansRepository:
-    """Repository for managing employee sales plans."""
+    """Plans can be global (month_key=None) or month-specific (month_key="ЯНВАРЬ_2025").
+    Month-specific plans override global ones when calculating payroll for that month.
+    """
 
     def __init__(self, path: str | Path | None = None) -> None:
         self.storage = JsonStorage(path or settings.sales_plans_file)
@@ -56,31 +67,35 @@ class SalesPlansRepository:
         self._load()
 
     def _load(self) -> None:
-        """Load plans from storage."""
         data = self.storage.load()
         if isinstance(data, list):
             for item in data:
                 if isinstance(item, dict) and item.get("employee_code"):
                     plan = SalesPlan.from_dict(item)
-                    self._plans[plan.employee_code] = plan
+                    key = _plan_key(plan.month_key, plan.employee_code)
+                    self._plans[key] = plan
 
     def _save(self) -> None:
-        """Save plans to storage."""
         data = [plan.to_dict() for plan in self._plans.values()]
         self.storage.save(data)
 
-    def list_plans(self) -> list[SalesPlan]:
-        """List all sales plans."""
-        return list(self._plans.values())
+    def list_plans(self, month_key: str | None = None) -> list[SalesPlan]:
+        if month_key is None:
+            return list(self._plans.values())
+        return [p for p in self._plans.values() if p.month_key == month_key]
 
-    def get_plan(self, employee_code: str) -> SalesPlan | None:
-        """Get sales plan for an employee by code."""
-        return self._plans.get(employee_code)
+    def get_plan(self, employee_code: str, month_key: str | None = None) -> SalesPlan | None:
+        if month_key:
+            specific = self._plans.get(_plan_key(month_key, employee_code))
+            if specific:
+                return specific
+        return self._plans.get(employee_code)  # global fallback
 
     def set_plan(
         self,
         employee_code: str,
         employee_name: str,
+        month_key: str | None = None,
         repair_plan: float | None = None,
         cosmetics_plan: float | None = None,
         shoes_plan: float | None = None,
@@ -88,8 +103,8 @@ class SalesPlansRepository:
         force_max: list | None = None,
         force_min: list | None = None,
     ) -> SalesPlan:
-        """Create or update a sales plan."""
-        existing = self._plans.get(employee_code)
+        key = _plan_key(month_key, employee_code)
+        existing = self._plans.get(key)
         if existing:
             if repair_plan is not None:
                 existing.repair_plan = repair_plan
@@ -109,6 +124,7 @@ class SalesPlansRepository:
             plan = SalesPlan(
                 employee_code=employee_code,
                 employee_name=employee_name,
+                month_key=month_key,
                 repair_plan=repair_plan or 0.0,
                 cosmetics_plan=cosmetics_plan or 0.0,
                 shoes_plan=shoes_plan or 0.0,
@@ -116,22 +132,32 @@ class SalesPlansRepository:
                 force_max=force_max or [],
                 force_min=force_min or [],
             )
-            self._plans[employee_code] = plan
+            self._plans[key] = plan
 
         self._save()
         return plan
 
-    def delete_plan(self, employee_code: str) -> bool:
-        """Delete a sales plan."""
-        if employee_code in self._plans:
-            del self._plans[employee_code]
+    def delete_plan(self, employee_code: str, month_key: str | None = None) -> bool:
+        key = _plan_key(month_key, employee_code)
+        if key in self._plans:
+            del self._plans[key]
             self._save()
             return True
         return False
 
-    def get_plans_map(self) -> dict[str, SalesPlan]:
-        """Get all plans as a dictionary keyed by employee code."""
-        return self._plans.copy()
+    def get_plans_map(self, month_key: str | None = None) -> dict[str, SalesPlan]:
+        """Returns dict keyed by employee_code.
+        Month-specific plans override global ones.
+        """
+        result: dict[str, SalesPlan] = {}
+        for plan in self._plans.values():
+            if plan.month_key is None:
+                result[plan.employee_code] = plan
+        if month_key:
+            for plan in self._plans.values():
+                if plan.month_key == month_key:
+                    result[plan.employee_code] = plan
+        return result
 
 
 _repository: SalesPlansRepository | None = None

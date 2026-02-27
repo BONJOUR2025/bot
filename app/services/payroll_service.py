@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -13,18 +13,17 @@ from openpyxl import load_workbook
 
 from app.settings import settings
 from app.data.sales_plans_repository import SalesPlansRepository, get_sales_plans_repository
+from app.data.payroll_settlement_repository import PayrollSettlementRepository, get_payroll_settlement_repository
 from app.services.firebird_service import FirebirdService, get_firebird_service
 
 logger = logging.getLogger(__name__)
 
-# Russian month names -> month number
 MONTH_NAMES = {
     "ЯНВАРЬ": 1, "ФЕВРАЛЬ": 2, "МАРТ": 3, "АПРЕЛЬ": 4,
     "МАЙ": 5, "ИЮНЬ": 6, "ИЮЛЬ": 7, "АВГУСТ": 8,
     "СЕНТЯБРЬ": 9, "ОКТЯБРЬ": 10, "НОЯБРЬ": 11, "ДЕКАБРЬ": 12,
 }
 
-# Commission rates
 REPAIR_RATE_HIGH = 0.02
 REPAIR_RATE_LOW = 0.01
 COSMETICS_RATE_HIGH = 0.08
@@ -37,13 +36,11 @@ CODE_RE = re.compile(r"(\d{4})$")
 
 
 def _extract_code(name: str | None) -> str | None:
-    """Extract 4-digit code from end of name string like 'Имя 1234'."""
     m = CODE_RE.search((name or "").strip())
     return m.group(1) if m else None
 
 
 def _parse_dt(v) -> datetime:
-    """Robust datetime parser supporting ISO strings, space-separated, timestamps."""
     if isinstance(v, datetime):
         return v
     if v is None:
@@ -73,6 +70,11 @@ def _dt_field(r: dict) -> Any:
     return r.get("date") or r.get("timestamp") or r.get("created_at") or r.get("createdAt")
 
 
+def make_month_key(month: str, year: int) -> str:
+    """Build a canonical month key, e.g. 'ЯНВАРЬ_2025'."""
+    return f"{month.strip().upper()}_{year}"
+
+
 @dataclass
 class PayrollRow:
     employee_code: str
@@ -99,19 +101,21 @@ class PayrollRow:
     cosmetics_commission: float
     shoes_commission: float
 
-    bonuses: float  # from bonuses_penalties.json
-    excel_bonus: float  # from Excel column BW
+    bonuses: float
+    excel_bonus: float
     penalties: float
-    advances: float
-    ignore_kpi: bool  # if True, commissions were zeroed
-    force_max: list  # categories always at max rate: ["repair","cosmetics","shoes"]
-    force_min: list  # categories always at min rate: ["repair","cosmetics","shoes"]
-    shoes_orders: list  # unique order numbers (DOC_NUM) for shoes sales
+    advances: float              # advances since last salary (actual deduction)
+    advances_this_month: float   # advances taken in this calendar month (display only)
+    ignore_kpi: bool
+    force_max: list
+    force_min: list
+    shoes_orders: list
 
     total_commission: float
     total_gross: float
     total_deductions: float
     total_net: float
+    settlement_paid: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -137,6 +141,7 @@ class PayrollRow:
             "excel_bonus": self.excel_bonus,
             "penalties": self.penalties,
             "advances": self.advances,
+            "advances_this_month": self.advances_this_month,
             "ignore_kpi": self.ignore_kpi,
             "force_max": self.force_max,
             "force_min": self.force_min,
@@ -145,6 +150,7 @@ class PayrollRow:
             "total_gross": self.total_gross,
             "total_deductions": self.total_deductions,
             "total_net": self.total_net,
+            "settlement_paid": self.settlement_paid,
         }
 
 
@@ -154,6 +160,7 @@ class PayrollService:
         excel_path: str | Path | None = None,
         firebird_service: FirebirdService | None = None,
         plans_repo: SalesPlansRepository | None = None,
+        settlement_repo: PayrollSettlementRepository | None = None,
         advance_requests_file: str | None = None,
         bonuses_penalties_file: str | None = None,
         users_file: str | None = None,
@@ -161,42 +168,35 @@ class PayrollService:
         self.excel_path = Path(excel_path or settings.payroll_excel_file)
         self.firebird = firebird_service or get_firebird_service()
         self.plans_repo = plans_repo or get_sales_plans_repository()
+        self.settlement_repo = settlement_repo or get_payroll_settlement_repository()
         self.advance_requests_file = Path(advance_requests_file or settings.advance_requests_file)
         self.bonuses_penalties_file = Path(bonuses_penalties_file or settings.bonuses_penalties_file)
         self.users_file = Path(users_file or settings.users_file)
 
-        # user_id -> employee_code, full_name -> employee_code
         self._user_id_to_code: dict[str, str] = {}
         self._full_name_to_code: dict[str, str] = {}
         self._load_user_mappings()
 
     def _load_user_mappings(self) -> None:
-        """Build lookup maps from user.json: user_id -> code, full_name -> code."""
         if not self.users_file.exists():
-            logger.warning(f"users file not found: {self.users_file}")
             return
         try:
             users = json.loads(self.users_file.read_text(encoding="utf-8"))
             for user_id, data in users.items():
-                name = data.get("name", "")       # "Вера 0102"
-                full_name = data.get("full_name", "")  # "Кочетова Вера Алексеевна"
+                name = data.get("name", "")
+                full_name = data.get("full_name", "")
                 code = _extract_code(name)
                 if code:
                     self._user_id_to_code[str(user_id)] = code
                     if full_name:
                         self._full_name_to_code[full_name.strip().lower()] = code
-            logger.info(f"Loaded {len(self._user_id_to_code)} user mappings")
         except Exception as e:
             logger.error(f"Error loading user mappings: {e}")
 
-    # ------------------------------------------------------------------ #
-    # Excel                                                                #
-    # ------------------------------------------------------------------ #
+    # ── Excel ────────────────────────────────────────────────────
 
     def list_months(self) -> list[str]:
-        """Return sheet names matching Russian month names."""
         if not self.excel_path.exists():
-            logger.warning(f"Excel file not found: {self.excel_path}")
             return []
         try:
             wb = load_workbook(self.excel_path, read_only=True, data_only=True)
@@ -208,27 +208,18 @@ class PayrollService:
             return []
 
     def _get_employees_from_excel(self, month: str) -> list[dict[str, Any]]:
-        """
-        Read employees from Excel sheet.
-        A3:A21   - name with code (e.g. "Вера 0102")
-        AU3:AU21 - base salary
-        BW3:BW21 - bonus from Excel
-        """
         if not self.excel_path.exists():
             return []
         try:
             wb = load_workbook(self.excel_path, data_only=True)
             sheet_name = next(
-                (s for s in wb.sheetnames if s.strip().upper() == month.strip().upper()),
-                None,
+                (s for s in wb.sheetnames if s.strip().upper() == month.strip().upper()), None
             )
             if not sheet_name:
-                logger.warning(f"Sheet '{month}' not found. Available: {wb.sheetnames}")
                 return []
-
             ws = wb[sheet_name]
             employees = []
-            for row in range(3, 22):  # rows 3..21
+            for row in range(3, 22):
                 name = ws[f"A{row}"].value
                 oklad = ws[f"AU{row}"].value
                 excel_bonus = ws[f"BW{row}"].value
@@ -237,108 +228,99 @@ class PayrollService:
                 code = _extract_code(str(name))
                 if not code:
                     continue
-                try:
-                    salary = float(oklad or 0)
-                except (TypeError, ValueError):
-                    salary = 0.0
-                try:
-                    bonus = float(excel_bonus or 0)
-                except (TypeError, ValueError):
-                    bonus = 0.0
                 employees.append({
                     "name": str(name).strip(),
                     "code": code,
-                    "salary": salary,
-                    "excel_bonus": bonus,
+                    "salary": float(oklad or 0),
+                    "excel_bonus": float(excel_bonus or 0),
                 })
-
             wb.close()
             return employees
         except Exception as e:
             logger.error(f"Error reading Excel sheet '{month}': {e}")
             return []
 
-    # ------------------------------------------------------------------ #
-    # Advances                                                             #
-    # ------------------------------------------------------------------ #
+    # ── Advances ─────────────────────────────────────────────────
 
-    def _get_advances_after_last_salary(self) -> dict[str, float]:
-        """
-        Rule:
-        - Find the LAST record with payout_type == "Зарплата" for each employee
-        - Sum ALL payout_type == "Аванс" records that are AFTER that date
-          (regardless of month - these are unpaid advances that need to be deducted)
-        - Only count advances with status "Одобрено" or "Выплачено"
-        """
+    def _load_advance_records(self) -> list[dict]:
         if not self.advance_requests_file.exists():
-            return {}
+            return []
         try:
-            data = json.loads(self.advance_requests_file.read_text(encoding="utf-8"))
+            return json.loads(self.advance_requests_file.read_text(encoding="utf-8"))
         except Exception as e:
             logger.error(f"Error reading advance requests: {e}")
-            return {}
+            return []
 
-        # Valid statuses for counting advances
-        VALID_STATUSES = {"Одобрено", "Выплачено"}
+    def _resolve_code(self, row: dict) -> str | None:
+        code = _extract_code(row.get("name"))
+        if not code:
+            code = self._user_id_to_code.get(str(row.get("user_id", "")))
+        return code
 
-        # Group by employee code (code is at end of "name" field)
+    def _get_advances_after_last_salary(self) -> dict[str, float]:
+        """Original logic: advances since last salary payment (actual deduction amount)."""
+        data = self._load_advance_records()
+        VALID = {"Одобрено", "Выплачено"}
+
         ops: dict[str, list[dict]] = {}
         for row in data:
-            code = _extract_code(row.get("name"))
-            if not code:
-                # Fallback: look up code via user_id
-                code = self._user_id_to_code.get(str(row.get("user_id", "")))
+            code = self._resolve_code(row)
             if code:
                 ops.setdefault(code, []).append(row)
 
         out: dict[str, float] = {}
         for code, items in ops.items():
             items_sorted = sorted(items, key=lambda r: _parse_dt(_dt_field(r)))
-
-            # Find last salary payment
-            last_salary_dt: datetime | None = None
+            last_salary_dt = None
             for r in items_sorted:
                 if r.get("payout_type") == "Зарплата":
                     last_salary_dt = _parse_dt(_dt_field(r))
 
             if last_salary_dt is None:
-                # No salary payment yet - sum ALL advances with valid status
-                total = sum(
+                out[code] = sum(
                     float(r.get("amount") or 0)
                     for r in items_sorted
-                    if r.get("payout_type") == "Аванс" and r.get("status") in VALID_STATUSES
+                    if r.get("payout_type") == "Аванс" and r.get("status") in VALID
                 )
-                out[code] = total
                 continue
 
-            # Sum ALL advances after last salary with valid status (no month filter)
             total = 0.0
             for r in items_sorted:
-                if r.get("payout_type") != "Аванс":
+                if r.get("payout_type") != "Аванс" or r.get("status") not in VALID:
                     continue
-                if r.get("status") not in VALID_STATUSES:
-                    continue
-                dt = _parse_dt(_dt_field(r))
-                if dt <= last_salary_dt:
+                if _parse_dt(_dt_field(r)) <= last_salary_dt:
                     continue
                 total += float(r.get("amount") or 0)
-
             out[code] = total
 
         return out
 
-    # ------------------------------------------------------------------ #
-    # Bonuses / Penalties                                                  #
-    # ------------------------------------------------------------------ #
+    def _get_advances_for_month(self, year: int, month_num: int) -> dict[str, float]:
+        """Advances taken DURING a specific calendar month (for historical display)."""
+        data = self._load_advance_records()
+        VALID = {"Одобрено", "Выплачено"}
+        out: dict[str, float] = {}
+        for row in data:
+            if row.get("payout_type") != "Аванс" or row.get("status") not in VALID:
+                continue
+            dt = _parse_dt(_dt_field(row))
+            if dt.year != year or dt.month != month_num:
+                continue
+            code = self._resolve_code(row)
+            if code:
+                out[code] = out.get(code, 0.0) + float(row.get("amount") or 0)
+        return out
 
-    def _get_bonuses_penalties_for_month(
-        self, year: int, month: int
-    ) -> tuple[dict[str, float], dict[str, float]]:
-        """
-        Return ({code: bonus_sum}, {code: penalty_sum}) for target month.
-        bonuses_penalties.json uses employee_id (Telegram user_id) and full_name
-        without 4-digit code, so we map via user.json.
-        """
+    def get_advances_history(self, month: str, year: int) -> dict[str, float]:
+        """Public method: advances per employee for a specific month (for API)."""
+        month_num = MONTH_NAMES.get(month.strip().upper())
+        if not month_num:
+            return {}
+        return self._get_advances_for_month(year, month_num)
+
+    # ── Bonuses / Penalties ───────────────────────────────────────
+
+    def _get_bonuses_penalties_for_month(self, year: int, month: int):
         if not self.bonuses_penalties_file.exists():
             return {}, {}
         try:
@@ -349,40 +331,27 @@ class PayrollService:
 
         bonuses: dict[str, float] = {}
         penalties: dict[str, float] = {}
-
         for r in data:
-            # Try to resolve code: first via employee_id, then via full_name
             code = self._user_id_to_code.get(str(r.get("employee_id", "")))
             if not code:
-                full_name = (r.get("name") or "").strip().lower()
-                code = self._full_name_to_code.get(full_name)
+                code = self._full_name_to_code.get((r.get("name") or "").strip().lower())
             if not code:
-                # Last resort: direct code extraction (handles future format changes)
                 code = _extract_code(r.get("name"))
             if not code:
                 continue
-
-            # Filter by month
             dt = _parse_dt(r.get("date"))
             if dt.year != year or dt.month != month:
                 continue
-
             amt = float(r.get("amount") or 0)
             if r.get("type") == "bonus":
                 bonuses[code] = bonuses.get(code, 0.0) + amt
             elif r.get("type") == "penalty":
                 penalties[code] = penalties.get(code, 0.0) + amt
-
         return bonuses, penalties
 
-    # ------------------------------------------------------------------ #
-    # Commission                                                           #
-    # ------------------------------------------------------------------ #
+    # ── Commission ────────────────────────────────────────────────
 
-    def _commission(
-        self, sales: float, plan: float, rate_hi: float, rate_lo: float
-    ) -> tuple[float, float, float]:
-        """Returns (fulfillment_pct, rate_applied, commission_amount)."""
+    def _commission(self, sales, plan, rate_hi, rate_lo):
         if plan and plan > 0:
             fulfillment = sales / plan
             rate = rate_hi if fulfillment >= PLAN_THRESHOLD else rate_lo
@@ -391,26 +360,21 @@ class PayrollService:
             rate = rate_lo
         return fulfillment, rate, sales * rate
 
-    # ------------------------------------------------------------------ #
-    # Main calculation                                                     #
-    # ------------------------------------------------------------------ #
+    # ── Main calculation ──────────────────────────────────────────
 
-    async def calculate_payroll(
-        self, month: str, year: int | None = None
-    ) -> list[PayrollRow]:
+    async def calculate_payroll(self, month: str, year: int | None = None) -> list[PayrollRow]:
         month = month.strip().upper()
         month_num = MONTH_NAMES.get(month)
         if not month_num:
-            logger.error(f"Unknown month: {month}")
             return []
 
         if year is None:
             year = datetime.now().year
 
-        # Load all data sources
+        month_key = make_month_key(month, year)
+
         employees = self._get_employees_from_excel(month)
         if not employees:
-            logger.warning(f"No employees found for month {month}")
             return []
 
         try:
@@ -420,8 +384,10 @@ class PayrollService:
             sales_data = {}
 
         advances_map = self._get_advances_after_last_salary()
+        advances_month_map = self._get_advances_for_month(year, month_num)
         bonuses_map, penalties_map = self._get_bonuses_penalties_for_month(year, month_num)
-        plans_map = self.plans_repo.get_plans_map()
+        plans_map = self.plans_repo.get_plans_map(month_key=month_key)
+        settlements_map = self.settlement_repo.get_settlements_map(month_key)
 
         results = []
         for emp in employees:
@@ -434,7 +400,6 @@ class PayrollService:
             repair_sales = emp_sales.get("repair", 0.0)
             cosmetics_sales = emp_sales.get("cosmetics", 0.0)
             shoes_sales = emp_sales.get("shoes", 0.0)
-            # shoes_orders is list of {doc_num: str, kredit: float}
             shoes_order_items = emp_sales.get("shoes_orders", [])
             shoes_orders = [o["doc_num"] for o in shoes_order_items if isinstance(o, dict)]
 
@@ -446,46 +411,35 @@ class PayrollService:
             force_max = plan.force_max if plan else []
             force_min = plan.force_min if plan else []
 
-            # Repair commission (with force_max/force_min override)
+            # Repair
             if "repair" in force_max:
-                repair_fulfillment = 1.0
-                repair_rate = REPAIR_RATE_HIGH
+                repair_fulfillment, repair_rate = 1.0, REPAIR_RATE_HIGH
                 repair_commission = repair_sales * REPAIR_RATE_HIGH
             elif "repair" in force_min:
-                repair_fulfillment = 0.0
-                repair_rate = REPAIR_RATE_LOW
+                repair_fulfillment, repair_rate = 0.0, REPAIR_RATE_LOW
                 repair_commission = repair_sales * REPAIR_RATE_LOW
             else:
                 repair_fulfillment, repair_rate, repair_commission = self._commission(
                     repair_sales, repair_plan, REPAIR_RATE_HIGH, REPAIR_RATE_LOW
                 )
 
-            # Cosmetics commission (with force_max/force_min override)
+            # Cosmetics
             if "cosmetics" in force_max:
-                cosmetics_fulfillment = 1.0
-                cosmetics_rate = COSMETICS_RATE_HIGH
+                cosmetics_fulfillment, cosmetics_rate = 1.0, COSMETICS_RATE_HIGH
                 cosmetics_commission = cosmetics_sales * COSMETICS_RATE_HIGH
             elif "cosmetics" in force_min:
-                cosmetics_fulfillment = 0.0
-                cosmetics_rate = COSMETICS_RATE_LOW
+                cosmetics_fulfillment, cosmetics_rate = 0.0, COSMETICS_RATE_LOW
                 cosmetics_commission = cosmetics_sales * COSMETICS_RATE_LOW
             else:
                 cosmetics_fulfillment, cosmetics_rate, cosmetics_commission = self._commission(
                     cosmetics_sales, cosmetics_plan, COSMETICS_RATE_HIGH, COSMETICS_RATE_LOW
                 )
 
-            # Shoes: flat per-pair commission, no plan/rate model
-            # Each record = 1 pair with its own KREDIT
-            # kredit > 11000 → 1000 ₽, else 500 ₽
-            # force_max → always 1000 ₽ per pair; force_min → always 500 ₽ per pair
             shoes_fulfillment = 0.0
             shoes_rate = 0.0
 
-            # If ignore_kpi is set, zero out all commissions
             if ignore_kpi:
-                repair_commission = 0.0
-                cosmetics_commission = 0.0
-                shoes_commission = 0.0
+                repair_commission = cosmetics_commission = shoes_commission = 0.0
             else:
                 if "shoes" in force_max:
                     shoes_commission = 1000.0 * sum(1 for o in shoes_order_items if isinstance(o, dict))
@@ -494,13 +448,14 @@ class PayrollService:
                 else:
                     shoes_commission = sum(
                         1000 if o["kredit"] > 11000 else 500
-                        for o in shoes_order_items
-                        if isinstance(o, dict)
+                        for o in shoes_order_items if isinstance(o, dict)
                     )
 
             bonuses = bonuses_map.get(code, 0.0)
             penalties = penalties_map.get(code, 0.0)
             advances = advances_map.get(code, 0.0)
+            advances_this_month = advances_month_map.get(code, 0.0)
+            settlement_paid = settlements_map.get(code, False)
 
             total_commission = repair_commission + cosmetics_commission + shoes_commission
             total_gross = base_salary + total_commission + bonuses + excel_bonus
@@ -530,6 +485,7 @@ class PayrollService:
                 excel_bonus=excel_bonus,
                 penalties=penalties,
                 advances=advances,
+                advances_this_month=advances_this_month,
                 ignore_kpi=ignore_kpi,
                 force_max=force_max,
                 force_min=force_min,
@@ -538,13 +494,12 @@ class PayrollService:
                 total_gross=total_gross,
                 total_deductions=total_deductions,
                 total_net=total_net,
+                settlement_paid=settlement_paid,
             ))
 
         return results
 
-    async def get_employee_details(
-        self, employee_code: str, month: str, year: int | None = None
-    ) -> PayrollRow | None:
+    async def get_employee_details(self, employee_code: str, month: str, year: int | None = None):
         rows = await self.calculate_payroll(month, year)
         for row in rows:
             if row.employee_code == employee_code:

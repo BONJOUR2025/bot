@@ -80,6 +80,11 @@ class Settings(BaseSettings):
         "sales_plans.json", validation_alias="SALES_PLANS_FILE"
     )
 
+    # Файл для хранения статусов выплаты зарплат
+    payroll_settlements_file: str = Field(
+        "payroll_settlements.json", validation_alias="PAYROLL_SETTLEMENTS_FILE"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
