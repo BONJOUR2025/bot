@@ -197,6 +197,47 @@ function FulfillmentBadge({ value, threshold = 0.8 }) {
   return <span className={`px-2 py-0.5 rounded text-xs font-medium ${color}`}>{pct}%</span>;
 }
 
+// ── Plan progress rows ────────────────────────────────────────────
+function PlanProgressRows({ sales, plan }) {
+  if (!plan || plan <= 0) return null;
+  const t80  = plan * 0.8;
+  const until80  = t80  - sales;
+  const until100 = plan - sales;
+  const over     = sales - plan;
+  return (
+    <>
+      {until80 > 0 ? (
+        <div className="flex justify-between">
+          <span>До 80%:</span>
+          <span className="font-medium text-red-500">−{fmtMoney(until80)}</span>
+        </div>
+      ) : (
+        <div className="flex justify-between">
+          <span className="text-green-600 font-medium">✓ 80% выполнен</span>
+          <span className="text-green-600 text-xs">{fmtMoney(sales - t80)} сверх</span>
+        </div>
+      )}
+      {until100 > 0 ? (
+        <div className="flex justify-between">
+          <span>До 100%:</span>
+          <span className="font-medium text-amber-500">−{fmtMoney(until100)}</span>
+        </div>
+      ) : (
+        <>
+          <div className="flex justify-between">
+            <span className="text-green-600 font-medium">✓ 100% выполнен</span>
+            <span></span>
+          </div>
+          <div className="flex justify-between">
+            <span>Перевыполнение:</span>
+            <span className="font-medium text-green-600">+{fmtMoney(over)}</span>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 // ── Expanded row ──────────────────────────────────────────────────
 function ExpandedRow({ row }) {
   const [showOrders, setShowOrders] = useState(false);
@@ -213,14 +254,7 @@ function ExpandedRow({ row }) {
               <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.repair_sales)}</span></div>
               <div className="flex justify-between"><span>План:</span><span>{fmtMoney(row.repair_plan)}</span></div>
               <div className="flex justify-between"><span>Выполнение:</span><FulfillmentBadge value={row.repair_fulfillment} /></div>
-              {row.repair_plan > 0 && (
-                <div className="flex justify-between">
-                  <span>{row.repair_sales >= row.repair_plan ? 'Перевыполнен на:' : 'До плана:'}</span>
-                  <span className={`font-medium ${row.repair_sales >= row.repair_plan ? 'text-green-600' : 'text-amber-600'}`}>
-                    {fmtMoney(Math.abs(row.repair_plan - row.repair_sales))}
-                  </span>
-                </div>
-              )}
+              <PlanProgressRows sales={row.repair_sales} plan={row.repair_plan} />
               <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.repair_rate)}</span></div>
               <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
                 <span>Комиссия:</span>
@@ -236,14 +270,7 @@ function ExpandedRow({ row }) {
               <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.cosmetics_sales)}</span></div>
               <div className="flex justify-between"><span>План:</span><span>{fmtMoney(row.cosmetics_plan)}</span></div>
               <div className="flex justify-between"><span>Выполнение:</span><FulfillmentBadge value={row.cosmetics_fulfillment} /></div>
-              {row.cosmetics_plan > 0 && (
-                <div className="flex justify-between">
-                  <span>{row.cosmetics_sales >= row.cosmetics_plan ? 'Перевыполнен на:' : 'До плана:'}</span>
-                  <span className={`font-medium ${row.cosmetics_sales >= row.cosmetics_plan ? 'text-green-600' : 'text-amber-600'}`}>
-                    {fmtMoney(Math.abs(row.cosmetics_plan - row.cosmetics_sales))}
-                  </span>
-                </div>
-              )}
+              <PlanProgressRows sales={row.cosmetics_sales} plan={row.cosmetics_plan} />
               <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.cosmetics_rate)}</span></div>
               <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
                 <span>Комиссия:</span>
