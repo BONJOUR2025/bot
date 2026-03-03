@@ -213,12 +213,15 @@ class FirebirdService:
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
-                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
             WHERE
                 docs_order.date_out_fact >= ?
                 AND docs_order.date_out_fact < ?
                 AND tovars_tbl.code IN ({placeholders})
-                AND docs_order_history.status_id = 5
+                AND EXISTS (
+                    SELECT 1 FROM docs_order_history
+                    WHERE doc_order_id = docs_order.id
+                      AND status_id = 5
+                )
             ORDER BY users.description, docs.doc_num, doc_order_services.id
         """
 
