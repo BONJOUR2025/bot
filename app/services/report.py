@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pandas as pd
 from pandas import DataFrame
 from .excel import get_cell_comment
@@ -100,5 +102,51 @@ def generate_employee_report(
             ("Аванс", get_cell_comment(month, row_index, "CM")),
             ("Удержание", get_cell_comment(month, row_index, "CI")),
             ("Бонус", get_cell_comment(month, row_index, "CA")),
+        ],
+    ]
+
+
+def generate_employee_report_from_payroll(row, month: str) -> list:
+    """Возвращает структуру отчёта из объекта PayrollRow (источник — SQL/Firebird)."""
+
+    def fmt(v: float) -> str:
+        return f"{int(round(v))} \u20bd"
+
+    def fmt_rate(rate: float, hi: float, lo: float) -> str:
+        pct = int(round(rate * 100))
+        if abs(rate - hi) < 1e-6:
+            return f"{pct}%, план выполнен"
+        if abs(rate - lo) < 1e-6:
+            return f"{pct}%, план не выполнен"
+        if rate == 0.0:
+            return "не начисляется"
+        return f"{pct}%"
+
+    total_bonus = row.bonuses + row.excel_bonus
+
+    return [
+        [
+            ("ЗАГОЛОВОК ОТЧЁТА", ""),
+            ("Сотрудник", row.employee_name),
+            ("Период", month),
+            ("Оклад", fmt(row.base_salary)),
+        ],
+        [
+            ("KPI", ""),
+            ("Ремонт", fmt_rate(row.repair_rate, 0.02, 0.01)),
+            ("Косметика", fmt_rate(row.cosmetics_rate, 0.08, 0.05)),
+            ("Обувь", fmt(row.shoes_commission)),
+        ],
+        [
+            ("НАЧИСЛЕНИЯ И УДЕРЖАНИЯ", ""),
+            ("Оклад", fmt(row.base_salary)),
+            ("Ремонт", fmt(row.repair_commission)),
+            ("Косметика", fmt(row.cosmetics_commission)),
+            ("Обувь", fmt(row.shoes_commission)),
+            ("Бонус", fmt(total_bonus)),
+            ("ИТОГО", fmt(row.total_gross)),
+            ("Удержание", fmt(row.penalties)),
+            ("Аванс", fmt(row.advances)),
+            ("К выплате", fmt(row.total_net)),
         ],
     ]

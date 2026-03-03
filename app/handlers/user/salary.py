@@ -1,12 +1,17 @@
 import os
+from datetime import datetime
+
 import pandas as pd
 from telegram import Update
 from telegram.ext import ContextTypes
 from typing import Optional
+
 from ...utils.image import create_combined_table_image
-from ...services.report import generate_employee_report
+from ...services.report import generate_employee_report, generate_employee_report_from_payroll
 from ...services.excel import load_data
 from ...services.users import load_users_map
+from ...services.payroll_service import get_payroll_service
+from ...settings import settings
 from ...utils.logger import log
 
 
@@ -52,40 +57,19 @@ async def handle_salary_request(
         chat_id=update.message.chat_id, action="typing"
     )
 
-    data: Optional[pd.DataFrame] = load_data(sheet_name=month)
-    if data is None or "ИМЯ" not in data.columns:
+    use_sql = settings.salary_bot_source.strip().lower() == "sql"
+
+    if use_sql:
+        report_tables = await _handle_salary_sql(user_id, month)
+    else:
+        report_tables = _handle_salary_excel(user_id, month)
+
+    if report_tables is None:
         await loading_message.edit_text(
-            f"❌ Ошибка загрузки данных для месяца {month}."
+            f"❌ Данные за {month} не найдены. Обратитесь к руководителю."
         )
         return
 
-    users = load_users_map()
-    user = users.get(user_id)
-    if not user:
-        await loading_message.edit_text(
-            "❌ Информация о пользователе не найдена. Обратитесь к администратору."
-        )
-        return
-
-    user_name: str = user.get("name")
-    log(f"✅ [handle_salary_request] Пользователь найден: {user_name}")
-
-    # Фильтрация данных по имени сотрудника
-    data["ИМЯ"] = data["ИМЯ"].astype(str).str.strip()
-    employee_data = data[data["ИМЯ"] == user_name]
-
-    if employee_data.empty:
-        await loading_message.edit_text(
-            f"❌ Данные за {month} для {user_name} не найдены. Обратитесь к руководителю."
-        )
-        return
-
-    row_index = employee_data.index[0]
-
-    # Генерация отчёта
-    report_tables = generate_employee_report(user_name, month, data, row_index)
-
-    # Создание изображения отчёта
     filename = create_combined_table_image(
         report_tables, f"salary_report_{user_id}.png"
     )
@@ -101,3 +85,49 @@ async def handle_salary_request(
         await loading_message.edit_text(
             "❌ Не удалось сгенерировать изображение отчёта."
         )
+
+
+def _handle_salary_excel(user_id: str, month: str):
+    """Загружает данные из Excel и возвращает таблицы отчёта."""
+    data: Optional[pd.DataFrame] = load_data(sheet_name=month)
+    if data is None or "ИМЯ" not in data.columns:
+        log(f"❌ [excel] Ошибка загрузки данных для месяца {month}")
+        return None
+
+    users = load_users_map()
+    user = users.get(user_id)
+    if not user:
+        log(f"❌ [excel] Пользователь {user_id} не найден")
+        return None
+
+    user_name: str = user.get("name")
+    log(f"✅ [excel] Пользователь найден: {user_name}")
+
+    data["ИМЯ"] = data["ИМЯ"].astype(str).str.strip()
+    employee_data = data[data["ИМЯ"] == user_name]
+
+    if employee_data.empty:
+        log(f"❌ [excel] Данные за {month} для {user_name} не найдены")
+        return None
+
+    row_index = employee_data.index[0]
+    return generate_employee_report(user_name, month, data, row_index)
+
+
+async def _handle_salary_sql(user_id: str, month: str):
+    """Загружает данные из SQL (Firebird) через PayrollService и возвращает таблицы отчёта."""
+    payroll = get_payroll_service()
+
+    employee_code = payroll._user_id_to_code.get(user_id)
+    if not employee_code:
+        log(f"❌ [sql] Код сотрудника для user_id={user_id} не найден")
+        return None
+
+    year = datetime.now().year
+    row = await payroll.get_employee_details(employee_code, month, year)
+    if row is None:
+        log(f"❌ [sql] Данные за {month} для кода {employee_code} не найдены")
+        return None
+
+    log(f"✅ [sql] Данные получены: {row.employee_name}")
+    return generate_employee_report_from_payroll(row, month)
