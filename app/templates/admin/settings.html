@@ -6,7 +6,26 @@
       <button onclick="resetStorage()" class="bg-red-500 text-white px-4 py-2 rounded">Сбросить user.json</button>
     </div>
   </div>
+
+  <!-- Источник данных для отчёта по зарплате в боте -->
+  <div class="border rounded-lg p-4 space-y-2">
+    <h2 class="text-lg font-medium">Источник данных зарплатного отчёта в боте</h2>
+    <p class="text-sm text-gray-500">Откуда бот берёт данные при запросе зарплаты сотрудником.</p>
+    <div class="flex items-center gap-4 mt-2">
+      <span id="salary-source-label" class="text-sm font-medium text-gray-700">Загрузка...</span>
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" id="salary-source-toggle" class="sr-only peer" onchange="saveSalarySource(this.checked)">
+        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer
+                    peer-checked:after:translate-x-full peer-checked:after:border-white
+                    after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                    after:bg-white after:border-gray-300 after:border after:rounded-full
+                    after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+      </label>
+      <span id="salary-source-badge" class="text-xs px-2 py-1 rounded font-mono"></span>
+    </div>
+  </div>
 </div>
+
 <script>
 async function resetStorage() {
   try {
@@ -16,4 +35,43 @@ async function resetStorage() {
     console.error(err);
   }
 }
+
+async function loadSalarySource() {
+  try {
+    const res = await axios.get('/api/config/');
+    const val = (res.data.salary_bot_source || 'excel').toLowerCase();
+    const isSql = val === 'sql';
+    document.getElementById('salary-source-toggle').checked = isSql;
+    updateSalarySourceUI(isSql);
+  } catch (err) {
+    console.error('Ошибка загрузки настроек:', err);
+  }
+}
+
+function updateSalarySourceUI(isSql) {
+  const label = document.getElementById('salary-source-label');
+  const badge = document.getElementById('salary-source-badge');
+  if (isSql) {
+    label.textContent = 'SQL (Firebird) — как в UI';
+    badge.textContent = 'sql';
+    badge.className = 'text-xs px-2 py-1 rounded font-mono bg-blue-100 text-blue-800';
+  } else {
+    label.textContent = 'Excel — текущий файл данных';
+    badge.textContent = 'excel';
+    badge.className = 'text-xs px-2 py-1 rounded font-mono bg-gray-100 text-gray-700';
+  }
+}
+
+async function saveSalarySource(isSql) {
+  const value = isSql ? 'sql' : 'excel';
+  updateSalarySourceUI(isSql);
+  try {
+    await axios.patch('/api/config/', { salary_bot_source: value });
+  } catch (err) {
+    console.error('Ошибка сохранения:', err);
+    alert('Не удалось сохранить настройку');
+  }
+}
+
+loadSalarySource();
 </script>

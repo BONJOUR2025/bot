@@ -11,8 +11,14 @@ from ...services.report import generate_employee_report, generate_employee_repor
 from ...services.excel import load_data
 from ...services.users import load_users_map
 from ...services.payroll_service import get_payroll_service
-from ...settings import settings
+from ...services.config_service import ConfigService
 from ...utils.logger import log
+
+
+def _use_sql_source() -> bool:
+    """Читает SALARY_BOT_SOURCE из config.json при каждом запросе (без перезапуска)."""
+    value = ConfigService().load().get("salary_bot_source", "excel")
+    return str(value).strip().lower() == "sql"
 
 
 async def handle_salary_request(
@@ -57,7 +63,7 @@ async def handle_salary_request(
         chat_id=update.message.chat_id, action="typing"
     )
 
-    use_sql = settings.salary_bot_source.strip().lower() == "sql"
+    use_sql = _use_sql_source()
 
     if use_sql:
         report_tables = await _handle_salary_sql(user_id, month)
