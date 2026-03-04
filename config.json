@@ -1,4 +1,5 @@
 {
+  "SALARY_BOT_SOURCE": "excel",
   "CARD_DISPATCH_CHATS": [
     {
       "key": "default",
