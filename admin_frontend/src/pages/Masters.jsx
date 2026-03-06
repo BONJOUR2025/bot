@@ -131,12 +131,24 @@ export default function Masters() {
     return r;
   }, [rows, statusFilter, masterSearch, nameSearch, docSearch, codeSearch]);
 
-  const kpi = useMemo(() => ({
-    total:   filtered.length,
-    done:    filtered.filter((x) => x.status === 'Выполнено').length,
-    inWork:  filtered.filter((x) => x.status === 'В работе').length,
-    masters: new Set(filtered.map((x) => x.description).filter(Boolean)).size,
-  }), [filtered]);
+  const kpi = useMemo(() => {
+    const orderMap = {};
+    filtered.forEach((r) => {
+      if (!r.doc_num) return;
+      if (!orderMap[r.doc_num]) orderMap[r.doc_num] = [];
+      orderMap[r.doc_num].push(r.status);
+    });
+    const orders = Object.values(orderMap);
+    return {
+      total:        filtered.length,
+      done:         filtered.filter((x) => x.status === 'Выполнено').length,
+      inWork:       filtered.filter((x) => x.status === 'В работе').length,
+      masters:      new Set(filtered.map((x) => x.description).filter(Boolean)).size,
+      ordersTotal:  orders.length,
+      ordersDone:   orders.filter((s) => s.every((v) => v === 'Выполнено')).length,
+      ordersInWork: orders.filter((s) => s.some((v) => v === 'В работе')).length,
+    };
+  }, [filtered]);
 
   function downloadCsv() {
     if (!filtered.length) return;
@@ -227,12 +239,25 @@ export default function Masters() {
 
       {loaded && !loading && (
         <>
-          {/* KPI */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <KpiCard label="Услуг" value={kpi.total} />
-            <KpiCard label="Выполнено" value={kpi.done} accent />
-            <KpiCard label="В работе" value={kpi.inWork} />
-            <KpiCard label="Мастеров" value={kpi.masters} />
+          {/* KPI — услуги */}
+          <div>
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Услуги</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <KpiCard label="Всего услуг" value={kpi.total} />
+              <KpiCard label="Выполнено" value={kpi.done} accent />
+              <KpiCard label="В работе" value={kpi.inWork} />
+              <KpiCard label="Мастеров" value={kpi.masters} />
+            </div>
+          </div>
+
+          {/* KPI — заказы */}
+          <div>
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Заказы</p>
+            <div className="grid grid-cols-3 gap-3">
+              <KpiCard label="Всего заказов" value={kpi.ordersTotal} />
+              <KpiCard label="Выполнено" value={kpi.ordersDone} accent />
+              <KpiCard label="В работе" value={kpi.ordersInWork} />
+            </div>
           </div>
 
           {/* Summary by masters */}
