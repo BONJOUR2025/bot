@@ -29,7 +29,8 @@ select
     user_session_actions.date_end,
     user_session_actions.work_place_id,
     user_session_actions.barcode,
-    users.description
+    users.description,
+    docs_order.status_id
 
 from doc_order_services
 
@@ -139,6 +140,7 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
         "last_event":    g["date_beg"].max(),
         "HAS_IN":        g["is_in"].any(),
         "HAS_OUT":       g["is_out"].any(),
+        "status_id":     first_or_na("status_id"),
     }).reset_index(drop=True)
 
     service["in_time"] = service["service_id"].map(in_time)
@@ -147,6 +149,9 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     service["status"] = "Прочее"
     service.loc[service["HAS_IN"] & service["HAS_OUT"], "status"] = "Выполнено"
     service.loc[service["HAS_IN"] & ~service["HAS_OUT"], "status"] = "В работе"
+    # Заказы с status_id = 5 не должны показываться как "В работе"
+    closed = service["status_id"].astype("Int64", errors="ignore") == 5
+    service.loc[closed & (service["status"] == "В работе"), "status"] = "Выполнено"
 
     service["duration_min"] = pd.NA
     done = service["status"] == "Выполнено"
@@ -227,7 +232,7 @@ def fetch_works(
         lambda v: round(float(v), 1) if pd.notna(v) else None
     )
 
-    result = service_df.drop(columns=["HAS_IN", "HAS_OUT"], errors="ignore")
+    result = service_df.drop(columns=["HAS_IN", "HAS_OUT", "status_id"], errors="ignore")
 
     # Replace all remaining NaN / pd.NA / inf with None so json.dumps won't fail
     import math
