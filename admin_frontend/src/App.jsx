@@ -31,6 +31,7 @@ import AccessControl from "./pages/AccessControl";
 import Payroll from "./pages/Payroll";
 import Tasks from "./pages/Tasks";
 import Passwords from "./pages/Passwords";
+import Masters from "./pages/Masters";
 
 export default function App() {
   return (
@@ -73,6 +74,7 @@ export default function App() {
                 <Route path="payroll" element={<Payroll />} />
                 <Route path="tasks" element={<Tasks />} />
                 <Route path="passwords" element={<Passwords />} />
+                <Route path="masters" element={<Masters />} />
               </Route>
 
               {/* Фолбэк: всё прочее редиректим в /admin */}

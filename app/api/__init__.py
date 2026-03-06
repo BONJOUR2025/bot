@@ -250,6 +250,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Masters / Agbis services dashboard
+    from .masters import create_masters_router
+
+    app.include_router(
+        create_masters_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # SPA фронтенд (Vite/React)
     # NOTE: We use explicit routes instead of app.mount() so that SPA routes
     # like /admin/login are served correctly (mount intercepts and returns 404
