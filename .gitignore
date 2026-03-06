@@ -138,3 +138,7 @@ docker-compose.override.yml
 media_archive/*
 !media_archive/.gitkeep
 
+# Node.js
+node_modules/
+admin_frontend/node_modules/
+
