@@ -451,7 +451,7 @@ export default function Payroll() {
         )}
         <div className="relative flex-1" style={{ minWidth: 200 }}>
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
-          <input className="input pl-9 w-full" placeholder="Поиск по ФИО…"
+          <input className="input w-full" style={{ paddingLeft: '2.25rem' }} placeholder="Поиск по ФИО…"
             value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && (
             <button onClick={() => setQuery('')}

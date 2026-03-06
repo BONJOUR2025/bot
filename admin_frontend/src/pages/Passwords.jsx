@@ -332,7 +332,7 @@ export default function Passwords() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
-            className="input-field w-full pl-10"
+            className="input-field w-full" style={{ paddingLeft: '2.5rem' }}
             placeholder="Поиск..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}

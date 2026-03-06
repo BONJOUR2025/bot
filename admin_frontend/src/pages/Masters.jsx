@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, RefreshCw, Download } from 'lucide-react';
+import { Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 
@@ -27,6 +27,22 @@ const STATUS_COLORS = {
   'Прочее':    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
 };
 
+const DURATION_OPTIONS = [
+  { label: 'Любая', value: 'all' },
+  { label: '< 5м',  value: 'lt5',    test: (v) => v != null && v < 5 },
+  { label: '5–30м', value: '5to30',  test: (v) => v != null && v >= 5 && v < 30 },
+  { label: '30–60м',value: '30to60', test: (v) => v != null && v >= 30 && v < 60 },
+  { label: '> 1ч',  value: 'gt60',   test: (v) => v != null && v >= 60 },
+  { label: 'Нет данных', value: 'null', test: (v) => v == null },
+];
+
+function SortIcon({ col, sortCol, sortDir }) {
+  if (sortCol !== col) return <ChevronsUpDown size={13} className="inline ml-1 opacity-30" />;
+  return sortDir === 'asc'
+    ? <ChevronUp size={13} className="inline ml-1 text-[color:var(--color-primary)]" />
+    : <ChevronDown size={13} className="inline ml-1 text-[color:var(--color-primary)]" />;
+}
+
 function KpiCard({ label, value, accent }) {
   return (
     <div className="app-card p-4 text-center">
@@ -38,7 +54,7 @@ function KpiCard({ label, value, accent }) {
   );
 }
 
-function MastersSummaryTable({ rows }) {
+function MastersSummaryTable({ rows, onMasterClick }) {
   const byMaster = useMemo(() => {
     const map = {};
     rows.forEach((r) => {
@@ -76,7 +92,14 @@ function MastersSummaryTable({ rows }) {
         <tbody>
           {byMaster.map((m, i) => (
             <tr key={m.name} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
-              <td className="px-4 py-2 font-medium">{m.name}</td>
+              <td className="px-4 py-2 font-medium">
+                <button
+                  onClick={() => onMasterClick(m.name)}
+                  className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors"
+                >
+                  {m.name}
+                </button>
+              </td>
               <td className="px-4 py-2 text-right">{m.total}</td>
               <td className="px-4 py-2 text-right text-green-600">{m.done}</td>
               <td className="px-4 py-2 text-right text-yellow-600">{m.inWork}</td>
@@ -97,16 +120,25 @@ export default function Masters() {
 
   const [dateFrom, setDateFrom] = useState(monthAgo);
   const [dateTo, setDateTo]     = useState(today);
-  const [statusFilter, setStatusFilter] = useState('Все');
-  const [masterSearch, setMasterSearch] = useState('');
-  const [nameSearch, setNameSearch]     = useState('');
-  const [codeSearch, setCodeSearch]     = useState('');
-  const [docSearch, setDocSearch]       = useState('');
+  const [statusFilter, setStatusFilter]     = useState('Все');
+  const [masterSearch, setMasterSearch]     = useState('');
+  const [nameSearch, setNameSearch]         = useState('');
+  const [codeSearch, setCodeSearch]         = useState('');
+  const [docSearch, setDocSearch]           = useState('');
+  const [durationFilter, setDurationFilter] = useState('all');
+
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
 
   const [rows, setRows]       = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
   const [loaded, setLoaded]   = useState(false);
+
+  const masterNames = useMemo(
+    () => [...new Set(rows.map((r) => r.description).filter(Boolean))].sort(),
+    [rows],
+  );
 
   async function load() {
     setLoading(true);
@@ -125,10 +157,19 @@ export default function Masters() {
     }
   }
 
+  function toggleSort(col) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  }
+
   const filtered = useMemo(() => {
     let r = rows;
     if (statusFilter !== 'Все') r = r.filter((x) => x.status === statusFilter);
-    if (masterSearch) r = r.filter((x) => (x.description || '').toLowerCase().includes(masterSearch.toLowerCase()));
+    if (masterSearch) r = r.filter((x) => (x.description || '') === masterSearch);
     if (nameSearch)   r = r.filter((x) => (x.name || '').toLowerCase().includes(nameSearch.toLowerCase()));
     if (docSearch)    r = r.filter((x) => (x.doc_num || '').toLowerCase().includes(docSearch.toLowerCase()));
     if (codeSearch) {
@@ -138,8 +179,23 @@ export default function Masters() {
         return tokens.some((t) => t.endsWith('.') ? c.startsWith(t.toLowerCase()) : c.includes(t.toLowerCase()));
       });
     }
+    if (durationFilter !== 'all') {
+      const opt = DURATION_OPTIONS.find((o) => o.value === durationFilter);
+      if (opt) r = r.filter((x) => opt.test(x.duration_min));
+    }
     return r;
-  }, [rows, statusFilter, masterSearch, nameSearch, docSearch, codeSearch]);
+  }, [rows, statusFilter, masterSearch, nameSearch, docSearch, codeSearch, durationFilter]);
+
+  const sorted = useMemo(() => {
+    if (!sortCol) return filtered;
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const av = a[sortCol] ?? '';
+      const bv = b[sortCol] ?? '';
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      return String(av).localeCompare(String(bv), 'ru') * dir;
+    });
+  }, [filtered, sortCol, sortDir]);
 
   const kpi = useMemo(() => {
     const orderMap = {};
@@ -170,6 +226,16 @@ export default function Masters() {
     const a = document.createElement('a'); a.href = url; a.download = 'masters_works.csv'; a.click();
     URL.revokeObjectURL(url);
   }
+
+  const SortTh = ({ col, children, className = '' }) => (
+    <th
+      className={`px-4 py-3 cursor-pointer select-none hover:text-[color:var(--color-text-primary)] transition-colors ${className}`}
+      onClick={() => toggleSort(col)}
+    >
+      {children}
+      <SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+    </th>
+  );
 
   return (
     <div className="space-y-5">
@@ -211,13 +277,22 @@ export default function Masters() {
           </div>
           <div>
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Мастер</label>
-            <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
-              <input className="input w-full pl-7" placeholder="Поиск..." value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
-            </div>
+            {loaded && masterNames.length > 0 ? (
+              <select className="input w-full" value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)}>
+                <option value="">Все мастера</option>
+                {masterNames.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="relative">
+                <Search size={14} style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} className="text-[color:var(--color-muted-foreground)]" />
+                <input className="input w-full" style={{ paddingLeft:'2rem' }} placeholder="Поиск..." value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
+              </div>
+            )}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Услуга</label>
             <input className="input w-full" placeholder="Название..." value={nameSearch} onChange={(e) => setNameSearch(e.target.value)} />
@@ -229,6 +304,14 @@ export default function Masters() {
           <div>
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Код (через запятую, или с точкой)</label>
             <input className="input w-full" placeholder="2.17, 3." value={codeSearch} onChange={(e) => setCodeSearch(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Длительность</label>
+            <select className="input w-full" value={durationFilter} onChange={(e) => setDurationFilter(e.target.value)}>
+              {DURATION_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -271,7 +354,7 @@ export default function Masters() {
           </div>
 
           {/* Summary by masters */}
-          <MastersSummaryTable rows={filtered} />
+          <MastersSummaryTable rows={filtered} onMasterClick={(name) => setMasterSearch(name)} />
 
           {/* Full table */}
           <div className="app-card overflow-x-auto">
@@ -282,19 +365,19 @@ export default function Masters() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
-                  <th className="px-4 py-3 text-left">Статус</th>
-                  <th className="px-4 py-3 text-left">Мастер</th>
-                  <th className="px-4 py-3 text-left">Заказ</th>
-                  <th className="px-4 py-3 text-left">Код</th>
-                  <th className="px-4 py-3 text-left">Услуга</th>
-                  <th className="px-4 py-3 text-left">Группа</th>
-                  <th className="px-4 py-3 text-right">Приём</th>
-                  <th className="px-4 py-3 text-right">Выдача</th>
-                  <th className="px-4 py-3 text-right">Длит.</th>
+                  <SortTh col="status" className="text-left">Статус</SortTh>
+                  <SortTh col="description" className="text-left">Мастер</SortTh>
+                  <SortTh col="doc_num" className="text-left">Заказ</SortTh>
+                  <SortTh col="code" className="text-left">Код</SortTh>
+                  <SortTh col="name" className="text-left">Услуга</SortTh>
+                  <SortTh col="service_group" className="text-left">Группа</SortTh>
+                  <SortTh col="in_time" className="text-right">Приём</SortTh>
+                  <SortTh col="out_time" className="text-right">Выдача</SortTh>
+                  <SortTh col="duration_min" className="text-right">Длит.</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {filtered.slice(0, 500).map((r, i) => (
+                {sorted.slice(0, 500).map((r, i) => (
                   <tr key={r.service_id ?? i} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
                     <td className="px-4 py-2">
                       <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
