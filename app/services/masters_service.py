@@ -227,4 +227,24 @@ def fetch_works(
         lambda v: round(float(v), 1) if pd.notna(v) else None
     )
 
-    return service_df.drop(columns=["HAS_IN", "HAS_OUT"], errors="ignore").to_dict(orient="records")
+    result = service_df.drop(columns=["HAS_IN", "HAS_OUT"], errors="ignore")
+
+    # Replace all remaining NaN / pd.NA / inf with None so json.dumps won't fail
+    import math
+
+    def _safe(v):
+        if v is None:
+            return None
+        try:
+            if pd.isna(v):
+                return None
+        except (TypeError, ValueError):
+            pass
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            return None
+        return v
+
+    return [
+        {k: _safe(val) for k, val in row.items()}
+        for row in result.to_dict(orient="records")
+    ]
