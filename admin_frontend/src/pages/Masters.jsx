@@ -4,7 +4,16 @@ import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 
 const fmt = (v) => (v == null ? '—' : v);
-const fmtMin = (v) => (v == null ? '—' : `${v} мин`);
+const fmtMin = (v) => {
+  if (v == null) return '—';
+  const total = Math.round(v);
+  const d = Math.floor(total / 1440);
+  const h = Math.floor((total % 1440) / 60);
+  const m = total % 60;
+  if (d > 0) return `${d}д ${h}ч ${m}м`;
+  if (h > 0) return `${h}ч ${m}м`;
+  return `${m}м`;
+};
 const fmtDt = (v) => {
   if (!v) return '—';
   try { return new Date(v).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
@@ -71,7 +80,7 @@ function MastersSummaryTable({ rows }) {
               <td className="px-4 py-2 text-right text-green-600">{m.done}</td>
               <td className="px-4 py-2 text-right text-yellow-600">{m.inWork}</td>
               <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">
-                {median(m.durations) != null ? `${median(m.durations).toFixed(1)}` : '—'}
+                {fmtMin(median(m.durations))}
               </td>
             </tr>
           ))}
