@@ -149,8 +149,8 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     service["status"] = "Прочее"
     service.loc[service["HAS_IN"] & service["HAS_OUT"], "status"] = "Выполнено"
     service.loc[service["HAS_IN"] & ~service["HAS_OUT"], "status"] = "В работе"
-    # Заказы с status_id = 5 не должны показываться как "В работе"
-    closed = service["status_id"].astype("Int64", errors="ignore") == 5
+    # Заказы с status_id = 5 или 7 не должны показываться как "В работе"
+    closed = service["status_id"].astype("Int64", errors="ignore").isin([5, 7])
     service.loc[closed & (service["status"] == "В работе"), "status"] = "Выполнено"
 
     service["duration_min"] = pd.NA
