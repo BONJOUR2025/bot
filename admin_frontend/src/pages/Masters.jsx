@@ -6,6 +6,7 @@ import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 const fmt = (v) => (v == null ? '—' : v);
 const fmtMin = (v) => {
   if (v == null) return '—';
+  if (v < 1) return '< 1м';
   const total = Math.round(v);
   const d = Math.floor(total / 1440);
   const h = Math.floor((total % 1440) / 60);
