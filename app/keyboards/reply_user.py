@@ -1,3 +1,5 @@
+from typing import List
+
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
