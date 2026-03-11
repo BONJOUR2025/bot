@@ -1,16 +1,35 @@
-fastapi
-uvicorn[standard]
-python-telegram-bot>=20
-pandas
-openpyxl
-fpdf
-pillow
-reportlab
-python-dateutil
-pydantic
-pydantic-settings
-SQLAlchemy
-Jinja2
-numpy
-python-multipart
-fdb
+# Web framework & server
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+starlette>=0.37.0
+
+# Telegram Bot
+python-telegram-bot>=20.0
+
+# Data processing
+pandas>=2.2.0
+numpy>=1.26.0
+openpyxl>=3.1.0
+python-dateutil>=2.9.0
+
+# PDF generation
+fpdf2>=2.7.0
+reportlab>=4.0.0
+
+# Images
+Pillow>=10.3.0
+
+# Validation & settings
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+
+# Database
+SQLAlchemy>=2.0.0
+fdb>=2.0.2
+
+# Templating
+Jinja2>=3.1.0
+
+# Testing
+pytest>=8.0.0
