@@ -11,9 +11,11 @@ import api from '../api';
 import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 export default function Employees() {
   const { toast } = useToast();
+  const { isMobile } = useViewport();
 
   const emptyForm = {
     id: '',
@@ -316,6 +318,67 @@ export default function Employees() {
         <div className="border rounded shadow bg-white p-4">
           <SkeletonTable rows={8} cols={6} />
         </div>
+      ) : isMobile ? (
+        <div className="space-y-3">
+          {sortedList.length === 0 && (
+            <div className="py-6 text-center text-gray-500 text-sm">Нет сотрудников</div>
+          )}
+          {sortedList.map((e) => {
+            const canArchive = e.status !== 'active';
+            return (
+              <div
+                key={e.id}
+                className={`border rounded-xl bg-white shadow-sm overflow-hidden ${e.is_admin ? 'border-orange-200' : ''} ${e.status !== 'active' ? 'opacity-70' : ''}`}
+              >
+                <div className="px-4 py-3 border-b bg-gray-50 flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={selected.includes(e.id)} onChange={(ev) => toggleSelect(e.id, ev.target.checked)} />
+                  </label>
+                  {e.photo_url ? (
+                    <img src={e.photo_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
+                      <span className="text-gray-400 text-xs">Фото</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{e.full_name}</div>
+                    <div className="text-xs text-gray-500">{e.position}</div>
+                  </div>
+                  {e.is_admin && <span className="text-xs text-orange-600 font-medium shrink-0">Админ</span>}
+                </div>
+                <div className="px-4 py-2 space-y-1.5 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Телефон</span>
+                    <span>{e.phone}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Место</span>
+                    <span>{e.work_place || '—'}</span>
+                  </div>
+                  {e.birthdate && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">День рождения</span>
+                      <span>{formatDateRu(e.birthdate)}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="px-4 py-2 border-t flex justify-end gap-3">
+                  <button className="text-blue-600" onClick={() => startEdit(e)}><Pencil size={18} /></button>
+                  <a href={`/api/employees/${e.id}/profile.pdf`} className="text-gray-600" title="PDF"><FileDown size={18} /></a>
+                  <button
+                    className={canArchive ? 'text-amber-600' : 'text-gray-300'}
+                    onClick={() => { if (canArchive) moveToArchive(e.id); }}
+                    disabled={!canArchive}
+                    title={canArchive ? 'В архив' : 'Сначала переведите в inactive'}
+                  >
+                    <Archive size={18} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div className="overflow-auto border rounded shadow bg-white">
           <table className="min-w-[1400px] text-sm">
@@ -432,6 +495,7 @@ export default function Employees() {
       )}
 
       {showForm && (
+
         <div className="modal-backdrop">
           <div className="modal-card">
             <h2 className="text-xl font-semibold">

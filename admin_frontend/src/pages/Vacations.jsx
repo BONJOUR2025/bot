@@ -3,6 +3,7 @@ import { Pencil, Trash2, Plus } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 export default function Vacations() {
   const { toast } = useToast();
@@ -204,56 +205,33 @@ export default function Vacations() {
           <SkeletonTable rows={6} cols={6} />
         </div>
       ) : (
-        <div className="overflow-auto border rounded shadow bg-white">
-          <table className="min-w-[1100px] text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="p-2 text-left">Сотрудник</th>
-                <th className="p-2 text-left">Тип</th>
-                <th className="p-2 text-left">Даты</th>
-                <th className="p-2 text-left">Длительность</th>
-                <th className="p-2 text-left">Комментарий</th>
-                <th className="p-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {vacations.map((v) => (
-                <tr key={v.id} className="hover:bg-gray-50">
-                  <td className="p-2">{v.name}</td>
-                  <td className="p-2">{v.type}</td>
-                  <td className="p-2">
-                    {formatDateRange(v.start_date, v.end_date)}
-                  </td>
-                  <td className="p-2">{duration(v.start_date, v.end_date)} дней</td>
-                  <td className="p-2 whitespace-pre-wrap">{v.comment}</td>
-                  <td className="p-2 space-x-1 text-right">
-                    <button
-                      className="text-blue-600 hover:text-blue-800"
-                      onClick={() => startEdit(v)}
-                      title="Редактировать"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      className="text-gray-600 hover:text-gray-800"
-                      onClick={() => remove(v.id)}
-                      title="Удалить"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {vacations.length === 0 && (
-                <tr>
-                  <td colSpan="6" className="p-4 text-center text-gray-500">
-                    Нет данных
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <ResponsiveTable
+          data={vacations}
+          keyFn={(v) => v.id}
+          emptyText="Нет данных"
+          columns={[
+            { label: 'Сотрудник', key: 'name', primary: true },
+            { label: 'Тип', key: 'type' },
+            { label: 'Даты', render: (v) => formatDateRange(v.start_date, v.end_date) },
+            { label: 'Длительность', render: (v) => `${duration(v.start_date, v.end_date)} дней` },
+            { label: 'Комментарий', key: 'comment' },
+            {
+              label: '',
+              isAction: true,
+              cellClass: 'text-right',
+              render: (v) => (
+                <>
+                  <button className="text-blue-600 hover:text-blue-800" onClick={() => startEdit(v)} title="Редактировать">
+                    <Pencil size={16} />
+                  </button>
+                  <button className="text-gray-600 hover:text-gray-800 ml-2" onClick={() => remove(v.id)} title="Удалить">
+                    <Trash2 size={16} />
+                  </button>
+                </>
+              ),
+            },
+          ]}
+        />
       )}
 
       <div className="space-y-2">

@@ -11,6 +11,7 @@ import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const MAX_AMOUNT = 100000;
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
@@ -111,6 +112,7 @@ function formatDateTime(value) {
 export default function Payouts() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { isMobile } = useViewport();
   const canManageDates = Boolean(
     user?.permissions?.includes('*') || user?.permissions?.includes(MANAGE_DATES_PERMISSION),
   );
@@ -469,6 +471,50 @@ export default function Payouts() {
         <div className="border rounded shadow bg-white p-4">
           <SkeletonTable rows={8} cols={7} />
         </div>
+      ) : isMobile ? (
+        <div className="space-y-3">
+          {payouts.length === 0 && (
+            <div className="py-6 text-center text-gray-500 text-sm italic">Нет данных</div>
+          )}
+          {payouts.map((p) => (
+            <div key={p.id} className={`border rounded-xl bg-white shadow-sm overflow-hidden ${selected.has(p.id) ? 'ring-2 ring-blue-400' : ''}`}>
+              <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
+                <label className="flex items-center gap-2 font-medium text-sm cursor-pointer">
+                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                  {p.name}
+                </label>
+                <span className={`px-2 py-0.5 rounded text-xs ${statusColor(p.status)}`}>{p.status}</span>
+              </div>
+              <div className="px-4 py-2 space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Сумма</span>
+                  <span className="font-semibold text-blue-800">{p.amount} ₽</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Тип / Способ</span>
+                  <span>{p.payout_type} · {p.method}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Дата</span>
+                  <span className="text-xs">{formatDateTime(p.timestamp)}</span>
+                </div>
+              </div>
+              <div className="px-4 py-2 border-t flex justify-end gap-3">
+                <button onClick={() => openEdit(p)} className="text-blue-600" title="Редактировать"><Pencil size={18} /></button>
+                {p.status === 'Ожидает' && (
+                  <button onClick={() => updateStatus(p.id, 'Одобрено')} className="text-green-600" title="Одобрить"><CheckCircle size={18} /></button>
+                )}
+                {p.status === 'Ожидает' && (
+                  <button onClick={() => updateStatus(p.id, 'Отклонено')} className="text-red-600" title="Отказать"><XCircle size={18} /></button>
+                )}
+                {p.status === 'Одобрено' && (
+                  <button onClick={() => updateStatus(p.id, 'Выплачено')} className="text-indigo-600" title="Отметить выплаченным"><Download size={18} /></button>
+                )}
+                <button onClick={() => remove(p.id)} className="text-gray-500" title="Удалить"><Trash2 size={18} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="overflow-auto border rounded shadow">
           <table className="min-w-[1100px] divide-y divide-gray-200 bg-white text-sm">
@@ -503,70 +549,29 @@ export default function Payouts() {
                   <td className="px-4 py-2">{p.name}</td>
                   <td className="px-4 py-2">{p.payout_type}</td>
                   <td className="px-4 py-2">{p.method}</td>
-                  <td className="px-4 py-2 text-blue-800 font-medium">
-                    {p.amount} ₽
-                  </td>
+                  <td className="px-4 py-2 text-blue-800 font-medium">{p.amount} ₽</td>
                   <td className="px-4 py-2">
-                    <span
-                      className={`px-2 py-1 rounded text-xs ${statusColor(p.status)}`}
-                    >
-                      {p.status}
-                    </span>
+                    <span className={`px-2 py-1 rounded text-xs ${statusColor(p.status)}`}>{p.status}</span>
                   </td>
                   <td className="px-4 py-2 text-xs">{formatDateTime(p.timestamp)}</td>
                   <td className="px-4 py-2 space-x-1 whitespace-nowrap">
-                    <button
-                      onClick={() => openEdit(p)}
-                      className="text-blue-600 hover:text-blue-800"
-                      title="Редактировать"
-                    >
-                      <Pencil size={16} />
-                    </button>
+                    <button onClick={() => openEdit(p)} className="text-blue-600 hover:text-blue-800" title="Редактировать"><Pencil size={16} /></button>
                     {p.status === 'Ожидает' && (
-                      <button
-                        onClick={() => updateStatus(p.id, 'Одобрено')}
-                        className="text-green-600 hover:text-green-800"
-                        title="Одобрить"
-                      >
-                        <CheckCircle size={16} />
-                      </button>
+                      <button onClick={() => updateStatus(p.id, 'Одобрено')} className="text-green-600 hover:text-green-800" title="Одобрить"><CheckCircle size={16} /></button>
                     )}
                     {p.status === 'Ожидает' && (
-                      <button
-                        onClick={() => updateStatus(p.id, 'Отклонено')}
-                        className="text-red-600 hover:text-red-800"
-                        title="Отказать"
-                      >
-                        <XCircle size={16} />
-                      </button>
+                      <button onClick={() => updateStatus(p.id, 'Отклонено')} className="text-red-600 hover:text-red-800" title="Отказать"><XCircle size={16} /></button>
                     )}
                     {p.status === 'Одобрено' && (
-                      <button
-                        onClick={() => updateStatus(p.id, 'Выплачено')}
-                        className="text-indigo-600 hover:text-indigo-800"
-                        title="Отметить выплаченным"
-                      >
-                        <Download size={16} />
-                      </button>
+                      <button onClick={() => updateStatus(p.id, 'Выплачено')} className="text-indigo-600 hover:text-indigo-800" title="Отметить выплаченным"><Download size={16} /></button>
                     )}
-                    <button
-                      onClick={() => remove(p.id)}
-                      className="text-gray-500 hover:text-gray-800"
-                      title="Удалить"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <button onClick={() => remove(p.id)} className="text-gray-500 hover:text-gray-800" title="Удалить"><Trash2 size={16} /></button>
                   </td>
                 </tr>
               ))}
               {payouts.length === 0 && (
                 <tr>
-                  <td
-                    colSpan="8"
-                    className="px-4 py-3 text-center text-gray-500 italic"
-                  >
-                    Нет данных
-                  </td>
+                  <td colSpan="8" className="px-4 py-3 text-center text-gray-500 italic">Нет данных</td>
                 </tr>
               )}
             </tbody>

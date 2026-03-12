@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Pencil, Trash2, Plus, Clock } from 'lucide-react';
+import { Pencil, Trash2, Plus } from 'lucide-react';
 import api from '../api';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 export default function Assets() {
   const emptyForm = {
@@ -152,52 +153,36 @@ export default function Assets() {
         </button>
       </div>
 
-      <div className="overflow-auto border rounded shadow bg-white">
-        <table className="min-w-[1100px] text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="p-2 text-left">ФИО</th>
-              <th className="p-2 text-left">Должность</th>
-              <th className="p-2 text-left">Наименование</th>
-              <th className="p-2 text-left">Размер</th>
-              <th className="p-2 text-left">Кол-во</th>
-              <th className="p-2 text-left">Выдано</th>
-              <th className="p-2 text-left">Возврат</th>
-              <th className="p-2 text-left">Срок службы</th>
-              <th className="p-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {list.map((u) => (
-              <tr key={u.id} className="hover:bg-gray-50">
-                <td className="p-2">{u.employee_name}</td>
-                <td className="p-2">{u.position}</td>
-                <td className="p-2">{u.item_name}</td>
-                <td className="p-2">{u.size}</td>
-                <td className="p-2">{u.quantity}</td>
-                <td className="p-2">{u.issue_date}</td>
-                <td className="p-2">{u.return_date || ''}</td>
-                <td className="p-2">{u.service_life || ''}</td>
-                <td className="p-2 space-x-1 text-right">
-                  <button className="text-blue-600" onClick={() => startEdit(u)}>
-                    <Pencil size={16} />
-                  </button>
-                  <button className="text-gray-600" onClick={() => remove(u.id)}>
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && (
-              <tr>
-                <td colSpan="9" className="p-4 text-center text-gray-500">
-                  Нет данных
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <ResponsiveTable
+        data={list}
+        keyFn={(u) => u.id}
+        emptyText="Нет данных"
+        columns={[
+          { label: 'ФИО', key: 'employee_name', primary: true },
+          { label: 'Должность', key: 'position' },
+          { label: 'Наименование', key: 'item_name' },
+          { label: 'Размер', key: 'size' },
+          { label: 'Кол-во', key: 'quantity' },
+          { label: 'Выдано', key: 'issue_date' },
+          { label: 'Возврат', render: (u) => u.return_date || '—' },
+          { label: 'Срок службы', render: (u) => u.service_life ? `${u.service_life} мес.` : '—', mobileHide: true },
+          {
+            label: '',
+            isAction: true,
+            cellClass: 'text-right',
+            render: (u) => (
+              <>
+                <button className="text-blue-600" onClick={() => startEdit(u)}>
+                  <Pencil size={16} />
+                </button>
+                <button className="text-gray-600 ml-2" onClick={() => remove(u.id)}>
+                  <Trash2 size={16} />
+                </button>
+              </>
+            ),
+          },
+        ]}
+      />
 
       <div className="border rounded p-3 space-y-2">
         <h3 className="font-semibold">Агрегированная информация</h3>

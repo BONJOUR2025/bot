@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../api';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 export default function Incentives() {
   const location = useLocation();
@@ -144,52 +145,33 @@ export default function Incentives() {
           ➕ Добавить
         </button>
       </div>
-      <div className="overflow-auto border rounded shadow">
-        <table className="min-w-[1100px] divide-y divide-gray-200 bg-white text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left">Сотрудник</th>
-              <th className="px-4 py-2 text-left">Дата</th>
-              <th className="px-4 py-2 text-left">Тип</th>
-              <th className="px-4 py-2 text-left">Сумма</th>
-              <th className="px-4 py-2 text-left">Причина</th>
-              <th className="px-4 py-2 text-left">Добавил</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {list.map((item) => (
-              <tr key={item.id} className={rowColor(item.type)}>
-                <td className="px-4 py-2">{item.name}</td>
-                <td className="px-4 py-2">{item.date}</td>
-                <td className="px-4 py-2 font-medium">
-                  {typeLabel(item.type)}
-                </td>
-                <td className="px-4 py-2">{item.amount} ₽</td>
-                <td className="px-4 py-2">{item.reason}</td>
-                <td className="px-4 py-2">{item.added_by}</td>
-                <td className="px-4 py-2 text-right">
-                  <button className="text-blue-600 mr-1" onClick={() => startEdit(item)}>
-                    ✏️
-                  </button>
-                  {!item.locked && (
-                    <button className="text-red-600" onClick={() => remove(item.id)}>
-                      🗑️
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && (
-              <tr>
-                <td colSpan="7" className="px-4 py-3 text-center text-gray-500">
-                  Нет данных
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <ResponsiveTable
+        data={list}
+        keyFn={(item) => item.id}
+        rowClass={(item) => rowColor(item.type)}
+        emptyText="Нет данных"
+        columns={[
+          { label: 'Сотрудник', key: 'name', primary: true },
+          { label: 'Дата', key: 'date' },
+          { label: 'Тип', render: (item) => <span className="font-medium">{typeLabel(item.type)}</span> },
+          { label: 'Сумма', render: (item) => `${item.amount} ₽` },
+          { label: 'Причина', key: 'reason' },
+          { label: 'Добавил', key: 'added_by' },
+          {
+            label: '',
+            isAction: true,
+            cellClass: 'text-right',
+            render: (item) => (
+              <>
+                <button className="text-blue-600 mr-1" onClick={() => startEdit(item)}>✏️</button>
+                {!item.locked && (
+                  <button className="text-red-600" onClick={() => remove(item.id)}>🗑️</button>
+                )}
+              </>
+            ),
+          },
+        ]}
+      />
 
       {showForm && (
         <div className="modal-backdrop">
