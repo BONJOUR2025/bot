@@ -7,6 +7,7 @@ import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const fmt = (v) => (v === null || v === undefined || v === 0 ? '—' : Number(v).toLocaleString('ru-RU'));
 const fmtMoney = (v) => (v === null || v === undefined || v === 0 ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
@@ -238,94 +239,100 @@ function PlanProgressRows({ sales, plan }) {
   );
 }
 
-// ── Expanded row ──────────────────────────────────────────────────
-function ExpandedRow({ row }) {
+// ── Expanded content (shared between table row and mobile card) ───
+function ExpandedContent({ row }) {
   const [showOrders, setShowOrders] = useState(false);
   const orders = row.shoes_orders || [];
 
   return (
-    <tr className="bg-[color:var(--color-bg-secondary)]">
-      <td colSpan="100%" className="px-4 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          {/* Ремонт */}
-          <div className="app-card p-3">
-            <div className="font-medium mb-2">Ремонт / Химчистка</div>
-            <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
-              <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.repair_sales)}</span></div>
-              <div className="flex justify-between"><span>План:</span><span>{fmtMoney(row.repair_plan)}</span></div>
-              <div className="flex justify-between"><span>Выполнение:</span><FulfillmentBadge value={row.repair_fulfillment} /></div>
-              <PlanProgressRows sales={row.repair_sales} plan={row.repair_plan} />
-              <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.repair_rate)}</span></div>
-              <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
-                <span>Комиссия:</span>
-                <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.repair_commission)}</span>
-              </div>
-            </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      {/* Ремонт */}
+      <div className="app-card p-3">
+        <div className="font-medium mb-2">Ремонт / Химчистка</div>
+        <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
+          <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.repair_sales)}</span></div>
+          <div className="flex justify-between"><span>План:</span><span>{fmtMoney(row.repair_plan)}</span></div>
+          <div className="flex justify-between"><span>Выполнение:</span><FulfillmentBadge value={row.repair_fulfillment} /></div>
+          <PlanProgressRows sales={row.repair_sales} plan={row.repair_plan} />
+          <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.repair_rate)}</span></div>
+          <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
+            <span>Комиссия:</span>
+            <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.repair_commission)}</span>
           </div>
+        </div>
+      </div>
 
-          {/* Косметика */}
-          <div className="app-card p-3">
-            <div className="font-medium mb-2">Косметика</div>
-            <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
-              <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.cosmetics_sales)}</span></div>
-              <div className="flex justify-between"><span>План:</span><span>{fmtMoney(row.cosmetics_plan)}</span></div>
-              <div className="flex justify-between"><span>Выполнение:</span><FulfillmentBadge value={row.cosmetics_fulfillment} /></div>
-              <PlanProgressRows sales={row.cosmetics_sales} plan={row.cosmetics_plan} />
-              <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.cosmetics_rate)}</span></div>
-              <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
-                <span>Комиссия:</span>
-                <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.cosmetics_commission)}</span>
-              </div>
-            </div>
+      {/* Косметика */}
+      <div className="app-card p-3">
+        <div className="font-medium mb-2">Косметика</div>
+        <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
+          <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.cosmetics_sales)}</span></div>
+          <div className="flex justify-between"><span>План:</span><span>{fmtMoney(row.cosmetics_plan)}</span></div>
+          <div className="flex justify-between"><span>Выполнение:</span><FulfillmentBadge value={row.cosmetics_fulfillment} /></div>
+          <PlanProgressRows sales={row.cosmetics_sales} plan={row.cosmetics_plan} />
+          <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.cosmetics_rate)}</span></div>
+          <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
+            <span>Комиссия:</span>
+            <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.cosmetics_commission)}</span>
           </div>
+        </div>
+      </div>
 
-          {/* Обувь + авансы */}
-          <div className="space-y-3">
-            <div className="app-card p-3">
-              <div className="font-medium mb-2">Обувь</div>
-              <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
-                <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.shoes_sales)}</span></div>
-                <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.shoes_rate)}</span></div>
-                <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
-                  <span>Комиссия:</span>
-                  <button
-                    className="font-semibold text-[color:var(--color-primary)] flex items-center gap-1 hover:underline"
-                    onClick={(e) => { e.stopPropagation(); setShowOrders((v) => !v); }}>
-                    {fmtMoney(row.shoes_commission)}
-                    {orders.length > 0 && (showOrders ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
-                  </button>
-                </div>
-                {showOrders && orders.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-[color:var(--color-border)]">
-                    <div className="text-xs font-medium mb-1">Заказы ({orders.length}):</div>
-                    <div className="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
-                      {orders.map((num) => (
-                        <span key={num} className="text-xs font-mono">{num}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+      {/* Обувь + авансы */}
+      <div className="space-y-3">
+        <div className="app-card p-3">
+          <div className="font-medium mb-2">Обувь</div>
+          <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
+            <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.shoes_sales)}</span></div>
+            <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.shoes_rate)}</span></div>
+            <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
+              <span>Комиссия:</span>
+              <button
+                className="font-semibold text-[color:var(--color-primary)] flex items-center gap-1 hover:underline"
+                onClick={(e) => { e.stopPropagation(); setShowOrders((v) => !v); }}>
+                {fmtMoney(row.shoes_commission)}
+                {orders.length > 0 && (showOrders ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
+              </button>
             </div>
-
-            {/* Авансы за месяц */}
-            {(row.advances_this_month > 0 || row.advances > 0) && (
-              <div className="app-card p-3">
-                <div className="font-medium mb-2 text-[color:var(--color-danger)]">Авансы</div>
-                <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
-                  <div className="flex justify-between">
-                    <span>За этот месяц:</span>
-                    <span className="font-medium text-[color:var(--color-danger)]">{fmtMoney(row.advances_this_month)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>К вычету (с посл. ЗП):</span>
-                    <span className="font-medium text-[color:var(--color-danger)]">{fmtMoney(row.advances)}</span>
-                  </div>
+            {showOrders && orders.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-[color:var(--color-border)]">
+                <div className="text-xs font-medium mb-1">Заказы ({orders.length}):</div>
+                <div className="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
+                  {orders.map((num) => (
+                    <span key={num} className="text-xs font-mono">{num}</span>
+                  ))}
                 </div>
               </div>
             )}
           </div>
         </div>
+
+        {(row.advances_this_month > 0 || row.advances > 0) && (
+          <div className="app-card p-3">
+            <div className="font-medium mb-2 text-[color:var(--color-danger)]">Авансы</div>
+            <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
+              <div className="flex justify-between">
+                <span>За этот месяц:</span>
+                <span className="font-medium text-[color:var(--color-danger)]">{fmtMoney(row.advances_this_month)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>К вычету (с посл. ЗП):</span>
+                <span className="font-medium text-[color:var(--color-danger)]">{fmtMoney(row.advances)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Expanded row (table version) ──────────────────────────────────
+function ExpandedRow({ row }) {
+  return (
+    <tr className="bg-[color:var(--color-bg-secondary)]">
+      <td colSpan="100%" className="px-4 py-4">
+        <ExpandedContent row={row} />
       </td>
     </tr>
   );
@@ -334,6 +341,7 @@ function ExpandedRow({ row }) {
 // ── Main component ────────────────────────────────────────────────
 export default function Payroll() {
   const { toast } = useToast();
+  const { isMobile } = useViewport();
   const [months, setMonths]           = useState([]);
   const [selectedMonth, setSelectedMonth] = useState('');
   const [rows, setRows]               = useState([]);
@@ -483,6 +491,73 @@ export default function Payroll() {
       ) : filtered.length === 0 ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
           {query ? 'Сотрудник не найден' : 'Нет данных за этот месяц'}
+        </div>
+      ) : isMobile ? (
+        <div className="space-y-3">
+          {filtered.map((row) => (
+            <div
+              key={row.employee_code}
+              className={`border rounded-xl overflow-hidden shadow-sm bg-[color:var(--color-table-bg)] ${row.settlement_paid ? 'border-green-300' : 'border-[color:var(--color-border)]'}`}
+            >
+              {/* Card header */}
+              <div
+                className="px-4 py-3 flex items-center justify-between cursor-pointer bg-[color:var(--color-table-header)]"
+                onClick={() => toggleRow(row.employee_code)}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {row.settlement_paid && <BadgeCheck size={16} className="text-green-500 shrink-0" />}
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">{row.employee_name}</div>
+                    <div className="text-xs text-[color:var(--color-muted-foreground)]">{row.employee_code}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-base font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.total_net)}</span>
+                  {expandedRows.has(row.employee_code) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </div>
+              </div>
+
+              {/* Card summary */}
+              <div className="px-4 py-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm border-b border-[color:var(--color-border)]">
+                <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Оклад</span><span>{fmtMoney(row.base_salary)}</span></div>
+                <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Комиссия</span><span>{row.ignore_kpi ? '—' : fmtMoney(row.total_commission)}</span></div>
+                {(row.bonuses + row.excel_bonus) > 0 && (
+                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Премии</span><span className="text-green-600">+{fmtMoney(row.bonuses + row.excel_bonus)}</span></div>
+                )}
+                {row.advances > 0 && (
+                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Авансы</span><span className="text-[color:var(--color-danger)]">-{fmtMoney(row.advances)}</span></div>
+                )}
+                {row.penalties > 0 && (
+                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Штрафы</span><span className="text-[color:var(--color-danger)]">-{fmtMoney(row.penalties)}</span></div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="px-4 py-2 flex justify-end gap-3">
+                <button
+                  onClick={() => toggleSettlement(row.employee_code, row.settlement_paid)}
+                  title={row.settlement_paid ? 'Расчёт выдан — нажмите для отмены' : 'Отметить как выданный'}
+                  className={`p-1.5 rounded transition-colors ${row.settlement_paid ? 'text-green-500' : 'text-[color:var(--color-muted-foreground)]'}`}
+                >
+                  {row.settlement_paid ? <CheckSquare size={20} /> : <Square size={20} />}
+                </button>
+                <button
+                  onClick={() => setEditingPlan(row)}
+                  className="p-1.5 rounded text-[color:var(--color-muted-foreground)]"
+                  title="Настроить план"
+                >
+                  <Settings size={18} />
+                </button>
+              </div>
+
+              {/* Expanded detail */}
+              {expandedRows.has(row.employee_code) && (
+                <div className="px-4 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <ExpandedContent row={row} />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       ) : (
         <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
