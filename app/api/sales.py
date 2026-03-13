@@ -39,4 +39,30 @@ def create_sales_router() -> APIRouter:
 
         return rows
 
+    @router.get("/plans")
+    async def get_plans(month_keys: Optional[str] = Query(default=None)):
+        """Return sales plans keyed by month_key → employee_code → {repair_plan, cosmetics_plan, shoes_plan}.
+
+        month_keys: comma-separated list of month keys like ЯНВАРЬ_2025,ФЕВРАЛЬ_2025
+        """
+        from app.data.sales_plans_repository import get_sales_plans_repository
+
+        repo = get_sales_plans_repository()
+        if not month_keys:
+            return {}
+
+        keys = [k.strip() for k in month_keys.split(',') if k.strip()]
+        result: dict = {}
+        for key in keys:
+            plans_map = repo.get_plans_map(month_key=key)
+            result[key] = {
+                code: {
+                    "repair_plan":    p.repair_plan,
+                    "cosmetics_plan": p.cosmetics_plan,
+                    "shoes_plan":     p.shoes_plan,
+                }
+                for code, p in plans_map.items()
+            }
+        return result
+
     return router

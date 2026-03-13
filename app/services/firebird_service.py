@@ -346,7 +346,10 @@ class FirebirdService:
             210398,
         )
 
-        # key: (date_str, code) → {date, code, description, repair, cosmetics}
+        shoes_sales_codes = tuple(c for c in SHOES_CODES if c != '1')
+        shoes_placeholders = ','.join(['?'] * len(shoes_sales_codes))
+
+        # key: (date_str, code) → {date, code, description, repair, cosmetics, shoes}
         result: dict[tuple, dict] = {}
 
         def _add(date_val, desc: str, amount, category: str) -> None:
@@ -362,6 +365,7 @@ class FirebirdService:
                     "description": (desc or "").strip(),
                     "repair": 0.0,
                     "cosmetics": 0.0,
+                    "shoes": 0.0,
                 }
             result[key][category] += float(amount or 0)
 
@@ -403,6 +407,28 @@ class FirebirdService:
             ORDER BY docs.doc_date, users.description
         """
 
+        sql_shoes = f"""
+            SELECT
+                CAST(docs_order.date_out_fact AS DATE),
+                users.description,
+                SUM(doc_order_services.kredit)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE
+                CAST(docs_order.date_out_fact AS DATE) >= ?
+                AND CAST(docs_order.date_out_fact AS DATE) <= ?
+                AND tovars_tbl.code IN ({shoes_placeholders})
+                AND EXISTS (
+                    SELECT 1 FROM docs_order_history
+                    WHERE doc_order_id = docs_order.id AND status_id = 5
+                )
+            GROUP BY CAST(docs_order.date_out_fact AS DATE), users.description
+            ORDER BY CAST(docs_order.date_out_fact AS DATE), users.description
+        """
+
         try:
             con = _connect()
             try:
@@ -413,13 +439,17 @@ class FirebirdService:
                 cur.execute(sql_cosmetics, (date_from, date_to))
                 for d, desc, s in cur.fetchall():
                     _add(d, desc, s, "cosmetics")
+                cur.execute(sql_shoes, (date_from, date_to, *shoes_sales_codes))
+                for d, desc, s in cur.fetchall():
+                    if d is not None:
+                        _add(d, desc, s, "shoes")
             finally:
                 con.close()
         except Exception as e:
             logger.error(f"Error fetching daily sales: {e}")
 
         return [
-            {**v, "total": v["repair"] + v["cosmetics"]}
+            {**v, "total": v["repair"] + v["cosmetics"] + v["shoes"]}
             for v in sorted(result.values(), key=lambda x: (x["date"], x["code"]))
         ]
 
