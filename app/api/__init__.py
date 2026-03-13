@@ -259,6 +259,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Sales analytics
+    from .sales import create_sales_router
+
+    app.include_router(
+        create_sales_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # SPA фронтенд (Vite/React)
     # NOTE: We use explicit routes instead of app.mount() so that SPA routes
     # like /admin/login are served correctly (mount intercepts and returns 404

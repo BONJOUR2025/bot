@@ -44,6 +44,7 @@ const navStructure = [
     name: 'Аналитика',
     items: [
       { to: '/admin/masters', label: 'Работы мастеров', permission: 'payroll' },
+      { to: '/admin/sales',   label: 'Продажи',         permission: 'payroll' },
     ],
   },
   {

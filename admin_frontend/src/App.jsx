@@ -32,6 +32,7 @@ import Payroll from "./pages/Payroll";
 import Tasks from "./pages/Tasks";
 import Passwords from "./pages/Passwords";
 import Masters from "./pages/Masters";
+import SalesAnalytics from "./pages/SalesAnalytics";
 
 export default function App() {
   return (
@@ -75,6 +76,7 @@ export default function App() {
                 <Route path="tasks" element={<Tasks />} />
                 <Route path="passwords" element={<Passwords />} />
                 <Route path="masters" element={<Masters />} />
+                <Route path="sales" element={<SalesAnalytics />} />
               </Route>
 
               {/* Фолбэк: всё прочее редиректим в /admin */}
