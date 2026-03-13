@@ -79,7 +79,7 @@ function MastersSummaryTable({ rows, onMasterClick }) {
       <div className="p-4 border-b border-[color:var(--color-border)]">
         <h3 className="font-semibold">Сводка по мастерам</h3>
       </div>
-      <table className="w-full text-sm">
+      <table className="w-full text-sm min-w-[480px]">
         <thead>
           <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
             <th className="px-4 py-2 text-left">Мастер</th>
@@ -357,52 +357,86 @@ export default function Masters() {
           <MastersSummaryTable rows={filtered} onMasterClick={(name) => setMasterSearch(name)} />
 
           {/* Full table */}
-          <div className="app-card overflow-x-auto">
+          <div className="app-card">
             <div className="p-4 border-b border-[color:var(--color-border)] flex items-center justify-between">
               <h3 className="font-semibold">Список услуг</h3>
               <span className="text-sm text-[color:var(--color-muted-foreground)]">{filtered.length} строк</span>
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
-                  <SortTh col="status" className="text-left">Статус</SortTh>
-                  <SortTh col="description" className="text-left">Мастер</SortTh>
-                  <SortTh col="doc_num" className="text-left">Заказ</SortTh>
-                  <SortTh col="code" className="text-left">Код</SortTh>
-                  <SortTh col="name" className="text-left">Услуга</SortTh>
-                  <SortTh col="service_group" className="text-left">Группа</SortTh>
-                  <SortTh col="in_time" className="text-right">Приём</SortTh>
-                  <SortTh col="out_time" className="text-right">Выдача</SortTh>
-                  <SortTh col="duration_min" className="text-right">Длит.</SortTh>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.slice(0, 500).map((r, i) => (
-                  <tr key={r.service_id ?? i} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
-                    <td className="px-4 py-2">
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 font-medium">{fmt(r.description)}</td>
-                    <td className="px-4 py-2 text-[color:var(--color-muted-foreground)]">{fmt(r.doc_num)}</td>
-                    <td className="px-4 py-2 font-mono text-xs">{fmt(r.code)}</td>
-                    <td className="px-4 py-2">{fmt(r.name)}</td>
-                    <td className="px-4 py-2 text-[color:var(--color-muted-foreground)]">{fmt(r.service_group)}</td>
-                    <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtDt(r.in_time)}</td>
-                    <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtDt(r.out_time)}</td>
-                    <td className="px-4 py-2 text-right">{fmtMin(r.duration_min)}</td>
+
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm min-w-[700px]">
+                <thead>
+                  <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
+                    <SortTh col="status" className="text-left">Статус</SortTh>
+                    <SortTh col="description" className="text-left">Мастер</SortTh>
+                    <SortTh col="doc_num" className="text-left">Заказ</SortTh>
+                    <SortTh col="code" className="text-left">Код</SortTh>
+                    <SortTh col="name" className="text-left">Услуга</SortTh>
+                    <SortTh col="service_group" className="text-left">Группа</SortTh>
+                    <SortTh col="in_time" className="text-right">Приём</SortTh>
+                    <SortTh col="out_time" className="text-right">Выдача</SortTh>
+                    <SortTh col="duration_min" className="text-right">Длит.</SortTh>
                   </tr>
-                ))}
-                {filtered.length > 500 && (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)]">
-                      Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sorted.slice(0, 500).map((r, i) => (
+                    <tr key={r.service_id ?? i} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
+                      <td className="px-4 py-2">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 font-medium">{fmt(r.description)}</td>
+                      <td className="px-4 py-2 text-[color:var(--color-muted-foreground)]">{fmt(r.doc_num)}</td>
+                      <td className="px-4 py-2 font-mono text-xs">{fmt(r.code)}</td>
+                      <td className="px-4 py-2">{fmt(r.name)}</td>
+                      <td className="px-4 py-2 text-[color:var(--color-muted-foreground)]">{fmt(r.service_group)}</td>
+                      <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtDt(r.in_time)}</td>
+                      <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtDt(r.out_time)}</td>
+                      <td className="px-4 py-2 text-right">{fmtMin(r.duration_min)}</td>
+                    </tr>
+                  ))}
+                  {filtered.length > 500 && (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)]">
+                        Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="sm:hidden divide-y divide-[color:var(--color-border)]">
+              {sorted.slice(0, 500).map((r, i) => (
+                <div key={r.service_id ?? i} className="p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
+                      {r.status}
+                    </span>
+                    <span className="text-xs text-[color:var(--color-muted-foreground)]">{fmtMin(r.duration_min)}</span>
+                  </div>
+                  <div className="font-medium text-sm">{fmt(r.description)}</div>
+                  <div className="text-sm">{fmt(r.name)}</div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[color:var(--color-muted-foreground)]">
+                    <span>Заказ: {fmt(r.doc_num)}</span>
+                    <span>Код: {fmt(r.code)}</span>
+                    {r.service_group && <span>{r.service_group}</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[color:var(--color-muted-foreground)]">
+                    {r.in_time && <span>Приём: {fmtDt(r.in_time)}</span>}
+                    {r.out_time && <span>Выдача: {fmtDt(r.out_time)}</span>}
+                  </div>
+                </div>
+              ))}
+              {filtered.length > 500 && (
+                <div className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)]">
+                  Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}
