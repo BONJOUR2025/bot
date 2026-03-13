@@ -378,7 +378,9 @@ export default function SalesAnalytics() {
                 <h3 className="font-semibold">Сводная таблица</h3>
                 <span className="text-sm text-[color:var(--color-muted-foreground)]">{periods.length} строк</span>
               </div>
-              <div className="overflow-x-auto">
+
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm" style={{ minWidth: `${Math.max(400, 120 + employees.length * 110)}px` }}>
                   <thead>
                     <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
@@ -409,7 +411,6 @@ export default function SalesAnalytics() {
                         </tr>
                       );
                     })}
-                    {/* Totals row */}
                     <tr className="border-t-2 border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 font-semibold">
                       <td className="px-4 py-2 sticky left-0 bg-inherit">Итого</td>
                       {employees.map((e) => (
@@ -423,6 +424,51 @@ export default function SalesAnalytics() {
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y divide-[color:var(--color-border)]">
+                {periods.map((key) => {
+                  const rowTotal = employees.reduce((s, e) => s + (cells[key]?.[e.code] || 0), 0);
+                  const active = employees.filter((e) => (cells[key]?.[e.code] || 0) > 0);
+                  return (
+                    <div key={key} className="p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{getPeriodLabel(key, gran)}</span>
+                        <span className="font-semibold text-[color:var(--color-primary)] text-sm tabular-nums">
+                          {rowTotal.toLocaleString('ru-RU')} ₽
+                        </span>
+                      </div>
+                      {active.length > 0 && (
+                        <div className="space-y-0.5">
+                          {active.map((e) => (
+                            <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
+                              <span>{shortName(e.description)}</span>
+                              <span className="tabular-nums">{(cells[key][e.code]).toLocaleString('ru-RU')} ₽</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Mobile totals */}
+                <div className="p-3 bg-[color:var(--color-muted)]/30 font-semibold">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>Итого</span>
+                    <span className="text-[color:var(--color-primary)] tabular-nums">
+                      {(colTotals._grand || 0).toLocaleString('ru-RU')} ₽
+                    </span>
+                  </div>
+                  <div className="mt-1 space-y-0.5">
+                    {employees.map((e) => (colTotals[e.code] || 0) > 0 && (
+                      <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
+                        <span>{shortName(e.description)}</span>
+                        <span className="tabular-nums">{(colTotals[e.code]).toLocaleString('ru-RU')} ₽</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
