@@ -13,9 +13,35 @@ const MONTHS_RU = ['Янв','Фев','Мар','Апр','Май','Июн','Июл
 const MONTHS_KEY_RU = ['ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ','ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ'];
 const CHART_COLORS = ['#6366f1','#22c55e','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#a3e635'];
 
+const EMP_NAMES = {
+  '0102': 'Вера',
+  '7272': 'Арина',
+  '2404': 'Эмиль',
+  '5984': 'Полина',
+  '3007': 'Юля',
+  '2201': 'Катя',
+  '2502': 'Виктория',
+  '1996': 'Вероника',
+  '2106': 'Валерия',
+  '1302': 'Любовь',
+  '2104': 'Алекс',
+  '0208': 'Марина',
+};
+
+const CATEGORIES = [
+  { key: 'repair',       label: 'Ремонт',    color: '#6366f1' },
+  { key: 'dry_cleaning', label: 'Химчистка', color: '#8b5cf6' },
+  { key: 'cosmetics',    label: 'Косметика', color: '#22c55e' },
+  { key: 'shoes',        label: 'Обувь',     color: '#f59e0b' },
+];
+
 /* ── helpers ─────────────────────────────────────────────── */
 const fmtRub  = (v) => v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽';
 const fmtPct  = (v) => v == null ? '—' : v.toFixed(1) + '%';
+
+function empName(code) {
+  return EMP_NAMES[code] || code;
+}
 
 function getPeriodKey(dateStr, gran) {
   if (gran === 'day')   return dateStr;
@@ -25,7 +51,7 @@ function getPeriodKey(dateStr, gran) {
   d.setDate(d.getDate() + 4 - day);
   const jan1 = new Date(d.getFullYear(), 0, 1);
   const week = Math.ceil((((d - jan1) / 86400000) + 1) / 7);
-  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
+  return `${d.getFullYear()}-W${String(week).padStart(2, '00')}`;
 }
 
 function getPeriodLabel(key, gran) {
@@ -44,13 +70,6 @@ function getPeriodLabel(key, gran) {
   const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
   const f = (dt) => `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}`;
   return `${f(mon)}–${f(sun)}`;
-}
-
-function shortName(desc) {
-  const parts = (desc || '').trim().split(/\s+/).filter((p) => !/^\d{4}$/.test(p));
-  if (!parts.length) return desc;
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts.slice(1).map((p) => p[0] + '.').join('')}`;
 }
 
 function toMonthKey(yyyymm) {
@@ -104,7 +123,7 @@ function MultiSelect({ options, selected, onChange, placeholder = 'Все' }) {
             className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-[color:var(--color-muted)] transition-colors"
           >
             <Check size={13} className={allSelected ? 'text-[color:var(--color-primary)]' : 'opacity-0'} />
-            <span>Все сотрудники</span>
+            <span>{placeholder}</span>
           </button>
           <div className="border-t border-[color:var(--color-border)]" />
           {options.map((o) => {
@@ -183,7 +202,8 @@ export default function SalesAnalytics() {
   const [showMA,   setShowMA]   = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const [chartMode, setChartMode] = useState('bar');
-  const [selectedEmployees, setSelectedEmployees] = useState(new Set());
+  const [selectedEmployees,  setSelectedEmployees]  = useState(new Set());
+  const [selectedCategories, setSelectedCategories] = useState(new Set());
 
   const [rows,     setRows]     = useState([]);
   const [prevRows, setPrevRows] = useState([]);
@@ -194,6 +214,12 @@ export default function SalesAnalytics() {
 
   const months = useMemo(() => getMonthsInRange(dateFrom, dateTo), [dateFrom, dateTo]);
 
+  /* active category keys (all if none selected) */
+  const activeCats = useMemo(() => {
+    const all = CATEGORIES.map((c) => c.key);
+    return selectedCategories.size === 0 ? all : all.filter((k) => selectedCategories.has(k));
+  }, [selectedCategories]);
+
   async function load() {
     setLoading(true);
     setError(null);
@@ -202,7 +228,6 @@ export default function SalesAnalytics() {
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo)   params.date_to   = dateTo;
 
-      // Previous period (same duration, shifted back)
       const d0 = new Date(dateFrom || TODAY);
       const d1 = new Date(dateTo   || TODAY);
       const dur = d1 - d0;
@@ -232,7 +257,7 @@ export default function SalesAnalytics() {
     }
   }
 
-  /* all employees (for dropdown) */
+  /* all employees for dropdown */
   const allEmployees = useMemo(() => {
     const map = {};
     rows.forEach((r) => {
@@ -243,8 +268,10 @@ export default function SalesAnalytics() {
   }, [rows]);
 
   const employeeOptions = useMemo(() =>
-    allEmployees.map((e) => ({ value: e.code, label: shortName(e.description) })),
+    allEmployees.map((e) => ({ value: e.code, label: empName(e.code) })),
   [allEmployees]);
+
+  const categoryOptions = CATEGORIES.map((c) => ({ value: c.key, label: c.label }));
 
   /* filtered rows */
   const filteredRows = useMemo(() =>
@@ -267,9 +294,12 @@ export default function SalesAnalytics() {
 
   const nameMap = useMemo(() => {
     const m = {};
-    employees.forEach((e) => { m[e.code] = shortName(e.description); });
+    employees.forEach((e) => { m[e.code] = empName(e.code); });
     return m;
   }, [employees]);
+
+  /* row value for selected categories */
+  const rowCatValue = (r) => activeCats.reduce((s, k) => s + (r[k] || 0), 0);
 
   /* period grouping */
   const { periods, cells, allPeriodsCount } = useMemo(() => {
@@ -277,14 +307,15 @@ export default function SalesAnalytics() {
     filteredRows.forEach((r) => {
       const key = getPeriodKey(r.date, gran);
       if (!c[key]) c[key] = {};
-      c[key][r.code] = (c[key][r.code] || 0) + r.total;
+      const val = activeCats.reduce((s, k) => s + (r[k] || 0), 0);
+      c[key][r.code] = (c[key][r.code] || 0) + val;
     });
     const all = Object.keys(c).sort();
     const nonZero = all.filter((p) =>
       employees.reduce((s, e) => s + (c[p]?.[e.code] || 0), 0) > 0
     );
     return { periods: hideZero ? nonZero : all, cells: c, allPeriodsCount: all.length };
-  }, [filteredRows, gran, hideZero, employees]);
+  }, [filteredRows, gran, hideZero, employees, activeCats]);
 
   /* chart data with 7-period trailing MA */
   const chartData = useMemo(() => {
@@ -301,24 +332,26 @@ export default function SalesAnalytics() {
     return data;
   }, [periods, employees, cells, gran]);
 
-  /* employee summary */
+  /* employee summary (always all 4 categories; activeCats used for total/activeDays) */
   const empSummary = useMemo(() => {
     const map = {};
     filteredRows.forEach((r) => {
       if (!map[r.code]) map[r.code] = {
         code: r.code, name: r.description,
-        repair: 0, cosmetics: 0, shoes: 0, total: 0, activeDays: 0,
+        repair: 0, dry_cleaning: 0, cosmetics: 0, shoes: 0, total: 0, activeDays: 0,
       };
-      map[r.code].repair    += r.repair;
-      map[r.code].cosmetics += r.cosmetics;
-      map[r.code].shoes     += (r.shoes || 0);
-      map[r.code].total     += r.total;
-      if (r.total > 0) map[r.code].activeDays++;
+      map[r.code].repair       += r.repair || 0;
+      map[r.code].dry_cleaning += r.dry_cleaning || 0;
+      map[r.code].cosmetics    += r.cosmetics || 0;
+      map[r.code].shoes        += r.shoes || 0;
+      const catVal = activeCats.reduce((s, k) => s + (r[k] || 0), 0);
+      map[r.code].total     += catVal;
+      if (catVal > 0) map[r.code].activeDays++;
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [filteredRows]);
+  }, [filteredRows, activeCats]);
 
-  /* plan totals per employee for the selected date range */
+  /* plan totals per employee */
   const planTotals = useMemo(() => {
     const result = {};
     allEmployees.forEach((e) => {
@@ -342,36 +375,64 @@ export default function SalesAnalytics() {
 
   /* KPI with delta vs previous period */
   const kpi = useMemo(() => {
-    const cur  = { repair: 0, cosmetics: 0, shoes: 0, total: 0 };
-    const prev = { repair: 0, cosmetics: 0, shoes: 0, total: 0 };
-    filteredRows.forEach((r) => { cur.repair += r.repair; cur.cosmetics += r.cosmetics; cur.shoes += (r.shoes||0); cur.total += r.total; });
-    prevFiltered.forEach((r) => { prev.repair += r.repair; prev.cosmetics += r.cosmetics; prev.shoes += (r.shoes||0); prev.total += r.total; });
+    const catKeys = CATEGORIES.map((c) => c.key);
+    const cur  = Object.fromEntries(catKeys.map((k) => [k, 0]));
+    const prev = Object.fromEntries(catKeys.map((k) => [k, 0]));
+    cur.total = 0; prev.total = 0;
+
+    filteredRows.forEach((r) => {
+      catKeys.forEach((k) => { cur[k] += r[k] || 0; });
+      cur.total += activeCats.reduce((s, k) => s + (r[k] || 0), 0);
+    });
+    prevFiltered.forEach((r) => {
+      catKeys.forEach((k) => { prev[k] += r[k] || 0; });
+      prev.total += activeCats.reduce((s, k) => s + (r[k] || 0), 0);
+    });
+
     const delta = (c, p) => p > 0 ? (c - p) / p * 100 : null;
     const avgPerActive = allPeriodsCount > 0 ? cur.total / allPeriodsCount : 0;
     return {
-      repair: cur.repair, cosmetics: cur.cosmetics, shoes: cur.shoes, total: cur.total,
-      dRepair: delta(cur.repair, prev.repair),
-      dCosmetics: delta(cur.cosmetics, prev.cosmetics),
-      dShoes: delta(cur.shoes, prev.shoes),
-      dTotal: delta(cur.total, prev.total),
+      ...cur,
+      dRepair:      delta(cur.repair, prev.repair),
+      dDryCleaning: delta(cur.dry_cleaning, prev.dry_cleaning),
+      dCosmetics:   delta(cur.cosmetics, prev.cosmetics),
+      dShoes:       delta(cur.shoes, prev.shoes),
+      dTotal:       delta(cur.total, prev.total),
       activePeriods: allPeriodsCount,
       avgPerActive,
     };
-  }, [filteredRows, prevFiltered, allPeriodsCount]);
+  }, [filteredRows, prevFiltered, allPeriodsCount, activeCats]);
+
+  /* leader per category */
+  const categoryLeaders = useMemo(() => {
+    const leaders = {};
+    CATEGORIES.forEach(({ key }) => {
+      const totals = {};
+      filteredRows.forEach((r) => {
+        if ((r[key] || 0) > 0) totals[r.code] = (totals[r.code] || 0) + (r[key] || 0);
+      });
+      const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+      leaders[key] = sorted.length ? { code: sorted[0][0], amount: sorted[0][1] } : null;
+    });
+    return leaders;
+  }, [filteredRows]);
 
   const periodLabel = gran === 'day' ? 'дн.' : gran === 'week' ? 'нед.' : 'мес.';
 
   function downloadCsv() {
     if (!filteredRows.length) return;
-    const hdr = 'Дата;Код;Имя;Ремонт;Косметика;Обувь;Итого';
+    const hdr = 'Дата;Код;Имя;Ремонт;Химчистка;Косметика;Обувь;Итого';
     const body = filteredRows.map((r) =>
-      [r.date, r.code, r.description, r.repair, r.cosmetics, r.shoes || 0, r.total].join(';')
+      [r.date, r.code, r.description, r.repair, r.dry_cleaning || 0, r.cosmetics, r.shoes || 0, r.total].join(';')
     ).join('\n');
     const blob = new Blob(['\uFEFF' + hdr + '\n' + body], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'sales.csv'; a.click();
     URL.revokeObjectURL(url);
   }
+
+  const kpiDelta = { repair: kpi.dRepair, dry_cleaning: kpi.dDryCleaning, cosmetics: kpi.dCosmetics, shoes: kpi.dShoes };
+  const kpiValue = { repair: kpi.repair, dry_cleaning: kpi.dry_cleaning, cosmetics: kpi.cosmetics, shoes: kpi.shoes };
 
   return (
     <div className="space-y-5">
@@ -393,7 +454,7 @@ export default function SalesAnalytics() {
 
       {/* Filters */}
       <div className="app-card p-4 space-y-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <div>
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата от</label>
             <input type="date" className="input w-full" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
@@ -422,6 +483,15 @@ export default function SalesAnalytics() {
               selected={selectedEmployees}
               onChange={setSelectedEmployees}
               placeholder="Все сотрудники"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Категории</label>
+            <MultiSelect
+              options={categoryOptions}
+              selected={selectedCategories}
+              onChange={setSelectedCategories}
+              placeholder="Все категории"
             />
           </div>
         </div>
@@ -458,14 +528,24 @@ export default function SalesAnalytics() {
 
       {loaded && !loading && (
         <>
-          {/* KPI — 6 cards */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <KpiCard label="Ремонт"     value={fmtRub(kpi.repair)}     delta={kpi.dRepair} />
-            <KpiCard label="Косметика"  value={fmtRub(kpi.cosmetics)}  delta={kpi.dCosmetics} />
-            <KpiCard label="Обувь"      value={fmtRub(kpi.shoes)}      delta={kpi.dShoes} />
-            <KpiCard label="Итого"      value={fmtRub(kpi.total)}      delta={kpi.dTotal} />
-            <KpiCard label={`Периодов с данными`} value={kpi.activePeriods}
-              sub={`${periodLabel} за период`} />
+          {/* KPI cards — 4 categories + 3 summary */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {CATEGORIES.map(({ key, label }) => {
+              const leader = categoryLeaders[key];
+              return (
+                <KpiCard
+                  key={key}
+                  label={label}
+                  value={fmtRub(kpiValue[key])}
+                  delta={kpiDelta[key]}
+                  sub={leader ? `${empName(leader.code)}: ${Math.round(leader.amount).toLocaleString('ru-RU')} ₽` : null}
+                />
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <KpiCard label="Итого" value={fmtRub(kpi.total)} delta={kpi.dTotal} />
+            <KpiCard label={`Периодов с данными`} value={kpi.activePeriods} sub={`${periodLabel} за период`} />
             <KpiCard label={`Среднее / ${periodLabel}`} value={fmtRub(kpi.avgPerActive)} />
           </div>
 
@@ -502,15 +582,21 @@ export default function SalesAnalytics() {
             <div className="app-card p-4">
               <h3 className="font-semibold mb-3">Сравнение сотрудников</h3>
               <ResponsiveContainer width="100%" height={Math.max(160, empSummary.length * 52)}>
-                <BarChart data={empSummary} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                <BarChart
+                  data={empSummary.map((e) => ({ ...e, displayName: empName(e.code) }))}
+                  layout="vertical"
+                  margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e7eb)" />
                   <XAxis type="number" tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} tickFormatter={shortName} width={110} />
-                  <Tooltip formatter={(v, n) => [Math.round(v).toLocaleString('ru-RU') + ' ₽', n]} labelFormatter={shortName} />
+                  <YAxis type="category" dataKey="displayName" tick={{ fontSize: 11 }} width={90} />
+                  <Tooltip formatter={(v, n) => [Math.round(v).toLocaleString('ru-RU') + ' ₽', n]} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="repair"    name="Ремонт"    stackId="a" fill="#6366f1" isAnimationActive={false} />
-                  <Bar dataKey="cosmetics" name="Косметика" stackId="a" fill="#22c55e" isAnimationActive={false} />
-                  <Bar dataKey="shoes"     name="Обувь"     stackId="a" fill="#f59e0b" isAnimationActive={false} />
+                  {CATEGORIES.map(({ key, label, color }) =>
+                    activeCats.includes(key) && (
+                      <Bar key={key} dataKey={key} name={label} stackId="a" fill={color} isAnimationActive={false} />
+                    )
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -523,13 +609,13 @@ export default function SalesAnalytics() {
                 <h3 className="font-semibold">Итоги по сотрудникам</h3>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[520px]">
+                <table className="w-full text-sm min-w-[580px]">
                   <thead>
                     <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
                       <th className="px-4 py-3 text-left">Сотрудник</th>
-                      <th className="px-3 py-3 text-right">Ремонт</th>
-                      <th className="px-3 py-3 text-right">Косметика</th>
-                      <th className="px-3 py-3 text-right">Обувь</th>
+                      {CATEGORIES.map(({ key, label }) => (
+                        <th key={key} className="px-3 py-3 text-right">{label}</th>
+                      ))}
                       <th className="px-3 py-3 text-right">Итого</th>
                       {showPlan && <th className="px-3 py-3 text-right">План</th>}
                       {showPlan && <th className="px-3 py-3 text-right">%</th>}
@@ -544,10 +630,12 @@ export default function SalesAnalytics() {
                       const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
                       return (
                         <tr key={e.code} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
-                          <td className="px-4 py-2 font-medium">{shortName(e.name)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{Math.round(e.repair).toLocaleString('ru-RU')}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{Math.round(e.cosmetics).toLocaleString('ru-RU')}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{Math.round(e.shoes).toLocaleString('ru-RU')}</td>
+                          <td className="px-4 py-2 font-medium">{empName(e.code)}</td>
+                          {CATEGORIES.map(({ key }) => (
+                            <td key={key} className="px-3 py-2 text-right tabular-nums">
+                              {Math.round(e[key] || 0).toLocaleString('ru-RU')}
+                            </td>
+                          ))}
                           <td className="px-3 py-2 text-right font-medium tabular-nums">{Math.round(e.total).toLocaleString('ru-RU')}</td>
                           {showPlan && (
                             <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-muted-foreground)]">
@@ -585,7 +673,7 @@ export default function SalesAnalytics() {
                     <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
                       <th className="px-4 py-3 text-left sticky left-0 bg-[color:var(--color-card)]">Период</th>
                       {employees.map((e) => (
-                        <th key={e.code} className="px-3 py-3 text-right">{shortName(e.description)}</th>
+                        <th key={e.code} className="px-3 py-3 text-right">{empName(e.code)}</th>
                       ))}
                       <th className="px-3 py-3 text-right font-semibold">Итого</th>
                     </tr>
@@ -640,7 +728,7 @@ export default function SalesAnalytics() {
                         <div className="space-y-0.5">
                           {active.map((e) => (
                             <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
-                              <span>{shortName(e.description)}</span>
+                              <span>{empName(e.code)}</span>
                               <span className="tabular-nums">{Math.round(cells[key][e.code]).toLocaleString('ru-RU')} ₽</span>
                             </div>
                           ))}
@@ -659,7 +747,7 @@ export default function SalesAnalytics() {
                   <div className="mt-1 space-y-0.5">
                     {employees.map((e) => (colTotals[e.code] || 0) > 0 && (
                       <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
-                        <span>{shortName(e.description)}</span>
+                        <span>{empName(e.code)}</span>
                         <span className="tabular-nums">{Math.round(colTotals[e.code]).toLocaleString('ru-RU')} ₽</span>
                       </div>
                     ))}
