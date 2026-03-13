@@ -29,10 +29,9 @@ const EMP_NAMES = {
 };
 
 const CATEGORIES = [
-  { key: 'repair',       label: 'Ремонт',    color: '#6366f1' },
-  { key: 'dry_cleaning', label: 'Химчистка', color: '#8b5cf6' },
-  { key: 'cosmetics',    label: 'Косметика', color: '#22c55e' },
-  { key: 'shoes',        label: 'Обувь',     color: '#f59e0b' },
+  { key: 'repair',    label: 'Ремонт/Химчистка', color: '#6366f1' },
+  { key: 'cosmetics', label: 'Косметика',         color: '#22c55e' },
+  { key: 'shoes',     label: 'Обувь',             color: '#f59e0b' },
 ];
 
 /* ── helpers ─────────────────────────────────────────────── */
@@ -338,12 +337,11 @@ export default function SalesAnalytics() {
     filteredRows.forEach((r) => {
       if (!map[r.code]) map[r.code] = {
         code: r.code, name: r.description,
-        repair: 0, dry_cleaning: 0, cosmetics: 0, shoes: 0, total: 0, activeDays: 0,
+        repair: 0, cosmetics: 0, shoes: 0, total: 0, activeDays: 0,
       };
-      map[r.code].repair       += r.repair || 0;
-      map[r.code].dry_cleaning += r.dry_cleaning || 0;
-      map[r.code].cosmetics    += r.cosmetics || 0;
-      map[r.code].shoes        += r.shoes || 0;
+      map[r.code].repair    += r.repair || 0;
+      map[r.code].cosmetics += r.cosmetics || 0;
+      map[r.code].shoes     += r.shoes || 0;
       const catVal = activeCats.reduce((s, k) => s + (r[k] || 0), 0);
       map[r.code].total     += catVal;
       if (catVal > 0) map[r.code].activeDays++;
@@ -393,11 +391,10 @@ export default function SalesAnalytics() {
     const avgPerActive = allPeriodsCount > 0 ? cur.total / allPeriodsCount : 0;
     return {
       ...cur,
-      dRepair:      delta(cur.repair, prev.repair),
-      dDryCleaning: delta(cur.dry_cleaning, prev.dry_cleaning),
-      dCosmetics:   delta(cur.cosmetics, prev.cosmetics),
-      dShoes:       delta(cur.shoes, prev.shoes),
-      dTotal:       delta(cur.total, prev.total),
+      dRepair:    delta(cur.repair, prev.repair),
+      dCosmetics: delta(cur.cosmetics, prev.cosmetics),
+      dShoes:     delta(cur.shoes, prev.shoes),
+      dTotal:     delta(cur.total, prev.total),
       activePeriods: allPeriodsCount,
       avgPerActive,
     };
@@ -421,9 +418,9 @@ export default function SalesAnalytics() {
 
   function downloadCsv() {
     if (!filteredRows.length) return;
-    const hdr = 'Дата;Код;Имя;Ремонт;Химчистка;Косметика;Обувь;Итого';
+    const hdr = 'Дата;Код;Имя;Ремонт/Химчистка;Косметика;Обувь;Итого';
     const body = filteredRows.map((r) =>
-      [r.date, r.code, r.description, r.repair, r.dry_cleaning || 0, r.cosmetics, r.shoes || 0, r.total].join(';')
+      [r.date, r.code, r.description, r.repair, r.cosmetics, r.shoes || 0, r.total].join(';')
     ).join('\n');
     const blob = new Blob(['\uFEFF' + hdr + '\n' + body], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -431,8 +428,8 @@ export default function SalesAnalytics() {
     URL.revokeObjectURL(url);
   }
 
-  const kpiDelta = { repair: kpi.dRepair, dry_cleaning: kpi.dDryCleaning, cosmetics: kpi.dCosmetics, shoes: kpi.dShoes };
-  const kpiValue = { repair: kpi.repair, dry_cleaning: kpi.dry_cleaning, cosmetics: kpi.cosmetics, shoes: kpi.shoes };
+  const kpiDelta = { repair: kpi.dRepair, cosmetics: kpi.dCosmetics, shoes: kpi.dShoes };
+  const kpiValue = { repair: kpi.repair, cosmetics: kpi.cosmetics, shoes: kpi.shoes };
 
   return (
     <div className="space-y-5">

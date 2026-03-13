@@ -349,7 +349,7 @@ class FirebirdService:
         shoes_sales_codes = tuple(c for c in SHOES_CODES if c != '1')
         shoes_placeholders = ','.join(['?'] * len(shoes_sales_codes))
 
-        # key: (date_str, code) → {date, code, description, repair, dry_cleaning, cosmetics, shoes}
+        # key: (date_str, code) → {date, code, description, repair, cosmetics, shoes}
         result: dict[tuple, dict] = {}
 
         def _add(date_val, desc: str, amount, category: str) -> None:
@@ -364,7 +364,6 @@ class FirebirdService:
                     "code": code,
                     "description": (desc or "").strip(),
                     "repair": 0.0,
-                    "dry_cleaning": 0.0,
                     "cosmetics": 0.0,
                     "shoes": 0.0,
                 }
@@ -374,8 +373,7 @@ class FirebirdService:
             SELECT
                 docs.doc_date,
                 users.description,
-                SUM(CASE WHEN tovars_tbl.code LIKE '20_.%' THEN doc_order_services.kredit ELSE 0 END),
-                SUM(CASE WHEN tovars_tbl.code NOT LIKE '20_.%' THEN doc_order_services.kredit ELSE 0 END)
+                SUM(doc_order_services.kredit)
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
@@ -436,9 +434,8 @@ class FirebirdService:
             try:
                 cur = con.cursor()
                 cur.execute(sql_repair, (date_from, date_to))
-                for d, desc, dry_cl, rep in cur.fetchall():
-                    _add(d, desc, dry_cl, "dry_cleaning")
-                    _add(d, desc, rep, "repair")
+                for d, desc, s in cur.fetchall():
+                    _add(d, desc, s, "repair")
                 cur.execute(sql_cosmetics, (date_from, date_to))
                 for d, desc, s in cur.fetchall():
                     _add(d, desc, s, "cosmetics")
@@ -452,7 +449,7 @@ class FirebirdService:
             logger.error(f"Error fetching daily sales: {e}")
 
         return [
-            {**v, "total": v["repair"] + v["dry_cleaning"] + v["cosmetics"] + v["shoes"]}
+            {**v, "total": v["repair"] + v["cosmetics"] + v["shoes"]}
             for v in sorted(result.values(), key=lambda x: (x["date"], x["code"]))
         ]
 
