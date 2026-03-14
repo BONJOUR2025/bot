@@ -409,7 +409,7 @@ class FirebirdService:
 
         sql_shoes = f"""
             SELECT
-                CAST(docs_order.date_out_fact AS DATE),
+                CAST(docs.doc_date AS DATE),
                 users.description,
                 SUM(doc_order_services.kredit)
             FROM docs_order
@@ -418,15 +418,11 @@ class FirebirdService:
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE
-                CAST(docs_order.date_out_fact AS DATE) >= ?
-                AND CAST(docs_order.date_out_fact AS DATE) <= ?
+                CAST(docs.doc_date AS DATE) >= ?
+                AND CAST(docs.doc_date AS DATE) <= ?
                 AND tovars_tbl.code IN ({shoes_placeholders})
-                AND EXISTS (
-                    SELECT 1 FROM docs_order_history
-                    WHERE doc_order_id = docs_order.id AND status_id = 5
-                )
-            GROUP BY CAST(docs_order.date_out_fact AS DATE), users.description
-            ORDER BY CAST(docs_order.date_out_fact AS DATE), users.description
+            GROUP BY CAST(docs.doc_date AS DATE), users.description
+            ORDER BY CAST(docs.doc_date AS DATE), users.description
         """
 
         try:
