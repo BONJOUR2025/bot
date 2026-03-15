@@ -6,6 +6,7 @@ starlette>=0.37.0
 
 # Telegram Bot
 python-telegram-bot>=20.0
+socksio>=1.0.0
 
 # Data processing
 pandas>=2.2.0
