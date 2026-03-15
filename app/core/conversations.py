@@ -91,15 +91,16 @@ def invalid_data_type(update, context):
 
 
 def build_admin_conversation():
+    admin_filter = filters.User(ADMIN_ID)
     return ConversationHandler(
         entry_points=[
-            CommandHandler("admin", admin),
-            MessageHandler(filters.Regex("📄 Просмотр данных"), view_data),
-            MessageHandler(filters.Regex("💸 Просмотр выплат"), view_payouts),
-            MessageHandler(filters.Regex("📢 Рассылка"), handle_broadcast_start),
-            MessageHandler(filters.Regex("🔄 Сбросить запросы"), reset_payout_request),
-            MessageHandler(filters.Regex("📈 Отчёт по авансам"), report_start),
-            MessageHandler(filters.Regex("🏠 Домой"), home_callback),
+            CommandHandler("admin", admin, filters=admin_filter),
+            MessageHandler(filters.Regex("📄 Просмотр данных") & admin_filter, view_data),
+            MessageHandler(filters.Regex("💸 Просмотр выплат") & admin_filter, view_payouts),
+            MessageHandler(filters.Regex("📢 Рассылка") & admin_filter, handle_broadcast_start),
+            MessageHandler(filters.Regex("🔄 Сбросить запросы") & admin_filter, reset_payout_request),
+            MessageHandler(filters.Regex("📈 Отчёт по авансам") & admin_filter, report_start),
+            MessageHandler(filters.Regex("🏠 Домой") & admin_filter, home_callback),
         ],
         states={
             UserStates.SELECT_DATA_TYPE: [
@@ -162,9 +163,10 @@ def build_admin_conversation():
 
 
 def build_manual_payout_conversation():
+    admin_filter = filters.User(ADMIN_ID)
     return ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex("^➕ Создать запрос$"), manual_payout_start)
+            MessageHandler(filters.Regex("^➕ Создать запрос$") & admin_filter, manual_payout_start)
         ],
         states={
             ManualPayoutStates.SELECT_EMPLOYEE: [
