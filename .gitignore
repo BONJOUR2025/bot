@@ -142,3 +142,6 @@ media_archive/*
 node_modules/
 admin_frontend/node_modules/
 
+# Local config with secrets (token, proxy credentials)
+config.json
+
