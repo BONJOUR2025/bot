@@ -73,7 +73,17 @@ def create_application():
         log(f"🌐 Using proxy for Telegram API: {proxy_url}")
 
     request = HTTPXRequest(**request_kwargs)
-    app = ApplicationBuilder().token(TOKEN).request(request).build()
+    get_updates_request = HTTPXRequest(**{
+        **request_kwargs,
+        "read_timeout": 30.0,
+    })
+    app = (
+        ApplicationBuilder()
+        .token(TOKEN)
+        .request(request)
+        .get_updates_request(get_updates_request)
+        .build()
+    )
     register_all_handlers(app)
     register_jobs(app)
 
