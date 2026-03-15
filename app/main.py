@@ -1,5 +1,11 @@
 """Entrypoint for running the bot."""
 
+import sys
+import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from .core.application import create_application
 from .utils.logger import log
 
