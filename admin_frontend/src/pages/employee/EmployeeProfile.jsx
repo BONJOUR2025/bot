@@ -126,7 +126,9 @@ export default function EmployeeProfile() {
             <div className="emp-profile-section__title">Уведомления</div>
             {!pushState.supported ? (
               <p style={{ fontSize: '0.8rem', color: 'var(--color-text-faint)', margin: 0 }}>
-                Уведомления доступны только при подключении по HTTPS
+                {pushState.notSecure
+                  ? 'Уведомления доступны только при подключении по HTTPS'
+                  : 'Ваш браузер не поддерживает push-уведомления'}
               </p>
             ) : pushState.denied ? (
               <p className="emp-page__empty" style={{ fontSize: '0.8rem', margin: 0 }}>

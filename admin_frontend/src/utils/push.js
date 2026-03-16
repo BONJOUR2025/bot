@@ -51,6 +51,9 @@ export async function unsubscribePush(employeeId) {
 }
 
 export async function getPushState(employeeId) {
+  if (!window.isSecureContext) {
+    return { supported: false, notSecure: true, subscribed: false };
+  }
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     return { supported: false, subscribed: false };
   }
