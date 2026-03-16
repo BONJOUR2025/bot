@@ -33,6 +33,20 @@ def create_employee_router(
             )
         ]
 
+    @router.get("/{employee_id}", response_model=EmployeeOut)
+    async def get_employee(
+        employee_id: str,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        if not access_service.is_employee_visible(
+            current, employee_id, _employee_department(employee_id)
+        ):
+            raise HTTPException(status_code=403, detail="forbidden")
+        employee = await service.get_employee(employee_id)
+        if not employee:
+            raise HTTPException(status_code=404, detail="not_found")
+        return employee
+
     @router.post("/", response_model=EmployeeOut)
     async def create(
         data: EmployeeCreate, current: ResolvedUser = Depends(get_current_user)

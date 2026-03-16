@@ -23,9 +23,11 @@ api.interceptors.response.use(
     console.error('API', error.config?.url, error.message);
     if (error.response?.status === 401) {
       localStorage.removeItem('auth_token');
-      const loginPath = '/admin/login';
-      if (!window.location.pathname.startsWith(loginPath)) {
-        window.location.href = loginPath;
+      const path = window.location.pathname;
+      if (path.startsWith('/employee')) {
+        if (path !== '/employee/login') window.location.href = '/employee/login';
+      } else {
+        if (path !== '/admin/login') window.location.href = '/admin/login';
       }
     }
     return Promise.reject(error);

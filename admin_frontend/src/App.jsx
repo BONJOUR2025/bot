@@ -8,9 +8,17 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 
 import MainLayout from "./layouts/MainLayout.jsx";
 import PlainLayout from "./layouts/PlainLayout.jsx";
+import EmployeeLayout from "./layouts/EmployeeLayout.jsx";
 
 import { AuthProvider } from "./providers/AuthProvider.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
+import RequireEmployee from "./components/RequireEmployee.jsx";
+
+import EmployeeLogin from "./pages/employee/EmployeeLogin.jsx";
+import EmployeeSalary from "./pages/employee/EmployeeSalary.jsx";
+import EmployeePayouts from "./pages/employee/EmployeePayouts.jsx";
+import EmployeeSchedule from "./pages/employee/EmployeeSchedule.jsx";
+import EmployeeProfile from "./pages/employee/EmployeeProfile.jsx";
 
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard";
@@ -77,6 +85,25 @@ export default function App() {
                 <Route path="passwords" element={<Passwords />} />
                 <Route path="masters" element={<Masters />} />
                 <Route path="sales" element={<SalesAnalytics />} />
+              </Route>
+
+              {/* Личный кабинет сотрудника */}
+              <Route path="/employee/login" element={<PlainLayout />}>
+                <Route index element={<EmployeeLogin />} />
+              </Route>
+              <Route
+                path="/employee"
+                element={
+                  <RequireEmployee>
+                    <EmployeeLayout />
+                  </RequireEmployee>
+                }
+              >
+                <Route index element={<Navigate to="/employee/salary" replace />} />
+                <Route path="salary" element={<EmployeeSalary />} />
+                <Route path="payouts" element={<EmployeePayouts />} />
+                <Route path="schedule" element={<EmployeeSchedule />} />
+                <Route path="profile" element={<EmployeeProfile />} />
               </Route>
 
               {/* Фолбэк: всё прочее редиректим в /admin */}

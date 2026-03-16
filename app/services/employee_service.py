@@ -132,6 +132,12 @@ class EmployeeAPIService:
         employees = self.service.list_employees(archived=archived)
         return [EmployeeOut(**e.__dict__) for e in employees]
 
+    async def get_employee(self, employee_id: str) -> EmployeeOut | None:
+        employee = self.service.get_employee(employee_id)
+        if not employee:
+            return None
+        return EmployeeOut(**employee.__dict__)
+
     async def create_employee(self, data: EmployeeCreate) -> EmployeeOut:
         employee = Employee(
             id=data.id or "",

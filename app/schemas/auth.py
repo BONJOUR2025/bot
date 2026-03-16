@@ -20,6 +20,7 @@ class AuthUser(BaseModel):
     display_name: Optional[str] = None
     allowed_employee_ids: Optional[List[str]] = None
     allowed_departments: Optional[List[str]] = None
+    employee_id: Optional[str] = None
 
 
 class LoginResponse(BaseModel):
@@ -62,6 +63,7 @@ class UserOut(BaseModel):
     allowed_departments: Optional[List[str]] = None
     resolved_employee_names: List[str] = Field(default_factory=list)
     resolved_departments: List[str] = Field(default_factory=list)
+    employee_id: Optional[str] = None
 
 
 class UserCreate(BaseModel):
@@ -73,6 +75,7 @@ class UserCreate(BaseModel):
     bot_buttons: Optional[List[str]] = None
     allowed_employee_ids: Optional[List[str]] = None
     allowed_departments: Optional[List[str]] = None
+    employee_id: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -83,6 +86,7 @@ class UserUpdate(BaseModel):
     bot_buttons: Optional[List[str]] = None
     allowed_employee_ids: Optional[List[str]] = None
     allowed_departments: Optional[List[str]] = None
+    employee_id: Optional[str] = None
 
 
 class AccessConfigResponse(BaseModel):

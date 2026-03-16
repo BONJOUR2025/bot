@@ -293,6 +293,23 @@ def create_app() -> FastAPI:
             return HTMLResponse(index_path.read_text(encoding="utf-8"))
         return Response(status_code=404)
 
+    @app.get("/employee", include_in_schema=False)
+    async def employee_root(request: Request):
+        index_path = frontend_path / "index.html"
+        if index_path.exists():
+            return HTMLResponse(index_path.read_text(encoding="utf-8"))
+        return Response(status_code=404)
+
+    @app.get("/employee/{full_path:path}", include_in_schema=False)
+    async def employee_spa_fallback(full_path: str, request: Request):
+        file_path = frontend_path / full_path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        index_path = frontend_path / "index.html"
+        if index_path.exists():
+            return HTMLResponse(index_path.read_text(encoding="utf-8"))
+        return Response(status_code=404)
+
     if telegram_app is not None:
 
         @app.post("/webhook")

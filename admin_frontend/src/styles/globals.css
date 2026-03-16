@@ -625,3 +625,298 @@ tbody tr:last-child td { border-bottom: none; }
 @media (max-width: 768px) {
   .app-shell__content { padding: 1rem 1rem 1.5rem; }
 }
+
+/* ================================================================
+   Employee Personal Account
+   ================================================================ */
+
+/* Shell */
+.emp-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Header */
+.emp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  height: 56px;
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+.emp-header__brand { display: flex; align-items: center; gap: 0.75rem; }
+.emp-header__logo {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 0.75rem;
+}
+.emp-header__title { font-weight: 600; font-size: 0.95rem; }
+.emp-header__right { display: flex; align-items: center; gap: 1rem; }
+.emp-header__name { font-size: 0.85rem; color: var(--color-text-muted); }
+
+/* Body layout */
+.emp-body {
+  display: flex;
+  flex: 1;
+}
+
+/* Sidebar (desktop) */
+.emp-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--color-panel);
+  border-right: 1px solid var(--color-border);
+  padding: 1rem 0;
+}
+
+/* Content */
+.emp-content {
+  flex: 1;
+  overflow: auto;
+  padding: 1.5rem 2rem 2rem;
+}
+
+/* Navigation (desktop sidebar + mobile drawer) */
+.emp-nav { display: flex; flex-direction: column; gap: 0.25rem; padding: 0 0.5rem; }
+.emp-nav--mobile {
+  flex-direction: column;
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.5rem;
+}
+.emp-nav__item {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem; color: var(--color-text-muted);
+  border: none; background: none; cursor: pointer; text-align: left;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+}
+.emp-nav__item:hover { background: var(--color-control-bg); color: var(--color-text); }
+.emp-nav__item--active { background: var(--color-control-bg); color: var(--color-primary); font-weight: 500; }
+.emp-nav__logout { color: var(--color-danger); margin-top: 0.5rem; }
+.emp-nav__logout:hover { background: rgba(239,68,68,0.08); }
+
+/* Bottom navigation (mobile) */
+.emp-bottomnav {
+  display: flex;
+  position: sticky;
+  bottom: 0;
+  background: var(--color-panel);
+  border-top: 1px solid var(--color-border);
+  z-index: 40;
+}
+.emp-bottomnav__item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 0.6rem 0.25rem;
+  font-size: 0.7rem; color: var(--color-text-muted);
+  text-decoration: none; transition: color var(--transition-fast);
+}
+.emp-bottomnav__item--active { color: var(--color-primary); }
+
+/* Page */
+.emp-page { max-width: 700px; }
+.emp-page__head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap;
+}
+.emp-page__title { font-size: 1.25rem; font-weight: 600; margin: 0; color: var(--color-text); }
+.emp-page__loading { color: var(--color-text-muted); font-size: 0.875rem; }
+.emp-page__empty { color: var(--color-text-muted); font-size: 0.875rem; }
+.emp-page__error { color: var(--color-danger); font-size: 0.875rem; }
+
+/* Select */
+.emp-select {
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-control-bg);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/* Salary card */
+.emp-salary-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.emp-salary-card__month {
+  padding: 1rem 1.25rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-border);
+}
+.emp-salary-section { padding: 1rem 1.25rem 0; }
+.emp-salary-section:last-of-type { padding-bottom: 1rem; }
+.emp-salary-section__title {
+  font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+  color: var(--color-text-faint); letter-spacing: 0.05em; margin-bottom: 0.5rem;
+}
+.emp-salary-grid { display: flex; flex-direction: column; gap: 0.35rem; }
+.emp-salary-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.875rem; padding: 0.3rem 0;
+}
+.emp-salary-row span:first-child { color: var(--color-text-muted); }
+.emp-salary-row span:last-child { font-weight: 500; }
+.emp-salary-row--sub { border-top: 1px solid var(--color-border); margin-top: 0.25rem; padding-top: 0.5rem; }
+.emp-salary-row--sub span:first-child { color: var(--color-text); font-weight: 500; }
+.emp-salary-row--total {
+  border-top: 2px solid var(--color-border);
+  margin-top: 0.25rem; padding-top: 0.75rem;
+  font-size: 1rem;
+}
+.emp-salary-row--total span { color: var(--color-text) !important; font-weight: 700 !important; }
+.emp-salary-row--neg span:last-child { color: var(--color-danger) !important; }
+.emp-salary-card__note {
+  margin: 0.5rem 1.25rem 1rem;
+  padding: 0.75rem;
+  background: var(--color-control-bg);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem; color: var(--color-text-muted);
+}
+
+/* Payout items */
+.emp-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.emp-payout-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+.emp-payout-item__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+.emp-payout-item__amount { font-size: 1.1rem; font-weight: 700; }
+.emp-payout-item__details { font-size: 0.8rem; color: var(--color-text-muted); display: flex; gap: 1rem; }
+.emp-payout-item__note { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.4rem; }
+
+/* Payout request form card */
+.emp-form-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.emp-form-card__header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-weight: 600; margin-bottom: 1rem;
+}
+.emp-form-card__actions { margin-top: 1rem; }
+.emp-form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+.emp-form-row .form-field { flex: 1 1 160px; }
+
+/* Badges */
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  font-size: 0.75rem; font-weight: 500;
+}
+.badge--warning { background: rgba(245,158,11,0.15); color: var(--color-warning); }
+.badge--info    { background: rgba(99,102,241,0.15); color: var(--color-primary); }
+.badge--error   { background: rgba(239,68,68,0.12); color: var(--color-danger); }
+.badge--success { background: rgba(34,197,94,0.12); color: var(--color-success); }
+
+/* Schedule */
+.emp-schedule-nav { display: flex; align-items: center; gap: 0.5rem; }
+.emp-schedule-nav__label { font-size: 0.875rem; font-weight: 500; min-width: 140px; text-align: center; }
+.emp-schedule-week {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem; margin-bottom: 1.5rem;
+}
+.emp-schedule-day {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.4rem;
+  min-height: 80px;
+}
+.emp-schedule-day--today { border-color: var(--color-primary); }
+.emp-schedule-day--work { background: rgba(99,102,241,0.06); }
+.emp-schedule-day__head { display: flex; flex-direction: column; align-items: center; margin-bottom: 0.4rem; }
+.emp-schedule-day__wd { font-size: 0.65rem; font-weight: 600; color: var(--color-text-faint); text-transform: uppercase; }
+.emp-schedule-day__date { font-size: 0.8rem; font-weight: 600; }
+.emp-schedule-day--today .emp-schedule-day__date { color: var(--color-primary); }
+.emp-schedule-day__body { font-size: 0.65rem; text-align: center; }
+.emp-schedule-day__point { font-weight: 500; color: var(--color-primary); margin-bottom: 2px; }
+.emp-schedule-day__off { color: var(--color-text-faint); }
+.emp-schedule-legend { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; font-size: 0.75rem; }
+.emp-schedule-legend__work::before,
+.emp-schedule-legend__today::before {
+  content: ''; display: inline-block; width: 12px; height: 12px;
+  border-radius: 2px; margin-right: 0.35rem; vertical-align: middle;
+}
+.emp-schedule-legend__work::before { background: rgba(99,102,241,0.15); border: 1px solid var(--color-border); }
+.emp-schedule-legend__today::before { border: 1.5px solid var(--color-primary); }
+.emp-schedule-all { display: flex; flex-direction: column; gap: 0.75rem; }
+.emp-schedule-all__title { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; }
+.emp-schedule-table-row {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm); padding: 0.75rem 1rem;
+  display: flex; gap: 1rem; flex-wrap: wrap;
+}
+.emp-schedule-table-row__date { font-size: 0.8rem; font-weight: 600; min-width: 80px; color: var(--color-text-muted); }
+.emp-schedule-table-row__points { display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
+.emp-schedule-point { display: flex; gap: 0.75rem; font-size: 0.8rem; }
+.emp-schedule-point__loc { font-weight: 500; }
+.emp-schedule-point__emp { color: var(--color-text-muted); }
+
+/* Profile card */
+.emp-profile-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.emp-profile-card__photo {
+  display: flex; justify-content: center; padding: 1.5rem 1rem 0.5rem;
+}
+.emp-profile-card__photo img {
+  width: 80px; height: 80px; border-radius: 50%; object-fit: cover;
+  border: 2px solid var(--color-border);
+}
+.emp-profile-card__name {
+  text-align: center; font-weight: 700; font-size: 1.1rem; padding: 0 1.25rem 0.25rem;
+}
+.emp-profile-card__position {
+  text-align: center; font-size: 0.85rem; color: var(--color-text-muted); padding: 0 1.25rem 1rem;
+}
+.emp-profile-section {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+.emp-profile-section:first-of-type { border-top: none; }
+.emp-profile-section__title {
+  font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+  color: var(--color-text-faint); letter-spacing: 0.05em; margin-bottom: 0.5rem;
+}
+.emp-profile-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0.3rem 0; font-size: 0.875rem;
+  border-bottom: 1px solid var(--color-table-border);
+}
+.emp-profile-row:last-child { border-bottom: none; }
+.emp-profile-row__label { color: var(--color-text-muted); }
+.emp-profile-row__value { font-weight: 500; }
+
+/* Responsive employee */
+@media (max-width: 768px) {
+  .emp-content { padding: 1rem 1rem 80px; }
+  .emp-sidebar { display: none; }
+  .emp-schedule-week { grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .emp-schedule-day { padding: 0.3rem 0.2rem; min-height: 60px; }
+  .emp-form-row { flex-direction: column; }
+}

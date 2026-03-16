@@ -15,6 +15,7 @@ const emptyUser = {
   limitByDepartments: false,
   allowed_employee_ids: [],
   allowed_departments: [],
+  employee_id: '',
 };
 
 export default function AccessControl() {
@@ -156,6 +157,7 @@ export default function AccessControl() {
       limitByDepartments: Array.isArray(departmentScope) && departmentScope.length > 0,
       allowed_employee_ids: Array.isArray(employeeScope) ? [...employeeScope] : [],
       allowed_departments: Array.isArray(departmentScope) ? [...departmentScope] : [],
+      employee_id: user.employee_id || '',
     });
   }
 
@@ -178,6 +180,7 @@ export default function AccessControl() {
       allowed_departments: userForm.limitByDepartments
         ? userForm.allowed_departments
         : null,
+      employee_id: userForm.employee_id || null,
     };
     try {
       if (isUserNew) {
@@ -397,6 +400,11 @@ export default function AccessControl() {
                       Доступные отделы: {user.resolved_departments.join(', ')}
                     </p>
                   )}
+                  {user.employee_id && (
+                    <p className="text-sm">
+                      Личный кабинет: сотрудник #{user.employee_id}
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
@@ -472,6 +480,27 @@ export default function AccessControl() {
                   ))}
                 </select>
               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700" htmlFor="user-employee">
+                Привязка к сотруднику (Личный кабинет)
+              </label>
+              <select
+                id="user-employee"
+                className="input w-full"
+                value={userForm.employee_id}
+                onChange={(e) => setUserForm((prev) => ({ ...prev, employee_id: e.target.value }))}
+              >
+                <option value="">Не привязан</option>
+                {data.available_employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name}{emp.department ? ` · ${emp.department}` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500">
+                При входе в Личный кабинет (/employee) этот пользователь увидит данные указанного сотрудника.
+              </p>
             </div>
             <div className="space-y-3">
               <div className="flex items-center gap-2">

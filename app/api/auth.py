@@ -46,6 +46,7 @@ def _to_auth_user(resolved: ResolvedUser) -> AuthUser:
         display_name=resolved.display_name,
         allowed_employee_ids=resolved.allowed_employee_ids,
         allowed_departments=resolved.allowed_departments,
+        employee_id=resolved.employee_id,
     )
 
 
@@ -162,6 +163,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
                 record.get("allowed_employee_ids")
             ),
             "resolved_departments": record.get("allowed_departments") or [],
+            "employee_id": resolved.employee_id,
         })
 
     @router.patch("/users/{user_id}", response_model=UserOut)
@@ -194,6 +196,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
                 record.get("allowed_employee_ids")
             ),
             "resolved_departments": record.get("allowed_departments") or [],
+            "employee_id": resolved.employee_id,
         })
 
     @router.delete("/users/{user_id}")

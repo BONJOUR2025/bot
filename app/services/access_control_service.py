@@ -93,6 +93,7 @@ class ResolvedUser:
     display_name: str | None
     allowed_employee_ids: list[str] | None
     allowed_departments: list[str] | None
+    employee_id: str | None = None
 
 
 class AccessControlService:
@@ -279,6 +280,7 @@ class AccessControlService:
                     "allowed_departments": allowed_departments,
                     "resolved_employee_names": self._employee_names(allowed_ids),
                     "resolved_departments": allowed_departments or [],
+                    "employee_id": resolved.employee_id,
                 }
             )
         return result
@@ -349,6 +351,11 @@ class AccessControlService:
         if role_id and not self._get_role(role_id):
             raise ValueError("role_not_found")
         salt, password_hash = self._hash_password(password)
+        raw_employee_id = data.get("employee_id")
+        employee_id = str(raw_employee_id) if raw_employee_id else None
+        raw_allowed = data.get("allowed_employee_ids")
+        if raw_allowed is None and employee_id:
+            raw_allowed = [employee_id]
         user_record = {
             "id": user_id,
             "login": login,
@@ -357,9 +364,8 @@ class AccessControlService:
             "bot_buttons": self._validate_buttons(data.get("bot_buttons")),
             "salt": salt,
             "password_hash": password_hash,
-            "allowed_employee_ids": self._validate_employee_ids(
-                data.get("allowed_employee_ids")
-            ),
+            "employee_id": employee_id,
+            "allowed_employee_ids": self._validate_employee_ids(raw_allowed),
             "allowed_departments": self._validate_departments(
                 data.get("allowed_departments")
             ),
@@ -396,6 +402,9 @@ class AccessControlService:
             )
         if data.get("password"):
             user["salt"], user["password_hash"] = self._hash_password(data["password"])
+        if "employee_id" in data:
+            raw_emp = data.get("employee_id")
+            user["employee_id"] = str(raw_emp) if raw_emp else None
         self._persist()
         return user
 
@@ -462,6 +471,9 @@ class AccessControlService:
         if employee:
             display_name = employee.full_name or employee.name
         allowed_employee_ids, allowed_departments = self._resolve_scope(record, role)
+        employee_id = record.get("employee_id") or None
+        if employee_id:
+            employee_id = str(employee_id)
         return ResolvedUser(
             id=user_id,
             login=record.get("login", ""),
@@ -472,6 +484,7 @@ class AccessControlService:
             display_name=display_name,
             allowed_employee_ids=allowed_employee_ids,
             allowed_departments=allowed_departments,
+            employee_id=employee_id,
         )
 
     def _resolve_permissions(
