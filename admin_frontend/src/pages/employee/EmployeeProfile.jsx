@@ -122,50 +122,52 @@ export default function EmployeeProfile() {
             {employee.note && <Row label="Заметка" value={employee.note} />}
           </div>
 
-          {pushState.supported && (
-            <div className="emp-profile-section emp-profile-section--push">
-              <div className="emp-profile-section__title">Уведомления</div>
-              {pushState.denied ? (
-                <p className="emp-page__empty" style={{ fontSize: '0.8rem', margin: 0 }}>
-                  Уведомления заблокированы в настройках браузера
-                </p>
-              ) : (
-                <div className="emp-push-row">
-                  <div className="emp-push-row__info">
-                    {pushState.subscribed ? (
-                      <>
-                        <Bell size={16} />
-                        <span>Уведомления включены</span>
-                      </>
-                    ) : (
-                      <>
-                        <BellOff size={16} />
-                        <span>Уведомления выключены</span>
-                      </>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className={`btn btn--sm ${pushState.subscribed ? 'btn--secondary' : 'btn--primary'}`}
-                    onClick={handlePushToggle}
-                    disabled={pushLoading}
-                  >
-                    {pushLoading
-                      ? '…'
-                      : pushState.subscribed
-                      ? 'Выключить'
-                      : 'Включить'}
-                  </button>
+          <div className="emp-profile-section emp-profile-section--push">
+            <div className="emp-profile-section__title">Уведомления</div>
+            {!pushState.supported ? (
+              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-faint)', margin: 0 }}>
+                Уведомления доступны только при подключении по HTTPS
+              </p>
+            ) : pushState.denied ? (
+              <p className="emp-page__empty" style={{ fontSize: '0.8rem', margin: 0 }}>
+                Уведомления заблокированы в настройках браузера
+              </p>
+            ) : (
+              <div className="emp-push-row">
+                <div className="emp-push-row__info">
+                  {pushState.subscribed ? (
+                    <>
+                      <Bell size={16} />
+                      <span>Уведомления включены</span>
+                    </>
+                  ) : (
+                    <>
+                      <BellOff size={16} />
+                      <span>Уведомления выключены</span>
+                    </>
+                  )}
                 </div>
-              )}
-              {pushError && <p className="emp-page__error" style={{ marginTop: '0.4rem', fontSize: '0.8rem' }}>{pushError}</p>}
-              {!pushState.subscribed && !pushState.denied && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-faint)', marginTop: '0.4rem' }}>
-                  Получайте уведомления об изменении статуса заявок на аванс
-                </p>
-              )}
-            </div>
-          )}
+                <button
+                  type="button"
+                  className={`btn btn--sm ${pushState.subscribed ? 'btn--secondary' : 'btn--primary'}`}
+                  onClick={handlePushToggle}
+                  disabled={pushLoading}
+                >
+                  {pushLoading ? '…' : pushState.subscribed ? 'Выключить' : 'Включить'}
+                </button>
+              </div>
+            )}
+            {pushError && (
+              <p className="emp-page__error" style={{ marginTop: '0.4rem', fontSize: '0.8rem' }}>
+                {pushError}
+              </p>
+            )}
+            {pushState.supported && !pushState.subscribed && !pushState.denied && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-faint)', marginTop: '0.4rem' }}>
+                Получайте уведомления об изменении статуса заявок на аванс
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>
