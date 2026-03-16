@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider.jsx';
+import { getHomeForUser } from '../pages/Login.jsx';
 
 export default function RequireAuth({ children }) {
   const { user, loading } = useAuth();
@@ -14,7 +15,12 @@ export default function RequireAuth({ children }) {
   }
 
   if (!user) {
-    return <Navigate to="/admin/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Employee without admin permissions ended up in /admin — redirect to their home
+  if (!user.permissions?.length) {
+    return <Navigate to={getHomeForUser(user)} replace />;
   }
 
   return children;

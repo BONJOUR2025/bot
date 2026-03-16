@@ -14,7 +14,6 @@ import { AuthProvider } from "./providers/AuthProvider.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
 import RequireEmployee from "./components/RequireEmployee.jsx";
 
-import EmployeeLogin from "./pages/employee/EmployeeLogin.jsx";
 import EmployeeSalary from "./pages/employee/EmployeeSalary.jsx";
 import EmployeePayouts from "./pages/employee/EmployeePayouts.jsx";
 import EmployeeSchedule from "./pages/employee/EmployeeSchedule.jsx";
@@ -51,10 +50,13 @@ export default function App() {
             <AuthProvider>
               <Router>
               <Routes>
-              {/* Публичная зона: логин */}
-              <Route path="/admin/login" element={<PlainLayout />}>
+              {/* Единая страница логина */}
+              <Route path="/login" element={<PlainLayout />}>
                 <Route index element={<Login />} />
               </Route>
+              {/* Редиректы со старых адресов */}
+              <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+              <Route path="/employee/login" element={<Navigate to="/login" replace />} />
 
               {/* Приватная зона: всё под /admin защищено RequireAuth */}
               <Route
@@ -88,9 +90,6 @@ export default function App() {
               </Route>
 
               {/* Личный кабинет сотрудника */}
-              <Route path="/employee/login" element={<PlainLayout />}>
-                <Route index element={<EmployeeLogin />} />
-              </Route>
               <Route
                 path="/employee"
                 element={
@@ -106,10 +105,8 @@ export default function App() {
                 <Route path="profile" element={<EmployeeProfile />} />
               </Route>
 
-              {/* Фолбэк: всё прочее редиректим в /admin */}
-              <Route path="*" element={<PlainLayout />}>
-                <Route index element={<Navigate to="/admin" replace />} />
-              </Route>
+              {/* Фолбэк */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
               </Routes>
               </Router>
             </AuthProvider>

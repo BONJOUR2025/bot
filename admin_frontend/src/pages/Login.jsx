@@ -3,31 +3,45 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 
+export function getHomeForUser(user) {
+  if (!user) return '/login';
+  if (user.permissions?.length > 0) return '/admin';
+  if (user.employee_id) return '/employee/salary';
+  return '/admin';
+}
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || '/';
+  const { isMobile } = useViewport();
 
   const [form, setForm] = useState({ login: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { isMobile } = useViewport();
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
+  const handleChange = (e) => {
+    const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await login(form.login, form.password);
-      navigate(from, { replace: true });
-    } catch (err) {
-      console.error(err);
+      const user = await login(form.login, form.password);
+      const home = getHomeForUser(user);
+      const from = location.state?.from?.pathname;
+      const isAdmin = home.startsWith('/admin');
+      // Only restore saved path if it belongs to the same zone
+      const dest =
+        from &&
+        ((isAdmin && from.startsWith('/admin')) || (!isAdmin && from.startsWith('/employee')))
+          ? from
+          : home;
+      navigate(dest, { replace: true });
+    } catch {
       setError('Неверный логин или пароль');
     } finally {
       setLoading(false);
@@ -39,13 +53,12 @@ export default function Login() {
       <div className="auth-card__logo">HR</div>
       <div className="auth-card__header">
         <h1>Добро пожаловать</h1>
-        <p>Введите логин и пароль администратора, чтобы войти в панель управления</p>
+        <p>Введите логин и пароль для входа</p>
       </div>
       <form className="auth-card__form" onSubmit={handleSubmit}>
         <label className="form-field">
           <span>Логин</span>
           <input
-            id="login"
             name="login"
             value={form.login}
             onChange={handleChange}
@@ -56,7 +69,6 @@ export default function Login() {
         <label className="form-field">
           <span>Пароль</span>
           <input
-            id="password"
             type="password"
             name="password"
             value={form.password}
