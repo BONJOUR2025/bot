@@ -11,6 +11,52 @@ function fmtNum(n) {
   return n != null ? String(n) : '—';
 }
 
+function fmtMoney(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 0 }) + ' ₽';
+}
+
+/** "ЯНВАРЬ 2025" → { month: "ЯНВАРЬ", year: 2025 } */
+function parseSalaryMonth(str) {
+  if (!str) return null;
+  const parts = str.trim().split(/\s+/);
+  if (parts.length === 2) {
+    const year = parseInt(parts[1], 10);
+    if (!isNaN(year)) return { month: parts[0].toUpperCase(), year };
+  }
+  return { month: str.toUpperCase(), year: null };
+}
+
+function PlanRow({ label, sales, plan, fulfillment }) {
+  if (!plan && !sales) return null;
+  const pct = fulfillment != null ? Math.round(fulfillment * 100) : null;
+  const color =
+    pct == null
+      ? undefined
+      : pct >= 100
+      ? 'var(--color-success, #16a34a)'
+      : pct >= 80
+      ? 'var(--color-warning, #d97706)'
+      : 'var(--color-error, #dc2626)';
+  return (
+    <div className="emp-salary-row emp-salary-plan-row">
+      <span>{label}</span>
+      <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        {plan > 0 && (
+          <span style={{ color: 'var(--muted-foreground)', fontSize: '0.85em' }}>
+            {fmtMoney(sales)} / {fmtMoney(plan)}
+          </span>
+        )}
+        {pct != null && (
+          <span style={{ fontWeight: 600, minWidth: '2.5rem', textAlign: 'right', color }}>
+            {pct}%
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
 export default function EmployeeSalary() {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
@@ -20,6 +66,7 @@ export default function EmployeeSalary() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [payroll, setPayroll] = useState(null);
 
   useEffect(() => {
     api.get('/salary/months').then((res) => {
@@ -33,14 +80,33 @@ export default function EmployeeSalary() {
     if (!selectedMonth || !employeeId) return;
     setLoading(true);
     setError('');
-    api
+    setPayroll(null);
+
+    const parsed = parseSalaryMonth(selectedMonth);
+
+    const salaryReq = api
       .get('/salary/', { params: { month: selectedMonth, employee_id: employeeId } })
       .then((res) => setRows(res.data || []))
-      .catch(() => setError('Не удалось загрузить данные'))
-      .finally(() => setLoading(false));
+      .catch(() => setError('Не удалось загрузить данные'));
+
+    const payrollReq = parsed
+      ? api
+          .get('/payroll/my', {
+            params: { month: parsed.month, ...(parsed.year ? { year: parsed.year } : {}) },
+          })
+          .then((res) => setPayroll(res.data))
+          .catch(() => { /* payroll data is optional */ })
+      : Promise.resolve();
+
+    Promise.all([salaryReq, payrollReq]).finally(() => setLoading(false));
   }, [selectedMonth, employeeId]);
 
   const row = rows[0] || null;
+
+  const hasPlans =
+    payroll &&
+    (payroll.repair_plan || payroll.cosmetics_plan || payroll.shoes_plan ||
+     payroll.repair_sales || payroll.cosmetics_sales || payroll.shoes_sales);
 
   if (!employeeId) {
     return (
@@ -73,6 +139,34 @@ export default function EmployeeSalary() {
 
       {!loading && !error && !row && (
         <p className="emp-page__empty">Данных за выбранный месяц нет</p>
+      )}
+
+      {hasPlans && (
+        <div className="emp-salary-card">
+          <section className="emp-salary-section">
+            <div className="emp-salary-section__title">План продаж</div>
+            <div className="emp-salary-grid">
+              <PlanRow
+                label="Ремонт"
+                sales={payroll.repair_sales}
+                plan={payroll.repair_plan}
+                fulfillment={payroll.repair_fulfillment}
+              />
+              <PlanRow
+                label="Косметика"
+                sales={payroll.cosmetics_sales}
+                plan={payroll.cosmetics_plan}
+                fulfillment={payroll.cosmetics_fulfillment}
+              />
+              <PlanRow
+                label="Обувь"
+                sales={payroll.shoes_sales}
+                plan={payroll.shoes_plan}
+                fulfillment={payroll.shoes_fulfillment}
+              />
+            </div>
+          </section>
+        </div>
       )}
 
       {row && (

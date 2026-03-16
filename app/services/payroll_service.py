@@ -506,6 +506,16 @@ class PayrollService:
                 return row
         return None
 
+    def get_code_for_employee(self, employee_id: str | None = None, full_name: str | None = None) -> str | None:
+        """Resolve payroll employee_code by employee_id (telegram id) or full_name."""
+        if employee_id:
+            code = self._user_id_to_code.get(str(employee_id))
+            if code:
+                return code
+        if full_name:
+            return self._full_name_to_code.get(full_name.strip().lower())
+        return None
+
 
 _payroll_service: PayrollService | None = None
 

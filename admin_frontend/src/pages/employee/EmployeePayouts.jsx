@@ -172,30 +172,55 @@ export default function EmployeePayouts() {
 
       {loading && <p className="emp-page__loading">Загрузка…</p>}
 
-      {!loading && payouts.length === 0 && (
+      {!loading && payouts.filter(p => p.payout_type === 'Аванс').length === 0 && (
         <p className="emp-page__empty">Нет запросов на выплату</p>
       )}
 
-      {payouts.length > 0 && (
-        <div className="emp-list">
-          {payouts.slice().reverse().map((p) => {
-            const st = STATUS_LABELS[p.status] || { label: p.status, cls: '' };
-            return (
-              <div key={p.id} className="emp-payout-item">
-                <div className="emp-payout-item__top">
-                  <span className="emp-payout-item__amount">{fmt(p.amount)}</span>
-                  <span className={`badge ${st.cls}`}>{st.label}</span>
+      {payouts.length > 0 && (() => {
+        // Sort newest first
+        const sorted = [...payouts].sort((a, b) => {
+          const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          return tb - ta;
+        });
+
+        // Find last paid salary to filter advances since then
+        const lastSalary = sorted.find(
+          (p) => p.payout_type === 'Зарплата' && p.status === 'Выплачено'
+        );
+        const cutoff = lastSalary?.timestamp ? new Date(lastSalary.timestamp).getTime() : null;
+
+        const visible = sorted.filter((p) => {
+          if (p.payout_type !== 'Аванс') return false;
+          if (cutoff == null) return true;
+          return new Date(p.timestamp || 0).getTime() >= cutoff;
+        });
+
+        if (visible.length === 0) {
+          return <p className="emp-page__empty">Авансов с последней зарплаты нет</p>;
+        }
+
+        return (
+          <div className="emp-list">
+            {visible.map((p) => {
+              const st = STATUS_LABELS[p.status] || { label: p.status, cls: '' };
+              return (
+                <div key={p.id} className="emp-payout-item">
+                  <div className="emp-payout-item__top">
+                    <span className="emp-payout-item__amount">{fmt(p.amount)}</span>
+                    <span className={`badge ${st.cls}`}>{st.label}</span>
+                  </div>
+                  <div className="emp-payout-item__details">
+                    <span>{p.payout_type} · {p.method}</span>
+                    {p.timestamp && <span>{fmtDate(p.timestamp)}</span>}
+                  </div>
+                  {p.note && <div className="emp-payout-item__note">{p.note}</div>}
                 </div>
-                <div className="emp-payout-item__details">
-                  <span>{p.payout_type} · {p.method}</span>
-                  {p.timestamp && <span>{fmtDate(p.timestamp)}</span>}
-                </div>
-                {p.note && <div className="emp-payout-item__note">{p.note}</div>}
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }

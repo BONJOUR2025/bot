@@ -10,6 +10,7 @@ from app.services.payroll_service import PayrollService, get_payroll_service, ma
 from app.data.sales_plans_repository import SalesPlansRepository, get_sales_plans_repository
 from app.data.payroll_settlement_repository import get_payroll_settlement_repository
 from app.services.access_control_service import AccessControlService, ResolvedUser
+from app.services.employee_service import EmployeeService
 from .dependencies import get_current_user
 
 
@@ -80,16 +81,38 @@ def create_payroll_router(
     payroll_service: PayrollService | None = None,
     plans_repo: SalesPlansRepository | None = None,
     access_service: AccessControlService | None = None,
+    employee_service: EmployeeService | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/payroll", tags=["Payroll"])
 
     _payroll = payroll_service or get_payroll_service()
     _plans = plans_repo or get_sales_plans_repository()
     _settlements = get_payroll_settlement_repository()
+    _employees = employee_service or EmployeeService()
 
     def _check(current: ResolvedUser) -> None:
         if access_service and not access_service.user_has_permission(current, "payroll"):
             raise HTTPException(status_code=403, detail="forbidden")
+
+    # ── Employee self-service ──────────────────────────────────────
+    @router.get("/my", response_model=PayrollRowOutput | None)
+    async def get_my_payroll(
+        month: str = Query(...),
+        year: Optional[int] = Query(None),
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        """Returns payroll data for the currently authenticated employee."""
+        if not current.employee_id:
+            raise HTTPException(status_code=403, detail="Not an employee account")
+        emp = _employees.get_employee(current.employee_id)
+        full_name = emp.full_name if emp else None
+        code = _payroll.get_code_for_employee(
+            employee_id=current.employee_id, full_name=full_name
+        )
+        if not code:
+            return None
+        row = await _payroll.get_employee_details(code, month, year)
+        return PayrollRowOutput(**row.to_dict()) if row else None
 
     # ── Months ────────────────────────────────────────────────────
     @router.get("/months", response_model=list[str])
