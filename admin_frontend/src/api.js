@@ -15,12 +15,8 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => {
-    console.log('API', response.config?.url, response.data);
-    return response;
-  },
+  (response) => response,
   (error) => {
-    console.error('API', error.config?.url, error.message);
     if (error.response?.status === 401) {
       localStorage.removeItem('auth_token');
       const path = window.location.pathname;
