@@ -288,6 +288,9 @@ def create_app() -> FastAPI:
         file_path = frontend_path / full_path
         if file_path.is_file():
             return FileResponse(str(file_path))
+        # Don't fall back to SPA for static asset requests (e.g. sw.js, *.png)
+        if "." in Path(full_path).name:
+            return Response(status_code=404)
         index_path = frontend_path / "index.html"
         if index_path.exists():
             return HTMLResponse(index_path.read_text(encoding="utf-8"))
@@ -305,6 +308,9 @@ def create_app() -> FastAPI:
         file_path = frontend_path / full_path
         if file_path.is_file():
             return FileResponse(str(file_path))
+        # Don't fall back to SPA for static asset requests
+        if "." in Path(full_path).name:
+            return Response(status_code=404)
         index_path = frontend_path / "index.html"
         if index_path.exists():
             return HTMLResponse(index_path.read_text(encoding="utf-8"))
