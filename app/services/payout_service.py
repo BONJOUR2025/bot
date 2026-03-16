@@ -24,9 +24,11 @@ class PayoutService:
         self,
         repo: Optional[PayoutRepository] = None,
         telegram_service: Optional["TelegramService"] = None,
+        push_service=None,
     ) -> None:
         self._repo = repo or PayoutRepository()
         self._telegram = telegram_service
+        self._push = push_service
 
     @staticmethod
     def _serialize_timestamp(value: datetime | str) -> str:
@@ -139,14 +141,30 @@ class PayoutService:
             return None
         logger.info(
             f"✏️ Выплата {payout_id} обновлена — статус: {status}")
+        push_titles = {
+            PAYOUT_STATUSES[1]: "✅ Заявка одобрена",
+            PAYOUT_STATUSES[2]: "❌ Заявка отклонена",
+            PAYOUT_STATUSES[3]: "📤 Выплата отправлена",
+        }
+        push_title = push_titles.get(status)
+        if push_title:
+            amount = updated.get("amount", "")
+            push_body = f"Сумма: {amount} ₽"
+            if self._push:
+                try:
+                    await self._push.send(
+                        updated["user_id"], push_title, push_body
+                    )
+                except Exception as exc:
+                    logger.warning(f"Не удалось отправить push: {exc}")
         if self._telegram and notify:
             try:
-                status_messages = {
+                tg_messages = {
                     PAYOUT_STATUSES[1]: "✅ Ваша заявка одобрена",
                     PAYOUT_STATUSES[2]: "❌ Ваша заявка отклонена",
                     PAYOUT_STATUSES[3]: "📤 Выплата отправлена",
                 }
-                message = status_messages.get(status)
+                message = tg_messages.get(status)
                 if message:
                     await self._telegram.send_message_to_user(
                         updated["user_id"],

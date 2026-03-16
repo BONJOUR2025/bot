@@ -32,5 +32,11 @@ fdb>=2.0.2
 # Templating
 Jinja2>=3.1.0
 
+# Web Push notifications
+pywebpush>=2.3.0
+py_vapid>=1.9.0
+aiohttp>=3.9.0
+httpx>=0.27.0
+
 # Testing
 pytest>=8.0.0

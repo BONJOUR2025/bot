@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Bell, BellOff } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
+import { subscribePush, unsubscribePush, getPushState } from '../../utils/push.js';
 
 function Row({ label, value }) {
   if (!value) return null;
@@ -20,6 +22,10 @@ export default function EmployeeProfile() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [pushState, setPushState] = useState({ supported: false, subscribed: false });
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushError, setPushError] = useState('');
+
   useEffect(() => {
     if (!employeeId) return;
     setLoading(true);
@@ -28,7 +34,32 @@ export default function EmployeeProfile() {
       .then((res) => setEmployee(res.data))
       .catch(() => setError('Не удалось загрузить профиль'))
       .finally(() => setLoading(false));
+
+    getPushState(employeeId).then(setPushState);
   }, [employeeId]);
+
+  const handlePushToggle = async () => {
+    setPushLoading(true);
+    setPushError('');
+    try {
+      if (pushState.subscribed) {
+        await unsubscribePush(employeeId);
+        setPushState((s) => ({ ...s, subscribed: false }));
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          setPushError('Разрешение на уведомления не выдано');
+          return;
+        }
+        await subscribePush(employeeId);
+        setPushState((s) => ({ ...s, subscribed: true }));
+      }
+    } catch (err) {
+      setPushError(err.message || 'Ошибка при настройке уведомлений');
+    } finally {
+      setPushLoading(false);
+    }
+  };
 
   if (!employeeId) {
     return (
@@ -90,6 +121,51 @@ export default function EmployeeProfile() {
             />
             {employee.note && <Row label="Заметка" value={employee.note} />}
           </div>
+
+          {pushState.supported && (
+            <div className="emp-profile-section emp-profile-section--push">
+              <div className="emp-profile-section__title">Уведомления</div>
+              {pushState.denied ? (
+                <p className="emp-page__empty" style={{ fontSize: '0.8rem', margin: 0 }}>
+                  Уведомления заблокированы в настройках браузера
+                </p>
+              ) : (
+                <div className="emp-push-row">
+                  <div className="emp-push-row__info">
+                    {pushState.subscribed ? (
+                      <>
+                        <Bell size={16} />
+                        <span>Уведомления включены</span>
+                      </>
+                    ) : (
+                      <>
+                        <BellOff size={16} />
+                        <span>Уведомления выключены</span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className={`btn btn--sm ${pushState.subscribed ? 'btn--secondary' : 'btn--primary'}`}
+                    onClick={handlePushToggle}
+                    disabled={pushLoading}
+                  >
+                    {pushLoading
+                      ? '…'
+                      : pushState.subscribed
+                      ? 'Выключить'
+                      : 'Включить'}
+                  </button>
+                </div>
+              )}
+              {pushError && <p className="emp-page__error" style={{ marginTop: '0.4rem', fontSize: '0.8rem' }}>{pushError}</p>}
+              {!pushState.subscribed && !pushState.denied && (
+                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-faint)', marginTop: '0.4rem' }}>
+                  Получайте уведомления об изменении статуса заявок на аванс
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

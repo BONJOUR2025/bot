@@ -45,6 +45,7 @@ from .vacations import create_vacation_router
 from .payroll import create_payroll_router
 from .tasks import create_task_router
 from .passwords import create_password_router
+from .push import create_push_router
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -148,8 +149,16 @@ def create_app() -> FastAPI:
         create_schedule_router(schedule_service), prefix="/api", dependencies=protected
     )
 
+    from ..services.push_service import get_push_service
+    push_service = get_push_service()
+    app.include_router(
+        create_push_router(push_service),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     telegram_service = TelegramService(employee_service._repo)
-    payout_service = PayoutService(telegram_service=telegram_service)
+    payout_service = PayoutService(telegram_service=telegram_service, push_service=push_service)
     app.include_router(
         create_payout_router(payout_service, access_service),
         prefix="/api",

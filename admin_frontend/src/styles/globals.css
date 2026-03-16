@@ -912,6 +912,16 @@ tbody tr:last-child td { border-bottom: none; }
 .emp-profile-row__label { color: var(--color-text-muted); }
 .emp-profile-row__value { font-weight: 500; }
 
+/* Push notification row in profile */
+.emp-push-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; padding: 0.35rem 0;
+}
+.emp-push-row__info {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.875rem; color: var(--color-text-muted);
+}
+
 /* Responsive employee */
 @media (max-width: 768px) {
   .emp-content { padding: 1rem 1rem 80px; }
