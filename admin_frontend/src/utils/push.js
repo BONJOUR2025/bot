@@ -7,9 +7,11 @@ function urlB64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
+const SW_PATH = '/admin/sw.js';
+
 export async function registerSW() {
   if (!('serviceWorker' in navigator)) return null;
-  const reg = await navigator.serviceWorker.register('/sw.js');
+  const reg = await navigator.serviceWorker.register(SW_PATH);
   await navigator.serviceWorker.ready;
   return reg;
 }
@@ -39,7 +41,7 @@ export async function subscribePush(employeeId) {
 export async function unsubscribePush(employeeId) {
   if (!('serviceWorker' in navigator)) return;
 
-  const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+  const reg = await navigator.serviceWorker.getRegistration(SW_PATH);
   if (!reg) return;
 
   const subscription = await reg.pushManager.getSubscription();
@@ -61,7 +63,7 @@ export async function getPushState(employeeId) {
   const permission = Notification.permission;
   if (permission === 'denied') return { supported: true, subscribed: false, denied: true };
 
-  const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+  const reg = await navigator.serviceWorker.getRegistration(SW_PATH);
   if (!reg) return { supported: true, subscribed: false };
 
   const subscription = await reg.pushManager.getSubscription();
