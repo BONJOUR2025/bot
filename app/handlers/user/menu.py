@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
@@ -8,8 +9,15 @@ from ...services.users import load_users_map
 from ...keyboards.reply_user import get_month_keyboard_user, get_main_menu
 from ...utils.image import create_schedule_image, create_combined_table_image
 from ...services.excel import load_data
-from ...services.report import generate_employee_report
+from ...services.report import generate_employee_report, generate_employee_report_from_payroll
+from ...services.payroll_service import get_payroll_service
+from ...services.config_service import ConfigService
 from ...utils.logger import log
+
+
+def _use_sql_source() -> bool:
+    value = ConfigService().load().get("salary_bot_source", "excel")
+    return str(value).strip().lower() == "sql"
 
 
 async def view_salary_user(
@@ -90,44 +98,57 @@ async def handle_selected_month_user(
 
     requested_data = context.user_data.get("requested_data", "")
     if requested_data == "salary":
-        try:
-            data = load_data(sheet_name=month)
-            if data is None or "ИМЯ" not in data.columns:
-                log(
-                    f"❌ [handle_selected_month_user] Неверная структура данных для {month}")
+        report_tables = None
+
+        if _use_sql_source():
+            payroll = get_payroll_service()
+            code = payroll.get_code_for_employee(
+                employee_id=user_id, full_name=user_name
+            )
+            if code:
+                year = datetime.now().year
+                row = await payroll.get_employee_details(code, month, year)
+                if row:
+                    report_tables = generate_employee_report_from_payroll(row, month)
+                    log(f"✅ [menu/sql] Отчёт из SQL для {user_name}")
+                else:
+                    log(f"⚠️ [menu/sql] Нет данных за {month} для {code}, fallback Excel")
+            else:
+                log(f"⚠️ [menu/sql] Код не найден для {user_name}, fallback Excel")
+
+        if report_tables is None:
+            try:
+                data = load_data(sheet_name=month)
+                if data is None or "ИМЯ" not in data.columns:
+                    await loading_message.edit_text(
+                        f"❌ Ошибка загрузки данных для {month}.",
+                        reply_markup=get_main_menu(user_id),
+                    )
+                    return
+            except Exception as e:
+                log(f"❌ [menu/excel] Ошибка чтения Excel: {e}")
                 await loading_message.edit_text(
-                    f"❌ Ошибка загрузки данных для {month}.",
+                    f"❌ Ошибка загрузки данных для {month}: {e}",
                     reply_markup=get_main_menu(user_id),
                 )
                 return
-        except Exception as e:
-            log(f"❌ [handle_selected_month_user] Ошибка чтения Excel: {e}")
-            await loading_message.edit_text(
-                f"❌ Ошибка загрузки данных для {month}: {e}",
-                reply_markup=get_main_menu(user_id),
-            )
-            return
+            data["ИМЯ"] = data["ИМЯ"].astype(str).str.strip().str.lower()
+            employee_data = data[data["ИМЯ"] == user_name_lower]
+            if employee_data.empty:
+                await loading_message.edit_text(
+                    f"❌ Данные за {month} для {user_name} не найдены. Обратитесь к руководителю.",
+                    reply_markup=get_main_menu(user_id),
+                )
+                return
+            row_index = employee_data.index[0]
+            report_tables = generate_employee_report(user_name, month, data, row_index)
 
-        data["ИМЯ"] = data["ИМЯ"].astype(str).str.strip().str.lower()
-        employee_data = data[data["ИМЯ"] == user_name_lower]
-        if employee_data.empty:
-            await loading_message.edit_text(
-                f"❌ Данные за {month} для {user_name} не найдены. Обратитесь к руководителю.",
-                reply_markup=get_main_menu(user_id),
-            )
-            return
-
-        row_index = employee_data.index[0]
-        report_tables = generate_employee_report(
-            user_name, month, data, row_index)
-        filename = create_combined_table_image(
-            report_tables, f"salary_report_{user_id}.png")
+        filename = create_combined_table_image(report_tables, f"salary_report_{user_id}.png")
         if filename and os.path.exists(filename):
             try:
                 await loading_message.delete()
             except Exception as e:
-                log(
-                    f"⚠️ [handle_selected_month_user] Ошибка удаления сообщения: {e}")
+                log(f"⚠️ [handle_selected_month_user] Ошибка удаления сообщения: {e}")
             with open(filename, "rb") as photo:
                 await update.message.reply_photo(
                     photo=photo,
