@@ -110,32 +110,61 @@ def generate_employee_report_from_payroll(row, month: str) -> list:
     """Возвращает структуру отчёта из объекта PayrollRow (источник — SQL/Firebird)."""
 
     def fmt(v: float) -> str:
-        return f"{int(round(v))} \u20bd"
+        """Форматирует число как рубли с пробелом-разделителем тысяч."""
+        return f"{int(round(v)):,} \u20bd".replace(",", "\u202f")
 
-    def fmt_rate(rate: float, hi: float, lo: float) -> str:
-        pct = int(round(rate * 100))
-        if abs(rate - hi) < 1e-6:
-            return f"{pct}%, план выполнен"
-        if abs(rate - lo) < 1e-6:
-            return f"{pct}%, план не выполнен"
-        if rate == 0.0:
-            return "не начисляется"
-        return f"{pct}%"
+    def fmt_kpi(sales: float, plan: float, fulfillment: float,
+                rate: float, ignore_kpi: bool) -> str:
+        """Строка KPI с деталями плана."""
+        if ignore_kpi or plan <= 0:
+            return "\u2014"  # —
+        pct_rate = int(round(rate * 100))
+        pct_fill = int(round(fulfillment * 100))
+        if fulfillment >= 0.8:
+            status = f"\u2705 {pct_rate}%, план выполнен"
+            if sales > plan:
+                extra = f"Перевыполнение: +{fmt(sales - plan)}"
+            else:
+                extra = f"Выполнение: {pct_fill}%"
+        else:
+            status = f"\u274c {pct_rate}%, план не выполнен"
+            remaining = plan * 0.8 - sales
+            extra = f"До 80%: {fmt(max(0.0, remaining))}"
+        detail = f"План: {fmt(plan)}  Факт: {fmt(sales)}"
+        return f"{status}\n{detail}\n{extra}"
 
-    total_bonus = row.bonuses + row.excel_bonus
+    # ── Начисления (только из payroll/json) ──────────────────────
+    bonus = row.bonuses  # только json-бонус, без excel_bonus
+    итого = (
+        row.base_salary
+        + row.repair_commission
+        + row.cosmetics_commission
+        + row.shoes_commission
+        + bonus
+    )
+    к_выплате = итого - row.penalties - row.advances
 
-    return [
+    kpi_repair = fmt_kpi(
+        row.repair_sales, row.repair_plan,
+        row.repair_fulfillment, row.repair_rate,
+        row.ignore_kpi,
+    )
+    kpi_cosmetics = fmt_kpi(
+        row.cosmetics_sales, row.cosmetics_plan,
+        row.cosmetics_fulfillment, row.cosmetics_rate,
+        row.ignore_kpi,
+    )
+
+    sections = [
         [
             ("ЗАГОЛОВОК ОТЧЁТА", ""),
             ("Сотрудник", row.employee_name),
             ("Период", month),
-            ("Оклад", fmt(row.base_salary)),
         ],
         [
             ("KPI", ""),
-            ("Ремонт", fmt_rate(row.repair_rate, 0.02, 0.01)),
-            ("Косметика", fmt_rate(row.cosmetics_rate, 0.08, 0.05)),
-            ("Обувь", fmt(row.shoes_commission)),
+            ("Ремонт", kpi_repair),
+            ("Косметика", kpi_cosmetics),
         ],
         [
             ("НАЧИСЛЕНИЯ И УДЕРЖАНИЯ", ""),
@@ -143,10 +172,20 @@ def generate_employee_report_from_payroll(row, month: str) -> list:
             ("Ремонт", fmt(row.repair_commission)),
             ("Косметика", fmt(row.cosmetics_commission)),
             ("Обувь", fmt(row.shoes_commission)),
-            ("Бонус", fmt(total_bonus)),
-            ("ИТОГО", fmt(row.total_gross)),
-            ("Удержание", fmt(row.penalties)),
-            ("Аванс", fmt(row.advances)),
-            ("К выплате", fmt(row.total_net)),
         ],
     ]
+
+    # Цех — если в объекте есть поле и оно ненулевое
+    workshop = getattr(row, "workshop_commission", None) or getattr(row, "workshop", None)
+    if workshop:
+        sections[2].append(("Цех", fmt(workshop)))
+
+    sections[2].extend([
+        ("Бонус", fmt(bonus)),
+        ("ИТОГО", fmt(итого)),
+        ("Удержание", fmt(row.penalties)),
+        ("Аванс", fmt(row.advances)),
+        ("К выплате", fmt(к_выплате)),
+    ])
+
+    return sections
