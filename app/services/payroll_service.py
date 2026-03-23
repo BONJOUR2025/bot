@@ -105,11 +105,6 @@ class PayrollRow:
     excel_bonus: float
     penalties: float
 
-    main_rate: float = 0.0
-    main_shifts: float = 0.0
-    extra_rate: float = 0.0
-    extra_shifts: float = 0.0
-    workshop_commission: float = 0.0
     advances: float              # advances since last salary (actual deduction)
     advances_this_month: float   # advances taken in this calendar month (display only)
     ignore_kpi: bool
@@ -121,6 +116,12 @@ class PayrollRow:
     total_gross: float
     total_deductions: float
     total_net: float
+
+    main_rate: float = 0.0
+    main_shifts: float = 0.0
+    extra_rate: float = 0.0
+    extra_shifts: float = 0.0
+    workshop_commission: float = 0.0
     settlement_paid: bool = False
 
     def to_dict(self) -> dict[str, Any]:
