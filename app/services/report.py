@@ -160,6 +160,10 @@ def generate_employee_report_from_payroll(row, month: str) -> list:
             ("ЗАГОЛОВОК ОТЧЁТА", ""),
             ("Сотрудник", row.employee_name),
             ("Период", month),
+            ("Основная ставка", fmt(row.main_rate) if row.main_rate else "—"),
+            ("Основные смены", str(int(row.main_shifts)) if row.main_shifts else "—"),
+            ("Дополнительная ставка", fmt(row.extra_rate) if row.extra_rate else "—"),
+            ("Дополнительные смены", str(int(row.extra_shifts)) if row.extra_shifts else "—"),
         ],
         [
             ("KPI", ""),
@@ -175,10 +179,8 @@ def generate_employee_report_from_payroll(row, month: str) -> list:
         ],
     ]
 
-    # Цех — если в объекте есть поле и оно ненулевое
-    workshop = getattr(row, "workshop_commission", None) or getattr(row, "workshop", None)
-    if workshop:
-        sections[2].append(("Цех", fmt(workshop)))
+    if row.workshop_commission:
+        sections[2].append(("Цех", fmt(row.workshop_commission)))
 
     sections[2].extend([
         ("Бонус", fmt(bonus)),

@@ -104,6 +104,12 @@ class PayrollRow:
     bonuses: float
     excel_bonus: float
     penalties: float
+
+    main_rate: float = 0.0
+    main_shifts: float = 0.0
+    extra_rate: float = 0.0
+    extra_shifts: float = 0.0
+    workshop_commission: float = 0.0
     advances: float              # advances since last salary (actual deduction)
     advances_this_month: float   # advances taken in this calendar month (display only)
     ignore_kpi: bool
@@ -211,11 +217,13 @@ class PayrollService:
         if not self.excel_path.exists():
             return []
         try:
+            import pandas as pd
             wb = load_workbook(self.excel_path, data_only=True)
             sheet_name = next(
                 (s for s in wb.sheetnames if s.strip().upper() == month.strip().upper()), None
             )
             if not sheet_name:
+                wb.close()
                 return []
             ws = wb[sheet_name]
             employees = []
@@ -235,6 +243,37 @@ class PayrollService:
                     "excel_bonus": float(excel_bonus or 0),
                 })
             wb.close()
+
+            # Read named columns for rates/shifts/workshop via pandas
+            try:
+                df = pd.read_excel(
+                    self.excel_path, sheet_name=sheet_name,
+                    header=1, engine="openpyxl"
+                )
+                if "ИМЯ" in df.columns:
+                    df["_name_clean"] = df["ИМЯ"].astype(str).str.strip()
+                    extras: dict[str, dict] = {}
+                    for _, r in df.iterrows():
+                        n = r["_name_clean"]
+                        if not n or n == "nan":
+                            continue
+                        extras[n] = {
+                            "main_rate": float(r.get("ОСН", 0) or 0),
+                            "main_shifts": float(r.get("ОСН.", 0) or 0),
+                            "extra_rate": float(r.get("ДОП", 0) or 0),
+                            "extra_shifts": float(r.get("ДОП.", 0) or 0),
+                            "workshop": float(r.get("Цех", 0) or 0),
+                        }
+                    for emp in employees:
+                        ex = extras.get(emp["name"], {})
+                        emp["main_rate"] = ex.get("main_rate", 0.0)
+                        emp["main_shifts"] = ex.get("main_shifts", 0.0)
+                        emp["extra_rate"] = ex.get("extra_rate", 0.0)
+                        emp["extra_shifts"] = ex.get("extra_shifts", 0.0)
+                        emp["workshop"] = ex.get("workshop", 0.0)
+            except Exception as e:
+                logger.warning(f"Could not read rates/shifts from Excel: {e}")
+
             return employees
         except Exception as e:
             logger.error(f"Error reading Excel sheet '{month}': {e}")
@@ -495,6 +534,11 @@ class PayrollService:
                 total_deductions=total_deductions,
                 total_net=total_net,
                 settlement_paid=settlement_paid,
+                main_rate=emp.get("main_rate", 0.0),
+                main_shifts=emp.get("main_shifts", 0.0),
+                extra_rate=emp.get("extra_rate", 0.0),
+                extra_shifts=emp.get("extra_shifts", 0.0),
+                workshop_commission=emp.get("workshop", 0.0),
             ))
 
         return results
