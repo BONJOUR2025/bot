@@ -558,7 +558,13 @@ class PayrollService:
             if code:
                 return code
         if full_name:
-            return self._full_name_to_code.get(full_name.strip().lower())
+            code = self._full_name_to_code.get(full_name.strip().lower())
+            if code:
+                return code
+            # Fallback: extract 4-digit code from display name (e.g. "Иванов И.И. 1234")
+            code = _extract_code(full_name)
+            if code:
+                return code
         return None
 
 
