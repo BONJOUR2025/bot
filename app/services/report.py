@@ -114,11 +114,24 @@ def generate_employee_report_from_payroll(row, month: str) -> list:
         return f"{int(round(v)):,} \u20bd".replace(",", "\u202f")
 
     def fmt_kpi(sales: float, plan: float, fulfillment: float,
-                rate: float, ignore_kpi: bool) -> str:
+                rate: float, ignore_kpi: bool,
+                forced: str = "", commission: float = 0.0) -> str:
         """Строка KPI с деталями плана."""
         if ignore_kpi or plan <= 0:
             return "\u2014"  # —
         pct_rate = int(round(rate * 100))
+        if forced == "max":
+            return (
+                f"\u2699 Принудительно: макс.\n"
+                f"\u2705 {pct_rate}%, комиссия: {fmt(commission)}\n"
+                f"Факт: {fmt(sales)}"
+            )
+        if forced == "min":
+            return (
+                f"\u2699 Принудительно: мин.\n"
+                f"\u2b07 {pct_rate}%, комиссия: {fmt(commission)}\n"
+                f"Факт: {fmt(sales)}"
+            )
         pct_fill = int(round(fulfillment * 100))
         if fulfillment >= 0.8:
             status = f"\u2705 {pct_rate}%, план выполнен"
@@ -144,15 +157,26 @@ def generate_employee_report_from_payroll(row, month: str) -> list:
     )
     к_выплате = итого - row.penalties - row.advances
 
+    def _forced(key: str) -> str:
+        if key in row.force_max:
+            return "max"
+        if key in row.force_min:
+            return "min"
+        return ""
+
     kpi_repair = fmt_kpi(
         row.repair_sales, row.repair_plan,
         row.repair_fulfillment, row.repair_rate,
         row.ignore_kpi,
+        forced=_forced("repair"),
+        commission=row.repair_commission,
     )
     kpi_cosmetics = fmt_kpi(
         row.cosmetics_sales, row.cosmetics_plan,
         row.cosmetics_fulfillment, row.cosmetics_rate,
         row.ignore_kpi,
+        forced=_forced("cosmetics"),
+        commission=row.cosmetics_commission,
     )
 
     sections = [
