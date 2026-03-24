@@ -246,20 +246,23 @@ class PayrollService:
                 })
             wb.close()
 
-            # Read named columns for rates/shifts/workshop via pandas
+            # Read ОСН/ДОП/Цех from the main salary Excel (data.xlsx), matched by employee code
             try:
-                df = pd.read_excel(
-                    self.excel_path, sheet_name=sheet_name,
-                    header=1, engine="openpyxl"
-                )
-                if "ИМЯ" in df.columns:
-                    df["_name_clean"] = df["ИМЯ"].astype(str).str.strip()
-                    extras: dict[str, dict] = {}
-                    for _, r in df.iterrows():
-                        n = r["_name_clean"]
-                        if not n or n == "nan":
+                from app.config import EXCEL_FILE
+                df_main = pd.read_excel(EXCEL_FILE, sheet_name=sheet_name, header=1, engine="openpyxl")
+                if "ИМЯ" in df_main.columns:
+                    extras_by_code: dict[str, dict] = {}
+                    for _, r in df_main.iterrows():
+                        row_name = str(r.get("ИМЯ") or "").strip()
+                        if not row_name or row_name == "nan":
                             continue
-                        extras[n] = {
+                        code = (
+                            self._full_name_to_code.get(row_name.lower())
+                            or _extract_code(row_name)
+                        )
+                        if not code:
+                            continue
+                        extras_by_code[code] = {
                             "main_rate": float(r.get("ОСН", 0) or 0),
                             "main_shifts": float(r.get("ОСН.", 0) or 0),
                             "extra_rate": float(r.get("ДОП", 0) or 0),
@@ -267,14 +270,14 @@ class PayrollService:
                             "workshop": float(r.get("Цех", 0) or 0),
                         }
                     for emp in employees:
-                        ex = extras.get(emp["name"], {})
+                        ex = extras_by_code.get(emp["code"], {})
                         emp["main_rate"] = ex.get("main_rate", 0.0)
                         emp["main_shifts"] = ex.get("main_shifts", 0.0)
                         emp["extra_rate"] = ex.get("extra_rate", 0.0)
                         emp["extra_shifts"] = ex.get("extra_shifts", 0.0)
                         emp["workshop"] = ex.get("workshop", 0.0)
             except Exception as e:
-                logger.warning(f"Could not read rates/shifts from Excel: {e}")
+                logger.warning(f"Could not read rates/shifts from main Excel: {e}")
 
             return employees
         except Exception as e:
