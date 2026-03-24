@@ -260,9 +260,9 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
 
     Expects sections in the format returned by generate_employee_report_from_payroll().
     """
-    BG = "#1C1C2E"; CARD = "#25253A"; ACCENT = "#7C6AF7"
-    GREEN = "#4CAF50"; ORANGE = "#FF9800"; RED = "#F44336"
-    TEXT = "#FFFFFF"; SUBTEXT = "#A0A0C0"; BORDER = "#35355A"; PBAR_BG = "#3A3A5C"
+    BG = "#F0F2F8"; CARD = "#FFFFFF"; ACCENT = "#4A6CF7"
+    GREEN = "#2E7D32"; ORANGE = "#E65100"; RED = "#C62828"
+    TEXT = "#1A1A2E"; SUBTEXT = "#6B6B8A"; BORDER = "#DDE0EE"; PBAR_BG = "#E4E6F0"
 
     W = 560; PAD = 18; IX = PAD + 14
 
@@ -393,11 +393,11 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
 
-    def rr(x1, y1, x2, y2, r=12, fill=CARD):
+    def rr(x1, y1, x2, y2, r=12, fill=CARD, outline=None):
         try:
-            d.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill)
+            d.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill, outline=outline)
         except AttributeError:
-            d.rectangle([x1, y1, x2, y2], fill=fill)
+            d.rectangle([x1, y1, x2, y2], fill=fill, outline=outline)
 
     def txt(s, x, y, font, color=TEXT, right=False):
         if right:
@@ -416,7 +416,7 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     y = PAD
 
     # header card
-    rr(PAD, y, W - PAD, y + HEADER_H)
+    rr(PAD, y, W - PAD, y + HEADER_H, outline=BORDER)
     txt(name, IX, y + 14, b20)
     txt(period, RX, y + 16, f14, SUBTEXT, right=True)
     if rate_line:
@@ -425,7 +425,7 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
 
     # KPI card
     if kpi_parsed:
-        rr(PAD, y, W - PAD, y + kh)
+        rr(PAD, y, W - PAD, y + kh, outline=BORDER)
         txt("KPI", IX, y + CVP, b16, ACCENT)
         ky = y + CVP + TITLE_H
         for i, (kn, p) in enumerate(kpi_parsed):
@@ -452,7 +452,7 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
 
     # charges card
     if charges:
-        rr(PAD, y, W - PAD, y + ch)
+        rr(PAD, y, W - PAD, y + ch, outline=BORDER)
         txt("Начисления", IX, y + CVP, b16, ACCENT)
         cy = y + CVP + TITLE_H
         for key, val in charges:
@@ -467,7 +467,7 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
 
     # deductions card
     if deductions:
-        rr(PAD, y, W - PAD, y + dh)
+        rr(PAD, y, W - PAD, y + dh, outline=BORDER)
         dy = y + CVP
         for key, val in deductions:
             txt(key, IX, dy, f14, SUBTEXT)
@@ -479,8 +479,8 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     if net_pay:
         rr(PAD, y, W - PAD, y + NET_H, r=10, fill=ACCENT)
         ny = y + (NET_H - 14) // 2
-        txt("К выплате", IX, ny, b16)
-        txt(net_pay, RX, ny, b16, right=True)
+        txt("К выплате", IX, ny, b16, "#FFFFFF")
+        txt(net_pay, RX, ny, b16, "#FFFFFF", right=True)
 
     img.save(filename)
     log(f"✅ [create_payroll_report_image] Saved: {filename}")
