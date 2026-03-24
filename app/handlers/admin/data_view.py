@@ -11,7 +11,7 @@ from ...services.excel import load_data
 from ...services.report import generate_employee_report, generate_employee_report_from_payroll
 from ...services.payroll_service import get_payroll_service
 from ...services.config_service import ConfigService
-from ...utils.image import create_combined_table_image, create_schedule_image
+from ...utils.image import create_combined_table_image, create_payroll_report_image, create_schedule_image
 from ...utils.logger import log
 
 
@@ -116,10 +116,13 @@ async def handle_salary_admin(
     await context.bot.send_chat_action(chat_id=update.message.chat_id, action="typing")
 
     report_tables = None
+    from_sql = False
 
     if _use_sql_source():
         report_tables = await _salary_admin_sql(employee_name, month)
-        if report_tables is None:
+        if report_tables is not None:
+            from_sql = True
+        else:
             log(f"⚠️ [handle_salary_admin] SQL не дал результата, пробую Excel")
 
     if report_tables is None:
@@ -131,7 +134,10 @@ async def handle_salary_admin(
         )
         return
 
-    filename = create_combined_table_image(report_tables, f"salary_report_admin_{user_id}.png")
+    if from_sql:
+        filename = create_payroll_report_image(report_tables, f"salary_report_admin_{user_id}.png")
+    else:
+        filename = create_combined_table_image(report_tables, f"salary_report_admin_{user_id}.png")
     if not filename or not os.path.exists(filename):
         await loading_message.edit_text("❌ Не удалось создать изображение отчёта.")
         return

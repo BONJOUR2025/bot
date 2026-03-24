@@ -1,6 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 import os
+import re
 from .logger import log
 
 COLORS = {
@@ -251,6 +252,238 @@ def create_combined_table_image(tables, filename="salary_report.png"):
         y += _TABLE_GAP
 
     img.save(filename)
+    return filename
+
+
+def create_payroll_report_image(sections: list, filename: str = "salary_report.png"):
+    """Modern dark-themed payroll report image (for SQL/Firebird source).
+
+    Expects sections in the format returned by generate_employee_report_from_payroll().
+    """
+    BG = "#1C1C2E"; CARD = "#25253A"; ACCENT = "#7C6AF7"
+    GREEN = "#4CAF50"; ORANGE = "#FF9800"; RED = "#F44336"
+    TEXT = "#FFFFFF"; SUBTEXT = "#A0A0C0"; BORDER = "#35355A"; PBAR_BG = "#3A3A5C"
+
+    W = 560; PAD = 18; IX = PAD + 14
+
+    regular_candidates = [
+        "arial.ttf", "calibri.ttf",
+        "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/calibri.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    bold_candidates = [
+        "arialbd.ttf", "calibrib.ttf",
+        "C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/calibrib.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
+
+    def tf(paths, size):
+        for p in paths:
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                pass
+        return ImageFont.load_default()
+
+    f12 = tf(regular_candidates, 12)
+    f13 = tf(regular_candidates, 13)
+    f14 = tf(regular_candidates, 14)
+    b14 = tf(bold_candidates, 14)
+    b16 = tf(bold_candidates, 16)
+    b20 = tf(bold_candidates, 20)
+
+    # ── extract data ──────────────────────────────────────
+    def section_dict(idx):
+        if idx >= len(sections):
+            return {}
+        return {k: v for k, v in sections[idx][1:] if k}
+
+    hdr = section_dict(0)
+    kpi_rows = [(k, v) for k, v in sections[1][1:] if k] if len(sections) > 1 else []
+    charge_rows = [(k, v) for k, v in sections[2][1:] if k] if len(sections) > 2 else []
+
+    name = hdr.get("Сотрудник", "")
+    period = hdr.get("Период", "")
+    mr = hdr.get("Основная ставка", ""); ms = hdr.get("Основные смены", "")
+    er = hdr.get("Дополнительная ставка", ""); es = hdr.get("Дополнительные смены", "")
+    rate_parts = []
+    if mr and mr != "—":
+        rate_parts.append(f"Осн: {mr} \u00d7 {ms} см")
+    if er and er != "—":
+        rate_parts.append(f"Доп: {er} \u00d7 {es} см")
+    rate_line = "   ".join(rate_parts)
+
+    def parse_kpi(s):
+        if not s or s.strip() == "—":
+            return None
+        lines = s.split("\n")
+        met = "\u2705" in lines[0]
+        m = re.search(r'(\d+)%', lines[0])
+        pct = m.group(0) if m else ""
+        plan = fact = 0.0
+        if len(lines) > 1:
+            nums = re.findall(r'[\d\u202f]+', lines[1])
+            if len(nums) >= 2:
+                plan = float(re.sub(r'[^\d]', '', nums[0]) or 0)
+                fact = float(re.sub(r'[^\d]', '', nums[1]) or 0)
+        return dict(
+            met=met, pct=pct, plan=plan, fact=fact,
+            fulfillment=fact / plan if plan > 0 else 0.0,
+            extra=lines[2] if len(lines) > 2 else "",
+            detail=lines[1] if len(lines) > 1 else "",
+        )
+
+    kpi_parsed = [(k, parse_kpi(v)) for k, v in kpi_rows]
+
+    charges = []; deductions = []; net_pay = ""
+    for key, val in charge_rows:
+        if key == "К выплате":
+            net_pay = val
+        elif key in {"Удержание", "Аванс"}:
+            deductions.append((key, val))
+        else:
+            charges.append((key, val))
+
+    # ── layout ────────────────────────────────────────────
+    GAP = 10; CVP = 14; TITLE_H = 30; HEADER_H = 80
+    KNH = 22; KBH = 10; KDH = 16; KEH = 16; KGAP = 10
+    KIH = KNH + 4 + KBH + 4 + KDH + 4 + KEH
+    KNOH = 26; CRH = 28; DIV = 6; DRH = 26; NET_H = 44
+
+    def kpi_card_h():
+        if not kpi_parsed:
+            return 0
+        h = CVP + TITLE_H
+        for i, (_, p) in enumerate(kpi_parsed):
+            h += KIH if p else KNOH
+            if i < len(kpi_parsed) - 1:
+                h += KGAP
+        return h + CVP
+
+    def charge_card_h():
+        h = CVP + TITLE_H
+        for key, _ in charges:
+            h += CRH
+            if key == "ИТОГО":
+                h += DIV
+        return h + CVP
+
+    def ded_card_h():
+        return CVP + len(deductions) * DRH + CVP if deductions else 0
+
+    kh = kpi_card_h(); ch = charge_card_h(); dh = ded_card_h()
+    blocks = [
+        (HEADER_H, True),
+        (kh, bool(kpi_parsed)),
+        (ch, bool(charges)),
+        (dh, bool(deductions)),
+        (NET_H, bool(net_pay)),
+    ]
+    H = PAD
+    for bh, vis in blocks:
+        if vis:
+            H += bh + GAP
+    H += PAD - GAP  # replace last gap with bottom padding
+
+    # ── drawing helpers ───────────────────────────────────
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+
+    def rr(x1, y1, x2, y2, r=12, fill=CARD):
+        try:
+            d.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill)
+        except AttributeError:
+            d.rectangle([x1, y1, x2, y2], fill=fill)
+
+    def txt(s, x, y, font, color=TEXT, right=False):
+        if right:
+            w = d.textlength(s, font=font)
+            d.text((x - w, y), s, font=font, fill=color)
+        else:
+            d.text((x, y), s, font=font, fill=color)
+
+    def pbar(x, y, w, h, pct, color):
+        rr(x, y, x + w, y + h, r=h // 2, fill=PBAR_BG)
+        fw = max(0, min(int(w * min(pct, 1.0)), w))
+        if fw >= 2:
+            rr(x, y, x + fw, y + h, r=min(h // 2, fw // 2), fill=color)
+
+    RX = W - IX
+    y = PAD
+
+    # header card
+    rr(PAD, y, W - PAD, y + HEADER_H)
+    txt(name, IX, y + 14, b20)
+    txt(period, RX, y + 16, f14, SUBTEXT, right=True)
+    if rate_line:
+        txt(rate_line, IX, y + 48, f13, SUBTEXT)
+    y += HEADER_H + GAP
+
+    # KPI card
+    if kpi_parsed:
+        rr(PAD, y, W - PAD, y + kh)
+        txt("KPI", IX, y + CVP, b16, ACCENT)
+        ky = y + CVP + TITLE_H
+        for i, (kn, p) in enumerate(kpi_parsed):
+            if p is None:
+                txt(kn, IX, ky, b14)
+                txt("—", RX, ky, f14, SUBTEXT, right=True)
+                ky += KNOH
+            else:
+                color = GREEN if p["met"] else ORANGE
+                txt(kn, IX, ky, b14)
+                txt(p["pct"], RX, ky, b14, color, right=True)
+                ky += KNH + 4
+                pbar(IX, ky, W - IX * 2, KBH, p["fulfillment"], color)
+                ky += KBH + 4
+                txt(p["detail"], IX, ky, f12, SUBTEXT)
+                ky += KDH + 4
+                ec = RED if "До 80%" in p["extra"] else GREEN
+                if p["extra"]:
+                    txt(p["extra"], IX, ky, f12, ec)
+                ky += KEH
+            if i < len(kpi_parsed) - 1:
+                ky += KGAP
+        y += kh + GAP
+
+    # charges card
+    if charges:
+        rr(PAD, y, W - PAD, y + ch)
+        txt("Начисления", IX, y + CVP, b16, ACCENT)
+        cy = y + CVP + TITLE_H
+        for key, val in charges:
+            is_total = key == "ИТОГО"
+            if is_total:
+                d.line([(IX, cy), (W - IX, cy)], fill=BORDER, width=1)
+                cy += DIV
+            txt(key, IX, cy, b14 if is_total else f14, TEXT if is_total else SUBTEXT)
+            txt(val, RX, cy, b16 if is_total else f14, TEXT, right=True)
+            cy += CRH
+        y += ch + GAP
+
+    # deductions card
+    if deductions:
+        rr(PAD, y, W - PAD, y + dh)
+        dy = y + CVP
+        for key, val in deductions:
+            txt(key, IX, dy, f14, SUBTEXT)
+            txt("\u2212\u202f" + val, RX, dy, b14, RED, right=True)
+            dy += DRH
+        y += dh + GAP
+
+    # net pay banner
+    if net_pay:
+        rr(PAD, y, W - PAD, y + NET_H, r=10, fill=ACCENT)
+        ny = y + (NET_H - 14) // 2
+        txt("К выплате", IX, ny, b16)
+        txt(net_pay, RX, ny, b16, right=True)
+
+    img.save(filename)
+    log(f"✅ [create_payroll_report_image] Saved: {filename}")
     return filename
 
 

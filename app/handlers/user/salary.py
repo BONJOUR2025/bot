@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from typing import Optional
 
-from ...utils.image import create_combined_table_image
+from ...utils.image import create_combined_table_image, create_payroll_report_image
 from ...services.report import generate_employee_report, generate_employee_report_from_payroll
 from ...services.excel import load_data
 from ...services.users import load_users_map
@@ -67,18 +67,20 @@ async def handle_salary_request(
 
     if use_sql:
         report_tables = await _handle_salary_sql(user_id, month)
+        if report_tables is None:
+            await loading_message.edit_text(
+                f"❌ Данные за {month} не найдены. Обратитесь к руководителю."
+            )
+            return
+        filename = create_payroll_report_image(report_tables, f"salary_report_{user_id}.png")
     else:
         report_tables = _handle_salary_excel(user_id, month)
-
-    if report_tables is None:
-        await loading_message.edit_text(
-            f"❌ Данные за {month} не найдены. Обратитесь к руководителю."
-        )
-        return
-
-    filename = create_combined_table_image(
-        report_tables, f"salary_report_{user_id}.png"
-    )
+        if report_tables is None:
+            await loading_message.edit_text(
+                f"❌ Данные за {month} не найдены. Обратитесь к руководителю."
+            )
+            return
+        filename = create_combined_table_image(report_tables, f"salary_report_{user_id}.png")
 
     if filename and os.path.exists(filename):
         try:
@@ -87,10 +89,8 @@ async def handle_salary_request(
             log(f"⚠️ Ошибка удаления сообщения: {e}")
         with open(filename, "rb") as photo:
             await update.message.reply_photo(photo=photo)
-    else:
-        await loading_message.edit_text(
-            "❌ Не удалось сгенерировать изображение отчёта."
-        )
+        return
+    await loading_message.edit_text("❌ Не удалось сгенерировать изображение отчёта.")
 
 
 def _handle_salary_excel(user_id: str, month: str):
