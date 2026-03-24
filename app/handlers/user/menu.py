@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from ...config import EXCEL_FILE
 from ...services.users import load_users_map
 from ...keyboards.reply_user import get_month_keyboard_user, get_main_menu
-from ...utils.image import create_schedule_image, create_combined_table_image
+from ...utils.image import create_schedule_image, create_combined_table_image, create_payroll_report_image
 from ...services.excel import load_data
 from ...services.report import generate_employee_report, generate_employee_report_from_payroll
 from ...services.payroll_service import get_payroll_service
@@ -99,6 +99,7 @@ async def handle_selected_month_user(
     requested_data = context.user_data.get("requested_data", "")
     if requested_data == "salary":
         report_tables = None
+        from_sql = False
 
         if _use_sql_source():
             payroll = get_payroll_service()
@@ -110,6 +111,7 @@ async def handle_selected_month_user(
                 row = await payroll.get_employee_details(code, month, year)
                 if row:
                     report_tables = generate_employee_report_from_payroll(row, month)
+                    from_sql = True
                     log(f"✅ [menu/sql] Отчёт из SQL для {user_name}")
                 else:
                     log(f"⚠️ [menu/sql] Нет данных за {month} для {code}, fallback Excel")
@@ -143,7 +145,10 @@ async def handle_selected_month_user(
             row_index = employee_data.index[0]
             report_tables = generate_employee_report(user_name, month, data, row_index)
 
-        filename = create_combined_table_image(report_tables, f"salary_report_{user_id}.png")
+        if from_sql:
+            filename = create_payroll_report_image(report_tables, f"salary_report_{user_id}.png")
+        else:
+            filename = create_combined_table_image(report_tables, f"salary_report_{user_id}.png")
         if filename and os.path.exists(filename):
             try:
                 await loading_message.delete()
