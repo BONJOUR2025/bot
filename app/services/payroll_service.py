@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from openpyxl import load_workbook
 
 from app.settings import settings

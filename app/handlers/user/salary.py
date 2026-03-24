@@ -124,7 +124,13 @@ async def _handle_salary_sql(user_id: str, month: str):
     """Загружает данные из SQL (Firebird) через PayrollService и возвращает таблицы отчёта."""
     payroll = get_payroll_service()
 
-    employee_code = payroll._user_id_to_code.get(user_id)
+    employee_code = payroll.get_code_for_employee(employee_id=user_id)
+    if not employee_code:
+        users = load_users_map()
+        user_data = users.get(user_id) or users.get(str(user_id))
+        if user_data:
+            name = user_data.get("full_name") or user_data.get("name", "")
+            employee_code = payroll.get_code_for_employee(full_name=name)
     if not employee_code:
         log(f"❌ [sql] Код сотрудника для user_id={user_id} не найден")
         return None
