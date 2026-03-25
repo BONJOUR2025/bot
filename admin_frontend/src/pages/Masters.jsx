@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 
-const fmt = (v) => (v == null ? '—' : v);
+const fmt    = (v) => (v == null ? '—' : v);
+const fmtRub = (v) => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽');
 const fmtMin = (v) => {
   if (v == null) return '—';
   if (v < 1) return '< 1м';
@@ -54,15 +55,21 @@ function KpiCard({ label, value, accent }) {
   );
 }
 
-function MastersSummaryTable({ rows, onMasterClick }) {
+function MastersSummaryTable({ rows, salarySummary, onMasterClick }) {
+  const [tab, setTab] = useState('works');
+
   const byMaster = useMemo(() => {
     const map = {};
     rows.forEach((r) => {
       const name = r.description || '—';
-      if (!map[name]) map[name] = { name, total: 0, done: 0, inWork: 0, durations: [] };
+      if (!map[name]) map[name] = { name, total: 0, done: 0, inWork: 0, warnings: 0, durations: [] };
       map[name].total++;
-      if (r.status === 'Выполнено') { map[name].done++; if (r.duration_min != null) map[name].durations.push(r.duration_min); }
+      if (r.status === 'Выполнено') {
+        map[name].done++;
+        if (r.duration_min != null) map[name].durations.push(r.duration_min);
+      }
       if (r.status === 'В работе') map[name].inWork++;
+      if (r.warnings?.length > 0) map[name].warnings++;
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [rows]);
@@ -76,40 +83,96 @@ function MastersSummaryTable({ rows, onMasterClick }) {
 
   return (
     <div className="app-card overflow-x-auto">
-      <div className="p-4 border-b border-[color:var(--color-border)]">
+      <div className="p-4 border-b border-[color:var(--color-border)] flex items-center gap-4">
         <h3 className="font-semibold">Сводка по мастерам</h3>
-      </div>
-      <table className="w-full text-sm min-w-[480px]">
-        <thead>
-          <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
-            <th className="px-4 py-2 text-left">Мастер</th>
-            <th className="px-4 py-2 text-right">Всего</th>
-            <th className="px-4 py-2 text-right">Выполнено</th>
-            <th className="px-4 py-2 text-right">В работе</th>
-            <th className="px-4 py-2 text-right">Медиана, мин</th>
-          </tr>
-        </thead>
-        <tbody>
-          {byMaster.map((m, i) => (
-            <tr key={m.name} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
-              <td className="px-4 py-2 font-medium">
-                <button
-                  onClick={() => onMasterClick(m.name)}
-                  className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors"
-                >
-                  {m.name}
-                </button>
-              </td>
-              <td className="px-4 py-2 text-right">{m.total}</td>
-              <td className="px-4 py-2 text-right text-green-600">{m.done}</td>
-              <td className="px-4 py-2 text-right text-yellow-600">{m.inWork}</td>
-              <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">
-                {fmtMin(median(m.durations))}
-              </td>
-            </tr>
+        <div className="flex gap-1 ml-auto">
+          {['works', 'salary'].map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-3 py-1 rounded text-sm transition-colors ${tab === t ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-muted)]'}`}>
+              {t === 'works' ? 'Работы' : 'Зарплата'}
+            </button>
           ))}
-        </tbody>
-      </table>
+        </div>
+      </div>
+
+      {tab === 'works' && (
+        <table className="w-full text-sm min-w-[540px]">
+          <thead>
+            <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
+              <th className="px-4 py-2 text-left">Мастер</th>
+              <th className="px-4 py-2 text-right">Всего</th>
+              <th className="px-4 py-2 text-right">Выполнено</th>
+              <th className="px-4 py-2 text-right">В работе</th>
+              <th className="px-4 py-2 text-right">Медиана</th>
+              <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
+            </tr>
+          </thead>
+          <tbody>
+            {byMaster.map((m, i) => (
+              <tr key={m.name} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
+                <td className="px-4 py-2 font-medium">
+                  <button onClick={() => onMasterClick(m.name)}
+                    className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
+                    {m.name}
+                  </button>
+                </td>
+                <td className="px-4 py-2 text-right">{m.total}</td>
+                <td className="px-4 py-2 text-right text-green-600">{m.done}</td>
+                <td className="px-4 py-2 text-right text-yellow-600">{m.inWork}</td>
+                <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtMin(median(m.durations))}</td>
+                <td className="px-4 py-2 text-right">
+                  {m.warnings > 0
+                    ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span>
+                    : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {tab === 'salary' && (
+        <table className="w-full text-sm min-w-[540px]">
+          <thead>
+            <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
+              <th className="px-4 py-2 text-left">Мастер</th>
+              <th className="px-4 py-2 text-right">Выполнено</th>
+              <th className="px-4 py-2 text-right">Сумма услуг</th>
+              <th className="px-4 py-2 text-right text-[color:var(--color-primary)]">Зарплата</th>
+              <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(salarySummary || []).map((m, i) => (
+              <tr key={m.master} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
+                <td className="px-4 py-2 font-medium">
+                  <button onClick={() => onMasterClick(m.master)}
+                    className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
+                    {m.master}
+                  </button>
+                </td>
+                <td className="px-4 py-2 text-right">{m.services_done}</td>
+                <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtRub(m.total_kredit)}</td>
+                <td className="px-4 py-2 text-right font-semibold text-[color:var(--color-primary)]">{fmtRub(m.total_salary)}</td>
+                <td className="px-4 py-2 text-right">
+                  {m.warnings_count > 0
+                    ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings_count}</span>
+                    : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
+                </td>
+              </tr>
+            ))}
+            {salarySummary?.length > 0 && (
+              <tr className="border-t border-[color:var(--color-border)] font-semibold bg-[color:var(--color-muted)]/20">
+                <td className="px-4 py-2">Итого</td>
+                <td className="px-4 py-2 text-right">{salarySummary.reduce((s, r) => s + r.services_done, 0)}</td>
+                <td className="px-4 py-2 text-right">{fmtRub(salarySummary.reduce((s, r) => s + (r.total_kredit || 0), 0))}</td>
+                <td className="px-4 py-2 text-right text-[color:var(--color-primary)]">{fmtRub(salarySummary.reduce((s, r) => s + (r.total_salary || 0), 0))}</td>
+                <td className="px-4 py-2 text-right">{salarySummary.reduce((s, r) => s + (r.warnings_count || 0), 0)}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -130,10 +193,12 @@ export default function Masters() {
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
 
-  const [rows, setRows]       = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [loaded, setLoaded]   = useState(false);
+  const [rows, setRows]                   = useState([]);
+  const [salarySummary, setSalarySummary] = useState([]);
+  const [loading, setLoading]             = useState(false);
+  const [error, setError]                 = useState(null);
+  const [loaded, setLoaded]               = useState(false);
+  const [warningsOnly, setWarningsOnly]   = useState(false);
 
   const masterNames = useMemo(
     () => [...new Set(rows.map((r) => r.description).filter(Boolean))].sort(),
@@ -148,7 +213,15 @@ export default function Masters() {
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo)   params.date_to   = dateTo;
       const res = await api.get('/masters/works', { params });
-      setRows(res.data);
+      const data = res.data;
+      // Support both old (array) and new (object) response shape
+      if (Array.isArray(data)) {
+        setRows(data);
+        setSalarySummary([]);
+      } else {
+        setRows(data.services || []);
+        setSalarySummary(data.salary_summary || []);
+      }
       setLoaded(true);
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
@@ -169,6 +242,7 @@ export default function Masters() {
   const filtered = useMemo(() => {
     let r = rows;
     if (statusFilter !== 'Все') r = r.filter((x) => x.status === statusFilter);
+    if (warningsOnly) r = r.filter((x) => x.warnings?.length > 0);
     if (masterSearch) r = r.filter((x) => (x.description || '') === masterSearch);
     if (nameSearch)   r = r.filter((x) => (x.name || '').toLowerCase().includes(nameSearch.toLowerCase()));
     if (docSearch)    r = r.filter((x) => (x.doc_num || '').toLowerCase().includes(docSearch.toLowerCase()));
@@ -184,7 +258,7 @@ export default function Masters() {
       if (opt) r = r.filter((x) => opt.test(x.duration_min));
     }
     return r;
-  }, [rows, statusFilter, masterSearch, nameSearch, docSearch, codeSearch, durationFilter]);
+  }, [rows, statusFilter, warningsOnly, masterSearch, nameSearch, docSearch, codeSearch, durationFilter]);
 
   const sorted = useMemo(() => {
     if (!sortCol) return filtered;
@@ -209,6 +283,7 @@ export default function Masters() {
       total:        filtered.length,
       done:         filtered.filter((x) => x.status === 'Выполнено').length,
       inWork:       filtered.filter((x) => x.status === 'В работе').length,
+      warnings:     filtered.filter((x) => x.warnings?.length > 0).length,
       masters:      new Set(filtered.map((x) => x.description).filter(Boolean)).size,
       ordersTotal:  orders.length,
       ordersDone:   orders.filter((s) => s.every((v) => v === 'Выполнено')).length,
@@ -218,7 +293,7 @@ export default function Masters() {
 
   function downloadCsv() {
     if (!filtered.length) return;
-    const cols = ['status', 'description', 'doc_num', 'code', 'name', 'service_group', 'in_time', 'out_time', 'duration_min'];
+    const cols = ['status', 'description', 'doc_num', 'code', 'name', 'service_group', 'in_time', 'out_time', 'duration_min', 'master_salary', 'warnings'];
     const header = cols.join(';');
     const body = filtered.map((r) => cols.map((c) => (r[c] ?? '')).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + header + '\n' + body], { type: 'text/csv;charset=utf-8' });
@@ -335,11 +410,23 @@ export default function Masters() {
           {/* KPI — услуги */}
           <div>
             <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Услуги</p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               <KpiCard label="Всего услуг" value={kpi.total} />
               <KpiCard label="Выполнено" value={kpi.done} accent />
               <KpiCard label="В работе" value={kpi.inWork} />
               <KpiCard label="Мастеров" value={kpi.masters} />
+              <div className="app-card p-4 text-center cursor-pointer hover:ring-2 ring-amber-400 transition-all"
+                onClick={() => setWarningsOnly((v) => !v)}
+                title="Кликните для фильтра по нарушениям"
+                style={warningsOnly ? {outline: '2px solid #f59e0b'} : {}}>
+                <div className="text-xs text-amber-600 mb-1 flex items-center justify-center gap-1">
+                  <AlertTriangle size={11} /> Нарушений
+                </div>
+                <div className={`text-xl font-semibold ${kpi.warnings > 0 ? 'text-amber-600' : 'text-[color:var(--color-text-primary)]'}`}>
+                  {kpi.warnings}
+                </div>
+                {warningsOnly && <div className="text-xs text-amber-500 mt-0.5">фильтр вкл.</div>}
+              </div>
             </div>
           </div>
 
@@ -354,7 +441,7 @@ export default function Masters() {
           </div>
 
           {/* Summary by masters */}
-          <MastersSummaryTable rows={filtered} onMasterClick={(name) => setMasterSearch(name)} />
+          <MastersSummaryTable rows={filtered} salarySummary={salarySummary} onMasterClick={(name) => setMasterSearch(name)} />
 
           {/* Full table */}
           <div className="app-card">
@@ -369,6 +456,7 @@ export default function Masters() {
                 <thead>
                   <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
                     <SortTh col="status" className="text-left">Статус</SortTh>
+                    <th className="px-4 py-3 text-amber-600 text-xs uppercase tracking-wide"></th>
                     <SortTh col="description" className="text-left">Мастер</SortTh>
                     <SortTh col="doc_num" className="text-left">Заказ</SortTh>
                     <SortTh col="code" className="text-left">Код</SortTh>
@@ -377,15 +465,24 @@ export default function Masters() {
                     <SortTh col="in_time" className="text-right">Приём</SortTh>
                     <SortTh col="out_time" className="text-right">Выдача</SortTh>
                     <SortTh col="duration_min" className="text-right">Длит.</SortTh>
+                    <SortTh col="master_salary" className="text-right">ЗП</SortTh>
                   </tr>
                 </thead>
                 <tbody>
                   {sorted.slice(0, 500).map((r, i) => (
-                    <tr key={r.service_id ?? i} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
+                    <tr key={r.service_id ?? i}
+                      className={`${r.warnings?.length > 0 ? 'bg-amber-50/60 dark:bg-amber-900/10' : i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}`}>
                       <td className="px-4 py-2">
                         <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
                           {r.status}
                         </span>
+                      </td>
+                      <td className="px-2 py-2">
+                        {r.warnings?.length > 0 && (
+                          <span title={r.warnings.join('\n')} className="cursor-help">
+                            <AlertTriangle size={14} className="text-amber-500" />
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2 font-medium">{fmt(r.description)}</td>
                       <td className="px-4 py-2 text-[color:var(--color-muted-foreground)]">{fmt(r.doc_num)}</td>
@@ -395,11 +492,12 @@ export default function Masters() {
                       <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtDt(r.in_time)}</td>
                       <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtDt(r.out_time)}</td>
                       <td className="px-4 py-2 text-right">{fmtMin(r.duration_min)}</td>
+                      <td className="px-4 py-2 text-right font-medium text-[color:var(--color-primary)]">{fmtRub(r.master_salary)}</td>
                     </tr>
                   ))}
                   {filtered.length > 500 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)]">
+                      <td colSpan={11} className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)]">
                         Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
                       </td>
                     </tr>
@@ -411,15 +509,35 @@ export default function Masters() {
             {/* Mobile cards */}
             <div className="sm:hidden divide-y divide-[color:var(--color-border)]">
               {sorted.slice(0, 500).map((r, i) => (
-                <div key={r.service_id ?? i} className="p-3 space-y-1.5">
+                <div key={r.service_id ?? i} className={`p-3 space-y-1.5 ${r.warnings?.length > 0 ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
-                      {r.status}
-                    </span>
-                    <span className="text-xs text-[color:var(--color-muted-foreground)]">{fmtMin(r.duration_min)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
+                        {r.status}
+                      </span>
+                      {r.warnings?.length > 0 && (
+                        <AlertTriangle size={13} className="text-amber-500" title={r.warnings.join('\n')} />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
+                      {r.master_salary != null && (
+                        <span className="font-medium text-[color:var(--color-primary)]">{fmtRub(r.master_salary)}</span>
+                      )}
+                      <span>{fmtMin(r.duration_min)}</span>
+                    </div>
                   </div>
                   <div className="font-medium text-sm">{fmt(r.description)}</div>
                   <div className="text-sm">{fmt(r.name)}</div>
+                  {r.warnings?.length > 0 && (
+                    <div className="space-y-0.5">
+                      {r.warnings.map((w, wi) => (
+                        <div key={wi} className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
+                          <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                          <span>{w}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[color:var(--color-muted-foreground)]">
                     <span>Заказ: {fmt(r.doc_num)}</span>
                     <span>Код: {fmt(r.code)}</span>

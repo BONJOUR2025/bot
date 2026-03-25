@@ -71,22 +71,32 @@ where
   AND DOC_DATE > '2023-01-01'
 """
 
-WP_IN = {1107, 11017, 11019}
+WP_IN  = {1107, 11017, 11019}
 WP_OUT = {1108, 11018, 11020, 11022, 11024, 1154, 11028}
 
 GROUP_RULES = [
-    ("Набойки", r"^1\."),
-    ("Свободная услуга", r"^10\."),
-    ("Срочность", r"^144\."),
-    ("Профилактика", r"^2\."),
-    ("Химчистка", r"^20\d\."),
-    ("Каблуки", r"^3\."),
+    ("Набойки",              r"^1\."),
+    ("Свободная услуга",     r"^10\."),
+    ("Срочность",            r"^144\."),
+    ("Профилактика",         r"^2\."),
+    ("Химчистка",            r"^20\d\."),
+    ("Каблуки",              r"^3\."),
     ("Задник/стельки/подносок", r"^4\."),
-    ("Подошва", r"^5\."),
-    ("Молния", r"^6\."),
-    ("Ушивка/ремни", r"^7\."),
-    ("Растяжка", r"^8\."),
+    ("Подошва",              r"^5\."),
+    ("Молния",               r"^6\."),
+    ("Ушивка/ремни",         r"^7\."),
+    ("Растяжка",             r"^8\."),
 ]
+
+# Codes with 23% salary rate: 2хх.хх  or  7х.хх
+_HIGH_RATE_RE = re.compile(r"^(2\d{2}|7\d)\.")
+
+
+def _salary_rate(code) -> float:
+    """Return commission rate for a given service code."""
+    if pd.isna(code):
+        return 0.20
+    return 0.23 if _HIGH_RATE_RE.match(str(code)) else 0.20
 
 
 def _add_service_group(df: pd.DataFrame) -> pd.DataFrame:
@@ -119,11 +129,23 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
 
     df[service_key] = df[service_key].astype("string")
     df["work_place_id"] = _normalize_wp(df["work_place_id"])
-    df["is_in"] = df["work_place_id"].isin(WP_IN)
+    df["is_in"]  = df["work_place_id"].isin(WP_IN)
     df["is_out"] = df["work_place_id"].isin(WP_OUT)
 
-    in_time = df[df["is_in"]].groupby(service_key)["date_beg"].min()
-    out_time = df[df["is_out"]].groupby(service_key)["date_beg"].min()
+    in_events  = df[df["is_in"]]
+    out_events = df[df["is_out"]]
+
+    # Per-service IN/OUT timestamps
+    in_time  = in_events.groupby(service_key)["date_beg"].min()
+    out_time = out_events.groupby(service_key)["date_beg"].min()
+
+    # Per-service master names
+    in_description  = in_events.groupby(service_key)["description"].first()
+    out_description = out_events.groupby(service_key)["description"].first()
+
+    # Scan counts for multi-scan detection
+    in_count  = in_events.groupby(service_key).size().rename("in_count")
+    out_count = out_events.groupby(service_key).size().rename("out_count")
 
     g = df.groupby(service_key, dropna=False)
 
@@ -137,22 +159,28 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
         "code":          first_or_na("code"),
         "name":          first_or_na("name"),
         "service_group": first_or_na("service_group"),
+        "kredit":        first_or_na("kredit"),
         "last_event":    g["date_beg"].max(),
         "HAS_IN":        g["is_in"].any(),
         "HAS_OUT":       g["is_out"].any(),
         "status_id":     first_or_na("status_id"),
     }).reset_index(drop=True)
 
-    service["in_time"] = service["service_id"].map(in_time)
-    service["out_time"] = service["service_id"].map(out_time)
+    service["in_time"]         = service["service_id"].map(in_time)
+    service["out_time"]        = service["service_id"].map(out_time)
+    service["in_description"]  = service["service_id"].map(in_description)
+    service["out_description"] = service["service_id"].map(out_description)
+    service["in_count"]        = service["service_id"].map(in_count).fillna(0).astype(int)
+    service["out_count"]       = service["service_id"].map(out_count).fillna(0).astype(int)
 
+    # ── Status ────────────────────────────────────────────────────
     service["status"] = "Прочее"
-    service.loc[service["HAS_IN"] & service["HAS_OUT"], "status"] = "Выполнено"
+    service.loc[service["HAS_IN"] & service["HAS_OUT"],  "status"] = "Выполнено"
     service.loc[service["HAS_IN"] & ~service["HAS_OUT"], "status"] = "В работе"
-    # Заказы с status_id = 5 или 7 не должны показываться как "В работе"
     closed = service["status_id"].astype("Int64", errors="ignore").isin([5, 7])
     service.loc[closed & (service["status"] == "В работе"), "status"] = "Выполнено"
 
+    # ── Duration ──────────────────────────────────────────────────
     service["duration_min"] = pd.NA
     done = service["status"] == "Выполнено"
     service.loc[done, "duration_min"] = (
@@ -160,16 +188,95 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
         .dt.total_seconds() / 60.0
     )
 
+    # ── Warnings ──────────────────────────────────────────────────
+    # 1. Разные мастера на входе и выходе
+    has_both = service["in_description"].notna() & service["out_description"].notna()
+    w_mismatch = has_both & (service["in_description"] != service["out_description"])
+
+    # 2. Слишком быстро: между входом и выходом < 3 минут
+    w_too_fast = (
+        service["duration_min"].notna() &
+        (service["duration_min"] < 3) &
+        done
+    )
+
+    # 3. Выход без входа
+    w_no_in = service["HAS_OUT"] & ~service["HAS_IN"]
+
+    # 4. Несколько сканирований входа и/или выхода
+    w_multi = (service["in_count"] > 1) | (service["out_count"] > 1)
+
+    service["warning_mismatch"]  = w_mismatch
+    service["warning_too_fast"]  = w_too_fast
+    service["warning_no_in"]     = w_no_in
+    service["warning_multi"]     = w_multi
+
+    def _build_warnings(row) -> list[str]:
+        msgs = []
+        if row["warning_mismatch"]:
+            msgs.append(f"Разные мастера: вход — {row['in_description']}, выход — {row['out_description']}")
+        if row["warning_too_fast"]:
+            mins = round(row["duration_min"], 1)
+            msgs.append(f"Слишком быстро: {mins} мин (менее 3 мин)")
+        if row["warning_no_in"]:
+            msgs.append("Нет входа: выполнено без сканирования на приёме")
+        if row["warning_multi"]:
+            parts = []
+            if row["in_count"] > 1:
+                parts.append(f"входов: {row['in_count']}")
+            if row["out_count"] > 1:
+                parts.append(f"выходов: {row['out_count']}")
+            msgs.append("Несколько сканирований (" + ", ".join(parts) + ")")
+        return msgs
+
+    service["warnings"] = service.apply(_build_warnings, axis=1)
+    service["has_warning"] = service["warnings"].apply(lambda w: len(w) > 0)
+
+    # ── Master salary ──────────────────────────────────────────────
+    # Calculated only for services with an OUT; attributed to out_description
+    service["salary_rate"] = service["code"].apply(_salary_rate)
+    service["master_salary"] = None
+    has_out_mask = service["HAS_OUT"]
+    kredit_vals = pd.to_numeric(service.loc[has_out_mask, "kredit"], errors="coerce").fillna(0)
+    service.loc[has_out_mask, "master_salary"] = (
+        kredit_vals * service.loc[has_out_mask, "salary_rate"]
+    ).round(2)
+
     return service
+
+
+def _build_salary_summary(service_df: pd.DataFrame) -> list[dict]:
+    """Aggregate master salary by master name."""
+    if service_df.empty:
+        return []
+
+    has_out = service_df["HAS_OUT"] & service_df["master_salary"].notna()
+    df = service_df[has_out].copy()
+    if df.empty:
+        return []
+
+    df["master"] = df["out_description"].fillna("Неизвестный мастер")
+    df["master_salary"] = pd.to_numeric(df["master_salary"], errors="coerce").fillna(0)
+
+    g = df.groupby("master")
+    summary = pd.DataFrame({
+        "master":          g["master"].first(),
+        "services_done":   g["service_id"].count(),
+        "total_kredit":    g["kredit"].apply(lambda x: pd.to_numeric(x, errors="coerce").sum()).round(2),
+        "total_salary":    g["master_salary"].sum().round(2),
+        "warnings_count":  g["has_warning"].sum(),
+    }).reset_index(drop=True)
+
+    return summary.sort_values("total_salary", ascending=False).to_dict(orient="records")
 
 
 def fetch_works(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
-) -> list[dict]:
-    """Query Firebird and return aggregated service works as list of dicts."""
+) -> dict:
+    """Query Firebird and return services with warnings/salary and salary summary."""
     if not FIREBIRD_AVAILABLE:
-        return []
+        return {"services": [], "salary_summary": []}
 
     sql = BASE_SQL
     params: list = []
@@ -179,7 +286,6 @@ def fetch_works(
         params.append(str(date_from))
 
     if date_to:
-        # date_to is inclusive — query up to next day midnight
         next_day = date_to + timedelta(days=1)
         sql += "\n  AND user_session_actions.date_beg <  CAST(? AS DATE)"
         params.append(str(next_day))
@@ -205,7 +311,7 @@ def fetch_works(
 
     df = pd.DataFrame(rows, columns=cols)
     if df.empty:
-        return []
+        return {"services": [], "salary_summary": []}
 
     for col in ("doc_date", "date_beg", "date_end"):
         if col in df.columns:
@@ -219,27 +325,37 @@ def fetch_works(
     service_df = _build_service_table(df)
 
     if service_df.empty:
-        return []
+        return {"services": [], "salary_summary": []}
 
-    # Convert timestamps to ISO strings for JSON
+    salary_summary = _build_salary_summary(service_df)
+
+    # Drop internal columns before serialising
+    drop_cols = ["HAS_IN", "HAS_OUT", "status_id", "salary_rate",
+                 "warning_mismatch", "warning_too_fast", "warning_no_in",
+                 "warning_multi", "has_warning"]
+    result_df = service_df.drop(columns=drop_cols, errors="ignore")
+
+    # Serialise timestamps
     for col in ("in_time", "out_time", "last_event"):
-        if col in service_df.columns:
-            service_df[col] = service_df[col].apply(
+        if col in result_df.columns:
+            result_df[col] = result_df[col].apply(
                 lambda v: v.isoformat() if pd.notna(v) else None
             )
 
-    service_df["duration_min"] = service_df["duration_min"].apply(
+    result_df["duration_min"] = result_df["duration_min"].apply(
         lambda v: round(float(v), 1) if pd.notna(v) else None
     )
+    result_df["master_salary"] = result_df["master_salary"].apply(
+        lambda v: round(float(v), 2) if pd.notna(v) else None
+    )
 
-    result = service_df.drop(columns=["HAS_IN", "HAS_OUT", "status_id"], errors="ignore")
-
-    # Replace all remaining NaN / pd.NA / inf with None so json.dumps won't fail
     import math
 
     def _safe(v):
         if v is None:
             return None
+        if isinstance(v, list):
+            return v
         try:
             if pd.isna(v):
                 return None
@@ -249,7 +365,19 @@ def fetch_works(
             return None
         return v
 
-    return [
+    services = [
         {k: _safe(val) for k, val in row.items()}
-        for row in result.to_dict(orient="records")
+        for row in result_df.to_dict(orient="records")
     ]
+
+    def _safe_summary(v):
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            return None
+        return v
+
+    salary_summary = [
+        {k: _safe_summary(val) for k, val in row.items()}
+        for row in salary_summary
+    ]
+
+    return {"services": services, "salary_summary": salary_summary}
