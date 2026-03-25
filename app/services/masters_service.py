@@ -172,17 +172,16 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
         "barcode":         first_or_na("barcode"),
         "barcode_read":    first_or_na("barcode_read"),
         "doc_num":         first_or_na("doc_num"),
-        "description":     first_or_na("description"),
         "code":            first_or_na("code"),
         "name":            first_or_na("name"),
         "folder_name":     first_or_na("folder_name"),
         "top_parent_name": first_or_na("top_parent_name"),
         "service_group":   first_or_na("service_group"),
-        "kredit":        first_or_na("kredit"),
-        "last_event":    g["date_beg"].max(),
-        "HAS_IN":        g["is_in"].any(),
-        "HAS_OUT":       g["is_out"].any(),
-        "status_id":     first_or_na("status_id"),
+        "kredit":          first_or_na("kredit"),
+        "last_event":      g["date_beg"].max(),
+        "HAS_IN":          g["is_in"].any(),
+        "HAS_OUT":         g["is_out"].any(),
+        "status_id":       first_or_na("status_id"),
     }).reset_index(drop=True)
 
     service["in_time"]         = service["service_id"].map(in_time)
@@ -191,6 +190,10 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     service["out_description"] = service["service_id"].map(out_description)
     service["in_count"]        = service["service_id"].map(in_count).fillna(0).astype(int)
     service["out_count"]       = service["service_id"].map(out_count).fillna(0).astype(int)
+
+    # Основной мастер: тот кто выдал (OUT) — он же получает ЗП.
+    # Для услуг "В работе" (нет OUT) — тот кто принял (IN).
+    service["description"] = service["out_description"].combine_first(service["in_description"])
 
     # ── Status ────────────────────────────────────────────────────
     service["status"] = "Прочее"
