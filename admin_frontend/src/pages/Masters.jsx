@@ -189,6 +189,7 @@ export default function Masters() {
   const [codeSearch, setCodeSearch]         = useState('');
   const [docSearch, setDocSearch]           = useState('');
   const [durationFilter, setDurationFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState(new Set());
 
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -204,6 +205,20 @@ export default function Masters() {
     () => [...new Set(rows.map((r) => r.description).filter(Boolean))].sort(),
     [rows],
   );
+
+  const categoryOptions = useMemo(
+    () => [...new Set(rows.map((r) => r.top_parent_name).filter(Boolean))].sort(),
+    [rows],
+  );
+
+  function toggleCategory(cat) {
+    setCategoryFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  }
 
   async function load() {
     setLoading(true);
@@ -243,6 +258,7 @@ export default function Masters() {
     let r = rows;
     if (statusFilter !== 'Все') r = r.filter((x) => x.status === statusFilter);
     if (warningsOnly) r = r.filter((x) => x.warnings?.length > 0);
+    if (categoryFilter.size > 0) r = r.filter((x) => x.top_parent_name && categoryFilter.has(x.top_parent_name));
     if (masterSearch) r = r.filter((x) => (x.description || '') === masterSearch);
     if (nameSearch)   r = r.filter((x) => (x.name || '').toLowerCase().includes(nameSearch.toLowerCase()));
     if (docSearch)    r = r.filter((x) => (x.doc_num || '').toLowerCase().includes(docSearch.toLowerCase()));
@@ -258,7 +274,7 @@ export default function Masters() {
       if (opt) r = r.filter((x) => opt.test(x.duration_min));
     }
     return r;
-  }, [rows, statusFilter, warningsOnly, masterSearch, nameSearch, docSearch, codeSearch, durationFilter]);
+  }, [rows, statusFilter, warningsOnly, categoryFilter, masterSearch, nameSearch, docSearch, codeSearch, durationFilter]);
 
   const sorted = useMemo(() => {
     if (!sortCol) return filtered;
@@ -389,6 +405,33 @@ export default function Masters() {
             </select>
           </div>
         </div>
+        {loaded && categoryOptions.length > 0 && (
+          <div>
+            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
+              Категория услуги
+              {categoryFilter.size > 0 && (
+                <button onClick={() => setCategoryFilter(new Set())} className="ml-2 text-[color:var(--color-primary)] hover:underline">
+                  сбросить
+                </button>
+              )}
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {categoryOptions.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => toggleCategory(cat)}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    categoryFilter.has(cat)
+                      ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                      : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (

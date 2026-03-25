@@ -1,7 +1,6 @@
 """Service for fetching and aggregating master works data from Firebird."""
 from __future__ import annotations
 
-import re
 from datetime import date, timedelta
 from typing import Optional
 
@@ -30,7 +29,9 @@ select
     user_session_actions.work_place_id,
     user_session_actions.barcode,
     users.description,
-    docs_order.status_id
+    docs_order.status_id,
+    tree.name AS folder_name,
+    tree2.name AS top_parent_name
 
 from doc_order_services
 
@@ -51,6 +52,12 @@ inner join user_session
 
 left join users
     on user_session.user_id = users.user_id
+
+left join tree
+    on tovars_tbl.folder_id = tree.folder_id
+
+left join tree tree2
+    on tree.top_parent = tree2.folder_id
 
 where
       user_session_actions.work_place_id in
@@ -88,15 +95,18 @@ GROUP_RULES = [
     ("Растяжка",             r"^8\."),
 ]
 
-# Codes with 23% salary rate: 2хх.хх  or  7х.хх
-_HIGH_RATE_RE = re.compile(r"^(2\d{2}|7\d)\.")
+_HIGH_RATE_CATEGORIES = {
+    "02. Химчистка обуви",
+    "03. Химчистка сумок,одежды,акссесуаров",
+    "06. Реставрация, выведение пятен, чистка",
+}
 
 
-def _salary_rate(code) -> float:
-    """Return commission rate for a given service code."""
-    if pd.isna(code):
+def _salary_rate(top_parent_name) -> float:
+    """Return commission rate based on top-level category name."""
+    if pd.isna(top_parent_name) or not top_parent_name:
         return 0.20
-    return 0.23 if _HIGH_RATE_RE.match(str(code)) else 0.20
+    return 0.23 if str(top_parent_name) in _HIGH_RATE_CATEGORIES else 0.20
 
 
 def _add_service_group(df: pd.DataFrame) -> pd.DataFrame:
@@ -158,14 +168,16 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
         return g[colname].first() if colname in df.columns else pd.NA
 
     service = pd.DataFrame({
-        "service_id":    g[service_key].first(),
-        "barcode":       first_or_na("barcode"),
-        "barcode_read":  first_or_na("barcode_read"),
-        "doc_num":       first_or_na("doc_num"),
-        "description":   first_or_na("description"),
-        "code":          first_or_na("code"),
-        "name":          first_or_na("name"),
-        "service_group": first_or_na("service_group"),
+        "service_id":      g[service_key].first(),
+        "barcode":         first_or_na("barcode"),
+        "barcode_read":    first_or_na("barcode_read"),
+        "doc_num":         first_or_na("doc_num"),
+        "description":     first_or_na("description"),
+        "code":            first_or_na("code"),
+        "name":            first_or_na("name"),
+        "folder_name":     first_or_na("folder_name"),
+        "top_parent_name": first_or_na("top_parent_name"),
+        "service_group":   first_or_na("service_group"),
         "kredit":        first_or_na("kredit"),
         "last_event":    g["date_beg"].max(),
         "HAS_IN":        g["is_in"].any(),
@@ -241,7 +253,7 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
 
     # ── Master salary ──────────────────────────────────────────────
     # Calculated only for services with an OUT; attributed to out_description
-    service["salary_rate"] = service["code"].apply(_salary_rate)
+    service["salary_rate"] = service["top_parent_name"].apply(_salary_rate)
     service["master_salary"] = None
     has_out_mask = service["HAS_OUT"]
     kredit_vals = pd.to_numeric(service.loc[has_out_mask, "kredit"], errors="coerce").fillna(0)
@@ -324,7 +336,7 @@ def fetch_works(
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
 
-    for col in ("description", "doc_num", "code", "name"):
+    for col in ("description", "doc_num", "code", "name", "folder_name", "top_parent_name"):
         if col in df.columns:
             df[col] = df[col].astype("string")
 
