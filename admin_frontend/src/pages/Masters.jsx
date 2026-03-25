@@ -37,6 +37,13 @@ const DURATION_OPTIONS = [
   { label: 'Нет данных', value: 'null', test: (v) => v == null },
 ];
 
+const WARNING_TYPES = [
+  { key: 'warning_mismatch', label: 'Разные мастера' },
+  { key: 'warning_too_fast', label: 'Слишком быстро' },
+  { key: 'warning_no_in',    label: 'Нет входа' },
+  { key: 'warning_multi',    label: 'Несколько сканов' },
+];
+
 function SortIcon({ col, sortCol, sortDir }) {
   if (sortCol !== col) return <ChevronsUpDown size={13} className="inline ml-1 opacity-30" />;
   return sortDir === 'asc'
@@ -189,7 +196,8 @@ export default function Masters() {
   const [codeSearch, setCodeSearch]         = useState('');
   const [docSearch, setDocSearch]           = useState('');
   const [durationFilter, setDurationFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState(new Set());
+  const [categoryFilter, setCategoryFilter]       = useState(new Set());
+  const [warningTypeFilter, setWarningTypeFilter] = useState(new Set());
 
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -216,6 +224,15 @@ export default function Masters() {
       const next = new Set(prev);
       if (next.has(cat)) next.delete(cat);
       else next.add(cat);
+      return next;
+    });
+  }
+
+  function toggleWarningType(key) {
+    setWarningTypeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
@@ -258,6 +275,7 @@ export default function Masters() {
     let r = rows;
     if (statusFilter !== 'Все') r = r.filter((x) => x.status === statusFilter);
     if (warningsOnly) r = r.filter((x) => x.warnings?.length > 0);
+    if (warningTypeFilter.size > 0) r = r.filter((x) => [...warningTypeFilter].some((k) => x[k]));
     if (categoryFilter.size > 0) r = r.filter((x) => x.top_parent_name && categoryFilter.has(x.top_parent_name));
     if (masterSearch) r = r.filter((x) => (x.description || '') === masterSearch);
     if (nameSearch)   r = r.filter((x) => (x.name || '').toLowerCase().includes(nameSearch.toLowerCase()));
@@ -274,7 +292,7 @@ export default function Masters() {
       if (opt) r = r.filter((x) => opt.test(x.duration_min));
     }
     return r;
-  }, [rows, statusFilter, warningsOnly, categoryFilter, masterSearch, nameSearch, docSearch, codeSearch, durationFilter]);
+  }, [rows, statusFilter, warningsOnly, warningTypeFilter, categoryFilter, masterSearch, nameSearch, docSearch, codeSearch, durationFilter]);
 
   const sorted = useMemo(() => {
     if (!sortCol) return filtered;
@@ -427,6 +445,33 @@ export default function Masters() {
                   }`}
                 >
                   {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {loaded && (
+          <div>
+            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
+              Тип нарушения
+              {warningTypeFilter.size > 0 && (
+                <button onClick={() => setWarningTypeFilter(new Set())} className="ml-2 text-[color:var(--color-primary)] hover:underline">
+                  сбросить
+                </button>
+              )}
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {WARNING_TYPES.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => toggleWarningType(key)}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    warningTypeFilter.has(key)
+                      ? 'bg-amber-500 text-white border-amber-500'
+                      : 'border-[color:var(--color-border)] hover:border-amber-400 hover:text-amber-600'
+                  }`}
+                >
+                  {label}
                 </button>
               ))}
             </div>
