@@ -62,7 +62,7 @@ function KpiCard({ label, value, accent }) {
   );
 }
 
-function MastersSummaryTable({ rows, salarySummary, onMasterClick }) {
+function MastersSummaryTable({ rows, onMasterClick }) {
   const [tab, setTab] = useState('works');
 
   const byMaster = useMemo(() => {
@@ -79,6 +79,21 @@ function MastersSummaryTable({ rows, salarySummary, onMasterClick }) {
       if (r.warnings?.length > 0) map[name].warnings++;
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [rows]);
+
+  // Вычисляется из отфильтрованных rows по out_description (кто выдал = кто получает ЗП)
+  const bySalaryMaster = useMemo(() => {
+    const map = {};
+    rows.forEach((r) => {
+      if (r.master_salary == null) return;
+      const name = r.out_description || '—';
+      if (!map[name]) map[name] = { master: name, services_done: 0, total_kredit: 0, total_salary: 0, warnings_count: 0 };
+      map[name].services_done++;
+      map[name].total_kredit += Number(r.kredit) || 0;
+      map[name].total_salary += Number(r.master_salary) || 0;
+      if (r.has_warning) map[name].warnings_count++;
+    });
+    return Object.values(map).sort((a, b) => b.total_salary - a.total_salary);
   }, [rows]);
 
   const median = (arr) => {
@@ -143,14 +158,14 @@ function MastersSummaryTable({ rows, salarySummary, onMasterClick }) {
           <thead>
             <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
               <th className="px-4 py-2 text-left">Мастер</th>
-              <th className="px-4 py-2 text-right">Выполнено</th>
+              <th className="px-4 py-2 text-right">Учтено в ЗП</th>
               <th className="px-4 py-2 text-right">Сумма услуг</th>
               <th className="px-4 py-2 text-right text-[color:var(--color-primary)]">Зарплата</th>
               <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
             </tr>
           </thead>
           <tbody>
-            {(salarySummary || []).map((m, i) => (
+            {bySalaryMaster.map((m, i) => (
               <tr key={m.master} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
                 <td className="px-4 py-2 font-medium">
                   <button onClick={() => onMasterClick(m.master)}
@@ -168,13 +183,13 @@ function MastersSummaryTable({ rows, salarySummary, onMasterClick }) {
                 </td>
               </tr>
             ))}
-            {salarySummary?.length > 0 && (
+            {bySalaryMaster.length > 0 && (
               <tr className="border-t border-[color:var(--color-border)] font-semibold bg-[color:var(--color-muted)]/20">
                 <td className="px-4 py-2">Итого</td>
-                <td className="px-4 py-2 text-right">{salarySummary.reduce((s, r) => s + r.services_done, 0)}</td>
-                <td className="px-4 py-2 text-right">{fmtRub(salarySummary.reduce((s, r) => s + (r.total_kredit || 0), 0))}</td>
-                <td className="px-4 py-2 text-right text-[color:var(--color-primary)]">{fmtRub(salarySummary.reduce((s, r) => s + (r.total_salary || 0), 0))}</td>
-                <td className="px-4 py-2 text-right">{salarySummary.reduce((s, r) => s + (r.warnings_count || 0), 0)}</td>
+                <td className="px-4 py-2 text-right">{bySalaryMaster.reduce((s, r) => s + r.services_done, 0)}</td>
+                <td className="px-4 py-2 text-right">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_kredit || 0), 0))}</td>
+                <td className="px-4 py-2 text-right text-[color:var(--color-primary)]">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_salary || 0), 0))}</td>
+                <td className="px-4 py-2 text-right">{bySalaryMaster.reduce((s, r) => s + (r.warnings_count || 0), 0)}</td>
               </tr>
             )}
           </tbody>
@@ -529,7 +544,7 @@ export default function Masters() {
           </div>
 
           {/* Summary by masters */}
-          <MastersSummaryTable rows={filtered} salarySummary={salarySummary} onMasterClick={(name) => setMasterSearch(name)} />
+          <MastersSummaryTable rows={filtered} onMasterClick={(name) => setMasterSearch(name)} />
 
           {/* Full table */}
           <div className="app-card">
