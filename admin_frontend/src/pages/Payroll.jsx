@@ -1,7 +1,8 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Download, Search, X, Settings, ChevronDown, ChevronUp, Percent,
-  CheckSquare, Square, BadgeCheck,
+  CheckSquare, Square, BadgeCheck, AlertTriangle, MessageSquare,
+  History, FileSpreadsheet, TrendingUp, TrendingDown, Minus,
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
@@ -23,6 +24,64 @@ function parseSelectedMonth(selectedMonth) {
 
 function makeMonthKey(month, year) {
   return `${month.toUpperCase()}_${year}`;
+}
+
+// ── Anomaly detection ─────────────────────────────────────────────
+function getAnomalyFlags(row) {
+  const flags = [];
+  const gross = row.total_gross || (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus);
+  if (gross > 0 && (row.advances + row.penalties) / gross > 0.2)
+    flags.push('Удержания > 20% от начисления');
+  if (row.repair_plan > 0 && row.repair_fulfillment != null && row.repair_fulfillment < 0.5)
+    flags.push('Выполнение ремонта < 50%');
+  if (row.cosmetics_plan > 0 && row.cosmetics_fulfillment != null && row.cosmetics_fulfillment < 0.5)
+    flags.push('Выполнение косметики < 50%');
+  if (row.force_max?.length > 0)
+    flags.push(`Force MAX: ${row.force_max.join(', ')}`);
+  if (row.force_min?.length > 0)
+    flags.push(`Force MIN: ${row.force_min.join(', ')}`);
+  return flags;
+}
+
+// ── Trend badge ───────────────────────────────────────────────────
+function TrendBadge({ current, prev }) {
+  if (prev == null || prev === 0) return null;
+  const delta = ((current - prev) / prev) * 100;
+  if (Math.abs(delta) < 2) return <Minus size={13} className="text-gray-400" title={`Пред. месяц: ${Math.round(prev).toLocaleString('ru-RU')} ₽`} />;
+  if (delta > 0) return (
+    <span title={`Пред. месяц: ${Math.round(prev).toLocaleString('ru-RU')} ₽ (+${delta.toFixed(1)}%)`}>
+      <TrendingUp size={13} className="text-green-500" />
+    </span>
+  );
+  return (
+    <span title={`Пред. месяц: ${Math.round(prev).toLocaleString('ru-RU')} ₽ (${delta.toFixed(1)}%)`}>
+      <TrendingDown size={13} className="text-red-500" />
+    </span>
+  );
+}
+
+// ── Comment modal ─────────────────────────────────────────────────
+function CommentModal({ employee, currentComment, onSave, onClose }) {
+  const [text, setText] = useState(currentComment || '');
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card max-w-sm">
+        <h3 className="text-base font-semibold mb-3">
+          Комментарий: {employee.employee_name}
+        </h3>
+        <textarea
+          className="input w-full h-28 resize-none text-sm"
+          placeholder="Заметка к выплате…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="flex justify-end gap-2 mt-3">
+          <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={onClose}>Отмена</button>
+          <button className="btn btn--primary" onClick={() => onSave(text)}>Сохранить</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Summary bar ───────────────────────────────────────────────────
@@ -328,10 +387,27 @@ function ExpandedContent({ row }) {
 }
 
 // ── Expanded row (table version) ──────────────────────────────────
-function ExpandedRow({ row }) {
+function ExpandedRow({ row, comment }) {
+  const flags = getAnomalyFlags(row);
   return (
     <tr className="bg-[color:var(--color-bg-secondary)]">
       <td colSpan="100%" className="px-4 py-4">
+        {flags.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {flags.map((f) => (
+              <span key={f} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                <AlertTriangle size={11} />
+                {f}
+              </span>
+            ))}
+          </div>
+        )}
+        {comment && (
+          <div className="mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-sm text-indigo-800">
+            <MessageSquare size={14} className="mt-0.5 shrink-0" />
+            <span>{comment}</span>
+          </div>
+        )}
         <ExpandedContent row={row} />
       </td>
     </tr>
@@ -345,18 +421,33 @@ export default function Payroll() {
   const [months, setMonths]           = useState([]);
   const [selectedMonth, setSelectedMonth] = useState('');
   const [rows, setRows]               = useState([]);
+  const [prevRows, setPrevRows]       = useState([]);
   const [plans, setPlans]             = useState([]);
   const [loading, setLoading]         = useState(false);
   const [loadingMonths, setLoadingMonths] = useState(true);
   const [query, setQuery]             = useState('');
   const [expandedRows, setExpandedRows]   = useState(new Set());
   const [editingPlan, setEditingPlan] = useState(null);
+  const [comments, setComments]       = useState({});
+  const [editingComment, setEditingComment] = useState(null);
+  const [auditLog, setAuditLog]       = useState([]);
+  const [showAudit, setShowAudit]     = useState(false);
 
   const { month: currentMonth, year: currentYear } = parseSelectedMonth(selectedMonth);
   const monthKey = selectedMonth ? makeMonthKey(selectedMonth, currentYear) : null;
 
   useEffect(() => { loadMonths(); }, []);
-  useEffect(() => { if (selectedMonth) { loadPayroll(selectedMonth); loadPlans(selectedMonth); } else setRows([]); }, [selectedMonth]);
+  useEffect(() => {
+    if (selectedMonth) {
+      loadPayroll(selectedMonth);
+      loadPlans(selectedMonth);
+      loadComments(selectedMonth);
+      loadAudit(selectedMonth);
+      loadPrevMonthRows(selectedMonth);
+    } else {
+      setRows([]);
+    }
+  }, [selectedMonth]);
 
   async function loadMonths() {
     setLoadingMonths(true);
@@ -378,6 +469,57 @@ export default function Payroll() {
     } catch (err) { console.error(err); }
   }
 
+  async function loadComments(month) {
+    try {
+      const res = await api.get('payroll/comments', { params: { month, year: currentYear } });
+      setComments(res.data || {});
+    } catch { /* silent */ }
+  }
+
+  async function loadAudit(month) {
+    try {
+      const res = await api.get('payroll/audit', { params: { month, year: currentYear, limit: 50 } });
+      setAuditLog(res.data || []);
+    } catch { /* silent */ }
+  }
+
+  async function loadPrevMonthRows(month) {
+    try {
+      const MONTHS_KEY_RU = ['ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ','ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ'];
+      const idx = MONTHS_KEY_RU.indexOf(month.toUpperCase());
+      if (idx < 0) { setPrevRows([]); return; }
+      const prevIdx = idx === 0 ? 11 : idx - 1;
+      const prevMonth = MONTHS_KEY_RU[prevIdx];
+      const prevYear = idx === 0 ? currentYear - 1 : currentYear;
+      const res = await api.get('payroll/calculate', { params: { month: prevMonth, year: prevYear } });
+      setPrevRows(res.data || []);
+    } catch { setPrevRows([]); }
+  }
+
+  async function saveComment(employeeCode, text) {
+    try {
+      await api.put(`payroll/comments/${employeeCode}`, { comment: text }, {
+        params: { month: selectedMonth, year: currentYear },
+      });
+      setComments((prev) => ({ ...prev, [employeeCode]: text }));
+      toast('Комментарий сохранён', 'success');
+    } catch { toast('Ошибка сохранения комментария', 'error'); }
+    setEditingComment(null);
+  }
+
+  async function postAuditEntry(action, row, details = {}) {
+    try {
+      await api.post('payroll/audit', {
+        action,
+        employee_code: row.employee_code,
+        employee_name: row.employee_name,
+        month_key: monthKey,
+        details,
+      });
+      loadAudit(selectedMonth);
+    } catch { /* silent */ }
+  }
+
   async function loadPayroll(month) {
     setLoading(true);
     try {
@@ -391,6 +533,11 @@ export default function Payroll() {
     try {
       await api.put('payroll/plans', planData);
       toast('План сохранён', 'success');
+      const prevPlan = plans.find((p) => p.employee_code === planData.employee_code);
+      postAuditEntry('Изменение плана', { employee_code: planData.employee_code, employee_name: planData.employee_name }, {
+        before: prevPlan ? { repair_plan: prevPlan.repair_plan, cosmetics_plan: prevPlan.cosmetics_plan, shoes_plan: prevPlan.shoes_plan, force_max: prevPlan.force_max, force_min: prevPlan.force_min, ignore_kpi: prevPlan.ignore_kpi } : null,
+        after: { repair_plan: planData.repair_plan, cosmetics_plan: planData.cosmetics_plan, shoes_plan: planData.shoes_plan, force_max: planData.force_max, force_min: planData.force_min, ignore_kpi: planData.ignore_kpi },
+      });
       setEditingPlan(null);
       loadPlans(selectedMonth);
       loadPayroll(selectedMonth);
@@ -402,7 +549,10 @@ export default function Payroll() {
       await api.put(`payroll/settlements/${employeeCode}`, { paid: !currentPaid }, {
         params: { month: selectedMonth, year: currentYear },
       });
-      // Optimistic update
+      const row = rows.find((r) => r.employee_code === employeeCode);
+      if (row) {
+        postAuditEntry(!currentPaid ? 'Выплата отмечена' : 'Выплата отменена', row, { paid: !currentPaid });
+      }
       setRows((prev) =>
         prev.map((r) =>
           r.employee_code === employeeCode ? { ...r, settlement_paid: !currentPaid } : r
@@ -415,6 +565,17 @@ export default function Payroll() {
     if (!selectedMonth) return;
     window.open(`/api/salary/report?month=${selectedMonth}`, '_blank');
   }
+
+  function exportExcel() {
+    if (!selectedMonth) return;
+    window.open(`/api/payroll/export/excel?month=${selectedMonth}&year=${currentYear}`, '_blank');
+  }
+
+  const prevRowsMap = useMemo(() => {
+    const m = {};
+    for (const r of prevRows) m[r.employee_code] = r;
+    return m;
+  }, [prevRows]);
 
   const toggleRow = (code) => {
     setExpandedRows((prev) => {
@@ -437,7 +598,15 @@ export default function Payroll() {
         <h2 className="text-2xl font-semibold tracking-tight flex-1">Расчёт зарплаты</h2>
         <button onClick={exportPdf} disabled={!selectedMonth || loading}
           className="btn btn--primary flex items-center gap-2 disabled:opacity-50">
-          <Download size={16} />PDF отчёт
+          <Download size={16} />PDF
+        </button>
+        <button onClick={exportExcel} disabled={!selectedMonth || loading}
+          className="btn flex items-center gap-2 disabled:opacity-50 bg-green-600 text-white hover:bg-green-700">
+          <FileSpreadsheet size={16} />Excel
+        </button>
+        <button onClick={() => setShowAudit((v) => !v)} disabled={!selectedMonth}
+          className={`btn flex items-center gap-2 disabled:opacity-50 ${showAudit ? 'bg-indigo-100 text-indigo-700 border border-indigo-300' : ''}`}>
+          <History size={16} />Журнал
         </button>
       </div>
 
@@ -506,6 +675,11 @@ export default function Payroll() {
               >
                 <div className="flex items-center gap-2 min-w-0">
                   {row.settlement_paid && <BadgeCheck size={16} className="text-green-500 shrink-0" />}
+                  {getAnomalyFlags(row).length > 0 && (
+                    <span title={getAnomalyFlags(row).join('\n')}>
+                      <AlertTriangle size={15} className="text-amber-500 shrink-0" />
+                    </span>
+                  )}
                   <div className="min-w-0">
                     <div className="font-medium text-sm truncate">{row.employee_name}</div>
                     <div className="text-xs text-[color:var(--color-muted-foreground)]">{row.employee_code}</div>
@@ -548,11 +722,33 @@ export default function Payroll() {
                 >
                   <Settings size={18} />
                 </button>
+                <button
+                  onClick={() => setEditingComment(row)}
+                  className={`p-1.5 rounded transition-colors ${comments[row.employee_code] ? 'text-indigo-500' : 'text-[color:var(--color-muted-foreground)]'}`}
+                  title="Комментарий"
+                >
+                  <MessageSquare size={18} />
+                </button>
               </div>
 
               {/* Expanded detail */}
               {expandedRows.has(row.employee_code) && (
                 <div className="px-4 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  {getAnomalyFlags(row).length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {getAnomalyFlags(row).map((f) => (
+                        <span key={f} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                          <AlertTriangle size={11} />{f}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {comments[row.employee_code] && (
+                    <div className="mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-sm text-indigo-800">
+                      <MessageSquare size={13} className="mt-0.5 shrink-0" />
+                      <span>{comments[row.employee_code]}</span>
+                    </div>
+                  )}
                   <ExpandedContent row={row} />
                 </div>
               )}
@@ -595,6 +791,16 @@ export default function Payroll() {
                     <td className="px-3 py-2.5 sticky left-0 bg-[color:var(--color-table-bg)] font-medium">
                       <div className="flex items-center gap-2">
                         {row.settlement_paid && <BadgeCheck size={14} className="text-green-500 shrink-0" />}
+                        {getAnomalyFlags(row).length > 0 && (
+                          <span title={getAnomalyFlags(row).join('\n')}>
+                            <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                          </span>
+                        )}
+                        {comments[row.employee_code] && (
+                          <span title={comments[row.employee_code]}>
+                            <MessageSquare size={13} className="text-indigo-400 shrink-0" />
+                          </span>
+                        )}
                         <div>
                           <div>{row.employee_name}</div>
                           <div className="text-xs text-[color:var(--color-muted-foreground)]">{row.employee_code}</div>
@@ -621,7 +827,10 @@ export default function Payroll() {
                       {row.penalties > 0 ? `-${fmtMoney(row.penalties)}` : '—'}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap font-semibold text-[color:var(--color-primary)]">
-                      {fmtMoney(row.total_net)}
+                      <div className="flex items-center justify-end gap-1.5">
+                        <TrendBadge current={row.total_net} prev={prevRowsMap[row.employee_code]?.total_net} />
+                        {fmtMoney(row.total_net)}
+                      </div>
                     </td>
 
                     {/* ── Зарплата ✓ ── */}
@@ -642,16 +851,25 @@ export default function Payroll() {
                     </td>
 
                     <td className="px-3 py-2.5 text-center">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setEditingPlan(row); }}
-                        className="p-1.5 rounded hover:bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text-primary)]"
-                        title="Настроить план"
-                      >
-                        <Settings size={16} />
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingPlan(row); }}
+                          className="p-1.5 rounded hover:bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text-primary)]"
+                          title="Настроить план"
+                        >
+                          <Settings size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingComment(row); }}
+                          className={`p-1.5 rounded hover:bg-[color:var(--color-bg-secondary)] transition-colors ${comments[row.employee_code] ? 'text-indigo-500' : 'text-[color:var(--color-muted-foreground)]'}`}
+                          title={comments[row.employee_code] ? `Комментарий: ${comments[row.employee_code]}` : 'Добавить комментарий'}
+                        >
+                          <MessageSquare size={15} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                  {expandedRows.has(row.employee_code) && <ExpandedRow key={`exp-${row.employee_code}`} row={row} />}
+                  {expandedRows.has(row.employee_code) && <ExpandedRow key={`exp-${row.employee_code}`} row={row} comment={comments[row.employee_code]} />}
                 </>
               ))}
             </tbody>
@@ -685,6 +903,44 @@ export default function Payroll() {
         </div>
       )}
 
+      {/* Audit log panel */}
+      {showAudit && (
+        <div className="app-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold flex items-center gap-2"><History size={16} />Журнал изменений{selectedMonth && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">— {monthKey}</span>}</h3>
+            <button onClick={() => loadAudit(selectedMonth)} className="text-xs text-[color:var(--color-primary)] hover:underline">Обновить</button>
+          </div>
+          {auditLog.length === 0 ? (
+            <p className="text-sm text-[color:var(--color-muted-foreground)]">Изменений за этот месяц нет.</p>
+          ) : (
+            <div className="overflow-auto max-h-64">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
+                    <th className="pb-1 text-left pr-4">Время</th>
+                    <th className="pb-1 text-left pr-4">Кто</th>
+                    <th className="pb-1 text-left pr-4">Действие</th>
+                    <th className="pb-1 text-left">Сотрудник</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[color:var(--color-border)]">
+                  {auditLog.map((e) => (
+                    <tr key={e.id} className="hover:bg-[color:var(--color-muted)] transition-colors">
+                      <td className="py-1.5 pr-4 text-xs text-[color:var(--color-muted-foreground)] whitespace-nowrap">
+                        {new Date(e.timestamp).toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
+                      </td>
+                      <td className="py-1.5 pr-4 text-xs font-mono">{e.actor}</td>
+                      <td className="py-1.5 pr-4 font-medium">{e.action}</td>
+                      <td className="py-1.5 text-[color:var(--color-muted-foreground)]">{e.employee_name}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Plan Modal */}
       {editingPlan && (
         <PlanModal
@@ -693,6 +949,16 @@ export default function Payroll() {
           onSave={savePlan}
           onClose={() => setEditingPlan(null)}
           monthKey={monthKey}
+        />
+      )}
+
+      {/* Comment Modal */}
+      {editingComment && (
+        <CommentModal
+          employee={editingComment}
+          currentComment={comments[editingComment.employee_code] || ''}
+          onSave={(text) => saveComment(editingComment.employee_code, text)}
+          onClose={() => setEditingComment(null)}
         />
       )}
     </div>
