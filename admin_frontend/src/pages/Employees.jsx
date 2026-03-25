@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   UserPlus,
   Trash2,
@@ -16,6 +16,8 @@ import { useViewport } from '../providers/ViewportProvider.jsx';
 export default function Employees() {
   const { toast } = useToast();
   const { isMobile } = useViewport();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const emptyForm = {
     id: '',
@@ -56,6 +58,14 @@ export default function Employees() {
     loadPositions();
     loadCashierChats();
   }, []);
+
+  useEffect(() => {
+    const editId = location.state?.editId;
+    if (editId && employees.length > 0) {
+      const emp = employees.find((e) => e.id === editId);
+      if (emp) startEdit(emp);
+    }
+  }, [location.state, employees]);
 
   async function load() {
     setLoading(true);
@@ -328,17 +338,18 @@ export default function Employees() {
             return (
               <div
                 key={e.id}
-                className={`border rounded-xl bg-white shadow-sm overflow-hidden ${e.is_admin ? 'border-orange-200' : ''} ${e.status !== 'active' ? 'opacity-70' : ''}`}
+                className={`border rounded-xl bg-white shadow-sm overflow-hidden cursor-pointer ${e.is_admin ? 'border-orange-200' : ''} ${e.status !== 'active' ? 'opacity-70' : ''}`}
+                onClick={() => navigate(`/admin/employees/${e.id}`)}
               >
                 <div className="px-4 py-3 border-b bg-gray-50 flex items-center gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer" onClick={(ev) => ev.stopPropagation()}>
                     <input type="checkbox" checked={selected.includes(e.id)} onChange={(ev) => toggleSelect(e.id, ev.target.checked)} />
                   </label>
                   {e.photo_url ? (
                     <img src={e.photo_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
                   ) : (
                     <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                      <span className="text-gray-400 text-xs">Фото</span>
+                      <span className="text-gray-400 text-xs">—</span>
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
@@ -352,10 +363,6 @@ export default function Employees() {
                     <span className="text-gray-500">Телефон</span>
                     <span>{e.phone}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Место</span>
-                    <span>{e.work_place || '—'}</span>
-                  </div>
                   {e.birthdate && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">День рождения</span>
@@ -363,7 +370,7 @@ export default function Employees() {
                     </div>
                   )}
                 </div>
-                <div className="px-4 py-2 border-t flex justify-end gap-3">
+                <div className="px-4 py-2 border-t flex justify-end gap-3" onClick={(ev) => ev.stopPropagation()}>
                   <button className="text-blue-600" onClick={() => startEdit(e)}><Pencil size={18} /></button>
                   <a href={`/api/employees/${e.id}/profile.pdf`} className="text-gray-600" title="PDF"><FileDown size={18} /></a>
                   <button
@@ -381,7 +388,7 @@ export default function Employees() {
         </div>
       ) : (
         <div className="overflow-auto border rounded shadow bg-white">
-          <table className="min-w-[1400px] text-sm">
+          <table className="min-w-[900px] text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="p-2"></th>
@@ -391,12 +398,8 @@ export default function Employees() {
                 <th className="p-2 text-left">Телефон</th>
                 <th className="p-2 text-left">День рождения</th>
                 <th className="p-2 text-left">Должность</th>
-                <th className="p-2 text-left">Место</th>
-                <th className="p-2 text-left">Размер</th>
-                <th className="p-2 text-left">Чат кассира</th>
                 <th className="p-2 text-left">Роль</th>
                 <th className="p-2 text-left">Создан</th>
-                <th className="p-2 text-left">История</th>
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -409,18 +412,19 @@ export default function Employees() {
                 return (
                   <tr
                     key={e.id}
-                    className={`${e.is_admin ? 'bg-orange-50' : ''} ${
-                      e.status !== 'active' ? 'bg-neutral-100' : ''
+                    className={`cursor-pointer hover:bg-blue-50 transition-colors ${e.is_admin ? 'bg-orange-50 hover:bg-orange-100' : ''} ${
+                      e.status !== 'active' ? 'opacity-60' : ''
                     }`}
+                    onClick={() => navigate(`/admin/employees/${e.id}`)}
                   >
-                  <td className="p-2">
+                  <td className="p-2" onClick={(ev) => ev.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selected.includes(e.id)}
                       onChange={(ev) => toggleSelect(e.id, ev.target.checked)}
                     />
                   </td>
-                  <td className="p-2">
+                  <td className="p-2" onClick={(ev) => ev.stopPropagation()}>
                     {e.photo_url ? (
                       <img
                         src={e.photo_url}
@@ -429,30 +433,19 @@ export default function Employees() {
                       />
                     ) : (
                       <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-gray-500 text-xs">No photo</span>
+                        <span className="text-gray-500 text-xs">—</span>
                       </div>
                     )}
                   </td>
-                  <td className="p-2">{e.name}</td>
+                  <td className="p-2 font-medium">{e.name}</td>
                   <td className="p-2">{e.full_name}</td>
                   <td className="p-2">{e.phone}</td>
                   <td className="p-2">{formatDateRu(e.birthdate)}</td>
                   <td className="p-2">{e.position}</td>
-                  <td className="p-2">{e.work_place}</td>
-                  <td className="p-2">{e.clothing_size}</td>
-                  <td className="p-2">{resolveChatName(e.payout_chat_key)}</td>
-                  <td className="p-2">{e.is_admin ? 'Админ' : 'Пользователь'}</td>
-                  <td className="p-2">{new Date(e.created_at).toLocaleDateString()}</td>
-                  <td className="p-2">
-                    <a
-                      href={`/admin/incentives?employee_id=${e.id}`}
-                      className="text-blue-600 underline"
-                    >
-                      История
-                    </a>
-                  </td>
-                  <td className="p-2 text-right">
-                    <button className="text-blue-600" onClick={() => startEdit(e)}>
+                  <td className="p-2">{e.is_admin ? 'Админ' : 'Польз.'}</td>
+                  <td className="p-2 text-gray-400 text-xs">{new Date(e.created_at).toLocaleDateString()}</td>
+                  <td className="p-2 text-right" onClick={(ev) => ev.stopPropagation()}>
+                    <button className="text-blue-600" onClick={() => startEdit(e)} title="Редактировать">
                       <Pencil size={16} />
                     </button>
                     <a
@@ -468,13 +461,9 @@ export default function Employees() {
                           ? 'text-amber-600 hover:text-amber-800'
                           : 'cursor-not-allowed text-gray-400'
                       }`}
-                      onClick={() => {
-                        if (canArchive) moveToArchive(e.id);
-                      }}
+                      onClick={() => { if (canArchive) moveToArchive(e.id); }}
                       disabled={!canArchive}
                       title={archiveTitle}
-                      aria-disabled={!canArchive}
-                      aria-label={archiveTitle}
                     >
                       <Archive size={16} className={!canArchive ? 'opacity-50' : ''} />
                     </button>
@@ -484,7 +473,7 @@ export default function Employees() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="14" className="p-4 text-center text-gray-500">
+                  <td colSpan="10" className="p-4 text-center text-gray-500">
                     Нет сотрудников
                   </td>
                 </tr>

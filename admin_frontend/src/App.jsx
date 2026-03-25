@@ -40,6 +40,7 @@ import Tasks from "./pages/Tasks";
 import Passwords from "./pages/Passwords";
 import Masters from "./pages/Masters";
 import SalesAnalytics from "./pages/SalesAnalytics";
+import AdminEmployeeProfile from "./pages/AdminEmployeeProfile";
 
 export default function App() {
   return (
@@ -69,6 +70,7 @@ export default function App() {
               >
                 <Route index element={<Dashboard />} />
                 <Route path="employees" element={<Employees />} />
+                <Route path="employees/:id" element={<AdminEmployeeProfile />} />
                 <Route path="archive" element={<ArchivedEmployees />} />
                 <Route path="payouts" element={<Payouts />} />
                 <Route path="payouts-control" element={<PayoutsControl />} />
