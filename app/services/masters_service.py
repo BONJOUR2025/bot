@@ -123,11 +123,16 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = df_raw.copy()
-    service_key = "barcode" if "barcode" in df.columns else "barcode_read"
-    if service_key not in df.columns:
-        return pd.DataFrame()
 
-    df[service_key] = df[service_key].astype("string")
+    # Group by doc_order_services.id — the true unique key per service.
+    # user_session_actions.barcode is what the master physically scanned and can
+    # repeat across different orders (same tag reused), so it must NOT be used
+    # as the grouping key.
+    if "id" not in df.columns:
+        return pd.DataFrame()
+    service_key = "id"
+
+    df[service_key] = df[service_key].astype("Int64")
     df["work_place_id"] = _normalize_wp(df["work_place_id"])
     df["is_in"]  = df["work_place_id"].isin(WP_IN)
     df["is_out"] = df["work_place_id"].isin(WP_OUT)
@@ -154,6 +159,8 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
 
     service = pd.DataFrame({
         "service_id":    g[service_key].first(),
+        "barcode":       first_or_na("barcode"),
+        "barcode_read":  first_or_na("barcode_read"),
         "doc_num":       first_or_na("doc_num"),
         "description":   first_or_na("description"),
         "code":          first_or_na("code"),
