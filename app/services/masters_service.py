@@ -305,14 +305,41 @@ def fetch_works(
     sql = BASE_SQL
     params: list = []
 
-    if date_from:
-        sql += "\n  AND user_session_actions.date_beg >= CAST(? AS DATE)"
-        params.append(str(date_from))
+    if date_from or date_to:
+        # Date filter applies only to OUT events (salary basis).
+        # IN events are fetched for any service that has an OUT in the period —
+        # no date restriction on IN, so "January IN / February OUT" is not a false warning_no_in.
+        wp_out_csv = ",".join(str(w) for w in sorted(WP_OUT))
+        wp_in_csv  = ",".join(str(w) for w in sorted(WP_IN))
 
-    if date_to:
-        next_day = date_to + timedelta(days=1)
-        sql += "\n  AND user_session_actions.date_beg <  CAST(? AS DATE)"
-        params.append(str(next_day))
+        out_clauses = []
+        sub_clauses = []
+        if date_from:
+            out_clauses.append("user_session_actions.date_beg >= CAST(? AS DATE)")
+            params.append(str(date_from))
+            sub_clauses.append("usa2.date_beg >= CAST(? AS DATE)")
+            params.append(str(date_from))
+        if date_to:
+            next_day = date_to + timedelta(days=1)
+            out_clauses.append("user_session_actions.date_beg <  CAST(? AS DATE)")
+            params.append(str(next_day))
+            sub_clauses.append("usa2.date_beg <  CAST(? AS DATE)")
+            params.append(str(next_day))
+
+        out_date = " AND ".join(out_clauses)
+        sub_date = " AND ".join(sub_clauses)
+
+        sql += f"""
+  AND (
+    (user_session_actions.work_place_id IN ({wp_out_csv}) AND {out_date})
+    OR
+    (user_session_actions.work_place_id IN ({wp_in_csv}) AND EXISTS (
+      SELECT 1 FROM user_session_actions usa2
+      WHERE usa2.doc_order_services_id = doc_order_services.id
+        AND usa2.work_place_id IN ({wp_out_csv})
+        AND {sub_date}
+    ))
+  )"""
 
     con = fdb.connect(
         host=settings.firebird_host,
