@@ -91,7 +91,7 @@ function MastersSummaryTable({ rows, onMasterClick }) {
       map[name].services_done++;
       map[name].total_kredit += Number(r.kredit) || 0;
       map[name].total_salary += Number(r.master_salary) || 0;
-      if (r.has_warning) map[name].warnings_count++;
+      if (r.warnings?.length > 0) map[name].warnings_count++;
     });
     return Object.values(map).sort((a, b) => b.total_salary - a.total_salary);
   }, [rows]);
