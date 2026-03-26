@@ -314,20 +314,27 @@ def fetch_works(
 
         out_clauses = []
         sub_clauses = []
+        next_day = (date_to + timedelta(days=1)) if date_to else None
+
         if date_from:
             out_clauses.append("user_session_actions.date_beg >= CAST(? AS DATE)")
-            params.append(str(date_from))
             sub_clauses.append("usa2.date_beg >= CAST(? AS DATE)")
-            params.append(str(date_from))
         if date_to:
-            next_day = date_to + timedelta(days=1)
             out_clauses.append("user_session_actions.date_beg <  CAST(? AS DATE)")
-            params.append(str(next_day))
             sub_clauses.append("usa2.date_beg <  CAST(? AS DATE)")
-            params.append(str(next_day))
 
         out_date = " AND ".join(out_clauses)
         sub_date = " AND ".join(sub_clauses)
+
+        # Params in SQL order: out placeholders first, then subquery placeholders
+        if date_from:
+            params.append(str(date_from))
+        if date_to:
+            params.append(str(next_day))
+        if date_from:
+            params.append(str(date_from))
+        if date_to:
+            params.append(str(next_day))
 
         sql += f"""
   AND (
