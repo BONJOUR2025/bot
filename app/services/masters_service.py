@@ -147,14 +147,14 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     df["is_in"]  = df["work_place_id"].isin(WP_IN)
     df["is_out"] = df["work_place_id"].isin(WP_OUT)
 
-    in_events  = df[df["is_in"]]
-    out_events = df[df["is_out"]]
+    in_events  = df[df["is_in"]].sort_values("date_beg")
+    out_events = df[df["is_out"]].sort_values("date_beg")
 
     # Per-service IN/OUT timestamps
     in_time  = in_events.groupby(service_key)["date_beg"].min()
     out_time = out_events.groupby(service_key)["date_beg"].min()
 
-    # Per-service master names
+    # Per-service master names — first() after sort_values gives earliest event's master
     in_description  = in_events.groupby(service_key)["description"].first()
     out_description = out_events.groupby(service_key)["description"].first()
 
@@ -255,15 +255,14 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     service["has_warning"] = service["warnings"].apply(lambda w: len(w) > 0)
 
     # ── Master salary ──────────────────────────────────────────────
-    # Calculated for ALL "Выполнено" services (normal + status_id override).
-    # Services closed via status_id without an OUT scan still earn salary,
-    # attributed to the IN master (out_description is null for those).
+    # Strictly by OUT scans: only services that have an OUT event get salary,
+    # attributed to out_description (earliest OUT master by date_beg).
     service["salary_rate"] = service["top_parent_name"].apply(_salary_rate)
     service["master_salary"] = None
-    salary_mask = service["status"] == "Выполнено"
-    kredit_vals = pd.to_numeric(service.loc[salary_mask, "kredit"], errors="coerce").fillna(0)
-    service.loc[salary_mask, "master_salary"] = (
-        kredit_vals * service.loc[salary_mask, "salary_rate"]
+    has_out_mask = service["HAS_OUT"]
+    kredit_vals = pd.to_numeric(service.loc[has_out_mask, "kredit"], errors="coerce").fillna(0)
+    service.loc[has_out_mask, "master_salary"] = (
+        kredit_vals * service.loc[has_out_mask, "salary_rate"]
     ).round(2)
 
     return service
