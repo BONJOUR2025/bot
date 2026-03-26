@@ -255,13 +255,15 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     service["has_warning"] = service["warnings"].apply(lambda w: len(w) > 0)
 
     # ── Master salary ──────────────────────────────────────────────
-    # Calculated only for services with an OUT; attributed to out_description
+    # Calculated for ALL "Выполнено" services (normal + status_id override).
+    # Services closed via status_id without an OUT scan still earn salary,
+    # attributed to the IN master (out_description is null for those).
     service["salary_rate"] = service["top_parent_name"].apply(_salary_rate)
     service["master_salary"] = None
-    has_out_mask = service["HAS_OUT"]
-    kredit_vals = pd.to_numeric(service.loc[has_out_mask, "kredit"], errors="coerce").fillna(0)
-    service.loc[has_out_mask, "master_salary"] = (
-        kredit_vals * service.loc[has_out_mask, "salary_rate"]
+    salary_mask = service["status"] == "Выполнено"
+    kredit_vals = pd.to_numeric(service.loc[salary_mask, "kredit"], errors="coerce").fillna(0)
+    service.loc[salary_mask, "master_salary"] = (
+        kredit_vals * service.loc[salary_mask, "salary_rate"]
     ).round(2)
 
     return service

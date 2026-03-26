@@ -81,12 +81,13 @@ function MastersSummaryTable({ rows, onMasterClick }) {
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [rows]);
 
-  // Вычисляется из отфильтрованных rows по out_description (кто выдал = кто получает ЗП)
+  // Вычисляется из отфильтрованных rows.
+  // Приоритет: out_description (кто выдал), fallback: in_description (для закрытых без OUT-скана).
   const bySalaryMaster = useMemo(() => {
     const map = {};
     rows.forEach((r) => {
       if (r.master_salary == null) return;
-      const name = r.out_description || '—';
+      const name = r.out_description || r.in_description || '—';
       if (!map[name]) map[name] = { master: name, services_done: 0, total_kredit: 0, total_salary: 0, warnings_count: 0 };
       map[name].services_done++;
       map[name].total_kredit += Number(r.kredit) || 0;
