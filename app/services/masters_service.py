@@ -154,9 +154,10 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     in_time  = in_events.groupby(service_key)["date_beg"].min()
     out_time = out_events.groupby(service_key)["date_beg"].min()
 
-    # Per-service master names — first() after sort_values gives earliest event's master
-    in_description  = in_events.groupby(service_key)["description"].first()
-    out_description = out_events.groupby(service_key)["description"].first()
+    # Per-service master names — last() after sort_values gives latest event's master.
+    # Last OUT is authoritative: earlier OUTs may be mistakes, the final scan is correct.
+    in_description  = in_events.groupby(service_key)["description"].last()
+    out_description = out_events.groupby(service_key)["description"].last()
 
     # Scan counts for multi-scan detection
     in_count  = in_events.groupby(service_key).size().rename("in_count")
