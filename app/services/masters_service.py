@@ -388,9 +388,7 @@ def fetch_works(
     salary_summary = _build_salary_summary(service_df)
 
     # Drop internal columns before serialising
-    drop_cols = ["HAS_IN", "HAS_OUT", "status_id", "salary_rate",
-                 "warning_mismatch", "warning_too_fast", "warning_no_in",
-                 "warning_multi", "has_warning"]
+    drop_cols = ["HAS_IN", "HAS_OUT", "status_id", "salary_rate", "has_warning"]
     result_df = service_df.drop(columns=drop_cols, errors="ignore")
 
     # Serialise timestamps
