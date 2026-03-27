@@ -45,7 +45,7 @@ def _connect():
 
 
 SHOES_CODES = (
-    '1',
+    '0', '1',
     '147.1', '147.2', '147.3', '147.4', '147.5', '147.6', '147.7',
     '147.8', '147.9', '147.10', '147.11', '147.12', '147.13', '147.14',
     '147.15', '147.16', '147.17', '147.18', '147.19', '147.20', '147.21', '147.22',
@@ -244,7 +244,8 @@ class FirebirdService:
             logger.error(f"Error fetching shoes data: {e}")
             return {}
 
-        # Parse into pairs: CODE='1' starts a pair, sum following 147.x until next '1'
+        # Parse into pairs: CODE in ('0','1') starts a pair, sum following 147.x until next starter
+        _PAIR_STARTERS = {'0', '1'}
         out: dict[str, list[dict]] = {}
         for emp_code, orders in raw.items():
             for doc_num, items in orders.items():
@@ -253,7 +254,7 @@ class FirebirdService:
                 in_pair = False
 
                 for code, kredit in items:
-                    if code == '1':
+                    if code in _PAIR_STARTERS:
                         # Save previous pair if exists
                         if in_pair:
                             pairs.append(current_kredit)
@@ -346,7 +347,7 @@ class FirebirdService:
             210398,
         )
 
-        shoes_sales_codes = tuple(c for c in SHOES_CODES if c != '1')
+        shoes_sales_codes = tuple(c for c in SHOES_CODES if c not in ('0', '1'))
         shoes_placeholders = ','.join(['?'] * len(shoes_sales_codes))
 
         # key: (date_str, code) → {date, code, description, repair, cosmetics, shoes}
