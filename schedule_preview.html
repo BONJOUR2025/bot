@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Расписание — превью</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f7; color: #1a1a2e; padding: 24px; }
+  h2 { font-size: 22px; font-weight: 700; }
+
+  /* Header */
+  .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .nav-row { display: flex; align-items: center; gap: 8px; }
+  .btn { border: 1px solid #d1d5db; background: white; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .btn-primary { background: #4f46e5; color: white; border-color: #4f46e5; }
+  .month-label { min-width: 160px; text-align: center; font-size: 17px; font-weight: 700; }
+
+  /* Today panel */
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #6b7280; margin-bottom: 10px; }
+  .today-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 20px; }
+  .point-card { background: white; border-radius: 10px; padding: 12px 14px; border-left: 4px solid #ccc; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .point-card .dot-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .point-name { font-size: 11px; font-weight: 600; color: #6b7280; }
+  .emp-name { font-size: 13px; font-weight: 600; }
+  .emp-none { font-size: 13px; font-style: italic; color: #9ca3af; }
+
+  /* Colors */
+  .c-blue   { border-color: #60a5fa; } .dot-blue   { background: #3b82f6; }
+  .c-purple { border-color: #c084fc; } .dot-purple { background: #a855f7; }
+  .c-amber  { border-color: #fbbf24; } .dot-amber  { background: #f59e0b; }
+  .c-green  { border-color: #4ade80; } .dot-green  { background: #22c55e; }
+  .c-orange { border-color: #fb923c; } .dot-orange { background: #f97316; }
+  .c-yellow { border-color: #facc15; } .dot-yellow { background: #eab308; }
+  .c-teal   { border-color: #2dd4bf; } .dot-teal   { background: #14b8a6; }
+
+  /* Chips */
+  .chip { display: inline-block; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 700; line-height: 1.4; }
+  .chip-blue   { background: #dbeafe; color: #1e40af; }
+  .chip-purple { background: #ede9fe; color: #5b21b6; }
+  .chip-amber  { background: #fef3c7; color: #92400e; }
+  .chip-green  { background: #dcfce7; color: #166534; }
+  .chip-orange { background: #ffedd5; color: #9a3412; }
+  .chip-yellow { background: #fefce8; color: #713f12; }
+  .chip-teal   { background: #ccfbf1; color: #115e59; }
+
+  /* Legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #6b7280; }
+
+  /* Table card */
+  .card { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #e5e7eb; }
+  .card-title { font-weight: 700; font-size: 14px; }
+  .card-sub { font-size: 13px; color: #6b7280; margin-left: 8px; }
+  .search { border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 10px 6px 28px; font-size: 13px; width: 200px; }
+  .search-wrap { position: relative; }
+  .search-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 13px; }
+
+  /* Grid table */
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; font-size: 12px; width: max-content; }
+  th, td { border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+  th { padding: 6px 4px; text-align: center; font-weight: 600; background: white; }
+  td { padding: 5px 4px; text-align: center; }
+  .th-emp { min-width: 150px; text-align: left; padding-left: 12px; position: sticky; left: 0; z-index: 5; background: white; color: #6b7280; }
+  .td-emp { min-width: 150px; text-align: left; padding-left: 12px; position: sticky; left: 0; z-index: 4; background: white; font-weight: 600; white-space: nowrap; }
+  .th-day { min-width: 36px; }
+  .th-today { background: #4f46e5; color: white; }
+  .th-weekend { background: #fff1f2; color: #ef4444; }
+  .th-normal { color: #6b7280; }
+  .td-today { background: rgba(79,70,229,.08); }
+  .td-weekend { background: rgba(254,226,226,.4); }
+  .td-empty { color: #d1d5db; }
+  .tr-odd { background: rgba(0,0,0,.02); }
+  .tr-summary { background: rgba(0,0,0,.04); font-weight: 700; border-top: 2px solid #e5e7eb; }
+  .td-summary-label { text-align: left; padding-left: 12px; font-size: 11px; color: #6b7280; position: sticky; left: 0; background: rgba(0,0,0,.04); z-index: 4; }
+  .summary-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h2>Расписание</h2>
+  <div class="nav-row">
+    <button class="btn">‹</button>
+    <span class="month-label">Март 2026</span>
+    <button class="btn">›</button>
+    <button class="btn btn-primary">↻</button>
+  </div>
+</div>
+
+<!-- Today panel -->
+<div class="section-label">Сегодня — 28 марта</div>
+<div class="today-grid">
+  <div class="point-card c-blue">
+    <div class="dot-row"><span class="dot dot-blue"></span><span class="point-name">Пассаж</span></div>
+    <div class="emp-name">Иванова А.</div>
+  </div>
+  <div class="point-card c-purple">
+    <div class="dot-row"><span class="dot dot-purple"></span><span class="point-name">Цех</span></div>
+    <div class="emp-name">Петров С.</div>
+  </div>
+  <div class="point-card c-amber">
+    <div class="dot-row"><span class="dot dot-amber"></span><span class="point-name">Академка</span></div>
+    <div class="emp-name">Сидорова Н.</div>
+  </div>
+  <div class="point-card c-green">
+    <div class="dot-row"><span class="dot dot-green"></span><span class="point-name">Меркурий</span></div>
+    <div class="emp-name">Козлов Д.</div>
+  </div>
+  <div class="point-card c-orange">
+    <div class="dot-row"><span class="dot dot-orange"></span><span class="point-name">Рио</span></div>
+    <div class="emp-none">Не назначен</div>
+  </div>
+  <div class="point-card c-yellow">
+    <div class="dot-row"><span class="dot dot-yellow"></span><span class="point-name">Озерки</span></div>
+    <div class="emp-name">Михайлова Е.</div>
+  </div>
+  <div class="point-card c-teal">
+    <div class="dot-row"><span class="dot dot-teal"></span><span class="point-name">Охта</span></div>
+    <div class="emp-name">Новиков В.</div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <span class="legend-item"><span class="chip chip-blue">П</span> Пассаж</span>
+  <span class="legend-item"><span class="chip chip-purple">Ц</span> Цех</span>
+  <span class="legend-item"><span class="chip chip-amber">А</span> Академка</span>
+  <span class="legend-item"><span class="chip chip-green">М</span> Меркурий</span>
+  <span class="legend-item"><span class="chip chip-orange">Р</span> Рио</span>
+  <span class="legend-item"><span class="chip chip-yellow">Оз</span> Озерки</span>
+  <span class="legend-item"><span class="chip chip-teal">Ох</span> Охта</span>
+</div>
+
+<!-- Table card -->
+<div class="card">
+  <div class="card-header">
+    <div><span class="card-title">График месяца</span><span class="card-sub">6 сотрудников</span></div>
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input class="search" placeholder="Поиск сотрудника...">
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="th-emp">Сотрудник</th>
+          <!-- days 24-31 with 28 as today, 29-30 weekend -->
+          <th class="th-day th-normal">24<div style="font-size:10px;font-weight:400;opacity:.7">вт</div></th>
+          <th class="th-day th-normal">25<div style="font-size:10px;font-weight:400;opacity:.7">ср</div></th>
+          <th class="th-day th-normal">26<div style="font-size:10px;font-weight:400;opacity:.7">чт</div></th>
+          <th class="th-day th-normal">27<div style="font-size:10px;font-weight:400;opacity:.7">пт</div></th>
+          <th class="th-day th-today">28<div style="font-size:10px;font-weight:400;opacity:.7">сб</div></th>
+          <th class="th-day th-weekend">29<div style="font-size:10px;font-weight:400;opacity:.7">вс</div></th>
+          <th class="th-day th-weekend">30<div style="font-size:10px;font-weight:400;opacity:.7">пн</div></th>
+          <th class="th-day th-normal">31<div style="font-size:10px;font-weight:400;opacity:.7">вт</div></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="td-emp">Иванова А.</td>
+          <td><span class="chip chip-purple">Ц</span></td>
+          <td><span class="chip chip-blue">П</span></td>
+          <td><span class="chip chip-amber">А</span></td>
+          <td><span class="chip chip-green">М</span></td>
+          <td class="td-today"><span class="chip chip-blue">П</span></td>
+          <td class="td-weekend"><span class="td-empty">—</span></td>
+          <td class="td-weekend"><span class="td-empty">—</span></td>
+          <td><span class="chip chip-teal">Ох</span></td>
+        </tr>
+        <tr class="tr-odd">
+          <td class="td-emp">Петров С.</td>
+          <td><span class="chip chip-orange">Р</span></td>
+          <td><span class="chip chip-teal">Ох</span></td>
+          <td><span class="chip chip-purple">Ц</span></td>
+          <td><span class="chip chip-blue">П</span></td>
+          <td class="td-today"><span class="chip chip-purple">Ц</span></td>
+          <td class="td-weekend"><span class="chip chip-amber">А</span></td>
+          <td class="td-weekend"><span class="td-empty">—</span></td>
+          <td><span class="chip chip-green">М</span></td>
+        </tr>
+        <tr>
+          <td class="td-emp">Сидорова Н.</td>
+          <td><span class="chip chip-teal">Ох</span></td>
+          <td><span class="chip chip-yellow">Оз</span></td>
+          <td><span class="chip chip-orange">Р</span></td>
+          <td><span class="chip chip-teal">Ох</span></td>
+          <td class="td-today"><span class="chip chip-amber">А</span></td>
+          <td class="td-weekend"><span class="chip chip-blue">П</span></td>
+          <td class="td-weekend"><span class="chip chip-purple">Ц</span></td>
+          <td><span class="chip chip-orange">Р</span></td>
+        </tr>
+        <tr class="tr-odd">
+          <td class="td-emp">Козлов Д.</td>
+          <td><span class="chip chip-amber">А</span></td>
+          <td><span class="chip chip-green">М</span></td>
+          <td><span class="chip chip-yellow">Оз</span></td>
+          <td><span class="chip chip-amber">А</span></td>
+          <td class="td-today"><span class="chip chip-green">М</span></td>
+          <td class="td-weekend"><span class="td-empty">—</span></td>
+          <td class="td-weekend"><span class="chip chip-orange">Р</span></td>
+          <td><span class="chip chip-purple">Ц</span></td>
+        </tr>
+        <tr>
+          <td class="td-emp">Михайлова Е.</td>
+          <td><span class="chip chip-green">М</span></td>
+          <td><span class="chip chip-purple">Ц</span></td>
+          <td><span class="chip chip-blue">П</span></td>
+          <td><span class="chip chip-yellow">Оз</span></td>
+          <td class="td-today"><span class="chip chip-yellow">Оз</span></td>
+          <td class="td-weekend"><span class="chip chip-teal">Ох</span></td>
+          <td class="td-weekend"><span class="chip chip-green">М</span></td>
+          <td><span class="chip chip-blue">П</span></td>
+        </tr>
+        <tr class="tr-odd">
+          <td class="td-emp">Новиков В.</td>
+          <td><span class="chip chip-yellow">Оз</span></td>
+          <td><span class="chip chip-orange">Р</span></td>
+          <td><span class="chip chip-teal">Ох</span></td>
+          <td><span class="chip chip-purple">Ц</span></td>
+          <td class="td-today"><span class="chip chip-teal">Ох</span></td>
+          <td class="td-weekend"><span class="chip chip-yellow">Оз</span></td>
+          <td class="td-weekend"><span class="chip chip-blue">П</span></td>
+          <td><span class="chip chip-amber">А</span></td>
+        </tr>
+
+        <!-- Summary row -->
+        <tr class="tr-summary">
+          <td class="td-summary-label">В точках</td>
+          <td>
+            <div class="summary-cell">
+              <span class="chip chip-purple">Ц</span>
+              <span class="chip chip-orange">Р</span>
+              <span class="chip chip-teal">Ох</span>
+              <span class="chip chip-amber">А</span>
+              <span class="chip chip-green">М</span>
+              <span class="chip chip-yellow">Оз</span>
+            </div>
+          </td>
+          <td>
+            <div class="summary-cell">
+              <span class="chip chip-blue">П</span>
+              <span class="chip chip-teal">Ох</span>
+              <span class="chip chip-yellow">Оз</span>
+              <span class="chip chip-green">М</span>
+              <span class="chip chip-purple">Ц</span>
+              <span class="chip chip-orange">Р</span>
+            </div>
+          </td>
+          <td>
+            <div class="summary-cell">
+              <span class="chip chip-amber">А</span>
+              <span class="chip chip-purple">Ц</span>
+              <span class="chip chip-orange">Р</span>
+              <span class="chip chip-yellow">Оз</span>
+              <span class="chip chip-blue">П</span>
+              <span class="chip chip-teal">Ох</span>
+            </div>
+          </td>
+          <td>
+            <div class="summary-cell">
+              <span class="chip chip-green">М</span>
+              <span class="chip chip-blue">П</span>
+              <span class="chip chip-teal">Ох</span>
+              <span class="chip chip-amber">А</span>
+              <span class="chip chip-yellow">Оз</span>
+              <span class="chip chip-purple">Ц</span>
+            </div>
+          </td>
+          <td class="td-today">
+            <div class="summary-cell">
+              <span class="chip chip-blue">П</span>
+              <span class="chip chip-purple">Ц</span>
+              <span class="chip chip-amber">А</span>
+              <span class="chip chip-green">М</span>
+              <span class="chip chip-yellow">Оз</span>
+              <span class="chip chip-teal">Ох</span>
+            </div>
+          </td>
+          <td class="td-weekend">
+            <div class="summary-cell">
+              <span class="chip chip-amber">А</span>
+              <span class="chip chip-blue">П</span>
+              <span class="chip chip-teal">Ох</span>
+              <span class="chip chip-yellow">Оз</span>
+            </div>
+          </td>
+          <td class="td-weekend">
+            <div class="summary-cell">
+              <span class="chip chip-purple">Ц</span>
+              <span class="chip chip-orange">Р</span>
+              <span class="chip chip-green">М</span>
+              <span class="chip chip-blue">П</span>
+            </div>
+          </td>
+          <td>
+            <div class="summary-cell">
+              <span class="chip chip-teal">Ох</span>
+              <span class="chip chip-green">М</span>
+              <span class="chip chip-orange">Р</span>
+              <span class="chip chip-purple">Ц</span>
+              <span class="chip chip-blue">П</span>
+              <span class="chip chip-amber">А</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>
