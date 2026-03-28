@@ -36,6 +36,7 @@ import Assets from "./pages/Assets";
 import Dictionary from "./pages/Dictionary";
 import AccessControl from "./pages/AccessControl";
 import Payroll from "./pages/Payroll";
+import Schedule from "./pages/Schedule";
 import Tasks from "./pages/Tasks";
 import Passwords from "./pages/Passwords";
 import Masters from "./pages/Masters";
@@ -85,6 +86,7 @@ export default function App() {
                 <Route path="settings" element={<Settings />} />
                 <Route path="access" element={<AccessControl />} />
                 <Route path="payroll" element={<Payroll />} />
+                <Route path="schedule" element={<Schedule />} />
                 <Route path="tasks" element={<Tasks />} />
                 <Route path="passwords" element={<Passwords />} />
                 <Route path="masters" element={<Masters />} />

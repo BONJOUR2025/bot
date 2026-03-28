@@ -15,6 +15,7 @@ const navStructure = [
     items: [
       { to: '/admin/employees', label: 'Сотрудники', permission: 'employees' },
       { to: '/admin/archive', label: 'Архив сотрудников', permission: 'employees' },
+      { to: '/admin/schedule', label: 'Расписание', permission: 'employees' },
       { to: '/admin/vacations', label: 'Отпуска', permission: 'vacations' },
       { to: '/admin/birthdays', label: 'Дни рождения', permission: 'birthdays' },
       { to: '/admin/assets', label: 'Имущество', permission: 'assets' },
