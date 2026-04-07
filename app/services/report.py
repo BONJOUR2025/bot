@@ -153,6 +153,7 @@ def generate_employee_report_from_payroll(row, month: str) -> list:
         + row.repair_commission
         + row.cosmetics_commission
         + row.shoes_commission
+        + row.workshop_commission
         + bonus
     )
     к_выплате = итого - row.penalties - row.advances
