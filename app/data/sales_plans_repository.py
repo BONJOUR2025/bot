@@ -64,16 +64,30 @@ class SalesPlansRepository:
     def __init__(self, path: str | Path | None = None) -> None:
         self.storage = JsonStorage(path or settings.sales_plans_file)
         self._plans: dict[str, SalesPlan] = {}
+        self._file_mtime: float = 0.0
         self._load()
 
     def _load(self) -> None:
         data = self.storage.load()
+        self._plans = {}
         if isinstance(data, list):
             for item in data:
                 if isinstance(item, dict) and item.get("employee_code"):
                     plan = SalesPlan.from_dict(item)
                     key = _plan_key(plan.month_key, plan.employee_code)
                     self._plans[key] = plan
+        try:
+            self._file_mtime = self.storage.path.stat().st_mtime
+        except OSError:
+            self._file_mtime = 0.0
+
+    def _reload_if_changed(self) -> None:
+        try:
+            mtime = self.storage.path.stat().st_mtime
+        except OSError:
+            return
+        if mtime != self._file_mtime:
+            self._load()
 
     def _save(self) -> None:
         data = [plan.to_dict() for plan in self._plans.values()]
@@ -148,7 +162,9 @@ class SalesPlansRepository:
     def get_plans_map(self, month_key: str | None = None) -> dict[str, SalesPlan]:
         """Returns dict keyed by employee_code.
         Month-specific plans override global ones.
+        Reloads from file automatically if it was modified by another process.
         """
+        self._reload_if_changed()
         result: dict[str, SalesPlan] = {}
         for plan in self._plans.values():
             if plan.month_key is None:
