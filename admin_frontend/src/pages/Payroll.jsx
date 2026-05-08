@@ -418,6 +418,7 @@ function ExpandedContent({ row }) {
         )}
       </div>
     </div>
+  </div>
   );
 }
 
