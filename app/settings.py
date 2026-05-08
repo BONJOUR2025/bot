@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     # Файл для хранения данных о салонах
     salons_file: str = Field("salons.json", validation_alias="SALONS_FILE")
 
+    # Файл для хранения кодов точек и планов продаж по точкам
+    locations_file: str = Field("locations.json", validation_alias="LOCATIONS_FILE")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

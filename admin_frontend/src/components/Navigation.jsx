@@ -25,6 +25,7 @@ const navStructure = [
     name: 'Финансы',
     items: [
       { to: '/admin/payroll', label: 'Расчёт зарплаты', permission: 'payroll' },
+      { to: '/admin/location-plans', label: 'Планы по точкам', permission: 'payroll' },
       { to: '/admin/payouts', label: 'Выплаты', permission: 'payouts' },
       { to: '/admin/payouts-control', label: 'Контроль выплат', permission: 'payouts-control' },
       { to: '/admin/incentives', label: 'Штрафы и премии', permission: 'incentives' },

@@ -74,6 +74,7 @@ class PayrollRowOutput(BaseModel):
     total_deductions: float
     total_net: float
     settlement_paid: bool = False
+    shifts_by_point: dict = {}
 
 
 class SettlementInput(BaseModel):

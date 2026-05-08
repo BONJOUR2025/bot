@@ -1,6 +1,7 @@
 """Payroll calculation service - combines Excel, Firebird, advances and bonuses."""
 from __future__ import annotations
 
+import calendar
 import json
 import logging
 import re
@@ -15,7 +16,9 @@ from openpyxl import load_workbook
 from app.settings import settings
 from app.data.sales_plans_repository import SalesPlansRepository, get_sales_plans_repository
 from app.data.payroll_settlement_repository import PayrollSettlementRepository, get_payroll_settlement_repository
+from app.data.location_repository import LocationRepository, get_location_repository
 from app.services.firebird_service import FirebirdService, get_firebird_service
+from app.config import EXCEL_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,7 @@ class PayrollRow:
     extra_shifts: float = 0.0
     workshop_commission: float = 0.0
     settlement_paid: bool = False
+    shifts_by_point: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -159,7 +163,83 @@ class PayrollRow:
             "total_deductions": self.total_deductions,
             "total_net": self.total_net,
             "settlement_paid": self.settlement_paid,
+            "shifts_by_point": self.shifts_by_point,
         }
+
+
+def _calc_base_salary(shifts_total: int, main_rate: float, extra_rate: float) -> float:
+    """Salary = first 15 shifts × main_rate + remaining shifts × extra_rate."""
+    main_shifts  = min(shifts_total, 15)
+    extra_shifts = max(0, shifts_total - 15)
+    return main_shifts * main_rate + extra_shifts * extra_rate
+
+
+def _parse_schedule_from_excel(month: str, year: int) -> dict[str, dict[str, int]]:
+    """Read schedule sheet from EXCEL_FILE.
+
+    Returns {employee_name: {point_code: shift_count}}.
+    """
+    from app.core.constants import MONTHS_RU
+    month_upper = month.strip().upper()
+    month_num = MONTH_NAMES.get(month_upper)
+    if not month_num:
+        return {}
+
+    excel_path = Path(EXCEL_FILE)
+    if not excel_path.exists():
+        return {}
+
+    try:
+        wb = load_workbook(excel_path, data_only=True)
+    except Exception as e:
+        logger.warning(f"Cannot open schedule Excel: {e}")
+        return {}
+
+    month_name = MONTHS_RU[month_num - 1]
+    sheet = None
+    for candidate in (month_name, month_name.upper(), month_upper):
+        if candidate in wb.sheetnames:
+            sheet = wb[candidate]
+            break
+    if sheet is None:
+        for title in wb.sheetnames:
+            if title.upper().startswith(month_upper[:3]):
+                sheet = wb[title]
+                break
+    if sheet is None:
+        return {}
+
+    # Find columns that contain day numbers (rows 1 or 2)
+    days_in_month = calendar.monthrange(year, month_num)[1]
+    day_cols: dict[int, int] = {}
+    for col in range(1, sheet.max_column + 1):
+        for row in (1, 2):
+            raw = str(sheet.cell(row=row, column=col).value or "").strip()
+            try:
+                d = int(raw)
+                if 1 <= d <= days_in_month and d not in day_cols:
+                    day_cols[d] = col
+            except ValueError:
+                pass
+
+    if not day_cols:
+        return {}
+
+    result: dict[str, dict[str, int]] = {}
+    for row in range(3, sheet.max_row + 1):
+        raw_name = sheet.cell(row=row, column=1).value
+        emp_name = str(raw_name).strip() if raw_name else ""
+        if not emp_name or emp_name.lower() in ("имя", "name", "nan"):
+            continue
+        shifts: dict[str, int] = {}
+        for d, col in day_cols.items():
+            val = str(sheet.cell(row=row, column=col).value or "").strip()
+            if val:
+                shifts[val] = shifts.get(val, 0) + 1
+        if shifts:
+            result[emp_name] = shifts
+
+    return result
 
 
 class PayrollService:
@@ -169,6 +249,7 @@ class PayrollService:
         firebird_service: FirebirdService | None = None,
         plans_repo: SalesPlansRepository | None = None,
         settlement_repo: PayrollSettlementRepository | None = None,
+        location_repo: LocationRepository | None = None,
         advance_requests_file: str | None = None,
         bonuses_penalties_file: str | None = None,
         users_file: str | None = None,
@@ -177,6 +258,7 @@ class PayrollService:
         self.firebird = firebird_service or get_firebird_service()
         self.plans_repo = plans_repo or get_sales_plans_repository()
         self.settlement_repo = settlement_repo or get_payroll_settlement_repository()
+        self.location_repo = location_repo or get_location_repository()
         self.advance_requests_file = Path(advance_requests_file or settings.advance_requests_file)
         self.bonuses_penalties_file = Path(bonuses_penalties_file or settings.bonuses_penalties_file)
         self.users_file = Path(users_file or settings.users_file)
@@ -433,12 +515,44 @@ class PayrollService:
         plans_map = self.plans_repo.get_plans_map(month_key=month_key)
         settlements_map = self.settlement_repo.get_settlements_map(month_key)
 
+        # ── Schedule-based shift counting ─────────────────────────
+        schedule = _parse_schedule_from_excel(month, year)
+        days_in_month = calendar.monthrange(year, month_num)[1]
+        loc_plans_map = self.location_repo.plans_map(month_key)
+
+        # Build lookup: code → shifts_by_point from schedule
+        # Schedule rows use full names (e.g. "Катя 2201"), extract code to match
+        schedule_by_code: dict[str, dict[str, int]] = {}
+        for emp_name, shifts in schedule.items():
+            code = _extract_code(emp_name)
+            if code:
+                schedule_by_code[code] = shifts
+
         results = []
         for emp in employees:
             code = emp["code"]
             name = emp["name"]
-            base_salary = emp["salary"]
             excel_bonus = emp.get("excel_bonus", 0.0)
+
+            main_rate   = emp.get("main_rate", 0.0)
+            extra_rate  = emp.get("extra_rate", 0.0)
+
+            # Shift counts from schedule (prefer live count; fall back to Excel columns)
+            shifts_by_point = schedule_by_code.get(code, {})
+            if shifts_by_point:
+                total_shifts  = sum(shifts_by_point.values())
+                main_shifts   = min(total_shifts, 15)
+                extra_shifts  = max(0, total_shifts - 15)
+                base_salary   = _calc_base_salary(total_shifts, main_rate, extra_rate)
+            else:
+                # Fallback: use values already parsed from data.xlsx
+                main_shifts  = int(emp.get("main_shifts", 0))
+                extra_shifts = int(emp.get("extra_shifts", 0))
+                total_shifts = main_shifts + extra_shifts
+                if main_rate or extra_rate:
+                    base_salary = _calc_base_salary(total_shifts, main_rate, extra_rate)
+                else:
+                    base_salary = emp.get("salary", 0.0)
 
             emp_sales = sales_data.get(code, {})
             repair_sales = emp_sales.get("repair", 0.0)
@@ -448,10 +562,26 @@ class PayrollService:
             shoes_orders = [o["doc_num"] for o in shoes_order_items if isinstance(o, dict)]
 
             plan = plans_map.get(code)
-            repair_plan = plan.repair_plan if plan else 0.0
-            cosmetics_plan = plan.cosmetics_plan if plan else 0.0
-            shoes_plan = plan.shoes_plan if plan else 0.0
             ignore_kpi = plan.ignore_kpi if plan else False
+
+            # ── Individual plan: manual override or auto from location plans ──
+            if plan and (plan.repair_plan or plan.cosmetics_plan or plan.shoes_plan):
+                repair_plan    = plan.repair_plan
+                cosmetics_plan = plan.cosmetics_plan
+                shoes_plan     = plan.shoes_plan
+            elif shifts_by_point and loc_plans_map:
+                # Auto-calculate: Σ (daily_location_plan × days_at_location)
+                repair_plan = cosmetics_plan = shoes_plan = 0.0
+                for pt_code, pt_days in shifts_by_point.items():
+                    lp = loc_plans_map.get(pt_code)
+                    if lp and days_in_month > 0:
+                        repair_plan    += lp.repair_plan    / days_in_month * pt_days
+                        cosmetics_plan += lp.cosmetics_plan / days_in_month * pt_days
+                        shoes_plan     += lp.shoes_plan     / days_in_month * pt_days
+            else:
+                repair_plan    = plan.repair_plan    if plan else 0.0
+                cosmetics_plan = plan.cosmetics_plan if plan else 0.0
+                shoes_plan     = plan.shoes_plan     if plan else 0.0
             force_max = plan.force_max if plan else []
             force_min = plan.force_min if plan else []
 
@@ -539,11 +669,12 @@ class PayrollService:
                 total_deductions=total_deductions,
                 total_net=total_net,
                 settlement_paid=settlement_paid,
-                main_rate=emp.get("main_rate", 0.0),
-                main_shifts=emp.get("main_shifts", 0.0),
-                extra_rate=emp.get("extra_rate", 0.0),
-                extra_shifts=emp.get("extra_shifts", 0.0),
+                main_rate=main_rate,
+                main_shifts=main_shifts,
+                extra_rate=extra_rate,
+                extra_shifts=extra_shifts,
                 workshop_commission=emp.get("workshop", 0.0),
+                shifts_by_point=shifts_by_point,
             ))
 
         return results

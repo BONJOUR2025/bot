@@ -302,9 +302,44 @@ function PlanProgressRows({ sales, plan }) {
 function ExpandedContent({ row }) {
   const [showOrders, setShowOrders] = useState(false);
   const orders = row.shoes_orders || [];
+  const shiftEntries = Object.entries(row.shifts_by_point || {}).sort((a, b) => b[1] - a[1]);
+  const totalShifts = shiftEntries.reduce((s, [, v]) => s + v, 0);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+    <div className="space-y-4 text-sm">
+      {/* Salary breakdown */}
+      {(row.main_rate > 0 || row.extra_rate > 0 || shiftEntries.length > 0) && (
+        <div className="app-card p-3">
+          <div className="font-medium mb-2">Оклад — расчёт по сменам</div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[color:var(--color-muted-foreground)]">
+            {row.main_rate > 0 && (
+              <div className="flex justify-between col-span-2 text-xs">
+                <span>Осн. ставка (1–15 смен):</span>
+                <span>{fmtMoney(row.main_rate)}/смену × {row.main_shifts || 0} = <strong>{fmtMoney((row.main_rate || 0) * (row.main_shifts || 0))}</strong></span>
+              </div>
+            )}
+            {row.extra_rate > 0 && row.extra_shifts > 0 && (
+              <div className="flex justify-between col-span-2 text-xs">
+                <span>Доп. ставка (от 16-й смены):</span>
+                <span>{fmtMoney(row.extra_rate)}/смену × {row.extra_shifts} = <strong>{fmtMoney((row.extra_rate || 0) * (row.extra_shifts || 0))}</strong></span>
+              </div>
+            )}
+            {shiftEntries.length > 0 && (
+              <div className="col-span-2 mt-1 pt-1 border-t border-[color:var(--color-border)]">
+                <div className="text-xs font-medium mb-1">Смены по точкам ({totalShifts} всего):</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {shiftEntries.map(([code, cnt]) => (
+                    <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-medium">
+                      {code} <span className="font-bold">{cnt}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {/* Ремонт */}
       <div className="app-card p-3">
         <div className="font-medium mb-2">Ремонт / Химчистка</div>

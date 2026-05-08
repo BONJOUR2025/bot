@@ -287,6 +287,16 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Location codes and monthly plans (for payroll auto-plan calculation)
+    from .location_plans import create_location_plans_router
+    from ..data.location_repository import get_location_repository
+
+    app.include_router(
+        create_location_plans_router(get_location_repository()),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # SPA фронтенд (Vite/React)
     # NOTE: We use explicit routes instead of app.mount() so that SPA routes
     # like /admin/login are served correctly (mount intercepts and returns 404
