@@ -578,6 +578,9 @@ class PayrollService:
                         repair_plan    += lp.repair_plan    / days_in_month * pt_days
                         cosmetics_plan += lp.cosmetics_plan / days_in_month * pt_days
                         shoes_plan     += lp.shoes_plan     / days_in_month * pt_days
+                repair_plan    = round(repair_plan)
+                cosmetics_plan = round(cosmetics_plan)
+                shoes_plan     = round(shoes_plan)
             else:
                 repair_plan    = plan.repair_plan    if plan else 0.0
                 cosmetics_plan = plan.cosmetics_plan if plan else 0.0
