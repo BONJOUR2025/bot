@@ -32,6 +32,12 @@ const navStructure = [
     ],
   },
   {
+    name: 'Сеть',
+    items: [
+      { to: '/admin/salons', label: 'Управление салонами', permission: 'salons' },
+    ],
+  },
+  {
     name: 'Управление',
     items: [
       { to: '/admin/broadcast', label: 'Рассылка', permission: 'broadcast' },

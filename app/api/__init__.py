@@ -277,6 +277,16 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Salons management
+    from .salons import create_salons_router
+    from ..data.salon_repository import get_salon_repository
+
+    app.include_router(
+        create_salons_router(get_salon_repository()),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # SPA фронтенд (Vite/React)
     # NOTE: We use explicit routes instead of app.mount() so that SPA routes
     # like /admin/login are served correctly (mount intercepts and returns 404

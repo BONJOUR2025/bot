@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     # Источник данных для отчёта по зарплате в боте: "excel" или "sql"
     salary_bot_source: str = Field("excel", validation_alias="SALARY_BOT_SOURCE")
 
+    # Файл для хранения данных о салонах
+    salons_file: str = Field("salons.json", validation_alias="SALONS_FILE")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
