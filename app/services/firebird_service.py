@@ -451,6 +451,43 @@ class FirebirdService:
         ]
 
 
+    def get_cash_moves(self, date_from: date | None = None, date_to: date | None = None) -> list[dict]:
+        """Load cash movements from DOC_KASSA_MOVES."""
+        if not FIREBIRD_AVAILABLE:
+            return []
+        conditions = ["DK_DATE > DATE '2024-12-31'"]
+        params: list = []
+        if date_from:
+            conditions.append("DK_DATE >= ?")
+            params.append(date_from)
+        if date_to:
+            conditions.append("DK_DATE <= ?")
+            params.append(date_to)
+        where = " AND ".join(conditions)
+        sql = f"""
+            SELECT ID_KASSES_MOVE, DK_DATE, SUMM, BASIS, OWN_USR_ID, DEP_SRC_ID
+            FROM DOC_KASSA_MOVES
+            WHERE {where}
+            ORDER BY DK_DATE DESC
+        """
+        try:
+            conn = _connect()
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            cols = [c[0] for c in cur.description]
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(cols, r))
+                if isinstance(row.get("DK_DATE"), date):
+                    row["DK_DATE"] = row["DK_DATE"].isoformat()
+                rows.append(row)
+            conn.close()
+            return rows
+        except Exception as e:
+            logger.warning(f"get_cash_moves error: {e}")
+            return []
+
+
 _firebird_service: FirebirdService | None = None
 
 

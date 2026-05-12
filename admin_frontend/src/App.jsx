@@ -44,6 +44,7 @@ import SalesAnalytics from "./pages/SalesAnalytics";
 import AdminEmployeeProfile from "./pages/AdminEmployeeProfile";
 import Salons from "./pages/Salons";
 import LocationPlans from "./pages/LocationPlans";
+import CashMovements from "./pages/CashMovements";
 
 export default function App() {
   return (
@@ -95,6 +96,7 @@ export default function App() {
                 <Route path="sales" element={<SalesAnalytics />} />
                 <Route path="salons" element={<Salons />} />
                 <Route path="location-plans" element={<LocationPlans />} />
+                <Route path="cash-moves" element={<CashMovements />} />
               </Route>
 
               {/* Личный кабинет сотрудника */}

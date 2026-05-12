@@ -297,6 +297,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Cash movements
+    from .cash_moves import create_cash_moves_router
+
+    app.include_router(
+        create_cash_moves_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # SPA фронтенд (Vite/React)
     # NOTE: We use explicit routes instead of app.mount() so that SPA routes
     # like /admin/login are served correctly (mount intercepts and returns 404
