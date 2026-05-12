@@ -128,7 +128,13 @@ export default function CashMovements() {
       const cat = getPrefixCategory(r.BASIS, meta.valid_prefixes);
       return selPrefixes.includes(cat ?? '__invalid__');
     });
-    if (query.trim())       out = out.filter((r) => (r.BASIS || '').toLowerCase().includes(query.toLowerCase()));
+    if (query.trim()) {
+      const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+      out = out.filter((r) => {
+        const basis = (r.BASIS || '').toLowerCase();
+        return terms.every((t) => basis.includes(t));
+      });
+    }
     if (invalidOnly)        out = out.filter((r) => !r.prefix_ok);
 
     const mult = sort.dir === 'asc' ? 1 : -1;
