@@ -332,12 +332,12 @@ export default function CashMovements() {
     }
     const mult = sort.dir === 'asc' ? 1 : -1;
     return [...out].sort((a, b) => {
-      if (sort.field === 'DK_DATE')    return mult * a.DK_DATE.localeCompare(b.DK_DATE);
-      if (sort.field === 'SUMM')       return mult * ((Number(a.SUMM)||0) - (Number(b.SUMM)||0));
-      if (sort.field === 'dep_name')   return mult * (a.dep_name||'').localeCompare(b.dep_name||'', 'ru');
-      if (sort.field === 'user_name')  return mult * (a.user_name||'').localeCompare(b.user_name||'', 'ru');
-      if (sort.field === 'BASIS')      return mult * (a.BASIS||'').localeCompare(b.BASIS||'', 'ru');
-      if (sort.field === 'category')   return mult * (a.category||'').localeCompare(b.category||'', 'ru');
+      if (sort.field === 'DK_DATE')   return mult * (a.DK_DATE || '').localeCompare(b.DK_DATE || '');
+      if (sort.field === 'SUMM')      return mult * ((Number(a.SUMM) || 0) - (Number(b.SUMM) || 0));
+      if (sort.field === 'dep_name')  return mult * (a.dep_name  || '').localeCompare(b.dep_name  || '', 'ru');
+      if (sort.field === 'user_name') return mult * (a.user_name || '').localeCompare(b.user_name || '', 'ru');
+      if (sort.field === 'BASIS')     return mult * (a.BASIS     || '').localeCompare(b.BASIS     || '', 'ru');
+      if (sort.field === 'category')  return mult * (a.category  || '').localeCompare(b.category  || '', 'ru');
       return 0;
     });
   }, [rows, selDeps, selUsers, selCatFilters, invalidOnly, query, sort]);
