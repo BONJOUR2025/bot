@@ -10,6 +10,26 @@ from .dependencies import require_permission
 from app.data.cash_category_repository import CashCategoryRepository, get_cash_category_repository
 
 
+class CategoryCreate(BaseModel):
+    name: str
+    prefixes: list[str] = []
+
+
+class CategoryUpdate(BaseModel):
+    new_name: Optional[str] = None
+    prefixes: Optional[list[str]] = None
+
+
+class PrefixBody(BaseModel):
+    prefix: str
+
+
+class AssignBody(BaseModel):
+    record_id: str
+    category: str
+    add_prefix: Optional[str] = None
+
+
 def create_cash_moves_router(repo: CashCategoryRepository | None = None) -> APIRouter:
     if repo is None:
         repo = get_cash_category_repository()
@@ -30,17 +50,6 @@ def create_cash_moves_router(repo: CashCategoryRepository | None = None) -> APIR
     @router.get("/categories")
     async def list_categories(_=Depends(perm)):
         return repo.list_categories()
-
-    class CategoryCreate(BaseModel):
-        name: str
-        prefixes: list[str] = []
-
-    class CategoryUpdate(BaseModel):
-        new_name: Optional[str] = None
-        prefixes: Optional[list[str]] = None
-
-    class PrefixBody(BaseModel):
-        prefix: str
 
     @router.post("/categories")
     async def create_category(body: CategoryCreate, _=Depends(perm)):
@@ -76,11 +85,6 @@ def create_cash_moves_router(repo: CashCategoryRepository | None = None) -> APIR
             raise HTTPException(404, str(e))
 
     # ── Assignments ──────────────────────────────────────────────────
-
-    class AssignBody(BaseModel):
-        record_id: str
-        category: str        # empty string = remove assignment
-        add_prefix: Optional[str] = None  # prefix to auto-add to category rules
 
     @router.post("/assign")
     async def assign(body: AssignBody, _=Depends(perm)):
