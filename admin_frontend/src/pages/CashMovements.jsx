@@ -311,13 +311,13 @@ export default function CashMovements() {
   const depOptions = useMemo(() => {
     const seen = new Map();
     rows.forEach((r) => { const k = String(r.DEP_SRC_ID ?? ''); if (!seen.has(k)) seen.set(k, r.dep_name); });
-    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    return [...seen.entries()].map(([id, name]) => ({ id, name: name || id })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
   }, [rows]);
 
   const userOptions = useMemo(() => {
     const seen = new Map();
     rows.forEach((r) => { const k = String(r.OWN_USR_ID ?? ''); if (!seen.has(k)) seen.set(k, r.user_name); });
-    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    return [...seen.entries()].map(([id, name]) => ({ id, name: name || id })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
   }, [rows]);
 
   const filtered = useMemo(() => {
