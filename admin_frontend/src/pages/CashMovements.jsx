@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Search, X, AlertTriangle, CheckCircle, Download } from 'lucide-react';
+import { Search, X, AlertTriangle, CheckCircle, Download, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -15,24 +15,64 @@ const fmtMoney = (v) => {
   return Number(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
 };
 
+const fmtMoneyShort = (v) => {
+  if (!v) return '—';
+  const n = Number(v);
+  return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+};
+
+function isoToday()    { return new Date().toISOString().slice(0, 10); }
+function isoMonthStart(offset = 0) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + offset, 1);
+  return d.toISOString().slice(0, 10);
+}
+function isoMonthEnd(offset = 0) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + offset + 1, 0);
+  return d.toISOString().slice(0, 10);
+}
+function isoYearStart() { return `${new Date().getFullYear()}-01-01`; }
+
+const DATE_PRESETS = [
+  { label: 'Этот месяц',    from: () => isoMonthStart(0),  to: () => isoToday() },
+  { label: 'Прошлый месяц', from: () => isoMonthStart(-1), to: () => isoMonthEnd(-1) },
+  { label: 'Этот год',      from: () => isoYearStart(),    to: () => isoToday() },
+  { label: 'Всё время',     from: () => '',                to: () => '' },
+];
+
+function SortIcon({ field, sort }) {
+  if (sort.field !== field) return <ChevronsUpDown size={13} className="opacity-30" />;
+  return sort.dir === 'asc' ? <ChevronUp size={13} /> : <ChevronDown size={13} />;
+}
+
+function getPrefixCategory(basis, validPrefixes) {
+  if (!basis) return null;
+  const t = String(basis).trim().toUpperCase();
+  return validPrefixes.find((p) => t.startsWith(p)) || null;
+}
+
 export default function CashMovements() {
   const { toast } = useToast();
-  const [rows, setRows]         = useState([]);
-  const [meta, setMeta]         = useState({ dep_map: {}, users_map: {}, valid_prefixes: [] });
-  const [loading, setLoading]   = useState(false);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo]     = useState('');
-  const [query, setQuery]       = useState('');
-  const [selDeps, setSelDeps]   = useState([]);
-  const [selUsers, setSelUsers] = useState([]);
+  const [rows, setRows]           = useState([]);
+  const [meta, setMeta]           = useState({ dep_map: {}, users_map: {}, valid_prefixes: [] });
+  const [loading, setLoading]     = useState(false);
+  const [dateFrom, setDateFrom]   = useState(isoMonthStart(0));
+  const [dateTo, setDateTo]       = useState(isoToday());
+  const [query, setQuery]         = useState('');
+  const [selDeps, setSelDeps]     = useState([]);
+  const [selUsers, setSelUsers]   = useState([]);
+  const [selPrefixes, setSelPrefixes] = useState([]);
   const [invalidOnly, setInvalidOnly] = useState(false);
+  const [sort, setSort]           = useState({ field: 'DK_DATE', dir: 'desc' });
+  const [showBreakdown, setShowBreakdown] = useState(true);
 
   useEffect(() => {
     api.get('cash-moves/meta').then((r) => setMeta(r.data)).catch(() => {});
-    loadData();
+    loadData(isoMonthStart(0), isoToday());
   }, []);
 
-  async function loadData(from = dateFrom, to = dateTo) {
+  async function loadData(from, to) {
     setLoading(true);
     try {
       const params = {};
@@ -47,55 +87,94 @@ export default function CashMovements() {
     }
   }
 
-  function handleFilter() {
-    loadData(dateFrom, dateTo);
+  function applyPreset(preset) {
+    const from = preset.from();
+    const to   = preset.to();
+    setDateFrom(from);
+    setDateTo(to);
+    loadData(from, to);
   }
 
-  const depOptions = useMemo(() => Object.entries(meta.dep_map).map(([id, name]) => ({ id, name })), [meta.dep_map]);
+  function handleApply() { loadData(dateFrom, dateTo); }
+
+  function toggleSort(field) {
+    setSort((prev) =>
+      prev.field === field ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' }
+    );
+  }
+
+  function toggleArr(setter, id) {
+    setter((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
+
+  const depOptions = useMemo(() =>
+    Object.entries(meta.dep_map).map(([id, name]) => ({ id, name })),
+    [meta.dep_map]
+  );
+
   const userOptions = useMemo(() => {
     const seen = new Set();
     return rows
-      .filter((r) => { const k = String(r.OWN_USR_ID || ''); if (seen.has(k)) return false; seen.add(k); return true; })
-      .map((r) => ({ id: String(r.OWN_USR_ID || ''), name: r.user_name }))
+      .filter((r) => { const k = String(r.OWN_USR_ID ?? ''); if (seen.has(k)) return false; seen.add(k); return true; })
+      .map((r) => ({ id: String(r.OWN_USR_ID ?? ''), name: r.user_name }))
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   }, [rows]);
 
   const filtered = useMemo(() => {
     let out = rows;
-    if (selDeps.length)  out = out.filter((r) => selDeps.includes(String(r.DEP_SRC_ID || '')));
-    if (selUsers.length) out = out.filter((r) => selUsers.includes(String(r.OWN_USR_ID || '')));
-    if (query.trim())    out = out.filter((r) => (r.BASIS || '').toLowerCase().includes(query.toLowerCase()));
-    if (invalidOnly)     out = out.filter((r) => !r.prefix_ok);
-    return out;
-  }, [rows, selDeps, selUsers, query, invalidOnly]);
+    if (selDeps.length)     out = out.filter((r) => selDeps.includes(String(r.DEP_SRC_ID ?? '')));
+    if (selUsers.length)    out = out.filter((r) => selUsers.includes(String(r.OWN_USR_ID ?? '')));
+    if (selPrefixes.length) out = out.filter((r) => {
+      const cat = getPrefixCategory(r.BASIS, meta.valid_prefixes);
+      return selPrefixes.includes(cat ?? '__invalid__');
+    });
+    if (query.trim())       out = out.filter((r) => (r.BASIS || '').toLowerCase().includes(query.toLowerCase()));
+    if (invalidOnly)        out = out.filter((r) => !r.prefix_ok);
+
+    const mult = sort.dir === 'asc' ? 1 : -1;
+    return [...out].sort((a, b) => {
+      if (sort.field === 'DK_DATE') return mult * a.DK_DATE.localeCompare(b.DK_DATE);
+      if (sort.field === 'SUMM')    return mult * ((Number(a.SUMM) || 0) - (Number(b.SUMM) || 0));
+      if (sort.field === 'dep_name')  return mult * (a.dep_name || '').localeCompare(b.dep_name || '', 'ru');
+      if (sort.field === 'user_name') return mult * (a.user_name || '').localeCompare(b.user_name || '', 'ru');
+      if (sort.field === 'BASIS')     return mult * (a.BASIS || '').localeCompare(b.BASIS || '', 'ru');
+      return 0;
+    });
+  }, [rows, selDeps, selUsers, selPrefixes, query, invalidOnly, sort, meta.valid_prefixes]);
+
+  // Category breakdown
+  const breakdown = useMemo(() => {
+    const map = {};
+    for (const r of filtered) {
+      const cat = getPrefixCategory(r.BASIS, meta.valid_prefixes) ?? '— без категории';
+      if (!map[cat]) map[cat] = { count: 0, sum: 0 };
+      map[cat].count++;
+      map[cat].sum += Number(r.SUMM) || 0;
+    }
+    return Object.entries(map).sort((a, b) => b[1].sum - a[1].sum);
+  }, [filtered, meta.valid_prefixes]);
 
   const invalidCount = useMemo(() => rows.filter((r) => !r.prefix_ok).length, [rows]);
   const totalSum     = useMemo(() => filtered.reduce((s, r) => s + (Number(r.SUMM) || 0), 0), [filtered]);
 
-  function toggleDep(id) {
-    setSelDeps((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  }
-  function toggleUser(id) {
-    setSelUsers((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  }
-
   function exportCsv() {
-    const header = ['Дата', 'Филиал', 'Создатель', 'BASIS', 'Сумма', 'Префикс ОК'];
+    const header = ['Дата', 'Филиал', 'Создатель', 'Категория', 'BASIS', 'Сумма', 'Префикс ОК'];
     const csvRows = filtered.map((r) => [
-      fmtDate(r.DK_DATE),
-      r.dep_name,
-      r.user_name,
-      r.BASIS || '',
-      r.SUMM || 0,
-      r.prefix_ok ? 'Да' : 'Нет',
+      fmtDate(r.DK_DATE), r.dep_name, r.user_name,
+      getPrefixCategory(r.BASIS, meta.valid_prefixes) ?? '',
+      r.BASIS || '', r.SUMM || 0, r.prefix_ok ? 'Да' : 'Нет',
     ]);
-    const csv = [header, ...csvRows].map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const csv = [header, ...csvRows]
+      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'cash_moves.csv'; a.click();
     URL.revokeObjectURL(url);
   }
+
+  const thClass = 'px-3 py-3 text-xs font-semibold uppercase tracking-wide select-none cursor-pointer hover:text-[color:var(--color-primary)]';
 
   return (
     <div className="space-y-6 max-w-full">
@@ -108,8 +187,18 @@ export default function CashMovements() {
         </button>
       </div>
 
-      {/* Filters */}
+      {/* Filters card */}
       <div className="app-card p-4 space-y-4">
+        {/* Date presets */}
+        <div className="flex flex-wrap gap-2">
+          {DATE_PRESETS.map((p) => (
+            <button key={p.label} onClick={() => applyPreset(p)}
+              className="px-3 py-1 rounded-full text-xs font-medium border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
+              {p.label}
+            </button>
+          ))}
+        </div>
+
         {/* Date range */}
         <div className="flex flex-wrap gap-3 items-end">
           <div>
@@ -120,9 +209,7 @@ export default function CashMovements() {
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата по</label>
             <input type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          <button onClick={handleFilter} disabled={loading} className="btn btn--primary">
-            Применить
-          </button>
+          <button onClick={handleApply} disabled={loading} className="btn btn--primary">Применить</button>
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(''); setDateTo(''); loadData('', ''); }}
               className="btn bg-gray-200 text-gray-700 hover:bg-gray-300">
@@ -144,14 +231,47 @@ export default function CashMovements() {
           )}
         </div>
 
-        {/* Dep + user filters */}
+        {/* Category (prefix) multiselect */}
+        {meta.valid_prefixes.length > 0 && (
+          <div>
+            <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Категория</div>
+            <div className="flex flex-wrap gap-1.5">
+              {meta.valid_prefixes.map((p) => (
+                <button key={p} onClick={() => toggleArr(setSelPrefixes, p)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    selPrefixes.includes(p)
+                      ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                      : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                  }`}>
+                  {p.replace(/_$/, '')}
+                </button>
+              ))}
+              <button onClick={() => toggleArr(setSelPrefixes, '__invalid__')}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  selPrefixes.includes('__invalid__')
+                    ? 'bg-red-500 text-white border-red-500'
+                    : 'border-[color:var(--color-border)] text-red-600 hover:border-red-400'
+                }`}>
+                Без категории
+              </button>
+              {selPrefixes.length > 0 && (
+                <button onClick={() => setSelPrefixes([])}
+                  className="px-3 py-1 rounded-full text-xs border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:border-[color:var(--color-danger)]">
+                  <X size={11} className="inline" /> Сбросить
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Branch + user filters */}
         <div className="flex flex-wrap gap-6">
           {depOptions.length > 0 && (
             <div>
               <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Филиал</div>
               <div className="flex flex-wrap gap-1.5">
                 {depOptions.map(({ id, name }) => (
-                  <button key={id} onClick={() => toggleDep(id)}
+                  <button key={id} onClick={() => toggleArr(setSelDeps, id)}
                     className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                       selDeps.includes(id)
                         ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
@@ -168,7 +288,7 @@ export default function CashMovements() {
               <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Создатель</div>
               <div className="flex flex-wrap gap-1.5">
                 {userOptions.map(({ id, name }) => (
-                  <button key={id} onClick={() => toggleUser(id)}
+                  <button key={id} onClick={() => toggleArr(setSelUsers, id)}
                     className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                       selUsers.includes(id)
                         ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
@@ -182,7 +302,7 @@ export default function CashMovements() {
           )}
         </div>
 
-        {/* Invalid only toggle */}
+        {/* Invalid only */}
         <label className="flex items-center gap-2 cursor-pointer w-fit">
           <input type="checkbox" className="w-4 h-4 rounded" checked={invalidOnly}
             onChange={(e) => setInvalidOnly(e.target.checked)} />
@@ -195,43 +315,95 @@ export default function CashMovements() {
         </label>
       </div>
 
-      {/* Summary */}
+      {/* Summary cards */}
       {!loading && rows.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="app-card p-4 text-center">
-            <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">Записей</div>
-            <div className="text-lg font-semibold">{filtered.length}</div>
-          </div>
-          <div className="app-card p-4 text-center">
-            <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">Итого сумма</div>
-            <div className="text-lg font-semibold text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</div>
-          </div>
-          <div className="app-card p-4 text-center">
-            <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">Верный BASIS</div>
-            <div className="text-lg font-semibold text-green-600">
-              {filtered.filter((r) => r.prefix_ok).length}
+          {[
+            { label: 'Записей', value: filtered.length },
+            { label: 'Итого сумма', value: fmtMoneyShort(totalSum), primary: true },
+            { label: 'Верный BASIS', value: filtered.filter((r) => r.prefix_ok).length, green: true },
+            { label: 'Неверный BASIS', value: filtered.filter((r) => !r.prefix_ok).length, red: true },
+          ].map((s) => (
+            <div key={s.label} className="app-card p-4 text-center">
+              <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{s.label}</div>
+              <div className={`text-lg font-semibold ${
+                s.primary ? 'text-[color:var(--color-primary)]' :
+                s.green   ? 'text-green-600' :
+                s.red     ? 'text-red-600' : ''
+              }`}>{s.value}</div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Category breakdown */}
+      {!loading && breakdown.length > 0 && (
+        <div className="app-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-medium text-sm">Разбивка по категориям</span>
+            <button onClick={() => setShowBreakdown((v) => !v)}
+              className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]">
+              {showBreakdown ? 'Скрыть' : 'Показать'}
+            </button>
           </div>
-          <div className="app-card p-4 text-center">
-            <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">Неверный BASIS</div>
-            <div className="text-lg font-semibold text-red-600">
-              {filtered.filter((r) => !r.prefix_ok).length}
+          {showBreakdown && (
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
+                    <th className="text-left pb-2 font-medium">Категория</th>
+                    <th className="text-right pb-2 font-medium pr-6">Кол-во</th>
+                    <th className="text-right pb-2 font-medium">Сумма</th>
+                    <th className="text-right pb-2 pl-6 font-medium">Доля</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[color:var(--color-border)]">
+                  {breakdown.map(([cat, { count, sum }]) => {
+                    const share = totalSum > 0 ? (sum / totalSum) * 100 : 0;
+                    const isInvalid = cat === '— без категории';
+                    return (
+                      <tr key={cat} className="hover:bg-[color:var(--color-bg-secondary)]">
+                        <td className="py-1.5">
+                          <span className={`font-mono text-xs px-2 py-0.5 rounded-full ${
+                            isInvalid ? 'bg-red-100 text-red-700' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                          }`}>
+                            {cat.replace(/_$/, '')}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right pr-6 text-[color:var(--color-muted-foreground)]">{count}</td>
+                        <td className="py-1.5 text-right font-medium">{fmtMoneyShort(sum)}</td>
+                        <td className="py-1.5 text-right pl-6">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-16 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
+                              <div className={`h-full rounded-full ${isInvalid ? 'bg-red-400' : 'bg-[color:var(--color-primary)]'}`}
+                                style={{ width: `${share}%` }} />
+                            </div>
+                            <span className="text-xs text-[color:var(--color-muted-foreground)] w-9 text-right">
+                              {share.toFixed(1)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Valid prefixes hint */}
       {meta.valid_prefixes.length > 0 && (
-        <div className="text-xs text-[color:var(--color-muted-foreground)]">
-          <span className="font-medium">Допустимые префиксы BASIS: </span>
-          {meta.valid_prefixes.join(', ')}
-        </div>
+        <p className="text-xs text-[color:var(--color-muted-foreground)]">
+          <span className="font-medium">Допустимые категории BASIS: </span>
+          {meta.valid_prefixes.map((p) => p.replace(/_$/, '')).join(', ')}
+        </p>
       )}
 
       {/* Table */}
       {loading ? (
-        <div className="app-card p-4"><SkeletonTable rows={10} cols={6} /></div>
+        <div className="app-card p-4"><SkeletonTable rows={10} cols={7} /></div>
       ) : filtered.length === 0 ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
           {rows.length === 0 ? 'Нет данных' : 'Нет записей по заданным фильтрам'}
@@ -241,38 +413,61 @@ export default function CashMovements() {
           <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
             <thead>
               <tr className="bg-[color:var(--color-table-header)]">
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide w-8"></th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Дата</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Филиал</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Создатель</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">BASIS</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Сумма</th>
+                <th className="px-3 py-3 w-8"></th>
+                <th className={`${thClass} text-left`} onClick={() => toggleSort('DK_DATE')}>
+                  <span className="inline-flex items-center gap-1">Дата <SortIcon field="DK_DATE" sort={sort} /></span>
+                </th>
+                <th className={`${thClass} text-left`} onClick={() => toggleSort('dep_name')}>
+                  <span className="inline-flex items-center gap-1">Филиал <SortIcon field="dep_name" sort={sort} /></span>
+                </th>
+                <th className={`${thClass} text-left`} onClick={() => toggleSort('user_name')}>
+                  <span className="inline-flex items-center gap-1">Создатель <SortIcon field="user_name" sort={sort} /></span>
+                </th>
+                <th className={`${thClass} text-left`}>Категория</th>
+                <th className={`${thClass} text-left`} onClick={() => toggleSort('BASIS')}>
+                  <span className="inline-flex items-center gap-1">BASIS <SortIcon field="BASIS" sort={sort} /></span>
+                </th>
+                <th className={`${thClass} text-right`} onClick={() => toggleSort('SUMM')}>
+                  <span className="inline-flex items-center gap-1 justify-end">Сумма <SortIcon field="SUMM" sort={sort} /></span>
+                </th>
                 <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">ID</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--color-border)]">
-              {filtered.map((row, i) => (
-                <tr key={row.ID_KASSES_MOVE ?? i}
-                  className={`transition-colors hover:bg-[color:var(--color-table-row-hover)] ${
-                    i % 2 !== 0 ? 'bg-[color:var(--color-table-row-alt)]' : ''
-                  } ${!row.prefix_ok ? 'border-l-2 border-l-red-400' : ''}`}>
-                  <td className="px-3 py-2.5 text-center">
-                    {row.prefix_ok
-                      ? <CheckCircle size={14} className="text-green-500 mx-auto" />
-                      : <AlertTriangle size={14} className="text-red-500 mx-auto" title="Неверный BASIS" />}
-                  </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap">{fmtDate(row.DK_DATE)}</td>
-                  <td className="px-3 py-2.5 whitespace-nowrap">{row.dep_name}</td>
-                  <td className="px-3 py-2.5 whitespace-nowrap">{row.user_name}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs max-w-xs truncate" title={row.BASIS}>{row.BASIS || '—'}</td>
-                  <td className="px-3 py-2.5 text-right whitespace-nowrap font-medium">{fmtMoney(row.SUMM)}</td>
-                  <td className="px-3 py-2.5 text-xs text-[color:var(--color-muted-foreground)] font-mono">{row.ID_KASSES_MOVE}</td>
-                </tr>
-              ))}
+              {filtered.map((row, i) => {
+                const cat = getPrefixCategory(row.BASIS, meta.valid_prefixes);
+                return (
+                  <tr key={row.ID_KASSES_MOVE ?? i}
+                    className={`transition-colors hover:bg-[color:var(--color-table-row-hover)] ${
+                      i % 2 !== 0 ? 'bg-[color:var(--color-table-row-alt)]' : ''
+                    } ${!row.prefix_ok ? 'border-l-2 border-l-red-400' : ''}`}>
+                    <td className="px-3 py-2.5 text-center">
+                      {row.prefix_ok
+                        ? <CheckCircle size={14} className="text-green-500 mx-auto" />
+                        : <AlertTriangle size={14} className="text-red-500 mx-auto" title="Неверный BASIS" />}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{fmtDate(row.DK_DATE)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{row.dep_name}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{row.user_name}</td>
+                    <td className="px-3 py-2.5">
+                      {cat ? (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]">
+                          {cat.replace(/_$/, '')}
+                        </span>
+                      ) : (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 font-mono text-xs max-w-xs truncate" title={row.BASIS}>{row.BASIS || '—'}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap font-medium">{fmtMoney(row.SUMM)}</td>
+                    <td className="px-3 py-2.5 text-xs text-[color:var(--color-muted-foreground)] font-mono">{row.ID_KASSES_MOVE}</td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="bg-[color:var(--color-table-header)] font-semibold">
-                <td className="px-3 py-2.5" colSpan={5}>Итого: {filtered.length} записей</td>
+                <td className="px-3 py-2.5" colSpan={6}>Итого: {filtered.length} записей</td>
                 <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</td>
                 <td className="px-3 py-2.5"></td>
               </tr>

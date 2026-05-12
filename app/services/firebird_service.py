@@ -455,7 +455,7 @@ class FirebirdService:
         """Load cash movements from DOC_KASSA_MOVES."""
         if not FIREBIRD_AVAILABLE:
             return []
-        conditions = ["DK_DATE > DATE '2024-12-31'"]
+        conditions = ["DK_DATE > DATE '2023-12-31'"]
         params: list = []
         if date_from:
             conditions.append("DK_DATE >= ?")
