@@ -1,64 +1,96 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
-from .dependencies import get_current_user, require_permission
-
-VALID_PREFIXES = [
-    "ЗАРПЛАТА_", "ЗП_", "ЛОГИСТИКА", "МАТЕРИАЛЫ_", "УБОРКА_", "ЧАЙ_",
-    "АПТЕЧКА_", "ВОЗВРАТ_", "КАНЦТОВАРЫ_", "УПАКОВКА_", "ИНКАССАЦИЯ_",
-]
-
-DEP_MAP: dict[str, str] = {
-    "17": "Охта-Молл",
-    "11": "Меркурий",
-    "7": "Пассаж",
-    "5": "Академ Парк",
-    "3": "Озерки",
-    "8": "Бестужевская",
-}
-
-USERS_MAP: dict[str, str] = {
-    "110275": "Вера 0102",
-    "110171": "Анастасия 2602",
-    "110158": "Арина 7272",
-    "110273": "Александр 1505",
-    "110221": "Эмиль 2404",
-    "111111": "Полина 5984",
-    "110276": "Наталья 0704",
-    "1136": "Катя 2201",
-    "110146": "Лали 1606",
-    "110145": "Екатерина 0104",
-    "110265": "Ирина 2006",
-    "110255": "Полина 1802",
-    "110150": "Вероника 1996",
-    "1134": "Ира 2405",
-    "110287": "Юля 3007",
-    "110222": "Алекс 2104",
-    "109110": "Марина 0208",
-}
+from .dependencies import require_permission
+from app.data.cash_category_repository import CashCategoryRepository, get_cash_category_repository
 
 
-def _has_valid_prefix(basis: str | None) -> bool:
-    if not basis:
-        return False
-    t = str(basis).strip().upper()
-    return any(t.startswith(p) for p in VALID_PREFIXES)
+def create_cash_moves_router(repo: CashCategoryRepository | None = None) -> APIRouter:
+    if repo is None:
+        repo = get_cash_category_repository()
 
-
-def create_cash_moves_router() -> APIRouter:
     router = APIRouter(prefix="/cash-moves", tags=["cash-moves"])
     perm = require_permission("cash-moves")
 
+    # ── Meta / categories ────────────────────────────────────────────
+
     @router.get("/meta")
     async def meta(_=Depends(perm)):
+        cats = repo.list_categories()
         return {
-            "dep_map": DEP_MAP,
-            "users_map": USERS_MAP,
-            "valid_prefixes": VALID_PREFIXES,
+            "categories": cats,
+            "valid_prefixes": repo.all_prefixes(),
         }
+
+    @router.get("/categories")
+    async def list_categories(_=Depends(perm)):
+        return repo.list_categories()
+
+    class CategoryCreate(BaseModel):
+        name: str
+        prefixes: list[str] = []
+
+    class CategoryUpdate(BaseModel):
+        new_name: Optional[str] = None
+        prefixes: Optional[list[str]] = None
+
+    class PrefixBody(BaseModel):
+        prefix: str
+
+    @router.post("/categories")
+    async def create_category(body: CategoryCreate, _=Depends(perm)):
+        try:
+            return repo.create_category(body.name, body.prefixes)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @router.patch("/categories/{name}")
+    async def update_category(name: str, body: CategoryUpdate, _=Depends(perm)):
+        try:
+            return repo.update_category(name, new_name=body.new_name, prefixes=body.prefixes)
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+
+    @router.delete("/categories/{name}")
+    async def delete_category(name: str, _=Depends(perm)):
+        repo.delete_category(name)
+        return {"ok": True}
+
+    @router.post("/categories/{name}/prefixes")
+    async def add_prefix(name: str, body: PrefixBody, _=Depends(perm)):
+        try:
+            return repo.add_prefix(name, body.prefix)
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+
+    @router.delete("/categories/{name}/prefixes/{prefix:path}")
+    async def remove_prefix(name: str, prefix: str, _=Depends(perm)):
+        try:
+            return repo.remove_prefix(name, prefix)
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+
+    # ── Assignments ──────────────────────────────────────────────────
+
+    class AssignBody(BaseModel):
+        record_id: str
+        category: str        # empty string = remove assignment
+        add_prefix: Optional[str] = None  # prefix to auto-add to category rules
+
+    @router.post("/assign")
+    async def assign(body: AssignBody, _=Depends(perm)):
+        try:
+            repo.assign(body.record_id, body.category, body.add_prefix or None)
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+        return {"ok": True}
+
+    # ── Records ──────────────────────────────────────────────────────
 
     @router.get("/")
     async def list_cash_moves(
@@ -68,12 +100,13 @@ def create_cash_moves_router() -> APIRouter:
     ):
         from app.services.firebird_service import get_firebird_service
         rows = get_firebird_service().get_cash_moves(date_from=date_from, date_to=date_to)
+        assignments = repo.get_assignments()
         for r in rows:
-            dep_id = str(r.get("DEP_SRC_ID") or "")
-            usr_id = str(r.get("OWN_USR_ID") or "")
-            r["dep_name"] = DEP_MAP.get(dep_id, dep_id or "—")
-            r["user_name"] = USERS_MAP.get(usr_id, usr_id or "—")
-            r["prefix_ok"] = _has_valid_prefix(r.get("BASIS"))
+            rid = str(r.get("ID_KASSES_MOVE") or "")
+            category = repo.resolve_category(rid, r.get("BASIS"))
+            r["category"] = category
+            r["prefix_ok"] = category is not None
+            r["manually_assigned"] = rid in assignments
         return rows
 
     return router

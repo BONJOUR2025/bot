@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     # Файл для хранения кодов точек и планов продаж по точкам
     locations_file: str = Field("locations.json", validation_alias="LOCATIONS_FILE")
 
+    # Файл для хранения категорий и правил кассовых перемещений
+    cash_categories_file: str = Field("cash_categories.json", validation_alias="CASH_CATEGORIES_FILE")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
