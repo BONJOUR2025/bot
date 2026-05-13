@@ -173,7 +173,7 @@ class PayoutService:
                 logger.warning(f"Не удалось уведомить пользователя: {exc}")
         return Payout(**updated)
 
-    async def bulk_update_status(self, ids: List[str], status: str) -> int:
+    async def bulk_update_status(self, ids: List[int], status: str) -> int:
         """Update status for multiple payouts. Never sends notifications."""
         if not ids:
             return 0

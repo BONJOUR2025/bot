@@ -17,7 +17,7 @@ MANAGE_DATES_PERMISSION = "payouts-manage-dates"
 
 
 class BulkStatusRequest(BaseModel):
-    ids: List[str]
+    ids: List[int]
     status: str
 
 
