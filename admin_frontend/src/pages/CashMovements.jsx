@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   Search, X, AlertTriangle, CheckCircle, Download,
   ChevronUp, ChevronDown, ChevronsUpDown,
-  Tag, Settings, Plus, Trash2, Edit2, Check,
+  Tag, Settings, Plus, Trash2, Edit2, Check, Users, Building2,
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
@@ -36,6 +36,95 @@ const DATE_PRESETS = [
 function SortIcon({ field, sort }) {
   if (sort.field !== field) return <ChevronsUpDown size={13} className="opacity-30" />;
   return sort.dir === 'asc' ? <ChevronUp size={13} /> : <ChevronDown size={13} />;
+}
+
+// ── Mapping Manager (users / branches) ───────────────────────────
+function MappingManager({ title, icon: Icon, endpoint, onClose, onChanged }) {
+  const { toast } = useToast();
+  const [entries, setEntries] = useState([]);
+  const [newId, setNewId]     = useState('');
+  const [newName, setNewName] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName]   = useState('');
+
+  useEffect(() => {
+    api.get(`cash-moves/${endpoint}`).then((r) => setEntries(r.data || [])).catch(() => {});
+  }, [endpoint]);
+
+  async function upsert(id, name) {
+    try {
+      await api.post(`cash-moves/${endpoint}`, { id, name });
+      const updated = entries.find((e) => e.id === id)
+        ? entries.map((e) => e.id === id ? { id, name } : e)
+        : [...entries, { id, name }];
+      setEntries(updated);
+      onChanged();
+    } catch { toast('Ошибка сохранения', 'error'); }
+  }
+
+  async function del(id) {
+    try {
+      await api.delete(`cash-moves/${endpoint}/${encodeURIComponent(id)}`);
+      const updated = entries.filter((e) => e.id !== id);
+      setEntries(updated);
+      onChanged();
+    } catch { toast('Ошибка удаления', 'error'); }
+  }
+
+  function addNew() {
+    if (!newId.trim() || !newName.trim()) return;
+    upsert(newId.trim(), newName.trim());
+    setNewId(''); setNewName('');
+  }
+
+  function saveEdit(id) {
+    if (!editName.trim()) return;
+    upsert(id, editName.trim());
+    setEditingId(null);
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card max-w-lg w-full max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2"><Icon size={18} /> {title}</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-bg-secondary)]"><X size={18} /></button>
+        </div>
+        <div className="text-xs text-[color:var(--color-muted-foreground)] mb-3">
+          ID берётся из Агбис. При добавлении нового пользователя/филиала в Агбис — добавьте здесь его ID и имя.
+        </div>
+        <div className="overflow-y-auto flex-1 divide-y divide-[color:var(--color-border)]">
+          {entries.map((e) => (
+            <div key={e.id} className="flex items-center gap-3 py-2">
+              <span className="font-mono text-xs text-[color:var(--color-muted-foreground)] w-20 shrink-0">{e.id}</span>
+              {editingId === e.id ? (
+                <>
+                  <input className="input flex-1 text-sm" value={editName}
+                    onChange={(x) => setEditName(x.target.value)}
+                    onKeyDown={(x) => x.key === 'Enter' && saveEdit(e.id)} />
+                  <button onClick={() => saveEdit(e.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded"><Check size={14} /></button>
+                  <button onClick={() => setEditingId(null)} className="p-1.5 text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-bg-secondary)] rounded"><X size={14} /></button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm">{e.name}</span>
+                  <button onClick={() => { setEditingId(e.id); setEditName(e.name); }} className="p-1.5 rounded hover:bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]"><Edit2 size={13} /></button>
+                  <button onClick={() => del(e.id)} className="p-1.5 rounded hover:bg-red-50 text-[color:var(--color-muted-foreground)] hover:text-red-500"><Trash2 size={13} /></button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="pt-4 border-t border-[color:var(--color-border)] flex gap-2">
+          <input className="input w-24 font-mono text-sm" placeholder="ID" value={newId} onChange={(e) => setNewId(e.target.value)} />
+          <input className="input flex-1 text-sm" placeholder="Имя…" value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addNew()} />
+          <button onClick={addNew} className="btn btn--primary"><Plus size={14} /></button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Category Manager modal ────────────────────────────────────────
@@ -239,6 +328,8 @@ export default function CashMovements() {
   const [sort, setSort]           = useState({ field: 'DK_DATE', dir: 'desc' });
   const [showBreakdown, setShowBreakdown] = useState(true);
   const [showCatManager, setShowCatManager] = useState(false);
+  const [showUsersManager, setShowUsersManager] = useState(false);
+  const [showBranchesManager, setShowBranchesManager] = useState(false);
   const [assignRecord, setAssignRecord]   = useState(null);
   const [selected, setSelected]   = useState(new Set()); // ID_KASSES_MOVE
 
@@ -381,6 +472,14 @@ export default function CashMovements() {
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-2xl font-semibold tracking-tight flex-1">Кассовые перемещения</h2>
+        <button onClick={() => setShowUsersManager(true)}
+          className="btn flex items-center gap-2 border border-[color:var(--color-border)]">
+          <Users size={15} /> Пользователи
+        </button>
+        <button onClick={() => setShowBranchesManager(true)}
+          className="btn flex items-center gap-2 border border-[color:var(--color-border)]">
+          <Building2 size={15} /> Филиалы
+        </button>
         <button onClick={() => setShowCatManager(true)}
           className="btn flex items-center gap-2 border border-[color:var(--color-border)]">
           <Settings size={15} /> Категории
@@ -677,6 +776,28 @@ export default function CashMovements() {
           <span className="text-sm">Сумма: <span className="font-bold text-[color:var(--color-sidebar-primary-foreground)]">{fmtMoney(selectedSum)}</span></span>
           <button onClick={() => setSelected(new Set())} className="ml-2 p-1 rounded-full hover:bg-white/10 transition-colors"><X size={16} /></button>
         </div>
+      )}
+
+      {/* Users Manager */}
+      {showUsersManager && (
+        <MappingManager
+          title="Пользователи кассы (ID → имя)"
+          icon={Users}
+          endpoint="users"
+          onClose={() => setShowUsersManager(false)}
+          onChanged={() => loadData(dateFrom, dateTo)}
+        />
+      )}
+
+      {/* Branches Manager */}
+      {showBranchesManager && (
+        <MappingManager
+          title="Филиалы (ID → название)"
+          icon={Building2}
+          endpoint="branches"
+          onClose={() => setShowBranchesManager(false)}
+          onChanged={() => loadData(dateFrom, dateTo)}
+        />
       )}
 
       {/* Category Manager */}

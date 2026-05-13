@@ -139,15 +139,18 @@ def create_payroll_router(
         return _payroll.list_months()
 
     # ── Calculate ─────────────────────────────────────────────────
-    @router.get("/calculate", response_model=list[PayrollRowOutput])
+    @router.get("/calculate")
     async def calculate_payroll(
         month: str = Query(...),
         year: Optional[int] = Query(None),
         current: ResolvedUser = Depends(get_current_user),
     ):
         _check(current)
-        rows = await _payroll.calculate_payroll(month, year)
-        return [PayrollRowOutput(**row.to_dict()) for row in rows]
+        rows, unknown_codes = await _payroll.calculate_payroll(month, year)
+        return {
+            "rows": [PayrollRowOutput(**row.to_dict()) for row in rows],
+            "unknown_codes": unknown_codes,
+        }
 
     @router.get("/calculate/{employee_code}", response_model=PayrollRowOutput | None)
     async def get_employee_payroll(
@@ -362,7 +365,7 @@ def create_payroll_router(
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
         from openpyxl.utils import get_column_letter
 
-        rows = await _payroll.calculate_payroll(month, year)
+        rows, _ = await _payroll.calculate_payroll(month, year)
         actual_year = year or __import__("datetime").date.today().year
         month_key = make_month_key(month, actual_year)
         settlements = _settlements.get_settlements_map(month_key)

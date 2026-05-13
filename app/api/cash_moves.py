@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from .dependencies import require_permission
 from app.data.cash_category_repository import CashCategoryRepository, get_cash_category_repository
+from app.data.cash_config_repository import CashConfigRepository, get_cash_config_repository
 
 
 class CategoryCreate(BaseModel):
@@ -30,22 +31,35 @@ class AssignBody(BaseModel):
     add_prefix: Optional[str] = None
 
 
-def create_cash_moves_router(repo: CashCategoryRepository | None = None) -> APIRouter:
+class MappingEntry(BaseModel):
+    id: str
+    name: str
+
+
+def create_cash_moves_router(
+    repo: CashCategoryRepository | None = None,
+    cfg: CashConfigRepository | None = None,
+) -> APIRouter:
     if repo is None:
         repo = get_cash_category_repository()
+    if cfg is None:
+        cfg = get_cash_config_repository()
 
     router = APIRouter(prefix="/cash-moves", tags=["cash-moves"])
     perm = require_permission("cash-moves")
 
-    # ── Meta / categories ────────────────────────────────────────────
+    # ── Meta ─────────────────────────────────────────────────────────
 
     @router.get("/meta")
     async def meta(_=Depends(perm)):
-        cats = repo.list_categories()
         return {
-            "categories": cats,
+            "categories": repo.list_categories(),
             "valid_prefixes": repo.all_prefixes(),
+            "users": cfg.get_users(),
+            "branches": cfg.get_branches(),
         }
+
+    # ── Categories ───────────────────────────────────────────────────
 
     @router.get("/categories")
     async def list_categories(_=Depends(perm)):
@@ -94,6 +108,38 @@ def create_cash_moves_router(repo: CashCategoryRepository | None = None) -> APIR
             raise HTTPException(404, str(e))
         return {"ok": True}
 
+    # ── Users mapping ────────────────────────────────────────────────
+
+    @router.get("/users")
+    async def list_users(_=Depends(perm)):
+        return [{"id": k, "name": v} for k, v in cfg.get_users().items()]
+
+    @router.post("/users")
+    async def upsert_user(body: MappingEntry, _=Depends(perm)):
+        cfg.upsert_user(body.id, body.name)
+        return {"ok": True}
+
+    @router.delete("/users/{uid}")
+    async def delete_user(uid: str, _=Depends(perm)):
+        cfg.delete_user(uid)
+        return {"ok": True}
+
+    # ── Branches mapping ─────────────────────────────────────────────
+
+    @router.get("/branches")
+    async def list_branches(_=Depends(perm)):
+        return [{"id": k, "name": v} for k, v in cfg.get_branches().items()]
+
+    @router.post("/branches")
+    async def upsert_branch(body: MappingEntry, _=Depends(perm)):
+        cfg.upsert_branch(body.id, body.name)
+        return {"ok": True}
+
+    @router.delete("/branches/{bid}")
+    async def delete_branch(bid: str, _=Depends(perm)):
+        cfg.delete_branch(bid)
+        return {"ok": True}
+
     # ── Records ──────────────────────────────────────────────────────
 
     @router.get("/")
@@ -107,6 +153,8 @@ def create_cash_moves_router(repo: CashCategoryRepository | None = None) -> APIR
         assignments = repo.get_assignments()
         for r in rows:
             rid = str(r.get("ID_KASSES_MOVE") or "")
+            r["dep_name"] = cfg.resolve_branch(r.get("DEP_SRC_ID"))
+            r["user_name"] = cfg.resolve_user(r.get("OWN_USR_ID"))
             category = repo.resolve_category(rid, r.get("BASIS"))
             r["category"] = category
             r["prefix_ok"] = category is not None

@@ -300,9 +300,19 @@ def create_app() -> FastAPI:
     # Cash movements
     from .cash_moves import create_cash_moves_router
     from ..data.cash_category_repository import get_cash_category_repository
+    from ..data.cash_config_repository import get_cash_config_repository
 
     app.include_router(
-        create_cash_moves_router(get_cash_category_repository()),
+        create_cash_moves_router(get_cash_category_repository(), get_cash_config_repository()),
+        prefix="/api",
+        dependencies=protected,
+    )
+
+    # System tools (status, backup, archive)
+    from .system import create_system_router
+
+    app.include_router(
+        create_system_router(),
         prefix="/api",
         dependencies=protected,
     )

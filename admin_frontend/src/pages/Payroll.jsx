@@ -457,6 +457,7 @@ export default function Payroll() {
   const [months, setMonths]           = useState([]);
   const [selectedMonth, setSelectedMonth] = useState('');
   const [rows, setRows]               = useState([]);
+  const [unknownCodes, setUnknownCodes] = useState([]);
   const [prevRows, setPrevRows]       = useState([]);
   const [plans, setPlans]             = useState([]);
   const [loading, setLoading]         = useState(false);
@@ -528,7 +529,7 @@ export default function Payroll() {
       const prevMonth = MONTHS_KEY_RU[prevIdx];
       const prevYear = idx === 0 ? currentYear - 1 : currentYear;
       const res = await api.get('payroll/calculate', { params: { month: prevMonth, year: prevYear } });
-      setPrevRows(res.data || []);
+      setPrevRows(res.data?.rows || res.data || []);
     } catch { setPrevRows([]); }
   }
 
@@ -560,7 +561,8 @@ export default function Payroll() {
     setLoading(true);
     try {
       const res = await api.get('payroll/calculate', { params: { month } });
-      setRows(res.data || []);
+      setRows(res.data?.rows || res.data || []);
+      setUnknownCodes(res.data?.unknown_codes || []);
     } catch { toast('Ошибка загрузки данных', 'error'); }
     finally { setLoading(false); }
   }
@@ -674,6 +676,18 @@ export default function Payroll() {
           )}
         </div>
       </div>
+
+      {/* Unknown location codes warning */}
+      {unknownCodes.length > 0 && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-sm">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-500" />
+          <div>
+            <span className="font-semibold">Неизвестные коды точек в расписании: </span>
+            <span className="font-mono">{unknownCodes.join(', ')}</span>
+            <span className="ml-2 text-xs opacity-75">— смены по этим точкам не учитываются в авто-плане. Добавьте коды в «Планы по точкам».</span>
+          </div>
+        </div>
+      )}
 
       {/* Summary */}
       {!loading && rows.length > 0 && <SummaryBar rows={filtered} />}

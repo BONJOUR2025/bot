@@ -488,11 +488,12 @@ class PayrollService:
 
     # ── Main calculation ──────────────────────────────────────────
 
-    async def calculate_payroll(self, month: str, year: int | None = None) -> list[PayrollRow]:
+    async def calculate_payroll(self, month: str, year: int | None = None) -> tuple[list[PayrollRow], list[str]]:
+        """Returns (rows, unknown_location_codes)."""
         month = month.strip().upper()
         month_num = MONTH_NAMES.get(month)
         if not month_num:
-            return []
+            return [], []
 
         if year is None:
             year = datetime.now().year
@@ -501,7 +502,7 @@ class PayrollService:
 
         employees = self._get_employees_from_excel(month)
         if not employees:
-            return []
+            return [], []
 
         try:
             sales_data = self.firebird.get_all_sales(year, month_num)
@@ -527,6 +528,15 @@ class PayrollService:
             code = _extract_code(emp_name)
             if code:
                 schedule_by_code[code] = shifts
+
+        # Detect unknown location codes (present in schedule but not in location repo)
+        known_codes = set(self.location_repo.codes_dict().keys())
+        unknown_codes: list[str] = sorted({
+            pt_code
+            for shifts in schedule_by_code.values()
+            for pt_code in shifts
+            if pt_code not in known_codes
+        })
 
         results = []
         for emp in employees:
@@ -680,10 +690,10 @@ class PayrollService:
                 shifts_by_point=shifts_by_point,
             ))
 
-        return results
+        return results, unknown_codes
 
     async def get_employee_details(self, employee_code: str, month: str, year: int | None = None):
-        rows = await self.calculate_payroll(month, year)
+        rows, _ = await self.calculate_payroll(month, year)
         for row in rows:
             if row.employee_code == employee_code:
                 return row
