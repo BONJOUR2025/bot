@@ -16,8 +16,8 @@ from app.settings import settings
 
 # JSON files that can be cleaned up by archiving old records.
 # Each entry: (filename, date_field_name)
+# NOTE: advance_requests are now stored in SQLite (hr.db) — no longer archived here.
 ARCHIVABLE = [
-    ("advance_requests.json", "timestamp"),
     ("bonuses_penalties.json", "date"),
     ("adjustments.json", "date"),
     ("messages.json", "timestamp"),
@@ -84,6 +84,12 @@ def create_system_router() -> APIRouter:
             for p in Path(".").glob("*.json"):
                 try:
                     zf.write(p, p.name)
+                except Exception:
+                    pass
+            db_path = Path("hr.db")
+            if db_path.exists():
+                try:
+                    zf.write(db_path, db_path.name)
                 except Exception:
                     pass
         buf.seek(0)

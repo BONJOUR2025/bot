@@ -1,167 +1,66 @@
-import json
-import os
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-import logging
+from typing import Any, Dict, List, Optional
 
-from app.config import ADVANCE_REQUESTS_FILE
+from sqlalchemy.orm import Session
+
+from app.db.session import SessionLocal, init_db
+from app.models.advance_request import AdvanceRequest
 from app.utils.logger import log
 
-logger = logging.getLogger(__name__)
-
-
-DEFAULT_ADVANCE_REQUESTS_FILE = "advance_requests.json"
+# Status aliases from legacy JSON → canonical values
+_STATUS_MAP = {
+    "В ожидании": "Ожидает",
+    "Ожидает одобрения": "Ожидает",
+    "Ожидает выплаты": "Ожидает",
+    "Разрешено": "Одобрено",
+    "Утверждено": "Одобрено",
+    "Подтверждено": "Одобрено",
+    "Отказано": "Отклонено",
+    "Проведено": "Выплачено",
+    "Завершено": "Выплачено",
+    "Выплачен": "Выплачено",
+}
 
 
 def normalize_status(status: str) -> str:
-    """Normalize payout status to one of the unified values."""
-    status_map = {
-        "Ожидает одобрения": "Ожидает",
-        "Ожидает выплаты": "Ожидает",
-        "Утверждено": "Одобрено",
-        "Подтверждено": "Одобрено",
-        "Проведено": "Выплачено",
-    }
-    return status_map.get(status, status)
+    return _STATUS_MAP.get(status, status)
 
 
 def load_advance_requests(file_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Load payout requests from JSON and normalize ids and statuses."""
-    path = file_path or ADVANCE_REQUESTS_FILE or DEFAULT_ADVANCE_REQUESTS_FILE
-    if not path or not os.path.exists(path):
-        return []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as exc:
-        log(f"❌ Failed reading {path}: {exc}")
-        return []
-
-    for item in data:
-        if "id" in item:
-            try:
-                item["id"] = int(item["id"])
-            except (TypeError, ValueError):
-                pass
-        if "status" in item:
-            item["status"] = normalize_status(item["status"])
-    return data
+    """Load all advance requests from the database (file_path ignored — kept for compat)."""
+    repo = PayoutRepository()
+    return repo.load_all()
 
 
 class PayoutRepository:
+    """Advance-request persistence backed by SQLite via SQLAlchemy."""
+
     def __init__(self, file_path: Optional[str] = None) -> None:
-        self._file = file_path or ADVANCE_REQUESTS_FILE or DEFAULT_ADVANCE_REQUESTS_FILE
-        log(f"📂 Loading payouts from {self._file}")
-        self._data: List[Dict[str, Any]] = self._load()
-        log(f"✅ Loaded payouts: {len(self._data)}")
-        if not self._data:
-            log("⚠️ PayoutRepository loaded no payout records")
-        self._counter = 0
-        changed = False
-        for item in self._data:
-            raw_id = item.get("id")
-            if raw_id is None or not str(raw_id).isdigit():
-                self._counter += 1
-                item["id"] = str(self._counter)
-                changed = True
-            else:
-                self._counter = max(self._counter, int(raw_id))
-        if changed:
-            self._save()
+        # file_path kept for backward compatibility but not used
+        init_db()
+        log("📂 PayoutRepository initialised (SQLite)")
 
     def reload(self) -> None:
-        """Reload payouts from disk, replacing in-memory data."""
-        self._data = self._load()
-        self._counter = 0
-        changed = False
-        for item in self._data:
-            raw_id = item.get("id")
-            if raw_id is None or not str(raw_id).isdigit():
-                self._counter += 1
-                item["id"] = str(self._counter)
-                changed = True
-            else:
-                self._counter = max(self._counter, int(raw_id))
-        if changed:
-            self._save()
+        """No-op: DB reads are always fresh."""
 
-    def _load(self) -> List[Dict[str, Any]]:
-        if not self._file or not os.path.exists(self._file):
-            example = (
-                self._file.replace(".json", ".example.json")
-                if self._file
-                else "advance_requests.example.json"
-            )
-            if os.path.exists(example):
-                log(f"⚠️ {self._file} not found. Using example {example}")
-                try:
-                    with open(example, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    with open(self._file, "w", encoding="utf-8") as out:
-                        json.dump(data, out, ensure_ascii=False, indent=2)
-                    return data
-                except Exception as e:
-                    log(f"❌ Failed reading example {example}: {e}")
-                    return []
-            log(f"❌ {self._file} not found and no example")
-            return []
-        try:
-            with open(self._file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            for payout in data:
-                payout["id"] = int(payout["id"])
-            logger.debug(f"[DEBUG] Загруженные ID: {[p['id'] for p in data]}")
-        except Exception as e:
-            log(f"❌ Failed reading {self._file}: {e}")
-            data = []
-        if not data:
-            example = self._file.replace(".json", ".example.json")
-            if os.path.exists(example):
-                try:
-                    log(f"⚠️ Using example {example}")
-                    with open(example, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    with open(self._file, "w", encoding="utf-8") as out:
-                        json.dump(data, out, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    log(f"❌ Failed reading example {example}: {e}")
-                    data = []
-        # normalize legacy status values
-        status_map = {
-            "В ожидании": "Ожидает",
-            "Ожидает одобрения": "Ожидает",
-            "Разрешено": "Одобрено",
-            "Утверждено": "Одобрено",
-            "Отказано": "Отклонено",
-            "Проведено": "Выплачено",
-            "Подтверждено": "Выплачено",
-            "Завершено": "Выплачено",
-            "Выплачен": "Выплачено",
-        }
-        changed = False
-        for item in data:
-            if item.get("status") in status_map:
-                item["status"] = status_map[item["status"]]
-                changed = True
-        if changed:
-            try:
-                with open(self._file, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-            except Exception as exc:
-                log(f"❌ Failed to save normalized payouts: {exc}")
-        return data
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-    def _save(self) -> None:
-        with open(self._file, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, ensure_ascii=False, indent=2)
+    def _session(self) -> Session:
+        return SessionLocal()
 
-    def _generate_id(self) -> str:
-        self._counter += 1
-        return str(self._counter)
+    def _row_to_dict(self, row: AdvanceRequest) -> Dict[str, Any]:
+        return row.to_dict()
+
+    # ------------------------------------------------------------------
+    # Public API (same contract as the old JSON-based repository)
+    # ------------------------------------------------------------------
 
     def load_all(self) -> List[Dict[str, Any]]:
-        """Return raw payout list without filtering."""
-        return list(self._data)
+        with self._session() as db:
+            rows = db.query(AdvanceRequest).order_by(AdvanceRequest.timestamp.desc()).all()
+            return [self._row_to_dict(r) for r in rows]
 
     def list(
         self,
@@ -172,58 +71,86 @@ class PayoutRepository:
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        result = []
-        from_dt = datetime.fromisoformat(from_date) if from_date else None
-        to_dt = datetime.fromisoformat(to_date) if to_date else None
-        for item in self._data:
-            if employee_id and str(item.get("user_id")) != str(employee_id):
-                continue
-            if payout_type and item.get("payout_type") != payout_type:
-                continue
-            if status and item.get("status") != status:
-                continue
-            if method and item.get("method") != method:
-                continue
-            ts_str = item.get("timestamp")
-            created = None
-            if ts_str:
-                try:
-                    created = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    pass
-            if from_dt and created and created < from_dt:
-                continue
-            if to_dt and created and created > to_dt:
-                continue
-            result.append(item)
-        result.sort(key=lambda i: i.get("timestamp", ""), reverse=True)
-        return result
+        with self._session() as db:
+            q = db.query(AdvanceRequest)
+            if employee_id is not None:
+                q = q.filter(AdvanceRequest.user_id == str(employee_id))
+            if payout_type is not None:
+                q = q.filter(AdvanceRequest.payout_type == payout_type)
+            if status is not None:
+                q = q.filter(AdvanceRequest.status == status)
+            if method is not None:
+                q = q.filter(AdvanceRequest.method == method)
+            if from_date:
+                q = q.filter(AdvanceRequest.timestamp >= from_date)
+            if to_date:
+                q = q.filter(AdvanceRequest.timestamp <= to_date + " 23:59:59")
+            rows = q.order_by(AdvanceRequest.timestamp.desc()).all()
+            return [self._row_to_dict(r) for r in rows]
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        if "id" not in data or any(p.get("id") == data["id"] for p in self._data):
-            data["id"] = self._generate_id()
-        self._data.append(data)
-        self._save()
-        return data
+        with self._session() as db:
+            row = AdvanceRequest(
+                user_id=str(data.get("user_id", "")),
+                name=data.get("name", ""),
+                phone=data.get("phone", ""),
+                card_number=data.get("card_number", ""),
+                bank=data.get("bank", ""),
+                amount=int(data.get("amount", 0)),
+                method=data.get("method", ""),
+                payout_type=data.get("payout_type"),
+                status=normalize_status(data.get("status", "Ожидает")),
+                timestamp=data.get("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                source_file=data.get("source_file"),
+                note=data.get("note", ""),
+                show_note_in_bot=bool(data.get("show_note_in_bot", False)),
+                force_notify_cashier=bool(data.get("force_notify_cashier", False)),
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return self._row_to_dict(row)
 
-    def update(
-        self, payout_id: str, updates: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
-        for item in self._data:
-            if str(item.get("id")) == str(payout_id):
-                item.update({k: v for k, v in updates.items() if v is not None})
-                self._save()
-                return item
-        return None
-
-    def delete_many(self, ids: List[str]) -> None:
-        self._data = [p for p in self._data if str(p.get("id")) not in ids]
-        self._save()
+    def update(self, payout_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        with self._session() as db:
+            row = db.query(AdvanceRequest).filter(
+                AdvanceRequest.id == int(payout_id)
+            ).first()
+            if row is None:
+                return None
+            for key, value in updates.items():
+                if value is None:
+                    continue
+                if key == "status":
+                    value = normalize_status(value)
+                if hasattr(row, key):
+                    setattr(row, key, value)
+            db.commit()
+            db.refresh(row)
+            return self._row_to_dict(row)
 
     def delete(self, payout_id: str) -> bool:
-        before = len(self._data)
-        self._data = [p for p in self._data if str(p.get("id")) != str(payout_id)]
-        if len(self._data) != before:
-            self._save()
+        with self._session() as db:
+            row = db.query(AdvanceRequest).filter(
+                AdvanceRequest.id == int(payout_id)
+            ).first()
+            if row is None:
+                return False
+            db.delete(row)
+            db.commit()
             return True
-        return False
+
+    def delete_many(self, ids: List[str]) -> None:
+        int_ids = []
+        for i in ids:
+            try:
+                int_ids.append(int(i))
+            except (TypeError, ValueError):
+                pass
+        if not int_ids:
+            return
+        with self._session() as db:
+            db.query(AdvanceRequest).filter(AdvanceRequest.id.in_(int_ids)).delete(
+                synchronize_session=False
+            )
+            db.commit()
