@@ -469,7 +469,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-card max-w-lg w-full max-h-[90vh] flex flex-col">
+      <div className="modal-card max-w-2xl w-full max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold flex items-center gap-2">
             <LinkIcon size={16} /> Привязать выплату к движению
@@ -556,20 +556,20 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
               <div className="flex-1 flex items-center justify-center text-[color:var(--color-muted-foreground)] text-sm">Нет выплат за период</div>
             ) : (
               <div className="overflow-auto flex-1">
-                <table className="w-full text-sm">
+                <table className="min-w-full text-sm">
                   <thead className="sticky top-0 bg-[color:var(--color-bg-secondary)] text-xs uppercase text-[color:var(--color-muted-foreground)]">
                     <tr>
                       <th className="px-3 py-2 text-left">Сотрудник</th>
-                      <th className="px-3 py-2 text-left">Тип</th>
-                      <th className="px-3 py-2 text-right">Сумма</th>
-                      <th className="px-3 py-2 text-left">Дата</th>
+                      <th className="px-3 py-2 text-left whitespace-nowrap">Тип</th>
+                      <th className="px-3 py-2 text-right whitespace-nowrap">Сумма</th>
+                      <th className="px-3 py-2 text-left whitespace-nowrap">Дата</th>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[color:var(--color-border)]">
                     {payoutsList.map((p) => (
                       <tr key={p.id} className={`hover:bg-[color:var(--color-bg-secondary)] ${p.cash_move_id ? 'opacity-50' : ''}`}>
-                        <td className="px-3 py-2 whitespace-nowrap">{p.name}</td>
+                        <td className="px-3 py-2 max-w-[200px] truncate" title={p.name}>{p.name}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs">{p.payout_type}</td>
                         <td className="px-3 py-2 text-right font-medium whitespace-nowrap">{Number(p.amount).toLocaleString('ru-RU')} ₽</td>
                         <td className="px-3 py-2 text-xs whitespace-nowrap">{p.timestamp ? p.timestamp.slice(0, 10) : '—'}</td>
