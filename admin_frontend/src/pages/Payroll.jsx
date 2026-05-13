@@ -30,7 +30,7 @@ function makeMonthKey(month, year) {
 function getAnomalyFlags(row) {
   const flags = [];
   const gross = row.total_gross || (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus);
-  if (gross > 0 && (row.advances + row.penalties) / gross > 0.2)
+  if (gross > 0 && row.penalties / gross > 0.2)
     flags.push('Удержания > 20% от начисления');
   if (row.repair_plan > 0 && row.repair_fulfillment != null && row.repair_fulfillment < 0.5)
     flags.push('Выполнение ремонта < 50%');
