@@ -8,12 +8,8 @@ const FIELDS = {
   employee_statuses: 'Статусы сотрудников',
   payout_types: 'Типы выплат',
   payout_methods: 'Способы выплат',
-  payout_statuses: 'Статусы выплат',
-  payout_control_types: 'Типы заявок на выплаты',
-  payout_control_methods: 'Способы заявок на выплаты',
   vacation_types: 'Типы отпусков',
   incentive_types: 'Типы штрафов и премий',
-  broadcast_statuses: 'Статусы рассылки',
   asset_items: 'Предметы имущества',
   asset_sizes: 'Размеры имущества',
 };
@@ -82,7 +78,3 @@ export default function Dictionary() {
     </div>
   );
 }
-
-
-
-

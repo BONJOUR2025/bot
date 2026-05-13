@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   CheckCircle, XCircle, RefreshCw, Download, Archive,
@@ -36,27 +36,21 @@ function Field({ label, hint, children }) {
 export default function Settings() {
   const { toast } = useToast();
   const [loaded, setLoaded] = useState(false);
-  const { register, handleSubmit, reset, watch } = useForm({ defaultValues: {} });
+  const { register, handleSubmit, reset } = useForm({ defaultValues: {} });
 
-  const [status, setStatus]         = useState(null);
+  const [status, setStatus]               = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [archiveBefore, setArchiveBefore] = useState('');
-  const [archiving, setArchiving]   = useState(false);
+  const [archiving, setArchiving]         = useState(false);
   const [archiveResult, setArchiveResult] = useState(null);
-  const [downloading, setDownloading] = useState(false);
+  const [downloading, setDownloading]     = useState(false);
 
   useEffect(() => { load(); loadStatus(); }, []);
 
   async function load() {
     try {
       const res = await api.get('config/');
-      const data = res.data;
-      reset({
-        ...data,
-        payout_types: (data.payout_types || []).join(', '),
-        payout_methods: (data.payout_methods || []).join(', '),
-        send_reminders_to: (data.send_reminders_to || []).join(', '),
-      });
+      reset(res.data);
       setLoaded(true);
     } catch { toast('Ошибка загрузки настроек', 'error'); }
   }
@@ -71,14 +65,8 @@ export default function Settings() {
   }
 
   async function save(values) {
-    const payload = {
-      ...values,
-      payout_types: (values.payout_types || '').split(',').map((s) => s.trim()).filter(Boolean),
-      payout_methods: (values.payout_methods || '').split(',').map((s) => s.trim()).filter(Boolean),
-      send_reminders_to: (values.send_reminders_to || '').split(',').map((s) => s.trim()).filter(Boolean),
-    };
     try {
-      await api.patch('config/', payload);
+      await api.patch('config/', values);
       toast('Сохранено', 'success');
       loadStatus();
     } catch { toast('Ошибка сохранения', 'error'); }
@@ -159,7 +147,7 @@ export default function Settings() {
       <Section title="Расчёт зарплаты">
         <Field
           label="Путь к Excel-файлу (ФОТ)"
-          hint="Полный путь к файлу, например C:\Users\hrbon\Desktop\ФОТ 2027.xlsx — обновите в начале каждого года при создании нового файла"
+          hint="Полный путь к файлу, например C:\Users\hrbon\Desktop\ФОТ 2027.xlsx — обновите в начале каждого года"
         >
           <input className="input w-full font-mono text-sm" placeholder="C:\путь\к\файлу.xlsx"
             {...register('payroll_excel_file')} />
@@ -172,73 +160,33 @@ export default function Settings() {
         )}
       </Section>
 
-      {/* General */}
-      <Section title="Общие">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Название компании">
-            <input className="input w-full" placeholder="Название компании" {...register('company_name')} />
-          </Field>
-          <Field label="Часовой пояс">
-            <input className="input w-full" placeholder="Europe/Moscow" {...register('timezone')} />
-          </Field>
-        </div>
-      </Section>
-
       {/* Payouts */}
       <Section title="Выплаты">
-        <Field label="Лимит аванса в месяц (₽)">
+        <Field label="Лимит аванса в месяц (₽)" hint="Максимальная сумма авансов на одного сотрудника в календарный месяц">
           <input type="number" className="input w-full" {...register('max_advance_amount_per_month')} />
-        </Field>
-        <Field label="Типы выплат (через запятую)">
-          <textarea className="input w-full h-16 resize-none text-sm" {...register('payout_types')} />
-        </Field>
-        <Field label="Способы выплат (через запятую)">
-          <textarea className="input w-full h-16 resize-none text-sm" {...register('payout_methods')} />
         </Field>
       </Section>
 
       {/* Telegram bot */}
       <Section title="Telegram-бот">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="admin_id"><input className="input w-full" {...register('admin_id')} /></Field>
-          <Field label="admin_chat_id"><input className="input w-full" {...register('admin_chat_id')} /></Field>
-          <Field label="card_dispatch_chat_id"><input className="input w-full" {...register('card_dispatch_chat_id')} /></Field>
-        </div>
-        <Field label="Welcome-сообщение">
-          <textarea className="input w-full h-20 resize-none text-sm" {...register('welcome_message')} />
-        </Field>
-      </Section>
-
-      {/* Notifications */}
-      <Section title="Уведомления">
-        <label className="flex items-center gap-2 cursor-pointer text-sm">
-          <input type="checkbox" className="w-4 h-4 rounded" {...register('birthday_reminder_enabled')} />
-          Напоминать о днях рождения
-        </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Время напоминания">
-            <input className="input w-full" placeholder="09:00" {...register('birthday_reminder_time')} />
+          <Field label="admin_id" hint="ID администратора в Telegram">
+            <input className="input w-full font-mono" {...register('admin_id')} />
           </Field>
-          <Field label="ID получателей (через запятую)">
-            <input className="input w-full" {...register('send_reminders_to')} />
+          <Field label="admin_chat_id" hint="Чат для уведомлений и напоминаний о ДР">
+            <input className="input w-full font-mono" {...register('admin_chat_id')} />
+          </Field>
+          <Field label="card_dispatch_chat_id" hint="Чат для отправки реквизитов карты при выплате">
+            <input className="input w-full font-mono" {...register('card_dispatch_chat_id')} />
           </Field>
         </div>
       </Section>
 
       {/* PDF */}
       <Section title="PDF-отчёты">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Путь к шрифту">
-            <input className="input w-full font-mono text-sm" {...register('font_path')} />
-          </Field>
-          <Field label="Формат даты">
-            <input className="input w-full" placeholder="%d.%m.%Y" {...register('pdf_date_format')} />
-          </Field>
-        </div>
-        <label className="flex items-center gap-2 cursor-pointer text-sm">
-          <input type="checkbox" className="w-4 h-4 rounded" {...register('show_excel_comments')} />
-          Показывать комментарии из Excel
-        </label>
+        <Field label="Путь к шрифту" hint="Шрифт для генерации PDF-отчётов, например fonts/DejaVuSans.ttf">
+          <input className="input w-full font-mono text-sm" {...register('font_path')} />
+        </Field>
       </Section>
 
       {/* Save */}
@@ -249,8 +197,8 @@ export default function Settings() {
       {/* Backup */}
       <Section title="Резервное копирование">
         <p className="text-sm text-[color:var(--color-muted-foreground)]">
-          Скачивает ZIP-архив со всеми JSON-файлами данных системы (сотрудники, выплаты, штрафы, планы и др.).
-          Рекомендуется делать перед любыми масштабными изменениями и в начале каждого месяца.
+          Скачивает ZIP-архив со всеми JSON-файлами и базой данных hr.db.
+          Рекомендуется делать перед масштабными изменениями и в начале каждого месяца.
         </p>
         <button type="button" onClick={downloadBackup} disabled={downloading}
           className="btn flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">
@@ -262,8 +210,8 @@ export default function Settings() {
       {/* Archive */}
       <Section title="Архивация старых данных">
         <p className="text-sm text-[color:var(--color-muted-foreground)]">
-          Перемещает записи старше указанной даты из рабочих файлов в архивные. Архивные файлы не удаляются — они остаются на сервере.
-          Затрагивает: авансы, штрафы/премии, корректировки.
+          Перемещает записи старше указанной даты из рабочих файлов в архивные.
+          Затрагивает: штрафы/премии, корректировки, сообщения.
         </p>
         <div className="flex flex-wrap gap-3 items-end">
           <div>
