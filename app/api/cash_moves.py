@@ -138,6 +138,81 @@ def create_cash_moves_router(
         cfg.delete_branch(bid)
         return {"ok": True}
 
+    # ── Payout reconciliation ─────────────────────────────────────────
+
+    @router.get("/match-payouts")
+    async def match_payouts(
+        date_from: Optional[date] = Query(None),
+        date_to: Optional[date] = Query(None),
+        _=Depends(perm),
+    ):
+        """
+        For each payout in the given period, find a cash movement in Firebird
+        that matches by amount and date ±1 day.
+        Returns list of {payout_id, matched, move_id}.
+        Explicit cash_move_id links take priority over fuzzy matching.
+        """
+        from datetime import timedelta
+        from app.services.firebird_service import get_firebird_service
+        from app.data.payout_repository import PayoutRepository
+
+        payout_repo = PayoutRepository()
+        payouts = payout_repo.list(
+            from_date=str(date_from) if date_from else None,
+            to_date=str(date_to) if date_to else None,
+        )
+        if not payouts:
+            return []
+
+        # Expand date range by 1 day for Firebird query
+        fb_from = (date_from - timedelta(days=1)) if date_from else None
+        fb_to = (date_to + timedelta(days=1)) if date_to else None
+        moves = get_firebird_service().get_cash_moves(date_from=fb_from, date_to=fb_to)
+
+        # Index moves: date_str → list of (move_id, amount)
+        from collections import defaultdict
+        moves_by_date: dict = defaultdict(list)
+        for m in moves:
+            d = str(m.get("DK_DATE") or "")[:10]
+            if d:
+                moves_by_date[d].append((str(m.get("ID_KASSES_MOVE") or ""), float(m.get("SUMM") or 0)))
+
+        results = []
+        for p in payouts:
+            payout_id = p["id"]
+
+            # Explicit link wins
+            if p.get("cash_move_id"):
+                results.append({"payout_id": payout_id, "matched": True, "move_id": p["cash_move_id"]})
+                continue
+
+            ts = str(p.get("timestamp") or "")[:10]
+            if not ts:
+                results.append({"payout_id": payout_id, "matched": False, "move_id": None})
+                continue
+
+            try:
+                from datetime import date as date_cls
+                payout_date = date_cls.fromisoformat(ts)
+            except ValueError:
+                results.append({"payout_id": payout_id, "matched": False, "move_id": None})
+                continue
+
+            payout_amount = float(p.get("amount") or 0)
+            matched_id = None
+            for delta in (0, -1, 1):
+                check = str(payout_date + timedelta(days=delta))
+                for move_id, move_amount in moves_by_date.get(check, []):
+                    if abs(payout_amount - move_amount) < 0.01:
+                        matched_id = move_id
+                        break
+                if matched_id:
+                    break
+
+            results.append({"payout_id": payout_id, "matched": matched_id is not None, "move_id": matched_id})
+
+        return results
+
     # ── Records ──────────────────────────────────────────────────────
 
     @router.get("/")

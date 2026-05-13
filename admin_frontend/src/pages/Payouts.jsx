@@ -6,6 +6,8 @@ import {
   RefreshCw,
   Trash2,
   XCircle,
+  LinkIcon,
+  Unlink,
 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -136,6 +138,7 @@ export default function Payouts() {
   };
 
   const [payouts, setPayouts] = useState([]);
+  const [moveMatches, setMoveMatches] = useState({});
   const [employees, setEmployees] = useState([]);
   const [useFullName, setUseFullName] = useState(true);
   const [filters, setFilters] = useState({
@@ -184,11 +187,26 @@ export default function Payouts() {
         list = list.filter((p) => p.name?.toLowerCase().includes(q));
       }
       setPayouts(list);
+      loadMoveMatches(params.from_date, params.to_date);
     } catch (err) {
       console.error(err);
       toast('Ошибка загрузки выплат', 'error');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadMoveMatches(fromDate, toDate) {
+    try {
+      const params = {};
+      if (fromDate) params.date_from = fromDate;
+      if (toDate)   params.date_to   = toDate;
+      const res = await api.get('cash-moves/match-payouts', { params });
+      const map = {};
+      for (const item of res.data || []) map[item.payout_id] = item;
+      setMoveMatches(map);
+    } catch {
+      // Firebird may be unavailable — silently ignore
     }
   }
 
@@ -552,6 +570,7 @@ export default function Payouts() {
                     onChange={toggleSelectAll}
                   />
                 </th>
+                <th className="px-2 py-2 w-8" title="Связь с кассовым движением"></th>
                 <th className="px-4 py-2 text-left">ФИО</th>
                 <th className="px-4 py-2 text-left">Тип</th>
                 <th className="px-4 py-2 text-left">Способ</th>
@@ -570,6 +589,13 @@ export default function Payouts() {
                       checked={selected.has(p.id)}
                       onChange={() => toggleSelect(p.id)}
                     />
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    {moveMatches[p.id] == null ? null :
+                      moveMatches[p.id].matched
+                        ? <LinkIcon size={14} className="mx-auto text-green-500" title={`Движение: ${moveMatches[p.id].move_id}`} />
+                        : <Unlink size={14} className="mx-auto text-amber-400" title="Кассовое движение не найдено" />
+                    }
                   </td>
                   <td className="px-4 py-2">{p.name}</td>
                   <td className="px-4 py-2">{p.payout_type}</td>
@@ -596,7 +622,7 @@ export default function Payouts() {
               ))}
               {payouts.length === 0 && (
                 <tr>
-                  <td colSpan="8" className="px-4 py-3 text-center text-gray-500 italic">Нет данных</td>
+                  <td colSpan="9" className="px-4 py-3 text-center text-gray-500 italic">Нет данных</td>
                 </tr>
               )}
             </tbody>
