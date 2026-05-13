@@ -616,6 +616,7 @@ export default function CashMovements() {
   const [invalidOnly, setInvalidOnly]    = useState(false);
   const [sort, setSort]           = useState({ field: 'DK_DATE', dir: 'desc' });
   const [showBreakdown, setShowBreakdown] = useState(true);
+  const [showSalonBreakdown, setShowSalonBreakdown] = useState(true);
   const [showCatManager, setShowCatManager] = useState(false);
   const [showUsersManager, setShowUsersManager] = useState(false);
   const [showBranchesManager, setShowBranchesManager] = useState(false);
@@ -756,6 +757,17 @@ export default function CashMovements() {
       if (!map[cat]) map[cat] = { count: 0, sum: 0 };
       map[cat].count++;
       map[cat].sum += Number(r.SUMM) || 0;
+    }
+    return Object.entries(Object.assign({}, map)).sort((a, b) => b[1].sum - a[1].sum);
+  }, [filtered]);
+
+  const salonBreakdown = useMemo(() => {
+    const map = Object.create(null);
+    for (const r of filtered) {
+      const dep = r.dep_name || '— без филиала';
+      if (!map[dep]) map[dep] = { count: 0, sum: 0 };
+      map[dep].count++;
+      map[dep].sum += Number(r.SUMM) || 0;
     }
     return Object.entries(Object.assign({}, map)).sort((a, b) => b[1].sum - a[1].sum);
   }, [filtered]);
@@ -998,6 +1010,58 @@ export default function CashMovements() {
                           <div className="flex items-center justify-end gap-2">
                             <div className="w-16 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
                               <div className={`h-full rounded-full ${invalid ? 'bg-red-400' : 'bg-[color:var(--color-primary)]'}`} style={{ width: `${share}%` }} />
+                            </div>
+                            <span className="text-xs text-[color:var(--color-muted-foreground)] w-9 text-right">{share.toFixed(1)}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Salon breakdown */}
+      {!loading && salonBreakdown.length > 0 && (
+        <div className="app-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-medium text-sm">Разбивка по салонам</span>
+            <button onClick={() => setShowSalonBreakdown((v) => !v)}
+              className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]">
+              {showSalonBreakdown ? 'Скрыть' : 'Показать'}
+            </button>
+          </div>
+          {showSalonBreakdown && (
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
+                    <th className="text-left pb-2 font-medium">Салон</th>
+                    <th className="text-right pb-2 font-medium pr-6">Кол-во</th>
+                    <th className="text-right pb-2 font-medium">Сумма</th>
+                    <th className="text-right pb-2 pl-6 font-medium">Доля</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[color:var(--color-border)]">
+                  {salonBreakdown.map(([dep, { count, sum }]) => {
+                    const share = totalSum > 0 ? (sum / totalSum) * 100 : 0;
+                    const unknown = dep === '— без филиала';
+                    return (
+                      <tr key={dep} className="hover:bg-[color:var(--color-bg-secondary)]">
+                        <td className="py-1.5">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${unknown ? 'bg-gray-100 text-gray-500' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'}`}>
+                            {dep}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right pr-6 text-[color:var(--color-muted-foreground)]">{count}</td>
+                        <td className="py-1.5 text-right font-medium">{fmtMoneyShort(sum)}</td>
+                        <td className="py-1.5 text-right pl-6">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-16 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
+                              <div className="h-full rounded-full bg-[color:var(--color-primary)]" style={{ width: `${share}%` }} />
                             </div>
                             <span className="text-xs text-[color:var(--color-muted-foreground)] w-9 text-right">{share.toFixed(1)}%</span>
                           </div>
