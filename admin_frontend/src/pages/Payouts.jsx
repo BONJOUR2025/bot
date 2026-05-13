@@ -274,6 +274,19 @@ export default function Payouts() {
     load();
   }
 
+  async function bulkSetStatus(status) {
+    if (selected.size === 0 || !status) return;
+    try {
+      const res = await api.post('payouts/bulk-status', { ids: [...selected], status });
+      toast(`Статус «${status}» установлен: ${res.data.updated} выплат`, 'success');
+      setSelected(new Set());
+      load();
+    } catch (err) {
+      console.error(err);
+      toast('Ошибка массового изменения статуса', 'error');
+    }
+  }
+
   function openCreate() {
     setForm({
       ...emptyForm,
@@ -447,19 +460,31 @@ export default function Payouts() {
       </div>
 
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 bg-blue-50 p-3 rounded border border-blue-200">
-          <span className="text-sm text-blue-800">
+        <div className="flex flex-wrap items-center gap-3 bg-blue-50 p-3 rounded border border-blue-200">
+          <span className="text-sm text-blue-800 font-medium">
             Выбрано: <strong>{selected.size}</strong>
           </span>
+          <div className="flex items-center gap-2">
+            <select
+              className="border border-blue-300 rounded px-2 py-1 text-sm bg-white"
+              defaultValue=""
+              onChange={(e) => { if (e.target.value) { bulkSetStatus(e.target.value); e.target.value = ''; } }}
+            >
+              <option value="" disabled>Установить статус…</option>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
           <button
             className="btn bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1"
             onClick={bulkDelete}
           >
             <Trash2 size={14} className="inline mr-1" />
-            Удалить выбранные
+            Удалить
           </button>
           <button
-            className="text-sm text-gray-600 hover:text-gray-800 underline"
+            className="text-sm text-gray-500 hover:text-gray-800 underline"
             onClick={() => setSelected(new Set())}
           >
             Снять выделение

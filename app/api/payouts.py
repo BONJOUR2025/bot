@@ -1,8 +1,9 @@
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from app.core.enums import PAYOUT_STATUSES
 from app.schemas.payout import Payout, PayoutCreate, PayoutUpdate
@@ -13,6 +14,11 @@ from .dependencies import get_current_user
 
 
 MANAGE_DATES_PERMISSION = "payouts-manage-dates"
+
+
+class BulkStatusRequest(BaseModel):
+    ids: List[str]
+    status: str
 
 
 def create_payout_router(
@@ -181,6 +187,18 @@ def create_payout_router(
     async def list_active_payouts(current: ResolvedUser = Depends(get_current_user)):
         rows = await service.list_active_payouts()
         return _filter_visible(rows, current)
+
+    @router.post("/bulk-status")
+    async def bulk_status(
+        body: BulkStatusRequest,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        if body.status not in PAYOUT_STATUSES:
+            raise HTTPException(status_code=400, detail="invalid status")
+        for payout_id in body.ids:
+            _ensure_access(payout_id, current)
+        count = await service.bulk_update_status(body.ids, body.status)
+        return {"ok": True, "updated": count}
 
     @router.delete("/")
     async def delete_many(ids: str, current: ResolvedUser = Depends(get_current_user)):
