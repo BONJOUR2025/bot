@@ -205,7 +205,7 @@ function CategoryManager({ categories, onClose, onChanged }) {
                     <button onClick={() => setEditingCat(null)} className="btn bg-gray-200 text-gray-700 hover:bg-gray-300">Отмена</button>
                   </div>
                   <div>
-                    <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Префиксы (начало BASIS):</div>
+                    <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Префиксы (начало Основания):</div>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {editingCat.prefixes.map((p) => (
                         <span key={p} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)]">
@@ -295,10 +295,10 @@ function AssignModal({ record, categories, onSave, onClose }) {
           {createRule && (
             <div>
               <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">
-                Префикс для правила — записи с таким началом BASIS будут автоматически попадать в категорию
+                Префикс для правила — записи с таким началом Основания будут автоматически попадать в категорию
               </label>
               <input className="input w-full font-mono text-sm" value={addPrefix}
-                onChange={(e) => setAddPrefix(e.target.value)} placeholder="Начало BASIS…" />
+                onChange={(e) => setAddPrefix(e.target.value)} placeholder="Начало Основания…" />
             </div>
           )}
         </div>
@@ -321,6 +321,7 @@ export default function CashMovements() {
   const [dateFrom, setDateFrom]   = useState(isoMStart(0));
   const [dateTo, setDateTo]       = useState(isoToday());
   const [query, setQuery]         = useState('');
+  const [searchOr, setSearchOr]   = useState(false);
   const [selDeps, setSelDeps]     = useState([]);
   const [selUsers, setSelUsers]   = useState([]);
   const [selCatFilters, setSelCatFilters] = useState([]);
@@ -421,7 +422,7 @@ export default function CashMovements() {
     if (invalidOnly)          out = out.filter((r) => !r.prefix_ok);
     if (query.trim()) {
       const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-      out = out.filter((r) => { const b = (r.BASIS || '').toLowerCase(); return terms.every((t) => b.includes(t)); });
+      out = out.filter((r) => { const b = (r.BASIS || '').toLowerCase(); return searchOr ? terms.some((t) => b.includes(t)) : terms.every((t) => b.includes(t)); });
     }
     const mult = sort.dir === 'asc' ? 1 : -1;
     return [...out].sort((a, b) => {
@@ -433,7 +434,7 @@ export default function CashMovements() {
       if (sort.field === 'category')  return mult * (a.category  || '').localeCompare(b.category  || '', 'ru');
       return 0;
     });
-  }, [safeRows, selDeps, selUsers, selCatFilters, invalidOnly, query, sort]);
+  }, [safeRows, selDeps, selUsers, selCatFilters, invalidOnly, query, searchOr, sort]);
 
   const filteredIds = useMemo(() => filtered.map((r) => r.ID_KASSES_MOVE), [filtered]);
   const allChecked  = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
@@ -455,7 +456,7 @@ export default function CashMovements() {
   const selectedCount = selected.size;
 
   function exportCsv() {
-    const header = ['Дата','Филиал','Создатель','Категория','BASIS','Сумма','Ручное назначение'];
+    const header = ['Дата','Филиал','Создатель','Категория','Основание','Сумма','Ручное назначение'];
     const csvRows = filtered.map((r) => [
       fmtDate(r.DK_DATE), r.dep_name, r.user_name,
       r.category || '', r.BASIS || '', r.SUMM || 0, r.manually_assigned ? 'Да' : 'Нет',
@@ -521,12 +522,26 @@ export default function CashMovements() {
           )}
         </div>
 
-        {/* BASIS search */}
-        <div className="relative" style={{ maxWidth: 360 }}>
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
-          <input className="input w-full" style={{ paddingLeft: '2.25rem' }} placeholder="Поиск в BASIS (несколько слов через пробел)…"
-            value={query} onChange={(e) => setQuery(e.target.value)} />
-          {query && <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} /></button>}
+        {/* Основание search */}
+        <div className="flex items-center gap-2">
+          <div className="relative" style={{ maxWidth: 360, flex: 1 }}>
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
+            <input className="input w-full" style={{ paddingLeft: '2.25rem' }} placeholder="Поиск по Основанию (несколько слов через пробел)…"
+              value={query} onChange={(e) => setQuery(e.target.value)} />
+            {query && <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} /></button>}
+          </div>
+          {query.trim().split(/\s+/).filter(Boolean).length > 1 && (
+            <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-hidden text-xs font-medium shrink-0">
+              <button onClick={() => setSearchOr(false)}
+                className={`px-2.5 py-1.5 transition-colors ${!searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}>
+                И
+              </button>
+              <button onClick={() => setSearchOr(true)}
+                className={`px-2.5 py-1.5 transition-colors ${searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}>
+                ИЛИ
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Category filter */}
@@ -704,7 +719,7 @@ export default function CashMovements() {
                   <span className="inline-flex items-center gap-1">Категория <SortIcon field="category" sort={sort} /></span>
                 </th>
                 <th className={`${thCls} text-left`} onClick={() => toggleSort('BASIS')}>
-                  <span className="inline-flex items-center gap-1">BASIS <SortIcon field="BASIS" sort={sort} /></span>
+                  <span className="inline-flex items-center gap-1">Основание <SortIcon field="BASIS" sort={sort} /></span>
                 </th>
                 <th className={`${thCls} text-right`} onClick={() => toggleSort('SUMM')}>
                   <span className="inline-flex items-center gap-1 justify-end">Сумма <SortIcon field="SUMM" sort={sort} /></span>
