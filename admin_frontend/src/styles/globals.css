@@ -403,7 +403,7 @@ select option { color: #0f172a; background-color: #ffffff; }
   animation: fadeIn var(--transition) forwards;
 }
 .modal-card {
-  width: min(520px, 100%);
+  width: 100%;
   max-height: min(88vh, 800px);
   overflow-y: auto;
   background: var(--color-modal-bg);
