@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import io
 import json
 import zipfile
@@ -42,6 +40,10 @@ def _get_payroll_excel_path() -> Path:
     except Exception:
         pass
     return Path(settings.payroll_excel_file)
+
+
+class ArchiveRequest(BaseModel):
+    before: str  # YYYY-MM-DD
 
 
 def create_system_router() -> APIRouter:
@@ -99,9 +101,6 @@ def create_system_router() -> APIRouter:
             media_type="application/zip",
             headers={"Content-Disposition": f'attachment; filename="backup_{ts}.zip"'},
         )
-
-    class ArchiveRequest(BaseModel):
-        before: str  # YYYY-MM-DD
 
     @router.post("/archive")
     async def archive_old_records(body: ArchiveRequest, _=Depends(perm)):
