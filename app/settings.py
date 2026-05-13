@@ -137,7 +137,9 @@ class Settings(BaseSettings):
                     continue
                 if isinstance(payload, dict):
                     data.update(payload)
-            return data
+            # Drop empty strings so Pydantic falls back to field defaults
+            return {k: v for k, v in data.items() if v != ""}
+
 
         return (
             init_settings,
