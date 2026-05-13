@@ -139,7 +139,7 @@ function MovementQuickViewModal({ payout, onUnlink, onChangeMove, onClose }) {
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-sm w-full">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold flex items-center gap-2">
@@ -247,7 +247,7 @@ function MovementPickerModal({ payout, onLink, onClose }) {
   }
 
   return (
-    <div className="modal-backdrop" style={{ zIndex: 60 }}>
+    <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-2xl w-full max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold flex items-center gap-2">
@@ -959,7 +959,7 @@ export default function Payouts() {
       <Summary list={payouts} />
 
       {showEditor && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowEditor(false)}>
           <div className="modal-card max-w-lg">
             <h2 className="text-xl font-semibold">
               {form.id ? 'Редактирование' : 'Новая выплата'}

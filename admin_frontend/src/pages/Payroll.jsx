@@ -64,7 +64,7 @@ function TrendBadge({ current, prev }) {
 function CommentModal({ employee, currentComment, onSave, onClose }) {
   const [text, setText] = useState(currentComment || '');
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-sm">
         <h3 className="text-base font-semibold mb-3">
           Комментарий: {employee.employee_name}
@@ -184,7 +184,7 @@ function PlanModal({ employee, plans, onSave, onClose, monthKey }) {
   };
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-md">
         <h3 className="text-lg font-semibold mb-1">
           План продаж: {employee.employee_name}

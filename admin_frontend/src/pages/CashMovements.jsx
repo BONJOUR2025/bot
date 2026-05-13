@@ -85,7 +85,7 @@ function MappingManager({ title, icon: Icon, endpoint, onClose, onChanged }) {
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-lg w-full max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2"><Icon size={18} /> {title}</h3>
@@ -187,7 +187,7 @@ function CategoryManager({ categories, onClose, onChanged }) {
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-2xl w-full max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2"><Settings size={18} /> Управление категориями</h3>
@@ -273,7 +273,7 @@ function AssignModal({ record, categories, onSave, onClose }) {
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-md">
         <h3 className="text-base font-semibold mb-1 flex items-center gap-2"><Tag size={16} /> Назначить категорию</h3>
         <p className="text-xs text-[color:var(--color-muted-foreground)] mb-4 font-mono break-all">{record.BASIS || '—'}</p>
@@ -335,7 +335,7 @@ function LinkedPayoutModal({ payout, onUnlink, onClose }) {
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-sm w-full">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold flex items-center gap-2">
@@ -468,7 +468,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-2xl w-full max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold flex items-center gap-2">

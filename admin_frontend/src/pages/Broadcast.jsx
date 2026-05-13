@@ -280,7 +280,7 @@ export default function Broadcast() {
         </ul>
       </div>
       {showTemplates && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowTemplates(false)}>
           <div className="modal-card max-w-lg">
             <h3 className="text-xl font-semibold">Шаблоны</h3>
             <ul className="space-y-1 mb-4 max-h-40 overflow-auto">

@@ -485,7 +485,7 @@ export default function Employees() {
 
       {showForm && (
 
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="modal-card">
             <h2 className="text-xl font-semibold">
               {form.id ? 'Редактирование' : 'Новый сотрудник'}

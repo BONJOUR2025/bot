@@ -192,7 +192,7 @@ export default function Assets() {
       </div>
 
       {showForm && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="modal-card max-w-xl">
             <h2 className="text-xl font-semibold">{form.id ? 'Редактирование' : 'Новая запись'}</h2>
             <select className="modal-control" value={form.employee_id} onChange={(e) => handleSelect(e.target.value)}>
