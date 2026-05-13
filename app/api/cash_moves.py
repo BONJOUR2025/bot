@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -13,12 +11,12 @@ from app.data.cash_config_repository import CashConfigRepository, get_cash_confi
 
 class CategoryCreate(BaseModel):
     name: str
-    prefixes: list[str] = []
+    prefixes: List[str] = []
 
 
 class CategoryUpdate(BaseModel):
     new_name: Optional[str] = None
-    prefixes: Optional[list[str]] = None
+    prefixes: Optional[List[str]] = None
 
 
 class PrefixBody(BaseModel):
@@ -37,8 +35,8 @@ class MappingEntry(BaseModel):
 
 
 def create_cash_moves_router(
-    repo: CashCategoryRepository | None = None,
-    cfg: CashConfigRepository | None = None,
+    repo: Optional[CashCategoryRepository] = None,
+    cfg: Optional[CashConfigRepository] = None,
 ) -> APIRouter:
     if repo is None:
         repo = get_cash_category_repository()
@@ -144,8 +142,8 @@ def create_cash_moves_router(
 
     @router.get("/")
     async def list_cash_moves(
-        date_from: date | None = Query(None),
-        date_to: date | None = Query(None),
+        date_from: Optional[date] = Query(None),
+        date_to: Optional[date] = Query(None),
         _=Depends(perm),
     ):
         from app.services.firebird_service import get_firebird_service

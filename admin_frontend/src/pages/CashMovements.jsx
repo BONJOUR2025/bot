@@ -346,7 +346,7 @@ export default function CashMovements() {
       if (from) params.date_from = from;
       if (to)   params.date_to   = to;
       const res = await api.get('cash-moves/', { params });
-      setRows(res.data || []);
+      setRows(Array.isArray(res.data) ? res.data : []);
     } catch { toast('Ошибка загрузки данных', 'error'); }
     finally { setLoading(false); }
   }
@@ -397,22 +397,24 @@ export default function CashMovements() {
     setAssignRecord(null);
   }
 
-  const catNames = useMemo(() => categories.map((c) => c.name), [categories]);
+  const catNames = useMemo(() => (Array.isArray(categories) ? categories : []).map((c) => c.name), [categories]);
+
+  const safeRows = useMemo(() => (Array.isArray(rows) ? rows : []), [rows]);
 
   const depOptions = useMemo(() => {
     const seen = new Map();
-    rows.forEach((r) => { const k = String(r.DEP_SRC_ID ?? ''); if (!seen.has(k)) seen.set(k, r.dep_name); });
+    safeRows.forEach((r) => { const k = String(r.DEP_SRC_ID ?? ''); if (!seen.has(k)) seen.set(k, r.dep_name); });
     return [...seen.entries()].map(([id, name]) => ({ id, name: name || id })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
-  }, [rows]);
+  }, [safeRows]);
 
   const userOptions = useMemo(() => {
     const seen = new Map();
-    rows.forEach((r) => { const k = String(r.OWN_USR_ID ?? ''); if (!seen.has(k)) seen.set(k, r.user_name); });
+    safeRows.forEach((r) => { const k = String(r.OWN_USR_ID ?? ''); if (!seen.has(k)) seen.set(k, r.user_name); });
     return [...seen.entries()].map(([id, name]) => ({ id, name: name || id })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
-  }, [rows]);
+  }, [safeRows]);
 
   const filtered = useMemo(() => {
-    let out = rows;
+    let out = safeRows;
     if (selDeps.length)       out = out.filter((r) => selDeps.includes(String(r.DEP_SRC_ID ?? '')));
     if (selUsers.length)      out = out.filter((r) => selUsers.includes(String(r.OWN_USR_ID ?? '')));
     if (selCatFilters.length) out = out.filter((r) => selCatFilters.includes(r.category ?? '__invalid__'));
@@ -431,23 +433,23 @@ export default function CashMovements() {
       if (sort.field === 'category')  return mult * (a.category  || '').localeCompare(b.category  || '', 'ru');
       return 0;
     });
-  }, [rows, selDeps, selUsers, selCatFilters, invalidOnly, query, sort]);
+  }, [safeRows, selDeps, selUsers, selCatFilters, invalidOnly, query, sort]);
 
   const filteredIds = useMemo(() => filtered.map((r) => r.ID_KASSES_MOVE), [filtered]);
   const allChecked  = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
 
   const breakdown = useMemo(() => {
-    const map = {};
+    const map = Object.create(null);
     for (const r of filtered) {
       const cat = r.category ?? '— без категории';
       if (!map[cat]) map[cat] = { count: 0, sum: 0 };
       map[cat].count++;
       map[cat].sum += Number(r.SUMM) || 0;
     }
-    return Object.entries(map).sort((a, b) => b[1].sum - a[1].sum);
+    return Object.entries(Object.assign({}, map)).sort((a, b) => b[1].sum - a[1].sum);
   }, [filtered]);
 
-  const invalidCount  = useMemo(() => rows.filter((r) => !r.prefix_ok).length, [rows]);
+  const invalidCount  = useMemo(() => safeRows.filter((r) => !r.prefix_ok).length, [safeRows]);
   const totalSum      = useMemo(() => filtered.reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered]);
   const selectedSum   = useMemo(() => filtered.filter((r) => selected.has(r.ID_KASSES_MOVE)).reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered, selected]);
   const selectedCount = selected.size;
@@ -604,7 +606,7 @@ export default function CashMovements() {
       </div>
 
       {/* Summary cards */}
-      {!loading && rows.length > 0 && (
+      {!loading && safeRows.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: 'Записей',       value: filtered.length },
@@ -677,7 +679,7 @@ export default function CashMovements() {
         <div className="app-card p-4"><SkeletonTable rows={10} cols={8} /></div>
       ) : filtered.length === 0 ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
-          {rows.length === 0 ? 'Нет данных' : 'Нет записей по заданным фильтрам'}
+          {safeRows.length === 0 ? 'Нет данных' : 'Нет записей по заданным фильтрам'}
         </div>
       ) : (
         <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
