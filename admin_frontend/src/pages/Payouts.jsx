@@ -172,7 +172,7 @@ function MovementQuickViewModal({ payout, onUnlink, onChangeMove, onClose }) {
             {moveDetails.BASIS && (
               <div className="flex justify-between gap-4">
                 <span className="text-gray-500 shrink-0">Основание</span>
-                <span className="font-mono text-xs text-right truncate">{moveDetails.BASIS}</span>
+                <span className="font-mono text-xs text-right truncate min-w-0">{moveDetails.BASIS}</span>
               </div>
             )}
           </div>

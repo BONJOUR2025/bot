@@ -494,7 +494,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
           {move.BASIS && (
             <div className="flex justify-between gap-4">
               <span className="text-[color:var(--color-muted-foreground)] shrink-0">Основание</span>
-              <span className="font-mono text-xs text-right truncate">{move.BASIS}</span>
+              <span className="font-mono text-xs text-right truncate min-w-0">{move.BASIS}</span>
             </div>
           )}
         </div>
