@@ -488,6 +488,33 @@ class FirebirdService:
             return []
 
 
+    def get_cash_move_by_id(self, move_id: str) -> Optional[dict]:
+        """Load a single cash movement by ID from DOC_KASSA_MOVES."""
+        if not FIREBIRD_AVAILABLE:
+            return None
+        sql = """
+            SELECT ID_KASSES_MOVE, DK_DATE, SUMM, BASIS, OWN_USR_ID, DEP_SRC_ID
+            FROM DOC_KASSA_MOVES
+            WHERE ID_KASSES_MOVE = ?
+        """
+        try:
+            conn = _connect()
+            cur = conn.cursor()
+            cur.execute(sql, [move_id])
+            cols = [c[0] for c in cur.description]
+            row = cur.fetchone()
+            conn.close()
+            if row is None:
+                return None
+            result = dict(zip(cols, row))
+            if isinstance(result.get("DK_DATE"), date):
+                result["DK_DATE"] = result["DK_DATE"].isoformat()
+            return result
+        except Exception as e:
+            logger.warning(f"get_cash_move_by_id error: {e}")
+            return None
+
+
 _firebird_service: FirebirdService | None = None
 
 

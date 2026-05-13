@@ -9,6 +9,8 @@ import {
   LinkIcon,
   Unlink,
   Search,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -112,6 +114,117 @@ function formatDateTime(value) {
   );
 }
 
+// ── Movement picker modal ─────────────────────────────────────────
+function MovementPickerModal({ payout, onLink, onClose }) {
+  const { toast } = useToast();
+  const defaultFrom = () => {
+    if (!payout?.timestamp) return '';
+    const d = new Date(payout.timestamp.replace(' ', 'T'));
+    if (isNaN(d)) return '';
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  };
+  const defaultTo = () => {
+    if (!payout?.timestamp) return '';
+    const d = new Date(payout.timestamp.replace(' ', 'T'));
+    if (isNaN(d)) return '';
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  };
+  const [dateFrom, setDateFrom] = useState(defaultFrom);
+  const [dateTo, setDateTo]     = useState(defaultTo);
+  const [moves, setMoves]       = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [linking, setLinking]   = useState(null);
+
+  async function loadMoves() {
+    setLoading(true);
+    try {
+      const params = {};
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo)   params.date_to   = dateTo;
+      const res = await api.get('cash-moves/', { params });
+      setMoves(Array.isArray(res.data) ? res.data : []);
+    } catch { toast('Ошибка загрузки движений', 'error'); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { loadMoves(); }, []);
+
+  async function handleLink(moveId) {
+    setLinking(moveId);
+    try {
+      await onLink(moveId);
+      onClose();
+    } catch { toast('Ошибка привязки', 'error'); }
+    finally { setLinking(null); }
+  }
+
+  return (
+    <div className="modal-backdrop" style={{ zIndex: 60 }}>
+      <div className="modal-card max-w-2xl w-full max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <LinkIcon size={16} /> Выбрать кассовое движение
+          </h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
+        </div>
+
+        <div className="flex gap-2 mb-3">
+          <input type="date" className="input flex-1" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <input type="date" className="input flex-1" value={dateTo}   onChange={(e) => setDateTo(e.target.value)} />
+          <button className="btn btn--primary" onClick={loadMoves} disabled={loading}>
+            {loading ? <RefreshCw size={14} className="animate-spin" /> : 'Найти'}
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Загрузка…</div>
+        ) : moves.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Нет движений за период</div>
+        ) : (
+          <div className="overflow-auto flex-1">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-gray-50 text-xs uppercase text-gray-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">Дата</th>
+                  <th className="px-3 py-2 text-left">Филиал</th>
+                  <th className="px-3 py-2 text-left">Основание</th>
+                  <th className="px-3 py-2 text-right">Сумма</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {moves.map((m) => (
+                  <tr key={m.ID_KASSES_MOVE} className={`hover:bg-gray-50 ${m.has_payout ? 'opacity-50' : ''}`}>
+                    <td className="px-3 py-2 whitespace-nowrap">{m.DK_DATE}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{m.dep_name || '—'}</td>
+                    <td className="px-3 py-2 font-mono text-xs max-w-xs truncate" title={m.BASIS}>{m.BASIS || '—'}</td>
+                    <td className="px-3 py-2 text-right font-medium whitespace-nowrap">
+                      {Number(m.SUMM).toLocaleString('ru-RU')} ₽
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        className="btn btn--primary text-xs px-2 py-1 disabled:opacity-50"
+                        disabled={linking === m.ID_KASSES_MOVE}
+                        onClick={() => handleLink(String(m.ID_KASSES_MOVE))}
+                      >
+                        {linking === m.ID_KASSES_MOVE
+                          ? <RefreshCw size={12} className="animate-spin" />
+                          : 'Привязать'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Payouts() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -143,6 +256,9 @@ export default function Payouts() {
   const [moveMatchesLoading, setMoveMatchesLoading] = useState(false);
   const [findingMoves, setFindingMoves] = useState(new Set());
   const [bulkFinding, setBulkFinding] = useState(false);
+  const [editingMoveDetails, setEditingMoveDetails] = useState(null);
+  const [loadingMoveDetails, setLoadingMoveDetails] = useState(false);
+  const [moveLinkPickerOpen, setMoveLinkPickerOpen] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [useFullName, setUseFullName] = useState(true);
   const [filters, setFilters] = useState({
@@ -191,7 +307,18 @@ export default function Payouts() {
         list = list.filter((p) => p.name?.toLowerCase().includes(q));
       }
       setPayouts(list);
-      loadMoveMatches(params.from_date, params.to_date);
+      if (params.from_date || params.to_date) {
+        loadMoveMatches(params.from_date, params.to_date);
+      } else {
+        // Build matches from cash_move_id stored on each payout (no Firebird query needed)
+        const map = {};
+        for (const p of list) {
+          if (p.cash_move_id) {
+            map[p.id] = { payout_id: p.id, matched: true, move_id: p.cash_move_id };
+          }
+        }
+        setMoveMatches(map);
+      }
     } catch (err) {
       console.error(err);
       toast('Ошибка загрузки выплат', 'error');
@@ -361,7 +488,47 @@ export default function Payouts() {
       show_note_in_bot: p.show_note_in_bot || false,
       force_notify_cashier: Boolean(p.force_notify_cashier),
     });
+    setEditingMoveDetails(null);
     setShowEditor(true);
+    if (p.cash_move_id) fetchMoveDetails(p.cash_move_id);
+  }
+
+  async function fetchMoveDetails(moveId) {
+    setLoadingMoveDetails(true);
+    try {
+      const res = await api.get(`cash-moves/by-id/${moveId}`);
+      setEditingMoveDetails(res.data);
+    } catch {
+      setEditingMoveDetails(null);
+    } finally {
+      setLoadingMoveDetails(false);
+    }
+  }
+
+  async function unlinkMove(payoutId) {
+    try {
+      const res = await api.delete(`payouts/${payoutId}/move-link`);
+      setPayouts((prev) => prev.map((p) => (p.id === payoutId ? res.data : p)));
+      setForm((prev) => ({ ...prev, cash_move_id: null }));
+      setEditingMoveDetails(null);
+      setMoveMatches((prev) => ({ ...prev, [payoutId]: { payout_id: payoutId, matched: false, move_id: null } }));
+      toast('Движение отвязано', 'success');
+    } catch {
+      toast('Ошибка отвязки', 'error');
+    }
+  }
+
+  async function linkMove(payoutId, moveId) {
+    try {
+      const res = await api.post(`payouts/${payoutId}/link-move`, { move_id: moveId });
+      setPayouts((prev) => prev.map((p) => (p.id === payoutId ? res.data : p)));
+      setForm((prev) => ({ ...prev, cash_move_id: moveId }));
+      setMoveMatches((prev) => ({ ...prev, [payoutId]: { payout_id: payoutId, matched: true, move_id: moveId } }));
+      toast('Движение привязано', 'success');
+      fetchMoveDetails(moveId);
+    } catch {
+      toast('Ошибка привязки', 'error');
+    }
   }
 
   async function saveForm() {
@@ -822,6 +989,70 @@ export default function Payouts() {
               />
               Отразить в боте
             </label>
+            {/* Linked movement block (edit mode only) */}
+            {form.id && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium flex items-center gap-1.5">
+                    <LinkIcon size={13} className={form.cash_move_id ? 'text-green-500' : 'text-gray-400'} />
+                    Кассовое движение
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {form.cash_move_id && (
+                      <button
+                        className="text-xs text-red-500 hover:text-red-700 underline"
+                        onClick={() => unlinkMove(form.id)}
+                      >
+                        Отвязать
+                      </button>
+                    )}
+                    <button
+                      className="text-xs text-blue-500 hover:text-blue-700 underline"
+                      onClick={() => setMoveLinkPickerOpen(true)}
+                    >
+                      {form.cash_move_id ? 'Изменить' : 'Привязать'}
+                    </button>
+                  </div>
+                </div>
+                {form.cash_move_id ? (
+                  loadingMoveDetails ? (
+                    <div className="text-xs text-gray-400 flex items-center gap-1">
+                      <RefreshCw size={11} className="animate-spin" /> Загрузка…
+                    </div>
+                  ) : editingMoveDetails ? (
+                    <div className="text-sm space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Дата</span>
+                        <span>{editingMoveDetails.DK_DATE || '—'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Сумма</span>
+                        <span className="font-semibold text-blue-700">
+                          {Number(editingMoveDetails.SUMM).toLocaleString('ru-RU')} ₽
+                        </span>
+                      </div>
+                      {editingMoveDetails.dep_name && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Филиал</span>
+                          <span>{editingMoveDetails.dep_name}</span>
+                        </div>
+                      )}
+                      {editingMoveDetails.BASIS && (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-gray-500 shrink-0">Основание</span>
+                          <span className="font-mono text-xs text-right truncate">{editingMoveDetails.BASIS}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400">ID: {form.cash_move_id}</div>
+                  )
+                ) : (
+                  <div className="text-xs text-gray-400 italic">Движение не привязано</div>
+                )}
+              </div>
+            )}
+
             <div className="flex justify-end space-x-2 pt-2">
               <button
                 className="btn bg-gray-200 text-gray-700 hover:bg-gray-300"
@@ -838,6 +1069,14 @@ export default function Payouts() {
             </div>
           </div>
         </div>
+      )}
+
+      {moveLinkPickerOpen && form.id && (
+        <MovementPickerModal
+          payout={form}
+          onLink={(moveId) => linkMove(form.id, moveId)}
+          onClose={() => setMoveLinkPickerOpen(false)}
+        />
       )}
     </div>
   );

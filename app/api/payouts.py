@@ -25,6 +25,10 @@ class BulkIdsRequest(BaseModel):
     ids: List[int]
 
 
+class LinkMoveRequest(BaseModel):
+    move_id: str
+
+
 def create_payout_router(
     service: PayoutService, access_service: AccessControlService
 ) -> APIRouter:
@@ -191,6 +195,29 @@ def create_payout_router(
     async def list_active_payouts(current: ResolvedUser = Depends(get_current_user)):
         rows = await service.list_active_payouts()
         return _filter_visible(rows, current)
+
+    @router.post("/{payout_id}/link-move", response_model=Payout)
+    async def link_move(
+        payout_id: str,
+        body: LinkMoveRequest,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        _ensure_access(payout_id, current)
+        updated = await service.link_cash_move(payout_id, body.move_id)
+        if updated:
+            return updated
+        raise HTTPException(status_code=404, detail="not found")
+
+    @router.delete("/{payout_id}/move-link", response_model=Payout)
+    async def unlink_move(
+        payout_id: str,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        _ensure_access(payout_id, current)
+        updated = await service.unlink_cash_move(payout_id)
+        if updated:
+            return updated
+        raise HTTPException(status_code=404, detail="not found")
 
     @router.post("/{payout_id}/find-move")
     async def find_move(

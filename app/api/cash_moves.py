@@ -215,6 +215,16 @@ def create_cash_moves_router(
 
     # ── Records ──────────────────────────────────────────────────────
 
+    @router.get("/by-id/{move_id}")
+    async def get_cash_move(move_id: str, _=Depends(perm)):
+        from app.services.firebird_service import get_firebird_service
+        row = get_firebird_service().get_cash_move_by_id(move_id)
+        if row is None:
+            raise HTTPException(404, "not found")
+        row["dep_name"] = cfg.resolve_branch(row.get("DEP_SRC_ID"))
+        row["user_name"] = cfg.resolve_user(row.get("OWN_USR_ID"))
+        return row
+
     @router.get("/")
     async def list_cash_moves(
         date_from: Optional[date] = Query(None),
@@ -225,7 +235,9 @@ def create_cash_moves_router(
         from app.data.payout_repository import PayoutRepository
         rows = get_firebird_service().get_cash_moves(date_from=date_from, date_to=date_to)
         assignments = repo.get_assignments()
-        linked_ids = PayoutRepository().linked_cash_move_ids()
+        payout_repo = PayoutRepository()
+        linked_ids = payout_repo.linked_cash_move_ids()
+        linked_payouts = payout_repo.linked_payouts_by_move_id()
         for r in rows:
             rid = str(r.get("ID_KASSES_MOVE") or "")
             r["dep_name"] = cfg.resolve_branch(r.get("DEP_SRC_ID"))
@@ -235,6 +247,7 @@ def create_cash_moves_router(
             r["prefix_ok"] = category is not None
             r["manually_assigned"] = rid in assignments
             r["has_payout"] = rid in linked_ids
+            r["linked_payout"] = linked_payouts.get(rid)
         return rows
 
     return router

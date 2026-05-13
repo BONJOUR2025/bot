@@ -249,6 +249,22 @@ class PayoutService:
         self._repo.delete_many(ids)
         logger.info(f"🗑 Удалены выплаты: {', '.join(ids)}")
 
+    async def link_cash_move(self, payout_id: str, move_id: str) -> Optional[Payout]:
+        self._repo.reload()
+        updated = self._repo.update(payout_id, {"cash_move_id": move_id})
+        if updated:
+            logger.info(f"🔗 Выплата {payout_id} вручную привязана к движению {move_id}")
+            return Payout(**updated)
+        return None
+
+    async def unlink_cash_move(self, payout_id: str) -> Optional[Payout]:
+        self._repo.reload()
+        updated = self._repo.unlink_cash_move(payout_id)
+        if updated:
+            logger.info(f"🔓 Выплата {payout_id} отвязана от движения")
+            return Payout(**updated)
+        return None
+
     async def delete_payout(self, payout_id: str) -> bool:
         self._repo.reload()
         deleted = self._repo.delete(payout_id)

@@ -149,6 +149,39 @@ class PayoutRepository:
             ).all()
             return {r[0] for r in rows}
 
+    def linked_payouts_by_move_id(self) -> Dict[str, Dict]:
+        """Return mapping of cash_move_id → basic payout info for all linked payouts."""
+        with self._session() as db:
+            rows = db.query(AdvanceRequest).filter(
+                AdvanceRequest.cash_move_id.isnot(None)
+            ).all()
+            result: Dict[str, Dict] = {}
+            for r in rows:
+                result[r.cash_move_id] = {
+                    "id": r.id,
+                    "user_id": r.user_id,
+                    "name": r.name,
+                    "amount": r.amount,
+                    "payout_type": r.payout_type,
+                    "status": r.status,
+                    "timestamp": r.timestamp,
+                    "method": r.method,
+                }
+            return result
+
+    def unlink_cash_move(self, payout_id: str) -> Optional[Dict[str, Any]]:
+        """Clear cash_move_id for the given payout."""
+        with self._session() as db:
+            row = db.query(AdvanceRequest).filter(
+                AdvanceRequest.id == int(payout_id)
+            ).first()
+            if row is None:
+                return None
+            row.cash_move_id = None
+            db.commit()
+            db.refresh(row)
+            return self._row_to_dict(row)
+
     def delete_many(self, ids: List[str]) -> None:
         int_ids = []
         for i in ids:

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
-  Search, X, AlertTriangle, CheckCircle, Download,
+  Search, X, AlertTriangle, CheckCircle, Download, RefreshCw,
   ChevronUp, ChevronDown, ChevronsUpDown,
   Tag, Settings, Plus, Trash2, Edit2, Check, Users, Building2,
   LinkIcon, Unlink,
@@ -313,17 +313,129 @@ function AssignModal({ record, categories, onSave, onClose }) {
   );
 }
 
+// ── Linked payout details modal ───────────────────────────────────
+function LinkedPayoutModal({ payout, onUnlink, onClose }) {
+  const { toast } = useToast();
+  const [unlinking, setUnlinking] = useState(false);
+
+  const statusColor = (s) => {
+    if (s === 'Одобрено') return 'bg-green-100 text-green-800';
+    if (s === 'Отклонено') return 'bg-red-100 text-red-800';
+    if (s === 'Выплачено') return 'bg-blue-100 text-blue-800';
+    return 'bg-yellow-100 text-yellow-800';
+  };
+
+  async function handleUnlink() {
+    setUnlinking(true);
+    try {
+      await onUnlink();
+      onClose();
+    } catch { toast('Ошибка отвязки', 'error'); }
+    finally { setUnlinking(false); }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card max-w-sm w-full">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <LinkIcon size={16} className="text-green-500" /> Привязанная выплата
+          </h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-bg-secondary)]"><X size={18} /></button>
+        </div>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-[color:var(--color-muted-foreground)]">Сотрудник</span>
+            <span className="font-medium">{payout.name || '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[color:var(--color-muted-foreground)]">Сумма</span>
+            <span className="font-semibold text-[color:var(--color-primary)]">
+              {Number(payout.amount).toLocaleString('ru-RU')} ₽
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[color:var(--color-muted-foreground)]">Тип</span>
+            <span>{payout.payout_type || '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[color:var(--color-muted-foreground)]">Способ</span>
+            <span>{payout.method || '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[color:var(--color-muted-foreground)]">Дата</span>
+            <span>{payout.timestamp ? payout.timestamp.slice(0, 10) : '—'}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[color:var(--color-muted-foreground)]">Статус</span>
+            <span className={`px-2 py-0.5 rounded text-xs ${statusColor(payout.status)}`}>{payout.status}</span>
+          </div>
+        </div>
+        <div className="flex justify-between mt-5">
+          <button
+            className="btn text-sm text-red-500 hover:text-red-700 border-red-200 hover:border-red-400 disabled:opacity-50"
+            onClick={handleUnlink}
+            disabled={unlinking}
+          >
+            {unlinking ? <RefreshCw size={13} className="animate-spin inline mr-1" /> : <Unlink size={13} className="inline mr-1" />}
+            Отвязать
+          </button>
+          <button className="btn" onClick={onClose}>Закрыть</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Create Payout from cash movement modal ────────────────────────
 function CreatePayoutModal({ move, onClose, onCreated }) {
   const { toast } = useToast();
+  const [tab, setTab]           = useState('create'); // 'create' | 'link'
   const [employees, setEmployees] = useState([]);
   const [userId, setUserId]     = useState('');
   const [payoutType, setPayoutType] = useState('Зарплата');
   const [saving, setSaving]     = useState(false);
+  // "link existing" tab state
+  const defaultFrom = move.DK_DATE ? (() => {
+    const d = new Date(move.DK_DATE); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10);
+  })() : '';
+  const defaultTo = move.DK_DATE ? (() => {
+    const d = new Date(move.DK_DATE); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10);
+  })() : '';
+  const [linkDateFrom, setLinkDateFrom] = useState(defaultFrom);
+  const [linkDateTo, setLinkDateTo]     = useState(defaultTo);
+  const [payoutsList, setPayoutsList]   = useState([]);
+  const [loadingPayouts, setLoadingPayouts] = useState(false);
+  const [linking, setLinking]           = useState(null);
 
   useEffect(() => {
     api.get('employees/').then((r) => setEmployees(r.data || [])).catch(() => {});
   }, []);
+
+  async function loadPayouts() {
+    setLoadingPayouts(true);
+    try {
+      const params = {};
+      if (linkDateFrom) params.from_date = linkDateFrom;
+      if (linkDateTo)   params.to_date   = linkDateTo;
+      const res = await api.get('payouts/', { params });
+      setPayoutsList(Array.isArray(res.data) ? res.data : []);
+    } catch { toast('Ошибка загрузки выплат', 'error'); }
+    finally { setLoadingPayouts(false); }
+  }
+
+  useEffect(() => { if (tab === 'link') loadPayouts(); }, [tab]);
+
+  async function handleLinkExisting(payoutId) {
+    setLinking(payoutId);
+    try {
+      const res = await api.post(`payouts/${payoutId}/link-move`, { move_id: String(move.ID_KASSES_MOVE) });
+      toast('Движение привязано к выплате', 'success');
+      onCreated(String(move.ID_KASSES_MOVE), res.data);
+      onClose();
+    } catch { toast('Ошибка привязки', 'error'); }
+    finally { setLinking(null); }
+  }
 
   async function handleSave() {
     if (!userId) { toast('Выберите сотрудника', 'error'); return; }
@@ -331,7 +443,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
     if (!emp) return;
     setSaving(true);
     try {
-      await api.post('payouts/', {
+      const res = await api.post('payouts/', {
         user_id: String(emp.user_id),
         name: emp.name || '',
         phone: emp.phone || '',
@@ -346,7 +458,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
         timestamp: move.DK_DATE ? move.DK_DATE + 'T00:00:00' : undefined,
       });
       toast('Выплата создана и привязана', 'success');
-      onCreated(String(move.ID_KASSES_MOVE));
+      onCreated(String(move.ID_KASSES_MOVE), res.data);
       onClose();
     } catch (e) {
       toast(e.response?.data?.detail || 'Ошибка создания выплаты', 'error');
@@ -357,16 +469,16 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-card max-w-md w-full">
-        <div className="flex items-center justify-between mb-4">
+      <div className="modal-card max-w-lg w-full max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold flex items-center gap-2">
-            <LinkIcon size={16} /> Создать выплату из движения
+            <LinkIcon size={16} /> Привязать выплату к движению
           </h3>
           <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-bg-secondary)]"><X size={18} /></button>
         </div>
 
         {/* Movement info */}
-        <div className="rounded-lg bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] p-3 mb-4 text-sm space-y-1">
+        <div className="rounded-lg bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] p-3 mb-3 text-sm space-y-1 shrink-0">
           <div className="flex justify-between">
             <span className="text-[color:var(--color-muted-foreground)]">Дата</span>
             <span className="font-medium">{move.DK_DATE || '—'}</span>
@@ -387,32 +499,102 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
           )}
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium mb-1">Сотрудник *</label>
-            <select className="input w-full" value={userId} onChange={(e) => setUserId(e.target.value)}>
-              <option value="">Выберите сотрудника…</option>
-              {employees.map((e) => (
-                <option key={e.user_id} value={e.user_id}>{e.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Тип выплаты</label>
-            <select className="input w-full" value={payoutType} onChange={(e) => setPayoutType(e.target.value)}>
-              {['Зарплата', 'Аванс', 'Премия', 'Другое'].map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5">
-          <button className="btn" onClick={onClose}>Отмена</button>
-          <button className="btn btn--primary flex items-center gap-1.5" onClick={handleSave} disabled={saving || !userId}>
-            <LinkIcon size={14} /> {saving ? 'Создаю…' : 'Создать выплату'}
+        {/* Tabs */}
+        <div className="flex rounded-lg border border-[color:var(--color-border)] overflow-hidden mb-3 shrink-0 text-sm font-medium">
+          <button
+            className={`flex-1 px-3 py-2 transition-colors ${tab === 'create' ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
+            onClick={() => setTab('create')}
+          >
+            Создать новую
+          </button>
+          <button
+            className={`flex-1 px-3 py-2 transition-colors ${tab === 'link' ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
+            onClick={() => setTab('link')}
+          >
+            Привязать существующую
           </button>
         </div>
+
+        {tab === 'create' ? (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Сотрудник *</label>
+              <select className="input w-full" value={userId} onChange={(e) => setUserId(e.target.value)}>
+                <option value="">Выберите сотрудника…</option>
+                {employees.map((e) => (
+                  <option key={e.user_id} value={e.user_id}>{e.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Тип выплаты</label>
+              <select className="input w-full" value={payoutType} onChange={(e) => setPayoutType(e.target.value)}>
+                {['Зарплата', 'Аванс', 'Премия', 'Другое'].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button className="btn" onClick={onClose}>Отмена</button>
+              <button className="btn btn--primary flex items-center gap-1.5" onClick={handleSave} disabled={saving || !userId}>
+                <LinkIcon size={14} /> {saving ? 'Создаю…' : 'Создать выплату'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex gap-2 mb-2 shrink-0">
+              <input type="date" className="input flex-1" value={linkDateFrom} onChange={(e) => setLinkDateFrom(e.target.value)} />
+              <input type="date" className="input flex-1" value={linkDateTo}   onChange={(e) => setLinkDateTo(e.target.value)} />
+              <button className="btn btn--primary shrink-0" onClick={loadPayouts} disabled={loadingPayouts}>
+                {loadingPayouts ? <RefreshCw size={13} className="animate-spin" /> : 'Найти'}
+              </button>
+            </div>
+            {loadingPayouts ? (
+              <div className="flex-1 flex items-center justify-center text-[color:var(--color-muted-foreground)] text-sm">Загрузка…</div>
+            ) : payoutsList.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-[color:var(--color-muted-foreground)] text-sm">Нет выплат за период</div>
+            ) : (
+              <div className="overflow-auto flex-1">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-[color:var(--color-bg-secondary)] text-xs uppercase text-[color:var(--color-muted-foreground)]">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Сотрудник</th>
+                      <th className="px-3 py-2 text-left">Тип</th>
+                      <th className="px-3 py-2 text-right">Сумма</th>
+                      <th className="px-3 py-2 text-left">Дата</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[color:var(--color-border)]">
+                    {payoutsList.map((p) => (
+                      <tr key={p.id} className={`hover:bg-[color:var(--color-bg-secondary)] ${p.cash_move_id ? 'opacity-50' : ''}`}>
+                        <td className="px-3 py-2 whitespace-nowrap">{p.name}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs">{p.payout_type}</td>
+                        <td className="px-3 py-2 text-right font-medium whitespace-nowrap">{Number(p.amount).toLocaleString('ru-RU')} ₽</td>
+                        <td className="px-3 py-2 text-xs whitespace-nowrap">{p.timestamp ? p.timestamp.slice(0, 10) : '—'}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            className="btn btn--primary text-xs px-2 py-1 disabled:opacity-50"
+                            disabled={linking === p.id}
+                            onClick={() => handleLinkExisting(p.id)}
+                          >
+                            {linking === p.id
+                              ? <RefreshCw size={12} className="animate-spin" />
+                              : 'Привязать'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex justify-end pt-2 shrink-0">
+              <button className="btn" onClick={onClose}>Отмена</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -439,6 +621,7 @@ export default function CashMovements() {
   const [showBranchesManager, setShowBranchesManager] = useState(false);
   const [assignRecord, setAssignRecord]   = useState(null);
   const [createPayoutMove, setCreatePayoutMove] = useState(null);
+  const [linkedPayoutRecord, setLinkedPayoutRecord] = useState(null); // {move, payout}
   const [noPayoutOnly, setNoPayoutOnly]   = useState(false);
   const [selected, setSelected]   = useState(new Set()); // ID_KASSES_MOVE
 
@@ -488,10 +671,22 @@ export default function CashMovements() {
     setSelected((prev) => ids.every((id) => prev.has(id)) ? new Set() : new Set(ids));
   }
 
-  function handlePayoutCreated(cashMoveId) {
+  function handlePayoutCreated(cashMoveId, payoutData) {
     setRows((prev) => prev.map((r) =>
-      String(r.ID_KASSES_MOVE) === String(cashMoveId) ? { ...r, has_payout: true } : r
+      String(r.ID_KASSES_MOVE) === String(cashMoveId)
+        ? { ...r, has_payout: true, linked_payout: payoutData || r.linked_payout }
+        : r
     ));
+  }
+
+  async function handleUnlinkPayout(payoutId, cashMoveId) {
+    const res = await api.delete(`payouts/${payoutId}/move-link`);
+    setRows((prev) => prev.map((r) =>
+      String(r.ID_KASSES_MOVE) === String(cashMoveId)
+        ? { ...r, has_payout: false, linked_payout: null }
+        : r
+    ));
+    return res;
   }
 
   async function handleAssign({ record_id, category, add_prefix }) {
@@ -881,9 +1076,15 @@ export default function CashMovements() {
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {row.has_payout
-                        ? <LinkIcon size={14} className="mx-auto text-green-500" title="Выплата привязана" />
+                        ? <button
+                            onClick={() => row.linked_payout && setLinkedPayoutRecord({ move: row, payout: row.linked_payout })}
+                            title="Выплата привязана — нажмите для просмотра"
+                            className="p-0.5 rounded hover:bg-green-100 transition-colors"
+                          >
+                            <LinkIcon size={14} className="mx-auto text-green-500" />
+                          </button>
                         : <button onClick={() => setCreatePayoutMove(row)}
-                            title="Создать выплату на основе этого движения"
+                            title="Привязать выплату к этому движению"
                             className="p-0.5 rounded hover:bg-amber-100 transition-colors">
                             <Unlink size={14} className="text-amber-500 mx-auto" />
                           </button>
@@ -975,12 +1176,21 @@ export default function CashMovements() {
         />
       )}
 
-      {/* Create Payout Modal */}
+      {/* Create / Link Payout Modal */}
       {createPayoutMove && (
         <CreatePayoutModal
           move={createPayoutMove}
           onClose={() => setCreatePayoutMove(null)}
           onCreated={handlePayoutCreated}
+        />
+      )}
+
+      {/* Linked Payout Details Modal */}
+      {linkedPayoutRecord && (
+        <LinkedPayoutModal
+          payout={linkedPayoutRecord.payout}
+          onUnlink={() => handleUnlinkPayout(linkedPayoutRecord.payout.id, linkedPayoutRecord.move.ID_KASSES_MOVE)}
+          onClose={() => setLinkedPayoutRecord(null)}
         />
       )}
     </div>
