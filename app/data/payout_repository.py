@@ -105,6 +105,7 @@ class PayoutRepository:
                 note=data.get("note", ""),
                 show_note_in_bot=bool(data.get("show_note_in_bot", False)),
                 force_notify_cashier=bool(data.get("force_notify_cashier", False)),
+                cash_move_id=data.get("cash_move_id") or None,
             )
             db.add(row)
             db.commit()
@@ -139,6 +140,14 @@ class PayoutRepository:
             db.delete(row)
             db.commit()
             return True
+
+    def linked_cash_move_ids(self) -> set:
+        """Return the set of all cash_move_id values that have a linked payout."""
+        with self._session() as db:
+            rows = db.query(AdvanceRequest.cash_move_id).filter(
+                AdvanceRequest.cash_move_id.isnot(None)
+            ).all()
+            return {r[0] for r in rows}
 
     def delete_many(self, ids: List[str]) -> None:
         int_ids = []

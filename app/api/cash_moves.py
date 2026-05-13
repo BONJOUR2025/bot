@@ -147,8 +147,10 @@ def create_cash_moves_router(
         _=Depends(perm),
     ):
         from app.services.firebird_service import get_firebird_service
+        from app.data.payout_repository import PayoutRepository
         rows = get_firebird_service().get_cash_moves(date_from=date_from, date_to=date_to)
         assignments = repo.get_assignments()
+        linked_ids = PayoutRepository().linked_cash_move_ids()
         for r in rows:
             rid = str(r.get("ID_KASSES_MOVE") or "")
             r["dep_name"] = cfg.resolve_branch(r.get("DEP_SRC_ID"))
@@ -157,6 +159,7 @@ def create_cash_moves_router(
             r["category"] = category
             r["prefix_ok"] = category is not None
             r["manually_assigned"] = rid in assignments
+            r["has_payout"] = rid in linked_ids
         return rows
 
     return router

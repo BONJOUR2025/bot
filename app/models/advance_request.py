@@ -21,6 +21,7 @@ class AdvanceRequest(Base):
     note = Column(Text, nullable=False, default="")
     show_note_in_bot = Column(Boolean, nullable=False, default=False)
     force_notify_cashier = Column(Boolean, nullable=False, default=False)
+    cash_move_id = Column(String, nullable=True, index=True)
 
     def to_dict(self) -> dict:
         return {
@@ -39,4 +40,5 @@ class AdvanceRequest(Base):
             "note": self.note,
             "show_note_in_bot": self.show_note_in_bot,
             "force_notify_cashier": self.force_notify_cashier,
+            "cash_move_id": self.cash_move_id,
         }

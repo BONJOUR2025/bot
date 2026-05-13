@@ -3,6 +3,7 @@ import {
   Search, X, AlertTriangle, CheckCircle, Download,
   ChevronUp, ChevronDown, ChevronsUpDown,
   Tag, Settings, Plus, Trash2, Edit2, Check, Users, Building2,
+  LinkIcon, Unlink,
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
@@ -312,6 +313,111 @@ function AssignModal({ record, categories, onSave, onClose }) {
   );
 }
 
+// ── Create Payout from cash movement modal ────────────────────────
+function CreatePayoutModal({ move, onClose, onCreated }) {
+  const { toast } = useToast();
+  const [employees, setEmployees] = useState([]);
+  const [userId, setUserId]     = useState('');
+  const [payoutType, setPayoutType] = useState('Зарплата');
+  const [saving, setSaving]     = useState(false);
+
+  useEffect(() => {
+    api.get('employees/').then((r) => setEmployees(r.data || [])).catch(() => {});
+  }, []);
+
+  async function handleSave() {
+    if (!userId) { toast('Выберите сотрудника', 'error'); return; }
+    const emp = employees.find((e) => String(e.user_id) === String(userId));
+    if (!emp) return;
+    setSaving(true);
+    try {
+      await api.post('payouts/', {
+        user_id: String(emp.user_id),
+        name: emp.name || '',
+        phone: emp.phone || '',
+        card_number: emp.card_number || '',
+        bank: emp.bank || '',
+        amount: Number(move.SUMM) || 0,
+        method: 'Из кассы',
+        payout_type: payoutType,
+        status: 'Выплачено',
+        cash_move_id: String(move.ID_KASSES_MOVE),
+        note: move.BASIS ? `Основание: ${move.BASIS}` : '',
+        timestamp: move.DK_DATE ? move.DK_DATE + 'T00:00:00' : undefined,
+      });
+      toast('Выплата создана и привязана', 'success');
+      onCreated(String(move.ID_KASSES_MOVE));
+      onClose();
+    } catch (e) {
+      toast(e.response?.data?.detail || 'Ошибка создания выплаты', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card max-w-md w-full">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <LinkIcon size={16} /> Создать выплату из движения
+          </h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-bg-secondary)]"><X size={18} /></button>
+        </div>
+
+        {/* Movement info */}
+        <div className="rounded-lg bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] p-3 mb-4 text-sm space-y-1">
+          <div className="flex justify-between">
+            <span className="text-[color:var(--color-muted-foreground)]">Дата</span>
+            <span className="font-medium">{move.DK_DATE || '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[color:var(--color-muted-foreground)]">Филиал</span>
+            <span className="font-medium">{move.dep_name || '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[color:var(--color-muted-foreground)]">Сумма</span>
+            <span className="font-semibold text-[color:var(--color-primary)]">{Number(move.SUMM).toLocaleString('ru-RU')} ₽</span>
+          </div>
+          {move.BASIS && (
+            <div className="flex justify-between gap-4">
+              <span className="text-[color:var(--color-muted-foreground)] shrink-0">Основание</span>
+              <span className="font-mono text-xs text-right truncate">{move.BASIS}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">Сотрудник *</label>
+            <select className="input w-full" value={userId} onChange={(e) => setUserId(e.target.value)}>
+              <option value="">Выберите сотрудника…</option>
+              {employees.map((e) => (
+                <option key={e.user_id} value={e.user_id}>{e.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Тип выплаты</label>
+            <select className="input w-full" value={payoutType} onChange={(e) => setPayoutType(e.target.value)}>
+              {['Зарплата', 'Аванс', 'Премия', 'Другое'].map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-5">
+          <button className="btn" onClick={onClose}>Отмена</button>
+          <button className="btn btn--primary flex items-center gap-1.5" onClick={handleSave} disabled={saving || !userId}>
+            <LinkIcon size={14} /> {saving ? 'Создаю…' : 'Создать выплату'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────
 export default function CashMovements() {
   const { toast } = useToast();
@@ -332,6 +438,8 @@ export default function CashMovements() {
   const [showUsersManager, setShowUsersManager] = useState(false);
   const [showBranchesManager, setShowBranchesManager] = useState(false);
   const [assignRecord, setAssignRecord]   = useState(null);
+  const [createPayoutMove, setCreatePayoutMove] = useState(null);
+  const [noPayoutOnly, setNoPayoutOnly]   = useState(false);
   const [selected, setSelected]   = useState(new Set()); // ID_KASSES_MOVE
 
   useEffect(() => {
@@ -380,6 +488,12 @@ export default function CashMovements() {
     setSelected((prev) => ids.every((id) => prev.has(id)) ? new Set() : new Set(ids));
   }
 
+  function handlePayoutCreated(cashMoveId) {
+    setRows((prev) => prev.map((r) =>
+      String(r.ID_KASSES_MOVE) === String(cashMoveId) ? { ...r, has_payout: true } : r
+    ));
+  }
+
   async function handleAssign({ record_id, category, add_prefix }) {
     try {
       await api.post('cash-moves/assign', { record_id, category, add_prefix });
@@ -420,6 +534,7 @@ export default function CashMovements() {
     if (selUsers.length)      out = out.filter((r) => selUsers.includes(String(r.OWN_USR_ID ?? '')));
     if (selCatFilters.length) out = out.filter((r) => selCatFilters.includes(r.category ?? '__invalid__'));
     if (invalidOnly)          out = out.filter((r) => !r.prefix_ok);
+    if (noPayoutOnly)         out = out.filter((r) => !r.has_payout);
     if (query.trim()) {
       const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
       out = out.filter((r) => { const b = (r.BASIS || '').toLowerCase(); return searchOr ? terms.some((t) => b.includes(t)) : terms.every((t) => b.includes(t)); });
@@ -434,7 +549,7 @@ export default function CashMovements() {
       if (sort.field === 'category')  return mult * (a.category  || '').localeCompare(b.category  || '', 'ru');
       return 0;
     });
-  }, [safeRows, selDeps, selUsers, selCatFilters, invalidOnly, query, searchOr, sort]);
+  }, [safeRows, selDeps, selUsers, selCatFilters, invalidOnly, noPayoutOnly, query, searchOr, sort]);
 
   const filteredIds = useMemo(() => filtered.map((r) => r.ID_KASSES_MOVE), [filtered]);
   const allChecked  = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
@@ -450,7 +565,8 @@ export default function CashMovements() {
     return Object.entries(Object.assign({}, map)).sort((a, b) => b[1].sum - a[1].sum);
   }, [filtered]);
 
-  const invalidCount  = useMemo(() => safeRows.filter((r) => !r.prefix_ok).length, [safeRows]);
+  const invalidCount    = useMemo(() => safeRows.filter((r) => !r.prefix_ok).length, [safeRows]);
+  const noPayoutCount   = useMemo(() => safeRows.filter((r) => !r.has_payout).length, [safeRows]);
   const totalSum      = useMemo(() => filtered.reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered]);
   const selectedSum   = useMemo(() => filtered.filter((r) => selected.has(r.ID_KASSES_MOVE)).reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered, selected]);
   const selectedCount = selected.size;
@@ -607,31 +723,43 @@ export default function CashMovements() {
           )}
         </div>
 
-        {/* Invalid only */}
-        <label className="flex items-center gap-2 cursor-pointer w-fit">
-          <input type="checkbox" className="w-4 h-4 rounded" checked={invalidOnly}
-            onChange={(e) => setInvalidOnly(e.target.checked)} />
-          <span className="text-sm">Только записи без категории</span>
-          {invalidCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-              <AlertTriangle size={11} /> {invalidCount}
-            </span>
-          )}
-        </label>
+        {/* Invalid only + no-payout only */}
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 cursor-pointer w-fit">
+            <input type="checkbox" className="w-4 h-4 rounded" checked={invalidOnly}
+              onChange={(e) => setInvalidOnly(e.target.checked)} />
+            <span className="text-sm">Только записи без категории</span>
+            {invalidCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                <AlertTriangle size={11} /> {invalidCount}
+              </span>
+            )}
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer w-fit">
+            <input type="checkbox" className="w-4 h-4 rounded" checked={noPayoutOnly}
+              onChange={(e) => setNoPayoutOnly(e.target.checked)} />
+            <span className="text-sm">Только без привязанной выплаты</span>
+            {noPayoutCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                <Unlink size={11} /> {noPayoutCount}
+              </span>
+            )}
+          </label>
+        </div>
       </div>
 
       {/* Summary cards */}
       {!loading && safeRows.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Записей',       value: filtered.length },
-            { label: 'Итого сумма',   value: fmtMoneyShort(totalSum), primary: true },
-            { label: 'С категорией',  value: filtered.filter((r) => r.prefix_ok).length, green: true },
-            { label: 'Без категории', value: filtered.filter((r) => !r.prefix_ok).length, red: true },
+            { label: 'Записей',         value: filtered.length },
+            { label: 'Итого сумма',     value: fmtMoneyShort(totalSum), primary: true },
+            { label: 'С выплатой',      value: filtered.filter((r) => r.has_payout).length, green: true },
+            { label: 'Без выплаты',     value: filtered.filter((r) => !r.has_payout).length, amber: true },
           ].map((s) => (
             <div key={s.label} className="app-card p-4 text-center">
               <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{s.label}</div>
-              <div className={`text-lg font-semibold ${s.primary ? 'text-[color:var(--color-primary)]' : s.green ? 'text-green-600' : s.red ? 'text-red-600' : ''}`}>{s.value}</div>
+              <div className={`text-lg font-semibold ${s.primary ? 'text-[color:var(--color-primary)]' : s.green ? 'text-green-600' : s.amber ? 'text-amber-600' : s.red ? 'text-red-600' : ''}`}>{s.value}</div>
             </div>
           ))}
         </div>
@@ -705,7 +833,8 @@ export default function CashMovements() {
                   <input type="checkbox" className="w-4 h-4 rounded cursor-pointer"
                     checked={allChecked} onChange={() => toggleSelectAll(filteredIds)} />
                 </th>
-                <th className="px-3 py-3 w-8"></th>
+                <th className="px-3 py-3 w-8" title="Статус категории"></th>
+                <th className="px-3 py-3 w-8" title="Привязанная выплата"></th>
                 <th className={`${thCls} text-left`} onClick={() => toggleSort('DK_DATE')}>
                   <span className="inline-flex items-center gap-1">Дата <SortIcon field="DK_DATE" sort={sort} /></span>
                 </th>
@@ -750,6 +879,16 @@ export default function CashMovements() {
                           </button>
                       }
                     </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {row.has_payout
+                        ? <LinkIcon size={14} className="mx-auto text-green-500" title="Выплата привязана" />
+                        : <button onClick={() => setCreatePayoutMove(row)}
+                            title="Создать выплату на основе этого движения"
+                            className="p-0.5 rounded hover:bg-amber-100 transition-colors">
+                            <Unlink size={14} className="text-amber-500 mx-auto" />
+                          </button>
+                      }
+                    </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{fmtDate(row.DK_DATE)}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{row.dep_name}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{row.user_name}</td>
@@ -776,7 +915,7 @@ export default function CashMovements() {
             </tbody>
             <tfoot>
               <tr className="bg-[color:var(--color-table-header)] font-semibold">
-                <td className="px-3 py-2.5" colSpan={7}>Итого: {filtered.length} записей</td>
+                <td className="px-3 py-2.5" colSpan={8}>Итого: {filtered.length} записей</td>
                 <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</td>
                 <td className="px-3 py-2.5"></td>
               </tr>
@@ -833,6 +972,15 @@ export default function CashMovements() {
           categories={categories}
           onSave={handleAssign}
           onClose={() => setAssignRecord(null)}
+        />
+      )}
+
+      {/* Create Payout Modal */}
+      {createPayoutMove && (
+        <CreatePayoutModal
+          move={createPayoutMove}
+          onClose={() => setCreatePayoutMove(null)}
+          onCreated={handlePayoutCreated}
         />
       )}
     </div>

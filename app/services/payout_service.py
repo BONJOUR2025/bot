@@ -76,10 +76,11 @@ class PayoutService:
             "amount": data.amount,
             "method": data.method,
             "payout_type": data.payout_type,
-            "status": PAYOUT_STATUSES[0],
+            "status": "Выплачено" if data.cash_move_id else PAYOUT_STATUSES[0],
             "note": data.note or "",
             "show_note_in_bot": data.show_note_in_bot,
             "force_notify_cashier": data.force_notify_cashier,
+            "cash_move_id": data.cash_move_id or None,
         }
         timestamp_value = data.timestamp or datetime.now()
         payout_dict["timestamp"] = self._serialize_timestamp(timestamp_value)
