@@ -21,6 +21,10 @@ class BulkStatusRequest(BaseModel):
     status: str
 
 
+class BulkIdsRequest(BaseModel):
+    ids: List[int]
+
+
 def create_payout_router(
     service: PayoutService, access_service: AccessControlService
 ) -> APIRouter:
@@ -187,6 +191,26 @@ def create_payout_router(
     async def list_active_payouts(current: ResolvedUser = Depends(get_current_user)):
         rows = await service.list_active_payouts()
         return _filter_visible(rows, current)
+
+    @router.post("/{payout_id}/find-move")
+    async def find_move(
+        payout_id: int, current: ResolvedUser = Depends(get_current_user)
+    ):
+        _ensure_access(str(payout_id), current)
+        move_id = await service.find_cash_move_for_payout(payout_id)
+        return {"payout_id": payout_id, "matched": move_id is not None, "move_id": move_id}
+
+    @router.post("/bulk-find-moves")
+    async def bulk_find_moves(
+        body: BulkIdsRequest, current: ResolvedUser = Depends(get_current_user)
+    ):
+        for payout_id in body.ids:
+            _ensure_access(str(payout_id), current)
+        results = await service.find_cash_moves_bulk(body.ids)
+        return [
+            {"payout_id": k, "matched": v is not None, "move_id": v}
+            for k, v in results.items()
+        ]
 
     @router.post("/bulk-status")
     async def bulk_status(

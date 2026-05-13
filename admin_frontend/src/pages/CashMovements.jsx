@@ -646,18 +646,18 @@ export default function CashMovements() {
               value={query} onChange={(e) => setQuery(e.target.value)} />
             {query && <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} /></button>}
           </div>
-          {query.trim().split(/\s+/).filter(Boolean).length > 1 && (
-            <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-hidden text-xs font-medium shrink-0">
+          <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-hidden text-xs font-medium shrink-0">
               <button onClick={() => setSearchOr(false)}
-                className={`px-2.5 py-1.5 transition-colors ${!searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}>
+                className={`px-2.5 py-1.5 transition-colors ${!searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
+                title="Все слова должны встречаться">
                 И
               </button>
               <button onClick={() => setSearchOr(true)}
-                className={`px-2.5 py-1.5 transition-colors ${searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}>
+                className={`px-2.5 py-1.5 transition-colors ${searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
+                title="Хотя бы одно слово">
                 ИЛИ
               </button>
             </div>
-          )}
         </div>
 
         {/* Category filter */}

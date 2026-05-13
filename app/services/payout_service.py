@@ -65,6 +65,53 @@ class PayoutService:
             to_date)
         return [Payout(**r) for r in rows]
 
+    @staticmethod
+    def _fuzzy_find_cash_move(payout_dict: Dict) -> Optional[str]:
+        """Find a Firebird cash movement matching payout by amount and date ±1 day."""
+        from datetime import timedelta, date as date_cls
+        try:
+            from app.services.firebird_service import get_firebird_service
+            ts = str(payout_dict.get("timestamp") or "")[:10]
+            if not ts:
+                return None
+            payout_date = date_cls.fromisoformat(ts)
+            payout_amount = float(payout_dict.get("amount") or 0)
+            moves = get_firebird_service().get_cash_moves(
+                date_from=payout_date - timedelta(days=1),
+                date_to=payout_date + timedelta(days=1),
+            )
+            for m in moves:
+                move_date_str = str(m.get("DK_DATE") or "")[:10]
+                try:
+                    move_date = date_cls.fromisoformat(move_date_str)
+                except ValueError:
+                    continue
+                if (abs((payout_date - move_date).days) <= 1
+                        and abs(payout_amount - float(m.get("SUMM") or 0)) < 0.01):
+                    return str(m.get("ID_KASSES_MOVE") or "")
+        except Exception as exc:
+            logger.warning(f"Cash move fuzzy match failed: {exc}")
+        return None
+
+    async def find_cash_move_for_payout(self, payout_id: int) -> Optional[str]:
+        """Manually find and persist a cash movement link for an existing payout."""
+        self._repo.reload()
+        payout = next((p for p in self._repo.load_all() if p["id"] == payout_id), None)
+        if not payout:
+            return None
+        move_id = self._fuzzy_find_cash_move(payout)
+        if move_id:
+            self._repo.update(str(payout_id), {"cash_move_id": move_id})
+            logger.info(f"🔗 Выплата {payout_id} привязана к движению {move_id}")
+        return move_id
+
+    async def find_cash_moves_bulk(self, ids: List[int]) -> Dict[int, Optional[str]]:
+        """Find and persist cash movement links for multiple payouts."""
+        results: Dict[int, Optional[str]] = {}
+        for payout_id in ids:
+            results[payout_id] = await self.find_cash_move_for_payout(payout_id)
+        return results
+
     async def create_payout(self, data: PayoutCreate) -> Payout:
         self._repo.reload()
         payout_dict: Dict = {
@@ -84,6 +131,14 @@ class PayoutService:
         }
         timestamp_value = data.timestamp or datetime.now()
         payout_dict["timestamp"] = self._serialize_timestamp(timestamp_value)
+
+        # Auto-link to cash movement for "Из кассы" payouts
+        if not payout_dict["cash_move_id"] and "кассы" in (data.method or "").lower():
+            move_id = self._fuzzy_find_cash_move(payout_dict)
+            if move_id:
+                payout_dict["cash_move_id"] = move_id
+                payout_dict["status"] = "Выплачено"
+
         created = self._repo.create(payout_dict)
         logger.info(
             f"🆕 Выплата '{created['payout_type']}' на {created['amount']} ₽ для user_id {created['user_id']} — статус: {created['status']}"

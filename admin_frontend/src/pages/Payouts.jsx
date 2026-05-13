@@ -8,6 +8,7 @@ import {
   XCircle,
   LinkIcon,
   Unlink,
+  Search,
 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -139,6 +140,9 @@ export default function Payouts() {
 
   const [payouts, setPayouts] = useState([]);
   const [moveMatches, setMoveMatches] = useState({});
+  const [moveMatchesLoading, setMoveMatchesLoading] = useState(false);
+  const [findingMoves, setFindingMoves] = useState(new Set());
+  const [bulkFinding, setBulkFinding] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [useFullName, setUseFullName] = useState(true);
   const [filters, setFilters] = useState({
@@ -197,6 +201,7 @@ export default function Payouts() {
   }
 
   async function loadMoveMatches(fromDate, toDate) {
+    setMoveMatchesLoading(true);
     try {
       const params = {};
       if (fromDate) params.date_from = fromDate;
@@ -207,6 +212,39 @@ export default function Payouts() {
       setMoveMatches(map);
     } catch {
       // Firebird may be unavailable — silently ignore
+    } finally {
+      setMoveMatchesLoading(false);
+    }
+  }
+
+  async function findMoveForPayout(payoutId) {
+    setFindingMoves((prev) => new Set([...prev, payoutId]));
+    try {
+      const res = await api.post(`payouts/${payoutId}/find-move`);
+      setMoveMatches((prev) => ({ ...prev, [payoutId]: res.data }));
+      if (res.data.matched) toast('Движение найдено и привязано', 'success');
+      else toast('Совпадение не найдено', 'warning');
+    } catch {
+      toast('Ошибка поиска движения', 'error');
+    } finally {
+      setFindingMoves((prev) => { const s = new Set(prev); s.delete(payoutId); return s; });
+    }
+  }
+
+  async function bulkFindMoves() {
+    if (selected.size === 0) return;
+    setBulkFinding(true);
+    try {
+      const res = await api.post('payouts/bulk-find-moves', { ids: [...selected] });
+      const updated = {};
+      for (const item of res.data || []) updated[item.payout_id] = item;
+      setMoveMatches((prev) => ({ ...prev, ...updated }));
+      const found = (res.data || []).filter((r) => r.matched).length;
+      toast(`Найдено движений: ${found} из ${selected.size}`, found > 0 ? 'success' : 'warning');
+    } catch {
+      toast('Ошибка поиска движений', 'error');
+    } finally {
+      setBulkFinding(false);
     }
   }
 
@@ -495,6 +533,17 @@ export default function Payouts() {
             </select>
           </div>
           <button
+            className="btn text-sm px-3 py-1 flex items-center gap-1.5 disabled:opacity-50"
+            onClick={bulkFindMoves}
+            disabled={bulkFinding}
+            title="Найти кассовые движения для выбранных выплат"
+          >
+            {bulkFinding
+              ? <RefreshCw size={14} className="animate-spin" />
+              : <Search size={14} />}
+            Найти движения
+          </button>
+          <button
             className="btn bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1"
             onClick={bulkDelete}
           >
@@ -591,10 +640,17 @@ export default function Payouts() {
                     />
                   </td>
                   <td className="px-2 py-2 text-center">
-                    {moveMatches[p.id] == null ? null :
-                      moveMatches[p.id].matched
+                    {findingMoves.has(p.id) || (moveMatchesLoading && moveMatches[p.id] == null)
+                      ? <RefreshCw size={13} className="mx-auto animate-spin text-gray-400" />
+                      : moveMatches[p.id]?.matched
                         ? <LinkIcon size={14} className="mx-auto text-green-500" title={`Движение: ${moveMatches[p.id].move_id}`} />
-                        : <Unlink size={14} className="mx-auto text-amber-400" title="Кассовое движение не найдено" />
+                        : moveMatches[p.id] != null
+                          ? <button onClick={() => findMoveForPayout(p.id)} title="Кассовое движение не найдено — нажмите для повторного поиска">
+                              <Unlink size={14} className="text-amber-400 hover:text-amber-600" />
+                            </button>
+                          : <button onClick={() => findMoveForPayout(p.id)} title="Найти кассовое движение">
+                              <Search size={13} className="text-gray-300 hover:text-gray-500" />
+                            </button>
                     }
                   </td>
                   <td className="px-4 py-2">{p.name}</td>
