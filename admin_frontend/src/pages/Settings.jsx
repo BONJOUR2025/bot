@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import {
   CheckCircle, XCircle, RefreshCw, Download, Archive,
   AlertTriangle, FileSpreadsheet, Database,
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
+import FilePicker from '../components/FilePicker.jsx';
 
 function StatusDot({ ok, loading }) {
   if (loading) return <RefreshCw size={14} className="animate-spin text-[color:var(--color-muted-foreground)]" />;
@@ -36,7 +37,7 @@ function Field({ label, hint, children }) {
 export default function Settings() {
   const { toast } = useToast();
   const [loaded, setLoaded] = useState(false);
-  const { register, handleSubmit, reset } = useForm({ defaultValues: {} });
+  const { register, handleSubmit, reset, control } = useForm({ defaultValues: {} });
 
   const [status, setStatus]               = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -149,8 +150,19 @@ export default function Settings() {
           label="Путь к Excel-файлу (ФОТ)"
           hint="Полный путь к файлу, например C:\Users\hrbon\Desktop\ФОТ 2027.xlsx — обновите в начале каждого года"
         >
-          <input className="input w-full font-mono text-sm" placeholder="C:\путь\к\файлу.xlsx"
-            {...register('payroll_excel_file')} />
+          <Controller
+            name="payroll_excel_file"
+            control={control}
+            render={({ field }) => (
+              <FilePicker
+                value={field.value}
+                onChange={field.onChange}
+                placeholder="C:\путь\к\файлу.xlsx"
+                ext=".xlsx,.xls"
+                title="Выбор Excel-файла (ФОТ)"
+              />
+            )}
+          />
         </Field>
         {status?.payroll_excel && !status.payroll_excel.ok && (
           <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
@@ -185,7 +197,19 @@ export default function Settings() {
       {/* PDF */}
       <Section title="PDF-отчёты">
         <Field label="Путь к шрифту" hint="Шрифт для генерации PDF-отчётов, например fonts/DejaVuSans.ttf">
-          <input className="input w-full font-mono text-sm" {...register('font_path')} />
+          <Controller
+            name="font_path"
+            control={control}
+            render={({ field }) => (
+              <FilePicker
+                value={field.value}
+                onChange={field.onChange}
+                placeholder="fonts/DejaVuSans.ttf"
+                ext=".ttf,.otf"
+                title="Выбор файла шрифта"
+              />
+            )}
+          />
         </Field>
       </Section>
 

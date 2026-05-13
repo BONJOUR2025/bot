@@ -1,11 +1,13 @@
 import io
 import json
+import os
+import sys
 import zipfile
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -49,6 +51,55 @@ class ArchiveRequest(BaseModel):
 def create_system_router() -> APIRouter:
     router = APIRouter(prefix="/system", tags=["system"])
     perm = require_permission("settings")
+
+    @router.get("/browse")
+    async def browse_files(
+        path: str = Query(""),
+        ext: str = Query(""),
+        _=Depends(perm),
+    ):
+        """List directory contents for the file picker."""
+        exts = {e.strip().lower() for e in ext.split(",") if e.strip()} if ext else set()
+
+        # Root level: list drives on Windows, "/" on Linux
+        if not path:
+            if sys.platform == "win32":
+                import string
+                drives = [
+                    {"name": f"{d}:\\", "full_path": f"{d}:\\", "is_dir": True}
+                    for d in string.ascii_uppercase
+                    if os.path.exists(f"{d}:\\")
+                ]
+                return {"path": "", "parent": None, "items": drives}
+            else:
+                path = "/"
+
+        p = Path(path)
+        if not p.exists():
+            raise HTTPException(status_code=404, detail="Путь не найден")
+        if not p.is_dir():
+            raise HTTPException(status_code=400, detail="Не директория")
+
+        try:
+            entries = sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Нет доступа")
+
+        items = []
+        for entry in entries:
+            try:
+                is_dir = entry.is_dir()
+                if not is_dir and exts and entry.suffix.lower() not in exts:
+                    continue
+                items.append({"name": entry.name, "full_path": str(entry), "is_dir": is_dir})
+            except OSError:
+                pass
+
+        parent = str(p.parent) if str(p.parent) != str(p) else None
+        # On Windows when at drive root (e.g. C:\), parent → drives list
+        if sys.platform == "win32" and parent and Path(parent) == p:
+            parent = ""
+        return {"path": str(p), "parent": parent, "items": items}
 
     @router.get("/status")
     async def system_status(_=Depends(perm)):
