@@ -219,7 +219,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             [
                 [
                     InlineKeyboardButton(
-                        "📤 Отправлено", callback_data=f"mark_sent_{user_id}"
+                        "📤 Отправлено", callback_data=f"mark_sent_{request_to_approve['id']}_{user_id}"
                     )
                 ]
             ]
@@ -408,7 +408,18 @@ async def mark_sent(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = query.data.split("_")[-1]
+    parts = query.data.split("_")
+    payout_id = parts[2] if len(parts) >= 4 else None
+    user_id = parts[-1]
+
+    if payout_id:
+        from app.data.payout_repository import PayoutRepository
+        try:
+            PayoutRepository().update(payout_id, {"status": "Выплачено"})
+            log(f"✅ [mark_sent] Выплата {payout_id} → Выплачено")
+        except Exception as e:
+            log(f"❌ [mark_sent] Не удалось обновить статус выплаты {payout_id}: {e}")
+
     current_text = query.message.text
     updated_text = f"{current_text}\n\n📤 Отправлено"
     log(
