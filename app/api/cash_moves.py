@@ -164,6 +164,11 @@ def create_cash_moves_router(
         if not payouts:
             return []
 
+        # Only match payouts paid from cash register
+        cash_payouts = [p for p in payouts if "кассы" in (p.get("method") or "").lower()]
+        if not cash_payouts:
+            return []
+
         # Expand date range by 1 day for Firebird query
         fb_from = (date_from - timedelta(days=1)) if date_from else None
         fb_to = (date_to + timedelta(days=1)) if date_to else None
@@ -178,7 +183,7 @@ def create_cash_moves_router(
                 moves_by_date[d].append((str(m.get("ID_KASSES_MOVE") or ""), float(m.get("SUMM") or 0)))
 
         results = []
-        for p in payouts:
+        for p in cash_payouts:
             payout_id = p["id"]
 
             # Explicit link wins
@@ -208,6 +213,9 @@ def create_cash_moves_router(
                         break
                 if matched_id:
                     break
+
+            if matched_id:
+                payout_repo.update(str(payout_id), {"cash_move_id": matched_id, "status": "Выплачено"})
 
             results.append({"payout_id": payout_id, "matched": matched_id is not None, "move_id": matched_id})
 

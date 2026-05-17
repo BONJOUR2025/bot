@@ -99,10 +99,12 @@ class PayoutService:
         payout = next((p for p in self._repo.load_all() if p["id"] == payout_id), None)
         if not payout:
             return None
+        if "кассы" not in (payout.get("method") or "").lower():
+            return None
         move_id = self._fuzzy_find_cash_move(payout)
         if move_id:
-            self._repo.update(str(payout_id), {"cash_move_id": move_id})
-            logger.info(f"🔗 Выплата {payout_id} привязана к движению {move_id}")
+            self._repo.update(str(payout_id), {"cash_move_id": move_id, "status": "Выплачено"})
+            logger.info(f"🔗 Выплата {payout_id} привязана к движению {move_id}, статус → Выплачено")
         return move_id
 
     async def find_cash_moves_bulk(self, ids: List[int]) -> Dict[int, Optional[str]]:
