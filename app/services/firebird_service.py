@@ -523,3 +523,54 @@ def get_firebird_service() -> FirebirdService:
     if _firebird_service is None:
         _firebird_service = FirebirdService()
     return _firebird_service
+
+    def get_smses(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[dict]:
+        """Load SMS messages from SMSES table."""
+        if not FIREBIRD_AVAILABLE:
+            return []
+        conditions = []
+        params: list = []
+        if date_from:
+            conditions.append("CAST(DTTM AS DATE) >= ?")
+            params.append(date_from)
+        if date_to:
+            conditions.append("CAST(DTTM AS DATE) <= ?")
+            params.append(date_to)
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        sql = f"""
+            SELECT FIRST 2000
+                ID, DTTM, PHONE, TXT, OPER_STATUS,
+                PUSH_ID, WAZZUP_MAX_ACCEPT, SMS_STATUS
+            FROM SMSES
+            {where}
+            ORDER BY DTTM DESC
+        """
+        try:
+            conn = _connect()
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            cols = [c[0] for c in cur.description]
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(cols, r))
+                if hasattr(row.get("DTTM"), "isoformat"):
+                    row["DTTM"] = row["DTTM"].isoformat()
+                # Derive channel
+                if row.get("PUSH_ID") not in (None, "", 0):
+                    row["channel"] = "Push"
+                elif row.get("WAZZUP_MAX_ACCEPT") not in (None, "", 0):
+                    row["channel"] = "MAX"
+                elif row.get("SMS_STATUS") not in (None, "", 0):
+                    row["channel"] = "СМС"
+                else:
+                    row["channel"] = "—"
+                rows.append(row)
+            conn.close()
+            return rows
+        except Exception as e:
+            logger.warning(f"get_smses error: {e}")
+            return []

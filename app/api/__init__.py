@@ -308,6 +308,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # SMS Агбис
+    from .smses import create_smses_router
+
+    app.include_router(
+        create_smses_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # System tools (status, backup, archive)
     from .system import create_system_router
 
