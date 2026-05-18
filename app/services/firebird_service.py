@@ -531,7 +531,7 @@ class FirebirdService:
         sql = f"""
             SELECT FIRST 2000
                 ID, DTTM, PHONE, TXT, OPER_STATUS,
-                PUSH_ID, WAZZUP_MAX_ACCEPT, SMS_STATUS
+                PUSH_ID, WAZZUP_MAX_ACCEPT, WAZZUP_MAX_SEND, SMS_STATUS
             FROM SMSES
             {where}
             ORDER BY DTTM DESC
@@ -548,7 +548,10 @@ class FirebirdService:
                     row["DTTM"] = row["DTTM"].isoformat()
                 if row.get("PUSH_ID") not in (None, "", 0):
                     row["channel"] = "Push"
-                elif row.get("WAZZUP_MAX_ACCEPT") not in (None, "", 0):
+                elif (
+                    row.get("WAZZUP_MAX_ACCEPT") not in (None, "", 0)
+                    or row.get("WAZZUP_MAX_SEND") not in (None, "", 0)
+                ):
                     row["channel"] = "MAX"
                 elif row.get("SMS_STATUS") not in (None, "", 0):
                     row["channel"] = "СМС"
