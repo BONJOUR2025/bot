@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Info } from 'lucide-react';
 
 const MONTHS = [
   'ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ',
@@ -9,7 +9,7 @@ const MONTHS = [
 ];
 
 function fmt(v) {
-  if (!v && v !== 0) return '';
+  if (!v && v !== 0) return '—';
   return Number(v).toLocaleString('ru');
 }
 
@@ -19,10 +19,10 @@ function fmtInput(v) {
 }
 
 // ── CodeManager ──────────────────────────────────────────────────
-function CodeManager({ codes, onAdd, onUpdate, onDelete, embedded = false }) {
+function CodeManager({ codes, onAdd, onUpdate, onDelete }) {
   const [adding, setAdding]   = useState(false);
   const [newCode, setNewCode] = useState({ code: '', name: '' });
-  const [editing, setEditing] = useState(null);  // code string being edited
+  const [editing, setEditing] = useState(null);
 
   function handleAdd() {
     if (!newCode.code.trim() || !newCode.name.trim()) return;
@@ -32,17 +32,20 @@ function CodeManager({ codes, onAdd, onUpdate, onDelete, embedded = false }) {
   }
 
   return (
-    <div className={embedded ? 'p-4 space-y-4' : 'card p-5 space-y-4'}>
+    <div className="card p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-sm">Точки (обозначения в расписании)</h3>
-        <button onClick={() => setAdding(v => !v)} className="text-xs text-[color:var(--color-primary)] font-medium hover:underline">
-          + Добавить
+        <h3 className="font-semibold text-sm text-[color:var(--color-foreground)]">Точки продаж</h3>
+        <button
+          onClick={() => setAdding(v => !v)}
+          className="text-xs text-[color:var(--color-primary)] font-medium hover:underline"
+        >
+          {adding ? 'Отмена' : '+ Добавить'}
         </button>
       </div>
 
       {adding && (
-        <div className="flex gap-2 items-end">
-          <div className="flex-1">
+        <div className="space-y-2 p-3 rounded-lg bg-[color:var(--color-muted)]/30 border border-[color:var(--color-border)]">
+          <div>
             <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Код (напр. «П»)</label>
             <input
               className="input w-full text-sm"
@@ -50,26 +53,27 @@ function CodeManager({ codes, onAdd, onUpdate, onDelete, embedded = false }) {
               onChange={e => setNewCode(v => ({ ...v, code: e.target.value }))}
               placeholder="П"
               maxLength={4}
+              autoFocus
             />
           </div>
-          <div className="flex-[3]">
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Название</label>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Название точки</label>
             <input
               className="input w-full text-sm"
               value={newCode.name}
               onChange={e => setNewCode(v => ({ ...v, name: e.target.value }))}
               placeholder="Пассаж"
+              onKeyDown={e => e.key === 'Enter' && handleAdd()}
             />
           </div>
-          <button onClick={handleAdd} className="btn btn-primary text-sm px-3">Добавить</button>
-          <button onClick={() => setAdding(false)} className="btn btn-secondary text-sm px-3">Отмена</button>
+          <button onClick={handleAdd} className="btn btn-primary w-full text-sm">Добавить</button>
         </div>
       )}
 
       <div className="divide-y divide-[color:var(--color-border)]">
         {codes.map(c => (
-          <div key={c.code} className="flex items-center gap-3 py-2">
-            <span className="w-10 h-8 flex items-center justify-center rounded-lg bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold flex-shrink-0">
+          <div key={c.code} className="flex items-center gap-2 py-2">
+            <span className="w-9 h-7 flex items-center justify-center rounded-lg bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold flex-shrink-0">
               {c.code}
             </span>
             {editing === c.code ? (
@@ -80,17 +84,37 @@ function CodeManager({ codes, onAdd, onUpdate, onDelete, embedded = false }) {
               />
             ) : (
               <>
-                <span className="flex-1 text-sm font-medium">{c.name}</span>
-                <button onClick={() => setEditing(c.code)} className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]">Изменить</button>
-                <button onClick={() => onDelete(c.code)} className="text-xs text-red-400 hover:text-red-600">Удалить</button>
+                <span className="flex-1 text-sm font-medium min-w-0 truncate">{c.name}</span>
+                <button
+                  onClick={() => setEditing(c.code)}
+                  className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)] flex-shrink-0"
+                >
+                  Изм.
+                </button>
+                <button
+                  onClick={() => onDelete(c.code)}
+                  className="text-xs text-red-400 hover:text-red-600 flex-shrink-0"
+                >
+                  Удал.
+                </button>
               </>
             )}
           </div>
         ))}
         {codes.length === 0 && (
-          <p className="text-sm text-[color:var(--color-muted-foreground)] italic py-3 text-center">Нет точек</p>
+          <p className="text-sm text-[color:var(--color-muted-foreground)] italic py-4 text-center">
+            Нет точек
+          </p>
         )}
       </div>
+
+      {codes.length > 0 && (
+        <div className="pt-1 border-t border-[color:var(--color-border)]">
+          <p className="text-xs text-[color:var(--color-muted-foreground)] text-center">
+            {codes.length} {codes.length === 1 ? 'точка' : codes.length < 5 ? 'точки' : 'точек'}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -98,10 +122,16 @@ function CodeManager({ codes, onAdd, onUpdate, onDelete, embedded = false }) {
 function EditCodeRow({ code, onSave, onCancel }) {
   const [name, setName] = useState(code.name);
   return (
-    <div className="flex flex-1 items-center gap-2">
-      <input className="input flex-1 text-sm" value={name} onChange={e => setName(e.target.value)} />
-      <button onClick={() => onSave(name)} className="text-xs text-[color:var(--color-primary)] font-medium">Сохранить</button>
-      <button onClick={onCancel} className="text-xs text-[color:var(--color-muted-foreground)]">Отмена</button>
+    <div className="flex flex-1 items-center gap-2 min-w-0">
+      <input
+        className="input flex-1 text-sm min-w-0"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') onSave(name); if (e.key === 'Escape') onCancel(); }}
+        autoFocus
+      />
+      <button onClick={() => onSave(name)} className="text-xs text-[color:var(--color-primary)] font-medium flex-shrink-0">OK</button>
+      <button onClick={onCancel} className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">✕</button>
     </div>
   );
 }
@@ -115,131 +145,114 @@ function PlansTable({ codes, plans, onChange }) {
     onChange(code, field, val);
   }
 
-  const colCls = 'text-right text-xs font-semibold text-[color:var(--color-muted-foreground)] px-3 py-2';
-  const cellCls = 'px-2 py-1.5';
-
-  return isMobile ? (
-    <div className="space-y-3">
-      {codes.length === 0 && (
-        <div className="px-4 py-8 text-center text-sm text-[color:var(--color-muted-foreground)] italic card">
-          Добавьте точки в левой панели
-        </div>
-      )}
-      {codes.map((c) => {
-        const p = plans[c.code] || {};
-        return (
-          <div key={c.code} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex items-center gap-2">
-              <span className="w-7 h-6 flex items-center justify-center rounded bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold">{c.code}</span>
-              {c.name}
-            </div>
-            <div className="px-4 py-2 space-y-1.5 text-sm">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500">Ремонт / Химчистка, ₽</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className="input text-right w-32 text-sm"
-                  value={fmtInput(p.repair_plan)}
-                  onChange={e => handleChange(c.code, 'repair_plan', e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500">Косметика, ₽</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className="input text-right w-32 text-sm"
-                  value={fmtInput(p.cosmetics_plan)}
-                  onChange={e => handleChange(c.code, 'cosmetics_plan', e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500">Обувь, ₽</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className="input text-right w-32 text-sm"
-                  value={fmtInput(p.shoes_plan)}
-                  onChange={e => handleChange(c.code, 'shoes_plan', e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-            </div>
+  if (isMobile) {
+    return (
+      <div className="space-y-3">
+        {codes.length === 0 && (
+          <div className="card px-4 py-8 text-center text-sm text-[color:var(--color-muted-foreground)] italic">
+            Добавьте точки выше
           </div>
-        );
-      })}
-    </div>
-  ) : (
+        )}
+        {codes.map((c) => {
+          const p = plans[c.code] || {};
+          return (
+            <div key={c.code} className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/20 text-sm font-semibold flex items-center gap-2">
+                <span className="w-7 h-6 flex items-center justify-center rounded bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold">
+                  {c.code}
+                </span>
+                {c.name}
+              </div>
+              <div className="px-4 py-3 space-y-2 text-sm">
+                {[
+                  { field: 'repair_plan', label: 'Ремонт / Химчистка' },
+                  { field: 'cosmetics_plan', label: 'Косметика' },
+                  { field: 'shoes_plan', label: 'Обувь' },
+                ].map(({ field, label }) => (
+                  <div key={field} className="flex items-center justify-between gap-3">
+                    <span className="text-[color:var(--color-muted-foreground)]">{label}</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="input text-right w-28 text-sm"
+                      value={fmtInput(p[field])}
+                      onChange={e => handleChange(c.code, field, e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const totalRepair = codes.reduce((s, c) => s + (plans[c.code]?.repair_plan || 0), 0);
+  const totalCosmetics = codes.reduce((s, c) => s + (plans[c.code]?.cosmetics_plan || 0), 0);
+  const totalShoes = codes.reduce((s, c) => s + (plans[c.code]?.shoes_plan || 0), 0);
+
+  return (
     <div className="card overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30">
-            <th className="text-left px-4 py-2.5 text-xs font-semibold text-[color:var(--color-muted-foreground)]">Точка</th>
-            <th className={colCls}>Ремонт / Химчистка, ₽</th>
-            <th className={colCls}>Косметика, ₽</th>
-            <th className={colCls}>Обувь, ₽</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-[color:var(--color-muted-foreground)] w-[35%]">
+              Точка
+            </th>
+            <th className="text-right px-3 py-3 text-xs font-semibold text-[color:var(--color-muted-foreground)] whitespace-nowrap">
+              Ремонт / Химчистка, ₽
+            </th>
+            <th className="text-right px-3 py-3 text-xs font-semibold text-[color:var(--color-muted-foreground)] whitespace-nowrap">
+              Косметика, ₽
+            </th>
+            <th className="text-right px-3 py-3 text-xs font-semibold text-[color:var(--color-muted-foreground)] whitespace-nowrap">
+              Обувь, ₽
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[color:var(--color-border)]">
           {codes.map((c, i) => {
             const p = plans[c.code] || {};
             return (
-              <tr key={c.code} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
-                <td className="px-4 py-2">
+              <tr key={c.code} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/10' : ''}>
+                <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="w-7 h-6 flex items-center justify-center rounded bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold">{c.code}</span>
-                    <span className="font-medium">{c.name}</span>
+                    <span className="w-7 h-6 flex items-center justify-center rounded bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold flex-shrink-0">
+                      {c.code}
+                    </span>
+                    <span className="font-medium truncate">{c.name}</span>
                   </div>
                 </td>
-                <td className={cellCls}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className="input text-right w-full text-sm"
-                    value={fmtInput(p.repair_plan)}
-                    onChange={e => handleChange(c.code, 'repair_plan', e.target.value)}
-                    placeholder="0"
-                  />
-                </td>
-                <td className={cellCls}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className="input text-right w-full text-sm"
-                    value={fmtInput(p.cosmetics_plan)}
-                    onChange={e => handleChange(c.code, 'cosmetics_plan', e.target.value)}
-                    placeholder="0"
-                  />
-                </td>
-                <td className={cellCls}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className="input text-right w-full text-sm"
-                    value={fmtInput(p.shoes_plan)}
-                    onChange={e => handleChange(c.code, 'shoes_plan', e.target.value)}
-                    placeholder="0"
-                  />
-                </td>
+                {['repair_plan', 'cosmetics_plan', 'shoes_plan'].map(field => (
+                  <td key={field} className="px-2 py-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="input text-right w-full text-sm min-w-[90px]"
+                      value={fmtInput(p[field])}
+                      onChange={e => handleChange(c.code, field, e.target.value)}
+                      placeholder="0"
+                    />
+                  </td>
+                ))}
               </tr>
             );
           })}
           {codes.length === 0 && (
             <tr>
-              <td colSpan={4} className="px-4 py-8 text-center text-sm text-[color:var(--color-muted-foreground)] italic">
-                Добавьте точки в левой панели
+              <td colSpan={4} className="px-4 py-10 text-center text-sm text-[color:var(--color-muted-foreground)] italic">
+                Добавьте точки в панели слева
               </td>
             </tr>
           )}
           {codes.length > 0 && (
             <tr className="bg-[color:var(--color-muted)]/40 font-semibold border-t-2 border-[color:var(--color-border)]">
-              <td className="px-4 py-2 text-sm">Итого</td>
-              <td className="px-3 py-2 text-right text-sm">{fmt(codes.reduce((s, c) => s + (plans[c.code]?.repair_plan || 0), 0))} ₽</td>
-              <td className="px-3 py-2 text-right text-sm">{fmt(codes.reduce((s, c) => s + (plans[c.code]?.cosmetics_plan || 0), 0))} ₽</td>
-              <td className="px-3 py-2 text-right text-sm">{fmt(codes.reduce((s, c) => s + (plans[c.code]?.shoes_plan || 0), 0))} ₽</td>
+              <td className="px-4 py-2.5 text-sm">Итого</td>
+              <td className="px-3 py-2.5 text-right text-sm">{fmt(totalRepair)} ₽</td>
+              <td className="px-3 py-2.5 text-right text-sm">{fmt(totalCosmetics)} ₽</td>
+              <td className="px-3 py-2.5 text-right text-sm">{fmt(totalShoes)} ₽</td>
             </tr>
           )}
         </tbody>
@@ -255,13 +268,12 @@ export default function LocationPlans() {
   const [year, setYear]     = useState(now.getFullYear());
   const [month, setMonth]   = useState(MONTHS[now.getMonth()]);
   const [codes, setCodes]   = useState([]);
-  const [plans, setPlans]   = useState({});  // {location_code: {repair_plan, cosmetics_plan, shoes_plan}}
+  const [plans, setPlans]   = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [saved, setSaved]     = useState(false);
   const [error, setError]     = useState(null);
   const [showInfo, setShowInfo] = useState(false);
-  const [showCodes, setShowCodes] = useState(false);
 
   const monthKey = `${month}_${year}`;
 
@@ -361,34 +373,25 @@ export default function LocationPlans() {
   }
 
   return (
-    <div className={isMobile ? 'p-4 space-y-4' : 'p-6 space-y-6'}>
+    <div className="p-4 sm:p-6 space-y-5">
       {/* Header */}
-      {isMobile ? (
-        <div className="space-y-3">
-          <h1 className="text-xl font-bold">Планы по точкам</h1>
-          <div className="flex items-center justify-between">
-            <button onClick={prevMonth} className="btn btn-secondary px-3 py-2 text-base">‹</button>
-            <span className="font-semibold text-base">{month} {year}</span>
-            <button onClick={nextMonth} className="btn btn-secondary px-3 py-2 text-base">›</button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">Планы по точкам</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold">Планы по точкам</h1>
+          {!isMobile && (
             <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
-              Месячные планы продаж для каждой точки — используются для авторасчёта индивидуальных планов сотрудников
+              Месячные планы продаж — используются для авторасчёта индивидуальных планов сотрудников
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={prevMonth} className="btn btn-secondary px-2.5">‹</button>
-            <span className="min-w-[160px] text-center font-semibold text-base">
-              {month} {year}
-            </span>
-            <button onClick={nextMonth} className="btn btn-secondary px-2.5">›</button>
-          </div>
+          )}
         </div>
-      )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={prevMonth} className="btn btn-secondary w-9 h-9 flex items-center justify-center text-lg leading-none">‹</button>
+          <span className="min-w-[140px] sm:min-w-[160px] text-center font-semibold text-sm sm:text-base px-1">
+            {month} {year}
+          </span>
+          <button onClick={nextMonth} className="btn btn-secondary w-9 h-9 flex items-center justify-center text-lg leading-none">›</button>
+        </div>
+      </div>
 
       {error && (
         <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
@@ -396,78 +399,29 @@ export default function LocationPlans() {
         </div>
       )}
 
-      {/* How it works */}
-      {isMobile ? (
-        <div className="rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800">
-          <button
-            className="w-full flex items-center justify-between px-4 py-3 font-semibold"
-            onClick={() => setShowInfo(v => !v)}
-          >
-            <span>Как работает авторасчёт</span>
-            {showInfo ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-          {showInfo && (
-            <div className="px-4 pb-3 space-y-1 border-t border-blue-200">
-              <p className="pt-2">Дневной план точки = Месячный план ÷ Кол-во дней в месяце</p>
-              <p>Индивидуальный план = Σ (Дневной план × Смен на этой точке)</p>
-              <p className="text-blue-600">Если задан ручной план — он имеет приоритет.</p>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-xl bg-blue-50 border border-blue-200 px-5 py-4 text-sm text-blue-800 space-y-1">
-          <p className="font-semibold">Как работает авторасчёт плана сотрудника</p>
-          <p>
-            Дневной план точки = Месячный план точки ÷ Кол-во дней в месяце<br/>
-            Индивидуальный план = Σ (Дневной план точки × Смен на этой точке)
-          </p>
-          <p className="text-blue-600">
-            Если для сотрудника задан ручной план в «Расчёте зарплаты» — он имеет приоритет.
-          </p>
-        </div>
-      )}
+      {/* How it works — collapsible on all screen sizes */}
+      <div className="rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800 overflow-hidden">
+        <button
+          className="w-full flex items-center gap-2 px-4 py-3 text-left"
+          onClick={() => setShowInfo(v => !v)}
+        >
+          <Info size={15} className="flex-shrink-0 text-blue-500" />
+          <span className="font-semibold flex-1">Как работает авторасчёт плана</span>
+          {showInfo ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+        </button>
+        {showInfo && (
+          <div className="px-4 pb-4 space-y-1.5 border-t border-blue-200 pt-3">
+            <p>Дневной план точки = Месячный план точки ÷ Количество дней в месяце</p>
+            <p>Индивидуальный план = Σ (Дневной план точки × Смен сотрудника на этой точке)</p>
+            <p className="text-blue-600">Если для сотрудника задан ручной план в «Расчёте зарплаты» — он имеет приоритет.</p>
+          </div>
+        )}
+      </div>
 
       {loading ? (
         <div className="text-center py-12 text-[color:var(--color-muted-foreground)]">Загрузка...</div>
-      ) : isMobile ? (
-        <div className="space-y-4">
-          {/* Collapsible code manager on mobile */}
-          <div className="card overflow-hidden">
-            <button
-              className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold"
-              onClick={() => setShowCodes(v => !v)}
-            >
-              <span>Точки ({codes.length})</span>
-              {showCodes ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-            {showCodes && (
-              <div className="border-t border-[color:var(--color-border)]">
-                <CodeManager
-                  codes={codes}
-                  onAdd={handleAddCode}
-                  onUpdate={handleUpdateCode}
-                  onDelete={handleDeleteCode}
-                  embedded
-                />
-              </div>
-            )}
-          </div>
-
-          <PlansTable codes={codes} plans={plans} onChange={handlePlanChange} />
-
-          <div className="flex items-center justify-between gap-3">
-            {saved && <span className="text-sm text-emerald-600 font-medium">✓ Сохранено</span>}
-            <button
-              onClick={handleSave}
-              disabled={saving || codes.length === 0}
-              className="btn btn-primary flex-1"
-            >
-              {saving ? 'Сохранение...' : 'Сохранить'}
-            </button>
-          </div>
-        </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5 items-start">
           {/* Left: code manager */}
           <CodeManager
             codes={codes}
@@ -476,13 +430,9 @@ export default function LocationPlans() {
             onDelete={handleDeleteCode}
           />
 
-          {/* Right: plans table */}
+          {/* Right: plans table + save */}
           <div className="space-y-4">
-            <PlansTable
-              codes={codes}
-              plans={plans}
-              onChange={handlePlanChange}
-            />
+            <PlansTable codes={codes} plans={plans} onChange={handlePlanChange} />
 
             <div className="flex items-center justify-end gap-3">
               {saved && (
@@ -491,9 +441,9 @@ export default function LocationPlans() {
               <button
                 onClick={handleSave}
                 disabled={saving || codes.length === 0}
-                className="btn btn-primary min-w-[120px]"
+                className={`btn btn-primary min-w-[130px] ${isMobile ? 'flex-1' : ''}`}
               >
-                {saving ? 'Сохранение...' : 'Сохранить'}
+                {saving ? 'Сохранение...' : 'Сохранить планы'}
               </button>
             </div>
           </div>
