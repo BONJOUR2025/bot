@@ -139,7 +139,8 @@ export default function Dashboard() {
   const [vacations, setVacations] = useState([]);
   const [taskStats, setTaskStats] = useState(null);
   const [birthdays, setBirthdays] = useState([]);
-  const [masters, setMasters]     = useState(null);   // null = not yet loaded / unavailable
+  const [masters, setMasters]     = useState(null);
+  const [sales, setSales]         = useState(null);   // null = unavailable
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -148,13 +149,14 @@ export default function Dashboard() {
     else setRefreshing(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [pendRes, appRes, vacRes, taskRes, bdRes, mastersRes] = await Promise.allSettled([
+      const [pendRes, appRes, vacRes, taskRes, bdRes, mastersRes, salesRes] = await Promise.allSettled([
         api.get('payouts/active'),
         api.get('payouts/', { params: { status: 'Одобрено' } }),
         api.get('vacations/active'),
         api.get('tasks/stats'),
         api.get('birthdays/', { params: { days: 30 } }),
         api.get('masters/works', { params: { date_from: today, date_to: today } }),
+        api.get('sales/daily',   { params: { date_from: today, date_to: today } }),
       ]);
       if (pendRes.status    === 'fulfilled') setPending(pendRes.value.data ?? []);
       if (appRes.status     === 'fulfilled') setApproved(appRes.value.data ?? []);
@@ -162,6 +164,7 @@ export default function Dashboard() {
       if (taskRes.status    === 'fulfilled') setTaskStats(taskRes.value.data ?? null);
       if (bdRes.status      === 'fulfilled') setBirthdays(bdRes.value.data ?? []);
       if (mastersRes.status === 'fulfilled') setMasters(mastersRes.value.data ?? null);
+      if (salesRes.status   === 'fulfilled') setSales(salesRes.value.data ?? null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -374,6 +377,75 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
+
+      {/* sales today */}
+      {sales !== null && (
+        <Card
+          title="Продажи сегодня"
+          actions={<SectionLink to="/admin/sales" label="Подробнее" />}
+        >
+          {!sales.length ? (
+            <Empty text="Нет данных по продажам за сегодня" />
+          ) : (() => {
+            // aggregate by employee (description)
+            const byEmp = {};
+            for (const r of sales) {
+              const key = r.description || r.code || '—';
+              if (!byEmp[key]) byEmp[key] = { description: key, repair: 0, cosmetics: 0, shoes: 0 };
+              byEmp[key].repair    += r.repair    ?? 0;
+              byEmp[key].cosmetics += r.cosmetics ?? 0;
+              byEmp[key].shoes     += r.shoes     ?? 0;
+            }
+            const rows = Object.values(byEmp).sort((a, b) => {
+              const ta = a.repair + a.cosmetics + a.shoes;
+              const tb = b.repair + b.cosmetics + b.shoes;
+              return tb - ta;
+            });
+            const totRepair    = rows.reduce((s, r) => s + r.repair, 0);
+            const totCosmetics = rows.reduce((s, r) => s + r.cosmetics, 0);
+            const totShoes     = rows.reduce((s, r) => s + r.shoes, 0);
+            const totTotal     = totRepair + totCosmetics + totShoes;
+            return (
+              <div className="overflow-x-auto -mx-6">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[color:var(--color-border)] text-left text-xs text-[color:var(--color-text-muted)]">
+                      <th className="px-6 pb-2 font-medium">Сотрудник</th>
+                      <th className="px-4 pb-2 text-right font-medium">Ремонт</th>
+                      <th className="px-4 pb-2 text-right font-medium">Косметика</th>
+                      <th className="px-4 pb-2 text-right font-medium">Обувь</th>
+                      <th className="px-4 pb-2 text-right font-medium">Итого</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[color:var(--color-border)]">
+                    {rows.map((r) => {
+                      const total = r.repair + r.cosmetics + r.shoes;
+                      return (
+                        <tr key={r.description} className="hover:bg-[color:var(--color-control-bg)] transition-colors">
+                          <td className="px-6 py-2.5 font-medium text-[color:var(--color-text)]">{r.description}</td>
+                          <td className="px-4 py-2.5 text-right text-[color:var(--color-text-muted)]">{r.repair ? fmt(r.repair) + ' ₽' : '—'}</td>
+                          <td className="px-4 py-2.5 text-right text-[color:var(--color-text-muted)]">{r.cosmetics ? fmt(r.cosmetics) + ' ₽' : '—'}</td>
+                          <td className="px-4 py-2.5 text-right text-[color:var(--color-text-muted)]">{r.shoes ? fmt(r.shoes) + ' ₽' : '—'}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-[color:var(--color-primary)]">{fmt(total)} ₽</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-[color:var(--color-border)] font-semibold text-[color:var(--color-text)]">
+                      <td className="px-6 py-2.5 text-xs text-[color:var(--color-text-muted)]">Итого</td>
+                      <td className="px-4 py-2.5 text-right">{fmt(totRepair)} ₽</td>
+                      <td className="px-4 py-2.5 text-right">{fmt(totCosmetics)} ₽</td>
+                      <td className="px-4 py-2.5 text-right">{fmt(totShoes)} ₽</td>
+                      <td className="px-4 py-2.5 text-right text-[color:var(--color-primary)]">{fmt(totTotal)} ₽</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            );
+          })()}
+        </Card>
+      )}
 
       {/* masters today */}
       {masters !== null && (
