@@ -381,6 +381,10 @@ class PayrollService:
         code = _extract_code(row.get("name"))
         if not code:
             code = self._user_id_to_code.get(str(row.get("user_id", "")))
+        if not code:
+            name_lower = str(row.get("name") or "").strip().lower()
+            if name_lower:
+                code = self._full_name_to_code.get(name_lower)
         return code
 
     def _get_advances_after_last_salary(self) -> dict[str, float]:
