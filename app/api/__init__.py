@@ -165,6 +165,16 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    from ..services import cash_move_auto_linker
+
+    @app.on_event("startup")
+    async def _start_auto_linker():
+        cash_move_auto_linker.start(payout_service)
+
+    @app.on_event("shutdown")
+    async def _stop_auto_linker():
+        cash_move_auto_linker.stop()
+
     vacation_service = VacationService()
     app.include_router(
         create_vacation_router(vacation_service, access_service),
