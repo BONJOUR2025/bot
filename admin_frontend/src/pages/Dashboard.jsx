@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Wallet, CheckCircle2, Palmtree, AlertTriangle,
   ArrowRight, CalendarDays, ClipboardList, Clock,
-  ListTodo, CirclePlay, RefreshCw,
+  ListTodo, CirclePlay, RefreshCw, Scissors,
 } from 'lucide-react';
 import api from '../api';
 import Card from '../components/ui/Card';
@@ -139,6 +139,7 @@ export default function Dashboard() {
   const [vacations, setVacations] = useState([]);
   const [taskStats, setTaskStats] = useState(null);
   const [birthdays, setBirthdays] = useState([]);
+  const [masters, setMasters]     = useState(null);   // null = not yet loaded / unavailable
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -146,18 +147,21 @@ export default function Dashboard() {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const [pendRes, appRes, vacRes, taskRes, bdRes] = await Promise.allSettled([
+      const today = new Date().toISOString().slice(0, 10);
+      const [pendRes, appRes, vacRes, taskRes, bdRes, mastersRes] = await Promise.allSettled([
         api.get('payouts/active'),
         api.get('payouts/', { params: { status: 'Одобрено' } }),
         api.get('vacations/active'),
         api.get('tasks/stats'),
         api.get('birthdays/', { params: { days: 30 } }),
+        api.get('masters/works', { params: { date_from: today, date_to: today } }),
       ]);
-      if (pendRes.status === 'fulfilled') setPending(pendRes.value.data ?? []);
-      if (appRes.status  === 'fulfilled') setApproved(appRes.value.data ?? []);
-      if (vacRes.status  === 'fulfilled') setVacations(vacRes.value.data ?? []);
-      if (taskRes.status === 'fulfilled') setTaskStats(taskRes.value.data ?? null);
-      if (bdRes.status   === 'fulfilled') setBirthdays(bdRes.value.data ?? []);
+      if (pendRes.status    === 'fulfilled') setPending(pendRes.value.data ?? []);
+      if (appRes.status     === 'fulfilled') setApproved(appRes.value.data ?? []);
+      if (vacRes.status     === 'fulfilled') setVacations(vacRes.value.data ?? []);
+      if (taskRes.status    === 'fulfilled') setTaskStats(taskRes.value.data ?? null);
+      if (bdRes.status      === 'fulfilled') setBirthdays(bdRes.value.data ?? []);
+      if (mastersRes.status === 'fulfilled') setMasters(mastersRes.value.data ?? null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -370,6 +374,65 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
+
+      {/* masters today */}
+      {masters !== null && (
+        <Card
+          title="Мастера сегодня"
+          actions={<SectionLink to="/admin/masters" label="Подробнее" />}
+        >
+          {!masters.salary_summary?.length ? (
+            <Empty text="Нет данных по мастерам за сегодня" />
+          ) : (() => {
+            const rows = masters.salary_summary;
+            const totKredit = rows.reduce((s, r) => s + (r.total_kredit ?? 0), 0);
+            const totSalary = rows.reduce((s, r) => s + (r.total_salary ?? 0), 0);
+            const totDone   = rows.reduce((s, r) => s + (r.services_done ?? 0), 0);
+            const totWarn   = rows.reduce((s, r) => s + (r.warnings_count ?? 0), 0);
+            return (
+              <div className="overflow-x-auto -mx-6">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[color:var(--color-border)] text-left text-xs text-[color:var(--color-text-muted)]">
+                      <th className="px-6 pb-2 font-medium">Мастер</th>
+                      <th className="px-4 pb-2 text-right font-medium">Услуг</th>
+                      <th className="px-4 pb-2 text-right font-medium">Выручка</th>
+                      <th className="px-4 pb-2 text-right font-medium">ЗП мастера</th>
+                      <th className="px-4 pb-2 text-center font-medium">⚠️</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[color:var(--color-border)]">
+                    {rows.map((m) => (
+                      <tr key={m.master} className="hover:bg-[color:var(--color-control-bg)] transition-colors">
+                        <td className="px-6 py-2.5 font-medium text-[color:var(--color-text)]">{m.master}</td>
+                        <td className="px-4 py-2.5 text-right text-[color:var(--color-text-muted)]">{m.services_done}</td>
+                        <td className="px-4 py-2.5 text-right">{fmt(m.total_kredit)} ₽</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-[color:var(--color-success)]">{fmt(m.total_salary)} ₽</td>
+                        <td className="px-4 py-2.5 text-center">
+                          {m.warnings_count > 0
+                            ? <Badge tone="danger">{m.warnings_count}</Badge>
+                            : <span className="text-[color:var(--color-text-muted)] opacity-40">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-[color:var(--color-border)] font-semibold text-[color:var(--color-text)]">
+                      <td className="px-6 py-2.5 text-xs text-[color:var(--color-text-muted)]">Итого</td>
+                      <td className="px-4 py-2.5 text-right">{totDone}</td>
+                      <td className="px-4 py-2.5 text-right">{fmt(totKredit)} ₽</td>
+                      <td className="px-4 py-2.5 text-right text-[color:var(--color-success)]">{fmt(totSalary)} ₽</td>
+                      <td className="px-4 py-2.5 text-center">
+                        {totWarn > 0 ? <Badge tone="danger">{totWarn}</Badge> : '—'}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            );
+          })()}
+        </Card>
+      )}
 
     </div>
   );
