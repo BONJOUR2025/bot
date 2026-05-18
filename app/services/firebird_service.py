@@ -553,7 +553,7 @@ class FirebirdService:
                     or row.get("WAZZUP_MAX_SEND") not in (None, "", 0)
                 ):
                     row["channel"] = "MAX"
-                elif row.get("SMS_STATUS") not in (None, "", 0):
+                elif row.get("SMS_STATUS") in (0, 255, -255):
                     row["channel"] = "СМС"
                 else:
                     row["channel"] = "—"
