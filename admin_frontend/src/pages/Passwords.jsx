@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const DEFAULT_CATEGORY_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
@@ -45,6 +46,8 @@ export default function Passwords() {
     icon: '🔐',
     color: '#6366f1',
   };
+
+  const { isMobile } = useViewport();
 
   const [entries, setEntries] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -379,6 +382,105 @@ export default function Passwords() {
                 <span className="ml-auto text-sm text-gray-400">{catEntries.length}</span>
               </div>
 
+              {isMobile ? (
+                <div className="space-y-3 p-3">
+                  {catEntries.map((entry) => (
+                    <div key={entry.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex items-center gap-2">
+                        <button
+                          onClick={() => toggleFavorite(entry.id)}
+                          className={`p-1 rounded ${entry.is_favorite ? 'text-yellow-400' : 'text-gray-500 hover:text-yellow-400'}`}
+                        >
+                          <Star size={15} fill={entry.is_favorite ? 'currentColor' : 'none'} />
+                        </button>
+                        <span>{entry.title}</span>
+                      </div>
+                      <div className="px-4 py-2 space-y-1.5 text-sm">
+                        {entry.username && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500">Логин</span>
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono">{entry.username}</span>
+                              <button
+                                onClick={() => copyToClipboard(entry.username, `user-${entry.id}`)}
+                                className="p-1 hover:bg-gray-100 rounded"
+                              >
+                                {copiedId === `user-${entry.id}` ? (
+                                  <Check size={13} className="text-green-400" />
+                                ) : (
+                                  <Copy size={13} className="text-gray-400" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">Пароль</span>
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono">
+                              {visiblePasswords.has(entry.id) ? entry.password : '••••••••'}
+                            </span>
+                            <button
+                              onClick={() => togglePasswordVisibility(entry.id)}
+                              className="p-1 hover:bg-gray-100 rounded"
+                            >
+                              {visiblePasswords.has(entry.id) ? (
+                                <EyeOff size={13} className="text-gray-400" />
+                              ) : (
+                                <Eye size={13} className="text-gray-400" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => copyToClipboard(entry.password, `pass-${entry.id}`)}
+                              className="p-1 hover:bg-gray-100 rounded"
+                            >
+                              {copiedId === `pass-${entry.id}` ? (
+                                <Check size={13} className="text-green-400" />
+                              ) : (
+                                <Copy size={13} className="text-gray-400" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        {entry.url && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-500">URL</span>
+                            <a
+                              href={entry.url.startsWith('http') ? entry.url : `https://${entry.url}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-blue-400 hover:underline text-sm"
+                            >
+                              <ExternalLink size={13} />
+                              <span className="truncate max-w-[150px]">{entry.url}</span>
+                            </a>
+                          </div>
+                        )}
+                        {entry.notes && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Заметки</span>
+                            <span className="truncate max-w-[180px] text-right">{entry.notes}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-4 py-2 border-t flex justify-end gap-3">
+                        <button
+                          onClick={() => startEditEntry(entry)}
+                          className="p-1.5 hover:bg-[var(--color-bg)] rounded"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          onClick={() => deleteEntry(entry.id)}
+                          className="p-1.5 hover:bg-red-500/20 rounded"
+                        >
+                          <Trash2 size={16} className="text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-[var(--color-border)] text-left text-sm text-gray-400">
@@ -492,6 +594,7 @@ export default function Passwords() {
                   ))}
                 </tbody>
               </table>
+              )}
             </div>
           );
         })}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 import {
   Wallet, CheckCircle2, Palmtree, AlertTriangle,
   ArrowRight, CalendarDays, ClipboardList, Clock,
@@ -134,6 +135,7 @@ function Empty({ text = 'Нет данных' }) {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { isMobile } = useViewport();
   const [pending, setPending]     = useState([]);
   const [approved, setApproved]   = useState([]);
   const [vacations, setVacations] = useState([]);
@@ -405,7 +407,33 @@ export default function Dashboard() {
             const totCosmetics = rows.reduce((s, r) => s + r.cosmetics, 0);
             const totShoes     = rows.reduce((s, r) => s + r.shoes, 0);
             const totTotal     = totRepair + totCosmetics + totShoes;
-            return (
+            return isMobile ? (
+              <div className="space-y-3">
+                {rows.map((r) => {
+                  const total = r.repair + r.cosmetics + r.shoes;
+                  return (
+                    <div key={r.description} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium" style={{ color: 'var(--color-text)' }}>{r.description}</div>
+                      <div className="px-4 py-2 space-y-1.5 text-sm">
+                        <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Ремонт</span><span style={{ color: 'var(--color-text-muted)' }}>{r.repair ? fmt(r.repair) + ' ₽' : '—'}</span></div>
+                        <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Косметика</span><span style={{ color: 'var(--color-text-muted)' }}>{r.cosmetics ? fmt(r.cosmetics) + ' ₽' : '—'}</span></div>
+                        <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Обувь</span><span style={{ color: 'var(--color-text-muted)' }}>{r.shoes ? fmt(r.shoes) + ' ₽' : '—'}</span></div>
+                        <div className="flex justify-between font-semibold"><span style={{ color: 'var(--color-text)' }}>Итого</span><span style={{ color: 'var(--color-primary)' }}>{fmt(total)} ₽</span></div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>Итого</div>
+                  <div className="px-4 py-2 space-y-1.5 text-sm">
+                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Ремонт</span><span>{fmt(totRepair)} ₽</span></div>
+                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Косметика</span><span>{fmt(totCosmetics)} ₽</span></div>
+                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Обувь</span><span>{fmt(totShoes)} ₽</span></div>
+                    <div className="flex justify-between font-semibold"><span style={{ color: 'var(--color-text)' }}>Всего</span><span style={{ color: 'var(--color-primary)' }}>{fmt(totTotal)} ₽</span></div>
+                  </div>
+                </div>
+              </div>
+            ) : (
               <div className="overflow-x-auto -mx-6">
                 <table className="w-full text-sm">
                   <thead>
@@ -461,7 +489,34 @@ export default function Dashboard() {
             const totSalary = rows.reduce((s, r) => s + (r.total_salary ?? 0), 0);
             const totDone   = rows.reduce((s, r) => s + (r.services_done ?? 0), 0);
             const totWarn   = rows.reduce((s, r) => s + (r.warnings_count ?? 0), 0);
-            return (
+            return isMobile ? (
+              <div className="space-y-3">
+                {rows.map((m) => (
+                  <div key={m.master} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium" style={{ color: 'var(--color-text)' }}>{m.master}</div>
+                    <div className="px-4 py-2 space-y-1.5 text-sm">
+                      <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Услуг</span><span style={{ color: 'var(--color-text-muted)' }}>{m.services_done}</span></div>
+                      <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Выручка</span><span>{fmt(m.total_kredit)} ₽</span></div>
+                      <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>ЗП мастера</span><span style={{ color: 'var(--color-success)', fontWeight: 600 }}>{fmt(m.total_salary)} ₽</span></div>
+                      {m.warnings_count > 0 && (
+                        <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Предупреждения</span><Badge tone="danger">{m.warnings_count}</Badge></div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>Итого</div>
+                  <div className="px-4 py-2 space-y-1.5 text-sm">
+                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Услуг</span><span>{totDone}</span></div>
+                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Выручка</span><span>{fmt(totKredit)} ₽</span></div>
+                    <div className="flex justify-between font-semibold"><span style={{ color: 'var(--color-text-muted)' }}>ЗП мастеров</span><span style={{ color: 'var(--color-success)' }}>{fmt(totSalary)} ₽</span></div>
+                    {totWarn > 0 && (
+                      <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Предупреждения</span><Badge tone="danger">{totWarn}</Badge></div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
               <div className="overflow-x-auto -mx-6">
                 <table className="w-full text-sm">
                   <thead>

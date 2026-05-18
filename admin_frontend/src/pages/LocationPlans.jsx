@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const MONTHS = [
   'ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ',
@@ -106,6 +107,8 @@ function EditCodeRow({ code, onSave, onCancel }) {
 
 // ── Plans table ──────────────────────────────────────────────────
 function PlansTable({ codes, plans, onChange }) {
+  const { isMobile } = useViewport();
+
   function handleChange(code, field, raw) {
     const val = parseFloat(raw.replace(/\s/g, '')) || 0;
     onChange(code, field, val);
@@ -114,7 +117,61 @@ function PlansTable({ codes, plans, onChange }) {
   const colCls = 'text-right text-xs font-semibold text-[color:var(--color-muted-foreground)] px-3 py-2';
   const cellCls = 'px-2 py-1.5';
 
-  return (
+  return isMobile ? (
+    <div className="space-y-3">
+      {codes.length === 0 && (
+        <div className="px-4 py-8 text-center text-sm text-[color:var(--color-muted-foreground)] italic card">
+          Добавьте точки в левой панели
+        </div>
+      )}
+      {codes.map((c) => {
+        const p = plans[c.code] || {};
+        return (
+          <div key={c.code} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex items-center gap-2">
+              <span className="w-7 h-6 flex items-center justify-center rounded bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold">{c.code}</span>
+              {c.name}
+            </div>
+            <div className="px-4 py-2 space-y-1.5 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Ремонт / Химчистка, ₽</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="input text-right w-32 text-sm"
+                  value={fmtInput(p.repair_plan)}
+                  onChange={e => handleChange(c.code, 'repair_plan', e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Косметика, ₽</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="input text-right w-32 text-sm"
+                  value={fmtInput(p.cosmetics_plan)}
+                  onChange={e => handleChange(c.code, 'cosmetics_plan', e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Обувь, ₽</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="input text-right w-32 text-sm"
+                  value={fmtInput(p.shoes_plan)}
+                  onChange={e => handleChange(c.code, 'shoes_plan', e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  ) : (
     <div className="card overflow-hidden">
       <table className="w-full text-sm">
         <thead>

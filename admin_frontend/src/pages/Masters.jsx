@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const fmt    = (v) => (v == null ? '—' : v);
 const fmtRub = (v) => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽');
@@ -63,6 +64,7 @@ function KpiCard({ label, value, accent }) {
 }
 
 function MastersSummaryTable({ rows, onMasterClick }) {
+  const { isMobile } = useViewport();
   const [tab, setTab] = useState('works');
 
   const byMaster = useMemo(() => {
@@ -118,82 +120,136 @@ function MastersSummaryTable({ rows, onMasterClick }) {
       </div>
 
       {tab === 'works' && (
-        <table className="w-full text-sm min-w-[540px]">
-          <thead>
-            <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
-              <th className="px-4 py-2 text-left">Мастер</th>
-              <th className="px-4 py-2 text-right">Всего</th>
-              <th className="px-4 py-2 text-right">Выполнено</th>
-              <th className="px-4 py-2 text-right">В работе</th>
-              <th className="px-4 py-2 text-right">Медиана</th>
-              <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
-            </tr>
-          </thead>
-          <tbody>
-            {byMaster.map((m, i) => (
-              <tr key={m.name} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
-                <td className="px-4 py-2 font-medium">
+        isMobile ? (
+          <div className="space-y-3 p-3">
+            {byMaster.map((m) => (
+              <div key={m.name} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">
                   <button onClick={() => onMasterClick(m.name)}
                     className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
                     {m.name}
                   </button>
-                </td>
-                <td className="px-4 py-2 text-right">{m.total}</td>
-                <td className="px-4 py-2 text-right text-green-600">{m.done}</td>
-                <td className="px-4 py-2 text-right text-yellow-600">{m.inWork}</td>
-                <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtMin(median(m.durations))}</td>
-                <td className="px-4 py-2 text-right">
-                  {m.warnings > 0
-                    ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span>
-                    : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
-                </td>
-              </tr>
+                </div>
+                <div className="px-4 py-2 space-y-1.5 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">Всего</span><span>{m.total}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Выполнено</span><span className="text-green-600">{m.done}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">В работе</span><span className="text-yellow-600">{m.inWork}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Медиана</span><span>{fmtMin(median(m.durations))}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Нарушений</span><span>{m.warnings > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        ) : (
+          <table className="w-full text-sm min-w-[540px]">
+            <thead>
+              <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
+                <th className="px-4 py-2 text-left">Мастер</th>
+                <th className="px-4 py-2 text-right">Всего</th>
+                <th className="px-4 py-2 text-right">Выполнено</th>
+                <th className="px-4 py-2 text-right">В работе</th>
+                <th className="px-4 py-2 text-right">Медиана</th>
+                <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byMaster.map((m, i) => (
+                <tr key={m.name} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
+                  <td className="px-4 py-2 font-medium">
+                    <button onClick={() => onMasterClick(m.name)}
+                      className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
+                      {m.name}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2 text-right">{m.total}</td>
+                  <td className="px-4 py-2 text-right text-green-600">{m.done}</td>
+                  <td className="px-4 py-2 text-right text-yellow-600">{m.inWork}</td>
+                  <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtMin(median(m.durations))}</td>
+                  <td className="px-4 py-2 text-right">
+                    {m.warnings > 0
+                      ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span>
+                      : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
       )}
 
       {tab === 'salary' && (
-        <table className="w-full text-sm min-w-[540px]">
-          <thead>
-            <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
-              <th className="px-4 py-2 text-left">Мастер</th>
-              <th className="px-4 py-2 text-right">Учтено в ЗП</th>
-              <th className="px-4 py-2 text-right">Сумма услуг</th>
-              <th className="px-4 py-2 text-right text-[color:var(--color-primary)]">Зарплата</th>
-              <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bySalaryMaster.map((m, i) => (
-              <tr key={m.master} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
-                <td className="px-4 py-2 font-medium">
+        isMobile ? (
+          <div className="space-y-3 p-3">
+            {bySalaryMaster.map((m) => (
+              <div key={m.master} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">
                   <button onClick={() => onMasterClick(m.master)}
                     className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
                     {m.master}
                   </button>
-                </td>
-                <td className="px-4 py-2 text-right">{m.services_done}</td>
-                <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtRub(m.total_kredit)}</td>
-                <td className="px-4 py-2 text-right font-semibold text-[color:var(--color-primary)]">{fmtRub(m.total_salary)}</td>
-                <td className="px-4 py-2 text-right">
-                  {m.warnings_count > 0
-                    ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings_count}</span>
-                    : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
-                </td>
-              </tr>
+                </div>
+                <div className="px-4 py-2 space-y-1.5 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">Учтено в ЗП</span><span>{m.services_done}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Сумма услуг</span><span className="text-[color:var(--color-muted-foreground)]">{fmtRub(m.total_kredit)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Зарплата</span><span className="font-semibold text-[color:var(--color-primary)]">{fmtRub(m.total_salary)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Нарушений</span><span>{m.warnings_count > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings_count}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
+                </div>
+              </div>
             ))}
             {bySalaryMaster.length > 0 && (
-              <tr className="border-t border-[color:var(--color-border)] font-semibold bg-[color:var(--color-muted)]/20">
-                <td className="px-4 py-2">Итого</td>
-                <td className="px-4 py-2 text-right">{bySalaryMaster.reduce((s, r) => s + r.services_done, 0)}</td>
-                <td className="px-4 py-2 text-right">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_kredit || 0), 0))}</td>
-                <td className="px-4 py-2 text-right text-[color:var(--color-primary)]">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_salary || 0), 0))}</td>
-                <td className="px-4 py-2 text-right">{bySalaryMaster.reduce((s, r) => s + (r.warnings_count || 0), 0)}</td>
-              </tr>
+              <div className="border rounded-xl bg-[color:var(--color-muted)]/20 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-semibold">Итого</div>
+                <div className="px-4 py-2 space-y-1.5 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">Учтено в ЗП</span><span className="font-semibold">{bySalaryMaster.reduce((s, r) => s + r.services_done, 0)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Сумма услуг</span><span className="font-semibold">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_kredit || 0), 0))}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Зарплата</span><span className="font-semibold text-[color:var(--color-primary)]">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_salary || 0), 0))}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Нарушений</span><span className="font-semibold">{bySalaryMaster.reduce((s, r) => s + (r.warnings_count || 0), 0)}</span></div>
+                </div>
+              </div>
             )}
-          </tbody>
-        </table>
+          </div>
+        ) : (
+          <table className="w-full text-sm min-w-[540px]">
+            <thead>
+              <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
+                <th className="px-4 py-2 text-left">Мастер</th>
+                <th className="px-4 py-2 text-right">Учтено в ЗП</th>
+                <th className="px-4 py-2 text-right">Сумма услуг</th>
+                <th className="px-4 py-2 text-right text-[color:var(--color-primary)]">Зарплата</th>
+                <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bySalaryMaster.map((m, i) => (
+                <tr key={m.master} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
+                  <td className="px-4 py-2 font-medium">
+                    <button onClick={() => onMasterClick(m.master)}
+                      className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
+                      {m.master}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2 text-right">{m.services_done}</td>
+                  <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtRub(m.total_kredit)}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-[color:var(--color-primary)]">{fmtRub(m.total_salary)}</td>
+                  <td className="px-4 py-2 text-right">
+                    {m.warnings_count > 0
+                      ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings_count}</span>
+                      : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
+                  </td>
+                </tr>
+              ))}
+              {bySalaryMaster.length > 0 && (
+                <tr className="border-t border-[color:var(--color-border)] font-semibold bg-[color:var(--color-muted)]/20">
+                  <td className="px-4 py-2">Итого</td>
+                  <td className="px-4 py-2 text-right">{bySalaryMaster.reduce((s, r) => s + r.services_done, 0)}</td>
+                  <td className="px-4 py-2 text-right">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_kredit || 0), 0))}</td>
+                  <td className="px-4 py-2 text-right text-[color:var(--color-primary)]">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_salary || 0), 0))}</td>
+                  <td className="px-4 py-2 text-right">{bySalaryMaster.reduce((s, r) => s + (r.warnings_count || 0), 0)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )
       )}
     </div>
   );

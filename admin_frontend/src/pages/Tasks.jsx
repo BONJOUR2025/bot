@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 // ── Constants ────────────────────────────────────────────────────
 const PRIORITIES = [
@@ -145,6 +146,8 @@ export default function Tasks() {
   const getCat = n => categories.find(c => c.name === n);
   const isOverdue  = t => t.status !== 'done' && t.due_date && t.due_date < todayISO;
   const isToday    = t => t.due_date === todayISO;
+
+  const { isMobile } = useViewport();
 
   const todayISO = new Date().toISOString().slice(0, 10);
 
@@ -338,6 +341,69 @@ export default function Tasks() {
 
       {/* ── List ──────────────────────────────────────────────── */}
       {viewMode === 'list' && (
+        isMobile ? (
+          <div className="space-y-3">
+            {tasks.map(task => {
+              const pri  = getPri(task.priority);
+              const cat  = getCat(task.category);
+              const over = isOverdue(task);
+              const tod  = isToday(task);
+              return (
+                <div key={task.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pri.dot }} />
+                      <span className={task.status === 'done' ? 'line-through text-gray-500' : ''}>{task.title}</span>
+                    </div>
+                  </div>
+                  <div className="px-4 py-2 space-y-1.5 text-sm">
+                    {cat && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Категория</span>
+                        <span className="text-xs px-2 py-0.5 rounded" style={{ background: cat.color + '22', color: cat.color }}>{cat.icon} {cat.name}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Приоритет</span>
+                      <span>{pri.label}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Срок</span>
+                      <span className={over ? 'text-red-400' : tod ? 'text-yellow-400' : ''}>
+                        {task.due_date ? `${task.due_date}${task.due_time ? ' ' + task.due_time.slice(0, 5) : ''}` : '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Статус</span>
+                      <select className="input-field text-sm py-0.5" value={task.status}
+                        onChange={e => updateStatus(task.id, e.target.value)}>
+                        {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="px-4 py-2 border-t flex justify-end gap-3">
+                    {task.status !== 'done' ? (
+                      <button onClick={() => completeTask(task.id)} className="p-1.5 hover:bg-green-500/20 rounded">
+                        <Check size={16} className="text-green-400" />
+                      </button>
+                    ) : (
+                      <button onClick={() => reopenTask(task.id)} className="p-1.5 hover:bg-blue-500/20 rounded">
+                        <RotateCcw size={16} className="text-blue-400" />
+                      </button>
+                    )}
+                    <button onClick={() => startEdit(task)} className="p-1.5 hover:bg-[var(--color-bg)] rounded">
+                      <Pencil size={16} />
+                    </button>
+                    <button onClick={() => deleteTask(task.id)} className="p-1.5 hover:bg-red-500/20 rounded">
+                      <Trash2 size={16} className="text-red-400" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {tasks.length === 0 && <div className="text-center text-gray-500 py-8">Нет задач</div>}
+          </div>
+        ) : (
         <div className="bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] overflow-hidden">
           <table className="w-full">
             <thead>
@@ -424,6 +490,7 @@ export default function Tasks() {
             </tbody>
           </table>
         </div>
+        )
       )}
 
       {/* ── Calendar / Diary ──────────────────────────────────── */}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../api.js';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const emptyRole = { id: '', name: '', permissions: [], bot_buttons: [] };
 const emptyUser = {
@@ -19,6 +20,7 @@ const emptyUser = {
 };
 
 export default function AccessControl() {
+  const { isMobile } = useViewport();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
@@ -256,30 +258,49 @@ export default function AccessControl() {
           <h2 className="text-xl font-semibold">Роли</h2>
           <button className="btn" onClick={startRoleCreate}>Добавить роль</button>
         </div>
-        <div className="grid gap-3">
-          {data.roles.map((role) => (
-            <div key={role.id} className="border rounded p-4 bg-white shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="font-semibold text-lg">{role.name}</h3>
-                  <p className="text-sm text-gray-500">ID: {role.id}</p>
-                  <p className="text-sm mt-2">
-                    Права: {role.permissions.length ? role.permissions.join(', ') : 'Нет'}
-                  </p>
-                  <p className="text-sm mt-1">
-                    Кнопки бота: {role.bot_buttons.length ? role.bot_buttons.join(', ') : 'По умолчанию'}
-                  </p>
+        {isMobile ? (
+          <div className="space-y-3">
+            {data.roles.map((role) => (
+              <div key={role.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{role.name}</div>
+                <div className="px-4 py-2 space-y-1.5 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">ID</span><span>{role.id}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Права</span><span className="text-right max-w-[60%]">{role.permissions.length ? role.permissions.join(', ') : 'Нет'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Кнопки бота</span><span className="text-right max-w-[60%]">{role.bot_buttons.length ? role.bot_buttons.join(', ') : 'По умолчанию'}</span></div>
                 </div>
-                <div className="flex gap-2">
+                <div className="px-4 py-2 border-t flex justify-end gap-3">
                   <button className="btn" onClick={() => startRoleEdit(role)}>Изменить</button>
-                  <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteRole(role)}>
-                    Удалить
-                  </button>
+                  <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteRole(role)}>Удалить</button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {data.roles.map((role) => (
+              <div key={role.id} className="border rounded p-4 bg-white shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-lg">{role.name}</h3>
+                    <p className="text-sm text-gray-500">ID: {role.id}</p>
+                    <p className="text-sm mt-2">
+                      Права: {role.permissions.length ? role.permissions.join(', ') : 'Нет'}
+                    </p>
+                    <p className="text-sm mt-1">
+                      Кнопки бота: {role.bot_buttons.length ? role.bot_buttons.join(', ') : 'По умолчанию'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn" onClick={() => startRoleEdit(role)}>Изменить</button>
+                    <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteRole(role)}>
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {roleForm && (
           <form className="border rounded p-4 bg-white space-y-4" onSubmit={submitRole}>
             <h3 className="text-lg font-semibold">
@@ -369,53 +390,90 @@ export default function AccessControl() {
           <h2 className="text-xl font-semibold">Пользователи</h2>
           <button className="btn" onClick={startUserCreate}>Добавить пользователя</button>
         </div>
-        <div className="grid gap-3">
-          {data.users.map((user) => (
-            <div key={user.id} className="border rounded p-4 bg-white shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                <div className="space-y-1">
-                  <h3 className="text-lg font-semibold">{user.login}</h3>
-                  <p className="text-sm text-gray-500">ID: {user.id}</p>
+        {isMobile ? (
+          <div className="space-y-3">
+            {data.users.map((user) => (
+              <div key={user.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{user.login}</div>
+                <div className="px-4 py-2 space-y-1.5 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">ID</span><span>{user.id}</span></div>
                   {user.display_name && (
-                    <p className="text-sm text-gray-500">{user.display_name}</p>
+                    <div className="flex justify-between"><span className="text-gray-500">Имя</span><span>{user.display_name}</span></div>
                   )}
-                  <p className="text-sm">Роль: {user.role_name || '—'}</p>
-                  <p className="text-sm">
-                    Итоговые права: {user.resolved_permissions.length ? user.resolved_permissions.join(', ') : 'нет'}
-                  </p>
-                  <p className="text-sm">
-                    Кнопки в боте: {user.resolved_bot_button_labels.length ? user.resolved_bot_button_labels.join(', ') : 'по умолчанию'}
-                  </p>
-                  {user.resolved_employee_names.length > 0 ? (
-                    <p className="text-sm">
-                      Доступ к сотрудникам: {user.resolved_employee_names.join(', ')}
-                    </p>
-                  ) : (
-                    <p className="text-sm">
-                      Доступ к сотрудникам: {user.resolved_departments.length ? 'по отделам' : 'все'}
-                    </p>
-                  )}
+                  <div className="flex justify-between"><span className="text-gray-500">Роль</span><span>{user.role_name || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Права</span><span className="text-right max-w-[60%]">{user.resolved_permissions.length ? user.resolved_permissions.join(', ') : 'нет'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Кнопки</span><span className="text-right max-w-[60%]">{user.resolved_bot_button_labels.length ? user.resolved_bot_button_labels.join(', ') : 'по умолчанию'}</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Сотрудники</span>
+                    <span className="text-right max-w-[60%]">
+                      {user.resolved_employee_names.length > 0
+                        ? user.resolved_employee_names.join(', ')
+                        : user.resolved_departments.length ? 'по отделам' : 'все'}
+                    </span>
+                  </div>
                   {user.resolved_departments.length > 0 && (
-                    <p className="text-sm">
-                      Доступные отделы: {user.resolved_departments.join(', ')}
-                    </p>
+                    <div className="flex justify-between"><span className="text-gray-500">Отделы</span><span className="text-right max-w-[60%]">{user.resolved_departments.join(', ')}</span></div>
                   )}
                   {user.employee_id && (
-                    <p className="text-sm">
-                      Личный кабинет: сотрудник #{user.employee_id}
-                    </p>
+                    <div className="flex justify-between"><span className="text-gray-500">Личный кабинет</span><span>сотрудник #{user.employee_id}</span></div>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="px-4 py-2 border-t flex justify-end gap-3">
                   <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
-                  <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>
-                    Удалить
-                  </button>
+                  <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>Удалить</button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {data.users.map((user) => (
+              <div key={user.id} className="border rounded p-4 bg-white shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-semibold">{user.login}</h3>
+                    <p className="text-sm text-gray-500">ID: {user.id}</p>
+                    {user.display_name && (
+                      <p className="text-sm text-gray-500">{user.display_name}</p>
+                    )}
+                    <p className="text-sm">Роль: {user.role_name || '—'}</p>
+                    <p className="text-sm">
+                      Итоговые права: {user.resolved_permissions.length ? user.resolved_permissions.join(', ') : 'нет'}
+                    </p>
+                    <p className="text-sm">
+                      Кнопки в боте: {user.resolved_bot_button_labels.length ? user.resolved_bot_button_labels.join(', ') : 'по умолчанию'}
+                    </p>
+                    {user.resolved_employee_names.length > 0 ? (
+                      <p className="text-sm">
+                        Доступ к сотрудникам: {user.resolved_employee_names.join(', ')}
+                      </p>
+                    ) : (
+                      <p className="text-sm">
+                        Доступ к сотрудникам: {user.resolved_departments.length ? 'по отделам' : 'все'}
+                      </p>
+                    )}
+                    {user.resolved_departments.length > 0 && (
+                      <p className="text-sm">
+                        Доступные отделы: {user.resolved_departments.join(', ')}
+                      </p>
+                    )}
+                    {user.employee_id && (
+                      <p className="text-sm">
+                        Личный кабинет: сотрудник #{user.employee_id}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
+                    <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {userForm && (
           <form className="border rounded p-4 bg-white space-y-4" onSubmit={submitUser}>
             <h3 className="text-lg font-semibold">

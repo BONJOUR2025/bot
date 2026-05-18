@@ -10,6 +10,7 @@ import {
   Hourglass,
 } from 'lucide-react';
 import api from '../api';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const typeFilters = [
   { value: 'all', label: 'Все сообщения' },
@@ -218,6 +219,7 @@ function StatusSummary({ recipients }) {
 }
 
 export default function MessageHistory() {
+  const { isMobile } = useViewport();
   const [entries, setEntries] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -438,32 +440,50 @@ export default function MessageHistory() {
               )}
 
               {isBroadcast && isExpanded && (
-                <div className="mt-4 overflow-hidden rounded border">
-                  <table className="min-w-[600px] divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">Получатель</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">Статус</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
+                <div className="mt-4">
+                  {isMobile ? (
+                    <div className="space-y-3">
                       {(entry.recipients || []).map((recipient) => (
-                        <tr key={`${recipient.user_id}-${recipient.status}`}>
-                          <td className="px-3 py-2 text-gray-700">
-                            <div className="flex flex-col">
-                              <span>{recipient.name || '—'}</span>
-                              {recipient.user_id && (
-                                <span className="text-xs text-gray-400">ID: {recipient.user_id}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2">
-                            <StatusBadge status={recipient.status} />
-                          </td>
-                        </tr>
+                        <div key={`${recipient.user_id}-${recipient.status}`} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                          <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{recipient.name || '—'}</div>
+                          <div className="px-4 py-2 space-y-1.5 text-sm">
+                            <div className="flex justify-between"><span className="text-gray-500">Статус</span><StatusBadge status={recipient.status} /></div>
+                            {recipient.user_id && (
+                              <div className="flex justify-between"><span className="text-gray-500">ID</span><span className="text-gray-400">{recipient.user_id}</span></div>
+                            )}
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded border">
+                      <table className="min-w-[600px] divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">Получатель</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">Статус</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {(entry.recipients || []).map((recipient) => (
+                            <tr key={`${recipient.user_id}-${recipient.status}`}>
+                              <td className="px-3 py-2 text-gray-700">
+                                <div className="flex flex-col">
+                                  <span>{recipient.name || '—'}</span>
+                                  {recipient.user_id && (
+                                    <span className="text-xs text-gray-400">ID: {recipient.user_id}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2">
+                                <StatusBadge status={recipient.status} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </article>

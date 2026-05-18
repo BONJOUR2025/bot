@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 /* ── constants ───────────────────────────────────────────── */
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -192,6 +193,7 @@ const ChartTooltip = ({ active, payload, label, nameMap }) => {
 
 /* ── main component ──────────────────────────────────────── */
 export default function SalesAnalytics() {
+  const { isMobile } = useViewport();
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
   const [dateFrom, setDateFrom] = useState(monthAgo);
@@ -605,53 +607,78 @@ export default function SalesAnalytics() {
               <div className="p-4 border-b border-[color:var(--color-border)]">
                 <h3 className="font-semibold">Итоги по сотрудникам</h3>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[580px]">
-                  <thead>
-                    <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
-                      <th className="px-4 py-3 text-left">Сотрудник</th>
-                      {CATEGORIES.map(({ key, label }) => (
-                        <th key={key} className="px-3 py-3 text-right">{label}</th>
-                      ))}
-                      <th className="px-3 py-3 text-right">Итого</th>
-                      {showPlan && <th className="px-3 py-3 text-right">План</th>}
-                      {showPlan && <th className="px-3 py-3 text-right">%</th>}
-                      <th className="px-3 py-3 text-right">Дней</th>
-                      <th className="px-3 py-3 text-right">Ср/день</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {empSummary.map((e, i) => {
-                      const plan   = planTotals[e.code] || 0;
-                      const pct    = plan > 0 ? e.total / plan * 100 : null;
-                      const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
-                      return (
-                        <tr key={e.code} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
-                          <td className="px-4 py-2 font-medium">{empName(e.code)}</td>
-                          {CATEGORIES.map(({ key }) => (
-                            <td key={key} className="px-3 py-2 text-right tabular-nums">
-                              {Math.round(e[key] || 0).toLocaleString('ru-RU')}
-                            </td>
-                          ))}
-                          <td className="px-3 py-2 text-right font-medium tabular-nums">{Math.round(e.total).toLocaleString('ru-RU')}</td>
-                          {showPlan && (
-                            <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-muted-foreground)]">
-                              {plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—'}
-                            </td>
-                          )}
-                          {showPlan && (
-                            <td className={`px-3 py-2 text-right tabular-nums font-medium ${pct == null ? '' : pct >= 100 ? 'text-green-600' : pct >= 75 ? 'text-yellow-600' : 'text-red-500'}`}>
-                              {fmtPct(pct)}
-                            </td>
-                          )}
-                          <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-muted-foreground)]">{e.activeDays}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{Math.round(avgDay).toLocaleString('ru-RU')}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {isMobile ? (
+                <div className="space-y-3 p-3">
+                  {empSummary.map((e) => {
+                    const plan   = planTotals[e.code] || 0;
+                    const pct    = plan > 0 ? e.total / plan * 100 : null;
+                    const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
+                    return (
+                      <div key={e.code} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                        <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{empName(e.code)}</div>
+                        <div className="px-4 py-2 space-y-1.5 text-sm">
+                          <div className="flex justify-between"><span className="text-gray-500">Ремонт/Химчистка</span><span>{Math.round(e.repair || 0).toLocaleString('ru-RU')}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500">Косметика</span><span>{Math.round(e.cosmetics || 0).toLocaleString('ru-RU')}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500">Обувь</span><span>{Math.round(e.shoes || 0).toLocaleString('ru-RU')}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500">Итого</span><span className="font-medium">{Math.round(e.total).toLocaleString('ru-RU')}</span></div>
+                          {showPlan && <div className="flex justify-between"><span className="text-gray-500">План</span><span className="text-[color:var(--color-muted-foreground)]">{plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—'}</span></div>}
+                          {showPlan && <div className="flex justify-between"><span className="text-gray-500">%</span><span className={`font-medium ${pct == null ? '' : pct >= 100 ? 'text-green-600' : pct >= 75 ? 'text-yellow-600' : 'text-red-500'}`}>{fmtPct(pct)}</span></div>}
+                          <div className="flex justify-between"><span className="text-gray-500">Дней</span><span className="text-[color:var(--color-muted-foreground)]">{e.activeDays}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500">Ср/день</span><span>{Math.round(avgDay).toLocaleString('ru-RU')}</span></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[580px]">
+                    <thead>
+                      <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
+                        <th className="px-4 py-3 text-left">Сотрудник</th>
+                        {CATEGORIES.map(({ key, label }) => (
+                          <th key={key} className="px-3 py-3 text-right">{label}</th>
+                        ))}
+                        <th className="px-3 py-3 text-right">Итого</th>
+                        {showPlan && <th className="px-3 py-3 text-right">План</th>}
+                        {showPlan && <th className="px-3 py-3 text-right">%</th>}
+                        <th className="px-3 py-3 text-right">Дней</th>
+                        <th className="px-3 py-3 text-right">Ср/день</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {empSummary.map((e, i) => {
+                        const plan   = planTotals[e.code] || 0;
+                        const pct    = plan > 0 ? e.total / plan * 100 : null;
+                        const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
+                        return (
+                          <tr key={e.code} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
+                            <td className="px-4 py-2 font-medium">{empName(e.code)}</td>
+                            {CATEGORIES.map(({ key }) => (
+                              <td key={key} className="px-3 py-2 text-right tabular-nums">
+                                {Math.round(e[key] || 0).toLocaleString('ru-RU')}
+                              </td>
+                            ))}
+                            <td className="px-3 py-2 text-right font-medium tabular-nums">{Math.round(e.total).toLocaleString('ru-RU')}</td>
+                            {showPlan && (
+                              <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-muted-foreground)]">
+                                {plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—'}
+                              </td>
+                            )}
+                            {showPlan && (
+                              <td className={`px-3 py-2 text-right tabular-nums font-medium ${pct == null ? '' : pct >= 100 ? 'text-green-600' : pct >= 75 ? 'text-yellow-600' : 'text-red-500'}`}>
+                                {fmtPct(pct)}
+                              </td>
+                            )}
+                            <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-muted-foreground)]">{e.activeDays}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{Math.round(avgDay).toLocaleString('ru-RU')}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

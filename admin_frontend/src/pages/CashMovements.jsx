@@ -8,6 +8,7 @@ import {
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 // ── Formatters ────────────────────────────────────────────────────
 const fmtDate = (v) => {
@@ -603,6 +604,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
 // ── Main component ────────────────────────────────────────────────
 export default function CashMovements() {
   const { toast } = useToast();
+  const { isMobile } = useViewport();
   const [rows, setRows]           = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading]     = useState(false);
@@ -1082,6 +1084,94 @@ export default function CashMovements() {
       ) : filtered.length === 0 ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
           {safeRows.length === 0 ? 'Нет данных' : 'Нет записей по заданным фильтрам'}
+        </div>
+      ) : isMobile ? (
+        <div className="space-y-3">
+          {filtered.map((row) => (
+            <div key={row.ID_KASSES_MOVE} className={`border rounded-xl bg-white shadow-sm overflow-hidden ${!row.prefix_ok ? 'border-l-4 border-l-red-400' : row.manually_assigned ? 'border-l-4 border-l-amber-400' : ''}`}>
+              <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex justify-between items-center">
+                <span>{fmtDate(row.DK_DATE)}</span>
+                <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.SUMM)}</span>
+              </div>
+              <div className="px-4 py-2 space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Филиал</span>
+                  <span>{row.dep_name || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Создатель</span>
+                  <span>{row.user_name || '—'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Категория</span>
+                  <span>
+                    {row.category ? (
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                        row.manually_assigned
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                      }`}>{row.category}</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">
+                        <Tag size={10} /> Без категории
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {row.BASIS && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500 shrink-0">Основание</span>
+                    <span className="font-mono text-xs text-right truncate min-w-0">{row.BASIS}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Выплата</span>
+                  <span>
+                    {row.has_payout
+                      ? <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full"><LinkIcon size={10} /> Привязана</span>
+                      : <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full"><Unlink size={10} /> Нет</span>
+                    }
+                  </span>
+                </div>
+              </div>
+              <div className="px-4 py-2 border-t flex justify-end gap-3">
+                <input type="checkbox" className="w-4 h-4 rounded cursor-pointer self-center"
+                  checked={selected.has(row.ID_KASSES_MOVE)} onChange={() => toggleSelect(row.ID_KASSES_MOVE)} />
+                {row.prefix_ok
+                  ? <CheckCircle size={16} className={row.manually_assigned ? 'text-amber-500 self-center' : 'text-green-500 self-center'}
+                      title={row.manually_assigned ? 'Назначено вручную' : 'Категория по правилу'} />
+                  : <button onClick={() => setAssignRecord(row)} title="Назначить категорию"
+                      className="p-1 rounded hover:bg-red-100 transition-colors">
+                      <AlertTriangle size={16} className="text-red-500" />
+                    </button>
+                }
+                {!row.category && (
+                  <button onClick={() => setAssignRecord(row)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200 transition-colors">
+                    <Tag size={11} /> Назначить
+                  </button>
+                )}
+                {row.has_payout
+                  ? <button
+                      onClick={() => row.linked_payout && setLinkedPayoutRecord({ move: row, payout: row.linked_payout })}
+                      title="Выплата привязана — нажмите для просмотра"
+                      className="p-1 rounded hover:bg-green-100 transition-colors"
+                    >
+                      <LinkIcon size={16} className="text-green-500" />
+                    </button>
+                  : <button onClick={() => setCreatePayoutMove(row)}
+                      title="Привязать выплату к этому движению"
+                      className="p-1 rounded hover:bg-amber-100 transition-colors">
+                      <Unlink size={16} className="text-amber-500" />
+                    </button>
+                }
+              </div>
+            </div>
+          ))}
+          <div className="px-4 py-2.5 rounded-xl bg-[color:var(--color-table-header)] border border-[color:var(--color-border)] text-sm font-semibold flex justify-between">
+            <span>Итого: {filtered.length} записей</span>
+            <span className="text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</span>
+          </div>
         </div>
       ) : (
         <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">

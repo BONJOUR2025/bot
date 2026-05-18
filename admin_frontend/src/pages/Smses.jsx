@@ -3,6 +3,7 @@ import { RefreshCw, Search, Download, MessageSquare } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const CHANNELS = ['СМС', 'Push', 'MAX'];
 const STATUSES = ['Доставлено', 'Не доставлено', 'В работе'];
@@ -39,6 +40,7 @@ function SortIcon({ field, sort }) {
 
 export default function Smses() {
   const { toast } = useToast();
+  const { isMobile } = useViewport();
   const [rows, setRows]         = useState([]);
   const [loading, setLoading]   = useState(false);
   const [dateFrom, setDateFrom] = useState(isoMStart());
@@ -252,6 +254,20 @@ export default function Smses() {
       ) : filtered.length === 0 ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
           {safeRows.length === 0 ? 'Нет данных' : 'Нет записей по заданным фильтрам'}
+        </div>
+      ) : isMobile ? (
+        <div className="space-y-3">
+          {filtered.map(row => (
+            <div key={row.ID} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium font-mono">{row.PHONE || '—'}</div>
+              <div className="px-4 py-2 space-y-1.5 text-sm">
+                <div className="flex justify-between"><span className="text-gray-500">Дата/время</span><span className="font-mono text-xs">{fmtDateTime(row.DTTM)}</span></div>
+                <div className="flex justify-between items-center"><span className="text-gray-500">Статус</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.OPER_STATUS] || 'bg-gray-100 text-gray-600'}`}>{row.OPER_STATUS || '—'}</span></div>
+                <div className="flex justify-between items-center"><span className="text-gray-500">Канал</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${CHANNEL_COLORS[row.channel] || ''}`}>{row.channel}</span></div>
+                <div className="flex flex-col gap-0.5"><span className="text-gray-500">Текст</span><span className="text-xs break-words whitespace-pre-wrap">{row.TXT || '—'}</span></div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">

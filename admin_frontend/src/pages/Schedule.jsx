@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react';
 import api from '../api';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const MONTHS_RU     = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const MONTHS_RU_GEN = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
@@ -27,6 +28,7 @@ function PointChip({ code }) {
 }
 
 export default function Schedule() {
+  const { isMobile } = useViewport();
   const today      = new Date();
   const [year, setYear]   = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -189,94 +191,128 @@ export default function Schedule() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="border-collapse text-xs">
-              <thead>
-                {/* Строка: дни */}
-                <tr>
-                  <th className="sticky left-0 z-20 min-w-[150px] border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2 text-left text-[color:var(--color-muted-foreground)]">
-                    Сотрудник
-                  </th>
-                  {data.days.map(d => {
-                    const isToday   = isCurrentMonth && d.day === todayDay;
-                    const isWeekend = d.is_weekend;
-                    return (
-                      <th
-                        key={d.day}
-                        ref={isToday ? todayColRef : null}
-                        className={`min-w-[36px] border-b border-r border-[color:var(--color-border)] px-1 py-2 text-center font-semibold
-                          ${isToday   ? 'bg-[color:var(--color-primary)] text-white'                    : ''}
-                          ${isWeekend && !isToday ? 'bg-red-50 text-red-500 dark:bg-red-900/20 dark:text-red-400' : ''}
-                          ${!isToday && !isWeekend ? 'bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)]' : ''}
-                        `}
-                      >
-                        <div>{d.day}</div>
-                        <div className="text-[10px] font-normal opacity-70">{d.weekday_short}</div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredEmps.map((emp, ri) => (
-                  <tr key={emp}
-                    className={ri % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
-                    <td className="sticky left-0 z-10 border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-1.5 font-medium whitespace-nowrap"
-                      style={{ background: ri % 2 === 1 ? 'var(--color-card)' : 'var(--color-card)' }}>
-                      {emp}
-                    </td>
+          {isMobile ? (
+            <div className="space-y-3 p-4">
+              {filteredEmps.map(emp => {
+                const assignments = data.days
+                  .filter(d => d.assignments[emp])
+                  .map(d => ({ day: d.day, weekday_short: d.weekday_short, code: d.assignments[emp], isToday: isCurrentMonth && d.day === todayDay, isWeekend: d.is_weekend }));
+                const todayAssignment = assignments.find(a => a.isToday);
+                return (
+                  <div key={emp} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{emp}</div>
+                    <div className="px-4 py-2 space-y-1.5 text-sm">
+                      {todayAssignment && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">Сегодня</span>
+                          <PointChip code={todayAssignment.code} />
+                        </div>
+                      )}
+                      <div className="flex justify-between"><span className="text-gray-500">Смен в месяце</span><span>{assignments.length}</span></div>
+                      {assignments.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {assignments.map(a => (
+                            <span key={a.day} className={`text-xs px-1.5 py-0.5 rounded border ${a.isToday ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 font-semibold' : a.isWeekend ? 'border-red-200 bg-red-50' : 'border-gray-200'}`}>
+                              {a.day} <PointChip code={a.code} />
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="border-collapse text-xs">
+                <thead>
+                  {/* Строка: дни */}
+                  <tr>
+                    <th className="sticky left-0 z-20 min-w-[150px] border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2 text-left text-[color:var(--color-muted-foreground)]">
+                      Сотрудник
+                    </th>
                     {data.days.map(d => {
-                      const code      = d.assignments[emp] || '';
                       const isToday   = isCurrentMonth && d.day === todayDay;
                       const isWeekend = d.is_weekend;
                       return (
-                        <td key={d.day}
-                          className={`border-b border-r border-[color:var(--color-border)] px-1 py-1.5 text-center
-                            ${isToday   ? 'bg-[color:var(--color-primary)]/10' : ''}
-                            ${isWeekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}
-                          `}>
-                          {code ? <PointChip code={code} /> : (
-                            <span className="text-[color:var(--color-muted-foreground)] opacity-30">—</span>
-                          )}
-                        </td>
+                        <th
+                          key={d.day}
+                          ref={isToday ? todayColRef : null}
+                          className={`min-w-[36px] border-b border-r border-[color:var(--color-border)] px-1 py-2 text-center font-semibold
+                            ${isToday   ? 'bg-[color:var(--color-primary)] text-white'                    : ''}
+                            ${isWeekend && !isToday ? 'bg-red-50 text-red-500 dark:bg-red-900/20 dark:text-red-400' : ''}
+                            ${!isToday && !isWeekend ? 'bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)]' : ''}
+                          `}
+                        >
+                          <div>{d.day}</div>
+                          <div className="text-[10px] font-normal opacity-70">{d.weekday_short}</div>
+                        </th>
                       );
                     })}
                   </tr>
-                ))}
+                </thead>
 
-                {/* Итоговая строка: количество в каждой точке */}
-                {data.employees.length > 0 && (
-                  <tr className="border-t-2 border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 font-semibold">
-                    <td className="sticky left-0 z-10 border-r border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)]">
-                      В точках
-                    </td>
-                    {data.days.map(d => {
-                      const counts = dayPointCount[d.day] || {};
-                      const isToday   = isCurrentMonth && d.day === todayDay;
-                      const isWeekend = d.is_weekend;
-                      return (
-                        <td key={d.day}
-                          className={`border-r border-[color:var(--color-border)] px-0.5 py-1 text-center
-                            ${isToday ? 'bg-[color:var(--color-primary)]/10' : ''}
-                            ${isWeekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}
-                          `}>
-                          <div className="flex flex-col gap-0.5 items-center">
-                            {Object.entries(counts).map(([code, cnt]) => (
-                              <span key={code} className="flex items-center gap-0.5">
-                                <PointChip code={code} />
-                                {cnt > 1 && <span className="text-[10px] text-[color:var(--color-muted-foreground)]">×{cnt}</span>}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                <tbody>
+                  {filteredEmps.map((emp, ri) => (
+                    <tr key={emp}
+                      className={ri % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
+                      <td className="sticky left-0 z-10 border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-1.5 font-medium whitespace-nowrap"
+                        style={{ background: ri % 2 === 1 ? 'var(--color-card)' : 'var(--color-card)' }}>
+                        {emp}
+                      </td>
+                      {data.days.map(d => {
+                        const code      = d.assignments[emp] || '';
+                        const isToday   = isCurrentMonth && d.day === todayDay;
+                        const isWeekend = d.is_weekend;
+                        return (
+                          <td key={d.day}
+                            className={`border-b border-r border-[color:var(--color-border)] px-1 py-1.5 text-center
+                              ${isToday   ? 'bg-[color:var(--color-primary)]/10' : ''}
+                              ${isWeekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}
+                            `}>
+                            {code ? <PointChip code={code} /> : (
+                              <span className="text-[color:var(--color-muted-foreground)] opacity-30">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+
+                  {/* Итоговая строка: количество в каждой точке */}
+                  {data.employees.length > 0 && (
+                    <tr className="border-t-2 border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 font-semibold">
+                      <td className="sticky left-0 z-10 border-r border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)]">
+                        В точках
+                      </td>
+                      {data.days.map(d => {
+                        const counts = dayPointCount[d.day] || {};
+                        const isToday   = isCurrentMonth && d.day === todayDay;
+                        const isWeekend = d.is_weekend;
+                        return (
+                          <td key={d.day}
+                            className={`border-r border-[color:var(--color-border)] px-0.5 py-1 text-center
+                              ${isToday ? 'bg-[color:var(--color-primary)]/10' : ''}
+                              ${isWeekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}
+                            `}>
+                            <div className="flex flex-col gap-0.5 items-center">
+                              {Object.entries(counts).map(([code, cnt]) => (
+                                <span key={code} className="flex items-center gap-0.5">
+                                  <PointChip code={code} />
+                                  {cnt > 1 && <span className="text-[10px] text-[color:var(--color-muted-foreground)]">×{cnt}</span>}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {filteredEmps.length === 0 && search && (
             <div className="p-6 text-center text-sm text-[color:var(--color-muted-foreground)]">
