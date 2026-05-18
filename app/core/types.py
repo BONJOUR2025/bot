@@ -18,6 +18,7 @@ class Employee:
     phone: str
     position: str = ""
     is_admin: bool = False
+    bot_user: bool = False
     card_number: str = ""
     bank: str = ""
     work_place: str = ""

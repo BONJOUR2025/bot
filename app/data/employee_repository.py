@@ -45,6 +45,7 @@ class EmployeeRepository:
             "phone": data.get("phone", ""),
             "position": data.get("position", ""),
             "is_admin": data.get("is_admin", False),
+            "bot_user": data.get("bot_user", False),
             "card_number": data.get("card_number", ""),
             "bank": data.get("bank", ""),
             "work_place": data.get("work_place", ""),
