@@ -187,7 +187,7 @@ export default function Broadcast() {
           </button>
           {openRecipients && (
             <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white border border-gray-300 rounded shadow">
-              {employees.map((e) => (
+              {employees.filter(e => e.bot_user || (!String(e.id).startsWith('nb_') && !!e.id)).map((e) => (
                 <label
                   key={e.id}
                   className="flex items-center px-2 py-1 gap-2"

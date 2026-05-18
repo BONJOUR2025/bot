@@ -34,6 +34,7 @@ export default function Employees() {
     status: 'active',
     position: '',
     is_admin: false,
+    bot_user: false,
     sync_to_bot: false,
     photo_file: null,
     photo_url: '',
@@ -152,7 +153,8 @@ export default function Employees() {
   }
 
   function startEdit(emp) {
-    setForm({ ...emp, id: emp.id, id_original: emp.id, payout_chat_key: emp.payout_chat_key || '' });
+    const isBotUser = emp.bot_user ?? (!String(emp.id).startsWith('nb_') && !!emp.id);
+    setForm({ ...emp, id: emp.id, id_original: emp.id, bot_user: isBotUser, payout_chat_key: emp.payout_chat_key || '' });
     setShowForm(true);
   }
 
@@ -213,13 +215,14 @@ export default function Employees() {
       status: form.status || 'active',
       position: form.position || '',
       is_admin: form.is_admin,
+      bot_user: form.bot_user,
       payout_chat_key: form.payout_chat_key || null,
     };
     try {
       if (form.id_original) {
-        await api.put(`employees/${form.id_original}`, { id: form.id, ...payload });
+        await api.put(`employees/${form.id_original}`, { id: form.bot_user ? form.id : form.id_original, ...payload });
       } else {
-        payload.id = form.id || Date.now().toString();
+        if (form.bot_user) payload.id = form.id || '';
         await api.post('employees/', payload);
       }
       if (form.photo_file) {
@@ -488,14 +491,24 @@ export default function Employees() {
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="modal-card max-w-lg">
             <h2 className="text-xl font-semibold">
-              {form.id ? 'Редактирование' : 'Новый сотрудник'}
+              {form.id_original ? 'Редактирование' : 'Новый сотрудник'}
             </h2>
-            <input
-              className="modal-control"
-              placeholder="ID"
-              value={form.id}
-              onChange={(e) => setForm({ ...form, id: e.target.value })}
-            />
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={form.bot_user}
+                onChange={(e) => setForm({ ...form, bot_user: e.target.checked, id: e.target.checked ? form.id : '' })}
+              />
+              Пользователь бота
+            </label>
+            {form.bot_user && (
+              <input
+                className="modal-control"
+                placeholder="Telegram ID"
+                value={form.id}
+                onChange={(e) => setForm({ ...form, id: e.target.value })}
+              />
+            )}
             <input
               className="modal-control"
               placeholder="Имя"

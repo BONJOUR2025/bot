@@ -139,13 +139,19 @@ class EmployeeAPIService:
         return EmployeeOut(**employee.__dict__)
 
     async def create_employee(self, data: EmployeeCreate) -> EmployeeOut:
+        if data.bot_user:
+            employee_id = data.id or ""
+        else:
+            import time
+            employee_id = data.id or f"nb_{int(time.time() * 1000)}"
         employee = Employee(
-            id=data.id or "",
+            id=employee_id,
             name=data.name,
             full_name=data.full_name or "",
             phone=data.phone or "",
             position=data.position or "",
             is_admin=data.is_admin or False,
+            bot_user=data.bot_user or False,
             card_number=data.card_number or "",
             bank=data.bank or "",
             work_place=data.work_place or "",

@@ -10,6 +10,7 @@ class EmployeeBase(BaseModel):
     phone: Optional[str] = ""
     position: Optional[str] = ""
     is_admin: bool = False
+    bot_user: bool = False
     card_number: Optional[str] = ""
     bank: Optional[str] = ""
     work_place: Optional[str] = ""
@@ -48,6 +49,7 @@ class Employee(BaseModel):
     work_place: str = ""
     clothing_size: str = ""
     is_admin: bool = False
+    bot_user: bool = False
     note: Optional[str] = None
     photo_url: Optional[str] = None
     payout_chat_key: Optional[str] = None
