@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const MONTHS = [
   'ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ',
@@ -18,7 +19,7 @@ function fmtInput(v) {
 }
 
 // ── CodeManager ──────────────────────────────────────────────────
-function CodeManager({ codes, onAdd, onUpdate, onDelete }) {
+function CodeManager({ codes, onAdd, onUpdate, onDelete, embedded = false }) {
   const [adding, setAdding]   = useState(false);
   const [newCode, setNewCode] = useState({ code: '', name: '' });
   const [editing, setEditing] = useState(null);  // code string being edited
@@ -31,7 +32,7 @@ function CodeManager({ codes, onAdd, onUpdate, onDelete }) {
   }
 
   return (
-    <div className="card p-5 space-y-4">
+    <div className={embedded ? 'p-4 space-y-4' : 'card p-5 space-y-4'}>
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm">Точки (обозначения в расписании)</h3>
         <button onClick={() => setAdding(v => !v)} className="text-xs text-[color:var(--color-primary)] font-medium hover:underline">
@@ -250,6 +251,7 @@ function PlansTable({ codes, plans, onChange }) {
 // ── Main page ─────────────────────────────────────────────────────
 export default function LocationPlans() {
   const now = new Date();
+  const { isMobile } = useViewport();
   const [year, setYear]     = useState(now.getFullYear());
   const [month, setMonth]   = useState(MONTHS[now.getMonth()]);
   const [codes, setCodes]   = useState([]);
@@ -258,6 +260,8 @@ export default function LocationPlans() {
   const [saving, setSaving]   = useState(false);
   const [saved, setSaved]     = useState(false);
   const [error, setError]     = useState(null);
+  const [showInfo, setShowInfo] = useState(false);
+  const [showCodes, setShowCodes] = useState(false);
 
   const monthKey = `${month}_${year}`;
 
@@ -357,23 +361,34 @@ export default function LocationPlans() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={isMobile ? 'p-4 space-y-4' : 'p-6 space-y-6'}>
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Планы по точкам</h1>
-          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
-            Месячные планы продаж для каждой точки — используются для авторасчёта индивидуальных планов сотрудников
-          </p>
+      {isMobile ? (
+        <div className="space-y-3">
+          <h1 className="text-xl font-bold">Планы по точкам</h1>
+          <div className="flex items-center justify-between">
+            <button onClick={prevMonth} className="btn btn-secondary px-3 py-2 text-base">‹</button>
+            <span className="font-semibold text-base">{month} {year}</span>
+            <button onClick={nextMonth} className="btn btn-secondary px-3 py-2 text-base">›</button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="btn btn-secondary px-2.5">‹</button>
-          <span className="min-w-[160px] text-center font-semibold text-base">
-            {month} {year}
-          </span>
-          <button onClick={nextMonth} className="btn btn-secondary px-2.5">›</button>
+      ) : (
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Планы по точкам</h1>
+            <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
+              Месячные планы продаж для каждой точки — используются для авторасчёта индивидуальных планов сотрудников
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={prevMonth} className="btn btn-secondary px-2.5">‹</button>
+            <span className="min-w-[160px] text-center font-semibold text-base">
+              {month} {year}
+            </span>
+            <button onClick={nextMonth} className="btn btn-secondary px-2.5">›</button>
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
@@ -382,19 +397,75 @@ export default function LocationPlans() {
       )}
 
       {/* How it works */}
-      <div className="rounded-xl bg-blue-50 border border-blue-200 px-5 py-4 text-sm text-blue-800 space-y-1">
-        <p className="font-semibold">Как работает авторасчёт плана сотрудника</p>
-        <p>
-          Дневной план точки = Месячный план точки ÷ Кол-во дней в месяце<br/>
-          Индивидуальный план = Σ (Дневной план точки × Смен на этой точке)
-        </p>
-        <p className="text-blue-600">
-          Если для сотрудника задан ручной план в «Расчёте зарплаты» — он имеет приоритет.
-        </p>
-      </div>
+      {isMobile ? (
+        <div className="rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800">
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 font-semibold"
+            onClick={() => setShowInfo(v => !v)}
+          >
+            <span>Как работает авторасчёт</span>
+            {showInfo ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+          {showInfo && (
+            <div className="px-4 pb-3 space-y-1 border-t border-blue-200">
+              <p className="pt-2">Дневной план точки = Месячный план ÷ Кол-во дней в месяце</p>
+              <p>Индивидуальный план = Σ (Дневной план × Смен на этой точке)</p>
+              <p className="text-blue-600">Если задан ручной план — он имеет приоритет.</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl bg-blue-50 border border-blue-200 px-5 py-4 text-sm text-blue-800 space-y-1">
+          <p className="font-semibold">Как работает авторасчёт плана сотрудника</p>
+          <p>
+            Дневной план точки = Месячный план точки ÷ Кол-во дней в месяце<br/>
+            Индивидуальный план = Σ (Дневной план точки × Смен на этой точке)
+          </p>
+          <p className="text-blue-600">
+            Если для сотрудника задан ручной план в «Расчёте зарплаты» — он имеет приоритет.
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-12 text-[color:var(--color-muted-foreground)]">Загрузка...</div>
+      ) : isMobile ? (
+        <div className="space-y-4">
+          {/* Collapsible code manager on mobile */}
+          <div className="card overflow-hidden">
+            <button
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold"
+              onClick={() => setShowCodes(v => !v)}
+            >
+              <span>Точки ({codes.length})</span>
+              {showCodes ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {showCodes && (
+              <div className="border-t border-[color:var(--color-border)]">
+                <CodeManager
+                  codes={codes}
+                  onAdd={handleAddCode}
+                  onUpdate={handleUpdateCode}
+                  onDelete={handleDeleteCode}
+                  embedded
+                />
+              </div>
+            )}
+          </div>
+
+          <PlansTable codes={codes} plans={plans} onChange={handlePlanChange} />
+
+          <div className="flex items-center justify-between gap-3">
+            {saved && <span className="text-sm text-emerald-600 font-medium">✓ Сохранено</span>}
+            <button
+              onClick={handleSave}
+              disabled={saving || codes.length === 0}
+              className="btn btn-primary flex-1"
+            >
+              {saving ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
           {/* Left: code manager */}

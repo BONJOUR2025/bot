@@ -248,7 +248,7 @@ function MovementPickerModal({ payout, onLink, onClose }) {
 
   return (
     <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-card max-w-2xl w-full max-h-[85vh] flex flex-col">
+      <div className="modal-card max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold flex items-center gap-2">
             <LinkIcon size={16} /> Выбрать кассовое движение

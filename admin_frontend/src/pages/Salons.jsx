@@ -201,7 +201,7 @@ function SalonModal({ salon, employees, onSave, onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-card max-w-2xl w-full flex flex-col" style={{ maxHeight: '90vh' }}>
+      <div className="modal-card max-w-2xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-[color:var(--color-border)]">
           <h3 className="text-lg font-bold">{isNew ? 'Новый салон' : form.name}</h3>
@@ -707,7 +707,7 @@ export default function Salons() {
               </div>
               <div className="px-4 py-2 border-t flex justify-end gap-3">
                 <button className="btn btn-secondary text-sm" onClick={e => { e.stopPropagation(); setDrawer(s); }}>Подробнее</button>
-                <button className="btn btn-primary text-sm" onClick={e => { e.stopPropagation(); setModal(s); }}>Изменить</button>
+                <button className="btn btn-primary text-sm" onClick={e => { e.stopPropagation(); setDrawer(null); setModal(s); }}>Изменить</button>
               </div>
             </div>
           ))}
