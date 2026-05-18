@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import date
-from typing import Any
+from typing import Any, Optional
 
 try:
     import fdb
@@ -515,25 +515,12 @@ class FirebirdService:
             return None
 
 
-_firebird_service: FirebirdService | None = None
-
-
-def get_firebird_service() -> FirebirdService:
-    global _firebird_service
-    if _firebird_service is None:
-        _firebird_service = FirebirdService()
-    return _firebird_service
-
-    def get_smses(
-        self,
-        date_from: date | None = None,
-        date_to: date | None = None,
-    ) -> list[dict]:
-        """Load SMS messages from SMSES table."""
+    def get_smses(self, date_from=None, date_to=None) -> list[dict]:
+        """Load SMS records from SMSES table."""
         if not FIREBIRD_AVAILABLE:
             return []
         conditions = []
-        params: list = []
+        params = []
         if date_from:
             conditions.append("CAST(DTTM AS DATE) >= ?")
             params.append(date_from)
@@ -559,7 +546,6 @@ def get_firebird_service() -> FirebirdService:
                 row = dict(zip(cols, r))
                 if hasattr(row.get("DTTM"), "isoformat"):
                     row["DTTM"] = row["DTTM"].isoformat()
-                # Derive channel
                 if row.get("PUSH_ID") not in (None, "", 0):
                     row["channel"] = "Push"
                 elif row.get("WAZZUP_MAX_ACCEPT") not in (None, "", 0):
@@ -574,3 +560,13 @@ def get_firebird_service() -> FirebirdService:
         except Exception as e:
             logger.warning(f"get_smses error: {e}")
             return []
+
+
+_firebird_service: FirebirdService | None = None
+
+
+def get_firebird_service() -> FirebirdService:
+    global _firebird_service
+    if _firebird_service is None:
+        _firebird_service = FirebirdService()
+    return _firebird_service
