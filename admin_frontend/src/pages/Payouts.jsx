@@ -269,7 +269,7 @@ function MovementPickerModal({ payout, onLink, onClose }) {
         ) : moves.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Нет движений за период</div>
         ) : (
-          <div className="overflow-auto flex-1">
+          <div className="overflow-y-auto flex-1">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
@@ -283,8 +283,8 @@ function MovementPickerModal({ payout, onLink, onClose }) {
               <tbody className="divide-y divide-gray-100">
                 {moves.map((m) => (
                   <tr key={m.ID_KASSES_MOVE} className={`hover:bg-gray-50 ${m.has_payout ? 'opacity-50' : ''}`}>
-                    <td className="px-3 py-2 whitespace-nowrap">{m.DK_DATE}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{m.dep_name || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">{m.DK_DATE}</td>
+                    <td className="px-3 py-2 max-w-[120px] truncate" title={m.dep_name}>{m.dep_name || '—'}</td>
                     <td className="px-3 py-2 font-mono text-xs max-w-xs truncate" title={m.BASIS}>{m.BASIS || '—'}</td>
                     <td className="px-3 py-2 text-right font-medium whitespace-nowrap">
                       {Number(m.SUMM).toLocaleString('ru-RU')} ₽

@@ -404,8 +404,9 @@ select option { color: #0f172a; background-color: #ffffff; }
 }
 .modal-card {
   width: 100%;
-  max-height: min(88vh, 800px);
+  max-height: min(95vh, 900px);
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--color-modal-bg);
   color: var(--color-modal-text);
   border-radius: var(--radius-xl);

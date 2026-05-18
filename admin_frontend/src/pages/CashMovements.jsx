@@ -556,7 +556,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
             ) : payoutsList.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-[color:var(--color-muted-foreground)] text-sm">Нет выплат за период</div>
             ) : (
-              <div className="overflow-auto flex-1">
+              <div className="overflow-y-auto flex-1">
                 <table className="min-w-full text-sm">
                   <thead className="sticky top-0 bg-[color:var(--color-bg-secondary)] text-xs uppercase text-[color:var(--color-muted-foreground)]">
                     <tr>
