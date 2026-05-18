@@ -369,12 +369,11 @@ class PayrollService:
     # ── Advances ─────────────────────────────────────────────────
 
     def _load_advance_records(self) -> list[dict]:
-        if not self.advance_requests_file.exists():
-            return []
+        from app.data.payout_repository import PayoutRepository
         try:
-            return json.loads(self.advance_requests_file.read_text(encoding="utf-8"))
+            return PayoutRepository().load_all()
         except Exception as e:
-            logger.error(f"Error reading advance requests: {e}")
+            logger.error(f"Error reading advance requests from DB: {e}")
             return []
 
     def _resolve_code(self, row: dict) -> str | None:
