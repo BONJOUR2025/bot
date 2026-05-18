@@ -53,6 +53,7 @@ export default function Employees() {
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirmWarnings, setConfirmWarnings] = useState([]);
 
   useEffect(() => {
     load();
@@ -197,11 +198,7 @@ export default function Employees() {
     }
   }
 
-  async function saveForm() {
-    if (!form.name || !form.full_name || !form.phone) {
-      toast('Заполните обязательные поля', 'warning');
-      return;
-    }
+  async function doSave() {
     const payload = {
       name: form.name,
       full_name: form.full_name,
@@ -238,6 +235,28 @@ export default function Employees() {
       console.error(err);
       toast('Ошибка при сохранении', 'error');
     }
+  }
+
+  function saveForm() {
+    if (!form.name || !form.full_name || !form.phone) {
+      toast('Заполните обязательные поля', 'warning');
+      return;
+    }
+    const warnings = [];
+    if (!form.card_number) {
+      warnings.push('Номер карты не заполнен.');
+    } else {
+      const phoneDigits = form.phone.replace(/\D/g, '');
+      const cardDigits  = form.card_number.replace(/\D/g, '');
+      if (phoneDigits && cardDigits && phoneDigits !== cardDigits) {
+        warnings.push('Номер карты отличается от номера телефона.');
+      }
+    }
+    if (warnings.length > 0) {
+      setConfirmWarnings(warnings);
+      return;
+    }
+    doSave();
   }
 
   function handleFile(e) {
@@ -487,12 +506,13 @@ export default function Employees() {
       )}
 
       {showForm && (
-
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="modal-card max-w-lg">
+          <div className="modal-card max-w-lg overflow-y-auto max-h-[90vh]">
             <h2 className="text-xl font-semibold">
               {form.id_original ? 'Редактирование' : 'Новый сотрудник'}
             </h2>
+
+            {/* Bot user toggle */}
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
@@ -501,135 +521,118 @@ export default function Employees() {
               />
               Пользователь бота
             </label>
+
             {form.bot_user && (
-              <input
-                className="modal-control"
-                placeholder="Telegram ID"
-                value={form.id}
-                onChange={(e) => setForm({ ...form, id: e.target.value })}
-              />
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Telegram ID</label>
+                <input className="modal-control" value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} />
+              </div>
             )}
-            <input
-              className="modal-control"
-              placeholder="Имя"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="ФИО"
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="Телефон"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="Номер карты"
-              value={form.card_number}
-              onChange={(e) => setForm({ ...form, card_number: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="Банк"
-              value={form.bank}
-              onChange={(e) => setForm({ ...form, bank: e.target.value })}
-            />
-            <select
-              className="modal-control"
-              value={form.position}
-              onChange={(e) => setForm({ ...form, position: e.target.value })}
-            >
-              <option value="">Не выбрано</option>
-              {positions.map((pos) => (
-                <option key={pos} value={pos}>
-                  {pos}
-                </option>
-              ))}
-            </select>
-            <select
-              className="modal-control"
-              value={form.work_place}
-              onChange={(e) => setForm({ ...form, work_place: e.target.value })}
-            >
-              <option value="">Не выбрано</option>
-              {workPlaces.map((wp) => (
-                <option key={wp} value={wp}>
-                  {wp}
-                </option>
-              ))}
-            </select>
-            <input
-              className="modal-control"
-              placeholder="Размер формы"
-              value={form.clothing_size}
-              onChange={(e) => setForm({ ...form, clothing_size: e.target.value })}
-            />
-            <input
-              type="date"
-              className="modal-control"
-              value={form.birthdate}
-              onChange={(e) => setForm({ ...form, birthdate: e.target.value })}
-            />
-            <textarea
-              className="modal-control"
-              placeholder="Заметка"
-              value={form.note}
-              onChange={(e) => setForm({ ...form, note: e.target.value })}
-            />
-            <select
-              className="modal-control"
-              value={form.payout_chat_key}
-              onChange={(e) => setForm({ ...form, payout_chat_key: e.target.value })}
-            >
-              <option value="">
-                {cashierChats.length
-                  ? `По умолчанию — ${cashierChats[0].name}`
-                  : 'По умолчанию'}
-              </option>
-              {cashierChats.map((chat) => (
-                <option key={chat.key} value={chat.key}>
-                  {chat.name} — {chat.chat_id}
-                </option>
-              ))}
-            </select>
-            <select
-              className="modal-control"
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-            >
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.sync_to_bot}
-                onChange={(e) => setForm({ ...form, sync_to_bot: e.target.checked })
-                }
-              />
-              Отразить в боте
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.is_admin}
-                onChange={(e) => setForm({ ...form, is_admin: e.target.checked })}
-              />
-              Администратор
-            </label>
-            <input type="file" onChange={handleFile} />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Имя *</label>
+                <input className="modal-control" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">ФИО *</label>
+                <input className="modal-control" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Телефон *</label>
+                <input className="modal-control" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Номер карты</label>
+                <input className="modal-control" value={form.card_number} onChange={(e) => setForm({ ...form, card_number: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Банк</label>
+                <input className="modal-control" value={form.bank} onChange={(e) => setForm({ ...form, bank: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Размер формы</label>
+                <input className="modal-control" value={form.clothing_size} onChange={(e) => setForm({ ...form, clothing_size: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Должность</label>
+                <select className="modal-control" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}>
+                  <option value="">Не выбрано</option>
+                  {positions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Место работы</label>
+                <select className="modal-control" value={form.work_place} onChange={(e) => setForm({ ...form, work_place: e.target.value })}>
+                  <option value="">Не выбрано</option>
+                  {workPlaces.map((wp) => <option key={wp} value={wp}>{wp}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Дата рождения</label>
+                <input type="date" className="modal-control" value={form.birthdate} onChange={(e) => setForm({ ...form, birthdate: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Чат кассира</label>
+                <select className="modal-control" value={form.payout_chat_key} onChange={(e) => setForm({ ...form, payout_chat_key: e.target.value })}>
+                  <option value="">{cashierChats.length ? `По умолчанию — ${cashierChats[0].name}` : 'По умолчанию'}</option>
+                  {cashierChats.map((chat) => <option key={chat.key} value={chat.key}>{chat.name} — {chat.chat_id}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Статус</label>
+                <select className="modal-control" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  <option value="active">Активный</option>
+                  <option value="inactive">Неактивный</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Заметка</label>
+              <textarea className="modal-control" rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+            </div>
+
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={form.sync_to_bot} onChange={(e) => setForm({ ...form, sync_to_bot: e.target.checked })} />
+                Отразить в боте
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={form.is_admin} onChange={(e) => setForm({ ...form, is_admin: e.target.checked })} />
+                Администратор
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Фото</label>
+              <input type="file" onChange={handleFile} />
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
-                Отмена
-              </button>
-              <button className="btn" onClick={saveForm}>
-                Сохранить
-              </button>
+              <button className="btn" onClick={() => setShowForm(false)}>Отмена</button>
+              <button className="btn btn--primary" onClick={saveForm}>Сохранить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm warnings dialog */}
+      {confirmWarnings.length > 0 && (
+        <div className="modal-backdrop" style={{ zIndex: 70 }}>
+          <div className="modal-card max-w-sm w-full">
+            <h3 className="text-base font-semibold">Предупреждение</h3>
+            <ul className="text-sm space-y-1">
+              {confirmWarnings.map((w, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="text-amber-500 mt-0.5">⚠</span> {w}
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm text-[color:var(--color-muted-foreground)]">Всё равно сохранить?</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button className="btn" onClick={() => setConfirmWarnings([])}>Отмена</button>
+              <button className="btn btn--primary" onClick={() => { setConfirmWarnings([]); doSave(); }}>Сохранить</button>
             </div>
           </div>
         </div>
