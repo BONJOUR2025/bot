@@ -1,89 +1,376 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Wallet, CheckCircle2, Palmtree, AlertTriangle,
+  ArrowRight, CalendarDays, ClipboardList, Clock,
+  ListTodo, CirclePlay, RefreshCw,
+} from 'lucide-react';
 import api from '../api';
 import Card from '../components/ui/Card';
+import Badge from '../components/ui/Badge';
 import Skeleton, { SkeletonCard } from '../components/ui/Skeleton.jsx';
 
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(n) {
+  return Number(n ?? 0).toLocaleString('ru-RU');
+}
+
+function fmtDate(val) {
+  if (!val) return '';
+  const d = new Date(val);
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+function fmtTs(val) {
+  if (!val) return '';
+  const d = new Date(val);
+  const now = new Date();
+  const diff = Math.floor((now - d) / 60000);
+  if (diff < 60) return `${diff} мин назад`;
+  if (diff < 1440) return `${Math.floor(diff / 60)} ч назад`;
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+function nextBirthdayDate(birthdate) {
+  if (!birthdate) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const bd = new Date(birthdate);
+  const candidate = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
+  if (candidate < today) candidate.setFullYear(today.getFullYear() + 1);
+  return candidate;
+}
+
+function daysUntilBirthday(birthdate) {
+  const next = nextBirthdayDate(birthdate);
+  if (!next) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((next - today) / 86400000);
+}
+
+function daysLeft(endDateStr) {
+  if (!endDateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(endDateStr);
+  d.setHours(0, 0, 0, 0);
+  return Math.round((d - today) / 86400000);
+}
+
+const VACATION_TONE = { Отпуск: 'info', Больничный: 'warning', Командировка: 'neutral' };
+
+// ── StatCard ──────────────────────────────────────────────────────────────────
+
+function StatCard({ icon: Icon, label, value, sub, tone = 'primary', to }) {
+  const navigate = useNavigate();
+  const iconCls = {
+    primary: 'text-[color:var(--color-primary)] bg-[color:var(--color-primary-muted)]',
+    warning: 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-muted)]',
+    danger:  'text-[color:var(--color-danger)]  bg-[color:var(--color-danger-muted)]',
+    success: 'text-[color:var(--color-success)] bg-[color:var(--color-success-muted)]',
+    info:    'text-[color:var(--color-info)]    bg-[color:var(--color-info-muted)]',
+  }[tone] ?? '';
+
+  return (
+    <div
+      onClick={to ? () => navigate(to) : undefined}
+      className={`flex items-center gap-4 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-5 shadow-sm transition-shadow duration-200 ${to ? 'cursor-pointer hover:shadow-md' : ''}`}
+    >
+      <div className={`rounded-xl p-3 shrink-0 ${iconCls}`}>
+        <Icon size={22} />
+      </div>
+      <div className="min-w-0">
+        <div className="text-2xl font-bold leading-none text-[color:var(--color-text)]">{value}</div>
+        <div className="mt-1 text-sm text-[color:var(--color-text-muted)]">{label}</div>
+        {sub && <div className="text-xs text-[color:var(--color-text-muted)] opacity-75">{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── SectionLink ───────────────────────────────────────────────────────────────
+
+function SectionLink({ to, label = 'Все' }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate(to)}
+      className="flex items-center gap-1 text-sm font-medium text-[color:var(--color-primary)] hover:opacity-75 transition-opacity"
+    >
+      {label} <ArrowRight size={14} />
+    </button>
+  );
+}
+
+// ── TaskMini ──────────────────────────────────────────────────────────────────
+
+function TaskRow({ icon: Icon, label, count, tone }) {
+  const color = {
+    danger:  'text-[color:var(--color-danger)]',
+    warning: 'text-[color:var(--color-warning)]',
+    info:    'text-[color:var(--color-info)]',
+    neutral: 'text-[color:var(--color-text-muted)]',
+  }[tone] ?? 'text-[color:var(--color-text-muted)]';
+
+  return (
+    <div className="flex items-center justify-between py-2">
+      <div className={`flex items-center gap-2 text-sm ${color}`}>
+        <Icon size={15} />
+        <span>{label}</span>
+      </div>
+      <span className={`text-sm font-semibold ${color}`}>{count}</span>
+    </div>
+  );
+}
+
+// ── EmptyState ────────────────────────────────────────────────────────────────
+
+function Empty({ text = 'Нет данных' }) {
+  return <p className="py-2 text-sm text-[color:var(--color-text-muted)]">{text}</p>;
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
-  const [birthday, setBirthday] = useState(null);
+  const [pending, setPending]     = useState([]);
+  const [approved, setApproved]   = useState([]);
   const [vacations, setVacations] = useState([]);
-  const [payouts, setPayouts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [taskStats, setTaskStats] = useState(null);
+  const [birthdays, setBirthdays] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
     try {
-      const [bRes, vRes, pRes] = await Promise.all([
-        api.get('birthdays/', { params: { days: 365 } }),
-        api.get('vacations/active'),
+      const [pendRes, appRes, vacRes, taskRes, bdRes] = await Promise.allSettled([
         api.get('payouts/active'),
+        api.get('payouts/', { params: { status: 'Одобрено' } }),
+        api.get('vacations/active'),
+        api.get('tasks/stats'),
+        api.get('birthdays/', { params: { days: 30 } }),
       ]);
-      setBirthday(bRes.data[0] || null);
-      setVacations(vRes.data);
-      setPayouts(pRes.data);
-    } catch (err) {
-      console.error(err);
+      if (pendRes.status === 'fulfilled') setPending(pendRes.value.data ?? []);
+      if (appRes.status  === 'fulfilled') setApproved(appRes.value.data ?? []);
+      if (vacRes.status  === 'fulfilled') setVacations(vacRes.value.data ?? []);
+      if (taskRes.status === 'fulfilled') setTaskStats(taskRes.value.data ?? null);
+      if (bdRes.status   === 'fulfilled') setBirthdays(bdRes.value.data ?? []);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
-  function formatDateRu(value) {
-    if (!value) return '';
-    return new Date(value).toLocaleDateString('ru-RU');
-  }
+  useEffect(() => { load(); }, []);
+
+  const pendingTotal  = pending.reduce((s, p) => s + (p.amount ?? 0), 0);
+  const approvedTotal = approved.reduce((s, p) => s + (p.amount ?? 0), 0);
 
   if (loading) {
     return (
-      <div className="space-y-6 max-w-3xl mx-auto">
-        <Skeleton variant="title" style={{ width: '150px' }} />
-        <SkeletonCard />
-        <SkeletonCard />
-        <SkeletonCard />
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2"><SkeletonCard /></div>
+          <SkeletonCard />
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <SkeletonCard /><SkeletonCard />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-semibold">Дашборд</h2>
-      <Card title="Ближайший день рождения">
-        {birthday ? (
-          <div>
-            <div className="font-medium">{birthday.full_name}</div>
-            <div className="text-sm text-gray-500">{formatDateRu(birthday.birthdate)}</div>
-          </div>
-        ) : (
-          <div className="text-gray-500">Нет данных</div>
-        )}
-      </Card>
-      <Card title="Сотрудники в отпуске">
-        {vacations.length ? (
-          <ul className="list-disc ml-4 space-y-1">
-            {vacations.map((v) => (
-              <li key={v.id}>{v.name}</li>
-            ))}
-          </ul>
-        ) : (
-          <div className="text-gray-500">Нет</div>
-        )}
-      </Card>
-      <Card title="Активные запросы на выплату">
-        {payouts.length ? (
-          <ul className="list-disc ml-4 space-y-1">
-            {payouts.map((p) => (
-              <li key={p.id}>
-                <span className="font-medium">{p.name}</span> — <span className="text-blue-600">{p.amount} ₽</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="text-gray-500">Нет</div>
-        )}
-      </Card>
+    <div className="space-y-6">
+
+      {/* header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold text-[color:var(--color-text)]">Дашборд</h2>
+        <button
+          onClick={() => load(true)}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg)] transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+          Обновить
+        </button>
+      </div>
+
+      {/* KPI row */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard
+          icon={Wallet}
+          label="К одобрению"
+          value={pending.length}
+          sub={pending.length ? `${fmt(pendingTotal)} ₽` : undefined}
+          tone="warning"
+          to="/admin/payouts"
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label="Одобрено, к выплате"
+          value={approved.length}
+          sub={approved.length ? `${fmt(approvedTotal)} ₽` : undefined}
+          tone="success"
+          to="/admin/payouts"
+        />
+        <StatCard
+          icon={Palmtree}
+          label="Сейчас отсутствуют"
+          value={vacations.length}
+          tone="info"
+          to="/admin/vacations"
+        />
+        <StatCard
+          icon={AlertTriangle}
+          label="Просрочено задач"
+          value={taskStats?.overdue ?? '—'}
+          sub={taskStats?.due_today ? `Сегодня: ${taskStats.due_today}` : undefined}
+          tone={taskStats?.overdue > 0 ? 'danger' : 'neutral'}
+          to="/admin/tasks"
+        />
+      </div>
+
+      {/* middle row: payouts + tasks */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+
+        {/* pending payouts */}
+        <Card
+          className="lg:col-span-2"
+          title="Ожидают выплаты"
+          actions={<SectionLink to="/admin/payouts" />}
+        >
+          {pending.length === 0 ? (
+            <Empty text="Нет запросов на выплату" />
+          ) : (
+            <div className="divide-y divide-[color:var(--color-border)]">
+              {pending.slice(0, 7).map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-[color:var(--color-text)]">
+                      {p.name}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-[color:var(--color-text-muted)]">
+                      <span>{p.payout_type}</span>
+                      <span>·</span>
+                      <span>{p.method}</span>
+                      <span>·</span>
+                      <span>{fmtTs(p.timestamp)}</span>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold text-[color:var(--color-primary)]">
+                    {fmt(p.amount)} ₽
+                  </span>
+                </div>
+              ))}
+              {pending.length > 7 && (
+                <p className="pt-2.5 text-xs text-[color:var(--color-text-muted)]">
+                  + ещё {pending.length - 7}
+                </p>
+              )}
+            </div>
+          )}
+        </Card>
+
+        {/* task stats */}
+        <Card
+          title="Задачи"
+          actions={<SectionLink to="/admin/tasks" />}
+        >
+          {!taskStats ? (
+            <Empty />
+          ) : (
+            <div className="divide-y divide-[color:var(--color-border)]">
+              <TaskRow icon={AlertTriangle} label="Просрочено"  count={taskStats.overdue}       tone="danger" />
+              <TaskRow icon={Clock}         label="Сегодня"      count={taskStats.due_today}     tone="warning" />
+              <TaskRow icon={CirclePlay}    label="В работе"     count={taskStats.in_progress}   tone="info" />
+              <TaskRow icon={ListTodo}      label="В очереди"    count={taskStats.todo}          tone="neutral" />
+              <div className="flex items-center justify-between pt-2 text-xs text-[color:var(--color-text-muted)]">
+                <span>Всего активных</span>
+                <span className="font-medium">{(taskStats.todo ?? 0) + (taskStats.in_progress ?? 0)}</span>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* bottom row: vacations + birthdays */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+        {/* vacations */}
+        <Card
+          title="Кто сейчас отсутствует"
+          actions={<SectionLink to="/admin/vacations" />}
+        >
+          {vacations.length === 0 ? (
+            <Empty text="Никто не в отпуске" />
+          ) : (
+            <div className="divide-y divide-[color:var(--color-border)]">
+              {vacations.map((v) => {
+                const left = daysLeft(v.end_date);
+                return (
+                  <div key={v.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[color:var(--color-text)]">
+                        {v.name}
+                      </div>
+                      <div className="text-xs text-[color:var(--color-text-muted)]">
+                        до {fmtDate(v.end_date)}
+                        {left != null && left >= 0 && ` · ещё ${left} дн.`}
+                      </div>
+                    </div>
+                    <Badge tone={VACATION_TONE[v.type] ?? 'neutral'}>{v.type}</Badge>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        {/* birthdays */}
+        <Card
+          title="Дни рождения (30 дней)"
+          actions={<SectionLink to="/admin/birthdays" />}
+        >
+          {birthdays.length === 0 ? (
+            <Empty text="Нет дней рождения в ближайшие 30 дней" />
+          ) : (
+            <div className="divide-y divide-[color:var(--color-border)]">
+              {birthdays.slice(0, 7).map((b) => {
+                const days = daysUntilBirthday(b.birthdate);
+                return (
+                  <div key={b.user_id ?? b.full_name} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <CalendarDays size={15} className="shrink-0 text-[color:var(--color-text-muted)]" />
+                      <span className="text-sm text-[color:var(--color-text)]">{b.full_name}</span>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-xs font-medium text-[color:var(--color-text-muted)]">
+                        {fmtDate(nextBirthdayDate(b.birthdate))}
+                      </div>
+                      {days != null && (
+                        <div className="text-xs text-[color:var(--color-text-muted)] opacity-75">
+                          {days === 0 ? '🎂 сегодня!' : `через ${days} дн.`}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {birthdays.length > 7 && (
+                <p className="pt-2.5 text-xs text-[color:var(--color-text-muted)]">+ ещё {birthdays.length - 7}</p>
+              )}
+            </div>
+          )}
+        </Card>
+      </div>
+
     </div>
   );
 }
