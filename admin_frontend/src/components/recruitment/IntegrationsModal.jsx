@@ -1,25 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   X, CheckCircle, AlertCircle, RefreshCw, Link2, Unlink,
-  ChevronDown, ExternalLink, Settings, Clock, Zap,
+  ExternalLink, Settings, Clock, Zap,
 } from 'lucide-react';
 import api from '../../api';
 
-// Callback URL shown in instructions so users know what to register in hh.ru
 const HH_CALLBACK_URL = `${window.location.origin}/api/recruitment/integrations/hh/callback`;
-
-// ── Instructions copy ──────────────────────────────────────────────
-const HH_INSTRUCTIONS = [
-  { step: '1', text: 'Зайдите на dev.hh.ru → «Создать приложение»' },
-  { step: '2', text: `В поле redirect_uri укажите: ${HH_CALLBACK_URL}` },
-  { step: '3', text: 'Получите Client ID и Client Secret вашего приложения' },
-  { step: '4', text: 'Введите их ниже и нажмите «Войти через hh.ru»' },
-];
-const AVITO_INSTRUCTIONS = [
-  { step: '1', text: 'Зайдите в кабинет разработчика Авито → «Мои приложения»' },
-  { step: '2', text: 'Создайте приложение, получите Client ID и Client Secret' },
-  { step: '3', text: 'Вставьте их ниже — токен получим автоматически' },
-];
 
 // ── Small helper components ────────────────────────────────────────
 function StatusBadge({ isActive, error }) {
@@ -34,31 +20,6 @@ function StatusBadge({ isActive, error }) {
     </span>
   );
   return <span className="text-xs text-[color:var(--color-muted-foreground)]">Не подключено</span>;
-}
-
-function Instructions({ steps }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-xl border border-blue-200 bg-blue-50 overflow-hidden text-sm">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 text-blue-700 font-medium text-left"
-      >
-        <span className="flex-1">Как получить доступ?</span>
-        <ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <ol className="px-4 pb-3 space-y-1.5 border-t border-blue-200 pt-2.5">
-          {steps.map(s => (
-            <li key={s.step} className="flex gap-2 text-blue-800">
-              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-200 text-blue-700 text-[11px] font-bold flex items-center justify-center">{s.step}</span>
-              <span>{s.text}</span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  );
 }
 
 // ── Vacancy linker row ─────────────────────────────────────────────
@@ -146,17 +107,15 @@ function VacancyLinkRow({ internalVacancy, source, externalVacancies, existingLi
 
 // ── HH Tab ────────────────────────────────────────────────────────
 function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
-  const [clientId, setClientId]   = useState('');
-  const [clientSecret, setSecret] = useState('');
-  const [interval, setInterval_]  = useState(source?.sync_interval_minutes || 15);
-  const [connecting, setConnecting] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [loadingVacs, setLoadingVacs] = useState(false);
+  const [connecting, setConnecting]     = useState(false);
+  const [disconnecting, setDisconn]     = useState(false);
+  const [loadingVacs, setLoadingVacs]   = useState(false);
   const [externalVacs, setExternalVacs] = useState([]);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState('');
+  const [syncing, setSyncing]           = useState(false);
+  const [error, setError]               = useState('');
 
-  const isConnected = source?.is_active;
+  const isConnected    = source?.is_active;
+  const envConfigured  = source?.env_configured ?? false;
 
   const loadExternalVacs = useCallback(async () => {
     if (!isConnected) return;
@@ -172,16 +131,11 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
   useEffect(() => { loadExternalVacs(); }, [loadExternalVacs]);
 
   async function startOAuth() {
-    if (!clientId.trim() || !clientSecret.trim()) return;
     setConnecting(true); setError('');
     try {
-      const res = await api.post('/recruitment/integrations/hh/setup', {
-        client_id: clientId.trim(),
-        client_secret: clientSecret.trim(),
-        redirect_uri: HH_CALLBACK_URL,
-        sync_interval_minutes: interval,
+      const res = await api.get('/recruitment/integrations/hh/auth-url', {
+        params: { redirect_uri: HH_CALLBACK_URL },
       });
-      // Full-page redirect to hh.ru authorization
       window.location.href = res.data.auth_url;
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
@@ -190,11 +144,9 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
   }
 
   async function disconnect() {
-    setDisconnecting(true);
-    try {
-      await api.delete('/recruitment/integrations/hh/disconnect');
-      await onRefresh();
-    } finally { setDisconnecting(false); }
+    setDisconn(true);
+    try { await api.delete('/recruitment/integrations/hh/disconnect'); await onRefresh(); }
+    finally { setDisconn(false); }
   }
 
   async function syncNow() {
@@ -207,7 +159,6 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
 
   return (
     <div className="space-y-4">
-      {/* Status */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium">hh.ru</p>
@@ -226,70 +177,35 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
 
       {!isConnected ? (
         <>
-          <Instructions steps={HH_INSTRUCTIONS} />
-
-          {/* Redirect URI copy box */}
-          <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-            <p className="text-xs text-[color:var(--color-muted-foreground)] mb-1">Redirect URI для регистрации в dev.hh.ru:</p>
-            <p className="text-xs font-mono text-gray-700 break-all select-all">{HH_CALLBACK_URL}</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">
-                Client ID <a href="https://dev.hh.ru" target="_blank" rel="noopener noreferrer" className="text-[color:var(--color-primary)] hover:underline inline-flex items-center gap-0.5">dev.hh.ru <ExternalLink size={10} /></a>
-              </label>
-              <input
-                className="input w-full text-sm"
-                value={clientId}
-                onChange={e => setClientId(e.target.value)}
-                placeholder="xxxxxxxx"
-                autoComplete="off"
-              />
+          {!envConfigured ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 space-y-1">
+              <p className="font-medium">Ожидаем одобрения заявки hh.ru</p>
+              <p className="text-xs text-amber-700">
+                После получения Client ID и Secret их нужно добавить в <code className="bg-amber-100 px-1 rounded">.env</code> на сервере:
+              </p>
+              <pre className="text-xs bg-amber-100 rounded px-2 py-1.5 mt-1 select-all">HH_CLIENT_ID=...<br/>HH_CLIENT_SECRET=...</pre>
+              <p className="text-xs text-amber-700 mt-1">
+                Redirect URI для регистрации в dev.hh.ru:
+              </p>
+              <p className="text-xs font-mono bg-amber-100 rounded px-2 py-1 break-all select-all">{HH_CALLBACK_URL}</p>
             </div>
-            <div>
-              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Client Secret</label>
-              <input
-                type="password"
-                className="input w-full text-sm font-mono"
-                value={clientSecret}
-                onChange={e => setSecret(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="off"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">Интервал синхронизации:</label>
-            <select className="input text-sm py-1" value={interval} onChange={e => setInterval_(+e.target.value)}>
-              {[5, 10, 15, 30, 60].map(m => <option key={m} value={m}>{m} мин.</option>)}
-            </select>
-          </div>
-
-          {error && <p className="text-xs text-red-600">{error}</p>}
-
-          <button
-            onClick={startOAuth}
-            disabled={connecting || !clientId.trim() || !clientSecret.trim()}
-            className="btn btn-primary w-full flex items-center justify-center gap-2"
-          >
-            {connecting ? (
-              <>
-                <RefreshCw size={14} className="animate-spin" />
-                Перенаправляем на hh.ru...
-              </>
-            ) : (
-              <>
-                <ExternalLink size={14} />
-                Войти через hh.ru
-              </>
-            )}
-          </button>
+          ) : (
+            <>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <button
+                onClick={startOAuth}
+                disabled={connecting}
+                className="btn btn-primary w-full flex items-center justify-center gap-2"
+              >
+                {connecting
+                  ? <><RefreshCw size={14} className="animate-spin" /> Перенаправляем на hh.ru...</>
+                  : <><ExternalLink size={14} /> Войти через hh.ru</>}
+              </button>
+            </>
+          )}
         </>
       ) : (
         <>
-          {/* Interval + sync controls */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <Clock size={14} className="text-[color:var(--color-muted-foreground)]" />
@@ -314,7 +230,6 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
             </button>
           </div>
 
-          {/* Vacancy linking */}
           <div>
             <p className="text-sm font-semibold mb-2">Привязка вакансий</p>
             <p className="text-xs text-[color:var(--color-muted-foreground)] mb-3">
@@ -348,17 +263,15 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
 
 // ── Avito Tab ──────────────────────────────────────────────────────
 function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
-  const [clientId, setClientId]     = useState('');
-  const [clientSecret, setSecret]   = useState('');
-  const [interval, setInterval_]    = useState(source?.sync_interval_minutes || 15);
   const [connecting, setConnecting] = useState(false);
-  const [disconnecting, setDisc]    = useState(false);
+  const [disconnecting, setDisconn] = useState(false);
   const [loadingVacs, setLoadVacs]  = useState(false);
   const [externalVacs, setExtVacs]  = useState([]);
   const [syncing, setSyncing]       = useState(false);
   const [error, setError]           = useState('');
 
-  const isConnected = source?.is_active;
+  const isConnected   = source?.is_active;
+  const envConfigured = source?.env_configured ?? false;
 
   const loadExternalVacs = useCallback(async () => {
     if (!isConnected) return;
@@ -374,15 +287,9 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
   useEffect(() => { loadExternalVacs(); }, [loadExternalVacs]);
 
   async function connect() {
-    if (!clientId.trim() || !clientSecret.trim()) return;
     setConnecting(true); setError('');
     try {
-      await api.post('/recruitment/integrations/avito/connect', {
-        client_id: clientId,
-        client_secret: clientSecret,
-        sync_interval_minutes: interval,
-      });
-      setClientId(''); setSecret('');
+      await api.post('/recruitment/integrations/avito/connect');
       await onRefresh();
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
@@ -390,11 +297,9 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
   }
 
   async function disconnect() {
-    setDisc(true);
-    try {
-      await api.delete('/recruitment/integrations/avito/disconnect');
-      await onRefresh();
-    } finally { setDisc(false); }
+    setDisconn(true);
+    try { await api.delete('/recruitment/integrations/avito/disconnect'); await onRefresh(); }
+    finally { setDisconn(false); }
   }
 
   async function syncNow() {
@@ -425,29 +330,22 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
 
       {!isConnected ? (
         <>
-          <Instructions steps={AVITO_INSTRUCTIONS} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">
-                Client ID <a href="https://developers.avito.ru" target="_blank" rel="noopener noreferrer" className="text-[color:var(--color-primary)] hover:underline inline-flex items-center gap-0.5">developers.avito.ru <ExternalLink size={10} /></a>
-              </label>
-              <input className="input w-full text-sm" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx" autoComplete="off" />
+          {!envConfigured ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 space-y-1">
+              <p className="font-medium">Ожидаем одобрения заявки Авито</p>
+              <p className="text-xs text-amber-700">
+                После получения Client ID и Secret добавьте их в <code className="bg-amber-100 px-1 rounded">.env</code> на сервере:
+              </p>
+              <pre className="text-xs bg-amber-100 rounded px-2 py-1.5 mt-1 select-all">AVITO_CLIENT_ID=...<br/>AVITO_CLIENT_SECRET=...</pre>
             </div>
-            <div>
-              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Client Secret</label>
-              <input type="password" className="input w-full text-sm font-mono" value={clientSecret} onChange={e => setSecret(e.target.value)} placeholder="••••••••" autoComplete="off" />
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">Интервал:</label>
-            <select className="input text-sm py-1" value={interval} onChange={e => setInterval_(+e.target.value)}>
-              {[5, 10, 15, 30, 60].map(m => <option key={m} value={m}>{m} мин.</option>)}
-            </select>
-          </div>
-          {error && <p className="text-xs text-red-600">{error}</p>}
-          <button onClick={connect} disabled={connecting || !clientId || !clientSecret} className="btn btn-primary w-full">
-            {connecting ? 'Подключаем...' : 'Подключить Авито'}
-          </button>
+          ) : (
+            <>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <button onClick={connect} disabled={connecting} className="btn btn-primary w-full">
+                {connecting ? 'Подключаем...' : 'Подключить Авито'}
+              </button>
+            </>
+          )}
         </>
       ) : (
         <>

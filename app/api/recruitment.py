@@ -56,11 +56,6 @@ class CandidateUpdate(BaseModel):
 class HHIntervalRequest(BaseModel):
     sync_interval_minutes: int = 15
 
-class AvitoConnectRequest(BaseModel):
-    client_id: str
-    client_secret: str
-    sync_interval_minutes: Optional[int] = 15
-
 class LinkCreate(BaseModel):
     vacancy_id: int
     source: str
@@ -166,31 +161,31 @@ def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):
 @router.get("/integrations")
 def list_integrations(db: Session = Depends(get_db)):
     sources = db.query(RecruitmentSource).all()
-    return [s.to_dict() for s in sources]
+    src_map = {s.source: s.to_dict() for s in sources}
+    result = []
+    for source_key, env_key_id, env_key_secret in [
+        ("hh",    "HH_CLIENT_ID",    "HH_CLIENT_SECRET"),
+        ("avito", "AVITO_CLIENT_ID", "AVITO_CLIENT_SECRET"),
+    ]:
+        entry = src_map.get(source_key, {"source": source_key, "is_active": False,
+                                         "employer_name": "", "last_error": "",
+                                         "sync_interval_minutes": 15})
+        entry["env_configured"] = bool(os.getenv(env_key_id) and os.getenv(env_key_secret))
+        result.append(entry)
+    return result
 
 
-@router.post("/integrations/hh/setup")
-async def setup_hh(data: HHSetupRequest, db: Session = Depends(get_db)):
-    """Save hh.ru credentials and return the OAuth authorization URL."""
+@router.get("/integrations/hh/auth-url")
+async def hh_auth_url(redirect_uri: str = Query(...)):
+    """Return OAuth authorization URL. Credentials come from env."""
     global _pending_hh_redirect_uri
     from app.services import hh_api
 
-    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
-    if not src:
-        src = RecruitmentSource(source="hh")
-        db.add(src)
+    if not _HH_CLIENT_ID or not _HH_CLIENT_SECRET:
+        raise HTTPException(503, "hh.ru не настроен на сервере (HH_CLIENT_ID / HH_CLIENT_SECRET)")
 
-    src.client_id = data.client_id
-    src.client_secret = data.client_secret
-    src.sync_interval_minutes = max(5, data.sync_interval_minutes or 15)
-    src.is_active = False
-    src.last_error = ""
-    src.updated_at = datetime.utcnow()
-    db.commit()
-
-    _pending_hh_redirect_uri = data.redirect_uri
-    auth_url = hh_api.build_auth_url(data.client_id, data.redirect_uri)
-    return {"auth_url": auth_url}
+    _pending_hh_redirect_uri = redirect_uri
+    return {"auth_url": hh_api.build_auth_url(_HH_CLIENT_ID, redirect_uri)}
 
 
 @router.get("/integrations/hh/callback", include_in_schema=False)
@@ -205,13 +200,10 @@ async def hh_callback(
 
     if error:
         return RedirectResponse(f"/admin/recruitment?hh_error={error}")
-
     if not code:
         return RedirectResponse("/admin/recruitment?hh_error=no_code")
-
-    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
-    if not src or not src.client_id:
-        return RedirectResponse("/admin/recruitment?hh_error=setup_missing")
+    if not _HH_CLIENT_ID or not _HH_CLIENT_SECRET:
+        return RedirectResponse("/admin/recruitment?hh_error=not_configured")
 
     redirect_uri = _pending_hh_redirect_uri
     if not redirect_uri:
@@ -219,17 +211,24 @@ async def hh_callback(
 
     try:
         token_data = await hh_api.exchange_code(
-            src.client_id, src.client_secret, code, redirect_uri
+            _HH_CLIENT_ID, _HH_CLIENT_SECRET, code, redirect_uri
         )
     except Exception as e:
-        src.last_error = str(e)[:500]
-        db.commit()
+        src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
+        if src:
+            src.last_error = str(e)[:500]
+            db.commit()
         return RedirectResponse("/admin/recruitment?hh_error=token_exchange")
 
     try:
         info = await hh_api.verify_token(token_data["access_token"])
     except Exception:
         info = {"employer_id": "", "employer_name": ""}
+
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
+    if not src:
+        src = RecruitmentSource(source="hh")
+        db.add(src)
 
     src.access_token = token_data["access_token"]
     src.refresh_token = token_data.get("refresh_token", "")
@@ -254,8 +253,6 @@ def disconnect_hh(db: Session = Depends(get_db)):
         src.is_active = False
         src.access_token = ""
         src.refresh_token = ""
-        src.client_id = ""
-        src.client_secret = ""
         src.last_error = ""
         db.commit()
     return {"status": "disconnected"}
@@ -277,10 +274,16 @@ async def hh_vacancies(db: Session = Depends(get_db)):
 
 
 @router.post("/integrations/avito/connect")
-async def connect_avito(data: AvitoConnectRequest, db: Session = Depends(get_db)):
+async def connect_avito(db: Session = Depends(get_db)):
+    """Connect Avito using env-configured credentials (client_credentials flow)."""
+    avito_client_id     = os.getenv("AVITO_CLIENT_ID", "")
+    avito_client_secret = os.getenv("AVITO_CLIENT_SECRET", "")
+    if not avito_client_id or not avito_client_secret:
+        raise HTTPException(503, "Авито не настроен на сервере (AVITO_CLIENT_ID / AVITO_CLIENT_SECRET)")
+
     from app.services import avito_api
     try:
-        tok = await avito_api.get_token(data.client_id, data.client_secret)
+        tok  = await avito_api.get_token(avito_client_id, avito_client_secret)
         info = await avito_api.get_user_info(tok["access_token"])
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -292,15 +295,12 @@ async def connect_avito(data: AvitoConnectRequest, db: Session = Depends(get_db)
         src = RecruitmentSource(source="avito")
         db.add(src)
 
-    src.client_id = data.client_id
-    src.client_secret = data.client_secret
     src.access_token = tok["access_token"]
-    src.employer_id = info["employer_id"]
+    src.employer_id  = info["employer_id"]
     src.employer_name = info["employer_name"]
-    src.is_active = True
-    src.last_error = ""
-    src.sync_interval_minutes = max(5, data.sync_interval_minutes or 15)
-    src.updated_at = datetime.utcnow()
+    src.is_active    = True
+    src.last_error   = ""
+    src.updated_at   = datetime.utcnow()
     db.commit(); db.refresh(src)
     return src.to_dict()
 
@@ -309,9 +309,7 @@ async def connect_avito(data: AvitoConnectRequest, db: Session = Depends(get_db)
 def disconnect_avito(db: Session = Depends(get_db)):
     src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "avito").first()
     if src:
-        src.is_active = False
-        src.client_id = ""
-        src.client_secret = ""
+        src.is_active  = False
         src.access_token = ""
         src.last_error = ""
         db.commit()
@@ -326,10 +324,11 @@ async def avito_vacancies(db: Session = Depends(get_db)):
     ).first()
     if not src:
         raise HTTPException(400, "Авито не подключён")
+    avito_client_id     = os.getenv("AVITO_CLIENT_ID", "")
+    avito_client_secret = os.getenv("AVITO_CLIENT_SECRET", "")
     from app.services import avito_api
     try:
-        # Refresh token first
-        tok = await avito_api.get_token(src.client_id, src.client_secret)
+        tok = await avito_api.get_token(avito_client_id, avito_client_secret)
         src.access_token = tok["access_token"]
         db.commit()
         return await avito_api.get_vacancies(tok["access_token"], src.employer_id)
