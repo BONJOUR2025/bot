@@ -50,7 +50,7 @@ async def get_user_info(access_token: str) -> dict:
 async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
     """Returns active job vacancies for the authenticated employer via Items API."""
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {"per_page": 50, "page": 1, "status": "active"}
+        params = {"per_page": 50, "page": 1}
         r = await client.get(
             f"{AVITO_BASE}/core/v1/items",
             headers={"Authorization": f"Bearer {access_token}"},
@@ -60,6 +60,7 @@ async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
             return []
         r.raise_for_status()
         data = r.json()
+        log.info("Avito items raw keys=%s raw=%s", list(data.keys()) if isinstance(data, dict) else type(data), str(data)[:500])
         resources = data.get("resources") or data.get("items") or data.get("data") or []
         log.info("Avito items count=%d, first keys=%s",
                  len(resources), list(resources[0].keys()) if resources else [])
