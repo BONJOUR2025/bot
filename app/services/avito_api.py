@@ -24,11 +24,12 @@ async def get_token(client_id: str, client_secret: str) -> dict:
                 "client_secret": client_secret,
             },
         )
-        if r.status_code in (400, 401):
-            detail = r.json().get("error_description") or r.json().get("error") or "Ошибка авторизации"
-            raise ValueError(f"Авито: {detail}")
         r.raise_for_status()
-        return r.json()
+        data = r.json()
+        if "error" in data:
+            detail = data.get("error_description") or data.get("error") or "Ошибка авторизации"
+            raise ValueError(f"Авито: {detail}")
+        return data
 
 
 async def get_user_info(access_token: str) -> dict:

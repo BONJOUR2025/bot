@@ -334,7 +334,7 @@ async def avito_vacancies(db: Session = Depends(get_db)):
     from app.services import avito_api
     try:
         tok = await avito_api.get_token(av_id, av_secret)
-        log.info("avito token keys: %s", list(tok.keys()))
+        log.info("avito token OK, keys: %s", list(tok.keys()))
         access_token = tok["access_token"]
         src.access_token = access_token
         db.commit()
