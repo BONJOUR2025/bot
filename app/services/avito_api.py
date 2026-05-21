@@ -48,12 +48,11 @@ async def get_user_info(access_token: str) -> dict:
 
 
 async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
-    """Returns active job vacancies for the authenticated employer."""
-    import re
+    """Returns active job vacancies for the authenticated employer via Items API."""
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {"per_page": 50, "page": 1, "status": "active", "user_id": user_id}
+        params = {"per_page": 50, "page": 1, "status": "active"}
         r = await client.get(
-            f"{AVITO_BASE}/job/v2/vacancies",
+            f"{AVITO_BASE}/core/v1/items",
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
         )
@@ -61,28 +60,27 @@ async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
             return []
         r.raise_for_status()
         data = r.json()
-        items = data.get("vacancies") or data.get("items") or data.get("data") or []
-        log.info("Avito vacancies count=%d user_id=%s companies=%s",
-                 len(items),
-                 user_id,
-                 list({v.get("companyName") or v.get("company") for v in items[:5]}))
+        resources = data.get("resources") or data.get("items") or data.get("data") or []
+        log.info("Avito items count=%d, first keys=%s",
+                 len(resources), list(resources[0].keys()) if resources else [])
         result = []
-        for v in items:
-            link = v.get("url") or v.get("link") or v.get("vacancyUrl") or ""
-            vid = v.get("id") or v.get("vacancyId") or v.get("vacancy_id") or ""
-            if not vid and link:
-                m = re.search(r"-(\d+)$", link.rstrip("/"))
-                vid = m.group(1) if m else link
-            addr = v.get("address") or v.get("addressDetails") or {}
-            if isinstance(addr, dict):
-                area = addr.get("city") or addr.get("district") or addr.get("name") or ""
-            else:
-                area = str(addr) if addr else ""
+        for v in resources:
+            cat = v.get("category") or {}
+            cat_name = cat.get("name") or "" if isinstance(cat, dict) else ""
+            # Only include job vacancies (skip regular ads)
+            if cat_name and "ванси" not in cat_name.lower() and "работ" not in cat_name.lower():
+                continue
+            vid = str(v.get("id") or "")
+            title = v.get("title") or v.get("name") or ""
+            address = v.get("address") or ""
+            url = v.get("url") or v.get("link") or ""
+            if not url and vid:
+                url = f"https://www.avito.ru/items/{vid}"
             result.append({
-                "id": str(vid),
-                "title": v.get("title") or v.get("name") or "",
-                "area": area,
-                "url": link,
+                "id": vid,
+                "title": title,
+                "area": address,
+                "url": url,
             })
         return result
 
