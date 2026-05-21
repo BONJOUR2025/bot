@@ -66,13 +66,21 @@ async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
                  len(items), list(items[0].keys()) if items else [])
         result = []
         for v in items:
+            link = v.get("link") or v.get("url") or v.get("vacancyUrl") or ""
+            # Extract numeric ID from the URL if no explicit id field
             vid = v.get("vacancyId") or v.get("id") or v.get("vacancy_id") or ""
+            if not vid and link:
+                # link is like https://www.avito.ru/.../vakansii/title-12345678
+                import re
+                m = re.search(r"-(\d+)$", link.rstrip("/"))
+                vid = m.group(1) if m else link
+            addr = v.get("addressDetails") or {}
+            area = addr.get("city") or addr.get("district") or addr.get("name") or ""
             result.append({
                 "id": str(vid),
                 "title": v.get("title") or v.get("name") or "",
-                "area": (v.get("locations") or [{}])[0].get("name", "") if v.get("locations") else
-                         v.get("address", {}).get("city", "") if isinstance(v.get("address"), dict) else "",
-                "url": v.get("url") or v.get("vacancyUrl") or "",
+                "area": area,
+                "url": link,
             })
         return result
 
