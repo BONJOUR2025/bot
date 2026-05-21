@@ -48,12 +48,12 @@ async def get_user_info(access_token: str) -> dict:
 
 
 async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
-    """Returns active job vacancies for the authenticated employer (v1 = own listings)."""
+    """Returns active job vacancies for the authenticated employer."""
     import re
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {"per_page": 50, "page": 1, "status": "active"}
+        params = {"per_page": 50, "page": 1, "status": "active", "user_id": user_id}
         r = await client.get(
-            f"{AVITO_BASE}/job/v1/vacancies",
+            f"{AVITO_BASE}/job/v2/vacancies",
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
         )
@@ -61,10 +61,11 @@ async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
             return []
         r.raise_for_status()
         data = r.json()
-        log.info("Avito v1 vacancies raw keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
         items = data.get("vacancies") or data.get("items") or data.get("data") or []
-        log.info("Avito v1 vacancies count: %d, first item keys: %s",
-                 len(items), list(items[0].keys()) if items else [])
+        log.info("Avito vacancies count=%d user_id=%s companies=%s",
+                 len(items),
+                 user_id,
+                 list({v.get("companyName") or v.get("company") for v in items[:5]}))
         result = []
         for v in items:
             link = v.get("url") or v.get("link") or v.get("vacancyUrl") or ""
