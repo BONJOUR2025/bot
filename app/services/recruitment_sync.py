@@ -61,7 +61,7 @@ async def _sync_link(db, src, link, token: str) -> int:
     if src.source == "hh":
         new_items = await _collect_hh(token, link.external_vacancy_id)
     elif src.source == "avito":
-        new_items = await avito_api.get_chats_for_vacancy(token, src.employer_id, link.external_vacancy_id)
+        new_items = await avito_api.get_applications_for_vacancy(token, src.employer_id, link.external_vacancy_id)
     else:
         return 0
 

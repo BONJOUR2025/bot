@@ -48,11 +48,12 @@ async def get_user_info(access_token: str) -> dict:
 
 
 async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
-    """Returns active job vacancies for the user."""
+    """Returns active job vacancies for the authenticated employer (v1 = own listings)."""
+    import re
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {"per_page": 50, "page": 1, "status": "active", "user_id": user_id}
+        params = {"per_page": 50, "page": 1, "status": "active"}
         r = await client.get(
-            f"{AVITO_BASE}/job/v2/vacancies",
+            f"{AVITO_BASE}/job/v1/vacancies",
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
         )
@@ -60,22 +61,22 @@ async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
             return []
         r.raise_for_status()
         data = r.json()
-        log.info("Avito vacancies raw keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
+        log.info("Avito v1 vacancies raw keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
         items = data.get("vacancies") or data.get("items") or data.get("data") or []
-        log.info("Avito vacancies count: %d, first item keys: %s",
+        log.info("Avito v1 vacancies count: %d, first item keys: %s",
                  len(items), list(items[0].keys()) if items else [])
         result = []
         for v in items:
-            link = v.get("link") or v.get("url") or v.get("vacancyUrl") or ""
-            # Extract numeric ID from the URL if no explicit id field
-            vid = v.get("vacancyId") or v.get("id") or v.get("vacancy_id") or ""
+            link = v.get("url") or v.get("link") or v.get("vacancyUrl") or ""
+            vid = v.get("id") or v.get("vacancyId") or v.get("vacancy_id") or ""
             if not vid and link:
-                # link is like https://www.avito.ru/.../vakansii/title-12345678
-                import re
                 m = re.search(r"-(\d+)$", link.rstrip("/"))
                 vid = m.group(1) if m else link
-            addr = v.get("addressDetails") or {}
-            area = addr.get("city") or addr.get("district") or addr.get("name") or ""
+            addr = v.get("address") or v.get("addressDetails") or {}
+            if isinstance(addr, dict):
+                area = addr.get("city") or addr.get("district") or addr.get("name") or ""
+            else:
+                area = str(addr) if addr else ""
             result.append({
                 "id": str(vid),
                 "title": v.get("title") or v.get("name") or "",
@@ -85,20 +86,15 @@ async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
         return result
 
 
-async def get_chats_for_vacancy(access_token: str, user_id: str, avito_vacancy_id: str) -> list[dict]:
+async def get_applications_for_vacancy(access_token: str, user_id: str, avito_vacancy_id: str) -> list[dict]:
     """
-    Fetch chats (responses) for a specific job vacancy via Avito Messenger API.
-    Each chat = one applicant who responded.
+    Fetch job applications for a specific vacancy via Avito Jobs API v1.
+    Returns list of candidates who applied.
     """
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {
-            "item_ids": avito_vacancy_id,
-            "chat_types": "u2i",
-            "per_page": 100,
-            "page": 1,
-        }
+        params = {"vacancy_id": avito_vacancy_id, "per_page": 100, "page": 1}
         r = await client.get(
-            f"{AVITO_BASE}/messenger/v3/chats",
+            f"{AVITO_BASE}/job/v1/applications",
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
         )
@@ -106,27 +102,37 @@ async def get_chats_for_vacancy(access_token: str, user_id: str, avito_vacancy_i
             return []
         r.raise_for_status()
         data = r.json()
+        log.info("Avito applications raw keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
 
         items = []
-        for chat in data.get("chats", []):
-            chat_id = chat.get("id", "")
-            # Find the other user (not us)
-            users = chat.get("users", [])
-            applicant = next(
-                (u for u in users if str(u.get("id")) != str(user_id)),
-                users[0] if users else {},
+        applications = data.get("applications") or data.get("items") or data.get("data") or []
+        log.info("Avito applications count: %d, first keys: %s",
+                 len(applications), list(applications[0].keys()) if applications else [])
+        for app in applications:
+            app_id = str(app.get("id") or app.get("application_id") or "")
+            applicant = app.get("applicant") or app.get("user") or app.get("candidate") or {}
+            name = (
+                applicant.get("name")
+                or applicant.get("fullName")
+                or app.get("name")
+                or "Кандидат"
             )
-            name = applicant.get("name") or "Кандидат"
-            last_msg = chat.get("last_message", {})
-            note_text = last_msg.get("content", {}).get("text", "") if last_msg else ""
-
+            phone = applicant.get("phone") or app.get("phone") or ""
+            email = applicant.get("email") or app.get("email") or ""
+            resume_url = app.get("resume_url") or app.get("resumeUrl") or ""
+            cover = app.get("cover_letter") or app.get("coverLetter") or app.get("message") or ""
             items.append({
-                "external_id": str(chat_id),
+                "external_id": app_id,
                 "name": name,
-                "phone": "",
-                "email": "",
-                "resume_url": "",
-                "notes": f"Авито отклик. Сообщение: {note_text}" if note_text else "Авито отклик",
+                "phone": phone,
+                "email": email,
+                "resume_url": resume_url,
+                "notes": f"Авито отклик. {cover}" if cover else "Авито отклик",
             })
 
         return items
+
+
+# Keep legacy alias for backwards compatibility during migration
+async def get_chats_for_vacancy(access_token: str, user_id: str, avito_vacancy_id: str) -> list[dict]:
+    return await get_applications_for_vacancy(access_token, user_id, avito_vacancy_id)
