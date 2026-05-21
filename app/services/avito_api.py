@@ -1,5 +1,9 @@
 """Avito Jobs API client."""
+import logging
+
 import httpx
+
+log = logging.getLogger(__name__)
 
 AVITO_BASE = "https://api.avito.ru"
 TIMEOUT = 15.0
@@ -55,15 +59,21 @@ async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
             return []
         r.raise_for_status()
         data = r.json()
-        return [
-            {
-                "id": str(v["vacancyId"]),
-                "title": v.get("title", ""),
-                "area": v.get("locations", [{}])[0].get("name", "") if v.get("locations") else "",
-                "url": v.get("url", ""),
-            }
-            for v in data.get("vacancies", [])
-        ]
+        log.info("Avito vacancies raw keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
+        items = data.get("vacancies") or data.get("items") or data.get("data") or []
+        log.info("Avito vacancies count: %d, first item keys: %s",
+                 len(items), list(items[0].keys()) if items else [])
+        result = []
+        for v in items:
+            vid = v.get("vacancyId") or v.get("id") or v.get("vacancy_id") or ""
+            result.append({
+                "id": str(vid),
+                "title": v.get("title") or v.get("name") or "",
+                "area": (v.get("locations") or [{}])[0].get("name", "") if v.get("locations") else
+                         v.get("address", {}).get("city", "") if isinstance(v.get("address"), dict) else "",
+                "url": v.get("url") or v.get("vacancyUrl") or "",
+            })
+        return result
 
 
 async def get_chats_for_vacancy(access_token: str, user_id: str, avito_vacancy_id: str) -> list[dict]:
