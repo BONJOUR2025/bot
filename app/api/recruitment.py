@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import RedirectResponse
+
+log = logging.getLogger(__name__)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -331,10 +334,14 @@ async def avito_vacancies(db: Session = Depends(get_db)):
     from app.services import avito_api
     try:
         tok = await avito_api.get_token(av_id, av_secret)
-        src.access_token = tok["access_token"]
+        log.info("avito token keys: %s", list(tok.keys()))
+        access_token = tok["access_token"]
+        src.access_token = access_token
         db.commit()
-        return await avito_api.get_vacancies(tok["access_token"], src.employer_id)
+        log.info("avito calling get_vacancies, employer_id=%s", src.employer_id)
+        return await avito_api.get_vacancies(access_token, src.employer_id)
     except Exception as e:
+        log.error("avito_vacancies error: %s", e, exc_info=True)
         raise HTTPException(502, f"Ошибка Авито: {e}")
 
 
