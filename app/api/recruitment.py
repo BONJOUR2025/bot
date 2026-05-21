@@ -328,6 +328,12 @@ def disconnect_avito(db: Session = Depends(get_db)):
 
 @router.get("/integrations/avito/vacancies")
 async def avito_vacancies(db: Session = Depends(get_db)):
+    return []
+
+
+@router.get("/integrations/avito/vacancy/{vacancy_id}")
+async def avito_vacancy_by_id(vacancy_id: str, db: Session = Depends(get_db)):
+    """Lookup a single Avito vacancy by ID to validate and get its title."""
     src = db.query(RecruitmentSource).filter(
         RecruitmentSource.source == "avito",
         RecruitmentSource.is_active == True,
@@ -337,11 +343,14 @@ async def avito_vacancies(db: Session = Depends(get_db)):
     from app.services import avito_api
     try:
         tok = await avito_api.get_token(src.client_id, src.client_secret)
-        src.access_token = tok["access_token"]
-        db.commit()
-        return await avito_api.get_vacancies(tok["access_token"], src.employer_id)
+        result = await avito_api.get_vacancy_by_id(tok["access_token"], vacancy_id)
+        if result is None:
+            raise HTTPException(404, "Вакансия не найдена")
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
-        log.error("avito_vacancies error: %s", e, exc_info=True)
+        log.error("avito_vacancy_by_id error: %s", e, exc_info=True)
         raise HTTPException(502, f"Ошибка Авито: {e}")
 
 

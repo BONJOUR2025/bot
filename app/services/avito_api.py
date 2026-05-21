@@ -1,5 +1,6 @@
 """Avito Jobs API client."""
 import logging
+from datetime import datetime, timedelta
 
 import httpx
 
@@ -12,8 +13,7 @@ TIMEOUT = 15.0
 async def get_token(client_id: str, client_secret: str) -> dict:
     """
     OAuth2 client_credentials flow.
-    Returns {"access_token": str, "expires_in": int}
-    or raises ValueError.
+    Returns {"access_token": str, "expires_in": int} or raises ValueError.
     """
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         r = await client.post(
@@ -33,7 +33,7 @@ async def get_token(client_id: str, client_secret: str) -> dict:
 
 
 async def get_user_info(access_token: str) -> dict:
-    """Returns {"user_id": str, "name": str}"""
+    """Returns {"employer_id": str, "employer_name": str}"""
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         r = await client.get(
             f"{AVITO_BASE}/core/v1/accounts/self",
@@ -47,91 +47,110 @@ async def get_user_info(access_token: str) -> dict:
         }
 
 
-async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
-    """Returns active job vacancies for the employer via Jobs API v2."""
-    import re
+async def get_vacancy_by_id(access_token: str, vacancy_id: str) -> dict | None:
+    """
+    Fetch a single vacancy by its Avito ID.
+    Returns {"id", "title", "area", "url"} or None if not found.
+    """
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {"per_page": 50, "page": 1, "status": "active", "user_id": user_id}
         r = await client.get(
-            f"{AVITO_BASE}/job/v2/vacancies",
+            f"{AVITO_BASE}/job/v2/vacancies/{vacancy_id}",
             headers={"Authorization": f"Bearer {access_token}"},
-            params=params,
         )
-        if r.status_code == 404:
-            return []
+        if r.status_code in (404, 403):
+            return None
         r.raise_for_status()
-        data = r.json()
-        items = data.get("vacancies") or data.get("items") or data.get("data") or []
-        log.info("Avito vacancies count=%d user_id=%s, first companyNames=%s",
-                 len(items), user_id,
-                 [v.get("companyName") or v.get("company") for v in items[:3]])
-        result = []
-        for v in items:
-            link = v.get("link") or v.get("url") or v.get("vacancyUrl") or ""
-            vid = v.get("vacancyId") or v.get("id") or v.get("vacancy_id") or ""
-            if not vid and link:
-                m = re.search(r"-(\d+)$", link.rstrip("/"))
-                vid = m.group(1) if m else link
-            addr = v.get("addressDetails") or {}
-            area = addr.get("city") or addr.get("district") or addr.get("name") or "" if isinstance(addr, dict) else ""
-            company = v.get("companyName") or v.get("company") or ""
-            result.append({
-                "id": str(vid),
-                "title": v.get("title") or v.get("name") or "",
-                "area": area,
-                "url": link,
-                "company": company,
-            })
-        return result
+        v = r.json()
+        addr = v.get("addressDetails") or {}
+        area = (addr.get("city") or addr.get("province") or addr.get("address") or "") if isinstance(addr, dict) else ""
+        return {
+            "id": str(vacancy_id),
+            "title": v.get("title") or "",
+            "area": area,
+            "url": v.get("url") or f"https://www.avito.ru/vakansii/{vacancy_id}",
+        }
 
 
-async def get_applications_for_vacancy(access_token: str, user_id: str, avito_vacancy_id: str) -> list[dict]:
+async def get_applications_for_vacancy(
+    access_token: str,
+    user_id: str,
+    avito_vacancy_id: str,
+    days_back: int = 30,
+) -> list[dict]:
     """
-    Fetch job applications for a specific vacancy via Avito Jobs API v1.
-    Returns list of candidates who applied.
+    Fetch job applications for a vacancy using the Avito Jobs API v1 two-step flow:
+    1. GET /job/v1/applications/get_ids — returns application IDs
+    2. POST /job/v1/applications/get_by_ids — returns full applicant data
     """
+    since = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {"vacancy_id": avito_vacancy_id, "per_page": 100, "page": 1}
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        # Step 1: get IDs
         r = await client.get(
-            f"{AVITO_BASE}/job/v1/applications",
-            headers={"Authorization": f"Bearer {access_token}"},
-            params=params,
+            f"{AVITO_BASE}/job/v1/applications/get_ids",
+            headers=headers,
+            params={
+                "vacancyIds": avito_vacancy_id,
+                "createdAtFrom": since,
+            },
         )
         if r.status_code in (404, 403):
             return []
         r.raise_for_status()
-        data = r.json()
-        log.info("Avito applications raw keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
+        applies_meta = r.json().get("applies") or []
+        ids = [a["id"] for a in applies_meta if a.get("id")]
+        log.info("Avito get_ids vacancy=%s since=%s → %d ids", avito_vacancy_id, since, len(ids))
+        if not ids:
+            return []
 
-        items = []
-        applications = data.get("applications") or data.get("items") or data.get("data") or []
-        log.info("Avito applications count: %d, first keys: %s",
-                 len(applications), list(applications[0].keys()) if applications else [])
-        for app in applications:
-            app_id = str(app.get("id") or app.get("application_id") or "")
-            applicant = app.get("applicant") or app.get("user") or app.get("candidate") or {}
-            name = (
-                applicant.get("name")
-                or applicant.get("fullName")
-                or app.get("name")
-                or "Кандидат"
-            )
-            phone = applicant.get("phone") or app.get("phone") or ""
-            email = applicant.get("email") or app.get("email") or ""
-            resume_url = app.get("resume_url") or app.get("resumeUrl") or ""
-            cover = app.get("cover_letter") or app.get("coverLetter") or app.get("message") or ""
-            items.append({
-                "external_id": app_id,
-                "name": name,
-                "phone": phone,
-                "email": email,
-                "resume_url": resume_url,
-                "notes": f"Авито отклик. {cover}" if cover else "Авито отклик",
-            })
+        # Step 2: get full details (max 100 per request)
+        r2 = await client.post(
+            f"{AVITO_BASE}/job/v1/applications/get_by_ids",
+            headers=headers,
+            json={"ids": ids[:100]},
+        )
+        if r2.status_code in (404, 403):
+            return []
+        r2.raise_for_status()
+        applies = r2.json().get("applies") or []
+        log.info("Avito get_by_ids → %d applications", len(applies))
 
-        return items
+    result = []
+    for app in applies:
+        app_id = str(app.get("id") or "")
+        applicant = app.get("applicant") or {}
+        data = applicant.get("data") or {}
+
+        full_name = data.get("full_name") or {}
+        if isinstance(full_name, dict):
+            parts = [full_name.get("last_name"), full_name.get("first_name"), full_name.get("patronymic")]
+            name = " ".join(p for p in parts if p) or data.get("name") or "Кандидат"
+        else:
+            name = data.get("name") or "Кандидат"
+
+        contacts = app.get("contacts") or {}
+        phones = contacts.get("phones") or []
+        phone = phones[0].get("value", "") if phones else ""
+
+        result.append({
+            "external_id": app_id,
+            "name": name,
+            "phone": str(phone) if phone else "",
+            "email": "",
+            "resume_url": "",
+            "notes": "Авито отклик",
+        })
+
+    return result
 
 
-# Keep legacy alias for backwards compatibility during migration
+# Avito API does not provide an endpoint to list the employer's own vacancies.
+# Users must enter vacancy IDs manually (taken from the vacancy URL on avito.ru).
+async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
+    return []
+
+
 async def get_chats_for_vacancy(access_token: str, user_id: str, avito_vacancy_id: str) -> list[dict]:
     return await get_applications_for_vacancy(access_token, user_id, avito_vacancy_id)
