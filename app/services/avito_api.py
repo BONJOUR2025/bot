@@ -57,7 +57,7 @@ async def get_vacancy_by_id(access_token: str, vacancy_id: str) -> dict | None:
             f"{AVITO_BASE}/job/v2/vacancies/{vacancy_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
-        if r.status_code in (404, 403):
+        if r.status_code in (402, 403, 404):
             return None
         r.raise_for_status()
         v = r.json()
