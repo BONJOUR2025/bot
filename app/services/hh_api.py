@@ -1,7 +1,10 @@
 """hh.ru Employer API client."""
+from urllib.parse import urlencode
+
 import httpx
 
 HH_BASE = "https://api.hh.ru"
+HH_AUTH_BASE = "https://hh.ru"
 TIMEOUT = 15.0
 
 
@@ -59,6 +62,49 @@ async def get_vacancies(access_token: str, employer_id: str) -> list[dict]:
             }
             for v in data.get("items", [])
         ]
+
+
+def build_auth_url(client_id: str, redirect_uri: str) -> str:
+    """Return the hh.ru OAuth2 authorization URL."""
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+    }
+    return f"{HH_AUTH_BASE}/oauth/authorize?{urlencode(params)}"
+
+
+async def exchange_code(client_id: str, client_secret: str, code: str, redirect_uri: str) -> dict:
+    """Exchange authorization code for access + refresh tokens."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.post(
+            f"{HH_BASE}/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+        )
+        if r.status_code != 200:
+            raise ValueError(f"Не удалось получить токен от hh.ru: {r.text}")
+        return r.json()
+
+
+async def refresh_access_token(client_id: str, client_secret: str, refresh_token: str) -> dict:
+    """Refresh an expired access token using the stored refresh token."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.post(
+            f"{HH_BASE}/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+        )
+        if r.status_code != 200:
+            raise ValueError(f"Не удалось обновить токен hh.ru: {r.text}")
+        return r.json()
 
 
 async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) -> dict:

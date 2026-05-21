@@ -374,6 +374,26 @@ export default function Recruitment() {
   const [detailModal,  setDetailModal]  = useState(null); // candidate
   const [showVacList,  setShowVacList]  = useState(!isMobile);
   const [showIntegrations, setShowIntegrations] = useState(false);
+  const [hhToast, setHhToast] = useState('');
+
+  // Auto-open integrations modal when returning from hh.ru OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('hh_connected') === '1') {
+      setShowIntegrations(true);
+      setHhToast('hh.ru успешно подключён!');
+      setTimeout(() => setHhToast(''), 5000);
+    } else if (params.get('hh_error')) {
+      setHhToast(`Ошибка подключения hh.ru: ${params.get('hh_error')}`);
+      setTimeout(() => setHhToast(''), 7000);
+    }
+    if (params.has('hh_connected') || params.has('hh_error')) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('hh_connected');
+      url.searchParams.delete('hh_error');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
 
   const loadVacancies = useCallback(async () => {
     setLoading(true);
@@ -478,6 +498,17 @@ export default function Recruitment() {
         <div className="mx-6 sm:mx-10 mt-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
           {error}
           <button onClick={() => setError(null)}><X size={14} /></button>
+        </div>
+      )}
+
+      {hhToast && (
+        <div className={`mx-6 sm:mx-10 mt-3 rounded-xl px-4 py-3 text-sm flex items-center justify-between ${
+          hhToast.startsWith('Ошибка')
+            ? 'bg-red-50 border border-red-200 text-red-600'
+            : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+        }`}>
+          {hhToast}
+          <button onClick={() => setHhToast('')}><X size={14} /></button>
         </div>
       )}
 

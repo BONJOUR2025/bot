@@ -5,12 +5,15 @@ import {
 } from 'lucide-react';
 import api from '../../api';
 
+// Callback URL shown in instructions so users know what to register in hh.ru
+const HH_CALLBACK_URL = `${window.location.origin}/api/recruitment/integrations/hh/callback`;
+
 // ── Instructions copy ──────────────────────────────────────────────
 const HH_INSTRUCTIONS = [
   { step: '1', text: 'Зайдите на dev.hh.ru → «Создать приложение»' },
-  { step: '2', text: 'В настройках приложения получите Client ID и Secret' },
-  { step: '3', text: 'Пройдите авторизацию OAuth и скопируйте Access Token' },
-  { step: '4', text: 'Вставьте токен ниже и нажмите «Подключить»' },
+  { step: '2', text: `В поле redirect_uri укажите: ${HH_CALLBACK_URL}` },
+  { step: '3', text: 'Получите Client ID и Client Secret вашего приложения' },
+  { step: '4', text: 'Введите их ниже и нажмите «Войти через hh.ru»' },
 ];
 const AVITO_INSTRUCTIONS = [
   { step: '1', text: 'Зайдите в кабинет разработчика Авито → «Мои приложения»' },
@@ -143,8 +146,9 @@ function VacancyLinkRow({ internalVacancy, source, externalVacancies, existingLi
 
 // ── HH Tab ────────────────────────────────────────────────────────
 function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
-  const [token, setToken] = useState('');
-  const [interval, setInterval_] = useState(source?.sync_interval_minutes || 15);
+  const [clientId, setClientId]   = useState('');
+  const [clientSecret, setSecret] = useState('');
+  const [interval, setInterval_]  = useState(source?.sync_interval_minutes || 15);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [loadingVacs, setLoadingVacs] = useState(false);
@@ -167,19 +171,22 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
 
   useEffect(() => { loadExternalVacs(); }, [loadExternalVacs]);
 
-  async function connect() {
-    if (!token.trim()) return;
+  async function startOAuth() {
+    if (!clientId.trim() || !clientSecret.trim()) return;
     setConnecting(true); setError('');
     try {
-      await api.post('/recruitment/integrations/hh/connect', {
-        access_token: token,
+      const res = await api.post('/recruitment/integrations/hh/setup', {
+        client_id: clientId.trim(),
+        client_secret: clientSecret.trim(),
+        redirect_uri: HH_CALLBACK_URL,
         sync_interval_minutes: interval,
       });
-      setToken('');
-      await onRefresh();
+      // Full-page redirect to hh.ru authorization
+      window.location.href = res.data.auth_url;
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
-    } finally { setConnecting(false); }
+      setConnecting(false);
+    }
   }
 
   async function disconnect() {
@@ -220,28 +227,64 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
       {!isConnected ? (
         <>
           <Instructions steps={HH_INSTRUCTIONS} />
-          <div className="space-y-2">
-            <label className="text-xs text-[color:var(--color-muted-foreground)] block">
-              Access Token <a href="https://dev.hh.ru" target="_blank" rel="noopener noreferrer" className="text-[color:var(--color-primary)] hover:underline inline-flex items-center gap-0.5">dev.hh.ru <ExternalLink size={10} /></a>
-            </label>
-            <input
-              type="password"
-              className="input w-full font-mono text-sm"
-              value={token}
-              onChange={e => setToken(e.target.value)}
-              placeholder="••••••••••••••••"
-              autoComplete="off"
-            />
+
+          {/* Redirect URI copy box */}
+          <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mb-1">Redirect URI для регистрации в dev.hh.ru:</p>
+            <p className="text-xs font-mono text-gray-700 break-all select-all">{HH_CALLBACK_URL}</p>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">
+                Client ID <a href="https://dev.hh.ru" target="_blank" rel="noopener noreferrer" className="text-[color:var(--color-primary)] hover:underline inline-flex items-center gap-0.5">dev.hh.ru <ExternalLink size={10} /></a>
+              </label>
+              <input
+                className="input w-full text-sm"
+                value={clientId}
+                onChange={e => setClientId(e.target.value)}
+                placeholder="xxxxxxxx"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Client Secret</label>
+              <input
+                type="password"
+                className="input w-full text-sm font-mono"
+                value={clientSecret}
+                onChange={e => setSecret(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
           <div className="flex items-center gap-3">
             <label className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">Интервал синхронизации:</label>
             <select className="input text-sm py-1" value={interval} onChange={e => setInterval_(+e.target.value)}>
               {[5, 10, 15, 30, 60].map(m => <option key={m} value={m}>{m} мин.</option>)}
             </select>
           </div>
+
           {error && <p className="text-xs text-red-600">{error}</p>}
-          <button onClick={connect} disabled={connecting || !token.trim()} className="btn btn-primary w-full">
-            {connecting ? 'Проверяем токен...' : 'Подключить hh.ru'}
+
+          <button
+            onClick={startOAuth}
+            disabled={connecting || !clientId.trim() || !clientSecret.trim()}
+            className="btn btn-primary w-full flex items-center justify-center gap-2"
+          >
+            {connecting ? (
+              <>
+                <RefreshCw size={14} className="animate-spin" />
+                Перенаправляем на hh.ru...
+              </>
+            ) : (
+              <>
+                <ExternalLink size={14} />
+                Войти через hh.ru
+              </>
+            )}
           </button>
         </>
       ) : (

@@ -1,12 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink
+
+# Stored in-process during the brief OAuth redirect roundtrip
+_pending_hh_redirect_uri: str = ""
 
 router = APIRouter(prefix="/recruitment", tags=["Recruitment"])
 
@@ -44,8 +48,10 @@ class CandidateUpdate(BaseModel):
     notes: Optional[str] = None
     vacancy_id: Optional[int] = None
 
-class HHConnectRequest(BaseModel):
-    access_token: str
+class HHSetupRequest(BaseModel):
+    client_id: str
+    client_secret: str
+    redirect_uri: str
     sync_interval_minutes: Optional[int] = 15
 
 class AvitoConnectRequest(BaseModel):
@@ -161,30 +167,82 @@ def list_integrations(db: Session = Depends(get_db)):
     return [s.to_dict() for s in sources]
 
 
-@router.post("/integrations/hh/connect")
-async def connect_hh(data: HHConnectRequest, db: Session = Depends(get_db)):
+@router.post("/integrations/hh/setup")
+async def setup_hh(data: HHSetupRequest, db: Session = Depends(get_db)):
+    """Save hh.ru credentials and return the OAuth authorization URL."""
+    global _pending_hh_redirect_uri
     from app.services import hh_api
-    try:
-        info = await hh_api.verify_token(data.access_token)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(502, f"hh.ru недоступен: {e}")
 
     src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
     if not src:
         src = RecruitmentSource(source="hh")
         db.add(src)
 
-    src.access_token = data.access_token
+    src.client_id = data.client_id
+    src.client_secret = data.client_secret
+    src.sync_interval_minutes = max(5, data.sync_interval_minutes or 15)
+    src.is_active = False
+    src.last_error = ""
+    src.updated_at = datetime.utcnow()
+    db.commit()
+
+    _pending_hh_redirect_uri = data.redirect_uri
+    auth_url = hh_api.build_auth_url(data.client_id, data.redirect_uri)
+    return {"auth_url": auth_url}
+
+
+@router.get("/integrations/hh/callback", include_in_schema=False)
+async def hh_callback(
+    code: Optional[str] = Query(None),
+    error: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Browser callback after hh.ru OAuth authorization."""
+    global _pending_hh_redirect_uri
+    from app.services import hh_api
+
+    if error:
+        return RedirectResponse(f"/admin/recruitment?hh_error={error}")
+
+    if not code:
+        return RedirectResponse("/admin/recruitment?hh_error=no_code")
+
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
+    if not src or not src.client_id:
+        return RedirectResponse("/admin/recruitment?hh_error=setup_missing")
+
+    redirect_uri = _pending_hh_redirect_uri
+    if not redirect_uri:
+        return RedirectResponse("/admin/recruitment?hh_error=session_expired")
+
+    try:
+        token_data = await hh_api.exchange_code(
+            src.client_id, src.client_secret, code, redirect_uri
+        )
+    except Exception as e:
+        src.last_error = str(e)[:500]
+        db.commit()
+        return RedirectResponse("/admin/recruitment?hh_error=token_exchange")
+
+    try:
+        info = await hh_api.verify_token(token_data["access_token"])
+    except Exception:
+        info = {"employer_id": "", "employer_name": ""}
+
+    src.access_token = token_data["access_token"]
+    src.refresh_token = token_data.get("refresh_token", "")
+    expires_in = token_data.get("expires_in")
+    if expires_in:
+        src.token_expires_at = datetime.utcnow() + timedelta(seconds=int(expires_in))
     src.employer_id = info["employer_id"]
     src.employer_name = info["employer_name"]
     src.is_active = True
     src.last_error = ""
-    src.sync_interval_minutes = max(5, data.sync_interval_minutes or 15)
     src.updated_at = datetime.utcnow()
-    db.commit(); db.refresh(src)
-    return src.to_dict()
+    db.commit()
+
+    _pending_hh_redirect_uri = ""
+    return RedirectResponse("/admin/recruitment?hh_connected=1")
 
 
 @router.delete("/integrations/hh/disconnect")
@@ -193,6 +251,9 @@ def disconnect_hh(db: Session = Depends(get_db)):
     if src:
         src.is_active = False
         src.access_token = ""
+        src.refresh_token = ""
+        src.client_id = ""
+        src.client_secret = ""
         src.last_error = ""
         db.commit()
     return {"status": "disconnected"}
