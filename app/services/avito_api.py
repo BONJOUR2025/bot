@@ -48,11 +48,12 @@ async def get_user_info(access_token: str) -> dict:
 
 
 async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
-    """Returns active job vacancies for the authenticated employer via Items API."""
+    """Returns active job vacancies for the employer via Jobs API v2."""
+    import re
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {"per_page": 50, "page": 1}
+        params = {"per_page": 50, "page": 1, "status": "active", "user_id": user_id}
         r = await client.get(
-            f"{AVITO_BASE}/core/v1/items",
+            f"{AVITO_BASE}/job/v2/vacancies",
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
         )
@@ -60,28 +61,26 @@ async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
             return []
         r.raise_for_status()
         data = r.json()
-        log.info("Avito items raw keys=%s raw=%s", list(data.keys()) if isinstance(data, dict) else type(data), str(data)[:500])
-        resources = data.get("resources") or data.get("items") or data.get("data") or []
-        log.info("Avito items count=%d, first keys=%s",
-                 len(resources), list(resources[0].keys()) if resources else [])
+        items = data.get("vacancies") or data.get("items") or data.get("data") or []
+        log.info("Avito vacancies count=%d user_id=%s, first companyNames=%s",
+                 len(items), user_id,
+                 [v.get("companyName") or v.get("company") for v in items[:3]])
         result = []
-        for v in resources:
-            cat = v.get("category") or {}
-            cat_name = cat.get("name") or "" if isinstance(cat, dict) else ""
-            # Only include job vacancies (skip regular ads)
-            if cat_name and "ванси" not in cat_name.lower() and "работ" not in cat_name.lower():
-                continue
-            vid = str(v.get("id") or "")
-            title = v.get("title") or v.get("name") or ""
-            address = v.get("address") or ""
-            url = v.get("url") or v.get("link") or ""
-            if not url and vid:
-                url = f"https://www.avito.ru/items/{vid}"
+        for v in items:
+            link = v.get("link") or v.get("url") or v.get("vacancyUrl") or ""
+            vid = v.get("vacancyId") or v.get("id") or v.get("vacancy_id") or ""
+            if not vid and link:
+                m = re.search(r"-(\d+)$", link.rstrip("/"))
+                vid = m.group(1) if m else link
+            addr = v.get("addressDetails") or {}
+            area = addr.get("city") or addr.get("district") or addr.get("name") or "" if isinstance(addr, dict) else ""
+            company = v.get("companyName") or v.get("company") or ""
             result.append({
-                "id": vid,
-                "title": title,
-                "area": address,
-                "url": url,
+                "id": str(vid),
+                "title": v.get("title") or v.get("name") or "",
+                "area": area,
+                "url": link,
+                "company": company,
             })
         return result
 
