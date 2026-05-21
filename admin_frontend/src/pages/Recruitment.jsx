@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
-  Briefcase, ExternalLink, Pencil, Trash2,
+  Briefcase, ExternalLink, Pencil, Trash2, Settings,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import IntegrationsModal from '../components/recruitment/IntegrationsModal.jsx';
 
 const STAGES = [
   { key: 'отклик',        label: 'Отклик',        color: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-400',     border: 'border-t-blue-400'   },
@@ -372,6 +373,7 @@ export default function Recruitment() {
   const [candModal,    setCandModal]    = useState(null); // null | { candidate?, stage }
   const [detailModal,  setDetailModal]  = useState(null); // candidate
   const [showVacList,  setShowVacList]  = useState(!isMobile);
+  const [showIntegrations, setShowIntegrations] = useState(false);
 
   const loadVacancies = useCallback(async () => {
     setLoading(true);
@@ -459,6 +461,13 @@ export default function Recruitment() {
               {showVacList ? 'Скрыть вакансии' : 'Вакансии'}
             </button>
           )}
+          <button
+            onClick={() => setShowIntegrations(true)}
+            className="btn btn-secondary text-sm flex items-center gap-1.5"
+            title="Настройка автоимпорта hh.ru и Авито"
+          >
+            <Settings size={15} /> Интеграции
+          </button>
           <button onClick={() => setVacancyModal('new')} className="btn btn-primary text-sm flex items-center gap-1.5">
             <Plus size={15} /> Вакансия
           </button>
@@ -633,6 +642,13 @@ export default function Recruitment() {
           onEdit={c => setCandModal({ candidate: c })}
           onDelete={deleteCandidate}
           onStageChange={stageChange}
+        />
+      )}
+
+      {showIntegrations && (
+        <IntegrationsModal
+          vacancies={vacancies}
+          onClose={() => { setShowIntegrations(false); loadCandidates(); }}
         />
       )}
     </div>

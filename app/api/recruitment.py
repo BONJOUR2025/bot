@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.recruitment import Candidate, Vacancy
+from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink
 
 router = APIRouter(prefix="/recruitment", tags=["Recruitment"])
 
@@ -14,19 +14,17 @@ VALID_STAGES = ["отклик", "собеседование", "ждем", "от�
 VALID_SOURCES = ["hh", "avito", "manual", "other"]
 
 
-# ── Schemas ────────────────────────────────────────────────────────
+# ── Pydantic schemas ───────────────────────────────────────────────
 
 class VacancyCreate(BaseModel):
     title: str
     description: Optional[str] = ""
     is_open: bool = True
 
-
 class VacancyUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     is_open: Optional[bool] = None
-
 
 class CandidateCreate(BaseModel):
     vacancy_id: int
@@ -37,7 +35,6 @@ class CandidateCreate(BaseModel):
     stage: Optional[str] = "отклик"
     notes: Optional[str] = ""
 
-
 class CandidateUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
@@ -47,58 +44,63 @@ class CandidateUpdate(BaseModel):
     notes: Optional[str] = None
     vacancy_id: Optional[int] = None
 
+class HHConnectRequest(BaseModel):
+    access_token: str
+    sync_interval_minutes: Optional[int] = 15
+
+class AvitoConnectRequest(BaseModel):
+    client_id: str
+    client_secret: str
+    sync_interval_minutes: Optional[int] = 15
+
+class LinkCreate(BaseModel):
+    vacancy_id: int
+    source: str
+    external_vacancy_id: str
+    external_vacancy_title: Optional[str] = ""
+
+class LinkUpdate(BaseModel):
+    sync_enabled: Optional[bool] = None
+    external_vacancy_id: Optional[str] = None
+    external_vacancy_title: Optional[str] = None
+
 
 # ── Vacancies ──────────────────────────────────────────────────────
 
 @router.get("/vacancies")
-def list_vacancies(
-    include_closed: bool = Query(False),
-    db: Session = Depends(get_db),
-):
+def list_vacancies(include_closed: bool = Query(False), db: Session = Depends(get_db)):
     q = db.query(Vacancy)
     if not include_closed:
         q = q.filter(Vacancy.is_open == True)
-    vacancies = q.order_by(Vacancy.created_at.desc()).all()
     result = []
-    for v in vacancies:
+    for v in q.order_by(Vacancy.created_at.desc()).all():
         d = v.to_dict()
         d["candidate_count"] = len(v.candidates)
         result.append(d)
     return result
 
-
 @router.post("/vacancies")
 def create_vacancy(data: VacancyCreate, db: Session = Depends(get_db)):
     v = Vacancy(title=data.title, description=data.description, is_open=data.is_open)
-    db.add(v)
-    db.commit()
-    db.refresh(v)
+    db.add(v); db.commit(); db.refresh(v)
     return v.to_dict()
-
 
 @router.patch("/vacancies/{vacancy_id}")
 def update_vacancy(vacancy_id: int, data: VacancyUpdate, db: Session = Depends(get_db)):
     v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
     if not v:
-        raise HTTPException(status_code=404, detail="Vacancy not found")
-    if data.title is not None:
-        v.title = data.title
-    if data.description is not None:
-        v.description = data.description
-    if data.is_open is not None:
-        v.is_open = data.is_open
-    db.commit()
-    db.refresh(v)
+        raise HTTPException(404, "Vacancy not found")
+    if data.title is not None: v.title = data.title
+    if data.description is not None: v.description = data.description
+    if data.is_open is not None: v.is_open = data.is_open
+    db.commit(); db.refresh(v)
     return v.to_dict()
-
 
 @router.delete("/vacancies/{vacancy_id}")
 def delete_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
     v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
-    if not v:
-        raise HTTPException(status_code=404, detail="Vacancy not found")
-    db.delete(v)
-    db.commit()
+    if not v: raise HTTPException(404, "Vacancy not found")
+    db.delete(v); db.commit()
     return {"status": "deleted"}
 
 
@@ -111,57 +113,243 @@ def list_candidates(
     db: Session = Depends(get_db),
 ):
     q = db.query(Candidate)
-    if vacancy_id is not None:
-        q = q.filter(Candidate.vacancy_id == vacancy_id)
-    if stage:
-        q = q.filter(Candidate.stage == stage)
+    if vacancy_id is not None: q = q.filter(Candidate.vacancy_id == vacancy_id)
+    if stage: q = q.filter(Candidate.stage == stage)
     return [c.to_dict() for c in q.order_by(Candidate.created_at.asc()).all()]
-
 
 @router.post("/candidates")
 def create_candidate(data: CandidateCreate, db: Session = Depends(get_db)):
     if data.stage not in VALID_STAGES:
-        raise HTTPException(status_code=400, detail=f"Invalid stage. Valid: {VALID_STAGES}")
-    vacancy = db.query(Vacancy).filter(Vacancy.id == data.vacancy_id).first()
-    if not vacancy:
-        raise HTTPException(status_code=404, detail="Vacancy not found")
+        raise HTTPException(400, f"Invalid stage. Valid: {VALID_STAGES}")
+    if not db.query(Vacancy).filter(Vacancy.id == data.vacancy_id).first():
+        raise HTTPException(404, "Vacancy not found")
     c = Candidate(
-        vacancy_id=data.vacancy_id,
-        name=data.name,
-        phone=data.phone or "",
-        email=data.email or "",
-        source=data.source or "manual",
-        stage=data.stage or "отклик",
+        vacancy_id=data.vacancy_id, name=data.name,
+        phone=data.phone or "", email=data.email or "",
+        source=data.source or "manual", stage=data.stage or "отклик",
         notes=data.notes or "",
     )
-    db.add(c)
-    db.commit()
-    db.refresh(c)
+    db.add(c); db.commit(); db.refresh(c)
     return c.to_dict()
-
 
 @router.patch("/candidates/{candidate_id}")
 def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session = Depends(get_db)):
     c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not c:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+    if not c: raise HTTPException(404, "Candidate not found")
     if data.stage is not None and data.stage not in VALID_STAGES:
-        raise HTTPException(status_code=400, detail=f"Invalid stage. Valid: {VALID_STAGES}")
+        raise HTTPException(400, f"Invalid stage. Valid: {VALID_STAGES}")
     for field in ("name", "phone", "email", "source", "stage", "notes", "vacancy_id"):
         val = getattr(data, field)
-        if val is not None:
-            setattr(c, field, val)
+        if val is not None: setattr(c, field, val)
     c.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(c)
+    db.commit(); db.refresh(c)
     return c.to_dict()
-
 
 @router.delete("/candidates/{candidate_id}")
 def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):
     c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not c:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-    db.delete(c)
-    db.commit()
+    if not c: raise HTTPException(404, "Candidate not found")
+    db.delete(c); db.commit()
     return {"status": "deleted"}
+
+
+# ── Integration sources ────────────────────────────────────────────
+
+@router.get("/integrations")
+def list_integrations(db: Session = Depends(get_db)):
+    sources = db.query(RecruitmentSource).all()
+    return [s.to_dict() for s in sources]
+
+
+@router.post("/integrations/hh/connect")
+async def connect_hh(data: HHConnectRequest, db: Session = Depends(get_db)):
+    from app.services import hh_api
+    try:
+        info = await hh_api.verify_token(data.access_token)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"hh.ru недоступен: {e}")
+
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
+    if not src:
+        src = RecruitmentSource(source="hh")
+        db.add(src)
+
+    src.access_token = data.access_token
+    src.employer_id = info["employer_id"]
+    src.employer_name = info["employer_name"]
+    src.is_active = True
+    src.last_error = ""
+    src.sync_interval_minutes = max(5, data.sync_interval_minutes or 15)
+    src.updated_at = datetime.utcnow()
+    db.commit(); db.refresh(src)
+    return src.to_dict()
+
+
+@router.delete("/integrations/hh/disconnect")
+def disconnect_hh(db: Session = Depends(get_db)):
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
+    if src:
+        src.is_active = False
+        src.access_token = ""
+        src.last_error = ""
+        db.commit()
+    return {"status": "disconnected"}
+
+
+@router.get("/integrations/hh/vacancies")
+async def hh_vacancies(db: Session = Depends(get_db)):
+    src = db.query(RecruitmentSource).filter(
+        RecruitmentSource.source == "hh",
+        RecruitmentSource.is_active == True,
+    ).first()
+    if not src:
+        raise HTTPException(400, "hh.ru не подключён")
+    from app.services import hh_api
+    try:
+        return await hh_api.get_vacancies(src.access_token, src.employer_id)
+    except Exception as e:
+        raise HTTPException(502, f"Ошибка hh.ru: {e}")
+
+
+@router.post("/integrations/avito/connect")
+async def connect_avito(data: AvitoConnectRequest, db: Session = Depends(get_db)):
+    from app.services import avito_api
+    try:
+        tok = await avito_api.get_token(data.client_id, data.client_secret)
+        info = await avito_api.get_user_info(tok["access_token"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"Авито недоступен: {e}")
+
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "avito").first()
+    if not src:
+        src = RecruitmentSource(source="avito")
+        db.add(src)
+
+    src.client_id = data.client_id
+    src.client_secret = data.client_secret
+    src.access_token = tok["access_token"]
+    src.employer_id = info["employer_id"]
+    src.employer_name = info["employer_name"]
+    src.is_active = True
+    src.last_error = ""
+    src.sync_interval_minutes = max(5, data.sync_interval_minutes or 15)
+    src.updated_at = datetime.utcnow()
+    db.commit(); db.refresh(src)
+    return src.to_dict()
+
+
+@router.delete("/integrations/avito/disconnect")
+def disconnect_avito(db: Session = Depends(get_db)):
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "avito").first()
+    if src:
+        src.is_active = False
+        src.client_id = ""
+        src.client_secret = ""
+        src.access_token = ""
+        src.last_error = ""
+        db.commit()
+    return {"status": "disconnected"}
+
+
+@router.get("/integrations/avito/vacancies")
+async def avito_vacancies(db: Session = Depends(get_db)):
+    src = db.query(RecruitmentSource).filter(
+        RecruitmentSource.source == "avito",
+        RecruitmentSource.is_active == True,
+    ).first()
+    if not src:
+        raise HTTPException(400, "Авито не подключён")
+    from app.services import avito_api
+    try:
+        # Refresh token first
+        tok = await avito_api.get_token(src.client_id, src.client_secret)
+        src.access_token = tok["access_token"]
+        db.commit()
+        return await avito_api.get_vacancies(tok["access_token"], src.employer_id)
+    except Exception as e:
+        raise HTTPException(502, f"Ошибка Авито: {e}")
+
+
+@router.patch("/integrations/{source}/interval")
+def update_interval(source: str, interval_minutes: int, db: Session = Depends(get_db)):
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == source).first()
+    if not src: raise HTTPException(404, "Source not found")
+    src.sync_interval_minutes = max(5, interval_minutes)
+    db.commit()
+    return src.to_dict()
+
+
+# ── Vacancy links ──────────────────────────────────────────────────
+
+@router.get("/links")
+def list_links(vacancy_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    q = db.query(VacancyLink)
+    if vacancy_id: q = q.filter(VacancyLink.vacancy_id == vacancy_id)
+    return [link.to_dict() for link in q.all()]
+
+
+@router.post("/links")
+def create_link(data: LinkCreate, db: Session = Depends(get_db)):
+    if data.source not in ("hh", "avito"):
+        raise HTTPException(400, "source must be 'hh' or 'avito'")
+    src = db.query(RecruitmentSource).filter(
+        RecruitmentSource.source == data.source,
+        RecruitmentSource.is_active == True,
+    ).first()
+    if not src:
+        raise HTTPException(400, f"Источник {data.source} не подключён")
+    # Check uniqueness (one source per vacancy)
+    existing = db.query(VacancyLink).filter(
+        VacancyLink.vacancy_id == data.vacancy_id,
+        VacancyLink.source == data.source,
+    ).first()
+    if existing:
+        # Update instead
+        existing.external_vacancy_id = data.external_vacancy_id
+        existing.external_vacancy_title = data.external_vacancy_title or ""
+        existing.sync_enabled = True
+        db.commit(); db.refresh(existing)
+        return existing.to_dict()
+
+    link = VacancyLink(
+        vacancy_id=data.vacancy_id,
+        source=data.source,
+        source_id=src.id,
+        external_vacancy_id=data.external_vacancy_id,
+        external_vacancy_title=data.external_vacancy_title or "",
+        sync_enabled=True,
+    )
+    db.add(link); db.commit(); db.refresh(link)
+    return link.to_dict()
+
+
+@router.patch("/links/{link_id}")
+def update_link(link_id: int, data: LinkUpdate, db: Session = Depends(get_db)):
+    link = db.query(VacancyLink).filter(VacancyLink.id == link_id).first()
+    if not link: raise HTTPException(404, "Link not found")
+    if data.sync_enabled is not None: link.sync_enabled = data.sync_enabled
+    if data.external_vacancy_id is not None: link.external_vacancy_id = data.external_vacancy_id
+    if data.external_vacancy_title is not None: link.external_vacancy_title = data.external_vacancy_title
+    db.commit(); db.refresh(link)
+    return link.to_dict()
+
+
+@router.delete("/links/{link_id}")
+def delete_link(link_id: int, db: Session = Depends(get_db)):
+    link = db.query(VacancyLink).filter(VacancyLink.id == link_id).first()
+    if not link: raise HTTPException(404, "Link not found")
+    db.delete(link); db.commit()
+    return {"status": "deleted"}
+
+
+# ── Manual sync trigger ────────────────────────────────────────────
+
+@router.post("/sync")
+async def trigger_sync(background_tasks: BackgroundTasks):
+    from app.services import recruitment_sync
+    background_tasks.add_task(recruitment_sync.run_now)
+    return {"status": "sync_started"}

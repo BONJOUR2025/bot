@@ -329,10 +329,20 @@ def create_app() -> FastAPI:
 
     # Recruitment CRM
     from .recruitment import router as recruitment_router
-    from app.models.recruitment import Vacancy, Candidate  # noqa: F401 — register with Base
+    from app.models.recruitment import Vacancy, Candidate, RecruitmentSource, VacancyLink  # noqa: F401
     from app.db.session import init_db as _init_db
     _init_db()
     app.include_router(recruitment_router, prefix="/api", dependencies=protected)
+
+    from app.services import recruitment_sync
+
+    @app.on_event("startup")
+    async def _start_recruitment_sync():
+        recruitment_sync.start()
+
+    @app.on_event("shutdown")
+    async def _stop_recruitment_sync():
+        recruitment_sync.stop()
 
     # System tools (status, backup, archive)
     from .system import create_system_router
