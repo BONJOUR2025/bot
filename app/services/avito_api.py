@@ -50,7 +50,7 @@ async def get_user_info(access_token: str) -> dict:
 async def get_vacancies(access_token: str, user_id: str) -> list[dict]:
     """Returns active job vacancies for the user."""
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        params = {"per_page": 50, "page": 1, "status": "active"}
+        params = {"per_page": 50, "page": 1, "status": "active", "user_id": user_id}
         r = await client.get(
             f"{AVITO_BASE}/job/v2/vacancies",
             headers={"Authorization": f"Bearer {access_token}"},
