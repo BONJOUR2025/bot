@@ -1,7 +1,8 @@
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -9,7 +10,11 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink
 
-# Stored in-process during the brief OAuth redirect roundtrip
+# Loaded once from environment — set HH_CLIENT_ID and HH_CLIENT_SECRET in .env
+_HH_CLIENT_ID     = os.getenv("HH_CLIENT_ID", "")
+_HH_CLIENT_SECRET = os.getenv("HH_CLIENT_SECRET", "")
+
+# Stored in-process during the brief OAuth redirect roundtrip (seconds)
 _pending_hh_redirect_uri: str = ""
 
 router = APIRouter(prefix="/recruitment", tags=["Recruitment"])
@@ -48,11 +53,8 @@ class CandidateUpdate(BaseModel):
     notes: Optional[str] = None
     vacancy_id: Optional[int] = None
 
-class HHSetupRequest(BaseModel):
-    client_id: str
-    client_secret: str
-    redirect_uri: str
-    sync_interval_minutes: Optional[int] = 15
+class HHIntervalRequest(BaseModel):
+    sync_interval_minutes: int = 15
 
 class AvitoConnectRequest(BaseModel):
     client_id: str
