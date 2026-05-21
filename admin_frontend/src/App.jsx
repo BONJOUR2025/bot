@@ -46,6 +46,7 @@ import Salons from "./pages/Salons";
 import LocationPlans from "./pages/LocationPlans";
 import CashMovements from "./pages/CashMovements";
 import Smses from "./pages/Smses";
+import Recruitment from "./pages/Recruitment";
 
 export default function App() {
   return (
@@ -99,6 +100,7 @@ export default function App() {
                 <Route path="location-plans" element={<LocationPlans />} />
                 <Route path="cash-moves" element={<CashMovements />} />
                 <Route path="smses" element={<Smses />} />
+                <Route path="recruitment" element={<Recruitment />} />
               </Route>
 
               {/* Личный кабинет сотрудника */}
