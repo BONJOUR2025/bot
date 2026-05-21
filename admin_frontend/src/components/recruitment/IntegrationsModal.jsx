@@ -239,6 +239,10 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
               <p className="text-sm text-[color:var(--color-muted-foreground)] text-center py-4">Загружаем объявления hh.ru...</p>
             ) : externalVacs.length === 0 ? (
               <p className="text-sm text-[color:var(--color-muted-foreground)] text-center py-4">Нет активных объявлений на hh.ru</p>
+            ) : vacancies.length === 0 ? (
+              <p className="text-sm text-[color:var(--color-muted-foreground)] text-center py-4">
+                Сначала создайте вакансию в CRM — кнопка «+ Вакансия» на главной странице подбора.
+              </p>
             ) : (
               <div className="space-y-2">
                 {vacancies.map(v => (
@@ -394,6 +398,10 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
               <p className="text-sm text-center py-4 text-[color:var(--color-muted-foreground)]">Загружаем объявления Авито...</p>
             ) : externalVacs.length === 0 ? (
               <p className="text-sm text-center py-4 text-[color:var(--color-muted-foreground)]">Нет активных объявлений на Авито</p>
+            ) : vacancies.length === 0 ? (
+              <p className="text-sm text-center py-4 text-[color:var(--color-muted-foreground)]">
+                Сначала создайте вакансию в CRM — кнопка «+ Вакансия» на главной странице подбора.
+              </p>
             ) : (
               <div className="space-y-2">
                 {vacancies.map(v => (
