@@ -263,6 +263,9 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
 
 // ── Avito Tab ──────────────────────────────────────────────────────
 function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
+  const [clientId, setClientId]     = useState('');
+  const [clientSecret, setSecret]   = useState('');
+  const [interval, setInterval_]    = useState(source?.sync_interval_minutes || 15);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconn] = useState(false);
   const [loadingVacs, setLoadVacs]  = useState(false);
@@ -270,8 +273,7 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
   const [syncing, setSyncing]       = useState(false);
   const [error, setError]           = useState('');
 
-  const isConnected   = source?.is_active;
-  const envConfigured = source?.env_configured ?? false;
+  const isConnected = source?.is_active;
 
   const loadExternalVacs = useCallback(async () => {
     if (!isConnected) return;
@@ -287,9 +289,15 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
   useEffect(() => { loadExternalVacs(); }, [loadExternalVacs]);
 
   async function connect() {
+    if (!clientId.trim() || !clientSecret.trim()) return;
     setConnecting(true); setError('');
     try {
-      await api.post('/recruitment/integrations/avito/connect');
+      await api.post('/recruitment/integrations/avito/connect', {
+        client_id: clientId.trim(),
+        client_secret: clientSecret.trim(),
+        sync_interval_minutes: interval,
+      });
+      setClientId(''); setSecret('');
       await onRefresh();
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
@@ -330,22 +338,26 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
 
       {!isConnected ? (
         <>
-          {!envConfigured ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 space-y-1">
-              <p className="font-medium">Ожидаем одобрения заявки Авито</p>
-              <p className="text-xs text-amber-700">
-                После получения Client ID и Secret добавьте их в <code className="bg-amber-100 px-1 rounded">.env</code> на сервере:
-              </p>
-              <pre className="text-xs bg-amber-100 rounded px-2 py-1.5 mt-1 select-all">AVITO_CLIENT_ID=...<br/>AVITO_CLIENT_SECRET=...</pre>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Client ID</label>
+              <input className="input w-full text-sm" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx" autoComplete="off" />
             </div>
-          ) : (
-            <>
-              {error && <p className="text-xs text-red-600">{error}</p>}
-              <button onClick={connect} disabled={connecting} className="btn btn-primary w-full">
-                {connecting ? 'Подключаем...' : 'Подключить Авито'}
-              </button>
-            </>
-          )}
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Client Secret</label>
+              <input type="password" className="input w-full text-sm font-mono" value={clientSecret} onChange={e => setSecret(e.target.value)} placeholder="••••••••" autoComplete="off" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">Интервал:</label>
+            <select className="input text-sm py-1" value={interval} onChange={e => setInterval_(+e.target.value)}>
+              {[5, 10, 15, 30, 60].map(m => <option key={m} value={m}>{m} мин.</option>)}
+            </select>
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <button onClick={connect} disabled={connecting || !clientId.trim() || !clientSecret.trim()} className="btn btn-primary w-full">
+            {connecting ? 'Подключаем...' : 'Подключить Авито'}
+          </button>
         </>
       ) : (
         <>

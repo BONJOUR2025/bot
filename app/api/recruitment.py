@@ -18,8 +18,6 @@ def _hh_creds() -> tuple[str, str]:
     return settings.hh_client_id, settings.hh_client_secret
 
 
-def _avito_creds() -> tuple[str, str]:
-    return settings.avito_client_id, settings.avito_client_secret
 
 # Stored in-process during the brief OAuth redirect roundtrip (seconds)
 _pending_hh_redirect_uri: str = ""
@@ -62,6 +60,11 @@ class CandidateUpdate(BaseModel):
 
 class HHIntervalRequest(BaseModel):
     sync_interval_minutes: int = 15
+
+class AvitoConnectRequest(BaseModel):
+    client_id: str
+    client_secret: str
+    sync_interval_minutes: Optional[int] = 15
 
 class LinkCreate(BaseModel):
     vacancy_id: int
@@ -171,8 +174,8 @@ def list_integrations(db: Session = Depends(get_db)):
     src_map = {s.source: s.to_dict() for s in sources}
     result = []
     for source_key, configured in [
-        ("hh",    bool(settings.hh_client_id    and settings.hh_client_secret)),
-        ("avito", bool(settings.avito_client_id and settings.avito_client_secret)),
+        ("hh",    bool(settings.hh_client_id and settings.hh_client_secret)),
+        ("avito", True),  # Avito credentials stored in DB, always show connect button
     ]:
         entry = src_map.get(source_key, {"source": source_key, "is_active": False,
                                          "employer_name": "", "last_error": "",
@@ -281,15 +284,11 @@ async def hh_vacancies(db: Session = Depends(get_db)):
 
 
 @router.post("/integrations/avito/connect")
-async def connect_avito(db: Session = Depends(get_db)):
-    """Connect Avito using env-configured credentials (client_credentials flow)."""
-    av_id, av_secret = _avito_creds()
-    if not av_id or not av_secret:
-        raise HTTPException(503, "Авито не настроен на сервере (AVITO_CLIENT_ID / AVITO_CLIENT_SECRET)")
-
+async def connect_avito(data: AvitoConnectRequest, db: Session = Depends(get_db)):
+    """Connect Avito — credentials stored in DB, no env vars needed."""
     from app.services import avito_api
     try:
-        tok  = await avito_api.get_token(av_id, av_secret)
+        tok  = await avito_api.get_token(data.client_id, data.client_secret)
         info = await avito_api.get_user_info(tok["access_token"])
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -301,11 +300,14 @@ async def connect_avito(db: Session = Depends(get_db)):
         src = RecruitmentSource(source="avito")
         db.add(src)
 
+    src.client_id    = data.client_id
+    src.client_secret = data.client_secret
     src.access_token = tok["access_token"]
     src.employer_id  = info["employer_id"]
     src.employer_name = info["employer_name"]
     src.is_active    = True
     src.last_error   = ""
+    src.sync_interval_minutes = max(5, data.sync_interval_minutes or 15)
     src.updated_at   = datetime.utcnow()
     db.commit(); db.refresh(src)
     return src.to_dict()
@@ -315,9 +317,11 @@ async def connect_avito(db: Session = Depends(get_db)):
 def disconnect_avito(db: Session = Depends(get_db)):
     src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "avito").first()
     if src:
-        src.is_active  = False
+        src.is_active    = False
         src.access_token = ""
-        src.last_error = ""
+        src.client_id    = ""
+        src.client_secret = ""
+        src.last_error   = ""
         db.commit()
     return {"status": "disconnected"}
 
@@ -330,16 +334,12 @@ async def avito_vacancies(db: Session = Depends(get_db)):
     ).first()
     if not src:
         raise HTTPException(400, "Авито не подключён")
-    av_id, av_secret = _avito_creds()
     from app.services import avito_api
     try:
-        tok = await avito_api.get_token(av_id, av_secret)
-        log.info("avito token OK, keys: %s", list(tok.keys()))
-        access_token = tok["access_token"]
-        src.access_token = access_token
+        tok = await avito_api.get_token(src.client_id, src.client_secret)
+        src.access_token = tok["access_token"]
         db.commit()
-        log.info("avito calling get_vacancies, employer_id=%s", src.employer_id)
-        return await avito_api.get_vacancies(access_token, src.employer_id)
+        return await avito_api.get_vacancies(tok["access_token"], src.employer_id)
     except Exception as e:
         log.error("avito_vacancies error: %s", e, exc_info=True)
         raise HTTPException(502, f"Ошибка Авито: {e}")
