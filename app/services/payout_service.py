@@ -67,8 +67,8 @@ class PayoutService:
 
     @staticmethod
     def _fuzzy_find_cash_move(payout_dict: Dict) -> Optional[str]:
-        """Find a Firebird cash movement matching payout by amount and date ±1 day."""
-        from datetime import timedelta, date as date_cls
+        """Find a Firebird cash movement matching payout by amount and exact date."""
+        from datetime import date as date_cls
         try:
             from app.services.firebird_service import get_firebird_service
             ts = str(payout_dict.get("timestamp") or "")[:10]
@@ -77,8 +77,8 @@ class PayoutService:
             payout_date = date_cls.fromisoformat(ts)
             payout_amount = float(payout_dict.get("amount") or 0)
             moves = get_firebird_service().get_cash_moves(
-                date_from=payout_date - timedelta(days=1),
-                date_to=payout_date + timedelta(days=1),
+                date_from=payout_date,
+                date_to=payout_date,
             )
             for m in moves:
                 move_date_str = str(m.get("DK_DATE") or "")[:10]
@@ -86,7 +86,7 @@ class PayoutService:
                     move_date = date_cls.fromisoformat(move_date_str)
                 except ValueError:
                     continue
-                if (abs((payout_date - move_date).days) <= 1
+                if (move_date == payout_date
                         and abs(payout_amount - float(m.get("SUMM") or 0)) < 0.01):
                     return str(m.get("ID_KASSES_MOVE") or "")
         except Exception as exc:

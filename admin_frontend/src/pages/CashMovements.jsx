@@ -798,24 +798,26 @@ export default function CashMovements() {
   return (
     <div className="space-y-6 max-w-full pb-20">
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight flex-1">Кассовые перемещения</h2>
-        <button onClick={() => setShowUsersManager(true)}
-          className="btn flex items-center gap-2 border border-[color:var(--color-border)]">
-          <Users size={15} /> Пользователи
-        </button>
-        <button onClick={() => setShowBranchesManager(true)}
-          className="btn flex items-center gap-2 border border-[color:var(--color-border)]">
-          <Building2 size={15} /> Филиалы
-        </button>
-        <button onClick={() => setShowCatManager(true)}
-          className="btn flex items-center gap-2 border border-[color:var(--color-border)]">
-          <Settings size={15} /> Категории
-        </button>
-        <button onClick={exportCsv} disabled={loading || filtered.length === 0}
-          className="btn flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">
-          <Download size={16} /> CSV
-        </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-2xl font-semibold tracking-tight flex-1 min-w-0">Кассовые перемещения</h2>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setShowUsersManager(true)}
+            className="btn flex items-center gap-1.5 border border-[color:var(--color-border)] px-2.5 py-1.5">
+            <Users size={15} /><span className="hidden sm:inline">Пользователи</span>
+          </button>
+          <button onClick={() => setShowBranchesManager(true)}
+            className="btn flex items-center gap-1.5 border border-[color:var(--color-border)] px-2.5 py-1.5">
+            <Building2 size={15} /><span className="hidden sm:inline">Филиалы</span>
+          </button>
+          <button onClick={() => setShowCatManager(true)}
+            className="btn flex items-center gap-1.5 border border-[color:var(--color-border)] px-2.5 py-1.5">
+            <Settings size={15} /><span className="hidden sm:inline">Категории</span>
+          </button>
+          <button onClick={exportCsv} disabled={loading || filtered.length === 0}
+            className="btn flex items-center gap-1.5 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 px-2.5 py-1.5">
+            <Download size={15} /><span className="hidden sm:inline">CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -1088,83 +1090,69 @@ export default function CashMovements() {
       ) : isMobile ? (
         <div className="space-y-3">
           {filtered.map((row) => (
-            <div key={row.ID_KASSES_MOVE} className={`border rounded-xl bg-white shadow-sm overflow-hidden ${!row.prefix_ok ? 'border-l-4 border-l-red-400' : row.manually_assigned ? 'border-l-4 border-l-amber-400' : ''}`}>
-              <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex justify-between items-center">
-                <span>{fmtDate(row.DK_DATE)}</span>
-                <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.SUMM)}</span>
+            <div key={row.ID_KASSES_MOVE} className={`border rounded-xl bg-white shadow-sm overflow-hidden ${!row.prefix_ok ? 'border-l-4 border-l-red-400' : row.manually_assigned ? 'border-l-4 border-l-amber-400' : 'border-[color:var(--color-border)]'}`}>
+              {/* Card header */}
+              <div className="px-4 py-2.5 border-b bg-[color:var(--color-bg-secondary)] flex justify-between items-center gap-2">
+                <span className="text-sm font-medium text-[color:var(--color-muted-foreground)]">{fmtDate(row.DK_DATE)}</span>
+                <span className="text-base font-bold text-[color:var(--color-primary)]">{fmtMoney(row.SUMM)}</span>
               </div>
-              <div className="px-4 py-2 space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Филиал</span>
-                  <span>{row.dep_name || '—'}</span>
+              {/* Card body */}
+              <div className="px-4 py-3 space-y-2 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span className="text-[color:var(--color-muted-foreground)] shrink-0">Филиал</span>
+                  <span className="text-right font-medium">{row.dep_name || '—'}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Создатель</span>
-                  <span>{row.user_name || '—'}</span>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[color:var(--color-muted-foreground)] shrink-0">Создатель</span>
+                  <span className="text-right">{row.user_name || '—'}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Категория</span>
-                  <span>
-                    {row.category ? (
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                        row.manually_assigned
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
-                      }`}>{row.category}</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">
-                        <Tag size={10} /> Без категории
-                      </span>
-                    )}
-                  </span>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-[color:var(--color-muted-foreground)] shrink-0">Категория</span>
+                  {row.category ? (
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                      row.manually_assigned ? 'bg-amber-100 text-amber-700' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                    }`}>{row.category}</span>
+                  ) : (
+                    <button onClick={() => setAssignRecord(row)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600 active:bg-red-200">
+                      <Tag size={10} /> Назначить
+                    </button>
+                  )}
                 </div>
                 {row.BASIS && (
-                  <div className="flex justify-between gap-3">
-                    <span className="text-gray-500 shrink-0">Основание</span>
-                    <span className="font-mono text-xs text-right truncate min-w-0">{row.BASIS}</span>
+                  <div className="pt-1 border-t border-[color:var(--color-border)]">
+                    <span className="text-xs text-[color:var(--color-muted-foreground)] block mb-0.5">Основание</span>
+                    <span className="font-mono text-xs break-all leading-relaxed">{row.BASIS}</span>
                   </div>
                 )}
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Выплата</span>
-                  <span>
-                    {row.has_payout
-                      ? <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full"><LinkIcon size={10} /> Привязана</span>
-                      : <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full"><Unlink size={10} /> Нет</span>
-                    }
-                  </span>
-                </div>
               </div>
-              <div className="px-4 py-2 border-t flex justify-end gap-3">
-                <input type="checkbox" className="w-4 h-4 rounded cursor-pointer self-center"
-                  checked={selected.has(row.ID_KASSES_MOVE)} onChange={() => toggleSelect(row.ID_KASSES_MOVE)} />
-                {row.prefix_ok
-                  ? <CheckCircle size={16} className={row.manually_assigned ? 'text-amber-500 self-center' : 'text-green-500 self-center'}
-                      title={row.manually_assigned ? 'Назначено вручную' : 'Категория по правилу'} />
-                  : <button onClick={() => setAssignRecord(row)} title="Назначить категорию"
-                      className="p-1 rounded hover:bg-red-100 transition-colors">
-                      <AlertTriangle size={16} className="text-red-500" />
-                    </button>
-                }
-                {!row.category && (
-                  <button onClick={() => setAssignRecord(row)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200 transition-colors">
-                    <Tag size={11} /> Назначить
-                  </button>
-                )}
-                {row.has_payout
-                  ? <button
-                      onClick={() => row.linked_payout && setLinkedPayoutRecord({ move: row, payout: row.linked_payout })}
-                      title="Выплата привязана — нажмите для просмотра"
-                      className="p-1 rounded hover:bg-green-100 transition-colors"
-                    >
-                      <LinkIcon size={16} className="text-green-500" />
-                    </button>
-                  : <button onClick={() => setCreatePayoutMove(row)}
-                      title="Привязать выплату к этому движению"
-                      className="p-1 rounded hover:bg-amber-100 transition-colors">
-                      <Unlink size={16} className="text-amber-500" />
-                    </button>
-                }
+              {/* Card footer */}
+              <div className="px-4 py-2 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] flex items-center justify-between gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 rounded cursor-pointer"
+                    checked={selected.has(row.ID_KASSES_MOVE)} onChange={() => toggleSelect(row.ID_KASSES_MOVE)} />
+                </label>
+                <div className="flex items-center gap-1">
+                  {row.prefix_ok
+                    ? <CheckCircle size={16} className={row.manually_assigned ? 'text-amber-500' : 'text-green-500'}
+                        title={row.manually_assigned ? 'Назначено вручную' : 'Категория по правилу'} />
+                    : <button onClick={() => setAssignRecord(row)}
+                        className="p-1.5 rounded-lg active:bg-red-100">
+                        <AlertTriangle size={16} className="text-red-500" />
+                      </button>
+                  }
+                  {row.has_payout
+                    ? <button
+                        onClick={() => row.linked_payout && setLinkedPayoutRecord({ move: row, payout: row.linked_payout })}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700 active:bg-green-200">
+                        <LinkIcon size={12} /> Выплата
+                      </button>
+                    : <button onClick={() => setCreatePayoutMove(row)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-100 text-amber-700 active:bg-amber-200">
+                        <Unlink size={12} /> Привязать
+                      </button>
+                  }
+                </div>
               </div>
             </div>
           ))}

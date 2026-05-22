@@ -169,10 +169,7 @@ def create_cash_moves_router(
         if not cash_payouts:
             return []
 
-        # Expand date range by 1 day for Firebird query
-        fb_from = (date_from - timedelta(days=1)) if date_from else None
-        fb_to = (date_to + timedelta(days=1)) if date_to else None
-        moves = get_firebird_service().get_cash_moves(date_from=fb_from, date_to=fb_to)
+        moves = get_firebird_service().get_cash_moves(date_from=date_from, date_to=date_to)
 
         # Index moves: date_str → list of (move_id, amount)
         from collections import defaultdict
@@ -205,13 +202,9 @@ def create_cash_moves_router(
 
             payout_amount = float(p.get("amount") or 0)
             matched_id = None
-            for delta in (0, -1, 1):
-                check = str(payout_date + timedelta(days=delta))
-                for move_id, move_amount in moves_by_date.get(check, []):
-                    if abs(payout_amount - move_amount) < 0.01:
-                        matched_id = move_id
-                        break
-                if matched_id:
+            for move_id, move_amount in moves_by_date.get(ts, []):
+                if abs(payout_amount - move_amount) < 0.01:
+                    matched_id = move_id
                     break
 
             if matched_id:
