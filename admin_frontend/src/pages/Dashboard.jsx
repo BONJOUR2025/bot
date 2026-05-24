@@ -151,17 +151,19 @@ export default function Dashboard() {
     else setRefreshing(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [pendRes, appRes, vacRes, taskRes, bdRes, mastersRes, salesRes] = await Promise.allSettled([
+      const [pendRes, vacRes, taskRes, bdRes, mastersRes, salesRes] = await Promise.allSettled([
         api.get('payouts/active'),
-        api.get('payouts/', { params: { status: 'Одобрено' } }),
         api.get('vacations/active'),
         api.get('tasks/stats'),
         api.get('birthdays/', { params: { days: 30 } }),
         api.get('masters/works', { params: { date_from: today, date_to: today } }),
         api.get('sales/daily',   { params: { date_from: today, date_to: today } }),
       ]);
-      if (pendRes.status    === 'fulfilled') setPending(pendRes.value.data ?? []);
-      if (appRes.status     === 'fulfilled') setApproved(appRes.value.data ?? []);
+      if (pendRes.status === 'fulfilled') {
+        const all = pendRes.value.data ?? [];
+        setPending(all.filter(p => p.status === 'Ожидает'));
+        setApproved(all.filter(p => p.status === 'Одобрено'));
+      }
       if (vacRes.status     === 'fulfilled') setVacations(vacRes.value.data ?? []);
       if (taskRes.status    === 'fulfilled') setTaskStats(taskRes.value.data ?? null);
       if (bdRes.status      === 'fulfilled') setBirthdays(bdRes.value.data ?? []);
