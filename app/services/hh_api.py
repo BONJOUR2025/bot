@@ -337,32 +337,14 @@ async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str)
         return False
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        # 1. Fetch available actions for this negotiation
-        r = await client.get(
-            f"{HH_BASE}/negotiations/employer_actions/{neg_id}",
-            headers=_headers(access_token),
-        )
-        if r.status_code != 200:
-            log.debug("hh employer_actions %s → %s", neg_id, r.status_code)
-            return False
-
-        available = {a["id"] for a in r.json().get("actions", [])}
-        if action not in available:
-            log.info(
-                "hh action '%s' not available for neg %s (available: %s)",
-                action, neg_id, available,
-            )
-            return False
-
-        # 2. Perform the action
-        r2 = await client.put(
+        r = await client.put(
             f"{HH_BASE}/negotiations/{action}/{neg_id}",
             headers=_headers(access_token),
         )
-        if r2.status_code not in (200, 201, 204):
+        if r.status_code not in (200, 201, 204):
             log.warning(
                 "hh action '%s' neg %s → HTTP %s: %s",
-                action, neg_id, r2.status_code, r2.text[:200],
+                action, neg_id, r.status_code, r.text[:200],
             )
             return False
 
