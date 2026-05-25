@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
-  ArrowRight, Clock,
+  ArrowRight, Clock, SendHorizonal, Loader2,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -255,7 +255,54 @@ function InterviewModal({ candidate, onSave, onClose }) {
 function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }) {
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
-  const srcIdx = STAGES.findIndex(s => s.key === candidate.stage);
+  const isHh = candidate.source === 'hh' && candidate.external_id;
+
+  const [tab, setTab] = useState('info');
+
+  // Chat state
+  const [messages, setMessages]   = useState([]);
+  const [msgLoading, setMsgLoading] = useState(false);
+  const [msgError, setMsgError]   = useState('');
+  const [text, setText]           = useState('');
+  const [sending, setSending]     = useState(false);
+  const bottomRef                 = useRef(null);
+
+  useEffect(() => {
+    if (tab === 'chat' && isHh && messages.length === 0) loadMessages();
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, tab]);
+
+  async function loadMessages() {
+    setMsgLoading(true); setMsgError('');
+    try {
+      const res = await api.get(`/recruitment/candidates/${candidate.id}/messages`);
+      setMessages(res.data);
+    } catch (e) {
+      setMsgError(e.response?.data?.detail || e.message);
+    } finally { setMsgLoading(false); }
+  }
+
+  async function handleSend() {
+    if (!text.trim() || sending) return;
+    setSending(true);
+    try {
+      await api.post(`/recruitment/candidates/${candidate.id}/messages`, { text: text.trim() });
+      setText('');
+      await loadMessages();
+    } catch (e) {
+      setMsgError(e.response?.data?.detail || e.message);
+    } finally { setSending(false); }
+  }
+
+  function fmtMsgTime(iso) {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch { return iso; }
+  }
 
   return (
     <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -303,8 +350,34 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
           </button>
         </div>
 
+        {/* ── Tabs ── */}
+        <div className="flex border-b border-[color:var(--color-border)] px-6">
+          <button
+            onClick={() => setTab('info')}
+            className={`text-sm font-medium py-2.5 pr-4 border-b-2 transition-colors ${
+              tab === 'info'
+                ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
+                : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+            }`}
+          >
+            Информация
+          </button>
+          {isHh && (
+            <button
+              onClick={() => setTab('chat')}
+              className={`text-sm font-medium py-2.5 px-4 border-b-2 transition-colors flex items-center gap-1.5 ${
+                tab === 'chat'
+                  ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
+                  : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+              }`}
+            >
+              <MessageCircle size={13} /> Переписка
+            </button>
+          )}
+        </div>
+
         {/* ── Body ── */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        {tab === 'info' && <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
           {/* Contacts block */}
           {(candidate.phone || candidate.email) && (
@@ -385,7 +458,70 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
               ))}
             </div>
           </div>
-        </div>
+        </div>}
+
+        {/* ── Chat tab ── */}
+        {tab === 'chat' && (
+          <div className="flex flex-col flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+            {/* Messages list */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+              {msgLoading && (
+                <div className="flex justify-center py-8 text-[color:var(--color-muted-foreground)]">
+                  <Loader2 size={20} className="animate-spin" />
+                </div>
+              )}
+              {msgError && (
+                <div className="text-xs text-red-500 text-center py-4">{msgError}</div>
+              )}
+              {!msgLoading && !msgError && messages.length === 0 && (
+                <div className="text-xs text-[color:var(--color-muted-foreground)] text-center py-8">
+                  Сообщений пока нет
+                </div>
+              )}
+              {messages.map(m => {
+                const isEmployer = m.author_type === 'employer';
+                return (
+                  <div key={m.id} className={`flex ${isEmployer ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                      isEmployer
+                        ? 'bg-[color:var(--color-primary)] text-white rounded-br-sm'
+                        : 'bg-[color:var(--color-muted)] text-[color:var(--color-foreground)] rounded-bl-sm'
+                    }`}>
+                      {!isEmployer && m.author_name && (
+                        <div className="text-[10px] font-medium opacity-60 mb-1">{m.author_name}</div>
+                      )}
+                      <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                      <div className={`text-[10px] mt-1 opacity-60 ${isEmployer ? 'text-right' : ''}`}>
+                        {fmtMsgTime(m.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Input */}
+            <div className="border-t border-[color:var(--color-border)] px-4 py-3 flex gap-2 items-end">
+              <textarea
+                rows={1}
+                value={text}
+                onChange={e => setText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                placeholder="Написать кандидату..."
+                className="flex-1 resize-none input text-sm py-2 max-h-28"
+                style={{ minHeight: '38px' }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!text.trim() || sending}
+                className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[color:var(--color-primary)] text-white disabled:opacity-40 hover:opacity-90 transition-opacity"
+              >
+                {sending ? <Loader2 size={15} className="animate-spin" /> : <SendHorizonal size={15} />}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Footer ── */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10">

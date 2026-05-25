@@ -192,6 +192,46 @@ def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted"}
 
 
+def _get_hh_candidate(candidate_id: int, db):
+    """Return (candidate, hh_token) or raise HTTPException."""
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    if c.source != "hh" or not c.external_id:
+        raise HTTPException(400, "Переписка доступна только для кандидатов с hh.ru")
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
+    if not src or not src.access_token:
+        raise HTTPException(400, "hh.ru не подключён")
+    return c, src.access_token
+
+
+@router.get("/candidates/{candidate_id}/messages")
+async def get_candidate_messages(candidate_id: int, db: Session = Depends(get_db)):
+    c, token = _get_hh_candidate(candidate_id, db)
+    from app.services import hh_api
+    try:
+        return await hh_api.get_messages(token, c.external_id)
+    except Exception as exc:
+        raise HTTPException(502, f"Ошибка hh.ru: {exc}")
+
+
+class SendMessageRequest(BaseModel):
+    text: str
+
+@router.post("/candidates/{candidate_id}/messages")
+async def send_candidate_message(candidate_id: int, data: SendMessageRequest, db: Session = Depends(get_db)):
+    if not data.text.strip():
+        raise HTTPException(400, "Текст сообщения не может быть пустым")
+    c, token = _get_hh_candidate(candidate_id, db)
+    from app.services import hh_api
+    try:
+        return await hh_api.send_message(token, c.external_id, data.text.strip())
+    except ValueError as exc:
+        raise HTTPException(502, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Ошибка hh.ru: {exc}")
+
+
 # ── Integration sources ────────────────────────────────────────────
 
 @router.get("/integrations")
