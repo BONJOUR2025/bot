@@ -131,42 +131,19 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
         r.raise_for_status()
         data = r.json()
 
-        items = []
-        first_logged = False
+        # Collect basic data first, then enrich with full resumes where accessible
+        raw_items = []
         for neg in data.get("items", []):
             resume = neg.get("resume") or {}
 
-            # Log the first resume structure to help debug what hh.ru actually returns
-            if not first_logged:
-                log.info("hh.ru resume sample keys: %s", list(resume.keys()))
-                contact_sample = resume.get("contact")
-                log.info("hh.ru contact sample: %s", contact_sample)
-                log.info("hh.ru birthday sample: %s", resume.get("birthday"))
-                log.info("hh.ru age field: %s", resume.get("age"))
-                first_logged = True
-
-            # ── Phone ──────────────────────────────────────────────
-            contact = resume.get("contact") or {}
-            phones = contact.get("phone") or []
-            phone = ""
-            if phones:
-                p = phones[0]
-                # Prefer pre-formatted string; fallback to assembling from parts
-                phone = (
-                    p.get("formatted")
-                    or f"+{p.get('country', '')}{p.get('city', '')}{p.get('number', '')}"
-                ).strip()
-
-            # ── Age ────────────────────────────────────────────────
+            # ── Age (available in list response) ───────────────────
             age = None
-            # 1. Direct age field (int)
             raw_age = resume.get("age")
             if raw_age is not None:
                 try:
                     age = int(raw_age)
                 except Exception:
                     pass
-            # 2. birthday as dict {"year": 1990, "month": 5, "day": 15}
             if age is None:
                 birthday = resume.get("birthday")
                 if isinstance(birthday, dict):
@@ -181,7 +158,6 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                             age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
                     except Exception:
                         pass
-                # 3. birthday as ISO string "YYYY-MM-DD"
                 elif isinstance(birthday, str) and birthday:
                     try:
                         from datetime import date as _date
@@ -191,22 +167,90 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                     except Exception:
                         pass
 
-            # ── Name / resume URL ──────────────────────────────────
-            email = contact.get("email") or ""
             first = resume.get("first_name") or ""
             last = resume.get("last_name") or ""
             name = (f"{last} {first}".strip()) or neg.get("applicant_name") or "Без имени"
             resume_url = resume.get("alternate_url") or ""
+            resume_id = resume.get("id") or ""
+            can_view = bool(resume.get("can_view_full_info"))
 
-            items.append({
-                "external_id": str(neg["id"]),
+            raw_items.append({
+                "neg_id": str(neg["id"]),
                 "name": name,
-                "phone": phone,
-                "email": email,
                 "resume_url": resume_url,
+                "resume_id": resume_id,
+                "can_view": can_view,
                 "age": age,
-                "notes": f"Отклик hh.ru: {resume_url}" if resume_url else "Отклик hh.ru",
+                "phone": "",
+                "email": "",
             })
+
+        # ── Enrich: fetch full resume for contacts ─────────────────
+        # hh.ru doesn't return contact in the negotiations list;
+        # need a separate GET /resumes/{id} when can_view_full_info=True
+        import asyncio
+        sem = asyncio.Semaphore(3)  # max 3 concurrent resume fetches
+
+        async def fetch_contacts(item: dict) -> None:
+            if not item["can_view"] or not item["resume_id"]:
+                return
+            async with sem:
+                try:
+                    r2 = await client.get(
+                        f"{HH_BASE}/resumes/{item['resume_id']}",
+                        headers=_headers(access_token),
+                    )
+                    if r2.status_code != 200:
+                        log.debug("hh resume %s → %s", item["resume_id"], r2.status_code)
+                        return
+                    full = r2.json()
+                    contact = full.get("contact") or {}
+                    phones = contact.get("phone") or []
+                    if phones:
+                        p = phones[0]
+                        item["phone"] = (
+                            p.get("formatted")
+                            or f"+{p.get('country','')}{p.get('city','')}{p.get('number','')}"
+                        ).strip()
+                    item["email"] = contact.get("email") or ""
+                    # birthday may be present in full resume
+                    if item["age"] is None:
+                        bd = full.get("birthday")
+                        if isinstance(bd, dict):
+                            try:
+                                from datetime import date as _date
+                                by = bd.get("year")
+                                if by:
+                                    bday = _date(int(by), int(bd.get("month", 1)), int(bd.get("day", 1)))
+                                    today = _date.today()
+                                    item["age"] = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                            except Exception:
+                                pass
+                        elif isinstance(bd, str) and bd:
+                            try:
+                                from datetime import date as _date
+                                bday = _date.fromisoformat(bd[:10])
+                                today = _date.today()
+                                item["age"] = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                            except Exception:
+                                pass
+                except Exception as exc:
+                    log.warning("hh resume fetch failed %s: %s", item["resume_id"], exc)
+
+        await asyncio.gather(*[fetch_contacts(it) for it in raw_items])
+
+        items = [
+            {
+                "external_id": it["neg_id"],
+                "name": it["name"],
+                "phone": it["phone"],
+                "email": it["email"],
+                "resume_url": it["resume_url"],
+                "age": it["age"],
+                "notes": f"Отклик hh.ru: {it['resume_url']}" if it["resume_url"] else "Отклик hh.ru",
+            }
+            for it in raw_items
+        ]
 
         return {
             "found": data.get("found", 0),
