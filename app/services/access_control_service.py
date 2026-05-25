@@ -39,6 +39,7 @@ AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
     {"id": "salons", "label": "Управление салонами"},
     {"id": "cash-moves", "label": "Кассовые перемещения"},
     {"id": "smses", "label": "СМС Агбис"},
+    {"id": "payment-calendar", "label": "Платежный календарь"},
 ]
 
 BOT_BUTTON_CATALOG: list[dict[str, Any]] = [

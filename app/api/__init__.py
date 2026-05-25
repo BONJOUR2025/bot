@@ -344,6 +344,17 @@ def create_app() -> FastAPI:
     async def _stop_recruitment_sync():
         recruitment_sync.stop()
 
+    # Payment calendar
+    from .payment_calendar import create_payment_calendar_router
+    from app.models.payment_calendar import PaymentSchedule, PaymentRecord  # noqa: F401
+    from app.db.session import init_db as _init_db2
+    _init_db2()
+    app.include_router(
+        create_payment_calendar_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # System tools (status, backup, archive)
     from .system import create_system_router
 
