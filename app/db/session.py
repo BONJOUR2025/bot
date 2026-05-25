@@ -24,3 +24,17 @@ def get_db():
 def init_db() -> None:
     """Create all tables that don't exist yet."""
     Base.metadata.create_all(bind=engine)
+    _run_migrations()
+
+
+def _run_migrations() -> None:
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for stmt in [
+            "ALTER TABLE candidates ADD COLUMN age INTEGER",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # column already exists

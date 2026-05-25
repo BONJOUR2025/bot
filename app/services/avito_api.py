@@ -134,12 +134,31 @@ async def get_applications_for_vacancy(
         phones = contacts.get("phones") or []
         phone = phones[0].get("value", "") if phones else ""
 
+        age = None
+        raw_age = data.get("age")
+        if raw_age is not None:
+            try:
+                age = int(raw_age)
+            except Exception:
+                pass
+        if age is None:
+            birthday_str = data.get("birthday")
+            if birthday_str:
+                try:
+                    from datetime import date as _date
+                    bday = _date.fromisoformat(str(birthday_str)[:10])
+                    today = _date.today()
+                    age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                except Exception:
+                    pass
+
         result.append({
             "external_id": app_id,
             "name": name,
             "phone": str(phone) if phone else "",
             "email": "",
             "resume_url": "",
+            "age": age,
             "notes": "Авито отклик",
         })
 

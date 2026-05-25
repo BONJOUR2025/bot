@@ -38,6 +38,7 @@ class Candidate(Base):
     source = Column(String, nullable=False, default="manual")  # hh / avito / manual / other
     external_id = Column(String, nullable=True, index=True)    # negotiation_id / chat_id
     resume_url = Column(String, nullable=True, default="")
+    age = Column(Integer, nullable=True)
     stage = Column(String, nullable=False, default="отклик", index=True)
     notes = Column(Text, nullable=True, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -55,6 +56,7 @@ class Candidate(Base):
             "source": self.source,
             "external_id": self.external_id,
             "resume_url": self.resume_url or "",
+            "age": self.age,
             "stage": self.stage,
             "notes": self.notes or "",
             "created_at": self.created_at.isoformat() if self.created_at else None,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
-  Briefcase, ExternalLink, Pencil, Trash2, Settings,
+  Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -25,6 +25,8 @@ const SOURCES = [
 const stageOf   = (key) => STAGES.find(s => s.key === key) || STAGES[0];
 const srcLabel  = (key) => SOURCES.find(s => s.key === key)?.label || key;
 const fmtDate   = (iso) => iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '';
+const tgLink    = (phone) => { const d = phone.replace(/\D/g, ''); return d ? `https://t.me/+${d}` : null; };
+const ageLabel  = (age) => age != null ? `${age} лет` : null;
 
 const SRC_BADGE = {
   hh:     'bg-red-100 text-red-600',
@@ -86,12 +88,14 @@ function VacancyModal({ vacancy, onClose, onSave }) {
 // ── Candidate modal ────────────────────────────────────────────────
 function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave }) {
   const [form, setForm] = useState({
-    name:   candidate?.name   || '',
-    phone:  candidate?.phone  || '',
-    email:  candidate?.email  || '',
-    source: candidate?.source || 'manual',
-    stage:  candidate?.stage  || initialStage || 'отклик',
-    notes:  candidate?.notes  || '',
+    name:       candidate?.name       || '',
+    phone:      candidate?.phone      || '',
+    email:      candidate?.email      || '',
+    source:     candidate?.source     || 'manual',
+    stage:      candidate?.stage      || initialStage || 'отклик',
+    notes:      candidate?.notes      || '',
+    age:        candidate?.age        ?? '',
+    resume_url: candidate?.resume_url || '',
   });
   const [saving, setSaving] = useState(false);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -100,9 +104,10 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
     if (!form.name.trim()) return;
     setSaving(true);
     try {
+      const payload = { ...form, age: form.age !== '' ? Number(form.age) : null };
       const res = candidate
-        ? await api.patch(`/recruitment/candidates/${candidate.id}`, form)
-        : await api.post('/recruitment/candidates', { ...form, vacancy_id: vacancyId });
+        ? await api.patch(`/recruitment/candidates/${candidate.id}`, payload)
+        : await api.post('/recruitment/candidates', { ...payload, vacancy_id: vacancyId });
       onSave(res.data);
       onClose();
     } finally { setSaving(false); }
@@ -126,9 +131,17 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
               <input className="input w-full" value={form.phone} onChange={set('phone')} placeholder="+7..." />
             </div>
             <div>
-              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Email</label>
-              <input className="input w-full" value={form.email} onChange={set('email')} placeholder="mail@..." />
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Возраст</label>
+              <input type="number" min={16} max={80} className="input w-full" value={form.age} onChange={set('age')} placeholder="30" />
             </div>
+          </div>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Email</label>
+            <input className="input w-full" value={form.email} onChange={set('email')} placeholder="mail@..." />
+          </div>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Ссылка на резюме</label>
+            <input className="input w-full" value={form.resume_url} onChange={set('resume_url')} placeholder="https://hh.ru/resume/..." />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -183,7 +196,19 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
           {candidate.phone && (
             <div className="flex items-center gap-2">
               <Phone size={14} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-              <a href={`tel:${candidate.phone}`} className="text-[color:var(--color-primary)] hover:underline">{candidate.phone}</a>
+              <a href={`tel:${candidate.phone}`} className="text-[color:var(--color-primary)] hover:underline flex-1">{candidate.phone}</a>
+              {tgLink(candidate.phone) && (
+                <a
+                  href={tgLink(candidate.phone)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Открыть чат в Telegram"
+                  onClick={e => e.stopPropagation()}
+                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-600 hover:bg-sky-200 transition-colors flex-shrink-0"
+                >
+                  <Send size={10} /> TG
+                </a>
+              )}
             </div>
           )}
           {candidate.email && (
@@ -192,11 +217,30 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
               <a href={`mailto:${candidate.email}`} className="text-[color:var(--color-primary)] hover:underline">{candidate.email}</a>
             </div>
           )}
+          {candidate.resume_url && (
+            <div className="flex items-center gap-2">
+              <Link size={14} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
+              <a
+                href={candidate.resume_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[color:var(--color-primary)] hover:underline truncate"
+              >
+                Открыть резюме ↗
+              </a>
+            </div>
+          )}
           <div className="flex items-center gap-2 text-[color:var(--color-muted-foreground)]">
             <ExternalLink size={14} className="flex-shrink-0" />
             <span>{srcLabel(candidate.source)}</span>
             <span className="opacity-50">·</span>
             <span>{fmtDate(candidate.created_at)}</span>
+            {candidate.age != null && (
+              <>
+                <span className="opacity-50">·</span>
+                <span>{candidate.age} лет</span>
+              </>
+            )}
           </div>
 
           {candidate.notes && (
@@ -250,7 +294,7 @@ function CandidateCard({ c, onClick }) {
     >
       <div className="flex items-start justify-between gap-1">
         <span className="text-sm font-medium leading-snug group-hover:text-[color:var(--color-primary)] transition-colors">
-          {c.name}
+          {c.name}{c.age != null && <span className="font-normal text-[color:var(--color-muted-foreground)]">, {c.age} л.</span>}
         </span>
         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${SRC_BADGE[c.source] || SRC_BADGE.other}`}>
           {srcBadgeLabel(c.source)}

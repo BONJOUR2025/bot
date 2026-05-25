@@ -48,6 +48,8 @@ class CandidateCreate(BaseModel):
     source: Optional[str] = "manual"
     stage: Optional[str] = "отклик"
     notes: Optional[str] = ""
+    age: Optional[int] = None
+    resume_url: Optional[str] = ""
 
 class CandidateUpdate(BaseModel):
     name: Optional[str] = None
@@ -57,6 +59,8 @@ class CandidateUpdate(BaseModel):
     stage: Optional[str] = None
     notes: Optional[str] = None
     vacancy_id: Optional[int] = None
+    age: Optional[int] = None
+    resume_url: Optional[str] = None
 
 class HHIntervalRequest(BaseModel):
     sync_interval_minutes: int = 15
@@ -140,7 +144,8 @@ def create_candidate(data: CandidateCreate, db: Session = Depends(get_db)):
         vacancy_id=data.vacancy_id, name=data.name,
         phone=data.phone or "", email=data.email or "",
         source=data.source or "manual", stage=data.stage or "отклик",
-        notes=data.notes or "",
+        notes=data.notes or "", age=data.age,
+        resume_url=data.resume_url or "",
     )
     db.add(c); db.commit(); db.refresh(c)
     return c.to_dict()
@@ -151,7 +156,7 @@ def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session = Dep
     if not c: raise HTTPException(404, "Candidate not found")
     if data.stage is not None and data.stage not in VALID_STAGES:
         raise HTTPException(400, f"Invalid stage. Valid: {VALID_STAGES}")
-    for field in ("name", "phone", "email", "source", "stage", "notes", "vacancy_id"):
+    for field in ("name", "phone", "email", "source", "stage", "notes", "vacancy_id", "age", "resume_url"):
         val = getattr(data, field)
         if val is not None: setattr(c, field, val)
     c.updated_at = datetime.utcnow()

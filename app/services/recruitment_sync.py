@@ -82,6 +82,7 @@ async def _sync_link(db, src, link, token: str) -> int:
                 source=src.source,
                 external_id=ext_id,
                 resume_url=item.get("resume_url", ""),
+                age=item.get("age"),
                 stage="отклик",
                 notes=item.get("notes", ""),
             )

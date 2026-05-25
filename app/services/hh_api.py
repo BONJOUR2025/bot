@@ -146,12 +146,24 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
             name = (f"{last} {first}".strip()) or neg.get("applicant_name") or "Без имени"
             resume_url = resume.get("alternate_url") or ""
 
+            age = None
+            birthday_str = resume.get("birthday")
+            if birthday_str:
+                try:
+                    from datetime import date as _date
+                    bday = _date.fromisoformat(str(birthday_str)[:10])
+                    today = _date.today()
+                    age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                except Exception:
+                    pass
+
             items.append({
                 "external_id": str(neg["id"]),
                 "name": name,
                 "phone": phone,
                 "email": email,
                 "resume_url": resume_url,
+                "age": age,
                 "notes": f"Отклик hh.ru: {resume_url}" if resume_url else "Отклик hh.ru",
             })
 
