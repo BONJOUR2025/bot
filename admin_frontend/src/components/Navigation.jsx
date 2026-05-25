@@ -32,6 +32,7 @@ const navStructure = [
       { to: '/admin/payouts-control', label: 'Контроль выплат', permission: 'payouts-control' },
       { to: '/admin/incentives', label: 'Штрафы и премии', permission: 'incentives' },
       { to: '/admin/cash-moves', label: 'Кассовые перемещения', permission: 'cash-moves' },
+      { to: '/admin/payment-calendar', label: 'Платежный календарь', permission: 'payment-calendar' },
     ],
   },
   {

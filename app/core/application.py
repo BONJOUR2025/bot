@@ -281,7 +281,6 @@ def register_jobs(app):
         await send_morning_briefing()
 
     from zoneinfo import ZoneInfo
-    # name= prevents duplicate registration if register_jobs is called more than once
     existing = [j for j in app.job_queue.jobs() if j.name == "morning_briefing"]
     if not existing:
         app.job_queue.run_daily(
@@ -289,3 +288,41 @@ def register_jobs(app):
             time(hour=10, minute=0, tzinfo=ZoneInfo("Europe/Moscow")),
             name="morning_briefing",
         )
+
+    async def payment_reminder(context: ContextTypes.DEFAULT_TYPE):
+        from ..data.payment_calendar_repository import get_payment_calendar_repository
+        import datetime as dt
+        today = dt.date.today()
+        repo = get_payment_calendar_repository()
+        year_month = today.strftime("%Y-%m")
+        records = repo.get_or_create_records_for_month(year_month)
+        for rec in records:
+            if rec["status"] != "pending":
+                continue
+            sched = rec.get("schedule") or {}
+            dom = sched.get("day_of_month")
+            if not dom:
+                continue
+            due = dt.date(today.year, today.month, min(dom, 28))
+            notify_before = sched.get("notify_days_before", 3)
+            if (due - today).days == notify_before:
+                tg_id = sched.get("responsible_tg_id") or ""
+                amount = sched.get("planned_amount", 0)
+                name = sched.get("name", "")
+                text = (
+                    f"🗓 Напоминание о платеже\n"
+                    f"📌 {name}\n"
+                    f"💰 {amount:,.0f} ₽\n"
+                    f"📅 Срок: {due.strftime('%d.%m.%Y')}"
+                )
+                targets = [tg_id] if tg_id else []
+                if ADMIN_CHAT_ID and str(ADMIN_CHAT_ID) not in targets:
+                    targets.append(str(ADMIN_CHAT_ID))
+                for chat_id in targets:
+                    if chat_id:
+                        try:
+                            await context.bot.send_message(chat_id=chat_id, text=text)
+                        except Exception:
+                            pass
+
+    app.job_queue.run_daily(payment_reminder, time(hour=9, minute=0))

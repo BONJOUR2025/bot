@@ -308,6 +308,19 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+
+    # Payment calendar
+    from .payment_calendar import create_payment_calendar_router
+    from app.models.payment_calendar import PaymentSchedule, PaymentRecord  # noqa: F401
+    from app.db.session import init_db as _init_db_pc
+    _init_db_pc()
+    app.include_router(
+        create_payment_calendar_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
+
     # System tools (status, backup, archive)
     from .system import create_system_router
 
