@@ -314,19 +314,30 @@ def fetch_works(
 
         out_clauses = []
         sub_clauses = []
+        in_clauses  = []
         next_day = (date_to + timedelta(days=1)) if date_to else None
 
         if date_from:
             out_clauses.append("user_session_actions.date_beg >= CAST(? AS DATE)")
             sub_clauses.append("usa2.date_beg >= CAST(? AS DATE)")
+            in_clauses.append("user_session_actions.date_beg  >= CAST(? AS DATE)")
         if date_to:
             out_clauses.append("user_session_actions.date_beg <  CAST(? AS DATE)")
             sub_clauses.append("usa2.date_beg <  CAST(? AS DATE)")
+            in_clauses.append("user_session_actions.date_beg  <  CAST(? AS DATE)")
 
         out_date = " AND ".join(out_clauses)
         sub_date = " AND ".join(sub_clauses)
+        in_date  = " AND ".join(in_clauses)
 
-        # Params in SQL order: out placeholders first, then subquery placeholders
+        # Params in SQL order:
+        # 1) OUT event date filter
+        # 2) EXISTS-subquery (IN events with OUT in range)
+        # 3) IN-only (в работе) event date filter
+        if date_from:
+            params.append(str(date_from))
+        if date_to:
+            params.append(str(next_day))
         if date_from:
             params.append(str(date_from))
         if date_to:
@@ -346,6 +357,13 @@ def fetch_works(
         AND usa2.work_place_id IN ({wp_out_csv})
         AND {sub_date}
     ))
+    OR
+    (user_session_actions.work_place_id IN ({wp_in_csv}) AND {in_date}
+     AND NOT EXISTS (
+       SELECT 1 FROM user_session_actions usa3
+       WHERE usa3.doc_order_services_id = doc_order_services.id
+         AND usa3.work_place_id IN ({wp_out_csv})
+     ))
   )"""
 
     con = fdb.connect(
