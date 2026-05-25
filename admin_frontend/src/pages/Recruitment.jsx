@@ -679,6 +679,8 @@ export default function Recruitment() {
   const [selectionMode,   setSelectionMode]   = useState(false);
   const [selectedIds,     setSelectedIds]     = useState(new Set());
   const [bulkLoading,     setBulkLoading]     = useState(false);
+  // hh.ru discard confirmation
+  const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null); // {candidateId, newStage}
 
   function toggleSelection(id) {
     setSelectedIds(prev => {
@@ -808,14 +810,23 @@ export default function Recruitment() {
     } catch (e) { setError(e.message); }
   }
 
-  function handleDrop(candidateId, newStage) {
+  function requestStageChange(candidateId, newStage) {
     const candidate = candidates.find(c => c.id === candidateId);
     if (!candidate || candidate.stage === newStage) return;
     if (newStage === 'собеседование') {
       setInterviewModal(candidate);
-    } else {
-      stageChange(candidateId, newStage);
+      return;
     }
+    // Warn before rejecting an hh.ru candidate — it sends them a notification
+    if (newStage === 'отказ' && candidate.source === 'hh') {
+      setHhDiscardConfirm({ candidateId, newStage });
+      return;
+    }
+    stageChange(candidateId, newStage);
+  }
+
+  function handleDrop(candidateId, newStage) {
+    requestStageChange(candidateId, newStage);
   }
 
   async function handleInterviewSave() {
@@ -1049,8 +1060,44 @@ export default function Recruitment() {
           onClose={() => setDetailModal(null)}
           onEdit={c => setCandModal({ candidate: c })}
           onDelete={deleteCandidate}
-          onStageChange={stageChange}
+          onStageChange={requestStageChange}
         />
+      )}
+
+      {hhDiscardConfirm && (
+        <div className="modal-backdrop" style={{ zIndex: 80 }}>
+          <div className="modal-card max-w-sm w-full">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <X size={18} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-base">Подтвердите отказ</h3>
+                <p className="text-sm text-[color:var(--color-muted-foreground)] mt-1">
+                  Кандидату будет отправлено автоматическое уведомление об отказе на hh.ru. Это действие нельзя отменить.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="btn btn-secondary text-sm"
+                onClick={() => setHhDiscardConfirm(null)}
+              >
+                Отмена
+              </button>
+              <button
+                className="btn text-sm bg-red-500 hover:bg-red-600 text-white border-red-500"
+                onClick={() => {
+                  const { candidateId, newStage } = hhDiscardConfirm;
+                  setHhDiscardConfirm(null);
+                  stageChange(candidateId, newStage);
+                }}
+              >
+                Отказать и уведомить
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {interviewModal && (

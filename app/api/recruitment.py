@@ -154,16 +154,34 @@ def create_candidate(data: CandidateCreate, db: Session = Depends(get_db)):
     return c.to_dict()
 
 @router.patch("/candidates/{candidate_id}")
-def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session = Depends(get_db)):
+async def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session = Depends(get_db)):
     c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not c: raise HTTPException(404, "Candidate not found")
     if data.stage is not None and data.stage not in VALID_STAGES:
         raise HTTPException(400, f"Invalid stage. Valid: {VALID_STAGES}")
+
+    old_stage = c.stage
+
     for field in ("name", "phone", "email", "source", "stage", "notes", "vacancy_id", "age", "resume_url", "photo_url"):
         val = getattr(data, field)
         if val is not None: setattr(c, field, val)
     c.updated_at = datetime.utcnow()
     db.commit(); db.refresh(c)
+
+    # Push stage change to hh.ru when applicable
+    if (
+        data.stage and data.stage != old_stage
+        and c.source == "hh"
+        and c.external_id
+    ):
+        src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
+        if src and src.access_token:
+            try:
+                from app.services import hh_api
+                await hh_api.sync_negotiation_stage(src.access_token, c.external_id, data.stage)
+            except Exception as exc:
+                log.warning("hh stage sync failed for candidate %s: %s", candidate_id, exc)
+
     return c.to_dict()
 
 @router.delete("/candidates/{candidate_id}")

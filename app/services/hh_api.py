@@ -273,3 +273,57 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
             "pages": data.get("pages", 1),
             "items": items,
         }
+
+
+# ── Stage synchronisation ──────────────────────────────────────────
+
+# Map internal stage keys → hh.ru employer action IDs
+_STAGE_TO_HH_ACTION: dict[str, str] = {
+    "отказ":         "discard",
+    "собеседование": "phone_interview",
+    "ждем":          "hold",
+}
+
+
+async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str) -> bool:
+    """
+    Push a stage change to hh.ru.
+    Returns True if the action was applied, False if not applicable / unavailable.
+    Never raises — logs warnings on failure.
+    """
+    action = _STAGE_TO_HH_ACTION.get(new_stage)
+    if not action:
+        return False
+
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        # 1. Fetch available actions for this negotiation
+        r = await client.get(
+            f"{HH_BASE}/negotiations/employer_actions/{neg_id}",
+            headers=_headers(access_token),
+        )
+        if r.status_code != 200:
+            log.debug("hh employer_actions %s → %s", neg_id, r.status_code)
+            return False
+
+        available = {a["id"] for a in r.json().get("actions", [])}
+        if action not in available:
+            log.info(
+                "hh action '%s' not available for neg %s (available: %s)",
+                action, neg_id, available,
+            )
+            return False
+
+        # 2. Perform the action
+        r2 = await client.put(
+            f"{HH_BASE}/negotiations/{action}/{neg_id}",
+            headers=_headers(access_token),
+        )
+        if r2.status_code not in (200, 201, 204):
+            log.warning(
+                "hh action '%s' neg %s → HTTP %s: %s",
+                action, neg_id, r2.status_code, r2.text[:200],
+            )
+            return False
+
+        log.info("hh action '%s' applied for neg %s", action, neg_id)
+        return True
