@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
+  CheckSquare, Square, ChevronDown,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -352,26 +353,42 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
 }
 
 // ── Candidate card ─────────────────────────────────────────────────
-function CandidateCard({ c, onClick, onDragStart, onDragEnd }) {
+function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, selected, onToggle }) {
+  function handleClick(e) {
+    if (selectionMode) { onToggle(c.id); return; }
+    onClick(c);
+  }
   return (
     <div
-      draggable
+      draggable={!selectionMode}
       onDragStart={e => {
         e.dataTransfer.setData('text/plain', String(c.id));
         e.dataTransfer.effectAllowed = 'move';
         onDragStart?.(c.id);
       }}
       onDragEnd={() => onDragEnd?.()}
-      onClick={() => onClick(c)}
-      className="w-full text-left bg-white border border-[color:var(--color-border)] rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:border-[color:var(--color-primary)]/40 transition-all group cursor-grab active:cursor-grabbing select-none"
+      onClick={handleClick}
+      className={`w-full text-left border rounded-xl px-3 py-2.5 shadow-sm transition-all group select-none
+        ${selectionMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing hover:shadow-md'}
+        ${selected
+          ? 'bg-[color:var(--color-primary)]/8 border-[color:var(--color-primary)]/50'
+          : 'bg-white border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]/40'
+        }`}
     >
       <div className="flex items-start justify-between gap-1">
-        <span className="text-sm font-medium leading-snug group-hover:text-[color:var(--color-primary)] transition-colors">
-          {c.name}
-          {c.age != null && (
-            <span className="font-normal text-[color:var(--color-muted-foreground)] ml-1">{c.age} л.</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {selectionMode && (
+            <span className={`flex-shrink-0 mt-0.5 ${selected ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
+              {selected ? <CheckSquare size={14} /> : <Square size={14} />}
+            </span>
           )}
-        </span>
+          <span className="text-sm font-medium leading-snug group-hover:text-[color:var(--color-primary)] transition-colors">
+            {c.name}
+            {c.age != null && (
+              <span className="font-normal text-[color:var(--color-muted-foreground)] ml-1">{c.age} л.</span>
+            )}
+          </span>
+        </div>
         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${SRC_BADGE[c.source] || SRC_BADGE.other}`}>
           {srcBadgeLabel(c.source)}
         </span>
@@ -390,7 +407,7 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd }) {
 }
 
 // ── Kanban board (desktop) ─────────────────────────────────────────
-function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop }) {
+function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMode, selectedIds, onToggle }) {
   const [dragOver, setDragOver] = useState(null);
   const [dragging, setDragging] = useState(null);
 
@@ -401,27 +418,39 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop }) {
           const cards = candidates.filter(c => c.stage === stage.key);
           const isTarget = dragOver === stage.key;
           const isDragSrc = dragging != null && candidates.find(c => c.id === dragging)?.stage === stage.key;
+          const colSelected = cards.filter(c => selectedIds.has(c.id)).length;
           return (
             <div key={stage.key} className="w-[230px] flex flex-col">
               <div className="flex items-center justify-between mb-3 px-0.5">
                 <div className="flex items-center gap-2">
+                  {selectionMode && cards.length > 0 && (
+                    <button
+                      onClick={() => cards.forEach(c => { if (!selectedIds.has(c.id)) onToggle(c.id); })}
+                      className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]"
+                      title="Выбрать всех в колонке"
+                    >
+                      {colSelected === cards.length ? <CheckSquare size={13} className="text-[color:var(--color-primary)]" /> : <Square size={13} />}
+                    </button>
+                  )}
                   <span className={`w-2 h-2 rounded-full ${stage.dot}`} />
                   <span className="text-sm font-semibold">{stage.label}</span>
                   <span className="text-[10px] text-[color:var(--color-muted-foreground)] bg-[color:var(--color-muted)]/60 rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
                     {cards.length}
                   </span>
                 </div>
-                <button
-                  onClick={() => onAddClick(stage.key)}
-                  title={`Добавить в «${stage.label}»`}
-                  className="w-6 h-6 flex items-center justify-center rounded-lg text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-muted)] hover:text-[color:var(--color-foreground)] transition-colors"
-                >
-                  <Plus size={14} />
-                </button>
+                {!selectionMode && (
+                  <button
+                    onClick={() => onAddClick(stage.key)}
+                    title={`Добавить в «${stage.label}»`}
+                    className="w-6 h-6 flex items-center justify-center rounded-lg text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-muted)] hover:text-[color:var(--color-foreground)] transition-colors"
+                  >
+                    <Plus size={14} />
+                  </button>
+                )}
               </div>
 
               <div
-                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(stage.key); }}
+                onDragOver={e => { if (selectionMode) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(stage.key); }}
                 onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null); }}
                 onDrop={e => {
                   e.preventDefault();
@@ -440,6 +469,9 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop }) {
                     onClick={onCardClick}
                     onDragStart={id => setDragging(id)}
                     onDragEnd={() => { setDragging(null); setDragOver(null); }}
+                    selectionMode={selectionMode}
+                    selected={selectedIds.has(c.id)}
+                    onToggle={onToggle}
                   />
                 ))}
                 {cards.length === 0 && (
@@ -467,7 +499,7 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop }) {
 }
 
 // ── Mobile board (tabs + list) ─────────────────────────────────────
-function MobileBoard({ candidates, onCardClick, onAddClick }) {
+function MobileBoard({ candidates, onCardClick, onAddClick, selectionMode, selectedIds, onToggle }) {
   const [activeStage, setActiveStage] = useState('отклик');
   const stage = stageOf(activeStage);
   const filtered = candidates.filter(c => c.stage === activeStage);
@@ -496,7 +528,12 @@ function MobileBoard({ candidates, onCardClick, onAddClick }) {
       </div>
 
       <div className="space-y-2">
-        {filtered.map(c => <CandidateCard key={c.id} c={c} onClick={onCardClick} />)}
+        {filtered.map(c => (
+          <CandidateCard
+            key={c.id} c={c} onClick={onCardClick}
+            selectionMode={selectionMode} selected={selectedIds.has(c.id)} onToggle={onToggle}
+          />
+        ))}
         {filtered.length === 0 && (
           <div className="text-center py-8 text-sm text-[color:var(--color-muted-foreground)] italic">
             Нет кандидатов в этапе «{stage.label}»
@@ -504,8 +541,67 @@ function MobileBoard({ candidates, onCardClick, onAddClick }) {
         )}
       </div>
 
-      <button onClick={() => onAddClick(activeStage)} className="w-full btn btn-secondary text-sm flex items-center justify-center gap-2">
-        <Plus size={16} /> Добавить кандидата
+      {!selectionMode && (
+        <button onClick={() => onAddClick(activeStage)} className="w-full btn btn-secondary text-sm flex items-center justify-center gap-2">
+          <Plus size={16} /> Добавить кандидата
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Bulk actions bar ───────────────────────────────────────────────
+function BulkActionsBar({ count, total, onSelectAll, onClear, onMoveStage, onDelete, loading }) {
+  const [stageOpen, setStageOpen] = useState(false);
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-3 text-sm">
+      <span className="font-semibold text-white/90 mr-1">{count} выбрано</span>
+      <button
+        onClick={onSelectAll}
+        className="text-xs text-white/60 hover:text-white px-2 py-1 rounded-lg hover:bg-white/10 transition-colors"
+      >
+        Все {total}
+      </button>
+      <div className="w-px h-5 bg-white/20" />
+
+      {/* Move to stage */}
+      <div className="relative">
+        <button
+          onClick={() => setStageOpen(o => !o)}
+          disabled={loading}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-50"
+        >
+          Перенести <ChevronDown size={13} />
+        </button>
+        {stageOpen && (
+          <div className="absolute bottom-full mb-2 left-0 bg-white text-gray-800 rounded-xl shadow-xl border border-gray-100 overflow-hidden min-w-[160px]">
+            {STAGES.map(s => (
+              <button
+                key={s.key}
+                onClick={() => { setStageOpen(false); onMoveStage(s.key); }}
+                className={`w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 transition-colors`}
+              >
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={onDelete}
+        disabled={loading}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-500/80 hover:bg-red-500 transition-colors disabled:opacity-50"
+      >
+        <Trash2 size={13} /> Удалить
+      </button>
+      <button
+        onClick={onClear}
+        className="ml-1 w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+        title="Снять выделение"
+      >
+        <X size={15} />
       </button>
     </div>
   );
@@ -524,10 +620,54 @@ export default function Recruitment() {
   const [vacancyModal,    setVacancyModal]    = useState(null);
   const [candModal,       setCandModal]       = useState(null);
   const [detailModal,     setDetailModal]     = useState(null);
-  const [interviewModal,  setInterviewModal]  = useState(null); // candidate
+  const [interviewModal,  setInterviewModal]  = useState(null);
   const [showVacList,     setShowVacList]     = useState(!isMobile);
   const [showIntegrations,setShowIntegrations]= useState(false);
   const [hhToast,         setHhToast]         = useState('');
+  // bulk selection
+  const [selectionMode,   setSelectionMode]   = useState(false);
+  const [selectedIds,     setSelectedIds]     = useState(new Set());
+  const [bulkLoading,     setBulkLoading]     = useState(false);
+
+  function toggleSelection(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function exitSelection() { setSelectionMode(false); setSelectedIds(new Set()); }
+
+  async function bulkMoveStage(newStage) {
+    if (!selectedIds.size) return;
+    if (newStage === 'собеседование') {
+      // For bulk move to interview, skip the interview form and just move
+      // (form is only shown for single-card drag)
+    }
+    setBulkLoading(true);
+    try {
+      await Promise.all([...selectedIds].map(id =>
+        api.patch(`/recruitment/candidates/${id}`, { stage: newStage })
+      ));
+      await loadCandidates();
+      exitSelection();
+    } catch (e) { setError(e.message); }
+    finally { setBulkLoading(false); }
+  }
+
+  async function bulkDelete() {
+    if (!selectedIds.size) return;
+    if (!window.confirm(`Удалить ${selectedIds.size} кандидатов?`)) return;
+    setBulkLoading(true);
+    try {
+      await Promise.all([...selectedIds].map(id =>
+        api.delete(`/recruitment/candidates/${id}`)
+      ));
+      await loadCandidates();
+      exitSelection();
+    } catch (e) { setError(e.message); }
+    finally { setBulkLoading(false); }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -779,11 +919,24 @@ export default function Recruitment() {
                   {selected.is_open ? '● Открыта' : '○ Закрыта'}
                 </button>
                 <button
-                  onClick={() => setCandModal({ stage: 'отклик' })}
-                  className="btn btn-primary text-sm flex items-center gap-1.5"
+                  onClick={() => { if (selectionMode) exitSelection(); else setSelectionMode(true); }}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors flex items-center gap-1 ${
+                    selectionMode
+                      ? 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
                 >
-                  <Plus size={15} /> Кандидат
+                  <CheckSquare size={13} />
+                  {selectionMode ? 'Отменить' : 'Выбрать'}
                 </button>
+                {!selectionMode && (
+                  <button
+                    onClick={() => setCandModal({ stage: 'отклик' })}
+                    className="btn btn-primary text-sm flex items-center gap-1.5"
+                  >
+                    <Plus size={15} /> Кандидат
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -799,8 +952,11 @@ export default function Recruitment() {
             ) : isMobile ? (
               <MobileBoard
                 candidates={candidates}
-                onCardClick={c => setDetailModal(c)}
+                onCardClick={c => { if (selectionMode) toggleSelection(c.id); else setDetailModal(c); }}
                 onAddClick={stage => setCandModal({ stage })}
+                selectionMode={selectionMode}
+                selectedIds={selectedIds}
+                onToggle={toggleSelection}
               />
             ) : (
               <KanbanBoard
@@ -808,6 +964,9 @@ export default function Recruitment() {
                 onCardClick={c => setDetailModal(c)}
                 onAddClick={stage => setCandModal({ stage })}
                 onDrop={handleDrop}
+                selectionMode={selectionMode}
+                selectedIds={selectedIds}
+                onToggle={toggleSelection}
               />
             )}
           </div>
@@ -855,6 +1014,18 @@ export default function Recruitment() {
         <IntegrationsModal
           vacancies={vacancies}
           onClose={() => { setShowIntegrations(false); loadCandidates(); }}
+        />
+      )}
+
+      {selectionMode && selectedIds.size > 0 && (
+        <BulkActionsBar
+          count={selectedIds.size}
+          total={candidates.length}
+          onSelectAll={() => setSelectedIds(new Set(candidates.map(c => c.id)))}
+          onClear={exitSelection}
+          onMoveStage={bulkMoveStage}
+          onDelete={bulkDelete}
+          loading={bulkLoading}
         />
       )}
     </div>
