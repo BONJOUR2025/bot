@@ -204,15 +204,25 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                         log.debug("hh resume %s → %s", item["resume_id"], r2.status_code)
                         return
                     full = r2.json()
-                    contact = full.get("contact") or {}
-                    phones = contact.get("phone") or []
-                    if phones:
-                        p = phones[0]
-                        item["phone"] = (
-                            p.get("formatted")
-                            or f"+{p.get('country','')}{p.get('city','')}{p.get('number','')}"
-                        ).strip()
-                    item["email"] = contact.get("email") or ""
+                    # hh.ru returns contact as a list:
+                    # [{"type": {"id": "cell"}, "value": {"formatted": "+7..."}, ...}, ...]
+                    contacts_list = full.get("contact") or []
+                    if isinstance(contacts_list, dict):
+                        # Fallback in case structure ever changes
+                        contacts_list = [contacts_list]
+                    for c in contacts_list:
+                        ctype = (c.get("type") or {}).get("id", "")
+                        val = c.get("value") or {}
+                        if ctype in ("cell", "home", "work") and not item["phone"]:
+                            if isinstance(val, dict):
+                                item["phone"] = (
+                                    val.get("formatted")
+                                    or f"+{val.get('country','')}{val.get('city','')}{val.get('number','')}".strip()
+                                )
+                            elif isinstance(val, str):
+                                item["phone"] = val
+                        elif ctype == "email" and not item["email"]:
+                            item["email"] = val if isinstance(val, str) else ""
                     # birthday may be present in full resume
                     if item["age"] is None:
                         bd = full.get("birthday")
