@@ -188,6 +188,7 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                 "phone": "",
                 "email": "",
                 "photo_url": photo_url,
+                "applied_at": neg.get("created_at") or "",
             })
 
         # ── Enrich: fetch full resume for contacts ─────────────────
@@ -263,6 +264,7 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                 "resume_url": it["resume_url"],
                 "photo_url": it["photo_url"],
                 "age": it["age"],
+                "applied_at": it["applied_at"],
                 "notes": f"Отклик hh.ru: {it['resume_url']}" if it["resume_url"] else "Отклик hh.ru",
             }
             for it in raw_items

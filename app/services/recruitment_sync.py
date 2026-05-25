@@ -74,6 +74,14 @@ async def _sync_link(db, src, link, token: str) -> int:
             Candidate.external_id == ext_id,
         ).first()
         if not exists:
+            applied_at = None
+            raw_applied = item.get("applied_at")
+            if raw_applied:
+                try:
+                    applied_at = datetime.fromisoformat(raw_applied.replace("Z", "+00:00"))
+                except Exception:
+                    pass
+
             c = Candidate(
                 vacancy_id=link.vacancy_id,
                 name=item["name"],
@@ -86,6 +94,7 @@ async def _sync_link(db, src, link, token: str) -> int:
                 age=item.get("age"),
                 stage="отклик",
                 notes=item.get("notes", ""),
+                created_at=applied_at or datetime.utcnow(),
             )
             db.add(c)
             count += 1
