@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
@@ -25,8 +25,7 @@ const SOURCES = [
 const stageOf   = (key) => STAGES.find(s => s.key === key) || STAGES[0];
 const srcLabel  = (key) => SOURCES.find(s => s.key === key)?.label || key;
 const fmtDate   = (iso) => iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '';
-const tgLink    = (phone) => { const d = phone.replace(/\D/g, ''); return d ? `https://t.me/+${d}` : null; };
-const ageLabel  = (age) => age != null ? `${age} лет` : null;
+const tgLink    = (phone) => { const d = (phone || '').replace(/\D/g, ''); return d.length >= 7 ? `https://t.me/+${d}` : null; };
 
 const SRC_BADGE = {
   hh:     'bg-red-100 text-red-600',
@@ -174,16 +173,98 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
   );
 }
 
+// ── Interview modal ────────────────────────────────────────────────
+function InterviewModal({ candidate, onSave, onClose }) {
+  const today = new Date().toISOString().split('T')[0];
+  const [form, setForm] = useState({ date: today, time: '', location: '', note: '' });
+  const [saving, setSaving] = useState(false);
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.patch(`/recruitment/candidates/${candidate.id}`, { stage: 'собеседование' });
+
+      const descParts = [];
+      if (form.location) descParts.push(`📍 Место: ${form.location}`);
+      if (form.note)     descParts.push(form.note);
+
+      await api.post('/tasks', {
+        title: `Собеседование: ${candidate.name}`,
+        description: descParts.join('\n') || null,
+        due_date: form.date || null,
+        due_time: form.time || null,
+        priority: 'high',
+        category: 'Подбор персонала',
+        status: 'todo',
+      });
+
+      onSave();
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" style={{ zIndex: 70 }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-card max-w-sm w-full">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-base font-semibold">Назначить собеседование</h3>
+          <button onClick={onClose} className="text-xl text-[color:var(--color-muted-foreground)] leading-none">&times;</button>
+        </div>
+        <p className="text-sm text-[color:var(--color-muted-foreground)] mb-4">{candidate.name}</p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Дата</label>
+              <input type="date" className="input w-full" value={form.date} onChange={set('date')} />
+            </div>
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Время</label>
+              <input type="time" className="input w-full" value={form.time} onChange={set('time')} />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Место</label>
+            <input className="input w-full" value={form.location} onChange={set('location')} placeholder="Офис, адрес или ссылка на звонок" />
+          </div>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Примечание</label>
+            <textarea className="input w-full min-h-[60px] resize-none" value={form.note} onChange={set('note')} placeholder="Что взять с собой, вопросы..." />
+          </div>
+          <div className="rounded-lg bg-violet-50 border border-violet-100 px-3 py-2 text-xs text-violet-700 flex items-center gap-1.5">
+            <span>📋</span> Задача автоматически создастся в разделе «Задачи»
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="btn btn-secondary">Отмена</button>
+          <button onClick={save} disabled={saving} className="btn btn-primary">
+            {saving ? 'Сохранение...' : 'Назначить'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Candidate detail modal ─────────────────────────────────────────
 function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }) {
   const stage = stageOf(candidate.stage);
+  const tg = tgLink(candidate.phone);
 
   return (
     <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-sm w-full flex flex-col overflow-hidden">
         <div className="flex items-start justify-between mb-4">
           <div className="min-w-0">
-            <h3 className="text-base font-semibold">{candidate.name}</h3>
+            <h3 className="text-base font-semibold">
+              {candidate.name}
+              {candidate.age != null && (
+                <span className="font-normal text-[color:var(--color-muted-foreground)] text-sm ml-1.5">{candidate.age} лет</span>
+              )}
+            </h3>
             <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full mt-1 ${stage.color}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${stage.dot}`} />
               {stage.label}
@@ -197,15 +278,10 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
             <div className="flex items-center gap-2">
               <Phone size={14} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
               <a href={`tel:${candidate.phone}`} className="text-[color:var(--color-primary)] hover:underline flex-1">{candidate.phone}</a>
-              {tgLink(candidate.phone) && (
-                <a
-                  href={tgLink(candidate.phone)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Открыть чат в Telegram"
+              {tg && (
+                <a href={tg} target="_blank" rel="noopener noreferrer"
                   onClick={e => e.stopPropagation()}
-                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-600 hover:bg-sky-200 transition-colors flex-shrink-0"
-                >
+                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-600 hover:bg-sky-200 transition-colors flex-shrink-0">
                   <Send size={10} /> TG
                 </a>
               )}
@@ -220,12 +296,8 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
           {candidate.resume_url && (
             <div className="flex items-center gap-2">
               <Link size={14} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-              <a
-                href={candidate.resume_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[color:var(--color-primary)] hover:underline truncate"
-              >
+              <a href={candidate.resume_url} target="_blank" rel="noopener noreferrer"
+                className="text-[color:var(--color-primary)] hover:underline truncate">
                 Открыть резюме ↗
               </a>
             </div>
@@ -235,12 +307,6 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
             <span>{srcLabel(candidate.source)}</span>
             <span className="opacity-50">·</span>
             <span>{fmtDate(candidate.created_at)}</span>
-            {candidate.age != null && (
-              <>
-                <span className="opacity-50">·</span>
-                <span>{candidate.age} лет</span>
-              </>
-            )}
           </div>
 
           {candidate.notes && (
@@ -285,16 +351,26 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
   );
 }
 
-// ── Kanban card ────────────────────────────────────────────────────
-function CandidateCard({ c, onClick }) {
+// ── Candidate card ─────────────────────────────────────────────────
+function CandidateCard({ c, onClick, onDragStart, onDragEnd }) {
   return (
-    <button
+    <div
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('text/plain', String(c.id));
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStart?.(c.id);
+      }}
+      onDragEnd={() => onDragEnd?.()}
       onClick={() => onClick(c)}
-      className="w-full text-left bg-white border border-[color:var(--color-border)] rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:border-[color:var(--color-primary)]/40 transition-all group"
+      className="w-full text-left bg-white border border-[color:var(--color-border)] rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:border-[color:var(--color-primary)]/40 transition-all group cursor-grab active:cursor-grabbing select-none"
     >
       <div className="flex items-start justify-between gap-1">
         <span className="text-sm font-medium leading-snug group-hover:text-[color:var(--color-primary)] transition-colors">
-          {c.name}{c.age != null && <span className="font-normal text-[color:var(--color-muted-foreground)]">, {c.age} л.</span>}
+          {c.name}
+          {c.age != null && (
+            <span className="font-normal text-[color:var(--color-muted-foreground)] ml-1">{c.age} л.</span>
+          )}
         </span>
         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${SRC_BADGE[c.source] || SRC_BADGE.other}`}>
           {srcBadgeLabel(c.source)}
@@ -309,17 +385,22 @@ function CandidateCard({ c, onClick }) {
         <p className="mt-1.5 text-xs text-[color:var(--color-muted-foreground)] line-clamp-2">{c.notes}</p>
       )}
       <div className="mt-1.5 text-[10px] text-[color:var(--color-muted-foreground)] opacity-60">{fmtDate(c.created_at)}</div>
-    </button>
+    </div>
   );
 }
 
 // ── Kanban board (desktop) ─────────────────────────────────────────
-function KanbanBoard({ candidates, onCardClick, onAddClick }) {
+function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop }) {
+  const [dragOver, setDragOver] = useState(null);
+  const [dragging, setDragging] = useState(null);
+
   return (
     <div className="overflow-x-auto pb-4">
       <div className="flex gap-4 min-w-max">
         {STAGES.map(stage => {
           const cards = candidates.filter(c => c.stage === stage.key);
+          const isTarget = dragOver === stage.key;
+          const isDragSrc = dragging != null && candidates.find(c => c.id === dragging)?.stage === stage.key;
           return (
             <div key={stage.key} className="w-[230px] flex flex-col">
               <div className="flex items-center justify-between mb-3 px-0.5">
@@ -339,15 +420,42 @@ function KanbanBoard({ candidates, onCardClick, onAddClick }) {
                 </button>
               </div>
 
-              <div className={`flex-1 rounded-xl border-t-2 ${stage.border} bg-[color:var(--color-muted)]/20 p-2 flex flex-col gap-2 min-h-[120px]`}>
-                {cards.map(c => <CandidateCard key={c.id} c={c} onClick={onCardClick} />)}
+              <div
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(stage.key); }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null); }}
+                onDrop={e => {
+                  e.preventDefault();
+                  const id = parseInt(e.dataTransfer.getData('text/plain'));
+                  if (id) onDrop(id, stage.key);
+                  setDragOver(null);
+                }}
+                className={`flex-1 rounded-xl border-t-2 ${stage.border} bg-[color:var(--color-muted)]/20 p-2 flex flex-col gap-2 min-h-[120px] transition-all ${
+                  isTarget && !isDragSrc ? 'ring-2 ring-inset ring-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/5' : ''
+                }`}
+              >
+                {cards.map(c => (
+                  <CandidateCard
+                    key={c.id}
+                    c={c}
+                    onClick={onCardClick}
+                    onDragStart={id => setDragging(id)}
+                    onDragEnd={() => { setDragging(null); setDragOver(null); }}
+                  />
+                ))}
                 {cards.length === 0 && (
                   <button
                     onClick={() => onAddClick(stage.key)}
-                    className="flex-1 flex items-center justify-center text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)] cursor-pointer transition-colors rounded-lg py-4"
+                    className={`flex-1 flex items-center justify-center text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)] cursor-pointer transition-colors rounded-lg py-4 ${
+                      isTarget ? 'text-[color:var(--color-primary)]' : ''
+                    }`}
                   >
-                    + добавить
+                    {isTarget ? '↓ Перетащить сюда' : '+ добавить'}
                   </button>
+                )}
+                {cards.length > 0 && isTarget && !isDragSrc && (
+                  <div className="h-10 rounded-lg border-2 border-dashed border-[color:var(--color-primary)]/40 flex items-center justify-center text-xs text-[color:var(--color-primary)]/60">
+                    ↓ Сюда
+                  </div>
                 )}
               </div>
             </div>
@@ -406,21 +514,21 @@ function MobileBoard({ candidates, onCardClick, onAddClick }) {
 // ── Main page ──────────────────────────────────────────────────────
 export default function Recruitment() {
   const { isMobile } = useViewport();
-  const [vacancies,    setVacancies]    = useState([]);
-  const [selectedId,   setSelectedId]   = useState(null);
-  const [candidates,   setCandidates]   = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [cLoading,     setCLoading]     = useState(false);
-  const [showClosed,   setShowClosed]   = useState(false);
-  const [error,        setError]        = useState(null);
-  const [vacancyModal, setVacancyModal] = useState(null); // null | 'new' | vacancy
-  const [candModal,    setCandModal]    = useState(null); // null | { candidate?, stage }
-  const [detailModal,  setDetailModal]  = useState(null); // candidate
-  const [showVacList,  setShowVacList]  = useState(!isMobile);
-  const [showIntegrations, setShowIntegrations] = useState(false);
-  const [hhToast, setHhToast] = useState('');
+  const [vacancies,       setVacancies]       = useState([]);
+  const [selectedId,      setSelectedId]      = useState(null);
+  const [candidates,      setCandidates]      = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [cLoading,        setCLoading]        = useState(false);
+  const [showClosed,      setShowClosed]      = useState(false);
+  const [error,           setError]           = useState(null);
+  const [vacancyModal,    setVacancyModal]    = useState(null);
+  const [candModal,       setCandModal]       = useState(null);
+  const [detailModal,     setDetailModal]     = useState(null);
+  const [interviewModal,  setInterviewModal]  = useState(null); // candidate
+  const [showVacList,     setShowVacList]     = useState(!isMobile);
+  const [showIntegrations,setShowIntegrations]= useState(false);
+  const [hhToast,         setHhToast]         = useState('');
 
-  // Auto-open integrations modal when returning from hh.ru OAuth
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('hh_connected') === '1') {
@@ -507,6 +615,21 @@ export default function Recruitment() {
       const res = await api.patch(`/recruitment/candidates/${candidateId}`, { stage: newStage });
       setCandidates(prev => prev.map(c => c.id === candidateId ? res.data : c));
     } catch (e) { setError(e.message); }
+  }
+
+  function handleDrop(candidateId, newStage) {
+    const candidate = candidates.find(c => c.id === candidateId);
+    if (!candidate || candidate.stage === newStage) return;
+    if (newStage === 'собеседование') {
+      setInterviewModal(candidate);
+    } else {
+      stageChange(candidateId, newStage);
+    }
+  }
+
+  async function handleInterviewSave() {
+    setInterviewModal(null);
+    await loadCandidates();
   }
 
   const selected = vacancies.find(v => v.id === selectedId);
@@ -636,7 +759,6 @@ export default function Recruitment() {
 
         {/* Right — kanban / board */}
         <div className="flex-1 min-w-0">
-          {/* Board header */}
           {selected && (
             <div className="px-5 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between gap-3 flex-wrap">
               <div className="min-w-0">
@@ -685,6 +807,7 @@ export default function Recruitment() {
                 candidates={candidates}
                 onCardClick={c => setDetailModal(c)}
                 onAddClick={stage => setCandModal({ stage })}
+                onDrop={handleDrop}
               />
             )}
           </div>
@@ -717,6 +840,14 @@ export default function Recruitment() {
           onEdit={c => setCandModal({ candidate: c })}
           onDelete={deleteCandidate}
           onStageChange={stageChange}
+        />
+      )}
+
+      {interviewModal && (
+        <InterviewModal
+          candidate={interviewModal}
+          onSave={handleInterviewSave}
+          onClose={() => setInterviewModal(null)}
         />
       )}
 

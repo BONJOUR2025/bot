@@ -32,6 +32,8 @@ def _run_migrations() -> None:
     with engine.connect() as conn:
         for stmt in [
             "ALTER TABLE candidates ADD COLUMN age INTEGER",
+            "ALTER TABLE candidates ADD COLUMN external_id TEXT",
+            "ALTER TABLE candidates ADD COLUMN resume_url TEXT DEFAULT ''",
         ]:
             try:
                 conn.execute(text(stmt))
