@@ -119,7 +119,7 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
             "page": page,
         }
         r = await client.get(
-            f"{HH_BASE}/negotiations/active",
+            f"{HH_BASE}/negotiations/response",
             headers=_headers(access_token),
             params=params,
         )
@@ -141,12 +141,14 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                 phone = f"+{p.get('country','')}{p.get('city','')}{p.get('number','')}"
 
             email = contact.get("email") or ""
-            name = neg.get("applicant_name") or resume.get("last_name", "")
+            first = resume.get("first_name") or ""
+            last = resume.get("last_name") or ""
+            name = (f"{last} {first}".strip()) or neg.get("applicant_name") or "Без имени"
             resume_url = resume.get("alternate_url") or ""
 
             items.append({
                 "external_id": str(neg["id"]),
-                "name": name or "Без имени",
+                "name": name,
                 "phone": phone,
                 "email": email,
                 "resume_url": resume_url,
