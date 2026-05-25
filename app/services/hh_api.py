@@ -174,6 +174,10 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
             resume_id = resume.get("id") or ""
             can_view = bool(resume.get("can_view_full_info"))
 
+            # Photo available in list response
+            photo_obj = resume.get("photo") or {}
+            photo_url = photo_obj.get("medium") or photo_obj.get("small") or ""
+
             raw_items.append({
                 "neg_id": str(neg["id"]),
                 "name": name,
@@ -183,6 +187,7 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                 "age": age,
                 "phone": "",
                 "email": "",
+                "photo_url": photo_url,
             })
 
         # ── Enrich: fetch full resume for contacts ─────────────────
@@ -256,6 +261,7 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                 "phone": it["phone"],
                 "email": it["email"],
                 "resume_url": it["resume_url"],
+                "photo_url": it["photo_url"],
                 "age": it["age"],
                 "notes": f"Отклик hh.ru: {it['resume_url']}" if it["resume_url"] else "Отклик hh.ru",
             }

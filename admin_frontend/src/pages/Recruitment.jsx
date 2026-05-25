@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
-  CheckSquare, Square, ChevronDown,
+  CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
+  ArrowRight, Clock,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -254,83 +255,131 @@ function InterviewModal({ candidate, onSave, onClose }) {
 function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }) {
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
+  const srcIdx = STAGES.findIndex(s => s.key === candidate.stage);
 
   return (
     <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-card max-w-sm w-full flex flex-col overflow-hidden">
-        <div className="flex items-start justify-between mb-4">
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold">
-              {candidate.name}
-              {candidate.age != null && (
-                <span className="font-normal text-[color:var(--color-muted-foreground)] text-sm ml-1.5">{candidate.age} лет</span>
-              )}
-            </h3>
-            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full mt-1 ${stage.color}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${stage.dot}`} />
-              {stage.label}
-            </span>
+      <div className="modal-card max-w-lg w-full flex flex-col overflow-hidden p-0">
+
+        {/* ── Header with photo ── */}
+        <div className="relative flex items-end gap-4 px-6 pt-6 pb-4 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/20">
+          {/* Avatar / photo */}
+          <div className="flex-shrink-0">
+            {candidate.photo_url ? (
+              <img
+                src={candidate.photo_url}
+                alt={candidate.name}
+                className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md"
+                onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+              />
+            ) : null}
+            <div className={`w-16 h-16 rounded-2xl border-2 border-white shadow-md bg-[color:var(--color-muted)] items-center justify-center text-[color:var(--color-muted-foreground)] ${candidate.photo_url ? 'hidden' : 'flex'}`}>
+              <User size={28} />
+            </div>
           </div>
-          <button onClick={onClose} className="text-xl text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] leading-none ml-3">&times;</button>
+
+          {/* Name + stage */}
+          <div className="flex-1 min-w-0 pb-0.5">
+            <h2 className="text-lg font-semibold leading-tight truncate">
+              {candidate.name}
+            </h2>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {candidate.age != null && (
+                <span className="text-sm text-[color:var(--color-muted-foreground)]">{candidate.age} лет</span>
+              )}
+              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${stage.color}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${stage.dot}`} />
+                {stage.label}
+              </span>
+              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${SRC_BADGE[candidate.source] || SRC_BADGE.other}`}>
+                {srcBadgeLabel(candidate.source)}
+              </span>
+            </div>
+          </div>
+
+          <button onClick={onClose}
+            className="absolute top-4 right-4 w-7 h-7 flex items-center justify-center rounded-full hover:bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] transition-colors">
+            <X size={16} />
+          </button>
         </div>
 
-        <div className="space-y-2.5 flex-1 overflow-y-auto text-sm">
-          {candidate.phone && (
-            <div className="flex items-center gap-2">
-              <Phone size={14} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-              <a href={`tel:${candidate.phone}`} className="text-[color:var(--color-primary)] hover:underline flex-1">{candidate.phone}</a>
-              {tg && (
-                <a href={tg} target="_blank" rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-600 hover:bg-sky-200 transition-colors flex-shrink-0">
-                  <Send size={10} /> TG
-                </a>
+        {/* ── Body ── */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+
+          {/* Contacts block */}
+          {(candidate.phone || candidate.email) && (
+            <div className="rounded-xl border border-[color:var(--color-border)] divide-y divide-[color:var(--color-border)] overflow-hidden">
+              {candidate.phone && (
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <Phone size={15} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
+                  <a href={`tel:${candidate.phone}`}
+                    className="flex-1 text-sm font-medium text-[color:var(--color-foreground)] hover:text-[color:var(--color-primary)] transition-colors">
+                    {candidate.phone}
+                  </a>
+                  {tg && (
+                    <a href={tg} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100 border border-sky-200 transition-colors flex-shrink-0">
+                      <MessageCircle size={12} /> Написать в TG
+                    </a>
+                  )}
+                </div>
+              )}
+              {candidate.email && (
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <Mail size={15} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
+                  <a href={`mailto:${candidate.email}`}
+                    className="flex-1 text-sm font-medium text-[color:var(--color-foreground)] hover:text-[color:var(--color-primary)] transition-colors truncate">
+                    {candidate.email}
+                  </a>
+                </div>
               )}
             </div>
           )}
-          {candidate.email && (
-            <div className="flex items-center gap-2">
-              <Mail size={14} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-              <a href={`mailto:${candidate.email}`} className="text-[color:var(--color-primary)] hover:underline">{candidate.email}</a>
-            </div>
-          )}
+
+          {/* Resume link */}
           {candidate.resume_url && (
-            <div className="flex items-center gap-2">
-              <Link size={14} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-              <a href={candidate.resume_url} target="_blank" rel="noopener noreferrer"
-                className="text-[color:var(--color-primary)] hover:underline truncate">
-                Открыть резюме ↗
-              </a>
-            </div>
+            <a href={candidate.resume_url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]/40 hover:bg-[color:var(--color-primary)]/4 transition-all group">
+              <FileText size={15} className="text-[color:var(--color-muted-foreground)] flex-shrink-0 group-hover:text-[color:var(--color-primary)]" />
+              <span className="flex-1 text-sm font-medium text-[color:var(--color-foreground)] group-hover:text-[color:var(--color-primary)]">
+                Открыть резюме
+              </span>
+              <ExternalLink size={13} className="text-[color:var(--color-muted-foreground)] group-hover:text-[color:var(--color-primary)]" />
+            </a>
           )}
-          <div className="flex items-center gap-2 text-[color:var(--color-muted-foreground)]">
-            <ExternalLink size={14} className="flex-shrink-0" />
-            <span>{srcLabel(candidate.source)}</span>
-            <span className="opacity-50">·</span>
-            <span>{fmtDate(candidate.created_at)}</span>
+
+          {/* Meta */}
+          <div className="flex items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
+            <Clock size={12} />
+            <span>Добавлен {fmtDate(candidate.created_at)}</span>
           </div>
 
+          {/* Notes */}
           {candidate.notes && (
-            <div className="mt-1 p-3 rounded-xl bg-[color:var(--color-muted)]/30 border border-[color:var(--color-border)]">
-              <div className="flex items-center gap-1.5 text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-100">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 mb-2">
                 <FileText size={12} /> Заметки
               </div>
-              <p className="text-sm whitespace-pre-wrap">{candidate.notes}</p>
+              <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">{candidate.notes}</p>
             </div>
           )}
 
-          <div className="mt-3 pt-3 border-t border-[color:var(--color-border)]">
-            <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2">Перевести в этап:</p>
-            <div className="flex flex-wrap gap-1.5">
+          {/* Stage pipeline */}
+          <div>
+            <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-2.5 uppercase tracking-wide">Перевести в этап</p>
+            <div className="grid grid-cols-3 gap-2">
               {STAGES.map(s => (
                 <button
                   key={s.key}
                   onClick={() => { onStageChange(candidate.id, s.key); onClose(); }}
                   disabled={s.key === candidate.stage}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-opacity ${s.color} ${
-                    s.key === candidate.stage ? 'opacity-40 cursor-default' : 'hover:opacity-75'
+                  className={`flex items-center justify-center gap-1.5 text-xs px-2 py-2 rounded-xl font-medium transition-all border ${s.color} ${
+                    s.key === candidate.stage
+                      ? 'opacity-40 cursor-default ring-1 ring-offset-1 ring-current'
+                      : 'hover:scale-[1.03] hover:shadow-sm border-transparent'
                   }`}
                 >
+                  {s.key === candidate.stage && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
                   {s.label}
                 </button>
               ))}
@@ -338,12 +387,14 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-5 pt-4 border-t border-[color:var(--color-border)]">
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10">
           <button onClick={() => { onDelete(candidate.id); onClose(); }}
-            className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700">
+            className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition-colors">
             <Trash2 size={14} /> Удалить
           </button>
-          <button onClick={() => { onClose(); onEdit(candidate); }} className="btn btn-primary text-sm flex items-center gap-1.5">
+          <button onClick={() => { onClose(); onEdit(candidate); }}
+            className="btn btn-primary text-sm flex items-center gap-1.5">
             <Pencil size={14} /> Редактировать
           </button>
         </div>
