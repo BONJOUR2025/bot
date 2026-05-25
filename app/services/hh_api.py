@@ -1,7 +1,10 @@
 """hh.ru Employer API client."""
+import logging
 from urllib.parse import urlencode
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 HH_BASE = "https://api.hh.ru"
 HH_AUTH_BASE = "https://hh.ru"
@@ -129,33 +132,71 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
         data = r.json()
 
         items = []
+        first_logged = False
         for neg in data.get("items", []):
             resume = neg.get("resume") or {}
-            contact = resume.get("contact") or {}
 
-            # Extract phone
+            # Log the first resume structure to help debug what hh.ru actually returns
+            if not first_logged:
+                log.info("hh.ru resume sample keys: %s", list(resume.keys()))
+                contact_sample = resume.get("contact")
+                log.info("hh.ru contact sample: %s", contact_sample)
+                log.info("hh.ru birthday sample: %s", resume.get("birthday"))
+                log.info("hh.ru age field: %s", resume.get("age"))
+                first_logged = True
+
+            # ── Phone ──────────────────────────────────────────────
+            contact = resume.get("contact") or {}
             phones = contact.get("phone") or []
             phone = ""
             if phones:
                 p = phones[0]
-                phone = f"+{p.get('country','')}{p.get('city','')}{p.get('number','')}"
+                # Prefer pre-formatted string; fallback to assembling from parts
+                phone = (
+                    p.get("formatted")
+                    or f"+{p.get('country', '')}{p.get('city', '')}{p.get('number', '')}"
+                ).strip()
 
+            # ── Age ────────────────────────────────────────────────
+            age = None
+            # 1. Direct age field (int)
+            raw_age = resume.get("age")
+            if raw_age is not None:
+                try:
+                    age = int(raw_age)
+                except Exception:
+                    pass
+            # 2. birthday as dict {"year": 1990, "month": 5, "day": 15}
+            if age is None:
+                birthday = resume.get("birthday")
+                if isinstance(birthday, dict):
+                    try:
+                        from datetime import date as _date
+                        by = birthday.get("year")
+                        bm = birthday.get("month", 1)
+                        bd = birthday.get("day", 1)
+                        if by:
+                            bday = _date(int(by), int(bm), int(bd))
+                            today = _date.today()
+                            age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                    except Exception:
+                        pass
+                # 3. birthday as ISO string "YYYY-MM-DD"
+                elif isinstance(birthday, str) and birthday:
+                    try:
+                        from datetime import date as _date
+                        bday = _date.fromisoformat(birthday[:10])
+                        today = _date.today()
+                        age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                    except Exception:
+                        pass
+
+            # ── Name / resume URL ──────────────────────────────────
             email = contact.get("email") or ""
             first = resume.get("first_name") or ""
             last = resume.get("last_name") or ""
             name = (f"{last} {first}".strip()) or neg.get("applicant_name") or "Без имени"
             resume_url = resume.get("alternate_url") or ""
-
-            age = None
-            birthday_str = resume.get("birthday")
-            if birthday_str:
-                try:
-                    from datetime import date as _date
-                    bday = _date.fromisoformat(str(birthday_str)[:10])
-                    today = _date.today()
-                    age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
-                except Exception:
-                    pass
 
             items.append({
                 "external_id": str(neg["id"]),
