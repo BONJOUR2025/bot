@@ -585,9 +585,6 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
           <Phone size={10} /> {c.phone}
         </div>
       )}
-      {c.notes && (
-        <p className="mt-1.5 text-xs text-[color:var(--color-muted-foreground)] line-clamp-2">{c.notes}</p>
-      )}
       <div className="mt-1.5 text-[10px] text-[color:var(--color-muted-foreground)] opacity-60">{fmtDate(c.created_at)}</div>
     </div>
   );
