@@ -309,7 +309,7 @@ async def send_message(access_token: str, neg_id: str, text: str) -> dict:
         r = await client.post(
             f"{HH_BASE}/negotiations/{neg_id}/messages",
             headers=_headers(access_token),
-            json={"text": text},
+            data={"message": text},
         )
         if r.status_code not in (200, 201):
             raise ValueError(f"hh.ru: не удалось отправить сообщение ({r.status_code}): {r.text[:200]}")
