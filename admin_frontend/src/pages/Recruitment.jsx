@@ -814,6 +814,8 @@ export default function Recruitment() {
   const [bulkLoading,     setBulkLoading]     = useState(false);
   // hh.ru discard confirmation
   const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null); // {candidateId, newStage}
+  const DEFAULT_REJECTION_MSG = 'Здравствуйте! К сожалению, ваша кандидатура не подошла для данной вакансии. Спасибо за проявленный интерес, желаем удачи в поиске работы!';
+  const [rejectionMsg, setRejectionMsg] = useState(DEFAULT_REJECTION_MSG);
 
   function toggleSelection(id) {
     setSelectedIds(prev => {
@@ -936,9 +938,9 @@ export default function Recruitment() {
     } catch (e) { setError(e.message); }
   }
 
-  async function stageChange(candidateId, newStage) {
+  async function stageChange(candidateId, newStage, extraFields = {}) {
     try {
-      const res = await api.patch(`/recruitment/candidates/${candidateId}`, { stage: newStage });
+      const res = await api.patch(`/recruitment/candidates/${candidateId}`, { stage: newStage, ...extraFields });
       setCandidates(prev => prev.map(c => c.id === candidateId ? res.data : c));
     } catch (e) { setError(e.message); }
   }
@@ -952,6 +954,7 @@ export default function Recruitment() {
     }
     // Warn before rejecting an hh.ru candidate — it sends them a notification
     if (newStage === 'отказ' && candidate.source === 'hh') {
+      setRejectionMsg(DEFAULT_REJECTION_MSG);
       setHhDiscardConfirm({ candidateId, newStage });
       return;
     }
@@ -1199,7 +1202,7 @@ export default function Recruitment() {
 
       {hhDiscardConfirm && (
         <div className="modal-backdrop" style={{ zIndex: 80 }}>
-          <div className="modal-card max-w-sm w-full">
+          <div className="modal-card max-w-md w-full">
             <div className="flex items-start gap-3 mb-4">
               <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <X size={18} className="text-red-600" />
@@ -1207,9 +1210,19 @@ export default function Recruitment() {
               <div>
                 <h3 className="font-semibold text-base">Подтвердите отказ</h3>
                 <p className="text-sm text-[color:var(--color-muted-foreground)] mt-1">
-                  Кандидату будет отправлено автоматическое уведомление об отказе на hh.ru. Это действие нельзя отменить.
+                  Кандидат получит письмо на hh.ru и увидит статус «Не подходит». Это действие нельзя отменить.
                 </p>
               </div>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Текст письма кандидату</label>
+              <textarea
+                className="input w-full text-sm"
+                rows={4}
+                value={rejectionMsg}
+                onChange={e => setRejectionMsg(e.target.value)}
+                placeholder="Текст сообщения об отказе..."
+              />
             </div>
             <div className="flex gap-2 justify-end">
               <button
@@ -1223,7 +1236,7 @@ export default function Recruitment() {
                 onClick={() => {
                   const { candidateId, newStage } = hhDiscardConfirm;
                   setHhDiscardConfirm(null);
-                  stageChange(candidateId, newStage);
+                  stageChange(candidateId, newStage, { rejection_message: rejectionMsg.trim() || null });
                 }}
               >
                 Отказать и уведомить

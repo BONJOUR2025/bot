@@ -326,7 +326,8 @@ _STAGE_TO_HH_ACTION: dict[str, str] = {
 }
 
 
-async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str) -> bool:
+async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str,
+                                  rejection_message: str | None = None) -> bool:
     """
     Push a stage change to hh.ru using the action URL from the negotiation's own actions list.
     Returns True if the action was applied, False if not applicable / unavailable.
@@ -362,10 +363,21 @@ async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str)
             log.info("hh action '%s' is disabled for neg %s", action_id, neg_id)
             return False
 
+        log.info("hh action object for '%s' neg %s: %s", action_id, neg_id, action)
+
         url = action.get("url") or f"{HH_BASE}/negotiations/{action_id}/{neg_id}"
         method = (action.get("method") or "PUT").upper()
 
-        r = await client.request(method, url, headers=_headers(access_token))
+        # Build form data from action arguments if any are required
+        arguments = action.get("arguments") or []
+        form_data: dict = {}
+        for arg in arguments:
+            if arg.get("required") and arg.get("value") is not None:
+                form_data[arg["id"]] = arg["value"]
+        log.info("hh action '%s' arguments: %s → form_data: %s", action_id, arguments, form_data)
+
+        r = await client.request(method, url, headers=_headers(access_token),
+                                 data=form_data if form_data else None)
         if r.status_code not in (200, 201, 204):
             log.warning(
                 "hh action '%s' neg %s → HTTP %s: %s",
@@ -374,4 +386,21 @@ async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str)
             return False
 
         log.info("hh action '%s' applied for neg %s", action_id, neg_id)
+
+        # Send rejection message so the candidate sees the status change
+        if rejection_message and new_stage == "отказ":
+            try:
+                r_msg = await client.post(
+                    f"{HH_BASE}/negotiations/{neg_id}/messages",
+                    headers=_headers(access_token),
+                    data={"message": rejection_message},
+                )
+                if r_msg.status_code in (200, 201):
+                    log.info("hh rejection message sent for neg %s", neg_id)
+                else:
+                    log.warning("hh rejection message failed for neg %s: HTTP %s %s",
+                                neg_id, r_msg.status_code, r_msg.text[:200])
+            except Exception as exc:
+                log.warning("hh rejection message error for neg %s: %s", neg_id, exc)
+
         return True
