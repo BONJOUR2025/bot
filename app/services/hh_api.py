@@ -292,9 +292,9 @@ async def get_messages(access_token: str, neg_id: str) -> list[dict]:
         items = r.json().get("items", [])
         return [
             {
-                "id": str(m.get("id", "")),
-                "text": m.get("text", ""),
-                "created_at": m.get("created_at", ""),
+                "id": str(m.get("id") or ""),
+                "text": m.get("text") or "",
+                "created_at": m.get("created_at") or "",
                 "author_type": (m.get("author") or {}).get("participant_type", ""),
                 "author_name": (m.get("author") or {}).get("name", ""),
                 "read": m.get("read", True),
