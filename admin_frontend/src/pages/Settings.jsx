@@ -52,13 +52,13 @@ export default function Settings() {
   useEffect(() => { load(); loadStatus(); loadTemplates(); }, []);
 
   async function loadTemplates() {
-    try { const r = await api.get('config/rejection-templates'); setTemplates(r.data || []); } catch {}
+    try { const r = await api.get('config/message-templates'); setTemplates(r.data || []); } catch {}
   }
 
   async function saveTemplates(list) {
     setSavingTpl(true);
     try {
-      await api.put('config/rejection-templates', list);
+      await api.put('config/message-templates', list);
       setTemplates(list);
       toast('Шаблоны сохранены', 'success');
     } catch { toast('Ошибка сохранения шаблонов', 'error'); }
@@ -66,7 +66,7 @@ export default function Settings() {
   }
 
   function addTemplate() {
-    setTemplates(prev => [...prev, { name: '', text: '' }]);
+    setTemplates(prev => [...prev, { type: 'rejection', name: '', text: '' }]);
   }
 
   function updateTemplate(i, field, value) {
@@ -265,15 +265,28 @@ export default function Settings() {
         </Field>
       </Section>
 
-      {/* Rejection message templates */}
-      <Section title="Шаблоны писем об отказе (hh.ru)">
+      {/* Message templates */}
+      <Section title="Шаблоны сообщений (hh.ru)">
         <p className="text-sm text-[color:var(--color-muted-foreground)]">
-          Шаблоны доступны при переводе кандидата в статус «Отказ» на странице Подбора персонала.
+          Шаблоны доступны при переводе кандидата в статус «Отказ» или «Собеседование».
+          В шаблонах собеседования можно использовать теги:{' '}
+          <code className="text-xs bg-[color:var(--color-bg-secondary)] px-1 rounded">#name</code>{' '}
+          <code className="text-xs bg-[color:var(--color-bg-secondary)] px-1 rounded">#date</code>{' '}
+          <code className="text-xs bg-[color:var(--color-bg-secondary)] px-1 rounded">#time</code>{' '}
+          <code className="text-xs bg-[color:var(--color-bg-secondary)] px-1 rounded">#place</code>
         </p>
         <div className="space-y-3">
           {templates.map((t, i) => (
             <div key={i} className="border border-[color:var(--color-border)] rounded-lg p-3 space-y-2">
               <div className="flex gap-2 items-center">
+                <select
+                  className="input text-sm w-36 flex-shrink-0"
+                  value={t.type || 'rejection'}
+                  onChange={e => updateTemplate(i, 'type', e.target.value)}
+                >
+                  <option value="rejection">Отказ</option>
+                  <option value="interview">Собеседование</option>
+                </select>
                 <input
                   className="input flex-1 text-sm"
                   placeholder="Название шаблона"
@@ -281,14 +294,16 @@ export default function Settings() {
                   onChange={e => updateTemplate(i, 'name', e.target.value)}
                 />
                 <button type="button" onClick={() => removeTemplate(i)}
-                  className="text-red-400 hover:text-red-600">
+                  className="text-red-400 hover:text-red-600 flex-shrink-0">
                   <Trash2 size={15} />
                 </button>
               </div>
               <textarea
                 className="input w-full text-sm resize-none"
                 rows={3}
-                placeholder="Текст письма..."
+                placeholder={t.type === 'interview'
+                  ? 'Здравствуйте, #name! Приглашаем на собеседование #date в #time. Место: #place'
+                  : 'Текст письма об отказе...'}
                 value={t.text}
                 onChange={e => updateTemplate(i, 'text', e.target.value)}
               />

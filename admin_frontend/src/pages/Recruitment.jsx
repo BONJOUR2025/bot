@@ -176,31 +176,40 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
 }
 
 // ── Interview modal ────────────────────────────────────────────────
-function buildInterviewMessage(form) {
-  const parts = ['Приглашаем вас на собеседование!'];
-  if (form.date) {
-    const d = new Date(form.date);
-    const dateStr = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-    parts.push(`📅 Дата: ${dateStr}`);
-  }
-  if (form.time) parts.push(`🕐 Время: ${form.time}`);
-  if (form.location) parts.push(`📍 Место: ${form.location}`);
-  if (form.note) parts.push(form.note);
-  parts.push('Если у вас возникнут вопросы — напишите в этот чат.');
-  return parts.join('\n');
+const DEFAULT_INTERVIEW_TEMPLATE = 'Здравствуйте, #name!\nПриглашаем вас на собеседование.\n📅 Дата: #date\n🕐 Время: #time\n📍 Место: #place\n\nЕсли возникнут вопросы — напишите в этот чат.';
+
+function applyTags(text, { name = '', date = '', time = '', place = '' } = {}) {
+  const dateStr = date
+    ? new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '#date';
+  return text
+    .replace(/#name/g, name || '#name')
+    .replace(/#date/g, date ? dateStr : '#date')
+    .replace(/#time/g, time || '#time')
+    .replace(/#place/g, place || '#place');
 }
 
-function InterviewModal({ candidate, onSave, onClose }) {
+function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
   const today = new Date().toISOString().split('T')[0];
   const [form, setForm] = useState({ date: today, time: '', location: '', note: '' });
   const [saving, setSaving] = useState(false);
   const [sendMsg, setSendMsg] = useState(candidate?.source === 'hh');
-  const [msgText, setMsgText] = useState(() => buildInterviewMessage({ date: today, time: '', location: '', note: '' }));
+  const [templateText, setTemplateText] = useState(DEFAULT_INTERVIEW_TEMPLATE);
+  const [msgText, setMsgText] = useState(() =>
+    applyTags(DEFAULT_INTERVIEW_TEMPLATE, { name: candidate?.name, date: today })
+  );
+
+  const interviewTemplates = templates.filter(t => t.type === 'interview');
+
+  function applyTemplate(text) {
+    setTemplateText(text);
+    setMsgText(applyTags(text, { name: candidate?.name, date: form.date, time: form.time, place: form.location }));
+  }
 
   const set = k => e => {
     const updated = { ...form, [k]: e.target.value };
     setForm(updated);
-    setMsgText(buildInterviewMessage(updated));
+    setMsgText(applyTags(templateText, { name: candidate?.name, date: updated.date, time: updated.time, place: updated.location }));
   };
 
   async function save() {
@@ -267,12 +276,26 @@ function InterviewModal({ candidate, onSave, onClose }) {
                 <label htmlFor="sendMsgChk" className="text-xs font-medium cursor-pointer">Отправить сообщение кандидату (hh.ru)</label>
               </div>
               {sendMsg && (
-                <textarea
-                  className="input w-full text-sm resize-none"
-                  rows={5}
-                  value={msgText}
-                  onChange={e => setMsgText(e.target.value)}
-                />
+                <div className="space-y-1.5">
+                  {interviewTemplates.length > 0 && (
+                    <select className="input w-full text-sm" defaultValue=""
+                      onChange={e => { if (e.target.value) applyTemplate(e.target.value); }}>
+                      <option value="">— выбрать шаблон —</option>
+                      {interviewTemplates.map((t, i) => (
+                        <option key={i} value={t.text}>{t.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  <textarea
+                    className="input w-full text-sm resize-none"
+                    rows={5}
+                    value={msgText}
+                    onChange={e => setMsgText(e.target.value)}
+                  />
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                    Теги: <code>#name</code> · <code>#date</code> · <code>#time</code> · <code>#place</code>
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -856,9 +879,9 @@ export default function Recruitment() {
   const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null); // {candidateId, newStage}
   const DEFAULT_REJECTION_MSG = 'Здравствуйте! К сожалению, ваша кандидатура не подошла для данной вакансии. Спасибо за проявленный интерес, желаем удачи в поиске работы!';
   const [rejectionMsg, setRejectionMsg] = useState(DEFAULT_REJECTION_MSG);
-  const [rejectionTemplates, setRejectionTemplates] = useState([]);
+  const [msgTemplates, setMsgTemplates] = useState([]);
   useEffect(() => {
-    api.get('/config/rejection-templates').then(r => setRejectionTemplates(r.data || [])).catch(() => {});
+    api.get('/config/message-templates').then(r => setMsgTemplates(r.data || [])).catch(() => {});
   }, []);
 
   function toggleSelection(id) {
@@ -1259,7 +1282,7 @@ export default function Recruitment() {
               </div>
             </div>
             <div className="mb-4 space-y-2">
-              {rejectionTemplates.length > 0 && (
+              {msgTemplates.filter(t => t.type === 'rejection').length > 0 && (
                 <div>
                   <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Шаблон</label>
                   <select
@@ -1268,7 +1291,7 @@ export default function Recruitment() {
                     onChange={e => { if (e.target.value) setRejectionMsg(e.target.value); }}
                   >
                     <option value="">— выбрать шаблон —</option>
-                    {rejectionTemplates.map((t, i) => (
+                    {msgTemplates.filter(t => t.type === 'rejection').map((t, i) => (
                       <option key={i} value={t.text}>{t.name}</option>
                     ))}
                   </select>
@@ -1312,6 +1335,7 @@ export default function Recruitment() {
           candidate={interviewModal}
           onSave={handleInterviewSave}
           onClose={() => setInterviewModal(null)}
+          templates={msgTemplates}
         />
       )}
 
