@@ -218,7 +218,7 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
                   onRefresh();
                 }}
               >
-                {[5, 10, 15, 30, 60].map(m => <option key={m} value={m}>{m} мин.</option>)}
+                {[1, 5, 10, 15, 30, 60].map(m => <option key={m} value={m}>{m} мин.</option>)}
               </select>
             </div>
             <button onClick={syncNow} disabled={syncing} className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5">
@@ -449,7 +449,7 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
                   onRefresh();
                 }}
               >
-                {[5, 10, 15, 30, 60].map(m => <option key={m} value={m}>{m} мин.</option>)}
+                {[1, 5, 10, 15, 30, 60].map(m => <option key={m} value={m}>{m} мин.</option>)}
               </select>
             </div>
             <button onClick={syncNow} disabled={syncing} className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5">

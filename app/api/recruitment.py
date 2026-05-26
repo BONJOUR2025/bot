@@ -373,7 +373,7 @@ async def connect_avito(data: AvitoConnectRequest, db: Session = Depends(get_db)
     src.employer_name = info["employer_name"]
     src.is_active    = True
     src.last_error   = ""
-    src.sync_interval_minutes = max(5, data.sync_interval_minutes or 15)
+    src.sync_interval_minutes = max(1, data.sync_interval_minutes or 15)
     src.updated_at   = datetime.utcnow()
     db.commit(); db.refresh(src)
     return src.to_dict()
@@ -424,7 +424,7 @@ async def avito_vacancy_by_id(vacancy_id: str, db: Session = Depends(get_db)):
 def update_interval(source: str, interval_minutes: int, db: Session = Depends(get_db)):
     src = db.query(RecruitmentSource).filter(RecruitmentSource.source == source).first()
     if not src: raise HTTPException(404, "Source not found")
-    src.sync_interval_minutes = max(5, interval_minutes)
+    src.sync_interval_minutes = max(1, interval_minutes)
     db.commit()
     return src.to_dict()
 
