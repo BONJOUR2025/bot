@@ -79,6 +79,7 @@ async def _check_hh_messages(db, src, token: str) -> None:
     from app.models.recruitment import Candidate
     from app.services import hh_api
     from app.services.notify import send_notification
+    from app.db.session import SessionLocal
 
     cutoff = datetime.utcnow() - timedelta(days=60)
     candidates = db.query(Candidate).filter(
@@ -88,34 +89,55 @@ async def _check_hh_messages(db, src, token: str) -> None:
         Candidate.created_at >= cutoff,
     ).all()
 
+    logger.info("[Sync] hh message check: %d active candidates to poll", len(candidates))
+
     sem = asyncio.Semaphore(3)
 
-    async def check_one(c: Candidate) -> None:
+    async def check_one(cand_id: int, neg_id: str, name: str, last_id: str | None) -> None:
         async with sem:
             try:
-                messages = await hh_api.get_messages(token, c.external_id)
+                messages = await hh_api.get_messages(token, neg_id)
+                logger.info("[Sync] hh messages neg=%s candidate=%s: %d messages, last_msg_id=%r",
+                            neg_id, name, len(messages), last_id)
                 if not messages:
                     return
                 latest = messages[-1]
                 latest_id = latest["id"]
-                if latest["author_type"] != "applicant":
-                    # Latest message is ours — no notification needed, but update tracker
+                latest_type = latest["author_type"]
+                logger.info("[Sync] hh latest msg: id=%s type=%s text=%r",
+                            latest_id, latest_type, latest["text"][:60])
+
+                # Update last_msg_id in its own session to avoid concurrency issues
+                own_db = SessionLocal()
+                try:
+                    c = own_db.query(Candidate).filter(Candidate.id == cand_id).first()
+                    if not c:
+                        return
+                    if latest_type != "applicant":
+                        c.last_msg_id = latest_id
+                        own_db.commit()
+                        return
+                    if c.last_msg_id == latest_id:
+                        logger.debug("[Sync] hh msg already seen: %s", latest_id)
+                        return
+                    # New message from applicant — notify
                     c.last_msg_id = latest_id
-                    db.commit()
-                    return
-                if c.last_msg_id == latest_id:
-                    return  # already seen
-                # New message from applicant
-                c.last_msg_id = latest_id
-                db.commit()
+                    own_db.commit()
+                finally:
+                    own_db.close()
+
+                logger.info("[Sync] hh new applicant message from %s, sending notification", name)
                 await send_notification(
                     f"💬 <b>Новое сообщение от кандидата (hh.ru)</b>\n"
-                    f"<b>{c.name}</b>: {latest['text'][:200]}"
+                    f"<b>{name}</b>: {latest['text'][:200]}"
                 )
             except Exception as exc:
-                logger.debug("hh message check failed for candidate %s: %s", c.id, exc)
+                logger.warning("[Sync] hh message check failed for neg=%s (%s): %s", neg_id, name, exc)
 
-    await asyncio.gather(*[check_one(c) for c in candidates])
+    await asyncio.gather(*[
+        check_one(c.id, c.external_id, c.name, c.last_msg_id)
+        for c in candidates
+    ])
 
 
 async def _sync_link(db, src, link, token: str) -> int:
