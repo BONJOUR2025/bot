@@ -342,10 +342,23 @@ async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str)
             headers=_headers(access_token),
         )
         if r.status_code not in (200, 201, 204):
-            log.warning(
-                "hh action '%s' neg %s → HTTP %s: %s",
-                action, neg_id, r.status_code, r.text[:200],
-            )
+            try:
+                wrong_state = any(
+                    e.get("value") == "wrong_state"
+                    for e in (r.json().get("errors") or [])
+                )
+            except Exception:
+                wrong_state = False
+            if wrong_state:
+                log.info(
+                    "hh action '%s' neg %s skipped: negotiation already in incompatible state",
+                    action, neg_id,
+                )
+            else:
+                log.warning(
+                    "hh action '%s' neg %s → HTTP %s: %s",
+                    action, neg_id, r.status_code, r.text[:200],
+                )
             return False
 
         log.info("hh action '%s' applied for neg %s", action, neg_id)
