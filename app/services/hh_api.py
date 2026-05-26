@@ -328,38 +328,50 @@ _STAGE_TO_HH_ACTION: dict[str, str] = {
 
 async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str) -> bool:
     """
-    Push a stage change to hh.ru.
+    Push a stage change to hh.ru using the action URL from the negotiation's own actions list.
     Returns True if the action was applied, False if not applicable / unavailable.
     Never raises — logs warnings on failure.
     """
-    action = _STAGE_TO_HH_ACTION.get(new_stage)
-    if not action:
+    action_id = _STAGE_TO_HH_ACTION.get(new_stage)
+    if not action_id:
         return False
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        r = await client.put(
-            f"{HH_BASE}/negotiations/{action}/{neg_id}",
+        # Fetch the negotiation to get the list of currently available actions
+        r_neg = await client.get(
+            f"{HH_BASE}/negotiations/{neg_id}",
             headers=_headers(access_token),
         )
-        if r.status_code not in (200, 201, 204):
-            try:
-                wrong_state = any(
-                    e.get("value") == "wrong_state"
-                    for e in (r.json().get("errors") or [])
-                )
-            except Exception:
-                wrong_state = False
-            if wrong_state:
-                log.info(
-                    "hh action '%s' neg %s skipped: negotiation already in incompatible state",
-                    action, neg_id,
-                )
-            else:
-                log.warning(
-                    "hh action '%s' neg %s → HTTP %s: %s",
-                    action, neg_id, r.status_code, r.text[:200],
-                )
+        if r_neg.status_code != 200:
+            log.warning("hh GET negotiation %s → HTTP %s", neg_id, r_neg.status_code)
             return False
 
-        log.info("hh action '%s' applied for neg %s", action, neg_id)
+        neg_data = r_neg.json()
+        actions = neg_data.get("actions") or []
+        action = next((a for a in actions if a.get("id") == action_id), None)
+
+        if action is None:
+            available = [a.get("id") for a in actions]
+            log.info(
+                "hh action '%s' not available for neg %s (available: %s)",
+                action_id, neg_id, available,
+            )
+            return False
+
+        if not action.get("enabled", True):
+            log.info("hh action '%s' is disabled for neg %s", action_id, neg_id)
+            return False
+
+        url = action.get("url") or f"{HH_BASE}/negotiations/{action_id}/{neg_id}"
+        method = (action.get("method") or "PUT").upper()
+
+        r = await client.request(method, url, headers=_headers(access_token))
+        if r.status_code not in (200, 201, 204):
+            log.warning(
+                "hh action '%s' neg %s → HTTP %s: %s",
+                action_id, neg_id, r.status_code, r.text[:200],
+            )
+            return False
+
+        log.info("hh action '%s' applied for neg %s", action_id, neg_id)
         return True
