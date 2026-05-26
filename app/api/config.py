@@ -1,7 +1,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from app.services.config_service import ConfigService
@@ -51,7 +51,7 @@ def create_config_router(service: ConfigService) -> APIRouter:
         return service.load().get("message_templates", [])
 
     @router.put("/message-templates")
-    async def save_message_templates(templates: list):
+    async def save_message_templates(templates: list = Body(...)):
         service.patch({"message_templates": templates})
         return templates
 
