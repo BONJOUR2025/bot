@@ -68,10 +68,12 @@ async def _sync_once() -> None:
 async def _notify_new_candidates(source: str, link, candidates: list[dict]) -> None:
     from app.services.notify import send_notification
     src_label = "hh.ru" if source == "hh" else "Авито"
-    vac_id = link.external_vacancy_id
+    vac_title = (getattr(link, "external_vacancy_title", "") or "") or \
+                (link.vacancy.title if getattr(link, "vacancy", None) else "") or \
+                f"#{link.external_vacancy_id}"
     count = len(candidates)
     word = "кандидат" if count == 1 else "кандидата" if count < 5 else "кандидатов"
-    lines = [f"👤 <b>Новые отклики ({src_label})</b>\nВакансия #{vac_id}: +{count} {word}\n"]
+    lines = [f"👤 <b>Новые отклики ({src_label})</b>\n{vac_title}: +{count} {word}\n"]
     for c in candidates:
         age_str = f", {c['age']} лет" if c.get("age") else ""
         phone_str = f"\n📞 {c['phone']}" if c.get("phone") else ""
