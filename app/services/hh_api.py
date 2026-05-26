@@ -313,7 +313,7 @@ async def send_message(access_token: str, neg_id: str, text: str) -> dict:
         )
         if r.status_code not in (200, 201):
             raise ValueError(f"hh.ru: не удалось отправить сообщение ({r.status_code}): {r.text[:200]}")
-        return r.json()
+        return r.json() if r.content else {}
 
 
 # ── Stage synchronisation ──────────────────────────────────────────
