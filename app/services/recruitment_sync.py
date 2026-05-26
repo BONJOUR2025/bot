@@ -101,7 +101,7 @@ async def _check_hh_messages(db, src, token: str) -> None:
                             neg_id, name, len(messages), last_id)
                 if not messages:
                     return
-                latest = messages[-1]
+                latest = max(messages, key=lambda m: m["created_at"])
                 latest_id = latest["id"]
                 latest_type = latest["author_type"]
                 logger.info("[Sync] hh latest msg: id=%s type=%s text=%r",
@@ -120,17 +120,21 @@ async def _check_hh_messages(db, src, token: str) -> None:
                     if c.last_msg_id == latest_id:
                         logger.debug("[Sync] hh msg already seen: %s", latest_id)
                         return
-                    # New message from applicant — notify
+                    # New message from applicant — save ID before notifying
                     c.last_msg_id = latest_id
                     own_db.commit()
                 finally:
                     own_db.close()
 
-                logger.info("[Sync] hh new applicant message from %s, sending notification", name)
-                await send_notification(
+                logger.warning("[Sync] hh NEW applicant message from %s (neg=%s), attempting notification", name, neg_id)
+                ok = await send_notification(
                     f"💬 <b>Новое сообщение от кандидата (hh.ru)</b>\n"
                     f"<b>{name}</b>: {latest['text'][:200]}"
                 )
+                if ok:
+                    logger.info("[Sync] hh notification sent for %s", name)
+                else:
+                    logger.warning("[Sync] hh notification FAILED for %s — check notification_chat_id and bot token", name)
             except Exception as exc:
                 logger.warning("[Sync] hh message check failed for neg=%s (%s): %s", neg_id, name, exc)
 
