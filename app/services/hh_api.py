@@ -320,7 +320,7 @@ async def send_message(access_token: str, neg_id: str, text: str) -> dict:
 
 # Map internal stage keys → hh.ru employer action IDs
 _STAGE_TO_HH_ACTION: dict[str, str] = {
-    "отказ":         "discard",
+    "отказ":         "discard_by_employer",
     "собеседование": "phone_interview",
     "ждем":          "hold",
 }
