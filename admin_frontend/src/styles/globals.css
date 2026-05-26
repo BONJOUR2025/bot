@@ -128,6 +128,9 @@ a:hover { text-decoration: underline; }
   grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
   position: relative;
+  transition: grid-template-columns 0.2s ease;
+}
+.app-shell--nav-collapsed { grid-template-columns: 64px 1fr; }
 }
 .app-shell--mobile { grid-template-columns: 1fr; }
 

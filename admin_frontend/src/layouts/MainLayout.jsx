@@ -31,9 +31,8 @@ export default function MainLayout() {
   const userLabel = user?.name || user?.login || 'Администратор';
 
   return (
-    <div className={`app-shell ${isMobile ? 'app-shell--mobile' : ''}`}>
-      <aside className={`app-shell__sidebar ${sidebarOpen ? 'is-open' : ''}`}
-        style={!isMobile ? { width: navCollapsed ? 64 : 280, flexShrink: 0 } : undefined}>
+    <div className={`app-shell ${isMobile ? 'app-shell--mobile' : ''} ${!isMobile && navCollapsed ? 'app-shell--nav-collapsed' : ''}`}>
+      <aside className={`app-shell__sidebar ${sidebarOpen ? 'is-open' : ''}`}>
         <Navigation
           onNavigate={() => setSidebarOpen(false)}
           collapsed={navCollapsed}
