@@ -42,6 +42,7 @@ class Candidate(Base):
     age = Column(Integer, nullable=True)
     stage = Column(String, nullable=False, default="отклик", index=True)
     notes = Column(Text, nullable=True, default="")
+    last_msg_id = Column(String, nullable=True)  # last seen hh.ru message id
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

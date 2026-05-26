@@ -10,36 +10,43 @@ export default function MainLayout() {
   const { isMobile } = useViewport();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try { return localStorage.getItem('nav_collapsed') === 'true'; } catch { return false; }
+  });
 
-  useEffect(() => {
-    setSidebarOpen(!isMobile);
-  }, [isMobile]);
+  useEffect(() => { setSidebarOpen(!isMobile); }, [isMobile]);
 
-  const toggleSidebar = () => setSidebarOpen((prev) => !prev);
-  const closeSidebar = () => setSidebarOpen(false);
+  function toggleCollapse() {
+    setNavCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('nav_collapsed', String(next)); } catch {}
+      return next;
+    });
+  }
 
   const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (err) {
-      console.error(err);
-    }
+    try { await logout(); } catch (err) { console.error(err); }
   };
 
   const userLabel = user?.name || user?.login || 'Администратор';
 
   return (
     <div className={`app-shell ${isMobile ? 'app-shell--mobile' : ''}`}>
-      <aside className={`app-shell__sidebar ${sidebarOpen ? 'is-open' : ''}`}>
-        <Navigation onNavigate={closeSidebar} />
+      <aside className={`app-shell__sidebar ${sidebarOpen ? 'is-open' : ''}`}
+        style={!isMobile ? { width: navCollapsed ? 64 : 280, flexShrink: 0 } : undefined}>
+        <Navigation
+          onNavigate={() => setSidebarOpen(false)}
+          collapsed={navCollapsed}
+          onToggleCollapse={toggleCollapse}
+        />
       </aside>
 
-      {isMobile && sidebarOpen && <div className="app-shell__backdrop" onClick={closeSidebar} />}
+      {isMobile && sidebarOpen && <div className="app-shell__backdrop" onClick={() => setSidebarOpen(false)} />}
 
       <div className="app-shell__main">
         <header className="app-shell__header">
           {isMobile && (
-            <button type="button" className="icon-button" onClick={toggleSidebar} aria-label="Открыть меню">
+            <button type="button" className="icon-button" onClick={() => setSidebarOpen(o => !o)} aria-label="Открыть меню">
               <Menu size={20} />
             </button>
           )}
@@ -62,7 +69,3 @@ export default function MainLayout() {
     </div>
   );
 }
-
-
-
-

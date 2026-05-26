@@ -1,12 +1,15 @@
 """Background sync: pulls new candidates from hh.ru and Avito into the CRM."""
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 _task: asyncio.Task | None = None
 _DEFAULT_INTERVAL = 15 * 60  # fallback 15 min; actual per-source interval used inside loop
+
+# Stages considered "active" for message polling
+_ACTIVE_STAGES = {"отклик", "собеседование", "ждем"}
 
 
 async def _sync_once() -> None:
@@ -26,7 +29,6 @@ async def _sync_once() -> None:
                 continue
 
             token = src.access_token
-            # For Avito, refresh token if needed (client_credentials are short-lived)
             if src.source == "avito" and src.client_id and src.client_secret:
                 try:
                     tok_data = await avito_api.get_token(src.client_id, src.client_secret)
@@ -46,12 +48,74 @@ async def _sync_once() -> None:
                     db.commit()
                     if new_count:
                         logger.info(f"[Sync] {src.source} vacancy={link.external_vacancy_id}: +{new_count} candidates")
+                        await _notify_new_candidates(src.source, link, new_count)
                 except Exception as e:
                     logger.warning(f"[Sync] {src.source} link {link.id} error: {e}")
                     src.last_error = str(e)
                     db.commit()
+
+            # Poll hh.ru messages for active candidates
+            if src.source == "hh" and token:
+                try:
+                    await _check_hh_messages(db, src, token)
+                except Exception as e:
+                    logger.warning(f"[Sync] hh message check failed: {e}")
     finally:
         db.close()
+
+
+async def _notify_new_candidates(source: str, link, count: int) -> None:
+    from app.services.notify import send_notification
+    src_label = "hh.ru" if source == "hh" else "Авито"
+    vac_id = link.external_vacancy_id
+    await send_notification(
+        f"👤 <b>Новые отклики ({src_label})</b>\n"
+        f"Вакансия #{vac_id}: +{count} {'кандидат' if count == 1 else 'кандидата' if count < 5 else 'кандидатов'}"
+    )
+
+
+async def _check_hh_messages(db, src, token: str) -> None:
+    """Poll hh.ru messages for active candidates, notify on new applicant messages."""
+    from app.models.recruitment import Candidate
+    from app.services import hh_api
+    from app.services.notify import send_notification
+
+    cutoff = datetime.utcnow() - timedelta(days=60)
+    candidates = db.query(Candidate).filter(
+        Candidate.source == "hh",
+        Candidate.external_id.isnot(None),
+        Candidate.stage.in_(_ACTIVE_STAGES),
+        Candidate.created_at >= cutoff,
+    ).all()
+
+    sem = asyncio.Semaphore(3)
+
+    async def check_one(c: Candidate) -> None:
+        async with sem:
+            try:
+                messages = await hh_api.get_messages(token, c.external_id)
+                if not messages:
+                    return
+                latest = messages[-1]
+                latest_id = latest["id"]
+                if latest["author_type"] != "applicant":
+                    # Latest message is ours — no notification needed, but update tracker
+                    c.last_msg_id = latest_id
+                    db.commit()
+                    return
+                if c.last_msg_id == latest_id:
+                    return  # already seen
+                # New message from applicant
+                c.last_msg_id = latest_id
+                db.commit()
+                await send_notification(
+                    f"💬 <b>Новое сообщение от кандидата (hh.ru)</b>\n"
+                    f"<b>{c.name}</b>: {latest['text'][:200]}"
+                )
+            except Exception as exc:
+                logger.debug("hh message check failed for candidate %s: %s", c.id, exc)
+
+    await asyncio.gather(*[check_one(c) for c in candidates])
 
 
 async def _sync_link(db, src, link, token: str) -> int:
@@ -124,7 +188,6 @@ async def _run() -> None:
         except Exception as e:
             logger.error(f"[Sync] Unexpected error: {e}")
 
-        # Sleep for the shortest active interval among sources, default 15 min
         interval = _DEFAULT_INTERVAL
         try:
             from app.db.session import SessionLocal

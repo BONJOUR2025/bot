@@ -191,6 +191,9 @@ export default function Settings() {
           <Field label="card_dispatch_chat_id" hint="Чат для отправки реквизитов карты при выплате">
             <input className="input w-full font-mono" {...register('card_dispatch_chat_id')} />
           </Field>
+          <Field label="notification_chat_id" hint="Telegram ID для уведомлений: новые отклики, сообщения с hh.ru, привязка выплат">
+            <input className="input w-full font-mono" placeholder="123456789" {...register('notification_chat_id')} />
+          </Field>
         </div>
       </Section>
 

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -93,6 +94,19 @@ class PayoutService:
             logger.warning(f"Cash move fuzzy match failed: {exc}")
         return None
 
+    @staticmethod
+    async def _notify_cash_move_linked(payout_dict: dict, move_id: str) -> None:
+        try:
+            from app.services.notify import send_notification
+            name = payout_dict.get("payout_type") or "Выплата"
+            amount = payout_dict.get("amount", "")
+            await send_notification(
+                f"🔗 <b>Выплата привязана к кассовому перемещению</b>\n"
+                f"{name} · {amount} ₽ → перемещение #{move_id}"
+            )
+        except Exception:
+            pass
+
     async def find_cash_move_for_payout(self, payout_id: int) -> Optional[str]:
         """Manually find and persist a cash movement link for an existing payout."""
         self._repo.reload()
@@ -140,6 +154,7 @@ class PayoutService:
             if move_id:
                 payout_dict["cash_move_id"] = move_id
                 payout_dict["status"] = "Выплачено"
+                asyncio.create_task(self._notify_cash_move_linked(payout_dict, move_id))
 
         created = self._repo.create(payout_dict)
         logger.info(

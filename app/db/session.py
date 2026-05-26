@@ -35,6 +35,7 @@ def _run_migrations() -> None:
             "ALTER TABLE candidates ADD COLUMN external_id TEXT",
             "ALTER TABLE candidates ADD COLUMN resume_url TEXT DEFAULT ''",
             "ALTER TABLE candidates ADD COLUMN photo_url TEXT DEFAULT ''",
+            "ALTER TABLE candidates ADD COLUMN last_msg_id TEXT",
         ]:
             try:
                 conn.execute(text(stmt))
