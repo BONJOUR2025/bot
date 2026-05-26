@@ -41,14 +41,15 @@ async def _sync_once() -> None:
 
             for link in links:
                 try:
-                    new_count = await _sync_link(db, src, link, token)
+                    new_candidates = await _sync_link(db, src, link, token)
+                    new_count = len(new_candidates)
                     link.last_synced_at = datetime.utcnow()
                     link.last_sync_count = new_count
                     src.last_error = ""
                     db.commit()
                     if new_count:
                         logger.info(f"[Sync] {src.source} vacancy={link.external_vacancy_id}: +{new_count} candidates")
-                        await _notify_new_candidates(src.source, link, new_count)
+                        await _notify_new_candidates(src.source, link, new_candidates)
                 except Exception as e:
                     logger.warning(f"[Sync] {src.source} link {link.id} error: {e}")
                     src.last_error = str(e)
@@ -64,14 +65,19 @@ async def _sync_once() -> None:
         db.close()
 
 
-async def _notify_new_candidates(source: str, link, count: int) -> None:
+async def _notify_new_candidates(source: str, link, candidates: list[dict]) -> None:
     from app.services.notify import send_notification
     src_label = "hh.ru" if source == "hh" else "Авито"
     vac_id = link.external_vacancy_id
-    await send_notification(
-        f"👤 <b>Новые отклики ({src_label})</b>\n"
-        f"Вакансия #{vac_id}: +{count} {'кандидат' if count == 1 else 'кандидата' if count < 5 else 'кандидатов'}"
-    )
+    count = len(candidates)
+    word = "кандидат" if count == 1 else "кандидата" if count < 5 else "кандидатов"
+    lines = [f"👤 <b>Новые отклики ({src_label})</b>\nВакансия #{vac_id}: +{count} {word}\n"]
+    for c in candidates:
+        age_str = f", {c['age']} лет" if c.get("age") else ""
+        phone_str = f"\n📞 {c['phone']}" if c.get("phone") else ""
+        resume_str = f"\n🔗 <a href=\"{c['resume_url']}\">Резюме</a>" if c.get("resume_url") else ""
+        lines.append(f"• <b>{c['name']}</b>{age_str}{phone_str}{resume_str}")
+    await send_notification("\n".join(lines))
 
 
 async def _check_hh_messages(db, src, token: str) -> None:
@@ -126,10 +132,15 @@ async def _check_hh_messages(db, src, token: str) -> None:
                 finally:
                     own_db.close()
 
+                msg_text = latest["text"].strip()
+                if not msg_text:
+                    logger.info("[Sync] hh new applicant message from %s has empty text, skipping notification", name)
+                    return
+
                 logger.warning("[Sync] hh NEW applicant message from %s (neg=%s), attempting notification", name, neg_id)
                 ok = await send_notification(
                     f"💬 <b>Новое сообщение от кандидата (hh.ru)</b>\n"
-                    f"<b>{name}</b>: {latest['text'][:200]}"
+                    f"<b>{name}</b>: {msg_text[:200]}"
                 )
                 if ok:
                     logger.info("[Sync] hh notification sent for %s", name)
@@ -144,7 +155,7 @@ async def _check_hh_messages(db, src, token: str) -> None:
     ])
 
 
-async def _sync_link(db, src, link, token: str) -> int:
+async def _sync_link(db, src, link, token: str) -> list[dict]:
     from app.models.recruitment import Candidate
     from app.services import hh_api, avito_api
 
@@ -153,9 +164,9 @@ async def _sync_link(db, src, link, token: str) -> int:
     elif src.source == "avito":
         new_items = await avito_api.get_applications_for_vacancy(token, src.employer_id, link.external_vacancy_id)
     else:
-        return 0
+        return []
 
-    count = 0
+    new_candidates = []
     for item in new_items:
         ext_id = item["external_id"]
         exists = db.query(Candidate).filter(
@@ -187,9 +198,14 @@ async def _sync_link(db, src, link, token: str) -> int:
                 created_at=applied_at or datetime.utcnow(),
             )
             db.add(c)
-            count += 1
+            new_candidates.append({
+                "name": item["name"],
+                "age": item.get("age"),
+                "phone": item.get("phone", ""),
+                "resume_url": item.get("resume_url", ""),
+            })
     db.flush()
-    return count
+    return new_candidates
 
 
 async def _collect_hh(token: str, vacancy_id: str) -> list[dict]:
