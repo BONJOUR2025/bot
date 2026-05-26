@@ -45,6 +45,7 @@ export default function Settings() {
   const [archiving, setArchiving]         = useState(false);
   const [archiveResult, setArchiveResult] = useState(null);
   const [downloading, setDownloading]     = useState(false);
+  const [testingNotify, setTestingNotify] = useState(false);
 
   useEffect(() => { load(); loadStatus(); }, []);
 
@@ -192,7 +193,27 @@ export default function Settings() {
             <input className="input w-full font-mono" {...register('card_dispatch_chat_id')} />
           </Field>
           <Field label="notification_chat_id" hint="Telegram ID для уведомлений: новые отклики, сообщения с hh.ru, привязка выплат">
-            <input className="input w-full font-mono" placeholder="123456789" {...register('notification_chat_id')} />
+            <div className="flex gap-2">
+              <input className="input flex-1 font-mono" placeholder="123456789" {...register('notification_chat_id')} />
+              <button
+                type="button"
+                disabled={testingNotify}
+                onClick={async () => {
+                  setTestingNotify(true);
+                  try {
+                    const res = await api.post('config/test-notification');
+                    if (res.data.ok) toast(res.data.message, 'success');
+                    else toast(res.data.error, 'error');
+                  } catch (e) {
+                    toast(e.response?.data?.detail || e.message, 'error');
+                  } finally { setTestingNotify(false); }
+                }}
+                className="btn text-sm flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
+              >
+                <RefreshCw size={13} className={testingNotify ? 'animate-spin' : ''} />
+                Тест
+              </button>
+            </div>
           </Field>
         </div>
       </Section>

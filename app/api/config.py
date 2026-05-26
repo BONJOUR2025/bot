@@ -1,9 +1,12 @@
 import json
+import logging
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from app.services.config_service import ConfigService
+
+log = logging.getLogger(__name__)
 
 
 def create_config_router(service: ConfigService) -> APIRouter:
@@ -20,6 +23,28 @@ def create_config_router(service: ConfigService) -> APIRouter:
     @router.patch("/", response_model=dict)
     async def patch_config(data: dict):
         return service.patch(data)
+
+    @router.post("/test-notification")
+    async def test_notification():
+        """Send a test notification and return detailed result for debugging."""
+        from app.services.notify import send_notification
+
+        cfg = service.load()
+        chat_id = str(cfg.get("notification_chat_id") or "").strip()
+        from app.config import TOKEN
+
+        log.info("test-notification: chat_id=%r token_set=%s", chat_id, bool(TOKEN))
+
+        if not chat_id:
+            return {"ok": False, "error": "notification_chat_id не заполнен в настройках"}
+        if not TOKEN:
+            return {"ok": False, "error": "Telegram bot token не настроен"}
+
+        ok = await send_notification("✅ <b>Тест уведомлений</b>\nЕсли вы видите это сообщение — уведомления работают.")
+        if ok:
+            return {"ok": True, "message": f"Сообщение отправлено на chat_id={chat_id}"}
+        else:
+            return {"ok": False, "error": f"Не удалось отправить. Проверьте логи сервера и убедитесь что chat_id={chat_id} верный и бот не заблокирован."}
 
     @router.post("/upload/")
     async def upload_config(file: UploadFile = File(...)):
@@ -38,9 +63,7 @@ def create_config_router(service: ConfigService) -> APIRouter:
         return Response(
             content=json.dumps(data, ensure_ascii=False, indent=2),
             media_type="application/json",
-            headers={
-                "Content-Disposition": 'attachment; filename="config.json"'
-            },
+            headers={"Content-Disposition": 'attachment; filename="config.json"'},
         )
 
     return router
