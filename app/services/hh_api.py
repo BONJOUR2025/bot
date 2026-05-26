@@ -327,7 +327,8 @@ _STAGE_TO_HH_ACTION: dict[str, str] = {
 
 
 async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str,
-                                  rejection_message: str | None = None) -> bool:
+                                  rejection_message: str | None = None,
+                                  hh_message: str | None = None) -> bool:
     """
     Push a stage change to hh.ru using the action URL from the negotiation's own actions list.
     Returns True if the action was applied, False if not applicable / unavailable.
@@ -387,20 +388,21 @@ async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str,
 
         log.info("hh action '%s' applied for neg %s", action_id, neg_id)
 
-        # Send rejection message so the candidate sees the status change
-        if rejection_message and new_stage == "отказ":
+        # Send message to candidate if provided
+        msg_text = rejection_message if new_stage == "отказ" else hh_message
+        if msg_text and msg_text.strip():
             try:
                 r_msg = await client.post(
                     f"{HH_BASE}/negotiations/{neg_id}/messages",
                     headers=_headers(access_token),
-                    data={"message": rejection_message},
+                    data={"message": msg_text.strip()},
                 )
                 if r_msg.status_code in (200, 201):
-                    log.info("hh rejection message sent for neg %s", neg_id)
+                    log.info("hh message sent for neg %s (stage=%s)", neg_id, new_stage)
                 else:
-                    log.warning("hh rejection message failed for neg %s: HTTP %s %s",
+                    log.warning("hh message failed for neg %s: HTTP %s %s",
                                 neg_id, r_msg.status_code, r_msg.text[:200])
             except Exception as exc:
-                log.warning("hh rejection message error for neg %s: %s", neg_id, exc)
+                log.warning("hh message error for neg %s: %s", neg_id, exc)
 
         return True

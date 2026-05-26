@@ -176,16 +176,40 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
 }
 
 // ── Interview modal ────────────────────────────────────────────────
+function buildInterviewMessage(form) {
+  const parts = ['Приглашаем вас на собеседование!'];
+  if (form.date) {
+    const d = new Date(form.date);
+    const dateStr = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    parts.push(`📅 Дата: ${dateStr}`);
+  }
+  if (form.time) parts.push(`🕐 Время: ${form.time}`);
+  if (form.location) parts.push(`📍 Место: ${form.location}`);
+  if (form.note) parts.push(form.note);
+  parts.push('Если у вас возникнут вопросы — напишите в этот чат.');
+  return parts.join('\n');
+}
+
 function InterviewModal({ candidate, onSave, onClose }) {
   const today = new Date().toISOString().split('T')[0];
   const [form, setForm] = useState({ date: today, time: '', location: '', note: '' });
   const [saving, setSaving] = useState(false);
-  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+  const [sendMsg, setSendMsg] = useState(candidate?.source === 'hh');
+  const [msgText, setMsgText] = useState(() => buildInterviewMessage({ date: today, time: '', location: '', note: '' }));
+
+  const set = k => e => {
+    const updated = { ...form, [k]: e.target.value };
+    setForm(updated);
+    setMsgText(buildInterviewMessage(updated));
+  };
 
   async function save() {
     setSaving(true);
     try {
-      await api.patch(`/recruitment/candidates/${candidate.id}`, { stage: 'собеседование' });
+      await api.patch(`/recruitment/candidates/${candidate.id}`, {
+        stage: 'собеседование',
+        hh_message: (sendMsg && candidate?.source === 'hh' && msgText.trim()) ? msgText.trim() : null,
+      });
 
       const descParts = [];
       if (form.location) descParts.push(`📍 Место: ${form.location}`);
@@ -236,6 +260,22 @@ function InterviewModal({ candidate, onSave, onClose }) {
             <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Примечание</label>
             <textarea className="input w-full min-h-[60px] resize-none" value={form.note} onChange={set('note')} placeholder="Что взять с собой, вопросы..." />
           </div>
+          {candidate?.source === 'hh' && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="sendMsgChk" checked={sendMsg} onChange={e => setSendMsg(e.target.checked)} className="rounded" />
+                <label htmlFor="sendMsgChk" className="text-xs font-medium cursor-pointer">Отправить сообщение кандидату (hh.ru)</label>
+              </div>
+              {sendMsg && (
+                <textarea
+                  className="input w-full text-sm resize-none"
+                  rows={5}
+                  value={msgText}
+                  onChange={e => setMsgText(e.target.value)}
+                />
+              )}
+            </div>
+          )}
           <div className="rounded-lg bg-violet-50 border border-violet-100 px-3 py-2 text-xs text-violet-700 flex items-center gap-1.5">
             <span>📋</span> Задача автоматически создастся в разделе «Задачи»
           </div>
@@ -816,6 +856,10 @@ export default function Recruitment() {
   const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null); // {candidateId, newStage}
   const DEFAULT_REJECTION_MSG = 'Здравствуйте! К сожалению, ваша кандидатура не подошла для данной вакансии. Спасибо за проявленный интерес, желаем удачи в поиске работы!';
   const [rejectionMsg, setRejectionMsg] = useState(DEFAULT_REJECTION_MSG);
+  const [rejectionTemplates, setRejectionTemplates] = useState([]);
+  useEffect(() => {
+    api.get('/config/rejection-templates').then(r => setRejectionTemplates(r.data || [])).catch(() => {});
+  }, []);
 
   function toggleSelection(id) {
     setSelectedIds(prev => {
@@ -1214,15 +1258,32 @@ export default function Recruitment() {
                 </p>
               </div>
             </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">Текст письма кандидату</label>
-              <textarea
-                className="input w-full text-sm"
-                rows={4}
-                value={rejectionMsg}
-                onChange={e => setRejectionMsg(e.target.value)}
-                placeholder="Текст сообщения об отказе..."
-              />
+            <div className="mb-4 space-y-2">
+              {rejectionTemplates.length > 0 && (
+                <div>
+                  <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Шаблон</label>
+                  <select
+                    className="input w-full text-sm"
+                    defaultValue=""
+                    onChange={e => { if (e.target.value) setRejectionMsg(e.target.value); }}
+                  >
+                    <option value="">— выбрать шаблон —</option>
+                    {rejectionTemplates.map((t, i) => (
+                      <option key={i} value={t.text}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium mb-1">Текст письма кандидату</label>
+                <textarea
+                  className="input w-full text-sm"
+                  rows={4}
+                  value={rejectionMsg}
+                  onChange={e => setRejectionMsg(e.target.value)}
+                  placeholder="Текст сообщения об отказе..."
+                />
+              </div>
             </div>
             <div className="flex gap-2 justify-end">
               <button

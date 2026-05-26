@@ -46,6 +46,15 @@ def create_config_router(service: ConfigService) -> APIRouter:
         else:
             return {"ok": False, "error": f"Не удалось отправить. Проверьте логи сервера и убедитесь что chat_id={chat_id} верный и бот не заблокирован."}
 
+    @router.get("/rejection-templates")
+    async def get_rejection_templates():
+        return service.load().get("rejection_templates", [])
+
+    @router.put("/rejection-templates")
+    async def save_rejection_templates(templates: list):
+        service.patch({"rejection_templates": templates})
+        return templates
+
     @router.post("/upload/")
     async def upload_config(file: UploadFile = File(...)):
         try:

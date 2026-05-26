@@ -64,6 +64,7 @@ class CandidateUpdate(BaseModel):
     resume_url: Optional[str] = None
     photo_url: Optional[str] = None
     rejection_message: Optional[str] = None
+    hh_message: Optional[str] = None
 
 class HHIntervalRequest(BaseModel):
     sync_interval_minutes: int = 15
@@ -182,6 +183,7 @@ async def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session
                 await hh_api.sync_negotiation_stage(
                     src.access_token, c.external_id, data.stage,
                     rejection_message=data.rejection_message or None,
+                    hh_message=data.hh_message or None,
                 )
             except Exception as exc:
                 log.warning("hh stage sync failed for candidate %s: %s", candidate_id, exc)

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import {
   CheckCircle, XCircle, RefreshCw, Download, Archive,
-  AlertTriangle, FileSpreadsheet, Database,
+  AlertTriangle, FileSpreadsheet, Database, Plus, Trash2,
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
@@ -46,8 +46,36 @@ export default function Settings() {
   const [archiveResult, setArchiveResult] = useState(null);
   const [downloading, setDownloading]     = useState(false);
   const [testingNotify, setTestingNotify] = useState(false);
+  const [templates, setTemplates]         = useState([]);
+  const [savingTpl, setSavingTpl]         = useState(false);
 
-  useEffect(() => { load(); loadStatus(); }, []);
+  useEffect(() => { load(); loadStatus(); loadTemplates(); }, []);
+
+  async function loadTemplates() {
+    try { const r = await api.get('config/rejection-templates'); setTemplates(r.data || []); } catch {}
+  }
+
+  async function saveTemplates(list) {
+    setSavingTpl(true);
+    try {
+      await api.put('config/rejection-templates', list);
+      setTemplates(list);
+      toast('Шаблоны сохранены', 'success');
+    } catch { toast('Ошибка сохранения шаблонов', 'error'); }
+    finally { setSavingTpl(false); }
+  }
+
+  function addTemplate() {
+    setTemplates(prev => [...prev, { name: '', text: '' }]);
+  }
+
+  function updateTemplate(i, field, value) {
+    setTemplates(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: value } : t));
+  }
+
+  function removeTemplate(i) {
+    setTemplates(prev => prev.filter((_, idx) => idx !== i));
+  }
 
   async function load() {
     try {
@@ -235,6 +263,48 @@ export default function Settings() {
             )}
           />
         </Field>
+      </Section>
+
+      {/* Rejection message templates */}
+      <Section title="Шаблоны писем об отказе (hh.ru)">
+        <p className="text-sm text-[color:var(--color-muted-foreground)]">
+          Шаблоны доступны при переводе кандидата в статус «Отказ» на странице Подбора персонала.
+        </p>
+        <div className="space-y-3">
+          {templates.map((t, i) => (
+            <div key={i} className="border border-[color:var(--color-border)] rounded-lg p-3 space-y-2">
+              <div className="flex gap-2 items-center">
+                <input
+                  className="input flex-1 text-sm"
+                  placeholder="Название шаблона"
+                  value={t.name}
+                  onChange={e => updateTemplate(i, 'name', e.target.value)}
+                />
+                <button type="button" onClick={() => removeTemplate(i)}
+                  className="text-red-400 hover:text-red-600">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <textarea
+                className="input w-full text-sm resize-none"
+                rows={3}
+                placeholder="Текст письма..."
+                value={t.text}
+                onChange={e => updateTemplate(i, 'text', e.target.value)}
+              />
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <button type="button" onClick={addTemplate}
+              className="btn text-sm flex items-center gap-1.5">
+              <Plus size={14} /> Добавить шаблон
+            </button>
+            <button type="button" onClick={() => saveTemplates(templates)} disabled={savingTpl}
+              className="btn btn--primary text-sm disabled:opacity-50">
+              {savingTpl ? 'Сохраняю…' : 'Сохранить шаблоны'}
+            </button>
+          </div>
+        </div>
       </Section>
 
       {/* Save */}
