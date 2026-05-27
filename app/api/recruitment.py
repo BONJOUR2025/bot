@@ -87,6 +87,9 @@ class LinkUpdate(BaseModel):
     external_vacancy_id: Optional[str] = None
     external_vacancy_title: Optional[str] = None
 
+class SendMessageRequest(BaseModel):
+    text: str
+
 
 # ── Vacancies ──────────────────────────────────────────────────────
 
@@ -320,9 +323,6 @@ async def get_candidate_messages(candidate_id: int, db: Session = Depends(get_db
     except Exception as exc:
         raise HTTPException(502, f"Ошибка hh.ru: {exc}")
 
-
-class SendMessageRequest(BaseModel):
-    text: str
 
 @router.post("/candidates/{candidate_id}/messages")
 async def send_candidate_message(candidate_id: int, data: SendMessageRequest, db: Session = Depends(get_db)):
