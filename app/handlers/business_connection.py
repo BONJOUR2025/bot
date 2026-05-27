@@ -92,7 +92,6 @@ async def handle_business_message(update, context):
                         direction="in",
                         text=msg_text,
                         tg_message_id=str(msg.message_id),
-                        is_read=False,
                     )
                     db.add(tg_msg)
                     db.commit()
