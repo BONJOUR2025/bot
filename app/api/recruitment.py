@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage
+from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage, UnlinkedTelegramMessage
 from app.settings import settings
 
 
@@ -605,6 +605,90 @@ def delete_link(link_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted"}
 
 
+# ── Telegram link code ─────────────────────────────────────────────
+
+@router.get("/candidates/{candidate_id}/telegram-link")
+def get_telegram_link(candidate_id: int, db: Session = Depends(get_db)):
+    """Generate or return existing link code for candidate."""
+    import secrets, string
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    if not getattr(c, 'telegram_link_code', None):
+        alphabet = string.ascii_uppercase + string.digits
+        token = ''.join(secrets.choice(alphabet) for _ in range(6))
+        code = f"CAND-{candidate_id}-{token}"
+        try:
+            c.telegram_link_code = code
+            db.commit()
+        except Exception:
+            pass
+        return {"code": code}
+    return {"code": c.telegram_link_code}
+
+
+# ── Unlinked Telegram messages ─────────────────────────────────────
+
+@router.get("/unlinked-tg")
+def list_unlinked_tg(db: Session = Depends(get_db)):
+    try:
+        msgs = db.query(UnlinkedTelegramMessage).order_by(
+            UnlinkedTelegramMessage.created_at.desc()
+        ).limit(100).all()
+        return [m.to_dict() for m in msgs]
+    except Exception:
+        return []
+
+
+class LinkTgRequest(BaseModel):
+    candidate_id: int
+
+@router.post("/unlinked-tg/{msg_id}/link")
+def link_unlinked_tg(msg_id: int, data: LinkTgRequest, db: Session = Depends(get_db)):
+    try:
+        msg = db.query(UnlinkedTelegramMessage).filter(
+            UnlinkedTelegramMessage.id == msg_id
+        ).first()
+        if not msg:
+            raise HTTPException(404, "Message not found")
+        c = db.query(Candidate).filter(Candidate.id == data.candidate_id).first()
+        if not c:
+            raise HTTPException(404, "Candidate not found")
+        # Link chat_id to candidate
+        c.telegram_chat_id = msg.chat_id
+        db.commit()
+        # Move message to TelegramMessage
+        tg_msg = TelegramMessage(
+            candidate_id=c.id,
+            direction="in",
+            text=msg.text,
+            tg_message_id=msg.tg_message_id,
+            is_read=False,
+        )
+        db.add(tg_msg)
+        db.delete(msg)
+        db.commit()
+        return {"status": "linked", "candidate": c.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+@router.delete("/unlinked-tg/{msg_id}")
+def delete_unlinked_tg(msg_id: int, db: Session = Depends(get_db)):
+    try:
+        msg = db.query(UnlinkedTelegramMessage).filter(
+            UnlinkedTelegramMessage.id == msg_id
+        ).first()
+        if msg:
+            db.delete(msg)
+            db.commit()
+    except Exception:
+        pass
+    return {"status": "deleted"}
+
+
 # ── Notifications summary ──────────────────────────────────────────
 
 @router.get("/notifications")
@@ -637,7 +721,12 @@ def get_notifications(db: Session = Depends(get_db)):
         except Exception:
             unread_tg = 0
 
-    return {"new_candidates": new_candidates, "unread_hh": unread_hh, "unread_tg": unread_tg}
+    try:
+        unlinked_tg = db.execute(text("SELECT COUNT(*) FROM unlinked_telegram_messages")).scalar() or 0
+    except Exception:
+        unlinked_tg = 0
+
+    return {"new_candidates": new_candidates, "unread_hh": unread_hh, "unread_tg": unread_tg, "unlinked_tg": unlinked_tg}
 
 
 # ── Manual sync trigger ────────────────────────────────────────────

@@ -48,6 +48,15 @@ def _run_migrations() -> None:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )""",
             "ALTER TABLE telegram_messages ADD COLUMN is_read INTEGER DEFAULT 0",
+            "ALTER TABLE candidates ADD COLUMN telegram_link_code TEXT",
+            """CREATE TABLE IF NOT EXISTS unlinked_telegram_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id TEXT NOT NULL,
+                sender_name TEXT DEFAULT '',
+                text TEXT NOT NULL DEFAULT '',
+                tg_message_id TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )""",
         ]:
             try:
                 conn.execute(text(stmt))

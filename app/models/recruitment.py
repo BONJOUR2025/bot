@@ -45,6 +45,7 @@ class Candidate(Base):
     last_msg_id = Column(String, nullable=True)
     telegram_chat_id = Column(String, nullable=True, default="")
     telegram_username = Column(String, nullable=True, default="")
+    telegram_link_code = Column(String, nullable=True)  # уникальный код для матчинга
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -143,6 +144,25 @@ class VacancyLink(Base):
             "sync_enabled": self.sync_enabled,
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
             "last_sync_count": self.last_sync_count or 0,
+        }
+
+
+class UnlinkedTelegramMessage(Base):
+    __tablename__ = "unlinked_telegram_messages"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    chat_id = Column(String, nullable=False)
+    sender_name = Column(String, nullable=True, default="")
+    text = Column(Text, nullable=False, default="")
+    tg_message_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "chat_id": self.chat_id,
+            "sender_name": self.sender_name or "",
+            "text": self.text,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 

@@ -363,6 +363,8 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
   const tgBottomRef                     = useRef(null);
   const [manualChatId, setManualChatId] = useState('');
   const [savingChatId, setSavingChatId] = useState(false);
+  const [linkCode, setLinkCode]         = useState('');
+  const [loadingCode, setLoadingCode]   = useState(false);
 
   useEffect(() => {
     if (tab === 'chat' && isHh && messages.length === 0) loadMessages();
@@ -430,6 +432,16 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
     } catch (e) {
       setTgError(e.response?.data?.detail || e.message);
     } finally { setSavingChatId(false); }
+  }
+
+  async function fetchLinkCode() {
+    setLoadingCode(true);
+    try {
+      const res = await api.get(`/recruitment/candidates/${candidate.id}/telegram-link`);
+      setLinkCode(res.data.code);
+    } catch (e) {
+      setTgError(e.response?.data?.detail || e.message);
+    } finally { setLoadingCode(false); }
   }
 
   function fmtMsgTime(iso) {

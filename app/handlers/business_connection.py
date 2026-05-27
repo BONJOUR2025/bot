@@ -33,32 +33,80 @@ async def handle_business_connection(update, context):
 async def handle_business_message(update, context):
     """Save incoming messages from candidates to DB."""
     msg = update.business_message
-    if not msg or not msg.text:
+    if not msg:
         return
 
     chat_id = str(msg.chat.id)
+    text = (msg.text or "").strip()
+    sender_name = getattr(msg.chat, 'full_name', '') or getattr(msg.chat, 'first_name', '') or ''
 
     try:
         from app.db.session import SessionLocal
-        from app.models.recruitment import Candidate, TelegramMessage
+        from app.models.recruitment import Candidate, TelegramMessage, UnlinkedTelegramMessage
+        import re
+
         db = SessionLocal()
         try:
+            # 1. Найти по уже известному chat_id
             candidate = db.query(Candidate).filter(
                 Candidate.telegram_chat_id == chat_id
             ).first()
-            if not candidate:
-                log.debug("business_message from unknown chat_id=%s, skipping", chat_id)
-                return
 
-            tg_msg = TelegramMessage(
-                candidate_id=candidate.id,
-                direction="in",
-                text=msg.text,
-                tg_message_id=str(msg.message_id),
-            )
-            db.add(tg_msg)
-            db.commit()
-            log.info("Saved incoming Telegram message from candidate_id=%s", candidate.id)
+            # 2. Матчинг по коду CAND-{id}-{token}
+            if not candidate and text:
+                m = re.match(r'^CAND-(\d+)-[A-Z0-9]{6}$', text)
+                if m:
+                    cand_id = int(m.group(1))
+                    c = db.query(Candidate).filter(
+                        Candidate.id == cand_id,
+                        Candidate.telegram_link_code == text,
+                    ).first()
+                    if c:
+                        c.telegram_chat_id = chat_id
+                        db.commit()
+                        candidate = c
+                        log.info("Telegram matched by code: candidate_id=%s chat_id=%s", c.id, chat_id)
+
+            # 3. Матчинг по контакту (кандидат поделился номером телефона)
+            if not candidate and msg.contact and msg.contact.phone_number:
+                raw_phone = msg.contact.phone_number
+                digits = re.sub(r'\D', '', raw_phone)[-10:]  # последние 10 цифр
+                all_cands = db.query(Candidate).filter(Candidate.phone.isnot(None)).all()
+                for c in all_cands:
+                    c_digits = re.sub(r'\D', '', c.phone or '')[-10:]
+                    if c_digits and c_digits == digits:
+                        c.telegram_chat_id = chat_id
+                        db.commit()
+                        candidate = c
+                        log.info("Telegram matched by phone: candidate_id=%s chat_id=%s", c.id, chat_id)
+                        break
+
+            if candidate:
+                # Сохранить сообщение
+                msg_text = text or ('[контакт]' if msg.contact else '[медиа]')
+                if msg_text:
+                    tg_msg = TelegramMessage(
+                        candidate_id=candidate.id,
+                        direction="in",
+                        text=msg_text,
+                        tg_message_id=str(msg.message_id),
+                        is_read=False,
+                    )
+                    db.add(tg_msg)
+                    db.commit()
+                    log.info("Saved TG message from candidate_id=%s", candidate.id)
+            else:
+                # 4. Сохранить как непривязанное сообщение
+                msg_text = text or ('[контакт]' if msg.contact else '[медиа]')
+                unlinked = UnlinkedTelegramMessage(
+                    chat_id=chat_id,
+                    sender_name=sender_name,
+                    text=msg_text,
+                    tg_message_id=str(msg.message_id),
+                )
+                db.add(unlinked)
+                db.commit()
+                log.info("Saved unlinked TG message from chat_id=%s name=%s", chat_id, sender_name)
         finally:
             db.close()
     except Exception as exc:
