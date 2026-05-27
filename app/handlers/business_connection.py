@@ -42,6 +42,21 @@ async def handle_business_message(update, context):
     text = (msg.text or "").strip()
     sender_name = getattr(msg.chat, 'full_name', '') or getattr(msg.chat, 'first_name', '') or ''
 
+    # Auto-save business_connection_id from incoming messages if not yet in config
+    try:
+        conn_id = getattr(msg, 'business_connection_id', None)
+        if conn_id:
+            from app.services.config_service import ConfigService
+            cfg = ConfigService().load()
+            if not cfg.get("tg_business_connection_id"):
+                ConfigService().patch({
+                    "tg_business_connection_id": conn_id,
+                    "tg_business_can_reply": True,
+                })
+                log.info("Auto-saved business_connection_id=%s from incoming message", conn_id)
+    except Exception as e:
+        log.warning("Failed to auto-save business_connection_id: %s", e)
+
     try:
         from app.db.session import SessionLocal
         from app.models.recruitment import Candidate, TelegramMessage, UnlinkedTelegramMessage
