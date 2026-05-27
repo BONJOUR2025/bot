@@ -609,8 +609,9 @@ def delete_link(link_id: int, db: Session = Depends(get_db)):
 
 @router.get("/candidates/{candidate_id}/telegram-link")
 def get_telegram_link(candidate_id: int, db: Session = Depends(get_db)):
-    """Generate or return existing link code for candidate."""
+    """Generate or return existing link code + t.me deep link for candidate."""
     import secrets, string
+    from urllib.parse import quote
     c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not c:
         raise HTTPException(404, "Candidate not found")
@@ -623,8 +624,18 @@ def get_telegram_link(candidate_id: int, db: Session = Depends(get_db)):
             db.commit()
         except Exception:
             pass
-        return {"code": code}
-    return {"code": c.telegram_link_code}
+    else:
+        code = c.telegram_link_code
+
+    # Build t.me deep link if personal username is configured
+    from app.services.config_service import ConfigService
+    cfg = ConfigService().get_all()
+    personal_username = (cfg.get("tg_personal_username") or "").strip().lstrip("@")
+    tg_link = None
+    if personal_username:
+        tg_link = f"https://t.me/{personal_username}?text={quote(code)}"
+
+    return {"code": code, "tg_link": tg_link, "personal_username": personal_username}
 
 
 # ── Unlinked Telegram messages ─────────────────────────────────────

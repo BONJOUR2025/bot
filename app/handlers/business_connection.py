@@ -14,13 +14,15 @@ async def handle_business_connection(update, context):
     svc = ConfigService()
 
     if conn.is_enabled:
+        personal_username = getattr(conn.user, 'username', None) or ""
         svc.patch({
             "tg_business_connection_id": conn.id,
             "tg_business_user_id": conn.user_id,
             "tg_business_can_reply": conn.can_reply,
+            "tg_personal_username": personal_username,
         })
-        log.info("Secretary Mode connected: user_id=%s connection_id=%s can_reply=%s",
-                 conn.user_id, conn.id, conn.can_reply)
+        log.info("Secretary Mode connected: user_id=%s connection_id=%s can_reply=%s username=%s",
+                 conn.user_id, conn.id, conn.can_reply, personal_username)
     else:
         svc.patch({
             "tg_business_connection_id": "",

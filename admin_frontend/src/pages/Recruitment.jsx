@@ -364,6 +364,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
   const [manualChatId, setManualChatId] = useState('');
   const [savingChatId, setSavingChatId] = useState(false);
   const [linkCode, setLinkCode]         = useState('');
+  const [tgDeepLink, setTgDeepLink]     = useState('');
   const [loadingCode, setLoadingCode]   = useState(false);
 
   useEffect(() => {
@@ -439,6 +440,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
     try {
       const res = await api.get(`/recruitment/candidates/${candidate.id}/telegram-link`);
       setLinkCode(res.data.code);
+      setTgDeepLink(res.data.tg_link || '');
     } catch (e) {
       setTgError(e.response?.data?.detail || e.message);
     } finally { setLoadingCode(false); }
@@ -692,22 +694,41 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
 
                 {/* Link code block */}
                 {linkCode ? (
-                  <div className="w-full max-w-xs">
-                    <p className="text-xs text-[color:var(--color-muted-foreground)] mb-1 text-left">
-                      Попросите кандидата прислать этот код вам в Telegram:
-                    </p>
-                    <div className="flex gap-2 items-center">
-                      <code className="flex-1 bg-[color:var(--color-muted)] rounded px-3 py-2 text-sm font-mono select-all">
-                        {linkCode}
-                      </code>
-                      <button onClick={() => navigator.clipboard.writeText(linkCode)}
-                        className="btn text-xs px-2">Копировать</button>
-                    </div>
+                  <div className="w-full max-w-sm space-y-2">
+                    {tgDeepLink ? (
+                      <>
+                        <p className="text-xs text-[color:var(--color-muted-foreground)] text-left">
+                          Скопируйте ссылку и отправьте кандидату (например, в сообщении на hh.ru).
+                          При переходе откроется Telegram с вашим аккаунтом и предзаполненным сообщением —
+                          кандидату останется только нажать «Отправить».
+                        </p>
+                        <div className="flex gap-2 items-center">
+                          <input readOnly value={tgDeepLink}
+                            className="input flex-1 text-xs font-mono truncate" />
+                          <button onClick={() => navigator.clipboard.writeText(tgDeepLink)}
+                            className="btn btn-primary text-xs px-3 shrink-0">Копировать</button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-[color:var(--color-muted-foreground)] text-left">
+                          Подключите Secretary Mode чтобы получить ссылку. Пока что скопируйте код и попросите кандидата прислать его вам в Telegram:
+                        </p>
+                        <div className="flex gap-2 items-center">
+                          <code className="flex-1 bg-[color:var(--color-muted)] rounded px-3 py-2 text-sm font-mono select-all">
+                            {linkCode}
+                          </code>
+                          <button onClick={() => navigator.clipboard.writeText(linkCode)}
+                            className="btn text-xs px-2">Копировать</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <button onClick={fetchLinkCode} disabled={loadingCode}
                     className="btn btn-secondary text-sm disabled:opacity-50">
-                    {loadingCode ? 'Загрузка...' : 'Получить код для кандидата'}
+                    {loadingCode ? <Loader2 size={13} className="animate-spin inline mr-1" /> : <Link size={13} className="inline mr-1" />}
+                    {loadingCode ? 'Загрузка...' : 'Получить ссылку для кандидата'}
                   </button>
                 )}
 
