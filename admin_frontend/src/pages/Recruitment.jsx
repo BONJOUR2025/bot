@@ -689,6 +689,28 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
                   <p>Chat ID определяется автоматически, когда кандидат напишет первым на ваш личный аккаунт.</p>
                   <p>Или введите Chat ID вручную, если он вам известен.</p>
                 </div>
+
+                {/* Link code block */}
+                {linkCode ? (
+                  <div className="w-full max-w-xs">
+                    <p className="text-xs text-[color:var(--color-muted-foreground)] mb-1 text-left">
+                      Попросите кандидата прислать этот код вам в Telegram:
+                    </p>
+                    <div className="flex gap-2 items-center">
+                      <code className="flex-1 bg-[color:var(--color-muted)] rounded px-3 py-2 text-sm font-mono select-all">
+                        {linkCode}
+                      </code>
+                      <button onClick={() => navigator.clipboard.writeText(linkCode)}
+                        className="btn text-xs px-2">Копировать</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={fetchLinkCode} disabled={loadingCode}
+                    className="btn btn-secondary text-sm disabled:opacity-50">
+                    {loadingCode ? 'Загрузка...' : 'Получить код для кандидата'}
+                  </button>
+                )}
+
                 <div className="flex gap-2 w-full max-w-xs">
                   <input
                     className="input flex-1 text-sm"
@@ -1046,6 +1068,24 @@ export default function Recruitment() {
   const [msgTemplates, setMsgTemplates] = useState([]);
   useEffect(() => {
     api.get('/config/message-templates').then(r => setMsgTemplates(r.data || [])).catch(() => {});
+  }, []);
+
+  const [unlinkedTg, setUnlinkedTg] = useState([]);
+  const [unlinkedLinkTarget, setUnlinkedLinkTarget] = useState({}); // msgId -> candidateId
+
+  const [allCandidates, setAllCandidates] = useState([]);
+
+  const loadUnlinkedTg = useCallback(async () => {
+    try {
+      const res = await api.get('/recruitment/unlinked-tg');
+      setUnlinkedTg(res.data || []);
+    } catch (e) { /* ignore */ }
+  }, []);
+
+  useEffect(() => { loadUnlinkedTg(); }, [loadUnlinkedTg]);
+
+  useEffect(() => {
+    api.get('/recruitment/candidates').then(r => setAllCandidates(r.data || [])).catch(() => {});
   }, []);
 
   function toggleSelection(id) {
@@ -1535,6 +1575,74 @@ export default function Recruitment() {
           onDelete={bulkDelete}
           loading={bulkLoading}
         />
+      )}
+
+      {/* Unlinked TG messages section */}
+      {unlinkedTg.length > 0 && (
+        <div className="mx-6 sm:mx-10 mt-6 mb-6">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
+            <div className="px-5 py-3 border-b border-amber-200 flex items-center gap-2">
+              <MessageCircle size={16} className="text-amber-600" />
+              <h3 className="text-sm font-semibold text-amber-800">Непривязанные сообщения Telegram</h3>
+              <span className="ml-auto text-xs bg-amber-200 text-amber-800 rounded-full px-2 py-0.5">{unlinkedTg.length}</span>
+            </div>
+            <div className="divide-y divide-amber-100">
+              {unlinkedTg.map(msg => (
+                <div key={msg.id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
+                      <span>{msg.sender_name || 'Неизвестный'}</span>
+                      <span className="text-xs text-amber-500 font-normal">chat_id: {msg.chat_id}</span>
+                    </div>
+                    <p className="text-sm text-amber-800 truncate mt-0.5">{msg.text}</p>
+                    <p className="text-xs text-amber-500 mt-0.5">
+                      {msg.created_at ? new Date(msg.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <select
+                      className="input text-sm py-1 px-2"
+                      value={unlinkedLinkTarget[msg.id] || ''}
+                      onChange={e => setUnlinkedLinkTarget(prev => ({ ...prev, [msg.id]: e.target.value }))}
+                    >
+                      <option value="">— выбрать кандидата —</option>
+                      {allCandidates.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={async () => {
+                        const candId = unlinkedLinkTarget[msg.id];
+                        if (!candId) return;
+                        try {
+                          await api.post(`/recruitment/unlinked-tg/${msg.id}/link`, { candidate_id: Number(candId) });
+                          await loadUnlinkedTg();
+                          await loadCandidates();
+                        } catch (e) { setError(e.response?.data?.detail || e.message); }
+                      }}
+                      disabled={!unlinkedLinkTarget[msg.id]}
+                      className="btn btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                    >
+                      Привязать
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.delete(`/recruitment/unlinked-tg/${msg.id}`);
+                          await loadUnlinkedTg();
+                        } catch (e) { setError(e.response?.data?.detail || e.message); }
+                      }}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-amber-200 text-amber-500 hover:text-amber-700 transition-colors"
+                      title="Удалить"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
