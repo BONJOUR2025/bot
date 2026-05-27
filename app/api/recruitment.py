@@ -284,7 +284,18 @@ async def send_telegram_message(candidate_id: int, data: SendMessageRequest, db:
     from app.services.notify import send_secretary_message
     err = await send_secretary_message(c.telegram_chat_id, data.text)
     if err:
-        raise HTTPException(400, err)
+        # Add config diagnostics to help debug
+        try:
+            from app.services.config_service import ConfigService
+            cfg = ConfigService().load()
+            conn_id = cfg.get("tg_business_connection_id", "")
+            can_reply = cfg.get("tg_business_can_reply", "NOT SET")
+            log.warning("Secretary send failed. config: connection_id=%r can_reply=%r", conn_id, can_reply)
+            raise HTTPException(400, f"{err} [diag: connection_id={'set' if conn_id else 'EMPTY'}, can_reply={can_reply!r}]")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(400, err)
 
     msg = TelegramMessage(candidate_id=candidate_id, direction="out", text=data.text)
     db.add(msg)
