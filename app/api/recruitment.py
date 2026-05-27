@@ -604,13 +604,33 @@ def delete_link(link_id: int, db: Session = Depends(get_db)):
 @router.get("/notifications")
 def get_notifications(db: Session = Depends(get_db)):
     """Return unread counts for dashboard badges."""
+    from sqlalchemy import text
     since = datetime.utcnow() - timedelta(hours=24)
     new_candidates = db.query(Candidate).filter(Candidate.created_at >= since).count()
-    unread_hh = db.query(Candidate).filter(Candidate.has_unread_hh_msg == True).count()
-    unread_tg = db.query(TelegramMessage).filter(
-        TelegramMessage.direction == "in",
-        TelegramMessage.is_read == False,
-    ).count()
+
+    try:
+        unread_hh = db.query(Candidate).filter(Candidate.has_unread_hh_msg == True).count()
+    except Exception:
+        try:
+            unread_hh = db.execute(
+                text("SELECT COUNT(*) FROM candidates WHERE has_unread_hh_msg = 1")
+            ).scalar() or 0
+        except Exception:
+            unread_hh = 0
+
+    try:
+        unread_tg = db.query(TelegramMessage).filter(
+            TelegramMessage.direction == "in",
+            TelegramMessage.is_read == False,
+        ).count()
+    except Exception:
+        try:
+            unread_tg = db.execute(
+                text("SELECT COUNT(*) FROM telegram_messages WHERE direction='in' AND is_read=0")
+            ).scalar() or 0
+        except Exception:
+            unread_tg = 0
+
     return {"new_candidates": new_candidates, "unread_hh": unread_hh, "unread_tg": unread_tg}
 
 

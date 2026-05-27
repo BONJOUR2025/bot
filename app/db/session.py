@@ -38,6 +38,7 @@ def _run_migrations() -> None:
             "ALTER TABLE candidates ADD COLUMN last_msg_id TEXT",
             "ALTER TABLE candidates ADD COLUMN telegram_chat_id TEXT DEFAULT ''",
             "ALTER TABLE candidates ADD COLUMN telegram_username TEXT DEFAULT ''",
+            "ALTER TABLE candidates ADD COLUMN has_unread_hh_msg INTEGER DEFAULT 0",
             """CREATE TABLE IF NOT EXISTS telegram_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -46,6 +47,7 @@ def _run_migrations() -> None:
                 tg_message_id TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )""",
+            "ALTER TABLE telegram_messages ADD COLUMN is_read INTEGER DEFAULT 0",
         ]:
             try:
                 conn.execute(text(stmt))
