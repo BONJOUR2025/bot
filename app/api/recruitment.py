@@ -255,6 +255,14 @@ def get_telegram_messages(candidate_id: int, db: Session = Depends(get_db)):
     msgs = db.query(TelegramMessage).filter(
         TelegramMessage.candidate_id == candidate_id
     ).order_by(TelegramMessage.created_at).all()
+    # Mark incoming messages as read when admin opens TG chat
+    updated = False
+    for m in msgs:
+        if m.direction == "in" and not m.is_read:
+            m.is_read = True
+            updated = True
+    if updated:
+        db.commit()
     return [m.to_dict() for m in msgs]
 
 
@@ -302,6 +310,10 @@ def _get_hh_candidate(candidate_id: int, db):
 @router.get("/candidates/{candidate_id}/messages")
 async def get_candidate_messages(candidate_id: int, db: Session = Depends(get_db)):
     c, token = _get_hh_candidate(candidate_id, db)
+    # Clear unread flag when admin opens hh chat
+    if c.has_unread_hh_msg:
+        c.has_unread_hh_msg = False
+        db.commit()
     from app.services import hh_api
     try:
         return await hh_api.get_messages(token, c.external_id)
@@ -584,6 +596,21 @@ def delete_link(link_id: int, db: Session = Depends(get_db)):
     if not link: raise HTTPException(404, "Link not found")
     db.delete(link); db.commit()
     return {"status": "deleted"}
+
+
+# ── Notifications summary ──────────────────────────────────────────
+
+@router.get("/notifications")
+def get_notifications(db: Session = Depends(get_db)):
+    """Return unread counts for dashboard badges."""
+    since = datetime.utcnow() - timedelta(hours=24)
+    new_candidates = db.query(Candidate).filter(Candidate.created_at >= since).count()
+    unread_hh = db.query(Candidate).filter(Candidate.has_unread_hh_msg == True).count()
+    unread_tg = db.query(TelegramMessage).filter(
+        TelegramMessage.direction == "in",
+        TelegramMessage.is_read == False,
+    ).count()
+    return {"new_candidates": new_candidates, "unread_hh": unread_hh, "unread_tg": unread_tg}
 
 
 # ── Manual sync trigger ────────────────────────────────────────────

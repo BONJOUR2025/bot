@@ -5,6 +5,7 @@ import {
   Wallet, CheckCircle2, Palmtree, AlertTriangle,
   ArrowRight, CalendarDays, ClipboardList, Clock,
   ListTodo, CirclePlay, RefreshCw, Scissors,
+  UserPlus, MessageSquare, Send,
 } from 'lucide-react';
 import api from '../api';
 import Card from '../components/ui/Card';
@@ -143,21 +144,23 @@ export default function Dashboard() {
   const [birthdays, setBirthdays] = useState([]);
   const [masters, setMasters]     = useState(null);
   const [sales, setSales]         = useState(null);   // null = unavailable
-  const [loading, setLoading]     = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading]             = useState(true);
+  const [refreshing, setRefreshing]       = useState(false);
+  const [recruitNotifs, setRecruitNotifs] = useState(null);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [pendRes, vacRes, taskRes, bdRes, mastersRes, salesRes] = await Promise.allSettled([
+      const [pendRes, vacRes, taskRes, bdRes, mastersRes, salesRes, notifRes] = await Promise.allSettled([
         api.get('payouts/active'),
         api.get('vacations/active'),
         api.get('tasks/stats'),
         api.get('birthdays/', { params: { days: 30 } }),
         api.get('masters/works', { params: { date_from: today, date_to: today } }),
         api.get('sales/daily',   { params: { date_from: today, date_to: today } }),
+        api.get('recruitment/notifications'),
       ]);
       if (pendRes.status === 'fulfilled') {
         const all = pendRes.value.data ?? [];
@@ -169,6 +172,7 @@ export default function Dashboard() {
       if (bdRes.status      === 'fulfilled') setBirthdays(bdRes.value.data ?? []);
       if (mastersRes.status === 'fulfilled') setMasters(mastersRes.value.data ?? null);
       if (salesRes.status   === 'fulfilled') setSales(salesRes.value.data ?? null);
+      if (notifRes.status   === 'fulfilled') setRecruitNotifs(notifRes.value.data ?? null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -247,6 +251,39 @@ export default function Dashboard() {
           to="/admin/tasks"
         />
       </div>
+
+      {/* recruitment notifications */}
+      {recruitNotifs && (recruitNotifs.new_candidates > 0 || recruitNotifs.unread_hh > 0 || recruitNotifs.unread_tg > 0) && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {recruitNotifs.new_candidates > 0 && (
+            <StatCard
+              icon={UserPlus}
+              label="Новые отклики (24ч)"
+              value={recruitNotifs.new_candidates}
+              tone="info"
+              to="/admin/recruitment"
+            />
+          )}
+          {recruitNotifs.unread_hh > 0 && (
+            <StatCard
+              icon={MessageSquare}
+              label="Новые сообщения hh.ru"
+              value={recruitNotifs.unread_hh}
+              tone="warning"
+              to="/admin/recruitment"
+            />
+          )}
+          {recruitNotifs.unread_tg > 0 && (
+            <StatCard
+              icon={Send}
+              label="Новые сообщения Telegram"
+              value={recruitNotifs.unread_tg}
+              tone="warning"
+              to="/admin/recruitment"
+            />
+          )}
+        </div>
+      )}
 
       {/* middle row: payouts + tasks */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
