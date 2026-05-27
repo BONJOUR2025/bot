@@ -629,7 +629,7 @@ def get_telegram_link(candidate_id: int, db: Session = Depends(get_db)):
 
     # Build t.me deep link if personal username is configured
     from app.services.config_service import ConfigService
-    cfg = ConfigService().get_all()
+    cfg = ConfigService().load()
     personal_username = (cfg.get("tg_personal_username") or "").strip().lstrip("@")
     tg_link = None
     if personal_username:
