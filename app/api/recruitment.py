@@ -260,13 +260,16 @@ def get_telegram_messages(candidate_id: int, db: Session = Depends(get_db)):
         TelegramMessage.candidate_id == candidate_id
     ).order_by(TelegramMessage.created_at).all()
     # Mark incoming messages as read when admin opens TG chat
-    updated = False
-    for m in msgs:
-        if m.direction == "in" and not m.is_read:
-            m.is_read = True
-            updated = True
-    if updated:
-        db.commit()
+    try:
+        updated = False
+        for m in msgs:
+            if m.direction == "in" and not getattr(m, 'is_read', True):
+                m.is_read = True
+                updated = True
+        if updated:
+            db.commit()
+    except Exception:
+        pass
     return [m.to_dict() for m in msgs]
 
 
@@ -315,9 +318,12 @@ def _get_hh_candidate(candidate_id: int, db):
 async def get_candidate_messages(candidate_id: int, db: Session = Depends(get_db)):
     c, token = _get_hh_candidate(candidate_id, db)
     # Clear unread flag when admin opens hh chat
-    if c.has_unread_hh_msg:
-        c.has_unread_hh_msg = False
-        db.commit()
+    if getattr(c, 'has_unread_hh_msg', False):
+        try:
+            c.has_unread_hh_msg = False
+            db.commit()
+        except Exception:
+            pass
     from app.services import hh_api
     try:
         return await hh_api.get_messages(token, c.external_id)
