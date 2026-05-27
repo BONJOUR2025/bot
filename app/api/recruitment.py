@@ -66,6 +66,7 @@ class CandidateUpdate(BaseModel):
     rejection_message: Optional[str] = None
     hh_message: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+    telegram_username: Optional[str] = None
     send_telegram: bool = False
 
 class HHIntervalRequest(BaseModel):
@@ -170,7 +171,7 @@ async def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session
     old_stage = c.stage
 
     for field in ("name", "phone", "email", "source", "stage", "notes", "vacancy_id",
-                  "age", "resume_url", "photo_url", "telegram_chat_id"):
+                  "age", "resume_url", "photo_url", "telegram_chat_id", "telegram_username"):
         val = getattr(data, field)
         if val is not None: setattr(c, field, val)
     c.updated_at = datetime.utcnow()

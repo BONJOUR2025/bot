@@ -253,35 +253,29 @@ export default function Dashboard() {
       </div>
 
       {/* recruitment notifications */}
-      {recruitNotifs && (recruitNotifs.new_candidates > 0 || recruitNotifs.unread_hh > 0 || recruitNotifs.unread_tg > 0) && (
+      {recruitNotifs && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {recruitNotifs.new_candidates > 0 && (
-            <StatCard
-              icon={UserPlus}
-              label="Новые отклики (24ч)"
-              value={recruitNotifs.new_candidates}
-              tone="info"
-              to="/admin/recruitment"
-            />
-          )}
-          {recruitNotifs.unread_hh > 0 && (
-            <StatCard
-              icon={MessageSquare}
-              label="Новые сообщения hh.ru"
-              value={recruitNotifs.unread_hh}
-              tone="warning"
-              to="/admin/recruitment"
-            />
-          )}
-          {recruitNotifs.unread_tg > 0 && (
-            <StatCard
-              icon={Send}
-              label="Новые сообщения Telegram"
-              value={recruitNotifs.unread_tg}
-              tone="warning"
-              to="/admin/recruitment"
-            />
-          )}
+          <StatCard
+            icon={UserPlus}
+            label="Новые отклики (24ч)"
+            value={recruitNotifs.new_candidates}
+            tone={recruitNotifs.new_candidates > 0 ? 'info' : 'neutral'}
+            to="/admin/recruitment"
+          />
+          <StatCard
+            icon={MessageSquare}
+            label="Новые сообщения hh.ru"
+            value={recruitNotifs.unread_hh}
+            tone={recruitNotifs.unread_hh > 0 ? 'warning' : 'neutral'}
+            to="/admin/recruitment"
+          />
+          <StatCard
+            icon={Send}
+            label="Новые сообщения Telegram"
+            value={recruitNotifs.unread_tg}
+            tone={recruitNotifs.unread_tg > 0 ? 'warning' : 'neutral'}
+            to="/admin/recruitment"
+          />
         </div>
       )}
 
