@@ -1,5 +1,6 @@
 from telegram.ext import (
     ApplicationBuilder,
+    BusinessConnectionHandler,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
@@ -55,6 +56,7 @@ from ..handlers.admin import (
 )
 from ..handlers.reset import global_reset
 from ..handlers.media_archive import archive_media
+from ..handlers.business_connection import handle_business_connection
 from telegram.request import HTTPXRequest
 import datetime
 
@@ -100,6 +102,7 @@ def _register_all_handlers(app):
         CallbackQueryHandler(log_button_press, block=False),
         group=-1,
     )
+    app.add_handler(BusinessConnectionHandler(handle_business_connection))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         CommandHandler("salary", handle_salary_request, filters=~filters.User(ADMIN_ID))

@@ -43,6 +43,7 @@ class Candidate(Base):
     stage = Column(String, nullable=False, default="отклик", index=True)
     notes = Column(Text, nullable=True, default="")
     last_msg_id = Column(String, nullable=True)  # last seen hh.ru message id
+    telegram_chat_id = Column(String, nullable=True, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -62,6 +63,7 @@ class Candidate(Base):
             "age": self.age,
             "stage": self.stage,
             "notes": self.notes or "",
+            "telegram_chat_id": self.telegram_chat_id or "",
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

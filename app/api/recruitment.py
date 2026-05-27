@@ -65,6 +65,8 @@ class CandidateUpdate(BaseModel):
     photo_url: Optional[str] = None
     rejection_message: Optional[str] = None
     hh_message: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    send_telegram: bool = False
 
 class HHIntervalRequest(BaseModel):
     sync_interval_minutes: int = 15
@@ -164,11 +166,14 @@ async def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session
 
     old_stage = c.stage
 
-    for field in ("name", "phone", "email", "source", "stage", "notes", "vacancy_id", "age", "resume_url", "photo_url"):
+    for field in ("name", "phone", "email", "source", "stage", "notes", "vacancy_id",
+                  "age", "resume_url", "photo_url", "telegram_chat_id"):
         val = getattr(data, field)
         if val is not None: setattr(c, field, val)
     c.updated_at = datetime.utcnow()
     db.commit(); db.refresh(c)
+
+    warnings: list[str] = []
 
     # Push stage change to hh.ru when applicable
     if (
@@ -188,7 +193,19 @@ async def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session
             except Exception as exc:
                 log.warning("hh stage sync failed for candidate %s: %s", candidate_id, exc)
 
-    return c.to_dict()
+    # Send via Telegram Secretary Mode if requested
+    tg_chat_id = c.telegram_chat_id or ""
+    tg_text = data.hh_message or data.rejection_message or ""
+    if data.send_telegram and tg_chat_id and tg_text:
+        from app.services.notify import send_secretary_message
+        err = await send_secretary_message(tg_chat_id, tg_text)
+        if err:
+            warnings.append(err)
+
+    result = c.to_dict()
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 @router.delete("/candidates/{candidate_id}")
 def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):

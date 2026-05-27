@@ -89,14 +89,15 @@ function VacancyModal({ vacancy, onClose, onSave }) {
 // ── Candidate modal ────────────────────────────────────────────────
 function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave }) {
   const [form, setForm] = useState({
-    name:       candidate?.name       || '',
-    phone:      candidate?.phone      || '',
-    email:      candidate?.email      || '',
-    source:     candidate?.source     || 'manual',
-    stage:      candidate?.stage      || initialStage || 'отклик',
-    notes:      candidate?.notes      || '',
-    age:        candidate?.age        ?? '',
-    resume_url: candidate?.resume_url || '',
+    name:             candidate?.name             || '',
+    phone:            candidate?.phone            || '',
+    email:            candidate?.email            || '',
+    source:           candidate?.source           || 'manual',
+    stage:            candidate?.stage            || initialStage || 'отклик',
+    notes:            candidate?.notes            || '',
+    age:              candidate?.age              ?? '',
+    resume_url:       candidate?.resume_url       || '',
+    telegram_chat_id: candidate?.telegram_chat_id || '',
   });
   const [saving, setSaving] = useState(false);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -143,6 +144,10 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
           <div>
             <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Ссылка на резюме</label>
             <input className="input w-full" value={form.resume_url} onChange={set('resume_url')} placeholder="https://hh.ru/resume/..." />
+          </div>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Telegram chat ID</label>
+            <input className="input w-full font-mono" value={form.telegram_chat_id} onChange={set('telegram_chat_id')} placeholder="123456789" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -194,6 +199,7 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
   const [form, setForm] = useState({ date: today, time: '', location: '', note: '' });
   const [saving, setSaving] = useState(false);
   const [sendMsg, setSendMsg] = useState(candidate?.source === 'hh');
+  const [sendTg, setSendTg] = useState(false);
   const [templateText, setTemplateText] = useState(DEFAULT_INTERVIEW_TEMPLATE);
   const [msgText, setMsgText] = useState(() =>
     applyTags(DEFAULT_INTERVIEW_TEMPLATE, { name: candidate?.name, date: today })
@@ -218,6 +224,7 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
       await api.patch(`/recruitment/candidates/${candidate.id}`, {
         stage: 'собеседование',
         hh_message: (sendMsg && candidate?.source === 'hh' && msgText.trim()) ? msgText.trim() : null,
+        send_telegram: sendTg && !!candidate?.telegram_chat_id,
       });
 
       const descParts = [];
@@ -275,6 +282,14 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
                 <input type="checkbox" id="sendMsgChk" checked={sendMsg} onChange={e => setSendMsg(e.target.checked)} className="rounded" />
                 <label htmlFor="sendMsgChk" className="text-xs font-medium cursor-pointer">Отправить сообщение кандидату (hh.ru)</label>
               </div>
+              {candidate?.telegram_chat_id && (
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="sendTgChk" checked={sendTg} onChange={e => setSendTg(e.target.checked)} className="rounded" />
+                  <label htmlFor="sendTgChk" className="text-xs font-medium cursor-pointer">
+                    Также отправить в Telegram (chat_id: <code>{candidate.telegram_chat_id}</code>)
+                  </label>
+                </div>
+              )}
               {sendMsg && (
                 <div className="space-y-1.5">
                   {interviewTemplates.length > 0 && (
@@ -876,9 +891,10 @@ export default function Recruitment() {
   const [selectedIds,     setSelectedIds]     = useState(new Set());
   const [bulkLoading,     setBulkLoading]     = useState(false);
   // hh.ru discard confirmation
-  const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null); // {candidateId, newStage}
+  const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null); // {candidateId, newStage, candidate}
   const DEFAULT_REJECTION_MSG = 'Здравствуйте! К сожалению, ваша кандидатура не подошла для данной вакансии. Спасибо за проявленный интерес, желаем удачи в поиске работы!';
   const [rejectionMsg, setRejectionMsg] = useState(DEFAULT_REJECTION_MSG);
+  const [sendRejectionTg, setSendRejectionTg] = useState(false);
   const [msgTemplates, setMsgTemplates] = useState([]);
   useEffect(() => {
     api.get('/config/message-templates').then(r => setMsgTemplates(r.data || [])).catch(() => {});
@@ -1008,7 +1024,9 @@ export default function Recruitment() {
   async function stageChange(candidateId, newStage, extraFields = {}) {
     try {
       const res = await api.patch(`/recruitment/candidates/${candidateId}`, { stage: newStage, ...extraFields });
-      setCandidates(prev => prev.map(c => c.id === candidateId ? res.data : c));
+      const { warnings, ...candidateData } = res.data;
+      setCandidates(prev => prev.map(c => c.id === candidateId ? candidateData : c));
+      if (warnings?.length) setError('⚠️ ' + warnings.join(' | '));
     } catch (e) { setError(e.message); }
   }
 
@@ -1022,7 +1040,8 @@ export default function Recruitment() {
     // Warn before rejecting an hh.ru candidate — it sends them a notification
     if (newStage === 'отказ' && candidate.source === 'hh') {
       setRejectionMsg(DEFAULT_REJECTION_MSG);
-      setHhDiscardConfirm({ candidateId, newStage });
+      setSendRejectionTg(false);
+      setHhDiscardConfirm({ candidateId, newStage, candidate });
       return;
     }
     stageChange(candidateId, newStage);
@@ -1308,6 +1327,15 @@ export default function Recruitment() {
                 />
               </div>
             </div>
+            {hhDiscardConfirm?.candidate?.telegram_chat_id && (
+              <div className="flex items-center gap-2 mb-3">
+                <input type="checkbox" id="sendRejTg" checked={sendRejectionTg}
+                  onChange={e => setSendRejectionTg(e.target.checked)} className="rounded" />
+                <label htmlFor="sendRejTg" className="text-xs cursor-pointer">
+                  Также отправить в Telegram (chat_id: <code>{hhDiscardConfirm.candidate.telegram_chat_id}</code>)
+                </label>
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
                 className="btn btn-secondary text-sm"
@@ -1320,7 +1348,10 @@ export default function Recruitment() {
                 onClick={() => {
                   const { candidateId, newStage } = hhDiscardConfirm;
                   setHhDiscardConfirm(null);
-                  stageChange(candidateId, newStage, { rejection_message: rejectionMsg.trim() || null });
+                  stageChange(candidateId, newStage, {
+                    rejection_message: rejectionMsg.trim() || null,
+                    send_telegram: sendRejectionTg,
+                  });
                 }}
               >
                 Отказать и уведомить
