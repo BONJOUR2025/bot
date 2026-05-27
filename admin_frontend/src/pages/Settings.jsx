@@ -255,6 +255,15 @@ export default function Settings() {
               <input className="input w-full rounded-l-none" placeholder="username" {...register('tg_personal_username')} />
             </div>
           </Field>
+          <Field label="Business Connection ID" hint="ID подключения Secretary Mode. Можно найти в логах бота после подключения в Telegram → Настройки → Бизнес-аккаунт → Чат-боты.">
+            <input className="input w-full font-mono text-sm" placeholder="вставьте connection_id из логов" {...register('tg_business_connection_id')} />
+          </Field>
+          <Field label="Право отвечать (can_reply)" hint="Включите если при подключении бота вы дали ему право отвечать на сообщения.">
+            <label className="flex items-center gap-2 cursor-pointer mt-1">
+              <input type="checkbox" className="w-4 h-4 accent-[color:var(--color-primary)]" {...register('tg_business_can_reply')} />
+              <span className="text-sm">Разрешено отвечать</span>
+            </label>
+          </Field>
         </div>
       </Section>
 

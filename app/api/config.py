@@ -46,6 +46,17 @@ def create_config_router(service: ConfigService) -> APIRouter:
         else:
             return {"ok": False, "error": f"Не удалось отправить. Проверьте логи сервера и убедитесь что chat_id={chat_id} верный и бот не заблокирован."}
 
+    @router.get("/secretary-status")
+    async def secretary_status():
+        """Diagnostic: show current Secretary Mode config values."""
+        cfg = service.load()
+        return {
+            "tg_business_connection_id": cfg.get("tg_business_connection_id") or "",
+            "tg_business_can_reply": cfg.get("tg_business_can_reply", False),
+            "tg_personal_username": cfg.get("tg_personal_username") or "",
+            "tg_business_user_id": cfg.get("tg_business_user_id") or "",
+        }
+
     @router.get("/message-templates")
     async def get_message_templates():
         return service.load().get("message_templates", [])
