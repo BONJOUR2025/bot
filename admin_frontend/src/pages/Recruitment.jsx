@@ -96,8 +96,9 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
     stage:            candidate?.stage            || initialStage || 'отклик',
     notes:            candidate?.notes            || '',
     age:              candidate?.age              ?? '',
-    resume_url:       candidate?.resume_url       || '',
-    telegram_chat_id: candidate?.telegram_chat_id || '',
+    resume_url:         candidate?.resume_url         || '',
+    telegram_chat_id:   candidate?.telegram_chat_id   || '',
+    telegram_username:  candidate?.telegram_username   || '',
   });
   const [saving, setSaving] = useState(false);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -146,8 +147,11 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
             <input className="input w-full" value={form.resume_url} onChange={set('resume_url')} placeholder="https://hh.ru/resume/..." />
           </div>
           <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Telegram chat ID</label>
-            <input className="input w-full font-mono" value={form.telegram_chat_id} onChange={set('telegram_chat_id')} placeholder="123456789" />
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Telegram username</label>
+            <input className="input w-full" value={form.telegram_username} onChange={set('telegram_username')} placeholder="@username" />
+            {form.telegram_chat_id && (
+              <p className="text-xs text-green-600 mt-1">chat_id: {form.telegram_chat_id}</p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -336,22 +340,34 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
   const isHh = candidate.source === 'hh' && candidate.external_id;
 
   const [tab, setTab] = useState('info');
+  const hasTg = !!candidate.telegram_chat_id;
 
-  // Chat state
-  const [messages, setMessages]   = useState([]);
+  // hh.ru chat state
+  const [messages, setMessages]     = useState([]);
   const [msgLoading, setMsgLoading] = useState(false);
-  const [msgError, setMsgError]   = useState('');
-  const [text, setText]           = useState('');
-  const [sending, setSending]     = useState(false);
-  const bottomRef                 = useRef(null);
+  const [msgError, setMsgError]     = useState('');
+  const [text, setText]             = useState('');
+  const [sending, setSending]       = useState(false);
+  const bottomRef                   = useRef(null);
+
+  // Telegram chat state
+  const [tgMessages, setTgMessages]     = useState([]);
+  const [tgLoading, setTgLoading]       = useState(false);
+  const [tgError, setTgError]           = useState('');
+  const [tgText, setTgText]             = useState('');
+  const [tgSending, setTgSending]       = useState(false);
+  const [resolving, setResolving]       = useState(false);
+  const tgBottomRef                     = useRef(null);
 
   useEffect(() => {
     if (tab === 'chat' && isHh && messages.length === 0) loadMessages();
+    if (tab === 'tg' && hasTg && tgMessages.length === 0) loadTgMessages();
   }, [tab]);
 
   useEffect(() => {
     if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, tab]);
+    if (tab === 'tg') tgBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, tgMessages, tab]);
 
   async function loadMessages() {
     setMsgLoading(true); setMsgError('');
@@ -373,6 +389,41 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
     } catch (e) {
       setMsgError(e.response?.data?.detail || e.message);
     } finally { setSending(false); }
+  }
+
+  async function loadTgMessages() {
+    setTgLoading(true); setTgError('');
+    try {
+      const res = await api.get(`/recruitment/candidates/${candidate.id}/telegram-messages`);
+      setTgMessages(res.data);
+    } catch (e) {
+      setTgError(e.response?.data?.detail || e.message);
+    } finally { setTgLoading(false); }
+  }
+
+  async function handleTgSend() {
+    if (!tgText.trim() || tgSending) return;
+    setTgSending(true); setTgError('');
+    try {
+      await api.post(`/recruitment/candidates/${candidate.id}/telegram-messages`, { text: tgText.trim() });
+      setTgText('');
+      await loadTgMessages();
+    } catch (e) {
+      setTgError(e.response?.data?.detail || e.message);
+    } finally { setTgSending(false); }
+  }
+
+  async function resolveTelegram() {
+    setResolving(true); setTgError('');
+    try {
+      const res = await api.post(`/recruitment/candidates/${candidate.id}/resolve-telegram`);
+      candidate.telegram_chat_id = res.data.chat_id;
+      setTgError('');
+      await loadTgMessages();
+      setTab('tg');
+    } catch (e) {
+      setTgError(e.response?.data?.detail || e.message);
+    } finally { setResolving(false); }
   }
 
   function fmtMsgTime(iso) {
@@ -449,9 +500,19 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
                   : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
               }`}
             >
-              <MessageCircle size={13} /> Переписка
+              <MessageCircle size={13} /> hh.ru
             </button>
           )}
+          <button
+            onClick={() => setTab('tg')}
+            className={`text-sm font-medium py-2.5 px-4 border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === 'tg'
+                ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
+                : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+            }`}
+          >
+            <MessageCircle size={13} /> Telegram
+          </button>
         </div>
 
         {/* ── Body ── */}
@@ -598,6 +659,71 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
                 {sending ? <Loader2 size={15} className="animate-spin" /> : <SendHorizonal size={15} />}
               </button>
             </div>
+          </div>
+        )}
+
+        {tab === 'tg' && (
+          <div className="flex flex-col flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+            {!candidate.telegram_chat_id && (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                <p className="text-sm text-[color:var(--color-muted-foreground)]">
+                  Telegram не привязан. Укажите username в карточке кандидата и нажмите «Найти».
+                </p>
+                {candidate.telegram_username ? (
+                  <button onClick={resolveTelegram} disabled={resolving}
+                    className="btn btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50">
+                    {resolving ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />}
+                    Найти @{candidate.telegram_username.replace('@','')}
+                  </button>
+                ) : (
+                  <button onClick={() => { onClose(); onEdit(candidate); }} className="btn text-sm">
+                    Открыть редактирование
+                  </button>
+                )}
+                {tgError && <p className="text-xs text-red-500">{tgError}</p>}
+              </div>
+            )}
+            {candidate.telegram_chat_id && (<>
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+                {tgLoading && <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-[color:var(--color-muted-foreground)]" /></div>}
+                {tgError && <div className="text-xs text-red-500 text-center py-4">{tgError}</div>}
+                {!tgLoading && !tgError && tgMessages.length === 0 && (
+                  <div className="text-xs text-[color:var(--color-muted-foreground)] text-center py-8">
+                    Сообщений пока нет. Входящие появятся после того как кандидат напишет.
+                  </div>
+                )}
+                {tgMessages.map(m => {
+                  const isOut = m.direction === 'out';
+                  return (
+                    <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                        isOut
+                          ? 'bg-[color:var(--color-primary)] text-white rounded-br-sm'
+                          : 'bg-[color:var(--color-muted)] text-[color:var(--color-foreground)] rounded-bl-sm'
+                      }`}>
+                        <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                        <div className={`text-[10px] mt-1 opacity-60 ${isOut ? 'text-right' : ''}`}>
+                          {fmtMsgTime(m.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={tgBottomRef} />
+              </div>
+              <div className="border-t border-[color:var(--color-border)] px-4 py-3 flex gap-2 items-end">
+                <textarea rows={1} value={tgText}
+                  onChange={e => setTgText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTgSend(); } }}
+                  placeholder="Написать в Telegram..."
+                  className="flex-1 resize-none input text-sm py-2 max-h-28" style={{ minHeight: '38px' }}
+                />
+                <button onClick={handleTgSend} disabled={!tgText.trim() || tgSending}
+                  className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[color:var(--color-primary)] text-white disabled:opacity-40">
+                  {tgSending ? <Loader2 size={15} className="animate-spin" /> : <SendHorizonal size={15} />}
+                </button>
+              </div>
+            </>)}
           </div>
         )}
 

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink
+from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage
 from app.settings import settings
 
 
@@ -206,6 +206,77 @@ async def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session
     if warnings:
         result["warnings"] = warnings
     return result
+
+
+@router.post("/candidates/{candidate_id}/resolve-telegram")
+async def resolve_telegram_username(candidate_id: int, db: Session = Depends(get_db)):
+    """Resolve candidate's telegram_username → chat_id via getChat API."""
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    username = (c.telegram_username or "").strip().lstrip("@")
+    if not username:
+        raise HTTPException(400, "telegram_username не заполнен")
+
+    import httpx
+    from app.config import TOKEN
+    if not TOKEN:
+        raise HTTPException(500, "Telegram bot token не настроен")
+
+    from app.settings import settings as _settings
+    proxy = getattr(_settings, "telegram_proxy", None)
+    client_kwargs: dict = {"timeout": 10.0}
+    if proxy:
+        client_kwargs["proxy"] = proxy
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
+        r = await client.post(
+            f"https://api.telegram.org/bot{TOKEN}/getChat",
+            json={"chat_id": f"@{username}"},
+        )
+
+    if r.status_code != 200:
+        data = r.json() if r.content else {}
+        raise HTTPException(400, data.get("description") or f"Telegram: HTTP {r.status_code}")
+
+    chat = r.json().get("result", {})
+    chat_id = str(chat.get("id", ""))
+    if not chat_id:
+        raise HTTPException(400, "Не удалось получить chat_id")
+
+    c.telegram_chat_id = chat_id
+    db.commit()
+    db.refresh(c)
+    return {"chat_id": chat_id, "candidate": c.to_dict()}
+
+
+@router.get("/candidates/{candidate_id}/telegram-messages")
+def get_telegram_messages(candidate_id: int, db: Session = Depends(get_db)):
+    msgs = db.query(TelegramMessage).filter(
+        TelegramMessage.candidate_id == candidate_id
+    ).order_by(TelegramMessage.created_at).all()
+    return [m.to_dict() for m in msgs]
+
+
+@router.post("/candidates/{candidate_id}/telegram-messages")
+async def send_telegram_message(candidate_id: int, data: SendMessageRequest, db: Session = Depends(get_db)):
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    if not c.telegram_chat_id:
+        raise HTTPException(400, "Telegram chat_id не найден. Укажите username и нажмите Найти.")
+
+    from app.services.notify import send_secretary_message
+    err = await send_secretary_message(c.telegram_chat_id, data.text)
+    if err:
+        raise HTTPException(400, err)
+
+    msg = TelegramMessage(candidate_id=candidate_id, direction="out", text=data.text)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg.to_dict()
+
 
 @router.delete("/candidates/{candidate_id}")
 def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):

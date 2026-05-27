@@ -42,8 +42,9 @@ class Candidate(Base):
     age = Column(Integer, nullable=True)
     stage = Column(String, nullable=False, default="отклик", index=True)
     notes = Column(Text, nullable=True, default="")
-    last_msg_id = Column(String, nullable=True)  # last seen hh.ru message id
+    last_msg_id = Column(String, nullable=True)
     telegram_chat_id = Column(String, nullable=True, default="")
+    telegram_username = Column(String, nullable=True, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -64,6 +65,7 @@ class Candidate(Base):
             "stage": self.stage,
             "notes": self.notes or "",
             "telegram_chat_id": self.telegram_chat_id or "",
+            "telegram_username": self.telegram_username or "",
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -141,4 +143,27 @@ class VacancyLink(Base):
             "sync_enabled": self.sync_enabled,
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
             "last_sync_count": self.last_sync_count or 0,
+        }
+
+
+class TelegramMessage(Base):
+    """Messages exchanged with candidates via Telegram Secretary Mode."""
+    __tablename__ = "telegram_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    candidate_id = Column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False, index=True)
+    direction = Column(String, nullable=False)   # "in" | "out"
+    text = Column(Text, nullable=False, default="")
+    tg_message_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    candidate = relationship("Candidate")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "candidate_id": self.candidate_id,
+            "direction": self.direction,
+            "text": self.text,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
