@@ -149,9 +149,13 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
           <div>
             <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Telegram username</label>
             <input className="input w-full" value={form.telegram_username} onChange={set('telegram_username')} placeholder="@username" />
-            {form.telegram_chat_id && (
-              <p className="text-xs text-green-600 mt-1">chat_id: {form.telegram_chat_id}</p>
-            )}
+          </div>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Telegram chat_id</label>
+            <input className="input w-full" value={form.telegram_chat_id} onChange={set('telegram_chat_id')} placeholder="Заполняется автоматически или вручную" />
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+              Определяется автоматически, когда кандидат напишет первым. Можно вставить вручную.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -356,12 +360,13 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
   const [tgError, setTgError]           = useState('');
   const [tgText, setTgText]             = useState('');
   const [tgSending, setTgSending]       = useState(false);
-  const [resolving, setResolving]       = useState(false);
   const tgBottomRef                     = useRef(null);
+  const [manualChatId, setManualChatId] = useState('');
+  const [savingChatId, setSavingChatId] = useState(false);
 
   useEffect(() => {
     if (tab === 'chat' && isHh && messages.length === 0) loadMessages();
-    if (tab === 'tg' && hasTg && tgMessages.length === 0) loadTgMessages();
+    if (tab === 'tg' && candidate.telegram_chat_id && tgMessages.length === 0) loadTgMessages();
   }, [tab]);
 
   useEffect(() => {
@@ -413,17 +418,18 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
     } finally { setTgSending(false); }
   }
 
-  async function resolveTelegram() {
-    setResolving(true); setTgError('');
+  async function saveChatId() {
+    const id = manualChatId.trim();
+    if (!id) return;
+    setSavingChatId(true); setTgError('');
     try {
-      const res = await api.post(`/recruitment/candidates/${candidate.id}/resolve-telegram`);
-      candidate.telegram_chat_id = res.data.chat_id;
-      setTgError('');
+      await api.patch(`/recruitment/candidates/${candidate.id}`, { telegram_chat_id: id });
+      candidate.telegram_chat_id = id;
+      setManualChatId('');
       await loadTgMessages();
-      setTab('tg');
     } catch (e) {
       setTgError(e.response?.data?.detail || e.message);
-    } finally { setResolving(false); }
+    } finally { setSavingChatId(false); }
   }
 
   function fmtMsgTime(iso) {
@@ -665,21 +671,25 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
         {tab === 'tg' && (
           <div className="flex flex-col flex-1 overflow-hidden" style={{ minHeight: 0 }}>
             {!candidate.telegram_chat_id && (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
-                <p className="text-sm text-[color:var(--color-muted-foreground)]">
-                  Telegram не привязан. Укажите username в карточке кандидата и нажмите «Найти».
-                </p>
-                {candidate.telegram_username ? (
-                  <button onClick={resolveTelegram} disabled={resolving}
-                    className="btn btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50">
-                    {resolving ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />}
-                    Найти @{candidate.telegram_username.replace('@','')}
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+                <div className="text-sm text-[color:var(--color-muted-foreground)] space-y-1">
+                  <p className="font-medium text-[color:var(--color-foreground)]">Telegram не привязан</p>
+                  <p>Chat ID определяется автоматически, когда кандидат напишет первым на ваш личный аккаунт.</p>
+                  <p>Или введите Chat ID вручную, если он вам известен.</p>
+                </div>
+                <div className="flex gap-2 w-full max-w-xs">
+                  <input
+                    className="input flex-1 text-sm"
+                    placeholder="Напр. 123456789"
+                    value={manualChatId}
+                    onChange={e => setManualChatId(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && saveChatId()}
+                  />
+                  <button onClick={saveChatId} disabled={savingChatId || !manualChatId.trim()}
+                    className="btn btn-primary text-sm disabled:opacity-50">
+                    {savingChatId ? <Loader2 size={13} className="animate-spin" /> : 'Сохранить'}
                   </button>
-                ) : (
-                  <button onClick={() => { onClose(); onEdit(candidate); }} className="btn text-sm">
-                    Открыть редактирование
-                  </button>
-                )}
+                </div>
                 {tgError && <p className="text-xs text-red-500">{tgError}</p>}
               </div>
             )}
