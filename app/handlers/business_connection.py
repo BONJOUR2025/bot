@@ -47,9 +47,19 @@ async def handle_business_message(update, context):
     # Determine if this message was sent by the admin (business owner) or the candidate
     from app.services.config_service import ConfigService
     cfg = ConfigService().load()
+    # tg_business_user_id is saved on connect event; fall back to ADMIN_ID from env
     business_user_id = str(cfg.get("tg_business_user_id") or "")
+    if not business_user_id:
+        try:
+            from app.config import ADMIN_ID
+            if ADMIN_ID:
+                business_user_id = str(ADMIN_ID)
+        except Exception:
+            pass
     sender_id = str(getattr(msg.from_user, 'id', '') if msg.from_user else '')
     is_admin_message = bool(business_user_id and sender_id == business_user_id)
+    log.debug("business_msg: sender_id=%s business_user_id=%s is_admin=%s chat_id=%s",
+              sender_id, business_user_id, is_admin_message, chat_id)
 
     # Auto-save business_connection_id from incoming messages if not yet in config
     try:
@@ -153,21 +163,29 @@ async def handle_business_message(update, context):
                 # ── Сообщение от администратора ───────────────────────────
                 # Сохраняем как исходящее, AI не трогаем
                 if candidate and text:
-                    tg_msg = TelegramMessage(
-                        candidate_id=candidate.id,
-                        direction="out",
-                        text=text,
-                        tg_message_id=str(msg.message_id),
-                    )
-                    db.add(tg_msg)
-                    db.commit()
-                    log.info("Saved admin→candidate TG message for candidate_id=%s", candidate.id)
-
-                    # Check if interview was confirmed in this exchange
-                    if getattr(candidate, 'stage', '') == 'общение':
-                        asyncio.ensure_future(
-                            _check_interview_confirmation(candidate.id)
+                    # Dedup: skip if this message_id already saved
+                    already = db.query(TelegramMessage).filter(
+                        TelegramMessage.candidate_id == candidate.id,
+                        TelegramMessage.tg_message_id == str(msg.message_id),
+                    ).first()
+                    if already:
+                        log.debug("Skipping duplicate admin message msg_id=%s", msg.message_id)
+                    else:
+                        tg_msg = TelegramMessage(
+                            candidate_id=candidate.id,
+                            direction="out",
+                            text=text,
+                            tg_message_id=str(msg.message_id),
                         )
+                        db.add(tg_msg)
+                        db.commit()
+                        log.info("Saved admin→candidate TG message for candidate_id=%s", candidate.id)
+
+                        # Check if interview was confirmed in this exchange
+                        if getattr(candidate, 'stage', '') == 'общение':
+                            asyncio.ensure_future(
+                                _check_interview_confirmation(candidate.id)
+                            )
 
         finally:
             db.close()
