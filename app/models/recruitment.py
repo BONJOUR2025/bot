@@ -11,6 +11,8 @@ class Vacancy(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True, default="")
+    knowledge_base = Column(Text, nullable=True, default="")
+    interview_location = Column(String, nullable=True, default="")
     is_open = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -22,6 +24,8 @@ class Vacancy(Base):
             "id": self.id,
             "title": self.title,
             "description": self.description or "",
+            "knowledge_base": self.knowledge_base or "",
+            "interview_location": self.interview_location or "",
             "is_open": self.is_open,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

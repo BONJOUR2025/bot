@@ -41,15 +41,17 @@ const srcBadgeLabel = (s) => s === 'manual' ? 'руч.' : s;
 
 // ── Vacancy modal ──────────────────────────────────────────────────
 function VacancyModal({ vacancy, onClose, onSave }) {
-  const [title, setTitle]       = useState(vacancy?.title || '');
-  const [description, setDesc]  = useState(vacancy?.description || '');
-  const [saving, setSaving]     = useState(false);
+  const [title, setTitle]         = useState(vacancy?.title || '');
+  const [description, setDesc]    = useState(vacancy?.description || '');
+  const [knowledgeBase, setKb]    = useState(vacancy?.knowledge_base || '');
+  const [interviewLoc, setLoc]    = useState(vacancy?.interview_location || '');
+  const [saving, setSaving]       = useState(false);
 
   async function save() {
     if (!title.trim()) return;
     setSaving(true);
     try {
-      const payload = { title, description };
+      const payload = { title, description, knowledge_base: knowledgeBase, interview_location: interviewLoc };
       const res = vacancy
         ? await api.patch(`/recruitment/vacancies/${vacancy.id}`, payload)
         : await api.post('/recruitment/vacancies', payload);
@@ -60,7 +62,7 @@ function VacancyModal({ vacancy, onClose, onSave }) {
 
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-card max-w-md w-full">
+      <div className="modal-card max-w-lg w-full">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold">{vacancy ? 'Редактировать вакансию' : 'Новая вакансия'}</h3>
           <button onClick={onClose} className="text-xl text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] leading-none">&times;</button>
@@ -73,8 +75,21 @@ function VacancyModal({ vacancy, onClose, onSave }) {
           </div>
           <div>
             <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Описание (необязательно)</label>
-            <textarea className="input w-full min-h-[72px] resize-none" value={description}
-              onChange={e => setDesc(e.target.value)} placeholder="Требования, условия..." />
+            <textarea className="input w-full min-h-[60px] resize-none" value={description}
+              onChange={e => setDesc(e.target.value)} placeholder="Краткое описание вакансии..." />
+          </div>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Место собеседований</label>
+            <input className="input w-full" value={interviewLoc} onChange={e => setLoc(e.target.value)}
+              placeholder="Адрес или ссылка на онлайн-встречу" />
+          </div>
+          <div>
+            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">
+              База знаний для AI <span className="opacity-60">(что Claude знает об этой вакансии)</span>
+            </label>
+            <textarea className="input w-full min-h-[100px] resize-y text-sm" value={knowledgeBase}
+              onChange={e => setKb(e.target.value)}
+              placeholder={"График: 5/2, 9:00–18:00\nЗарплата: от 60 000 ₽\nТребования: ...\nУсловия: ..."} />
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">

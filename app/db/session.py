@@ -49,6 +49,8 @@ def _run_migrations() -> None:
             )""",
             "ALTER TABLE telegram_messages ADD COLUMN is_read INTEGER DEFAULT 0",
             "ALTER TABLE candidates ADD COLUMN telegram_link_code TEXT",
+            "ALTER TABLE vacancies ADD COLUMN knowledge_base TEXT DEFAULT ''",
+            "ALTER TABLE vacancies ADD COLUMN interview_location TEXT DEFAULT ''",
             """CREATE TABLE IF NOT EXISTS unlinked_telegram_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 chat_id TEXT NOT NULL,

@@ -33,11 +33,15 @@ VALID_SOURCES = ["hh", "avito", "manual", "other"]
 class VacancyCreate(BaseModel):
     title: str
     description: Optional[str] = ""
+    knowledge_base: Optional[str] = ""
+    interview_location: Optional[str] = ""
     is_open: bool = True
 
 class VacancyUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    knowledge_base: Optional[str] = None
+    interview_location: Optional[str] = None
     is_open: Optional[bool] = None
 
 class CandidateCreate(BaseModel):
@@ -108,7 +112,9 @@ def list_vacancies(include_closed: bool = Query(False), db: Session = Depends(ge
 
 @router.post("/vacancies")
 def create_vacancy(data: VacancyCreate, db: Session = Depends(get_db)):
-    v = Vacancy(title=data.title, description=data.description, is_open=data.is_open)
+    v = Vacancy(title=data.title, description=data.description,
+                knowledge_base=data.knowledge_base, interview_location=data.interview_location,
+                is_open=data.is_open)
     db.add(v); db.commit(); db.refresh(v)
     return v.to_dict()
 
@@ -119,6 +125,8 @@ def update_vacancy(vacancy_id: int, data: VacancyUpdate, db: Session = Depends(g
         raise HTTPException(404, "Vacancy not found")
     if data.title is not None: v.title = data.title
     if data.description is not None: v.description = data.description
+    if data.knowledge_base is not None: v.knowledge_base = data.knowledge_base
+    if data.interview_location is not None: v.interview_location = data.interview_location
     if data.is_open is not None: v.is_open = data.is_open
     db.commit(); db.refresh(v)
     return v.to_dict()

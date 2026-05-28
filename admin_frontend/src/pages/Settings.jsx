@@ -255,14 +255,8 @@ export default function Settings() {
               <input className="input w-full rounded-l-none" placeholder="username" {...register('tg_personal_username')} />
             </div>
           </Field>
-          <Field label="Business Connection ID" hint="ID подключения Secretary Mode. Можно найти в логах бота после подключения в Telegram → Настройки → Бизнес-аккаунт → Чат-боты.">
+          <Field label="Business Connection ID" hint="ID подключения Secretary Mode. Можно найти в логах бота после подключения в Telegram → Настройки → Бизнес-аккаунт → Чат-боты. Заполняется автоматически при первом входящем сообщении.">
             <input className="input w-full font-mono text-sm" placeholder="вставьте connection_id из логов" {...register('tg_business_connection_id')} />
-          </Field>
-          <Field label="Право отвечать (can_reply)" hint="Включите если при подключении бота вы дали ему право отвечать на сообщения.">
-            <label className="flex items-center gap-2 cursor-pointer mt-1">
-              <input type="checkbox" className="w-4 h-4 accent-[color:var(--color-primary)]" {...register('tg_business_can_reply')} />
-              <span className="text-sm">Разрешено отвечать</span>
-            </label>
           </Field>
         </div>
       </Section>
@@ -284,12 +278,15 @@ export default function Settings() {
             <input className="input w-full" {...register('automation_sources_str')} placeholder="hh,avito" />
           </Field>
         </div>
-        <Field label="Место проведения собеседований" hint="Адрес или описание — Claude будет предлагать это кандидатам">
+        <Field label="База знаний (по умолчанию)" hint="Используется если у вакансии нет своей базы знаний. В карточке вакансии можно задать отдельную базу знаний для каждой позиции.">
+          <textarea className="input w-full min-h-[100px] resize-y text-sm" {...register('automation_knowledge_base')}
+            placeholder={"Компания занимается...\nГрафик работы: ...\nЗарплата: ...\nТребования: ..."} />
+        </Field>
+        <Field label="Место собеседований (по умолчанию)" hint="Используется если у вакансии не задан свой адрес.">
           <input className="input w-full" {...register('automation_interview_location')} placeholder="г. Москва, ул. Примерная, 1" />
         </Field>
-        <Field label="База знаний для AI" hint="Информация о компании, вакансии, условиях — Claude будет отвечать на основе этого текста">
-          <textarea className="input w-full min-h-[120px] resize-y text-sm" {...register('automation_knowledge_base')}
-            placeholder={"Компания занимается...\nГрафик работы: ...\nЗарплата: ...\nТребования: ..."} />
+        <Field label="Anthropic API Key" hint="API ключ для Claude AI (console.anthropic.com). Хранится в config.json на сервере.">
+          <input type="password" className="input w-full font-mono text-sm" placeholder="sk-ant-api03-..." {...register('anthropic_api_key')} />
         </Field>
       </Section>
 

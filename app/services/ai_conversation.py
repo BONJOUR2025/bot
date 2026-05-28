@@ -28,13 +28,20 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
 
     db = SessionLocal()
     try:
+        from app.models.recruitment import Vacancy
         c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
         if not c or not c.telegram_chat_id:
             return
 
         cfg = ConfigService().load()
-        knowledge_base = cfg.get("automation_knowledge_base", "").strip()
-        interview_location = cfg.get("automation_interview_location", "").strip()
+        # Per-vacancy knowledge base takes priority over global config
+        vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+        knowledge_base = (
+            getattr(vacancy, "knowledge_base", "") or cfg.get("automation_knowledge_base", "")
+        ).strip()
+        interview_location = (
+            getattr(vacancy, "interview_location", "") or cfg.get("automation_interview_location", "")
+        ).strip()
 
         if not knowledge_base:
             # No knowledge base — escalate immediately
@@ -65,7 +72,8 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         )
 
         try:
-            client = Anthropic()
+            api_key = cfg.get("anthropic_api_key") or None
+            client = Anthropic(api_key=api_key)
             response = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=500,
