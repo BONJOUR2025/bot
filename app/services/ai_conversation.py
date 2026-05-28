@@ -100,14 +100,15 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             )
             return
 
-        if reply.upper().startswith("ESCALATE"):
+        reply_upper = reply.upper()
+        if "ESCALATE" in reply_upper:
             await send_notification(
                 f"🙋 <b>AI: нужна помощь</b>\nКандидат <b>{c.name}</b> задал вопрос вне базы знаний.\n"
                 f"Вопрос: {message_text[:200]}\n\nПодключитесь к диалогу в Telegram."
             )
             return
 
-        if reply.upper().startswith("PROPOSE_INTERVIEW"):
+        if "PROPOSE_INTERVIEW" in reply_upper:
             location_text = f" в {interview_location}" if interview_location else ""
             reply = (
                 f"Отлично! Предлагаем пройти собеседование{location_text}. "
