@@ -111,11 +111,14 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             return
 
         if "PROPOSE_INTERVIEW" in reply_upper:
-            location_text = f" в {interview_location}" if interview_location else ""
-            reply = (
-                f"Отлично! Предлагаем пройти собеседование{location_text}. "
-                f"Напишите удобные для вас дату и время — мы подтвердим или предложим альтернативу."
+            await send_notification(
+                f"📅 <b>Кандидат готов к собеседованию!</b>\n"
+                f"Кандидат <b>{c.name}</b> хочет записаться.\n"
+                f"Сообщение: {message_text[:300]}\n\n"
+                f"Подтвердите время в Telegram."
             )
+            default_reply = "Отлично! Ваша заявка принята, наш менеджер свяжется с вами в ближайшее время для подтверждения."
+            reply = (cfg.get("ai_propose_interview_reply") or "").strip() or default_reply
 
         # Send AI reply via Secretary Mode
         err = await send_secretary_message(c.telegram_chat_id, reply)

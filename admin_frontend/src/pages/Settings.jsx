@@ -300,6 +300,11 @@ export default function Settings() {
                 placeholder="120" min="50" max="2000" />
             </Field>
           </div>
+          <Field label="Ответ при готовности к собеседованию (PROPOSE_INTERVIEW)"
+            hint="Что кандидат получит когда AI решит что он готов к собеседованию. Пусто = стандартный текст.">
+            <input className="input w-full text-sm" {...register('ai_propose_interview_reply')}
+              placeholder="Отлично! Ваша заявка принята, наш менеджер свяжется с вами в ближайшее время для подтверждения." />
+          </Field>
           <Field
             label="Системный промпт"
             hint="Плейсхолдеры: {knowledge_base} и {interview_location} — обязательны. Пусто = встроенный промпт по умолчанию."
