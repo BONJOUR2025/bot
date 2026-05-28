@@ -179,6 +179,7 @@ class TelegramMessage(Base):
     direction = Column(String, nullable=False)   # "in" | "out"
     text = Column(Text, nullable=False, default="")
     tg_message_id = Column(String, nullable=True)
+    is_ai_escalation = Column(Integer, nullable=False, default=0)  # 1 when this is an AI escalation reply
     created_at = Column(DateTime, default=datetime.utcnow)
 
     candidate = relationship("Candidate")

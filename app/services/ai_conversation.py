@@ -116,6 +116,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
                     candidate_id=candidate_id,
                     direction="out",
                     text=escalate_reply,
+                    is_ai_escalation=1,
                 )
                 db.add(out_msg)
                 db.commit()

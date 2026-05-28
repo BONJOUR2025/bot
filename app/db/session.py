@@ -48,6 +48,7 @@ def _run_migrations() -> None:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )""",
             "ALTER TABLE telegram_messages ADD COLUMN is_read INTEGER DEFAULT 0",
+            "ALTER TABLE telegram_messages ADD COLUMN is_ai_escalation INTEGER DEFAULT 0",
             "ALTER TABLE candidates ADD COLUMN telegram_link_code TEXT",
             "ALTER TABLE vacancies ADD COLUMN knowledge_base TEXT DEFAULT ''",
             "ALTER TABLE vacancies ADD COLUMN interview_location TEXT DEFAULT ''",

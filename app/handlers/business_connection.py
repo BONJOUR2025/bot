@@ -181,8 +181,12 @@ async def handle_business_message(update, context):
                         db.commit()
                         log.info("Saved admin→candidate TG message for candidate_id=%s", candidate.id)
 
-                        # Check if interview was confirmed in this exchange
                         if getattr(candidate, 'stage', '') == 'общение':
+                            # Check if this admin reply follows an AI escalation → self-learning
+                            asyncio.ensure_future(
+                                _maybe_learn_from_escalation(candidate.id, text)
+                            )
+                            # Check if interview was confirmed in this exchange
                             asyncio.ensure_future(
                                 _check_interview_confirmation(candidate.id)
                             )
@@ -191,6 +195,66 @@ async def handle_business_message(update, context):
             db.close()
     except Exception as exc:
         log.warning("handle_business_message error: %s", exc)
+
+
+async def _maybe_learn_from_escalation(candidate_id: int, admin_answer: str):
+    """
+    Detect pattern: candidate question → AI escalation → admin answer.
+    If found and this is the FIRST admin reply after the escalation, trigger learning.
+    """
+    try:
+        from app.db.session import SessionLocal
+        from app.models.recruitment import TelegramMessage
+
+        db = SessionLocal()
+        try:
+            # Load last 10 messages ordered by time
+            history = db.query(TelegramMessage).filter(
+                TelegramMessage.candidate_id == candidate_id
+            ).order_by(TelegramMessage.created_at.desc()).limit(10).all()
+            history = list(reversed(history))
+
+            if len(history) < 3:
+                return
+
+            # Find the most recent escalation message
+            esc_idx = None
+            for i, m in enumerate(history):
+                if getattr(m, 'is_ai_escalation', 0):
+                    esc_idx = i
+
+            if esc_idx is None:
+                return
+
+            # Count admin ("out") messages AFTER the escalation (excluding escalation itself)
+            admin_after = [
+                m for m in history[esc_idx + 1:]
+                if m.direction == "out"
+            ]
+            # Only learn from the FIRST admin reply after escalation
+            if len(admin_after) != 1:
+                return
+
+            # Find the candidate's question: last "in" message before the escalation
+            question = None
+            for m in reversed(history[:esc_idx]):
+                if m.direction == "in":
+                    question = m.text
+                    break
+
+            if not question:
+                return
+
+            log.info("Auto-learning triggered for candidate_id=%s question=%s",
+                     candidate_id, question[:80])
+        finally:
+            db.close()
+
+        from app.services.learning_service import learn_from_escalation
+        await learn_from_escalation(candidate_id, question, admin_answer)
+
+    except Exception as e:
+        log.warning("_maybe_learn_from_escalation error: %s", e)
 
 
 async def _check_interview_confirmation(candidate_id: int):
