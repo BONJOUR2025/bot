@@ -305,6 +305,11 @@ export default function Settings() {
             <input className="input w-full text-sm" {...register('ai_propose_interview_reply')}
               placeholder="Отлично! Ваша заявка принята, наш менеджер свяжется с вами в ближайшее время для подтверждения." />
           </Field>
+          <Field label="Ответ при эскалации (ESCALATE)"
+            hint="Что кандидат получит когда AI не знает ответа и передаёт диалог менеджеру. Пусто = стандартный текст.">
+            <input className="input w-full text-sm" {...register('ai_escalate_reply')}
+              placeholder="Ваш вопрос передан нашему менеджеру, с вами свяжутся в ближайшее время." />
+          </Field>
           <Field
             label="Системный промпт"
             hint="Плейсхолдеры: {knowledge_base} и {interview_location} — обязательны. Пусто = встроенный промпт по умолчанию."

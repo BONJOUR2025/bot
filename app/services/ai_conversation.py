@@ -108,6 +108,17 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
                 f"🙋 <b>AI: нужна помощь</b>\nКандидат <b>{c.name}</b> задал вопрос вне базы знаний.\n"
                 f"Вопрос: {message_text[:200]}\n\nПодключитесь к диалогу в Telegram."
             )
+            default_escalate = "Ваш вопрос передан нашему менеджеру, с вами свяжутся в ближайшее время."
+            escalate_reply = (cfg.get("ai_escalate_reply") or "").strip() or default_escalate
+            err = await send_secretary_message(c.telegram_chat_id, escalate_reply)
+            if not err:
+                out_msg = TelegramMessage(
+                    candidate_id=candidate_id,
+                    direction="out",
+                    text=escalate_reply,
+                )
+                db.add(out_msg)
+                db.commit()
             return
 
         if "PROPOSE_INTERVIEW" in reply_upper:
