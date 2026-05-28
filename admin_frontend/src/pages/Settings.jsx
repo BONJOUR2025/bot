@@ -288,6 +288,27 @@ export default function Settings() {
         <Field label="Anthropic API Key" hint="API ключ для Claude AI (console.anthropic.com). Хранится в config.json на сервере.">
           <input type="password" className="input w-full font-mono text-sm" placeholder="sk-ant-api03-..." {...register('anthropic_api_key')} />
         </Field>
+        <div className="border-t border-[color:var(--color-border)] pt-4 mt-2">
+          <p className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wide mb-3">Параметры AI — разговор с кандидатами</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <Field label="Модель" hint="claude-haiku-4-5-20251001 / claude-sonnet-4-6 / claude-opus-4-7">
+              <input className="input w-full font-mono text-sm" {...register('ai_candidate_model')}
+                placeholder="claude-haiku-4-5-20251001" />
+            </Field>
+            <Field label="Max tokens" hint="Жёсткий лимит длины ответа. 120 ≈ 2 предложения, 300 ≈ абзац.">
+              <input type="number" className="input w-full" {...register('ai_candidate_max_tokens')}
+                placeholder="120" min="50" max="2000" />
+            </Field>
+          </div>
+          <Field
+            label="Системный промпт"
+            hint="Плейсхолдеры: {knowledge_base} и {interview_location} — обязательны. Пусто = встроенный промпт по умолчанию."
+          >
+            <textarea className="input w-full min-h-[160px] resize-y text-sm font-mono"
+              {...register('ai_candidate_system_prompt')}
+              placeholder={"Ты HR-ассистент компании. Отвечаешь на вопросы кандидата о вакансии.\n\nБаза знаний:\n{knowledge_base}\n\nМесто собеседований: {interview_location}\n\nПравила..."} />
+          </Field>
+        </div>
         <Field
           label="Шаблон сообщения на hh.ru (с Telegram-ссылкой)"
           hint="Отправляется кандидату автоматикой. Плейсхолдеры: {name} — имя, {link} — ссылка на TG (обязательно!), {code} — код привязки."

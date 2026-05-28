@@ -67,15 +67,17 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         if not messages or messages[-1]["content"] != message_text:
             messages.append({"role": "user", "content": message_text})
 
-        system = SYSTEM_PROMPT_TEMPLATE.format(
+        system_tpl = (cfg.get("ai_candidate_system_prompt") or "").strip() or SYSTEM_PROMPT_TEMPLATE
+        system = system_tpl.format(
             knowledge_base=knowledge_base,
             interview_location=interview_location or "уточняется",
         )
 
         try:
             api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-            model = "claude-haiku-4-5-20251001"
-            log.info("AI: using api_key=%s... model=%s", (api_key or "")[:12], model)
+            model = (cfg.get("ai_candidate_model") or "claude-haiku-4-5-20251001").strip()
+            max_tokens = int(cfg.get("ai_candidate_max_tokens") or 120)
+            log.info("AI: using api_key=%s... model=%s max_tokens=%s", (api_key or "")[:12], model, max_tokens)
             from app.settings import settings as _settings
             proxy_url = getattr(_settings, "telegram_proxy", None)
             http_client = None
@@ -85,7 +87,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             client = Anthropic(api_key=api_key, http_client=http_client)
             response = client.messages.create(
                 model=model,
-                max_tokens=120,
+                max_tokens=max_tokens,
                 system=system,
                 messages=messages,
             )
