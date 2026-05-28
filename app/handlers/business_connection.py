@@ -1,5 +1,7 @@
 """Handle Telegram Secretary Mode (Chat Automation) business_connection updates."""
+import asyncio
 import logging
+from datetime import datetime
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +113,30 @@ async def handle_business_message(update, context):
                     db.add(tg_msg)
                     db.commit()
                     log.info("Saved TG message from candidate_id=%s", candidate.id)
+
+                    # If stage is "ждем_привязки" → move to "общение" + notify admin
+                    if getattr(candidate, 'stage', '') == 'ждем_привязки':
+                        try:
+                            candidate.stage = 'общение'
+                            candidate.updated_at = datetime.utcnow()
+                            db.commit()
+                            from app.services.notify import send_notification
+                            await send_notification(
+                                f"✅ <b>Telegram привязан!</b>\n"
+                                f"Кандидат <b>{candidate.name}</b> написал в Telegram и переведён на этап «Общение»."
+                            )
+                            # Start AI conversation
+                            from app.services.ai_conversation import handle_candidate_message
+                            asyncio.ensure_future(handle_candidate_message(candidate.id, msg_text))
+                        except Exception as e:
+                            log.warning("Stage transition error: %s", e)
+                    elif getattr(candidate, 'stage', '') == 'общение':
+                        # Continue AI conversation
+                        try:
+                            from app.services.ai_conversation import handle_candidate_message
+                            asyncio.ensure_future(handle_candidate_message(candidate.id, msg_text))
+                        except Exception as e:
+                            log.warning("AI conversation trigger error: %s", e)
             else:
                 # 4. Сохранить как непривязанное сообщение
                 msg_text = text or ('[контакт]' if msg.contact else '[медиа]')

@@ -61,8 +61,39 @@ async def _sync_once() -> None:
                     await _check_hh_messages(db, src, token)
                 except Exception as e:
                     logger.warning(f"[Sync] hh message check failed: {e}")
+
+        # Check 24h unlinked candidates
+        try:
+            await _check_pending_tg_links(db)
+        except Exception as e:
+            logger.warning(f"[Sync] pending TG check error: {e}")
     finally:
         db.close()
+
+
+async def _check_pending_tg_links(db) -> None:
+    """Notify admin about candidates waiting for TG link more than 24h."""
+    from app.models.recruitment import Candidate
+    from app.services.notify import send_notification
+
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    pending = db.query(Candidate).filter(
+        Candidate.stage == "ждем_привязки",
+        Candidate.updated_at <= cutoff,
+        Candidate.telegram_chat_id == None,
+    ).all()
+
+    for c in pending:
+        # Only notify once — use last_error as flag
+        if c.last_error == "tg_notified":
+            continue
+        await send_notification(
+            f"⏰ <b>TG не привязан 24ч</b>\n"
+            f"Кандидат <b>{c.name}</b> не перешёл по ссылке в течение 24 часов.\n"
+            f"Вакансия: {c.vacancy.title if c.vacancy else '?'}"
+        )
+        c.last_error = "tg_notified"
+        db.commit()
 
 
 async def _notify_new_candidates(source: str, link, candidates: list[dict]) -> None:
