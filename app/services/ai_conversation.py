@@ -4,7 +4,7 @@ from anthropic import Anthropic
 
 log = logging.getLogger(__name__)
 
-SYSTEM_PROMPT_TEMPLATE = """Ты вежливый HR-ассистент компании. Отвечай на вопросы кандидата о вакансии и условиях работы.
+SYSTEM_PROMPT_TEMPLATE = """Ты вежливый HR-ассистент компании. Отвечаешь на вопросы кандидата о вакансии и условиях работы.
 
 База знаний о компании и вакансии:
 {knowledge_base}
@@ -12,10 +12,11 @@ SYSTEM_PROMPT_TEMPLATE = """Ты вежливый HR-ассистент комп
 Место проведения собеседований: {interview_location}
 
 Правила:
-1. Отвечай только на основе предоставленной базы знаний.
-2. Если вопрос выходит за рамки базы знаний — ответь ТОЛЬКО словом: ESCALATE
-3. Если кандидат говорит что вопросов нет или хочет назначить собеседование — ответь: PROPOSE_INTERVIEW
-4. Будь кратким и дружелюбным. Пиши на русском.
+1. Отвечай ТОЛЬКО на основе базы знаний выше. Не придумывай информацию.
+2. Если вопрос выходит за рамки базы знаний — ответь ОДНИМ словом: ESCALATE
+3. Если кандидат говорит что вопросов нет, готов к собеседованию или хочет назначить встречу — ответь ОДНИМ словом: PROPOSE_INTERVIEW
+4. Пиши на русском, кратко (1-3 предложения). Без форматирования: никаких **, *, #, >, _ и прочих символов разметки.
+5. Обращайся на «вы» вежливо и дружелюбно.
 """
 
 
@@ -89,6 +90,8 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
                 messages=messages,
             )
             reply = response.content[0].text.strip()
+            # Strip markdown that Claude sometimes adds despite instructions
+            reply = reply.replace("**", "").replace("__", "").strip()
         except Exception as e:
             log.warning("AI conversation error for candidate %s: %s", candidate_id, e)
             await send_notification(
@@ -97,14 +100,14 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             )
             return
 
-        if reply == "ESCALATE":
+        if reply.upper().startswith("ESCALATE"):
             await send_notification(
                 f"🙋 <b>AI: нужна помощь</b>\nКандидат <b>{c.name}</b> задал вопрос вне базы знаний.\n"
                 f"Вопрос: {message_text[:200]}\n\nПодключитесь к диалогу в Telegram."
             )
             return
 
-        if reply == "PROPOSE_INTERVIEW":
+        if reply.upper().startswith("PROPOSE_INTERVIEW"):
             location_text = f" в {interview_location}" if interview_location else ""
             reply = (
                 f"Отлично! Предлагаем пройти собеседование{location_text}. "
