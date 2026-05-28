@@ -75,7 +75,13 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             api_key = (cfg.get("anthropic_api_key") or "").strip() or None
             model = "claude-haiku-4-5-20251001"
             log.info("AI: using api_key=%s... model=%s", (api_key or "")[:12], model)
-            client = Anthropic(api_key=api_key)
+            from app.settings import settings as _settings
+            proxy_url = getattr(_settings, "telegram_proxy", None)
+            http_client = None
+            if proxy_url:
+                import httpx
+                http_client = httpx.Client(proxy=proxy_url)
+            client = Anthropic(api_key=api_key, http_client=http_client)
             response = client.messages.create(
                 model=model,
                 max_tokens=500,
