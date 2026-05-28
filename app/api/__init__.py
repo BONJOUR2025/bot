@@ -334,6 +334,11 @@ def create_app() -> FastAPI:
     _init_db()
     app.include_router(recruitment_router, prefix="/api", dependencies=protected)
 
+    # Employee knowledge base
+    from .knowledge import router as knowledge_router
+    from app.models.knowledge import KnowledgeDocument  # noqa: F401
+    app.include_router(knowledge_router, prefix="/api", dependencies=protected)
+
     from app.services import recruitment_sync
 
     @app.on_event("startup")

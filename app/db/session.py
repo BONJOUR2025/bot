@@ -59,6 +59,15 @@ def _run_migrations() -> None:
                 tg_message_id TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )""",
+            """CREATE TABLE IF NOT EXISTS knowledge_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'Общее',
+                content TEXT NOT NULL DEFAULT '',
+                order_idx INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )""",
         ]:
             try:
                 conn.execute(text(stmt))

@@ -6,7 +6,7 @@ import {
   Umbrella, Cake, Package, Calculator, MapPin, Banknote,
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, BookOpen, Settings as SettingsIcon,
-  Lock, Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send,
+  Lock, Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -21,7 +21,8 @@ const navStructure = [
     name: 'Персонал',
     items: [
       { to: '/admin/employees',   label: 'Сотрудники',        permission: 'employees', icon: Users },
-      { to: '/admin/recruitment', label: 'Подбор персонала',  permission: 'employees', icon: UserPlus },
+      { to: '/admin/recruitment',    label: 'Подбор персонала', permission: 'employees', icon: UserPlus },
+      { to: '/admin/knowledge-base', label: 'База знаний',      permission: 'employees', icon: LibraryBig },
       { to: '/admin/archive',     label: 'Архив сотрудников', permission: 'employees', icon: Archive },
       { to: '/admin/schedule',    label: 'Расписание',        permission: 'employees', icon: CalendarRange },
       { to: '/admin/vacations',   label: 'Отпуска',           permission: 'vacations', icon: Umbrella },

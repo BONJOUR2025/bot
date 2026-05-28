@@ -5,6 +5,7 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
+    ConversationHandler,
     filters,
 )
 
@@ -58,6 +59,7 @@ from ..handlers.admin import (
 from ..handlers.reset import global_reset
 from ..handlers.media_archive import archive_media
 from ..handlers.business_connection import handle_business_connection, handle_business_message
+from ..handlers.knowledge_base import handle_kb_entry, handle_kb_question, KB_CHAT
 from telegram.request import HTTPXRequest
 import datetime
 
@@ -194,6 +196,23 @@ def _register_all_handlers(app):
     app.add_handler(CommandHandler("cancel", global_reset), group=0)
     app.add_handler(CallbackQueryHandler(mark_sent, pattern=r"^mark_sent_"))
     app.add_handler(CallbackQueryHandler(handle_acknowledgment, pattern=r"^ack_"))
+
+    # Knowledge base Q&A conversation
+    kb_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(r"^📚 База знаний$") & ~filters.User(ADMIN_ID), handle_kb_entry)
+        ],
+        states={
+            KB_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_kb_question)],
+        },
+        fallbacks=[
+            MessageHandler(filters.Regex(r"^🏠 Домой$"), handle_kb_question),
+            CommandHandler("cancel", handle_kb_question),
+        ],
+        allow_reentry=True,
+    )
+    app.add_handler(kb_conv)
+
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND & ~filters.User(ADMIN_ID), save_new_value

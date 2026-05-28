@@ -28,6 +28,7 @@ import PayoutsControl from "./pages/PayoutsControl";
 import Incentives from "./pages/Incentives";
 import Reports from "./pages/Reports";
 import Broadcast from "./pages/Broadcast";
+import KnowledgeBase from "./pages/KnowledgeBase";
 import MessageHistory from "./pages/MessageHistory";
 import Vacations from "./pages/Vacations";
 import Birthdays from "./pages/Birthdays";
@@ -103,6 +104,7 @@ export default function App() {
                 <Route path="payment-calendar" element={<PaymentCalendar />} />
                 <Route path="smses" element={<Smses />} />
                 <Route path="recruitment" element={<Recruitment />} />
+                <Route path="knowledge-base" element={<KnowledgeBase />} />
               </Route>
 
               {/* Личный кабинет сотрудника */}

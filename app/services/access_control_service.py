@@ -68,6 +68,12 @@ BOT_BUTTON_CATALOG: list[dict[str, Any]] = [
         "text": "👤 Личный кабинет",
     },
     {
+        "id": "user.knowledge_base",
+        "label": "📚 База знаний",
+        "scope": "user",
+        "text": "📚 База знаний",
+    },
+    {
         "id": "common.home",
         "label": "🏠 Домой",
         "scope": "common",
