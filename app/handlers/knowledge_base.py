@@ -31,12 +31,14 @@ async def handle_kb_question(update: Update, context: ContextTypes.DEFAULT_TYPE)
     text = (update.message.text or "").strip()
 
     if text.lower() in _EXIT_PHRASES or text == "🏠 Домой":
-        from ...keyboards.reply_user import get_main_menu
+        from app.config import ADMIN_ID
         user_id = str(update.effective_user.id)
-        await update.message.reply_text(
-            "🏠 Вы вернулись в главное меню.",
-            reply_markup=get_main_menu(user_id),
-        )
+        if str(update.effective_user.id) == str(ADMIN_ID):
+            from app.keyboards.reply_admin import get_admin_menu
+            await update.message.reply_text("🏠 Главное меню", reply_markup=get_admin_menu())
+        else:
+            from app.keyboards.reply_user import get_main_menu
+            await update.message.reply_text("🏠 Вы вернулись в главное меню.", reply_markup=get_main_menu(user_id))
         return ConversationHandler.END
 
     await update.message.chat.send_action("typing")

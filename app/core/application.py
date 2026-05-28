@@ -200,7 +200,7 @@ def _register_all_handlers(app):
     # Knowledge base Q&A conversation
     kb_conv = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(r"^📚 База знаний$") & ~filters.User(ADMIN_ID), handle_kb_entry)
+            MessageHandler(filters.Regex(r"^📚 База знаний$"), handle_kb_entry)
         ],
         states={
             KB_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_kb_question)],

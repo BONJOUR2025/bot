@@ -7,8 +7,9 @@ from telegram.ext import ContextTypes
 def get_admin_menu() -> ReplyKeyboardMarkup:
     keyboard: List[List[str]] = [
         ["📄 Просмотр данных", "📢 Рассылка"],
-        ["💸 Просмотр выплат", "🔄 Сбросить запросы"],  # Новая кнопка
+        ["💸 Просмотр выплат", "🔄 Сбросить запросы"],
         ["📈 Отчёт по авансам"],
+        ["📚 База знаний"],
         ["📨 Сообщение пользователю", "➕ Создать запрос", "🏠 Домой"],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
