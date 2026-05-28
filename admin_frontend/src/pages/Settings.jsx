@@ -194,6 +194,57 @@ export default function Settings() {
         </div>
       </Section>
 
+
+      {/* Secretary Mode */}
+      <Section title="Telegram Secretary Mode">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Ваш username" hint="Ваш личный username в Telegram (без @). Используется для формирования ссылок-маяков для кандидатов.">
+            <div className="flex items-center gap-0">
+              <span className="input px-3 py-2 rounded-r-none border-r-0 text-[color:var(--color-muted-foreground)] bg-[color:var(--color-muted)] select-none">@</span>
+              <input className="input w-full rounded-l-none" placeholder="username" {...register('tg_personal_username')} />
+            </div>
+          </Field>
+          <Field label="Business Connection ID" hint="ID подключения Secretary Mode. Можно найти в логах бота после подключения в Telegram → Настройки → Бизнес-аккаунт → Чат-боты.">
+            <input className="input w-full font-mono text-sm" placeholder="вставьте connection_id из логов" {...register('tg_business_connection_id')} />
+          </Field>
+          <Field label="Право отвечать (can_reply)" hint="Включите если при подключении бота вы дали ему право отвечать на сообщения.">
+            <label className="flex items-center gap-2 cursor-pointer mt-1">
+              <input type="checkbox" className="w-4 h-4 accent-[color:var(--color-primary)]" {...register('tg_business_can_reply')} />
+              <span className="text-sm">Разрешено отвечать</span>
+            </label>
+          </Field>
+        </div>
+      </Section>
+
+      {/* Automation */}
+      <Section title="Автоматизация найма">
+        <p className="text-sm text-[color:var(--color-muted-foreground)] mb-3">
+          Глобальный переключатель автоматизации находится на странице «Подбор».
+          Здесь настраиваются фильтры и база знаний.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+          <Field label="Возраст от" hint="Минимальный возраст кандидата">
+            <input type="number" className="input w-full" {...register('automation_age_min')} placeholder="18" />
+          </Field>
+          <Field label="Возраст до" hint="Максимальный возраст кандидата">
+            <input type="number" className="input w-full" {...register('automation_age_max')} placeholder="60" />
+          </Field>
+          <Field label="Источники" hint="hh, avito, manual — через запятую. Пусто = все.">
+            <input className="input w-full" {...register('automation_sources_str')} placeholder="hh,avito" />
+          </Field>
+        </div>
+        <Field label="Место проведения собеседований" hint="Адрес или описание — Claude будет предлагать это кандидатам">
+          <input className="input w-full" {...register('automation_interview_location')} placeholder="г. Москва, ул. Примерная, 1" />
+        </Field>
+        <Field label="База знаний для AI" hint="Информация о компании, вакансии, условиях — Claude будет отвечать на основе этого текста">
+          <textarea className="input w-full min-h-[120px] resize-y text-sm" {...register('automation_knowledge_base')}
+            placeholder={"Компания занимается...\nГрафик работы: ...\nЗарплата: ...\nТребования: ..."} />
+        </Field>
+        <Field label="Anthropic API Key" hint="API ключ для Claude AI (console.anthropic.com). Хранится в config.json на сервере. Можно также задать через переменную окружения ANTHROPIC_API_KEY.">
+          <input type="password" className="input w-full font-mono text-sm" placeholder="sk-ant-api03-..." {...register('anthropic_api_key')} />
+        </Field>
+      </Section>
+
       {/* PDF */}
       <Section title="PDF-отчёты">
         <Field label="Путь к шрифту" hint="Шрифт для генерации PDF-отчётов, например fonts/DejaVuSans.ttf">
