@@ -72,10 +72,11 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         )
 
         try:
-            api_key = cfg.get("anthropic_api_key") or None
+            api_key = (cfg.get("anthropic_api_key") or "").strip() or None
+            log.info("AI: using api_key=%s... model=claude-haiku-4-5", (api_key or "")[:12])
             client = Anthropic(api_key=api_key)
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-haiku-4-5",
                 max_tokens=500,
                 system=system,
                 messages=messages,
