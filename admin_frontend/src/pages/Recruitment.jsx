@@ -46,6 +46,8 @@ function VacancyModal({ vacancy, onClose, onSave }) {
   const [knowledgeBase, setKb]    = useState(vacancy?.knowledge_base || '');
   const [interviewLoc, setLoc]    = useState(vacancy?.interview_location || '');
   const [saving, setSaving]       = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis]   = useState(null);
 
   async function save() {
     if (!title.trim()) return;
@@ -58,6 +60,18 @@ function VacancyModal({ vacancy, onClose, onSave }) {
       onSave(res.data);
       onClose();
     } finally { setSaving(false); }
+  }
+
+  async function analyze() {
+    if (!vacancy?.id) return;
+    setAnalyzing(true);
+    setAnalysis(null);
+    try {
+      const res = await api.post(`/recruitment/vacancies/${vacancy.id}/analyze-kb`);
+      setAnalysis(res.data.analysis);
+    } catch (e) {
+      setAnalysis('Ошибка: ' + (e.response?.data?.detail || e.message));
+    } finally { setAnalyzing(false); }
   }
 
   return (
@@ -84,13 +98,29 @@ function VacancyModal({ vacancy, onClose, onSave }) {
               placeholder="Адрес или ссылка на онлайн-встречу" />
           </div>
           <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">
-              База знаний для AI <span className="opacity-60">(что Claude знает об этой вакансии)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-[color:var(--color-muted-foreground)] block">
+                База знаний для AI <span className="opacity-60">(что Claude знает об этой вакансии)</span>
+              </label>
+              {vacancy?.id && (
+                <button type="button" onClick={analyze} disabled={analyzing}
+                  className="text-xs text-[color:var(--color-primary)] hover:underline disabled:opacity-50 flex items-center gap-1 shrink-0">
+                  {analyzing ? '⏳ Анализирую...' : '✦ Что добавить?'}
+                </button>
+              )}
+            </div>
             <textarea className="input w-full min-h-[100px] resize-y text-sm" value={knowledgeBase}
               onChange={e => setKb(e.target.value)}
               placeholder={"График: 5/2, 9:00–18:00\nЗарплата: от 60 000 ₽\nТребования: ...\nУсловия: ..."} />
           </div>
+          {analysis && (
+            <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-3 text-sm space-y-1">
+              <div className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-2">
+                Вопросы кандидатов, на которые AI не сможет ответить:
+              </div>
+              <pre className="whitespace-pre-wrap text-xs leading-relaxed font-sans">{analysis}</pre>
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="btn btn-secondary">Отмена</button>

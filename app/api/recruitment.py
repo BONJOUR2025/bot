@@ -138,6 +138,50 @@ def delete_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
     db.delete(v); db.commit()
     return {"status": "deleted"}
 
+@router.post("/vacancies/{vacancy_id}/analyze-kb")
+async def analyze_knowledge_base(vacancy_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not v: raise HTTPException(404, "Vacancy not found")
+
+    from app.services.config_service import ConfigService
+    cfg = ConfigService().load()
+    api_key = (cfg.get("anthropic_api_key") or "").strip() or None
+    if not api_key:
+        raise HTTPException(400, "Anthropic API Key не настроен в Настройках")
+
+    kb = (v.knowledge_base or "").strip() or (cfg.get("automation_knowledge_base") or "").strip()
+    if not kb:
+        raise HTTPException(400, "База знаний пуста. Заполните её сначала.")
+
+    prompt = f"""Ты опытный HR-консультант. Проанализируй базу знаний о вакансии «{v.title}».
+
+База знаний:
+{kb}
+
+Задача: выяви пробелы. Напиши список конкретных вопросов, которые кандидат СКОРЕЕ ВСЕГО задаст, но ответа на которые в базе знаний НЕТ.
+
+Формат ответа — нумерованный список. Каждый пункт: вопрос кандидата + одно предложение почему его нет в базе. Без вступлений и заключений. Максимум 10 пунктов."""
+
+    try:
+        from anthropic import Anthropic
+        from app.settings import settings as _settings
+        proxy_url = getattr(_settings, "telegram_proxy", None)
+        http_client = None
+        if proxy_url:
+            import httpx
+            http_client = httpx.Client(proxy=proxy_url)
+
+        client = Anthropic(api_key=api_key, http_client=http_client)
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=800,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        analysis = response.content[0].text.strip()
+        return {"analysis": analysis}
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка Claude API: {e}")
+
 
 # ── Candidates ─────────────────────────────────────────────────────
 
