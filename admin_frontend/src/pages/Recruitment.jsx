@@ -3,7 +3,7 @@ import {
   Plus, X, Phone, Mail, FileText,
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
-  ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Bell,
+  ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Bell, Zap,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -13,6 +13,8 @@ const STAGES = [
   { key: 'отклик',        label: 'Отклик',        color: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-400',     border: 'border-t-blue-400'   },
   { key: 'собеседование', label: 'Собеседование',  color: 'bg-violet-100 text-violet-700',   dot: 'bg-violet-400',   border: 'border-t-violet-400' },
   { key: 'ждем',          label: 'Ожидание',       color: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-400',    border: 'border-t-amber-400'  },
+  { key: 'ждем_привязки', label: 'Ждём TG',        color: 'bg-cyan-100 text-cyan-700',       dot: 'bg-cyan-400',     border: 'border-t-cyan-400'   },
+  { key: 'общение',       label: 'Общение',        color: 'bg-purple-100 text-purple-700',   dot: 'bg-purple-400',   border: 'border-t-purple-400' },
   { key: 'отказ',         label: 'Отказ',          color: 'bg-red-100 text-red-700',         dot: 'bg-red-400',      border: 'border-t-red-400'    },
   { key: 'нанят',         label: 'Нанят ✓',        color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-400',  border: 'border-t-emerald-400'},
 ];
@@ -794,10 +796,27 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
 
         {/* ── Footer ── */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10">
-          <button onClick={() => { onDelete(candidate.id); onClose(); }}
-            className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition-colors">
-            <Trash2 size={14} /> Удалить
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { onDelete(candidate.id); onClose(); }}
+              className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition-colors">
+              <Trash2 size={14} /> Удалить
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const res = await api.post(`/recruitment/candidates/${candidate.id}/test-automation`);
+                  alert(`Результат: ${res.data.result}`);
+                } catch (e) {
+                  alert(e.response?.data?.detail || e.message);
+                }
+              }}
+              className="btn text-xs flex items-center gap-1 text-[color:var(--color-muted-foreground)]"
+              title="Запустить автоматизацию для этого кандидата (игнорирует глобальный переключатель)"
+            >
+              <Zap size={12} />
+              Тест авто
+            </button>
+          </div>
           <button onClick={() => { onClose(); onEdit(candidate); }}
             className="btn btn-primary text-sm flex items-center gap-1.5">
             <Pencil size={14} /> Редактировать
@@ -1113,6 +1132,20 @@ export default function Recruitment() {
     api.get('/config/message-templates').then(r => setMsgTemplates(r.data || [])).catch(() => {});
   }, []);
 
+  const [automationEnabled, setAutomationEnabled] = useState(false);
+  useEffect(() => {
+    api.get('/recruitment/automation/status')
+      .then(r => setAutomationEnabled(r.data.enabled))
+      .catch(() => {});
+  }, []);
+
+  async function toggleAutomation() {
+    try {
+      const res = await api.post('/recruitment/automation/toggle', { enabled: !automationEnabled });
+      setAutomationEnabled(res.data.enabled);
+    } catch (e) { setError(e.response?.data?.detail || e.message); }
+  }
+
   const [unlinkedTg, setUnlinkedTg] = useState([]);
   const [unlinkedLinkTarget, setUnlinkedLinkTarget] = useState({}); // msgId -> candidateId
   const [unlinkedOpen, setUnlinkedOpen] = useState(false);
@@ -1305,6 +1338,18 @@ export default function Recruitment() {
               {showVacList ? 'Скрыть вакансии' : 'Вакансии'}
             </button>
           )}
+          <button
+            onClick={toggleAutomation}
+            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+              automationEnabled
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                : 'bg-[color:var(--color-control-bg)] border-[color:var(--color-border)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'
+            }`}
+            title={automationEnabled ? 'Автоматизация включена. Нажмите чтобы выключить.' : 'Автоматизация выключена. Нажмите чтобы включить.'}
+          >
+            <Zap size={14} className={automationEnabled ? 'text-emerald-600' : ''} />
+            {automationEnabled ? 'Авто: вкл' : 'Авто: выкл'}
+          </button>
           <button
             onClick={() => setShowIntegrations(true)}
             className="btn btn-secondary text-sm flex items-center gap-1.5"

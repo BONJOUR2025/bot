@@ -200,6 +200,7 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
         return []
 
     new_candidates = []
+    new_candidate_objs = []
     for item in new_items:
         ext_id = item["external_id"]
         exists = db.query(Candidate).filter(
@@ -237,7 +238,18 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 "phone": item.get("phone", ""),
                 "resume_url": item.get("resume_url", ""),
             })
+            new_candidate_objs.append(c)
     db.flush()
+
+    # Trigger automation for newly added candidates
+    from app.services.automation import is_enabled, trigger_for_candidate, matches_filters
+    from app.services.config_service import ConfigService
+    if is_enabled() and new_candidate_objs:
+        cfg = ConfigService().load()
+        for cand_obj in new_candidate_objs:
+            if matches_filters(cand_obj, cfg):
+                asyncio.ensure_future(trigger_for_candidate(cand_obj.id))
+
     return new_candidates
 
 

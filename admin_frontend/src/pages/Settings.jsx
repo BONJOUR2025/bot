@@ -267,6 +267,32 @@ export default function Settings() {
         </div>
       </Section>
 
+      {/* Automation */}
+      <Section title="Автоматизация найма">
+        <p className="text-sm text-[color:var(--color-muted-foreground)] mb-3">
+          Глобальный переключатель автоматизации находится на странице «Подбор».
+          Здесь настраиваются фильтры и база знаний.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+          <Field label="Возраст от" hint="Минимальный возраст кандидата">
+            <input type="number" className="input w-full" {...register('automation_age_min')} placeholder="18" />
+          </Field>
+          <Field label="Возраст до" hint="Максимальный возраст кандидата">
+            <input type="number" className="input w-full" {...register('automation_age_max')} placeholder="60" />
+          </Field>
+          <Field label="Источники" hint="hh, avito, manual — через запятую. Пусто = все.">
+            <input className="input w-full" {...register('automation_sources_str')} placeholder="hh,avito" />
+          </Field>
+        </div>
+        <Field label="Место проведения собеседований" hint="Адрес или описание — Claude будет предлагать это кандидатам">
+          <input className="input w-full" {...register('automation_interview_location')} placeholder="г. Москва, ул. Примерная, 1" />
+        </Field>
+        <Field label="База знаний для AI" hint="Информация о компании, вакансии, условиях — Claude будет отвечать на основе этого текста">
+          <textarea className="input w-full min-h-[120px] resize-y text-sm" {...register('automation_knowledge_base')}
+            placeholder={"Компания занимается...\nГрафик работы: ...\nЗарплата: ...\nТребования: ..."} />
+        </Field>
+      </Section>
+
       {/* PDF */}
       <Section title="PDF-отчёты">
         <Field label="Путь к шрифту" hint="Шрифт для генерации PDF-отчётов, например fonts/DejaVuSans.ttf">

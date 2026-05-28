@@ -285,6 +285,15 @@ export default function Dashboard() {
               to="/admin/recruitment"
             />
           )}
+          {recruitNotifs.pending_tg_24h > 0 && (
+            <StatCard
+              icon={Clock}
+              label="Ждут TG-привязки >24ч"
+              value={recruitNotifs.pending_tg_24h}
+              tone="danger"
+              to="/admin/recruitment"
+            />
+          )}
         </div>
       )}
 

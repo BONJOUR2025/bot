@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import RedirectResponse
 
 log = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ _pending_hh_redirect_uri: str = ""
 
 router = APIRouter(prefix="/recruitment", tags=["Recruitment"])
 
-VALID_STAGES = ["отклик", "собеседование", "ждем", "отказ", "нанят"]
+VALID_STAGES = ["отклик", "собеседование", "ждем", "ждем_привязки", "общение", "отказ", "нанят"]
 VALID_SOURCES = ["hh", "avito", "manual", "other"]
 
 
@@ -770,7 +770,45 @@ def get_notifications(db: Session = Depends(get_db)):
     except Exception:
         unlinked_tg = 0
 
-    return {"new_candidates": new_candidates, "unread_hh": unread_hh, "unread_tg": unread_tg, "unlinked_tg": unlinked_tg}
+    try:
+        cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+        pending_tg = db.query(Candidate).filter(
+            Candidate.stage == "ждем_привязки",
+            Candidate.updated_at <= cutoff_24h,
+        ).count()
+    except Exception:
+        pending_tg = 0
+
+    return {
+        "new_candidates": new_candidates,
+        "unread_hh": unread_hh,
+        "unread_tg": unread_tg,
+        "unlinked_tg": unlinked_tg,
+        "pending_tg_24h": pending_tg,
+    }
+
+
+# ── Automation ────────────────────────────────────────────────────
+
+@router.get("/automation/status")
+def get_automation_status():
+    from app.services.automation import is_enabled
+    return {"enabled": is_enabled()}
+
+@router.post("/automation/toggle")
+def toggle_automation(data: dict = Body({})):
+    from app.services.automation import set_enabled, is_enabled
+    val = data.get("enabled")
+    if val is None:
+        val = not is_enabled()
+    set_enabled(bool(val))
+    return {"enabled": is_enabled()}
+
+@router.post("/candidates/{candidate_id}/test-automation")
+async def test_automation(candidate_id: int):
+    from app.services.automation import trigger_for_candidate
+    result = await trigger_for_candidate(candidate_id, force=True)
+    return {"result": result}
 
 
 # ── Manual sync trigger ────────────────────────────────────────────
