@@ -104,17 +104,25 @@ async def trigger_for_candidate(candidate_id: int, force: bool = False) -> str:
         # Build message
         name_short = c.name.split()[0] if c.name else "Здравствуйте"
         if tg_link:
-            message = (
-                f"{name_short}, здравствуйте! Для удобного общения приглашаем вас в Telegram.\n\n"
-                f"Пожалуйста, перейдите по ссылке и нажмите «Отправить» — это займёт 5 секунд:\n"
-                f"{tg_link}\n\n"
-                f"⚠️ Важно: не изменяйте текст сообщения — это нужно для автоматической идентификации."
+            default_tpl = (
+                "{name}, здравствуйте! Для удобного общения приглашаем вас в Telegram.\n\n"
+                "Пожалуйста, перейдите по ссылке и нажмите «Отправить» — это займёт 5 секунд:\n"
+                "{link}\n\n"
+                "⚠️ Важно: не изменяйте текст сообщения — это нужно для автоматической идентификации."
             )
+            tpl = (cfg.get("automation_hh_message_with_link") or "").strip() or default_tpl
+            message = tpl.format(name=name_short, link=tg_link, code=code)
         else:
-            message = (
-                f"{name_short}, здравствуйте! Для удобного общения напишите нам в Telegram: "
-                f"@{personal_username or 'наш менеджер'}.\n"
-                f"При написании укажите код: {code}"
+            default_tpl = (
+                "{name}, здравствуйте! Для удобного общения напишите нам в Telegram: "
+                "@{username}.\nПри написании укажите код: {code}"
+            )
+            tpl = (cfg.get("automation_hh_message_no_link") or "").strip() or default_tpl
+            message = tpl.format(
+                name=name_short,
+                code=code,
+                username=personal_username or "наш менеджер",
+                link=link_text,
             )
 
         # Send hh message

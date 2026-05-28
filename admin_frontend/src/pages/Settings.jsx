@@ -288,6 +288,20 @@ export default function Settings() {
         <Field label="Anthropic API Key" hint="API ключ для Claude AI (console.anthropic.com). Хранится в config.json на сервере.">
           <input type="password" className="input w-full font-mono text-sm" placeholder="sk-ant-api03-..." {...register('anthropic_api_key')} />
         </Field>
+        <Field
+          label="Шаблон сообщения на hh.ru (с Telegram-ссылкой)"
+          hint="Отправляется кандидату автоматикой. Плейсхолдеры: {name} — имя, {link} — ссылка на TG (обязательно!), {code} — код привязки."
+        >
+          <textarea className="input w-full min-h-[100px] resize-y text-sm font-mono" {...register('automation_hh_message_with_link')}
+            placeholder={"{name}, здравствуйте! Для удобного общения перейдите по ссылке и нажмите «Отправить»:\n{link}\n\n⚠️ Не изменяйте текст сообщения."} />
+        </Field>
+        <Field
+          label="Шаблон сообщения на hh.ru (без ссылки)"
+          hint="Используется когда Telegram username не настроен. Плейсхолдеры: {name}, {code} (обязательно!), {username}."
+        >
+          <textarea className="input w-full min-h-[80px] resize-y text-sm font-mono" {...register('automation_hh_message_no_link')}
+            placeholder={"{name}, здравствуйте! Напишите нам в Telegram @{username} и укажите код: {code}"} />
+        </Field>
       </Section>
 
       {/* PDF */}
