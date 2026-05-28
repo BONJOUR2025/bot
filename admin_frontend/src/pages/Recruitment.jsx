@@ -45,9 +45,10 @@ function VacancyModal({ vacancy, onClose, onSave }) {
   const [description, setDesc]    = useState(vacancy?.description || '');
   const [knowledgeBase, setKb]    = useState(vacancy?.knowledge_base || '');
   const [interviewLoc, setLoc]    = useState(vacancy?.interview_location || '');
-  const [saving, setSaving]       = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis]   = useState(null);
+  const [saving, setSaving]         = useState(false);
+  const [aiLoading, setAiLoading]   = useState(null); // 'analyze' | 'calibrate' | null
+  const [aiTab, setAiTab]           = useState(null); // 'analyze' | 'calibrate' | null
+  const [aiResults, setAiResults]   = useState({});   // { analyze: '...', calibrate: '...' }
 
   async function save() {
     if (!title.trim()) return;
@@ -62,16 +63,19 @@ function VacancyModal({ vacancy, onClose, onSave }) {
     } finally { setSaving(false); }
   }
 
-  async function analyze() {
+  async function runAi(mode) {
     if (!vacancy?.id) return;
-    setAnalyzing(true);
-    setAnalysis(null);
+    setAiLoading(mode);
+    setAiTab(mode);
     try {
-      const res = await api.post(`/recruitment/vacancies/${vacancy.id}/analyze-kb`);
-      setAnalysis(res.data.analysis);
+      const endpoint = mode === 'analyze'
+        ? `/recruitment/vacancies/${vacancy.id}/analyze-kb`
+        : `/recruitment/vacancies/${vacancy.id}/calibrate-kb`;
+      const res = await api.post(endpoint);
+      setAiResults(prev => ({ ...prev, [mode]: res.data.result }));
     } catch (e) {
-      setAnalysis('Ошибка: ' + (e.response?.data?.detail || e.message));
-    } finally { setAnalyzing(false); }
+      setAiResults(prev => ({ ...prev, [mode]: 'Ошибка: ' + (e.response?.data?.detail || e.message) }));
+    } finally { setAiLoading(null); }
   }
 
   return (
@@ -103,22 +107,38 @@ function VacancyModal({ vacancy, onClose, onSave }) {
                 База знаний для AI <span className="opacity-60">(что Claude знает об этой вакансии)</span>
               </label>
               {vacancy?.id && (
-                <button type="button" onClick={analyze} disabled={analyzing}
-                  className="text-xs text-[color:var(--color-primary)] hover:underline disabled:opacity-50 flex items-center gap-1 shrink-0">
-                  {analyzing ? '⏳ Анализирую...' : '✦ Что добавить?'}
-                </button>
+                <div className="flex gap-2 shrink-0">
+                  <button type="button" onClick={() => runAi('analyze')} disabled={!!aiLoading}
+                    className="text-xs text-[color:var(--color-primary)] hover:underline disabled:opacity-50">
+                    {aiLoading === 'analyze' ? '⏳' : '✦'} Что добавить?
+                  </button>
+                  <span className="text-[color:var(--color-muted-foreground)]">·</span>
+                  <button type="button" onClick={() => runAi('calibrate')} disabled={!!aiLoading}
+                    className="text-xs text-[color:var(--color-primary)] hover:underline disabled:opacity-50">
+                    {aiLoading === 'calibrate' ? '⏳' : '◎'} Калибровка
+                  </button>
+                </div>
               )}
             </div>
             <textarea className="input w-full min-h-[100px] resize-y text-sm" value={knowledgeBase}
-              onChange={e => setKb(e.target.value)}
+              onChange={e => { setKb(e.target.value); setAiTab(null); }}
               placeholder={"График: 5/2, 9:00–18:00\nЗарплата: от 60 000 ₽\nТребования: ...\nУсловия: ..."} />
           </div>
-          {analysis && (
-            <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-3 text-sm space-y-1">
-              <div className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-2">
-                Вопросы кандидатов, на которые AI не сможет ответить:
+          {aiTab && aiResults[aiTab] && (
+            <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-3">
+              <div className="flex gap-3 mb-2 text-xs font-medium">
+                <button onClick={() => setAiTab('analyze')}
+                  className={`pb-0.5 border-b-2 ${aiTab === 'analyze' ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]' : 'border-transparent text-[color:var(--color-muted-foreground)]'}`}>
+                  Пробелы
+                </button>
+                {aiResults.calibrate && (
+                  <button onClick={() => setAiTab('calibrate')}
+                    className={`pb-0.5 border-b-2 ${aiTab === 'calibrate' ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]' : 'border-transparent text-[color:var(--color-muted-foreground)]'}`}>
+                    Калибровка
+                  </button>
+                )}
               </div>
-              <pre className="whitespace-pre-wrap text-xs leading-relaxed font-sans">{analysis}</pre>
+              <pre className="whitespace-pre-wrap text-xs leading-relaxed font-sans">{aiResults[aiTab]}</pre>
             </div>
           )}
         </div>
