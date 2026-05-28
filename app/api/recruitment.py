@@ -142,7 +142,30 @@ def list_candidates(
     q = db.query(Candidate)
     if vacancy_id is not None: q = q.filter(Candidate.vacancy_id == vacancy_id)
     if stage: q = q.filter(Candidate.stage == stage)
-    return [c.to_dict() for c in q.order_by(Candidate.created_at.asc()).all()]
+    candidates = q.order_by(Candidate.created_at.asc()).all()
+
+    # Compute per-candidate flags
+    since_24h = datetime.utcnow() - timedelta(hours=24)
+    # Collect candidate IDs with unread TG messages
+    try:
+        unread_tg_ids = {
+            row[0] for row in db.query(TelegramMessage.candidate_id).filter(
+                TelegramMessage.direction == "in",
+                TelegramMessage.is_read == False,
+            ).all()
+        }
+    except Exception:
+        unread_tg_ids = set()
+
+    result = []
+    for c in candidates:
+        d = c.to_dict()
+        d["is_new"] = bool(c.created_at and c.created_at >= since_24h)
+        d["has_unread_hh_msg"] = bool(getattr(c, "has_unread_hh_msg", False))
+        d["has_unread_tg"] = c.id in unread_tg_ids
+        d["vacancy_title"] = c.vacancy.title if c.vacancy else ""
+        result.append(d)
+    return result
 
 @router.post("/candidates")
 def create_candidate(data: CandidateCreate, db: Session = Depends(get_db)):
@@ -685,7 +708,6 @@ def link_unlinked_tg(msg_id: int, data: LinkTgRequest, db: Session = Depends(get
             direction="in",
             text=msg.text,
             tg_message_id=msg.tg_message_id,
-            is_read=False,
         )
         db.add(tg_msg)
         db.delete(msg)
