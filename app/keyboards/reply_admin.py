@@ -11,6 +11,7 @@ def get_admin_menu() -> ReplyKeyboardMarkup:
         ["📈 Отчёт по авансам"],
         ["📚 База знаний"],
         ["📨 Сообщение пользователю", "➕ Создать запрос", "🏠 Домой"],
+        ["📝 Задача"],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
