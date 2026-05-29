@@ -142,11 +142,24 @@ async def handle_business_message(update, context):
                         except Exception as e:
                             log.warning("Stage transition error: %s", e)
                     elif getattr(candidate, 'stage', '') == 'общение':
-                        try:
-                            from app.services.ai_conversation import handle_candidate_message
-                            asyncio.ensure_future(handle_candidate_message(candidate.id, msg_text))
-                        except Exception as e:
-                            log.warning("AI conversation trigger error: %s", e)
+                        # Check if admin was actively writing manually — if so, AI stays silent
+                        last_out = db.query(TelegramMessage).filter(
+                            TelegramMessage.candidate_id == candidate.id,
+                            TelegramMessage.direction == "out",
+                        ).order_by(TelegramMessage.created_at.desc()).first()
+                        admin_is_active = last_out is not None and not getattr(last_out, 'sent_by_ai', 0)
+
+                        if admin_is_active:
+                            log.info("AI suppressed: last outgoing message was from admin, not AI (candidate_id=%s)", candidate.id)
+                        else:
+                            try:
+                                from app.services.ai_conversation import handle_candidate_message
+                                asyncio.ensure_future(handle_candidate_message(candidate.id, msg_text))
+                            except Exception as e:
+                                log.warning("AI conversation trigger error: %s", e)
+
+                        # Always check if candidate's reply confirms an interview
+                        asyncio.ensure_future(_check_interview_confirmation(candidate.id))
                 else:
                     msg_text = text or ('[контакт]' if msg.contact else '[медиа]')
                     unlinked = UnlinkedTelegramMessage(

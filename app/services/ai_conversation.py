@@ -138,6 +138,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
                     direction="out",
                     text=escalate_reply,
                     is_ai_escalation=1,
+                    sent_by_ai=1,
                 )
                 db.add(out_msg)
                 db.commit()
@@ -162,6 +163,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             out_msg = TelegramMessage(
                 candidate_id=candidate_id,
                 direction="out",
+                sent_by_ai=1,
                 text=reply,
             )
             db.add(out_msg)
