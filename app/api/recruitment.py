@@ -445,6 +445,44 @@ def reset_candidate_history(candidate_id: int, db: Session = Depends(get_db)):
     return {"status": "reset", "messages_deleted": deleted}
 
 
+@router.post("/candidates/{candidate_id}/toggle-pause")
+def toggle_pause(candidate_id: int, db: Session = Depends(get_db)):
+    """Pause or unpause AI automation for this candidate."""
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    c.is_paused = not bool(c.is_paused)
+    c.updated_at = datetime.utcnow()
+    db.commit()
+    return {"id": c.id, "is_paused": bool(c.is_paused)}
+
+
+@router.get("/interviews")
+async def list_interviews(db: Session = Depends(get_db)):
+    """Return candidates at 'собеседование' stage with their interview task details."""
+    from app.services.task_service import get_task_service
+
+    candidates = db.query(Candidate).filter(
+        Candidate.stage == "собеседование"
+    ).order_by(Candidate.updated_at.desc()).all()
+
+    try:
+        tasks = await get_task_service().list_tasks(category="Подбор персонала")
+    except Exception:
+        tasks = []
+
+    result = []
+    for c in candidates:
+        task = next((t for t in tasks if c.name in (t.title or "") and not (t.status == "done")), None)
+        entry = c.to_dict()
+        entry["interview_date"] = task.due_date if task else None
+        entry["interview_time"] = task.due_time if task else None
+        raw_desc = (task.description or "") if task else ""
+        entry["interview_place"] = raw_desc.replace("📍 Место: ", "").strip() or None
+        result.append(entry)
+    return result
+
+
 def _get_hh_candidate(candidate_id: int, db):
     """Return (candidate, hh_token) or raise HTTPException."""
     c = db.query(Candidate).filter(Candidate.id == candidate_id).first()

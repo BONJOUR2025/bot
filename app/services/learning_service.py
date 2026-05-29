@@ -46,12 +46,20 @@ async def learn_from_escalation(candidate_id: int, question: str, admin_answer: 
             f"Ответ менеджера: {admin_answer}\n\n"
             "Ответь ТОЛЬКО в формате JSON (без markdown, без пояснений):\n"
             '{"title": "краткий заголовок вопроса (до 80 символов)", '
-            '"content": "чёткий, полный ответ на этот вопрос (2-5 предложений)"}'
+            '"content": "чёткий, полный ответ на этот вопрос (2-5 предложений)", '
+            '"quality": 3, '
+            '"is_useful": true}'
+            "\n\nПравила для поля quality (1-5): насколько полезна эта запись для будущих кандидатов.\n"
+            "Правила для is_useful=false:\n"
+            "- Персональная информация конкретного кандидата\n"
+            "- Разовая ситуация, нерелевантная другим\n"
+            "- Пустой/слишком короткий ответ менеджера\n"
+            "- Уже очевидная информация"
         )
 
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=300,
+            max_tokens=400,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.content[0].text.strip()
@@ -64,9 +72,16 @@ async def learn_from_escalation(candidate_id: int, question: str, admin_answer: 
         data = json.loads(m.group())
         title = (data.get("title") or "").strip()
         content = (data.get("content") or "").strip()
+        quality = int(data.get("quality") or 0)
+        is_useful = bool(data.get("is_useful", True))
 
         if not title or not content:
             log.warning("learning_service: empty title or content from Claude")
+            return False
+
+        # Quality gate: skip if not useful or quality too low
+        if not is_useful or quality < 3:
+            log.info("learning_service: skipping entry '%s' (is_useful=%s, quality=%s)", title, is_useful, quality)
             return False
 
         db = SessionLocal()

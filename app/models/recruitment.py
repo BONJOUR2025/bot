@@ -55,6 +55,8 @@ class Candidate(Base):
     pending_interview_date = Column(String, nullable=True)   # YYYY-MM-DD, ждёт подтверждения
     pending_interview_time = Column(String, nullable=True)   # HH:MM
     pending_interview_place = Column(String, nullable=True)
+    interview_notified_at = Column(DateTime, nullable=True)  # last time admin was notified about interview
+    is_paused = Column(Boolean, nullable=False, default=False)
     has_unread_hh_msg = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -77,6 +79,7 @@ class Candidate(Base):
             "notes": self.notes or "",
             "telegram_chat_id": self.telegram_chat_id or "",
             "telegram_username": self.telegram_username or "",
+            "is_paused": bool(self.is_paused),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

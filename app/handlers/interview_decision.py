@@ -313,6 +313,15 @@ async def cancel_instruction(update, context):
     return ConversationHandler.END
 
 
+async def handle_instruction_timeout(update, context):
+    context.user_data.pop("interview_instruction_candidate", None)
+    if update.message:
+        await update.message.reply_text(
+            "⏰ Время вышло. Инструкция отменена — нажмите «✏️ Другое» снова."
+        )
+    return ConversationHandler.END
+
+
 def build_interview_decision_handlers():
     """Returns list of handlers to register in application."""
     confirm_handler = CallbackQueryHandler(handle_confirm_callback, pattern=r'^iview_ok_\d+$')
@@ -323,9 +332,13 @@ def build_interview_decision_handlers():
             INSTRUCTION_WAITING: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_instruction_text)
             ],
+            ConversationHandler.TIMEOUT: [
+                MessageHandler(filters.ALL, handle_instruction_timeout)
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel_instruction)],
         per_chat=True,
         allow_reentry=True,
+        conversation_timeout=300,
     )
     return [confirm_handler, other_conv]

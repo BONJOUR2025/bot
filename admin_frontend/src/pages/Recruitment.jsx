@@ -4,6 +4,7 @@ import {
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Bell, Zap,
+  Pause, Play,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -405,7 +406,7 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
 }
 
 // ── Candidate detail modal ─────────────────────────────────────────
-function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory }) {
+function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory, onPauseToggle }) {
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
   const isHh = candidate.source === 'hh' && candidate.external_id;
@@ -413,6 +414,8 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const [tab, setTab] = useState('info');
   const hasTg = !!candidate.telegram_chat_id;
   const [resetting, setResetting] = useState(false);
+  const [paused, setPaused] = useState(!!candidate.is_paused);
+  const [toggling, setToggling] = useState(false);
 
   // hh.ru chat state
   const [messages, setMessages]     = useState([]);
@@ -512,6 +515,16 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
     } catch (e) {
       setTgError(e.response?.data?.detail || e.message);
     } finally { setLoadingCode(false); }
+  }
+
+  async function handleTogglePause() {
+    setToggling(true);
+    try {
+      const res = await api.post(`/recruitment/candidates/${candidate.id}/toggle-pause`);
+      setPaused(res.data.is_paused);
+      onPauseToggle?.(candidate.id, res.data.is_paused);
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setToggling(false); }
   }
 
   async function handleResetHistory() {
@@ -696,6 +709,23 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Pause AI */}
+          <div className="pt-2 border-t border-[color:var(--color-border)]">
+            <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-2 uppercase tracking-wide">ИИ-автоматизация</p>
+            <button
+              onClick={handleTogglePause}
+              disabled={toggling}
+              className={`w-full flex items-center justify-center gap-2 text-xs font-medium px-3 py-2.5 rounded-xl border transition-colors disabled:opacity-50 ${
+                paused
+                  ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {toggling ? <Loader2 size={13} className="animate-spin" /> : paused ? <Play size={13} /> : <Pause size={13} />}
+              {paused ? '▶️ Возобновить (ИИ на паузе)' : '⏸ Поставить на паузу'}
+            </button>
           </div>
 
           {/* Reset history */}
@@ -967,6 +997,12 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
       <div className="mt-1.5 flex items-center justify-between gap-1">
         <span className="text-[10px] text-[color:var(--color-muted-foreground)] opacity-60">{fmtDate(c.created_at)}</span>
         <div className="flex items-center gap-1">
+          {c.is_paused && (
+            <span title="ИИ на паузе"
+              className="w-4 h-4 rounded-full bg-amber-400 text-white flex items-center justify-center">
+              <Pause size={8} />
+            </span>
+          )}
           {c.has_unread_hh_msg && (
             <span title="Новое сообщение hh.ru"
               className="w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[8px] font-bold">
@@ -1192,6 +1228,89 @@ function BulkActionsBar({ count, total, onSelectAll, onClear, onMoveStage, onDel
   );
 }
 
+// ── Interview schedule view ────────────────────────────────────────
+function InterviewSchedule({ onCandidateClick }) {
+  const [interviews, setInterviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    api.get('/recruitment/interviews')
+      .then(r => setInterviews(r.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="py-16 text-center text-sm text-[color:var(--color-muted-foreground)]">Загрузка...</div>;
+  if (!interviews.length) return (
+    <div className="flex flex-col items-center justify-center py-20 text-[color:var(--color-muted-foreground)]">
+      <Calendar size={44} className="mb-3 opacity-20" />
+      <p className="text-sm">Нет запланированных собеседований</p>
+    </div>
+  );
+
+  // Group by date
+  const byDate = {};
+  for (const c of interviews) {
+    const d = c.interview_date || 'Дата не указана';
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(c);
+  }
+  // Sort groups by date
+  const sortedDates = Object.keys(byDate).sort((a, b) => {
+    if (a === 'Дата не указана') return 1;
+    if (b === 'Дата не указана') return -1;
+    return a.localeCompare(b);
+  });
+
+  function fmtGroupDate(iso) {
+    if (iso === 'Дата не указана') return iso;
+    try {
+      return new Date(iso).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+    } catch { return iso; }
+  }
+
+  return (
+    <div className="p-5 space-y-6">
+      {sortedDates.map(date => (
+        <div key={date}>
+          <h3 className="text-sm font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wide mb-3 capitalize">
+            {fmtGroupDate(date)}
+          </h3>
+          <div className="space-y-2">
+            {byDate[date]
+              .sort((a, b) => (a.interview_time || '').localeCompare(b.interview_time || ''))
+              .map(c => (
+                <div
+                  key={c.id}
+                  onClick={() => onCandidateClick?.(c)}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-[color:var(--color-border)] bg-white hover:bg-[color:var(--color-muted)]/20 cursor-pointer transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center flex-shrink-0 text-sm font-bold">
+                    {(c.name || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{c.name}</p>
+                    {c.vacancy_title && <p className="text-xs text-[color:var(--color-muted-foreground)] truncate">{c.vacancy_title}</p>}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0 text-sm text-[color:var(--color-muted-foreground)]">
+                    {c.interview_time && (
+                      <span className="flex items-center gap-1"><Clock size={13} />{c.interview_time}</span>
+                    )}
+                    {c.interview_place && (
+                      <span className="text-xs max-w-[120px] truncate">{c.interview_place}</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────
 export default function Recruitment() {
   const { isMobile } = useViewport();
@@ -1222,6 +1341,8 @@ export default function Recruitment() {
   useEffect(() => {
     api.get('/config/message-templates').then(r => setMsgTemplates(r.data || [])).catch(() => {});
   }, []);
+
+  const [mainView, setMainView] = useState('funnel'); // 'funnel' | 'interviews'
 
   const [automationEnabled, setAutomationEnabled] = useState(false);
   useEffect(() => {
@@ -1382,6 +1503,10 @@ export default function Recruitment() {
     setCandidates(prev => prev.map(c => c.id === id ? { ...c, stage: 'отклик' } : c));
   }
 
+  function handlePauseToggle(id, isPaused) {
+    setCandidates(prev => prev.map(c => c.id === id ? { ...c, is_paused: isPaused } : c));
+  }
+
   async function stageChange(candidateId, newStage, extraFields = {}) {
     try {
       const res = await api.patch(`/recruitment/candidates/${candidateId}`, { stage: newStage, ...extraFields });
@@ -1452,6 +1577,20 @@ export default function Recruitment() {
           >
             <Settings size={15} /> Интеграции
           </button>
+          <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-hidden">
+            <button
+              onClick={() => setMainView('funnel')}
+              className={`px-3 py-1.5 text-sm transition-colors ${mainView === 'funnel' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+            >
+              Воронка
+            </button>
+            <button
+              onClick={() => setMainView('interviews')}
+              className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 ${mainView === 'interviews' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+            >
+              <Calendar size={13} /> Собеседования
+            </button>
+          </div>
           <button onClick={() => setVacancyModal('new')} className="btn btn-primary text-sm flex items-center gap-1.5">
             <Plus size={15} /> Вакансия
           </button>
@@ -1476,8 +1615,13 @@ export default function Recruitment() {
         </div>
       )}
 
+      {/* Interview schedule view */}
+      {mainView === 'interviews' && (
+        <InterviewSchedule onCandidateClick={c => setDetailModal(c)} />
+      )}
+
       {/* Two-panel layout */}
-      <div className={`flex ${isMobile ? 'flex-col' : ''} gap-0`}>
+      {mainView === 'funnel' && <div className={`flex ${isMobile ? 'flex-col' : ''} gap-0`}>
         {/* Left — vacancy list */}
         {(!isMobile || showVacList) && (
           <aside className={`flex-shrink-0 border-b sm:border-b-0 sm:border-r border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10 ${isMobile ? 'w-full' : 'w-60'}`}>
@@ -1628,7 +1772,7 @@ export default function Recruitment() {
             )}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Modals */}
       {vacancyModal && (
@@ -1657,6 +1801,7 @@ export default function Recruitment() {
           onDelete={deleteCandidate}
           onStageChange={requestStageChange}
           onResetHistory={resetCandidateHistory}
+          onPauseToggle={handlePauseToggle}
         />
       )}
 

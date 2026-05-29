@@ -1,4 +1,5 @@
 """Send plain-text notifications to the configured notification_chat_id."""
+import asyncio
 import logging
 import httpx
 
@@ -8,6 +9,7 @@ log = logging.getLogger(__name__)
 async def send_secretary_message(chat_id: str | int, text: str) -> str | None:
     """
     Send a message from the owner's personal Telegram via Secretary Mode.
+    Retries up to 2 more times on failure. If all 3 attempts fail, alerts admin.
     Returns None on success, or an error string describing the failure.
     """
     try:
@@ -39,17 +41,38 @@ async def send_secretary_message(chat_id: str | int, text: str) -> str | None:
             "business_connection_id": connection_id,
         }
 
-        async with httpx.AsyncClient(**client_kwargs) as client:
-            r = await client.post(url, json=payload)
+        last_description = ""
+        for attempt in range(3):
+            if attempt > 0:
+                await asyncio.sleep(2)
+            try:
+                async with httpx.AsyncClient(**client_kwargs) as client:
+                    r = await client.post(url, json=payload)
 
-        if r.status_code == 200:
-            log.info("Secretary message sent to chat_id=%s", chat_id)
-            return None
+                if r.status_code == 200:
+                    log.info("Secretary message sent to chat_id=%s (attempt %d)", chat_id, attempt + 1)
+                    return None
 
-        data = r.json() if r.content else {}
-        description = data.get("description") or r.text[:200]
-        log.warning("Secretary message failed chat_id=%s: HTTP %s — %s", chat_id, r.status_code, description)
-        return f"Telegram: {description}"
+                data = r.json() if r.content else {}
+                last_description = data.get("description") or r.text[:200]
+                log.warning("Secretary message failed chat_id=%s attempt %d: HTTP %s — %s",
+                            chat_id, attempt + 1, r.status_code, last_description)
+            except Exception as exc:
+                last_description = str(exc)
+                log.warning("send_secretary_message error attempt %d: %s", attempt + 1, exc)
+
+        # All 3 attempts failed — alert admin
+        error_str = f"Telegram: {last_description}"
+        try:
+            await send_notification(
+                f"❌ Сообщение не доставлено кандидату\n"
+                f"chat_id: {chat_id}\n"
+                f"Текст: {text[:100]}...\n"
+                f"Ошибка: {last_description}"
+            )
+        except Exception as notify_exc:
+            log.warning("Failed to send admin alert for secretary failure: %s", notify_exc)
+        return error_str
 
     except Exception as exc:
         log.warning("send_secretary_message error: %s", exc)

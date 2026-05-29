@@ -5,6 +5,9 @@ from datetime import datetime
 
 log = logging.getLogger(__name__)
 
+# In-memory dedup: candidate_ids currently being processed for interview confirmation
+_confirmation_in_progress: set = set()
+
 
 async def handle_business_connection(update, context):
     """Save/remove business_connection_id when user connects/disconnects the bot."""
@@ -130,7 +133,10 @@ async def handle_business_message(update, context):
                     candidate.follow_up_last_sent_at = None
                     db.commit()
 
-                    if getattr(candidate, 'stage', '') == 'ждем_привязки':
+                    # Skip AI entirely if candidate is on pause
+                    if getattr(candidate, 'is_paused', False):
+                        log.info("AI skipped: candidate_id=%s is paused", candidate.id)
+                    elif getattr(candidate, 'stage', '') == 'ждем_привязки':
                         try:
                             candidate.stage = 'общение'
                             candidate.updated_at = datetime.utcnow()
@@ -275,18 +281,30 @@ async def _maybe_learn_from_escalation(candidate_id: int, admin_answer: str):
 
 async def _check_interview_confirmation(candidate_id: int):
     """Use Claude to detect if an interview date/time was confirmed in the conversation."""
+    # In-process dedup: prevent parallel runs for same candidate
+    if candidate_id in _confirmation_in_progress:
+        log.debug("_check_interview_confirmation: already running for candidate_id=%s, skipping", candidate_id)
+        return
+    _confirmation_in_progress.add(candidate_id)
     try:
         from app.db.session import SessionLocal
         from app.models.recruitment import Candidate, TelegramMessage, Vacancy
         from app.services.config_service import ConfigService
         from app.services.notify import send_notification, send_secretary_message
         import json, re
-        from datetime import date as date_cls, time as time_cls, datetime as dt_cls
+        from datetime import date as date_cls, time as time_cls, datetime as dt_cls, timedelta
 
         db = SessionLocal()
         try:
             c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
             if not c or getattr(c, 'stage', '') != 'общение':
+                return
+            if getattr(c, 'is_paused', False):
+                return
+            # 10-minute dedup: skip if admin was already notified recently
+            notified_at = getattr(c, 'interview_notified_at', None)
+            if notified_at and (datetime.utcnow() - notified_at) < timedelta(minutes=10):
+                log.debug("_check_interview_confirmation: notified recently for candidate_id=%s, skipping", candidate_id)
                 return
 
             history = db.query(TelegramMessage).filter(
@@ -384,6 +402,10 @@ async def _check_interview_confirmation(candidate_id: int):
                 db.add(out_msg)
                 db.commit()
 
+            # Mark notified before sending so parallel calls see it
+            c.interview_notified_at = datetime.utcnow()
+            db.commit()
+
             # Тебе: уведомление с кнопками
             summary_parts = [interview_date, interview_time, place]
             interview_summary = "  ".join(p for p in summary_parts if p)
@@ -405,3 +427,5 @@ async def _check_interview_confirmation(candidate_id: int):
             db.close()
     except Exception as e:
         log.warning("_check_interview_confirmation error: %s", e)
+    finally:
+        _confirmation_in_progress.discard(candidate_id)

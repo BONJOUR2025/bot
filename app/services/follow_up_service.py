@@ -44,6 +44,7 @@ async def run_follow_up_check():
             Candidate.stage == "общение",
             Candidate.telegram_chat_id.isnot(None),
             Candidate.telegram_chat_id != "",
+            Candidate.is_paused != True,
         ).all()
 
         for c in candidates:
@@ -87,6 +88,17 @@ async def _process(c, db, cfg, delay: timedelta, now_utc: datetime):
         msg_key = "follow_up_message_1" if count == 0 else "follow_up_message_2"
         default = DEFAULT_MSG_1 if count == 0 else DEFAULT_MSG_2
         msg_text = (cfg.get(msg_key) or "").strip() or default
+
+        # Race condition check: re-query to see if a new "in" message arrived after reference
+        last_in_recheck = db.query(TelegramMessage).filter(
+            TelegramMessage.candidate_id == c.id,
+            TelegramMessage.direction == "in",
+        ).order_by(TelegramMessage.created_at.desc()).first()
+        if last_in_recheck and last_in_recheck.created_at > reference:
+            log.info("follow_up: candidate_id=%s replied after reference, skipping follow-up", c.id)
+            c.follow_up_count = 0
+            db.commit()
+            return
 
         err = await send_secretary_message(c.telegram_chat_id, msg_text)
         if err:
