@@ -421,6 +421,30 @@ def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted"}
 
 
+@router.post("/candidates/{candidate_id}/reset-history")
+def reset_candidate_history(candidate_id: int, db: Session = Depends(get_db)):
+    """Delete all Telegram messages and reset automation state for a clean test."""
+    from datetime import datetime
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+
+    deleted = db.query(TelegramMessage).filter(
+        TelegramMessage.candidate_id == candidate_id
+    ).delete(synchronize_session=False)
+
+    c.follow_up_count = 0
+    c.follow_up_last_sent_at = None
+    c.pending_interview_date = None
+    c.pending_interview_time = None
+    c.pending_interview_place = None
+    c.stage = "отклик"
+    c.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {"status": "reset", "messages_deleted": deleted}
+
+
 def _get_hh_candidate(candidate_id: int, db):
     """Return (candidate, hh_token) or raise HTTPException."""
     c = db.query(Candidate).filter(Candidate.id == candidate_id).first()

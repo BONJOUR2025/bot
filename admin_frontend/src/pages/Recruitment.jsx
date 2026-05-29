@@ -405,13 +405,14 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
 }
 
 // ── Candidate detail modal ─────────────────────────────────────────
-function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }) {
+function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory }) {
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
   const isHh = candidate.source === 'hh' && candidate.external_id;
 
   const [tab, setTab] = useState('info');
   const hasTg = !!candidate.telegram_chat_id;
+  const [resetting, setResetting] = useState(false);
 
   // hh.ru chat state
   const [messages, setMessages]     = useState([]);
@@ -511,6 +512,18 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
     } catch (e) {
       setTgError(e.response?.data?.detail || e.message);
     } finally { setLoadingCode(false); }
+  }
+
+  async function handleResetHistory() {
+    if (!window.confirm(`Удалить всю историю переписки с ${candidate.name} и сбросить этап на «Отклик»? Это действие нельзя отменить.`)) return;
+    setResetting(true);
+    try {
+      await api.post(`/recruitment/candidates/${candidate.id}/reset-history`);
+      onResetHistory?.(candidate.id);
+      onClose();
+    } catch (e) {
+      alert(e.response?.data?.detail || e.message);
+    } finally { setResetting(false); }
   }
 
   function fmtMsgTime(iso) {
@@ -683,6 +696,19 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange }
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Reset history */}
+          <div className="pt-2 border-t border-[color:var(--color-border)]">
+            <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-2 uppercase tracking-wide">Чистый тест</p>
+            <button
+              onClick={handleResetHistory}
+              disabled={resetting}
+              className="w-full flex items-center justify-center gap-2 text-xs font-medium px-3 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              {resetting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+              Сбросить историю и этап
+            </button>
           </div>
         </div>}
 
@@ -1352,6 +1378,10 @@ export default function Recruitment() {
     } catch (e) { setError(e.message); }
   }
 
+  async function resetCandidateHistory(id) {
+    setCandidates(prev => prev.map(c => c.id === id ? { ...c, stage: 'отклик' } : c));
+  }
+
   async function stageChange(candidateId, newStage, extraFields = {}) {
     try {
       const res = await api.patch(`/recruitment/candidates/${candidateId}`, { stage: newStage, ...extraFields });
@@ -1626,6 +1656,7 @@ export default function Recruitment() {
           onEdit={c => setCandModal({ candidate: c })}
           onDelete={deleteCandidate}
           onStageChange={requestStageChange}
+          onResetHistory={resetCandidateHistory}
         />
       )}
 
