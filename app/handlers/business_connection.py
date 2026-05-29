@@ -125,6 +125,9 @@ async def handle_business_message(update, context):
                         tg_message_id=str(msg.message_id),
                     )
                     db.add(tg_msg)
+                    # Кандидат написал — сбрасываем счётчик follow-up
+                    candidate.follow_up_count = 0
+                    candidate.follow_up_last_sent_at = None
                     db.commit()
 
                     if getattr(candidate, 'stage', '') == 'ждем_привязки':

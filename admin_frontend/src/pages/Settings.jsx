@@ -335,6 +335,27 @@ export default function Settings() {
         </Field>
       </Section>
 
+      <Section title="Follow-up (реактивация молчащих кандидатов)">
+        <Field label="" hint="Бот пишет кандидату сам, если тот замолчал. Только с 10:00 до 20:00 МСК.">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" {...register('follow_up_enabled')} />
+            <span className="text-sm">Включить follow-up</span>
+          </label>
+        </Field>
+        <Field label="Задержка перед follow-up (часов)" hint="Сколько часов молчания кандидата до первого и каждого последующего напоминания.">
+          <input type="number" className="input w-full" {...register('follow_up_delay_hours')}
+            placeholder="1" min="0.5" max="72" step="0.5" />
+        </Field>
+        <Field label="Текст первого follow-up" hint="Пусто = стандартный текст.">
+          <textarea className="input w-full min-h-[70px] resize-y text-sm" {...register('follow_up_message_1')}
+            placeholder="Здравствуйте! Остались ли у вас вопросы по вакансии? Готовы записаться на собеседование?" />
+        </Field>
+        <Field label="Текст второго follow-up" hint="Отправляется если после первого тоже нет ответа. Пусто = стандартный текст.">
+          <textarea className="input w-full min-h-[70px] resize-y text-sm" {...register('follow_up_message_2')}
+            placeholder="Мы всё ещё ждём вашего ответа. Если вас интересует вакансия — напишите, будем рады помочь." />
+        </Field>
+      </Section>
+
       {/* PDF */}
       <Section title="PDF-отчёты">
         <Field label="Путь к шрифту" hint="Шрифт для генерации PDF-отчётов, например fonts/DejaVuSans.ttf">

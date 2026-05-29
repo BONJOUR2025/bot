@@ -337,3 +337,9 @@ def register_jobs(app):
                             pass
 
     app.job_queue.run_daily(payment_reminder, time(hour=9, minute=0))
+
+    async def follow_up_job(context: ContextTypes.DEFAULT_TYPE):
+        from ..services.follow_up_service import run_follow_up_check
+        await run_follow_up_check()
+
+    app.job_queue.run_repeating(follow_up_job, interval=900, first=60)  # каждые 15 минут
