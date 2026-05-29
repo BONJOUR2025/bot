@@ -50,8 +50,12 @@ class Candidate(Base):
     telegram_chat_id = Column(String, nullable=True, default="")
     telegram_username = Column(String, nullable=True, default="")
     telegram_link_code = Column(String, nullable=True)  # уникальный код для матчинга
-    follow_up_count = Column(Integer, nullable=False, default=0)          # 0→1→2→3(notified)
-    follow_up_last_sent_at = Column(DateTime, nullable=True)              # UTC timestamp of last follow-up
+    follow_up_count = Column(Integer, nullable=False, default=0)
+    follow_up_last_sent_at = Column(DateTime, nullable=True)
+    pending_interview_date = Column(String, nullable=True)   # YYYY-MM-DD, ждёт подтверждения
+    pending_interview_time = Column(String, nullable=True)   # HH:MM
+    pending_interview_place = Column(String, nullable=True)
+    has_unread_hh_msg = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

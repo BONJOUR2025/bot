@@ -60,6 +60,7 @@ from ..handlers.reset import global_reset
 from ..handlers.media_archive import archive_media
 from ..handlers.business_connection import handle_business_connection, handle_business_message
 from ..handlers.knowledge_base import handle_kb_entry, handle_kb_question, KB_CHAT
+from ..handlers.interview_decision import build_interview_decision_handlers
 from telegram.request import HTTPXRequest
 import datetime
 
@@ -107,6 +108,8 @@ def _register_all_handlers(app):
     )
     app.add_handler(BusinessConnectionHandler(handle_business_connection))
     app.add_handler(TGMessageHandler(filters.UpdateType.BUSINESS_MESSAGE, handle_business_message))
+    for h in build_interview_decision_handlers():
+        app.add_handler(h)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         CommandHandler("salary", handle_salary_request, filters=~filters.User(ADMIN_ID))
@@ -342,4 +345,14 @@ def register_jobs(app):
         from ..services.follow_up_service import run_follow_up_check
         await run_follow_up_check()
 
-    app.job_queue.run_repeating(follow_up_job, interval=900, first=60)  # каждые 15 минут
+    app.job_queue.run_repeating(follow_up_job, interval=900, first=60)
+
+    async def morning_briefing_job(context: ContextTypes.DEFAULT_TYPE):
+        from ..services.briefing_service import send_morning_briefing
+        await send_morning_briefing()
+
+    from zoneinfo import ZoneInfo
+    app.job_queue.run_daily(
+        morning_briefing_job,
+        time(hour=10, minute=0, tzinfo=ZoneInfo("Europe/Moscow")),
+    )
