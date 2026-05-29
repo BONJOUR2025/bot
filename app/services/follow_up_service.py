@@ -45,6 +45,7 @@ async def run_follow_up_check():
             Candidate.telegram_chat_id.isnot(None),
             Candidate.telegram_chat_id != "",
             Candidate.is_paused != True,
+            Candidate.pending_interview_date.is_(None),  # уже назначено — не трогаем
         ).all()
 
         for c in candidates:
