@@ -151,21 +151,26 @@ async def handle_business_message(update, context):
                         except Exception as e:
                             log.warning("Stage transition error: %s", e)
                     elif getattr(candidate, 'stage', '') == 'общение':
-                        # Check if admin was actively writing manually — if so, AI stays silent
-                        last_out = db.query(TelegramMessage).filter(
-                            TelegramMessage.candidate_id == candidate.id,
-                            TelegramMessage.direction == "out",
-                        ).order_by(TelegramMessage.created_at.desc()).first()
-                        admin_is_active = last_out is not None and not getattr(last_out, 'sent_by_ai', 0)
-
-                        if admin_is_active:
-                            log.info("AI suppressed: last outgoing message was from admin, not AI (candidate_id=%s)", candidate.id)
+                        # If interview is already pending admin confirmation — AI stays silent
+                        interview_pending = bool(getattr(candidate, 'pending_interview_date', None))
+                        if interview_pending:
+                            log.info("AI suppressed: interview pending for candidate_id=%s", candidate.id)
                         else:
-                            try:
-                                from app.services.ai_conversation import handle_candidate_message
-                                asyncio.ensure_future(handle_candidate_message(candidate.id, msg_text))
-                            except Exception as e:
-                                log.warning("AI conversation trigger error: %s", e)
+                            # Check if admin was actively writing manually — if so, AI stays silent
+                            last_out = db.query(TelegramMessage).filter(
+                                TelegramMessage.candidate_id == candidate.id,
+                                TelegramMessage.direction == "out",
+                            ).order_by(TelegramMessage.created_at.desc()).first()
+                            admin_is_active = last_out is not None and not getattr(last_out, 'sent_by_ai', 0)
+
+                            if admin_is_active:
+                                log.info("AI suppressed: last outgoing message was from admin (candidate_id=%s)", candidate.id)
+                            else:
+                                try:
+                                    from app.services.ai_conversation import handle_candidate_message
+                                    asyncio.ensure_future(handle_candidate_message(candidate.id, msg_text))
+                                except Exception as e:
+                                    log.warning("AI conversation trigger error: %s", e)
 
                         # Always check if candidate's reply confirms an interview
                         asyncio.ensure_future(_check_interview_confirmation(candidate.id))
@@ -345,18 +350,19 @@ async def _check_interview_confirmation(candidate_id: int):
             client = Anthropic(api_key=api_key, http_client=http_client)
             prompt = (
                 f"Сегодня {today_str}.\n"
-                "Проанализируй переписку менеджера с кандидатом на собеседование.\n"
-                "Определи: договорились ли обе стороны о конкретном времени и месте встречи?\n\n"
+                "Проанализируй переписку менеджера с кандидатом.\n\n"
                 f"Переписка:\n{transcript}\n\n"
-                "Правила:\n"
-                "- confirmed = true ТОЛЬКО если обе стороны явно согласились на конкретные дату, время и место\n"
-                "- Преобразуй относительные даты в абсолютные на основе сегодняшней даты\n"
-                "- Время может быть неточным (\"часа в 3\" → \"15:00\")\n"
-                "- place — извлеки адрес/место из переписки (если упоминался в тексте)\n"
-                "- Если время не уточнено, но дата есть — time = null\n"
-                "- Если место не упоминалось — place = null\n\n"
+                "Правила — читай строго:\n"
+                "- confirmed = true ТОЛЬКО если в тексте переписки выше:\n"
+                "  1. Менеджер или кандидат предложил КОНКРЕТНУЮ дату и/или время\n"
+                "  2. Другая сторона явно согласилась (написала «да», «подходит», «договорились», «ок» и т.п.)\n"
+                "- Если кандидат просто сказал «спасибо», «хорошо», «понял» без явного подтверждения встречи — confirmed = false\n"
+                "- Если дата/место не упоминались в тексте переписки — confirmed = false\n"
+                "- НЕ используй данные из системного контекста (место по умолчанию, шаблоны) — только то, что написано в переписке\n"
+                "- Преобразуй относительные даты в абсолютные (сегодня = " + today_str + ")\n"
+                "- place — только если адрес/место явно упоминался в переписке выше\n\n"
                 'Ответь ТОЛЬКО в формате JSON (без markdown):\n'
-                '{"confirmed": true/false, "date": "YYYY-MM-DD или null", "time": "HH:MM или null", "place": "адрес/место или null", "notes": "краткое описание договорённости"}'
+                '{"confirmed": true/false, "date": "YYYY-MM-DD или null", "time": "HH:MM или null", "place": "адрес/место или null", "notes": "краткое описание"}'
             )
 
             response = client.messages.create(
