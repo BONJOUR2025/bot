@@ -6,7 +6,6 @@ log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT_TEMPLATE = """Ты HR-ассистент компании. Отвечаешь на вопросы кандидата о вакансии.
 
-База знаний:
 {knowledge_base}
 
 Место собеседований: {interview_location}
@@ -18,6 +17,29 @@ SYSTEM_PROMPT_TEMPLATE = """Ты HR-ассистент компании. Отв�
 4. МАКСИМУМ 2 коротких предложения. Никаких списков, абзацев, вступлений.
 5. Только русский язык. Никаких символов форматирования.
 """
+
+
+def _build_knowledge_base_block(global_kb: str, vacancy_kb: str) -> str:
+    """
+    Merge global and vacancy knowledge bases with explicit priority instructions.
+    Vacancy KB overrides global on conflicts; global fills gaps absent from vacancy KB.
+    """
+    global_kb = global_kb.strip()
+    vacancy_kb = vacancy_kb.strip()
+
+    if global_kb and vacancy_kb:
+        return (
+            "База знаний — ОБЩАЯ (компания):\n"
+            f"{global_kb}\n\n"
+            "База знаний — ВАКАНСИЯ (приоритет выше):\n"
+            f"{vacancy_kb}\n\n"
+            "Правило приоритета: если информация в базах противоречит друг другу — "
+            "используй данные из базы ВАКАНСИИ. Если информации нет в базе вакансии — "
+            "используй базу компании."
+        )
+    if vacancy_kb:
+        return f"База знаний:\n{vacancy_kb}"
+    return f"База знаний:\n{global_kb}"
 
 
 async def handle_candidate_message(candidate_id: int, message_text: str) -> None:
@@ -35,16 +57,14 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             return
 
         cfg = ConfigService().load()
-        # Per-vacancy knowledge base takes priority over global config
         vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
-        knowledge_base = (
-            getattr(vacancy, "knowledge_base", "") or cfg.get("automation_knowledge_base", "")
-        ).strip()
+        global_kb = cfg.get("automation_knowledge_base", "").strip()
+        vacancy_kb = getattr(vacancy, "knowledge_base", "").strip() if vacancy else ""
         interview_location = (
             getattr(vacancy, "interview_location", "") or cfg.get("automation_interview_location", "")
         ).strip()
 
-        if not knowledge_base:
+        if not global_kb and not vacancy_kb:
             # No knowledge base — escalate immediately
             await send_notification(
                 f"🤖 <b>AI: нет базы знаний</b>\nКандидат <b>{c.name}</b> написал в Telegram, "
@@ -67,9 +87,10 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         if not messages or messages[-1]["content"] != message_text:
             messages.append({"role": "user", "content": message_text})
 
+        knowledge_base_block = _build_knowledge_base_block(global_kb, vacancy_kb)
         system_tpl = (cfg.get("ai_candidate_system_prompt") or "").strip() or SYSTEM_PROMPT_TEMPLATE
         system = system_tpl.format(
-            knowledge_base=knowledge_base,
+            knowledge_base=knowledge_base_block,
             interview_location=interview_location or "уточняется",
         )
 
