@@ -383,11 +383,13 @@ async def _check_interview_confirmation(candidate_id: int):
             # Тебе: уведомление с кнопками
             summary_parts = [interview_date, interview_time, place]
             interview_summary = "  ".join(p for p in summary_parts if p)
+            place_warning = "\n\n⚠️ <b>Место не указано!</b> Укажите через «✏️ Другое» перед подтверждением." if not place else ""
             from app.services.notify import send_notification_with_keyboard
             await send_notification_with_keyboard(
                 f"📅 <b>Кандидат согласовал собеседование!</b>\n"
                 f"Кандидат: <b>{c.name}</b>\n"
-                f"Время и место: <b>{interview_summary or 'не уточнено'}</b>\n\n"
+                f"Время и место: <b>{interview_summary or 'не уточнено'}</b>"
+                f"{place_warning}\n\n"
                 f"Подтвердить запись или изменить условия?",
                 [[
                     {"text": "✅ Подтвердить", "callback_data": f"iview_ok_{candidate_id}"},

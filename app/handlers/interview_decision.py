@@ -27,15 +27,12 @@ def _fmt_date(iso: str) -> str:
 
 
 def _apply_tpl(tpl: str, name: str, date: str, time: str, place: str) -> str:
-    import re
-    if not place:
-        tpl = re.sub(r'[^\n]*#place[^\n]*\n?', '', tpl)
     return (
         tpl
         .replace("#name", name.split()[0] if name else "Здравствуйте")
-        .replace("#date", _fmt_date(date) if date else "")
-        .replace("#time", time or "")
-        .replace("#place", place or "")
+        .replace("#date", _fmt_date(date) if date else "#date")
+        .replace("#time", time or "#time")
+        .replace("#place", place or "#place")
     )
 
 
@@ -73,6 +70,13 @@ async def _finalize_interview(candidate_id: int):
         interview_date = c.pending_interview_date or ""
         interview_time = c.pending_interview_time or ""
         place = c.pending_interview_place or ""
+
+        if not place:
+            return (
+                "❌ Место собеседования не указано.\n"
+                "Нажмите «✏️ Другое» и напишите место, например:\n"
+                "«место — Гранд Палас, зал переговоров»"
+            )
 
         cfg = ConfigService().load()
         saved_tpls = cfg.get("message_templates") or []
