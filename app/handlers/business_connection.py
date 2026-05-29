@@ -277,9 +277,11 @@ async def _check_interview_confirmation(candidate_id: int):
     """Use Claude to detect if an interview date/time was confirmed in the conversation."""
     try:
         from app.db.session import SessionLocal
-        from app.models.recruitment import Candidate, TelegramMessage
+        from app.models.recruitment import Candidate, TelegramMessage, Vacancy
         from app.services.config_service import ConfigService
-        from app.services.notify import send_notification
+        from app.services.notify import send_notification, send_secretary_message
+        import json, re
+        from datetime import date as date_cls, time as time_cls, datetime as dt_cls
 
         db = SessionLocal()
         try:
@@ -318,14 +320,21 @@ async def _check_interview_confirmation(candidate_id: int):
                 import httpx
                 http_client = httpx.Client(proxy=proxy_url)
 
+            today_str = date_cls.today().isoformat()  # передаём чтобы Claude резолвил "завтра", "в пятницу" и т.д.
+
             client = Anthropic(api_key=api_key, http_client=http_client)
             prompt = (
-                "Проанализируй переписку менеджера с кандидатом. "
-                "Определи: была ли ПОДТВЕРЖДЕНА конкретная дата и время собеседования обеими сторонами?\n\n"
+                f"Сегодня {today_str}.\n"
+                "Проанализируй переписку менеджера с кандидатом на собеседование.\n"
+                "Определи: договорились ли обе стороны о конкретном времени встречи?\n\n"
                 f"Переписка:\n{transcript}\n\n"
+                "Правила:\n"
+                "- Confirmed = true если обе стороны согласились, даже если дата относительная (завтра, в пятницу и т.п.)\n"
+                "- Преобразуй относительные даты в абсолютные на основе сегодняшней даты\n"
+                "- Время может быть неточным (\"часа в 3\" → \"15:00\")\n"
+                "- Если время не уточнено, но дата есть — time = null\n\n"
                 'Ответь ТОЛЬКО в формате JSON (без markdown):\n'
-                '{"confirmed": true/false, "date": "YYYY-MM-DD или null", "time": "HH:MM или null", "notes": "краткое описание"}\n\n'
-                "Confirmed = true ТОЛЬКО если обе стороны явно согласились на конкретные дату и время."
+                '{"confirmed": true/false, "date": "YYYY-MM-DD или null", "time": "HH:MM или null", "notes": "краткое описание договорённости"}'
             )
 
             response = client.messages.create(
@@ -335,7 +344,6 @@ async def _check_interview_confirmation(candidate_id: int):
             )
             raw = response.content[0].text.strip()
 
-            import json, re
             m = re.search(r'\{.*\}', raw, re.DOTALL)
             if not m:
                 return
@@ -344,21 +352,28 @@ async def _check_interview_confirmation(candidate_id: int):
             if not data.get("confirmed"):
                 return
 
-            interview_date = data.get("date")
-            interview_time = data.get("time")
+            interview_date = data.get("date")   # "YYYY-MM-DD" or None
+            interview_time = data.get("time")   # "HH:MM" or None
             notes_text = data.get("notes", "")
 
             log.info("Interview confirmed for candidate %s: %s %s", candidate_id, interview_date, interview_time)
 
+            # Место собеседования: из вакансии или глобального конфига
+            vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+            place = (
+                getattr(vacancy, "interview_location", "") or cfg.get("automation_interview_location", "")
+            ).strip()
+
+            # Перевод на этап собеседование
             c.stage = 'собеседование'
-            c.updated_at = datetime.utcnow()
+            c.updated_at = dt_cls.utcnow()
             db.commit()
 
+            # Создание задачи (в том же формате что и ручной flow)
             task_info = ""
             try:
                 from app.services.task_service import TaskService
                 from app.schemas.task import TaskCreate
-                from datetime import date as date_cls, time as time_cls
 
                 due_date = None
                 due_time_val = None
@@ -374,24 +389,86 @@ async def _check_interview_confirmation(candidate_id: int):
                     except Exception:
                         pass
 
+                desc_parts = []
+                if place:
+                    desc_parts.append(f"📍 Место: {place}")
+                if notes_text:
+                    desc_parts.append(notes_text)
+
                 task_data = TaskCreate(
                     title=f"Собеседование: {c.name}",
-                    description=f"Кандидат на вакансию. {notes_text}".strip(),
+                    description="\n".join(desc_parts) or None,
                     due_date=due_date,
                     due_time=due_time_val,
+                    priority="high",
+                    category="Подбор персонала",
                 )
-                svc = TaskService()
-                await svc.create_task(task_data, created_by="AI")
-                task_info = f"{interview_date or ''} {interview_time or ''}".strip()
+                await TaskService().create_task(task_data, created_by="AI")
+                task_info = " ".join(filter(None, [interview_date, interview_time]))
                 log.info("Created interview task for candidate %s", candidate_id)
             except Exception as e:
                 log.warning("Failed to create interview task: %s", e)
+
+            # Отправка подтверждения кандидату по шаблону
+            try:
+                _MONTHS_RU = ["января","февраля","марта","апреля","мая","июня",
+                               "июля","августа","сентября","октября","ноября","декабря"]
+
+                def _fmt_date(iso: str) -> str:
+                    d = date_cls.fromisoformat(iso)
+                    return f"{d.day} {_MONTHS_RU[d.month - 1]} {d.year} г."
+
+                DEFAULT_TPL = (
+                    "Здравствуйте, #name!\n"
+                    "Приглашаем вас на собеседование.\n"
+                    "📅 Дата: #date\n"
+                    "🕐 Время: #time\n"
+                    "📍 Место: #place\n\n"
+                    "Если возникнут вопросы — напишите в этот чат."
+                )
+                # Ищем шаблон с type='interview' в конфиге
+                saved_tpls = cfg.get("message_templates") or []
+                tpl_text = next(
+                    (t.get("text", "") for t in saved_tpls if t.get("type") == "interview"),
+                    ""
+                )
+                tpl_text = tpl_text.strip() or DEFAULT_TPL
+
+                name_short = (c.name or "").split()[0] if c.name else "Здравствуйте"
+                date_str = _fmt_date(interview_date) if interview_date else "#date"
+                time_str = interview_time or "#time"
+                place_str = place or "#place"
+
+                msg_text = (
+                    tpl_text
+                    .replace("#name", name_short)
+                    .replace("#date", date_str)
+                    .replace("#time", time_str)
+                    .replace("#place", place_str)
+                )
+
+                err = await send_secretary_message(c.telegram_chat_id, msg_text)
+                if not err:
+                    out_msg = TelegramMessage(
+                        candidate_id=candidate_id,
+                        direction="out",
+                        text=msg_text,
+                        sent_by_ai=1,
+                    )
+                    db.add(out_msg)
+                    db.commit()
+                    log.info("Interview confirmation message sent to candidate %s", candidate_id)
+                else:
+                    log.warning("Failed to send interview confirmation to candidate %s: %s", candidate_id, err)
+            except Exception as e:
+                log.warning("Failed to send interview confirmation message: %s", e)
 
             await send_notification(
                 f"📅 <b>Собеседование подтверждено!</b>\n"
                 f"Кандидат <b>{c.name}</b> переведён на этап «Собеседование».\n"
                 + (f"Дата и время: <b>{task_info}</b>\n" if task_info else "")
-                + "Задача создана автоматически."
+                + (f"Место: {place}\n" if place else "")
+                + "Задача и сообщение кандидату отправлены автоматически."
             )
 
         finally:
