@@ -71,13 +71,6 @@ async def _finalize_interview(candidate_id: int):
         interview_time = c.pending_interview_time or ""
         place = c.pending_interview_place or ""
 
-        if not place:
-            return (
-                "❌ Место собеседования не указано.\n"
-                "Нажмите «✏️ Другое» и напишите место, например:\n"
-                "«место — Гранд Палас, зал переговоров»"
-            )
-
         cfg = ConfigService().load()
         saved_tpls = cfg.get("message_templates") or []
         tpl = next((t.get("text", "") for t in saved_tpls if t.get("type") == "interview"), "")
@@ -204,15 +197,20 @@ async def handle_instruction_text(update, context):
         today_str = date_cls.today().isoformat()
         prompt = (
             f"Сегодня {today_str}.\n"
-            f"Ты помощник HR-менеджера. Менеджер дал инструкцию по кандидату.\n\n"
+            f"Ты ассистент HR-менеджера. Менеджер дал инструкцию по кандидату.\n\n"
             f"Кандидат: {c.name}\n"
-            f"Обсуждаемое время: {c.pending_interview_date or '?'} {c.pending_interview_time or ''}\n"
-            f"Место: {c.pending_interview_place or '?'}\n\n"
+            f"Текущие согласованные данные: {c.pending_interview_date or '?'} {c.pending_interview_time or ''}, место: {c.pending_interview_place or 'не указано'}\n\n"
             f"Инструкция менеджера: «{instruction}»\n\n"
-            "Определи:\n"
-            "1. Что написать кандидату (от лица компании, коротко и дружелюбно)\n"
-            "2. Нужно ли создать задачу-напоминание менеджеру (если надо перезвонить, связаться и т.п.)\n"
-            "3. Если нужно обновить дату/время/место — укажи новые значения\n\n"
+            "Определи что написать кандидату, руководствуясь этими правилами:\n"
+            "— Если менеджер МЕНЯЕТ дату/время/место (пересогласование): напиши вежливое сообщение-запрос.\n"
+            "  Формат: 'К сожалению, [старое время/место] не получится. Удобно ли вам [новые условия]?'\n"
+            "  НЕ пиши подтверждение — кандидат ещё не согласился на новые условия.\n"
+            "— Если менеджер ПОДТВЕРЖДАЕТ текущие условия: напиши финальное подтверждение.\n"
+            "— Если менеджер просит передать инфо или перезвонить: напиши соответствующее сообщение.\n"
+            "— Стиль: нейтрально-деловой, вежливый. Без восклицательного энтузиазма и неформальных фраз.\n\n"
+            "Дополнительно определи:\n"
+            "— Нужна ли задача-напоминание менеджеру (перезвонить, связаться и т.п.)\n"
+            "— Если нужно обновить дату/время/место — укажи новые значения\n\n"
             "Ответь ТОЛЬКО в JSON (без markdown):\n"
             '{"message_to_candidate": "текст", '
             '"create_task": true/false, '
@@ -226,7 +224,7 @@ async def handle_instruction_text(update, context):
 
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=400,
+            max_tokens=600,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.content[0].text.strip()

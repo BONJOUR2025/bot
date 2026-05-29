@@ -326,15 +326,17 @@ async def _check_interview_confirmation(candidate_id: int):
             prompt = (
                 f"Сегодня {today_str}.\n"
                 "Проанализируй переписку менеджера с кандидатом на собеседование.\n"
-                "Определи: договорились ли обе стороны о конкретном времени встречи?\n\n"
+                "Определи: договорились ли обе стороны о конкретном времени и месте встречи?\n\n"
                 f"Переписка:\n{transcript}\n\n"
                 "Правила:\n"
-                "- Confirmed = true если обе стороны согласились, даже если дата относительная (завтра, в пятницу и т.п.)\n"
+                "- confirmed = true ТОЛЬКО если обе стороны явно согласились на конкретные дату, время и место\n"
                 "- Преобразуй относительные даты в абсолютные на основе сегодняшней даты\n"
                 "- Время может быть неточным (\"часа в 3\" → \"15:00\")\n"
-                "- Если время не уточнено, но дата есть — time = null\n\n"
+                "- place — извлеки адрес/место из переписки (если упоминался в тексте)\n"
+                "- Если время не уточнено, но дата есть — time = null\n"
+                "- Если место не упоминалось — place = null\n\n"
                 'Ответь ТОЛЬКО в формате JSON (без markdown):\n'
-                '{"confirmed": true/false, "date": "YYYY-MM-DD или null", "time": "HH:MM или null", "notes": "краткое описание договорённости"}'
+                '{"confirmed": true/false, "date": "YYYY-MM-DD или null", "time": "HH:MM или null", "place": "адрес/место или null", "notes": "краткое описание договорённости"}'
             )
 
             response = client.messages.create(
@@ -358,11 +360,13 @@ async def _check_interview_confirmation(candidate_id: int):
 
             log.info("Interview tentatively agreed for candidate %s: %s %s", candidate_id, interview_date, interview_time)
 
-            # Место собеседования: из вакансии или глобального конфига
+            # Место: сначала из переписки (Claude извлёк), затем фоллбэк на вакансию/конфиг
+            place_from_conv = (data.get("place") or "").strip()
             vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
-            place = (
+            place_from_cfg = (
                 getattr(vacancy, "interview_location", "") or cfg.get("automation_interview_location", "")
             ).strip()
+            place = place_from_conv or place_from_cfg
 
             # Сохраняем pending данные — этап НЕ меняем, задачу НЕ создаём
             c.pending_interview_date = interview_date
