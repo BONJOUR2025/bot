@@ -434,14 +434,13 @@ async def _check_interview_confirmation(candidate_id: int):
 
 
 async def _check_candidate_refusal(candidate_id: int, last_msg: str):
-    """Detect if candidate refused or asked to postpone. Alert admin if so."""
+    """Detect if candidate refused. If so, disable follow-up by exhausting the counter."""
     if not last_msg or len(last_msg) < 3:
         return
     try:
         from app.db.session import SessionLocal
         from app.models.recruitment import Candidate, TelegramMessage
         from app.services.config_service import ConfigService
-        from app.services.notify import send_notification
         import json, re
 
         db = SessionLocal()
@@ -449,20 +448,20 @@ async def _check_candidate_refusal(candidate_id: int, last_msg: str):
             c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
             if not c or getattr(c, 'stage', '') != 'общение':
                 return
+            if (c.follow_up_count or 0) >= 3:
+                return  # already disabled
 
             cfg = ConfigService().load()
             api_key = (cfg.get("anthropic_api_key") or "").strip() or None
             if not api_key:
                 return
 
-            # Load last 6 messages for context
             history = db.query(TelegramMessage).filter(
                 TelegramMessage.candidate_id == candidate_id
             ).order_by(TelegramMessage.created_at.desc()).limit(6).all()
-            history = list(reversed(history))
             lines = [
                 f"{'Менеджер' if m.direction == 'out' else 'Кандидат'}: {m.text}"
-                for m in history
+                for m in reversed(history)
             ]
             transcript = "\n".join(lines)
         finally:
@@ -482,19 +481,16 @@ async def _check_candidate_refusal(candidate_id: int, last_msg: str):
 
         client = Anthropic(api_key=api_key, http_client=http_client)
         prompt = (
-            "Проанализируй последнее сообщение кандидата в переписке с рекрутером.\n\n"
-            f"Переписка:\n{transcript}\n\n"
-            "Определи:\n"
-            "- refused: кандидат явно отказался от вакансии / нашёл другую работу / больше не заинтересован\n"
-            "- call_later: кандидат просит связаться позже, перезвонить, напомнить через N дней\n"
-            "- reason: краткая причина (1 предложение) или null\n\n"
-            "Ответь ТОЛЬКО в JSON (без markdown):\n"
-            '{"refused": true/false, "call_later": true/false, "reason": "текст или null"}'
+            "Переписка рекрутера с кандидатом:\n\n"
+            f"{transcript}\n\n"
+            "Кандидат в последнем сообщении явно отказался от вакансии "
+            "(нашёл другую работу, не интересует, передумал и т.п.)?\n"
+            'Ответь ТОЛЬКО в JSON: {"refused": true/false}'
         )
 
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=80,
+            max_tokens=20,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.content[0].text.strip()
@@ -504,24 +500,15 @@ async def _check_candidate_refusal(candidate_id: int, last_msg: str):
         data = json.loads(m.group())
 
         if data.get("refused"):
-            reason = data.get("reason") or "Причина не указана"
-            await send_notification(
-                f"❌ <b>Кандидат отказался от вакансии</b>\n"
-                f"Кандидат: <b>{c.name}</b>\n"
-                f"Причина: {reason}\n\n"
-                f"Последнее сообщение: «{last_msg[:200]}»"
-            )
-            log.info("Refusal detected for candidate_id=%s reason=%s", candidate_id, reason)
-
-        elif data.get("call_later"):
-            reason = data.get("reason") or ""
-            await send_notification(
-                f"🕐 <b>Кандидат просит связаться позже</b>\n"
-                f"Кандидат: <b>{c.name}</b>\n"
-                f"{reason}\n\n"
-                f"Последнее сообщение: «{last_msg[:200]}»"
-            )
-            log.info("Call-later detected for candidate_id=%s", candidate_id)
+            db2 = SessionLocal()
+            try:
+                c2 = db2.query(Candidate).filter(Candidate.id == candidate_id).first()
+                if c2:
+                    c2.follow_up_count = 3  # exhausted — no more follow-ups
+                    db2.commit()
+                    log.info("Refusal detected, follow-up disabled for candidate_id=%s", candidate_id)
+            finally:
+                db2.close()
 
     except Exception as e:
         log.warning("_check_candidate_refusal error: %s", e)
