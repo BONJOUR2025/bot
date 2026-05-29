@@ -63,6 +63,7 @@ class TaskRepository:
         include_done: bool = True,
     ) -> List[Dict[str, Any]]:
         """List tasks with optional filters."""
+        self._data = self._load()  # always fresh from disk (two-process setup)
         result = []
 
         due_from_dt = date.fromisoformat(due_from) if due_from else None
@@ -117,6 +118,8 @@ class TaskRepository:
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new task."""
+        self._data = self._load()  # sync with disk before mutating
+        self._counter = max((int(t["id"]) for t in self._data if str(t.get("id", "")).isdigit()), default=0)
         data["id"] = self._generate_id()
         data["created_at"] = datetime.now().isoformat()
         data["updated_at"] = datetime.now().isoformat()
@@ -134,6 +137,7 @@ class TaskRepository:
 
     def update(self, task_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Update an existing task."""
+        self._data = self._load()  # sync with disk before mutating
         for item in self._data:
             if item.get("id") == task_id:
                 # Track completion time
@@ -150,6 +154,7 @@ class TaskRepository:
 
     def delete(self, task_id: int) -> bool:
         """Delete a task."""
+        self._data = self._load()  # sync with disk before mutating
         before = len(self._data)
         self._data = [t for t in self._data if t.get("id") != task_id]
         if len(self._data) != before:
@@ -159,6 +164,7 @@ class TaskRepository:
 
     def delete_many(self, ids: List[int]) -> int:
         """Delete multiple tasks. Returns count of deleted."""
+        self._data = self._load()  # sync with disk before mutating
         before = len(self._data)
         self._data = [t for t in self._data if t.get("id") not in ids]
         deleted = before - len(self._data)
