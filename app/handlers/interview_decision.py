@@ -27,12 +27,15 @@ def _fmt_date(iso: str) -> str:
 
 
 def _apply_tpl(tpl: str, name: str, date: str, time: str, place: str) -> str:
+    import re
+    if not place:
+        tpl = re.sub(r'[^\n]*#place[^\n]*\n?', '', tpl)
     return (
         tpl
         .replace("#name", name.split()[0] if name else "Здравствуйте")
-        .replace("#date", _fmt_date(date) if date else "#date")
-        .replace("#time", time or "#time")
-        .replace("#place", place or "#place")
+        .replace("#date", _fmt_date(date) if date else "")
+        .replace("#time", time or "")
+        .replace("#place", place or "")
     )
 
 
@@ -58,7 +61,7 @@ async def _finalize_interview(candidate_id: int):
     from app.models.recruitment import Candidate, TelegramMessage
     from app.services.config_service import ConfigService
     from app.services.notify import send_secretary_message
-    from app.services.task_service import TaskService
+    from app.services.task_service import get_task_service
     from app.schemas.task import TaskCreate
 
     db = SessionLocal()
@@ -103,7 +106,7 @@ async def _finalize_interview(candidate_id: int):
             except Exception: pass
 
         desc = f"📍 Место: {place}" if place else None
-        await TaskService().create_task(TaskCreate(
+        await get_task_service().create_task(TaskCreate(
             title=f"Собеседование: {c.name}",
             description=desc,
             due_date=due_date,
@@ -178,7 +181,7 @@ async def handle_instruction_text(update, context):
     from app.models.recruitment import Candidate, TelegramMessage
     from app.services.config_service import ConfigService
     from app.services.notify import send_secretary_message
-    from app.services.task_service import TaskService
+    from app.services.task_service import get_task_service
     from app.schemas.task import TaskCreate
 
     db = SessionLocal()
@@ -267,7 +270,7 @@ async def handle_instruction_text(update, context):
                         due_time_val = time_cls(int(h), int(mn))
                     except Exception: pass
 
-                await TaskService().create_task(TaskCreate(
+                await get_task_service().create_task(TaskCreate(
                     title=data.get("task_title") or f"Связаться с кандидатом: {c.name}",
                     description=f"Инструкция: «{instruction}»",
                     due_date=due_date,

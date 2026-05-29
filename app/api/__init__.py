@@ -250,9 +250,9 @@ def create_app() -> FastAPI:
     )
 
     # Task manager
-    from ..services.task_service import TaskService
+    from ..services.task_service import get_task_service
 
-    task_service = TaskService()
+    task_service = get_task_service()
     app.include_router(
         create_task_router(task_service),
         prefix="/api",

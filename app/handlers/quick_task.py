@@ -29,7 +29,7 @@ async def quick_task_handle_text(update, context):
     await update.message.reply_text("⏳ Обрабатываю...")
 
     from app.services.config_service import ConfigService
-    from app.services.task_service import TaskService
+    from app.services.task_service import get_task_service
     from app.schemas.task import TaskCreate
 
     cfg = ConfigService().load()
@@ -108,7 +108,7 @@ async def quick_task_handle_text(update, context):
     description = (data.get("description") or "").strip() or None
 
     try:
-        await TaskService().create_task(TaskCreate(
+        await get_task_service().create_task(TaskCreate(
             title=title,
             description=description,
             due_date=due_date,

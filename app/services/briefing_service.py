@@ -10,7 +10,7 @@ async def send_morning_briefing():
     from app.db.session import SessionLocal
     from app.models.recruitment import Candidate, TelegramMessage
     from app.services.config_service import ConfigService
-    from app.services.task_service import TaskService
+    from app.services.task_service import get_task_service
     from app.services.notify import send_notification
 
     cfg = ConfigService().load()
@@ -22,7 +22,7 @@ async def send_morning_briefing():
 
     db = SessionLocal()
     try:
-        task_svc = TaskService()
+        task_svc = get_task_service()
 
         overdue   = await task_svc.list_tasks(due_to=yesterday_iso, include_done=False)
         overdue   = [t for t in overdue if t.status != "done"]

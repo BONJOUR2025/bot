@@ -4,6 +4,15 @@ from typing import List, Optional
 from app.schemas.task import Task, TaskCreate, TaskUpdate, TaskStats
 from app.data.task_repository import TaskRepository
 
+_task_service_singleton: "TaskService | None" = None
+
+
+def get_task_service() -> "TaskService":
+    global _task_service_singleton
+    if _task_service_singleton is None:
+        _task_service_singleton = TaskService()
+    return _task_service_singleton
+
 
 class TaskService:
     def __init__(self, repo: Optional[TaskRepository] = None) -> None:
