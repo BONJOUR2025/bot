@@ -138,28 +138,17 @@ def delete_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
     db.delete(v); db.commit()
     return {"status": "deleted"}
 
-def _get_kb_and_client(v):
-    """Return (knowledge_base_str, Anthropic_client) or raise HTTPException."""
+def _get_kb_and_cfg(v):
+    """Return (knowledge_base_str, cfg) or raise HTTPException."""
     from app.services.config_service import ConfigService
-    from anthropic import Anthropic
+    from app.services.llm_client import get_client
     cfg = ConfigService().load()
-    api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-    if not api_key:
-        raise HTTPException(400, "Anthropic API Key не настроен в Настройках")
+    if not get_client(cfg):
+        raise HTTPException(400, "API Key не настроен в Настройках")
     kb = (getattr(v, "knowledge_base", "") or "").strip() or (cfg.get("automation_knowledge_base") or "").strip()
     if not kb:
         raise HTTPException(400, "База знаний пуста. Заполните её сначала.")
-    proxy_url = None
-    try:
-        from app.settings import settings as _s
-        proxy_url = getattr(_s, "telegram_proxy", None)
-    except Exception:
-        pass
-    http_client = None
-    if proxy_url:
-        import httpx
-        http_client = httpx.Client(proxy=proxy_url)
-    return kb, Anthropic(api_key=api_key, http_client=http_client)
+    return kb, cfg
 
 
 @router.post("/vacancies/{vacancy_id}/analyze-kb")
@@ -167,7 +156,8 @@ async def analyze_knowledge_base(vacancy_id: int, db: Session = Depends(get_db))
     v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
     if not v: raise HTTPException(404, "Vacancy not found")
 
-    kb, client = _get_kb_and_client(v)
+    kb, cfg = _get_kb_and_cfg(v)
+    from app.services.llm_client import chat
 
     prompt = f"""Ты опытный HR-консультант. Проанализируй базу знаний о вакансии «{v.title}».
 
@@ -179,13 +169,10 @@ async def analyze_knowledge_base(vacancy_id: int, db: Session = Depends(get_db))
 Формат ответа — нумерованный список. Каждый пункт: вопрос кандидата + одно предложение почему его нет в базе. Без вступлений и заключений. Максимум 10 пунктов."""
 
     try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001", max_tokens=800,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return {"result": response.content[0].text.strip()}
+        result = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=800)
+        return {"result": result or ""}
     except Exception as e:
-        raise HTTPException(500, f"Ошибка Claude API: {e}")
+        raise HTTPException(500, f"Ошибка AI: {e}")
 
 
 @router.post("/vacancies/{vacancy_id}/calibrate-kb")
@@ -193,7 +180,8 @@ async def calibrate_knowledge_base(vacancy_id: int, db: Session = Depends(get_db
     v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
     if not v: raise HTTPException(404, "Vacancy not found")
 
-    kb, client = _get_kb_and_client(v)
+    kb, cfg = _get_kb_and_cfg(v)
+    from app.services.llm_client import chat
 
     prompt = f"""Ты HR-ассистент, который будет отвечать кандидатам на вакансию «{v.title}».
 Прочитай базу знаний и подтверди как ты её понял — перефразируй каждый смысловой блок своими словами так, как будешь отвечать кандидатам.
@@ -208,13 +196,10 @@ async def calibrate_knowledge_base(vacancy_id: int, db: Session = Depends(get_db
 Без вступлений. Только структурированный разбор."""
 
     try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001", max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return {"result": response.content[0].text.strip()}
+        result = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=1000)
+        return {"result": result or ""}
     except Exception as e:
-        raise HTTPException(500, f"Ошибка Claude API: {e}")
+        raise HTTPException(500, f"Ошибка AI: {e}")
 
 
 # ── Candidates ─────────────────────────────────────────────────────

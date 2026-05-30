@@ -44,7 +44,7 @@ async def handle_kb_question(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.chat.send_action("typing")
 
     try:
-        kb_text, client = _load_kb_and_client()
+        kb_text, cfg = _load_kb_and_cfg()
     except Exception as e:
         await update.message.reply_text(f"⚠️ {e}", reply_markup=KB_KEYBOARD)
         return KB_CHAT
@@ -61,13 +61,8 @@ async def handle_kb_question(update: Update, context: ContextTypes.DEFAULT_TYPE)
 4. Пиши на русском, обращайся на «вы»."""
 
     try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=600,
-            system=system,
-            messages=[{"role": "user", "content": text}],
-        )
-        reply = response.content[0].text.strip()
+        from app.services.llm_client import chat
+        reply = chat(cfg, [{"role": "user", "content": text}], system=system, max_tokens=600) or ""
         reply = reply.replace("**", "").replace("__", "").strip()
     except Exception as e:
         log.warning("KB AI error: %s", e)
@@ -81,16 +76,15 @@ async def handle_kb_question(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return KB_CHAT
 
 
-def _load_kb_and_client():
+def _load_kb_and_cfg():
     from app.db.session import SessionLocal
     from app.models.knowledge import KnowledgeDocument
     from app.services.config_service import ConfigService
-    from anthropic import Anthropic
+    from app.services.llm_client import get_client
 
     cfg = ConfigService().load()
-    api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-    if not api_key:
-        raise ValueError("Anthropic API Key не настроен. Обратитесь к администратору.")
+    if not get_client(cfg):
+        raise ValueError("API Key не настроен. Обратитесь к администратору.")
 
     db = SessionLocal()
     try:
@@ -108,15 +102,4 @@ def _load_kb_and_client():
     if not kb_text:
         raise ValueError("База знаний пуста. Обратитесь к администратору.")
 
-    proxy_url = None
-    try:
-        from app.settings import settings as _s
-        proxy_url = getattr(_s, "telegram_proxy", None)
-    except Exception:
-        pass
-    http_client = None
-    if proxy_url:
-        import httpx
-        http_client = httpx.Client(proxy=proxy_url)
-
-    return kb_text, Anthropic(api_key=api_key, http_client=http_client)
+    return kb_text, cfg

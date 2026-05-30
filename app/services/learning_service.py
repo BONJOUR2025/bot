@@ -19,26 +19,7 @@ async def learn_from_escalation(candidate_id: int, question: str, admin_answer: 
         from app.models.recruitment import Candidate
 
         cfg = ConfigService().load()
-        api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-        if not api_key:
-            log.warning("learning_service: no anthropic_api_key, skipping auto-learn")
-            return False
-
-        proxy_url = None
-        try:
-            from app.settings import settings as _s
-            proxy_url = getattr(_s, "telegram_proxy", None)
-        except Exception:
-            pass
-
-        http_client = None
-        if proxy_url:
-            import httpx
-            http_client = httpx.Client(proxy=proxy_url)
-
-        from anthropic import Anthropic
-        client = Anthropic(api_key=api_key, http_client=http_client)
-
+        from app.services.llm_client import chat
         prompt = (
             "Кандидат задал вопрос HR-менеджеру, менеджер ответил. "
             "Сформулируй это как запись в базу знаний для HR-бота.\n\n"
@@ -57,12 +38,10 @@ async def learn_from_escalation(candidate_id: int, question: str, admin_answer: 
             "- Уже очевидная информация"
         )
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = response.content[0].text.strip()
+        raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=400)
+        if not raw:
+            log.warning("learning_service: no API key configured, skipping auto-learn")
+            return False
 
         m = re.search(r'\{.*\}', raw, re.DOTALL)
         if not m:

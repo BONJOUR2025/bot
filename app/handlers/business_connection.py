@@ -329,25 +329,11 @@ async def _check_interview_confirmation(candidate_id: int):
             transcript = "\n".join(lines)
 
             cfg = ConfigService().load()
-            api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-            if not api_key:
+            from app.services.llm_client import chat, get_client
+            if not get_client(cfg):
                 return
 
-            from anthropic import Anthropic
-            proxy_url = None
-            try:
-                from app.settings import settings as _s
-                proxy_url = getattr(_s, "telegram_proxy", None)
-            except Exception:
-                pass
-            http_client = None
-            if proxy_url:
-                import httpx
-                http_client = httpx.Client(proxy=proxy_url)
-
-            today_str = date_cls.today().isoformat()  # передаём чтобы Claude резолвил "завтра", "в пятницу" и т.д.
-
-            client = Anthropic(api_key=api_key, http_client=http_client)
+            today_str = date_cls.today().isoformat()
             prompt = (
                 f"Сегодня {today_str}.\n"
                 "Проанализируй переписку менеджера с кандидатом.\n\n"
@@ -365,12 +351,9 @@ async def _check_interview_confirmation(candidate_id: int):
                 '{"confirmed": true/false, "date": "YYYY-MM-DD или null", "time": "HH:MM или null", "place": "адрес/место или null", "notes": "краткое описание"}'
             )
 
-            response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=150,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw = response.content[0].text.strip()
+            raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=150)
+            if not raw:
+                return
 
             m = re.search(r'\{.*\}', raw, re.DOTALL)
             if not m:
@@ -458,8 +441,8 @@ async def _check_candidate_refusal(candidate_id: int, last_msg: str):
                 return  # already disabled
 
             cfg = ConfigService().load()
-            api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-            if not api_key:
+            from app.services.llm_client import chat, get_client
+            if not get_client(cfg):
                 return
 
             history = db.query(TelegramMessage).filter(
@@ -473,19 +456,6 @@ async def _check_candidate_refusal(candidate_id: int, last_msg: str):
         finally:
             db.close()
 
-        from anthropic import Anthropic
-        proxy_url = None
-        try:
-            from app.settings import settings as _s
-            proxy_url = getattr(_s, "telegram_proxy", None)
-        except Exception:
-            pass
-        http_client = None
-        if proxy_url:
-            import httpx
-            http_client = httpx.Client(proxy=proxy_url)
-
-        client = Anthropic(api_key=api_key, http_client=http_client)
         prompt = (
             "Переписка рекрутера с кандидатом:\n\n"
             f"{transcript}\n\n"
@@ -494,12 +464,9 @@ async def _check_candidate_refusal(candidate_id: int, last_msg: str):
             'Ответь ТОЛЬКО в JSON: {"refused": true/false}'
         )
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=20,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = response.content[0].text.strip()
+        raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=20)
+        if not raw:
+            return
         m = re.search(r'\{.*\}', raw, re.DOTALL)
         if not m:
             return

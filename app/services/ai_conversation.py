@@ -1,6 +1,5 @@
 """Claude AI conversation handler for onboarded candidates."""
 import logging
-from anthropic import Anthropic
 
 log = logging.getLogger(__name__)
 
@@ -95,30 +94,21 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         )
 
         try:
-            api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-            model = (cfg.get("ai_candidate_model") or "claude-haiku-4-5-20251001").strip()
+            from app.services.llm_client import chat
+            model = (cfg.get("ai_candidate_model") or "").strip() or None
             max_tokens = int(cfg.get("ai_candidate_max_tokens") or 120)
-            log.info("AI: using api_key=%s... model=%s max_tokens=%s", (api_key or "")[:12], model, max_tokens)
-            from app.settings import settings as _settings
-            proxy_url = getattr(_settings, "telegram_proxy", None)
-            http_client = None
-            if proxy_url:
-                import httpx
-                http_client = httpx.Client(proxy=proxy_url)
-            client = Anthropic(api_key=api_key, http_client=http_client)
-            response = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=messages,
-            )
-            reply = response.content[0].text.strip()
+            reply = chat(cfg, messages, system=system, model=model, max_tokens=max_tokens)
+            if reply is None:
+                await send_notification(
+                    f"⚠️ <b>AI ошибка</b>\nAPI key не настроен для кандидата <b>{c.name}</b>."
+                )
+                return
             # Strip markdown that Claude sometimes adds despite instructions
             reply = reply.replace("**", "").replace("__", "").strip()
         except Exception as e:
             log.warning("AI conversation error for candidate %s: %s", candidate_id, e)
             await send_notification(
-                f"⚠️ <b>AI ошибка</b>\nНе удалось получить ответ Claude для кандидата <b>{c.name}</b>.\n"
+                f"⚠️ <b>AI ошибка</b>\nНе удалось получить ответ для кандидата <b>{c.name}</b>.\n"
                 f"Подключитесь вручную. Ошибка: {e}"
             )
             return

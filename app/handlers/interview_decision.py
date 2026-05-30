@@ -36,21 +36,6 @@ def _apply_tpl(tpl: str, name: str, date: str, time: str, place: str) -> str:
     )
 
 
-async def _get_anthropic_client(cfg):
-    proxy_url = None
-    try:
-        from app.settings import settings as _s
-        proxy_url = getattr(_s, "telegram_proxy", None)
-    except Exception:
-        pass
-    http_client = None
-    if proxy_url:
-        import httpx
-        http_client = httpx.Client(proxy=proxy_url)
-    from anthropic import Anthropic
-    api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-    return Anthropic(api_key=api_key, http_client=http_client) if api_key else None
-
 
 async def _finalize_interview(candidate_id: int):
     """Move candidate to 'собеседование', send template, create task. Used by both confirm and instruction flow."""
@@ -189,9 +174,9 @@ async def handle_instruction_text(update, context):
             return ConversationHandler.END
 
         cfg = ConfigService().load()
-        client = await _get_anthropic_client(cfg)
-        if not client:
-            await update.message.reply_text("❌ Anthropic API key не настроен.")
+        from app.services.llm_client import chat, get_client
+        if not get_client(cfg):
+            await update.message.reply_text("❌ API key не настроен.")
             return ConversationHandler.END
 
         today_str = date_cls.today().isoformat()
@@ -222,16 +207,14 @@ async def handle_instruction_text(update, context):
             '"new_place": "место или null"}'
         )
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=600,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = response.content[0].text.strip()
+        raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=600)
+        if not raw:
+            await update.message.reply_text("❌ Не удалось получить ответ AI.")
+            return ConversationHandler.END
 
         m = re.search(r'\{.*\}', raw, re.DOTALL)
         if not m:
-            await update.message.reply_text("❌ Не удалось разобрать ответ Claude.")
+            await update.message.reply_text("❌ Не удалось разобрать ответ AI.")
             return ConversationHandler.END
 
         data = json.loads(m.group())

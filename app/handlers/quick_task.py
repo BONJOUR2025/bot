@@ -33,24 +33,10 @@ async def quick_task_handle_text(update, context):
     from app.schemas.task import TaskCreate
 
     cfg = ConfigService().load()
-    api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-    if not api_key:
-        await update.message.reply_text("❌ Anthropic API key не настроен в настройках.")
+    from app.services.llm_client import chat, get_client
+    if not get_client(cfg):
+        await update.message.reply_text("❌ API key не настроен в настройках.")
         return ConversationHandler.END
-
-    proxy_url = None
-    try:
-        from app.settings import settings as _s
-        proxy_url = getattr(_s, "telegram_proxy", None)
-    except Exception:
-        pass
-    http_client = None
-    if proxy_url:
-        import httpx
-        http_client = httpx.Client(proxy=proxy_url)
-
-    from anthropic import Anthropic
-    client = Anthropic(api_key=api_key, http_client=http_client)
 
     today_str = date_cls.today().isoformat()
     prompt = (
@@ -68,15 +54,12 @@ async def quick_task_handle_text(update, context):
     )
 
     try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = response.content[0].text.strip()
+        raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=200)
+        if not raw:
+            raise ValueError("empty response")
     except Exception as e:
-        log.warning("quick_task: Claude failed: %s", e)
-        await update.message.reply_text("❌ Ошибка при обращении к Claude. Попробуйте позже.")
+        log.warning("quick_task: LLM failed: %s", e)
+        await update.message.reply_text("❌ Ошибка при обращении к AI. Попробуйте позже.")
         return ConversationHandler.END
 
     m = re.search(r'\{.*\}', raw, re.DOTALL)

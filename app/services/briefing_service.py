@@ -140,20 +140,6 @@ async def _summarize_messages(tg_msgs, cand_names: dict, hh_candidates, cfg) -> 
 
     context_text = "\n".join(lines)
 
-    proxy_url = None
-    try:
-        from app.settings import settings as _s
-        proxy_url = getattr(_s, "telegram_proxy", None)
-    except Exception:
-        pass
-    http_client = None
-    if proxy_url:
-        import httpx
-        http_client = httpx.Client(proxy=proxy_url)
-
-    from anthropic import Anthropic
-    client = Anthropic(api_key=api_key, http_client=http_client)
-
     prompt = (
         "Ты помощник HR-менеджера. Проанализируй входящие сообщения за последние 24ч.\n"
         "Выдели ТОЛЬКО важное и требующее действий:\n"
@@ -168,13 +154,11 @@ async def _summarize_messages(tg_msgs, cand_names: dict, hh_candidates, cfg) -> 
     )
 
     try:
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=350,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        result = response.content[0].text.strip()
+        from app.services.llm_client import chat
+        result = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=350)
+        if not result:
+            return ""
         return "" if result.upper() == "NONE" else result
     except Exception as e:
-        log.warning("briefing: Claude summarize failed: %s", e)
+        log.warning("briefing: LLM summarize failed: %s", e)
         return ""
