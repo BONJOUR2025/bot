@@ -1,6 +1,9 @@
 # Runtime database (generated locally — do not commit)
 hr.db
 
+# Claude Code internal state
+.claude/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
