@@ -139,6 +139,7 @@ async def handle_business_message(update, context):
                     elif getattr(candidate, 'stage', '') == 'ждем_привязки':
                         try:
                             candidate.stage = 'общение'
+                            candidate.interview_phase = 'greeting'
                             candidate.updated_at = datetime.utcnow()
                             db.commit()
                             from app.services.notify import send_notification
@@ -146,6 +147,11 @@ async def handle_business_message(update, context):
                                 f"✅ <b>Telegram привязан!</b>\n"
                                 f"Кандидат <b>{candidate.name}</b> написал в Telegram и переведён на этап «Общение»."
                             )
+                            # Check vacancy readiness before starting interview
+                            if candidate.vacancy_id:
+                                asyncio.ensure_future(
+                                    _check_vacancy_readiness(candidate.vacancy_id)
+                                )
                             from app.services.ai_conversation import handle_candidate_message
                             asyncio.ensure_future(handle_candidate_message(candidate.id, msg_text))
                         except Exception as e:
@@ -485,3 +491,12 @@ async def _check_candidate_refusal(candidate_id: int, last_msg: str):
 
     except Exception as e:
         log.warning("_check_candidate_refusal error: %s", e)
+
+
+async def _check_vacancy_readiness(vacancy_id: int):
+    """Notify admin if vacancy KB is missing data needed for structured screening."""
+    try:
+        from app.services.vacancy_readiness import notify_admin_if_incomplete
+        await notify_admin_if_incomplete(vacancy_id)
+    except Exception as e:
+        log.warning("_check_vacancy_readiness error: %s", e)

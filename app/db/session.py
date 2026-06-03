@@ -58,6 +58,7 @@ def _run_migrations() -> None:
             "ALTER TABLE candidates ADD COLUMN telegram_link_code TEXT",
             "ALTER TABLE candidates ADD COLUMN interview_notified_at DATETIME",
             "ALTER TABLE candidates ADD COLUMN is_paused INTEGER DEFAULT 0",
+            "ALTER TABLE candidates ADD COLUMN interview_phase TEXT DEFAULT 'greeting'",
             "ALTER TABLE vacancies ADD COLUMN knowledge_base TEXT DEFAULT ''",
             "ALTER TABLE vacancies ADD COLUMN interview_location TEXT DEFAULT ''",
             """CREATE TABLE IF NOT EXISTS unlinked_telegram_messages (

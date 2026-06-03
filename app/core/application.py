@@ -62,6 +62,7 @@ from ..handlers.business_connection import handle_business_connection, handle_bu
 from ..handlers.knowledge_base import handle_kb_entry, handle_kb_question, KB_CHAT
 from ..handlers.interview_decision import build_interview_decision_handlers
 from ..handlers.quick_task import build_quick_task_handler
+from ..handlers.vacancy_setup import build_vacancy_setup_handler
 from telegram.request import HTTPXRequest
 import datetime
 
@@ -112,6 +113,7 @@ def _register_all_handlers(app):
     for h in build_interview_decision_handlers():
         app.add_handler(h)
     app.add_handler(build_quick_task_handler(ADMIN_ID))
+    app.add_handler(build_vacancy_setup_handler())
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         CommandHandler("salary", handle_salary_request, filters=~filters.User(ADMIN_ID))

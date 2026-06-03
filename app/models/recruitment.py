@@ -57,6 +57,7 @@ class Candidate(Base):
     pending_interview_place = Column(String, nullable=True)
     interview_notified_at = Column(DateTime, nullable=True)  # last time admin was notified about interview
     is_paused = Column(Boolean, nullable=False, default=False)
+    interview_phase = Column(String, nullable=True, default="greeting")  # structured interview phase
     has_unread_hh_msg = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
