@@ -17,6 +17,8 @@ class EmployeeBase(BaseModel):
     birthdate: Optional[date] = None
     note: Optional[str] = ""
     photo_url: Optional[str] = ""
+    passport_url: Optional[str] = ""
+    external_code: Optional[str] = ""
     status: str = "active"
     payout_chat_key: Optional[str] = None
     archived: bool = False
@@ -50,5 +52,7 @@ class Employee(BaseModel):
     is_admin: bool = False
     note: Optional[str] = None
     photo_url: Optional[str] = None
+    passport_url: Optional[str] = None
+    external_code: Optional[str] = None
     payout_chat_key: Optional[str] = None
     archived: bool = False

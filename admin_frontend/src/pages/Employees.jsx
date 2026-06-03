@@ -37,6 +37,9 @@ export default function Employees() {
     sync_to_bot: false,
     photo_file: null,
     photo_url: '',
+    passport_file: null,
+    passport_url: '',
+    external_code: '',
     payout_chat_key: '',
     archived: false,
   };
@@ -152,7 +155,17 @@ export default function Employees() {
   }
 
   function startEdit(emp) {
-    setForm({ ...emp, id: emp.id, id_original: emp.id, payout_chat_key: emp.payout_chat_key || '' });
+    const isBotUser = emp.bot_user ?? (!String(emp.id).startsWith('nb_') && !!emp.id);
+    setForm({
+      ...emp,
+      id: emp.id,
+      id_original: emp.id,
+      bot_user: isBotUser,
+      payout_chat_key: emp.payout_chat_key || '',
+      photo_file: null,
+      passport_file: null,
+      external_code: emp.external_code || '',
+    });
     setShowForm(true);
   }
 
@@ -214,6 +227,7 @@ export default function Employees() {
       position: form.position || '',
       is_admin: form.is_admin,
       payout_chat_key: form.payout_chat_key || null,
+      external_code: form.external_code || '',
     };
     try {
       if (form.id_original) {
@@ -222,10 +236,16 @@ export default function Employees() {
         payload.id = form.id || Date.now().toString();
         await api.post('employees/', payload);
       }
+      const savedId = form.id_original || payload.id;
       if (form.photo_file) {
         const fd = new FormData();
         fd.append('file', form.photo_file);
-        await api.post(`employees/${payload.id}/photo`, fd);
+        await api.post(`employees/${savedId}/photo`, fd);
+      }
+      if (form.passport_file) {
+        const fd = new FormData();
+        fd.append('file', form.passport_file);
+        await api.post(`employees/${savedId}/passport`, fd);
       }
       setShowForm(false);
       setForm(emptyForm);
@@ -239,9 +259,12 @@ export default function Employees() {
 
   function handleFile(e) {
     const file = e.target.files?.[0];
-    if (file) {
-      setForm((f) => ({ ...f, photo_file: file }));
-    }
+    if (file) setForm((f) => ({ ...f, photo_file: file }));
+  }
+
+  function handlePassportFile(e) {
+    const file = e.target.files?.[0];
+    if (file) setForm((f) => ({ ...f, passport_file: file }));
   }
 
   async function downloadPdf() {
@@ -484,139 +507,146 @@ export default function Employees() {
       )}
 
       {showForm && (
-
-        <div className="modal-backdrop">
-          <div className="modal-card">
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="modal-card max-w-lg overflow-y-auto max-h-[90vh]">
             <h2 className="text-xl font-semibold">
-              {form.id ? 'Редактирование' : 'Новый сотрудник'}
+              {form.id_original ? 'Редактирование' : 'Новый сотрудник'}
             </h2>
-            <input
-              className="modal-control"
-              placeholder="ID"
-              value={form.id}
-              onChange={(e) => setForm({ ...form, id: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="Имя"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="ФИО"
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="Телефон"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="Номер карты"
-              value={form.card_number}
-              onChange={(e) => setForm({ ...form, card_number: e.target.value })}
-            />
-            <input
-              className="modal-control"
-              placeholder="Банк"
-              value={form.bank}
-              onChange={(e) => setForm({ ...form, bank: e.target.value })}
-            />
-            <select
-              className="modal-control"
-              value={form.position}
-              onChange={(e) => setForm({ ...form, position: e.target.value })}
-            >
-              <option value="">Не выбрано</option>
-              {positions.map((pos) => (
-                <option key={pos} value={pos}>
-                  {pos}
-                </option>
-              ))}
-            </select>
-            <select
-              className="modal-control"
-              value={form.work_place}
-              onChange={(e) => setForm({ ...form, work_place: e.target.value })}
-            >
-              <option value="">Не выбрано</option>
-              {workPlaces.map((wp) => (
-                <option key={wp} value={wp}>
-                  {wp}
-                </option>
-              ))}
-            </select>
-            <input
-              className="modal-control"
-              placeholder="Размер формы"
-              value={form.clothing_size}
-              onChange={(e) => setForm({ ...form, clothing_size: e.target.value })}
-            />
-            <input
-              type="date"
-              className="modal-control"
-              value={form.birthdate}
-              onChange={(e) => setForm({ ...form, birthdate: e.target.value })}
-            />
-            <textarea
-              className="modal-control"
-              placeholder="Заметка"
-              value={form.note}
-              onChange={(e) => setForm({ ...form, note: e.target.value })}
-            />
-            <select
-              className="modal-control"
-              value={form.payout_chat_key}
-              onChange={(e) => setForm({ ...form, payout_chat_key: e.target.value })}
-            >
-              <option value="">
-                {cashierChats.length
-                  ? `По умолчанию — ${cashierChats[0].name}`
-                  : 'По умолчанию'}
-              </option>
-              {cashierChats.map((chat) => (
-                <option key={chat.key} value={chat.key}>
-                  {chat.name} — {chat.chat_id}
-                </option>
-              ))}
-            </select>
-            <select
-              className="modal-control"
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-            >
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-            <label className="flex items-center gap-2 text-sm">
+
+            {/* Bot user toggle */}
+            <label className="flex items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
-                checked={form.sync_to_bot}
-                onChange={(e) => setForm({ ...form, sync_to_bot: e.target.checked })
-                }
+                checked={form.bot_user}
+                onChange={(e) => setForm({ ...form, bot_user: e.target.checked, id: e.target.checked ? form.id : '' })}
               />
-              Отразить в боте
+              Пользователь бота
             </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.is_admin}
-                onChange={(e) => setForm({ ...form, is_admin: e.target.checked })}
-              />
-              Администратор
-            </label>
-            <input type="file" onChange={handleFile} />
+
+            {form.bot_user && (
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Telegram ID</label>
+                <input className="modal-control" value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Имя *</label>
+                <input className="modal-control" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">ФИО *</label>
+                <input className="modal-control" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Телефон *</label>
+                <input className="modal-control" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Номер карты</label>
+                <input className="modal-control" value={form.card_number} onChange={(e) => setForm({ ...form, card_number: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Банк</label>
+                <input className="modal-control" value={form.bank} onChange={(e) => setForm({ ...form, bank: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Размер формы</label>
+                <input className="modal-control" value={form.clothing_size} onChange={(e) => setForm({ ...form, clothing_size: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Должность</label>
+                <select className="modal-control" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}>
+                  <option value="">Не выбрано</option>
+                  {positions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Место работы</label>
+                <select className="modal-control" value={form.work_place} onChange={(e) => setForm({ ...form, work_place: e.target.value })}>
+                  <option value="">Не выбрано</option>
+                  {workPlaces.map((wp) => <option key={wp} value={wp}>{wp}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Дата рождения</label>
+                <input type="date" className="modal-control" value={form.birthdate} onChange={(e) => setForm({ ...form, birthdate: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Чат кассира</label>
+                <select className="modal-control" value={form.payout_chat_key} onChange={(e) => setForm({ ...form, payout_chat_key: e.target.value })}>
+                  <option value="">{cashierChats.length ? `По умолчанию — ${cashierChats[0].name}` : 'По умолчанию'}</option>
+                  {cashierChats.map((chat) => <option key={chat.key} value={chat.key}>{chat.name} — {chat.chat_id}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Статус</label>
+                <select className="modal-control" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  <option value="active">Активный</option>
+                  <option value="inactive">Неактивный</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Код в системе (для связи с зарплатой/мастерами)</label>
+              <input className="modal-control" value={form.external_code} onChange={(e) => setForm({ ...form, external_code: e.target.value })} placeholder="Например: ИМЯ в Firebird или табельный номер" />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Заметка</label>
+              <textarea className="modal-control" rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+            </div>
+
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={form.sync_to_bot} onChange={(e) => setForm({ ...form, sync_to_bot: e.target.checked })} />
+                Отразить в боте
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={form.is_admin} onChange={(e) => setForm({ ...form, is_admin: e.target.checked })} />
+                Администратор
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Фото</label>
+                {form.photo_url && <img src={form.photo_url} alt="" className="w-10 h-10 rounded-full object-cover mb-1" />}
+                <input type="file" accept="image/*" onChange={handleFile} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Скан паспорта</label>
+                {form.passport_url && <a href={form.passport_url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline block mb-1">Открыть скан</a>}
+                <input type="file" accept="image/*,.pdf" onChange={handlePassportFile} />
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
-                Отмена
-              </button>
-              <button className="btn" onClick={saveForm}>
-                Сохранить
-              </button>
+              <button className="btn" onClick={() => setShowForm(false)}>Отмена</button>
+              <button className="btn btn--primary" onClick={saveForm}>Сохранить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm warnings dialog */}
+      {confirmWarnings.length > 0 && (
+        <div className="modal-backdrop" style={{ zIndex: 70 }}>
+          <div className="modal-card max-w-sm w-full">
+            <h3 className="text-base font-semibold">Предупреждение</h3>
+            <ul className="text-sm space-y-1">
+              {confirmWarnings.map((w, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="text-amber-500 mt-0.5">⚠</span> {w}
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm text-[color:var(--color-muted-foreground)]">Всё равно сохранить?</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button className="btn" onClick={() => setConfirmWarnings([])}>Отмена</button>
+              <button className="btn btn--primary" onClick={() => { setConfirmWarnings([]); doSave(); }}>Сохранить</button>
             </div>
           </div>
         </div>

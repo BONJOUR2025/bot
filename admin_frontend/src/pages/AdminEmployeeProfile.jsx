@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, FileDown, Archive, ExternalLink,
   Phone, CreditCard, MapPin, Shirt, Cake, StickyNote,
-  ShieldCheck, Building2, MessageCircle,
+  ShieldCheck, Building2, MessageCircle, FileText, Hash,
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
@@ -200,8 +200,26 @@ export default function AdminEmployeeProfile() {
         <InfoRow icon={Shirt} label="Размер одежды" value={employee.clothing_size} />
         <InfoRow icon={Cake} label="День рождения" value={formatDate(employee.birthdate)} />
         <InfoRow icon={MessageCircle} label="Чат кассира" value={resolveChatName(employee.payout_chat_key)} />
+        <InfoRow icon={Hash} label="Код в системе" value={employee.external_code} />
         {employee.note && <InfoRow icon={StickyNote} label="Заметка" value={employee.note} />}
       </Section>
+
+      {employee.passport_url && (
+        <Section title="Документы">
+          <div className="flex items-center gap-3 py-2">
+            <FileText size={15} className="text-[color:var(--color-muted-foreground)] shrink-0" />
+            <span className="text-sm text-[color:var(--color-muted-foreground)] w-36 shrink-0">Паспорт</span>
+            <a
+              href={employee.passport_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-medium text-blue-600 hover:underline"
+            >
+              Открыть скан
+            </a>
+          </div>
+        </Section>
+      )}
 
       <Section title="Системная информация">
         <InfoRow label="ID" value={employee.id} />
@@ -218,12 +236,25 @@ export default function AdminEmployeeProfile() {
             <ExternalLink size={13} /> История начислений
           </a>
           <a
-            href={`/admin/payroll`}
+            href="/admin/payroll"
             className="btn flex items-center gap-1.5 text-sm"
+            title={employee.external_code ? `Найдите по коду: ${employee.external_code}` : 'Откройте расчёт зарплаты'}
           >
             <ExternalLink size={13} /> Расчёт зарплаты
+            {employee.external_code && <span className="text-xs text-[color:var(--color-muted-foreground)]">({employee.external_code})</span>}
+          </a>
+          <a
+            href={`/admin/masters${employee.full_name ? `?master=${encodeURIComponent(employee.full_name)}` : ''}`}
+            className="btn flex items-center gap-1.5 text-sm"
+          >
+            <ExternalLink size={13} /> Работы мастера
           </a>
         </div>
+        {!employee.external_code && (
+          <p className="text-xs text-[color:var(--color-muted-foreground)] mt-2">
+            Укажите «Код в системе» в профиле сотрудника для точной привязки к данным зарплаты и мастеров.
+          </p>
+        )}
       </Section>
     </div>
   );

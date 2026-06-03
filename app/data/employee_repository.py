@@ -52,6 +52,8 @@ class EmployeeRepository:
             "birthdate": self._parse_date(data.get("birthdate")),
             "note": data.get("note", ""),
             "photo_url": data.get("photo_url", ""),
+            "passport_url": data.get("passport_url", ""),
+            "external_code": data.get("external_code", ""),
             "status": EmployeeStatus(data.get("status", "active")),
             "created_at": self._parse_datetime(data.get("created_at"))
             or datetime.utcnow(),

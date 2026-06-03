@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -202,12 +203,18 @@ function MastersSummaryTable({ rows, onMasterClick }) {
 export default function Masters() {
   const today = new Date().toISOString().slice(0, 10);
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const [searchParams] = useSearchParams();
 
   const [dateFrom, setDateFrom] = useState(monthAgo);
   const [dateTo, setDateTo]     = useState(today);
   const [statusFilter, setStatusFilter]     = useState('Все');
-  const [masterSearch, setMasterSearch]     = useState('');
+  const [masterSearch, setMasterSearch]     = useState(searchParams.get('master') || '');
   const [nameSearch, setNameSearch]         = useState('');
+
+  useEffect(() => {
+    const m = searchParams.get('master');
+    if (m) setMasterSearch(m);
+  }, [searchParams]);
   const [codeSearch, setCodeSearch]         = useState('');
   const [docSearch, setDocSearch]           = useState('');
   const [durationFilter, setDurationFilter] = useState('all');

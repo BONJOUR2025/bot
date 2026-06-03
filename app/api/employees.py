@@ -81,6 +81,18 @@ def create_employee_router(
             raise HTTPException(status_code=403, detail="forbidden")
         return await service.upload_employee_photo(employee_id, file)
 
+    @router.post("/{employee_id}/passport")
+    async def upload_passport(
+        employee_id: str,
+        file: UploadFile = File(...),
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        if not access_service.is_employee_visible(
+            current, employee_id, _employee_department(employee_id)
+        ):
+            raise HTTPException(status_code=403, detail="forbidden")
+        return await service.upload_employee_passport(employee_id, file)
+
     @router.delete("/{employee_id}")
     async def delete(
         employee_id: str, current: ResolvedUser = Depends(get_current_user)

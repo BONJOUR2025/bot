@@ -25,6 +25,8 @@ class Employee:
     birthdate: Optional[date] = None
     note: str = ""
     photo_url: str = ""
+    passport_url: str = ""
+    external_code: str = ""
     status: EmployeeStatus = EmployeeStatus.ACTIVE
     created_at: datetime = field(default_factory=datetime.utcnow)
     tags: List[str] = field(default_factory=list)

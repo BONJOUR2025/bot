@@ -153,6 +153,8 @@ class EmployeeAPIService:
             birthdate=data.birthdate,
             note=data.note or "",
             photo_url=data.photo_url or "",
+            passport_url=data.passport_url or "",
+            external_code=data.external_code or "",
             status=EmployeeStatus(data.status or "active"),
             payout_chat_key=data.payout_chat_key,
             archived=data.archived,
@@ -207,6 +209,19 @@ class EmployeeAPIService:
         self.service.update_employee(
             employee_id, photo_url="/" + str(upload_path))
         return {"status": "photo_uploaded", "url": "/" + str(upload_path)}
+
+    async def upload_employee_passport(
+            self, employee_id: str, file: UploadFile) -> dict[str, str]:
+        emp = self.service.get_employee(employee_id)
+        if not emp:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        upload_path = Path(f"static/uploads/employees/{employee_id}_passport.jpg")
+        upload_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(upload_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        self.service.update_employee(
+            employee_id, passport_url="/" + str(upload_path))
+        return {"status": "passport_uploaded", "url": "/" + str(upload_path)}
 
     async def delete_employee(self, employee_id: str) -> dict[str, str]:
         emp = self.service.get_employee(employee_id)
