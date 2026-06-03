@@ -25,11 +25,20 @@ async def handle_setup_callback(update, context):
     try:
         v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
         title = v.title if v else f"#{vacancy_id}"
+        # read all needed fields before closing session
+        v_snapshot = {"title": title, "knowledge_base": getattr(v, "knowledge_base", "") or "",
+                      "id": vacancy_id} if v else None
     finally:
         db.close()
 
     cfg = ConfigService().load()
-    questions = await get_missing_questions(v, cfg) if v else []
+
+    class _V:  # lightweight stand-in so get_missing_questions works without a live session
+        def __init__(self, d):
+            self.title = d["title"]
+            self.knowledge_base = d["knowledge_base"]
+
+    questions = await get_missing_questions(_V(v_snapshot), cfg) if v_snapshot else []
     context.user_data["setup_questions"] = questions
 
     q_text = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(questions)) if questions else "(все данные уже есть)"

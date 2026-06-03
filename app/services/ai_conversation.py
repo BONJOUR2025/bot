@@ -108,6 +108,18 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         if phase == "done":
             return
 
+        # If candidate already has conversation history but phase is still "greeting",
+        # they pre-date the structured interview — skip to experience phase
+        if phase == "greeting":
+            existing_count = db.query(TelegramMessage).filter(
+                TelegramMessage.candidate_id == candidate_id,
+                TelegramMessage.direction == "in",
+            ).count()
+            if existing_count > 1:  # more than the current message
+                phase = "experience"
+                c.interview_phase = "experience"
+                db.commit()
+
         history = db.query(TelegramMessage).filter(
             TelegramMessage.candidate_id == candidate_id
         ).order_by(TelegramMessage.created_at).all()
@@ -198,6 +210,7 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
         c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
         if not c:
             return
+        candidate_name = c.name  # read before session closes
 
         history = db.query(TelegramMessage).filter(
             TelegramMessage.candidate_id == candidate_id
@@ -214,7 +227,7 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
     cfg = ConfigService().load()
     prompt = (
         f"Проанализируй интервью с кандидатом на вакансию и составь профиль.\n\n"
-        f"Кандидат: {c.name}\n\n"
+        f"Кандидат: {candidate_name}\n\n"
         f"Транскрипт интервью:\n{transcript}\n\n"
         "Верни ТОЛЬКО JSON:\n"
         '{"score": 0-100, '
@@ -248,7 +261,7 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
     tags = " ".join(f"#{t.replace(' ', '_')}" for t in (p.get("tags") or []))
 
     text = (
-        f"👤 <b>Профиль кандидата: {c.name}</b>\n\n"
+        f"👤 <b>Профиль кандидата: {candidate_name}</b>\n\n"
         f"<b>Скор:</b> {p.get('score', '?')}/100 — {p.get('score_reason', '')}\n\n"
         f"<b>Резюме:</b>\n{p.get('summary', '')}\n\n"
     )
@@ -266,3 +279,4 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
 
     await send_notification(text)
     log.info("Candidate profile sent for candidate_id=%s score=%s", candidate_id, p.get("score"))
+
