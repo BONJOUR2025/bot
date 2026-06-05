@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   Download, Search, X, Settings, ChevronDown, ChevronUp, Percent,
   CheckSquare, Square, BadgeCheck, AlertTriangle, MessageSquare,
@@ -473,9 +473,15 @@ export default function Payroll() {
   const { month: currentMonth, year: currentYear } = parseSelectedMonth(selectedMonth);
   const monthKey = selectedMonth ? makeMonthKey(selectedMonth, currentYear) : null;
 
+  // Request counter: discard responses from stale (superseded) requests
+  const payrollReqId = useRef(0);
+
   useEffect(() => { loadMonths(); }, []);
   useEffect(() => {
     if (selectedMonth) {
+      // Clear stale data immediately so user never sees wrong month
+      setRows([]);
+      setUnknownCodes([]);
       loadPayroll(selectedMonth);
       loadPlans(selectedMonth);
       loadComments(selectedMonth);
@@ -492,7 +498,8 @@ export default function Payroll() {
       const res = await api.get('payroll/months');
       const list = res.data || [];
       setMonths(list);
-      if (list.length > 0) setSelectedMonth(list[0]);
+      // Auto-select the last (most recent) month, not the first
+      if (list.length > 0) setSelectedMonth(list[list.length - 1]);
     } catch { toast('Ошибка загрузки месяцев', 'error'); }
     finally { setLoadingMonths(false); }
   }
@@ -558,13 +565,19 @@ export default function Payroll() {
   }
 
   async function loadPayroll(month) {
+    const reqId = ++payrollReqId.current;
     setLoading(true);
     try {
       const res = await api.get('payroll/calculate', { params: { month } });
+      // Ignore if a newer request was already made (user switched month during load)
+      if (reqId !== payrollReqId.current) return;
       setRows(res.data?.rows || res.data || []);
       setUnknownCodes(res.data?.unknown_codes || []);
-    } catch { toast('Ошибка загрузки данных', 'error'); }
-    finally { setLoading(false); }
+    } catch {
+      if (reqId === payrollReqId.current) toast('Ошибка загрузки данных', 'error');
+    } finally {
+      if (reqId === payrollReqId.current) setLoading(false);
+    }
   }
 
   async function savePlan(planData) {

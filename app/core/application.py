@@ -275,3 +275,17 @@ def register_jobs(app):
             )
 
     app.job_queue.run_daily(birthday_reminder, time(hour=9, minute=0))
+
+    async def morning_briefing_job(context: ContextTypes.DEFAULT_TYPE):
+        from ..services.briefing_service import send_morning_briefing
+        await send_morning_briefing()
+
+    from zoneinfo import ZoneInfo
+    # name= prevents duplicate registration if register_jobs is called more than once
+    existing = [j for j in app.job_queue.jobs() if j.name == "morning_briefing"]
+    if not existing:
+        app.job_queue.run_daily(
+            morning_briefing_job,
+            time(hour=10, minute=0, tzinfo=ZoneInfo("Europe/Moscow")),
+            name="morning_briefing",
+        )
