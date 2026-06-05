@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       base: '/admin/',
       manifest: {
-        name: 'Штаб',
-        short_name: 'Штаб',
+        name: 'Центр управления',
+        short_name: 'Центр управления',
         start_url: '/admin/',
         display: 'standalone',
         background_color: '#ffffff',

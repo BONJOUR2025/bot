@@ -93,11 +93,11 @@ export default function Navigation({ onNavigate, onCollapse, sidebarOpen }) {
     <nav className="flex h-full min-h-screen w-full flex-col bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] shadow-xl sm:w-[280px]">
       <div className="flex items-center gap-3 px-5 pb-4 pt-6">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] text-xs font-bold shadow">
-          ШТ
+          ЦУ
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold leading-tight truncate">Штаб</div>
-          <div className="text-[11px] text-[color:var(--color-muted-foreground)] truncate">Панель управления</div>
+          <div className="text-sm font-semibold leading-tight truncate">Центр управления</div>
+          <div className="text-[11px] text-[color:var(--color-muted-foreground)] truncate">Панель администратора</div>
         </div>
         {/* Collapse / close button */}
         {isMobile ? (
@@ -149,7 +149,7 @@ export default function Navigation({ onNavigate, onCollapse, sidebarOpen }) {
       </div>
 
       <div className="border-t border-[color:var(--color-sidebar-border)] px-5 py-4 text-[11px] text-[color:var(--color-muted-foreground)] opacity-70">
-        © {new Date().getFullYear()} Штаб
+        © {new Date().getFullYear()} Центр управления
       </div>
     </nav>
   );
