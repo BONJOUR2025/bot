@@ -51,7 +51,7 @@ export default function MainLayout() {
           )}
           <div className="app-shell__brand">
             <span className="app-shell__brand-accent" />
-            HR Панель управления
+            Центр управления
           </div>
           <div className="app-shell__user">
             <span className="app-shell__user-name">{userLabel}</span>

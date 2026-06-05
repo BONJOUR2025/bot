@@ -21,13 +21,12 @@ const navStructure = [
     name: 'Персонал',
     items: [
       { to: '/admin/employees',   label: 'Сотрудники',        permission: 'employees', icon: Users },
-      { to: '/admin/recruitment',    label: 'Подбор персонала', permission: 'employees', icon: UserPlus },
-      { to: '/admin/knowledge-base', label: 'База знаний',      permission: 'employees', icon: LibraryBig },
-      { to: '/admin/archive',     label: 'Архив сотрудников', permission: 'employees', icon: Archive },
+      { to: '/admin/archive',     label: 'Архив',             permission: 'employees', icon: Archive },
       { to: '/admin/schedule',    label: 'Расписание',        permission: 'employees', icon: CalendarRange },
       { to: '/admin/vacations',   label: 'Отпуска',           permission: 'vacations', icon: Umbrella },
       { to: '/admin/birthdays',   label: 'Дни рождения',      permission: 'birthdays', icon: Cake },
       { to: '/admin/assets',      label: 'Имущество',         permission: 'assets',    icon: Package },
+      { to: '/admin/salons',      label: 'Салоны',            permission: 'salons',    icon: Store },
     ],
   },
   {
@@ -35,43 +34,36 @@ const navStructure = [
     items: [
       { to: '/admin/payroll',          label: 'Расчёт зарплаты',      permission: 'payroll',         icon: Calculator },
       { to: '/admin/location-plans',   label: 'Планы по точкам',      permission: 'payroll',         icon: MapPin },
+      { to: '/admin/masters',          label: 'Работы мастеров',      permission: 'payroll',         icon: Hammer },
       { to: '/admin/payouts',          label: 'Выплаты',              permission: 'payouts',         icon: Banknote },
       { to: '/admin/payouts-control',  label: 'Контроль выплат',      permission: 'payouts-control', icon: ShieldCheck },
       { to: '/admin/incentives',       label: 'Штрафы и премии',      permission: 'incentives',      icon: Award },
       { to: '/admin/cash-moves',       label: 'Кассовые перемещения', permission: 'cash-moves',      icon: ArrowLeftRight },
       { to: '/admin/payment-calendar', label: 'Платежный календарь',  permission: 'payment-calendar',icon: CalendarDays },
-      { to: '/admin/smses',            label: 'СМС Агбис',            permission: 'smses',           icon: MessageSquare },
-      { to: '/admin/reports',          label: 'Отчёты',               permission: 'reports',         icon: BarChart2 },
-    ],
-  },
-  {
-    name: 'Сеть',
-    items: [
-      { to: '/admin/salons', label: 'Управление салонами', permission: 'salons', icon: Store },
-    ],
-  },
-  {
-    name: 'Управление',
-    items: [
-      { to: '/admin/broadcast', label: 'Рассылка',           permission: 'broadcast', icon: Megaphone },
-      { to: '/admin/messages',  label: 'История сообщений',  permission: 'messages',  icon: History },
-      { to: '/admin/dictionary',label: 'Словарь',            permission: 'dictionary',icon: BookOpen },
-      { to: '/admin/settings',  label: 'Настройки',          permission: 'settings',  icon: SettingsIcon },
-      { to: '/admin/access',    label: 'Доступ',             permission: 'access',    icon: Lock },
     ],
   },
   {
     name: 'Аналитика',
     items: [
-      { to: '/admin/masters', label: 'Работы мастеров', permission: 'payroll', icon: Hammer },
-      { to: '/admin/sales',   label: 'Продажи',         permission: 'payroll', icon: TrendingUp },
+      { to: '/admin/sales',   label: 'Продажи', permission: 'payroll', icon: TrendingUp },
+      { to: '/admin/reports', label: 'Отчёты',  permission: 'reports', icon: BarChart2 },
     ],
   },
   {
-    name: 'Инструменты',
+    name: 'Операции',
     items: [
-      { to: '/admin/tasks',     label: 'Задачи',   permission: 'tasks',     icon: ListTodo },
-      { to: '/admin/passwords', label: 'Пароли',   permission: 'passwords', icon: KeyRound },
+      { to: '/admin/tasks',     label: 'Задачи',            permission: 'tasks',     icon: ListTodo },
+      { to: '/admin/broadcast', label: 'Рассылка',          permission: 'broadcast', icon: Megaphone },
+      { to: '/admin/messages',  label: 'История сообщений', permission: 'messages',  icon: History },
+    ],
+  },
+  {
+    name: 'Система',
+    items: [
+      { to: '/admin/dictionary',label: 'Словарь',   permission: 'dictionary',icon: BookOpen },
+      { to: '/admin/passwords', label: 'Пароли',    permission: 'passwords', icon: KeyRound },
+      { to: '/admin/access',    label: 'Доступ',    permission: 'access',    icon: Lock },
+      { to: '/admin/settings',  label: 'Настройки', permission: 'settings',  icon: SettingsIcon },
     ],
   },
 ];
@@ -112,12 +104,12 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
       {/* Logo */}
       <div className={`flex items-center gap-4 px-4 pb-5 pt-7 ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
         <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[0_10px_30px_rgba(0,0,0,0.12)] text-sm font-bold">
-          HR
+          ЦУ
         </div>
         {!isCollapsed && (
           <div className="flex flex-col text-sm min-w-0">
-            <span className="text-base font-semibold leading-tight">Админ-панель</span>
-            <span className="text-[13px] text-[color:var(--color-muted-foreground)]">Управление персоналом</span>
+            <span className="text-base font-semibold leading-tight">Центр управления</span>
+            <span className="text-[13px] text-[color:var(--color-muted-foreground)]">Панель администратора</span>
           </div>
         )}
         {isMobile && (
@@ -173,7 +165,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
         <div className={`border-t border-[color:var(--color-sidebar-border)] py-3 ${isCollapsed ? 'flex justify-center' : 'px-6 flex justify-between items-center'}`}>
           {!isCollapsed && (
             <span className="text-xs text-[color:var(--color-muted-foreground)] opacity-70">
-              © {new Date().getFullYear()} HR Platform
+              © {new Date().getFullYear()} Центр управления
             </span>
           )}
           <button
@@ -190,7 +182,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
       {/* Mobile footer */}
       {isMobile && (
         <div className="border-t border-[color:var(--color-sidebar-border)] px-6 py-5 text-xs text-[color:var(--color-muted-foreground)] opacity-90">
-          © {new Date().getFullYear()} HR Platform
+          © {new Date().getFullYear()} Центр управления
         </div>
       )}
     </nav>

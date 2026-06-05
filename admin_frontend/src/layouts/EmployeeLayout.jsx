@@ -28,7 +28,7 @@ export default function EmployeeLayout() {
     <div className="emp-shell">
       <header className="emp-header">
         <div className="emp-header__brand">
-          <span className="emp-header__logo">HR</span>
+          <span className="emp-header__logo">ЦУ</span>
           <span className="emp-header__title">Личный кабинет</span>
         </div>
         <div className="emp-header__right">

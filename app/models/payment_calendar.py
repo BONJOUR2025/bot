@@ -1,8 +1,24 @@
+import json
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
 from app.db.base_class import Base
+
+
+class PaymentCategory(Base):
+    __tablename__ = "payment_categories"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True, nullable=False)
+    sort_order = Column(Integer, default=0)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "sort_order": self.sort_order,
+        }
 
 
 class PaymentSchedule(Base):
@@ -18,11 +34,16 @@ class PaymentSchedule(Base):
     notify_days_before = Column(Integer, nullable=False, default=3)
     is_active = Column(Boolean, nullable=False, default=True)
     note = Column(Text, nullable=True, default="")
+    objects = Column(Text, nullable=True, default="[]")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     records = relationship("PaymentRecord", back_populates="schedule", cascade="all, delete-orphan")
 
     def to_dict(self):
+        try:
+            objects = json.loads(self.objects or "[]")
+        except Exception:
+            objects = []
         return {
             "id": self.id,
             "name": self.name,
@@ -34,6 +55,7 @@ class PaymentSchedule(Base):
             "notify_days_before": self.notify_days_before,
             "is_active": self.is_active,
             "note": self.note or "",
+            "objects": objects,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
