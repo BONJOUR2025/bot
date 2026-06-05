@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Menu, LogOut } from 'lucide-react';
+import { Menu, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 import Navigation from '../components/Navigation.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -28,24 +28,36 @@ export default function MainLayout() {
 
   const userLabel = user?.name || user?.login || 'Администратор';
 
+  const shellClass = [
+    'app-shell',
+    isMobile ? 'app-shell--mobile' : '',
+    !isMobile && !sidebarOpen ? 'app-shell--collapsed' : '',
+  ].filter(Boolean).join(' ');
+
   return (
-    <div className={`app-shell ${isMobile ? 'app-shell--mobile' : ''}`}>
+    <div className={shellClass}>
       <aside className={`app-shell__sidebar ${sidebarOpen ? 'is-open' : ''}`}>
-        <Navigation onNavigate={closeSidebar} />
+        <Navigation onNavigate={closeSidebar} onCollapse={toggleSidebar} sidebarOpen={sidebarOpen} />
       </aside>
 
       {isMobile && sidebarOpen && <div className="app-shell__backdrop" onClick={closeSidebar} />}
 
       <div className="app-shell__main">
         <header className="app-shell__header">
-          {isMobile && (
+          {isMobile ? (
             <button type="button" className="icon-button" onClick={toggleSidebar} aria-label="Открыть меню">
               <Menu size={20} />
             </button>
+          ) : (
+            !sidebarOpen && (
+              <button type="button" className="icon-button" onClick={toggleSidebar} aria-label="Открыть меню">
+                <PanelLeftOpen size={20} />
+              </button>
+            )
           )}
           <div className="app-shell__brand">
             <span className="app-shell__brand-accent" />
-            HR Панель управления
+            Штаб
           </div>
           <div className="app-shell__user">
             <span className="app-shell__user-name">{userLabel}</span>
@@ -62,7 +74,3 @@ export default function MainLayout() {
     </div>
   );
 }
-
-
-
-

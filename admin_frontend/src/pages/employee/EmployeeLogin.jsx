@@ -35,7 +35,7 @@ export default function EmployeeLogin() {
 
   return (
     <div className={`auth-card ${isMobile ? 'auth-card--mobile' : ''}`}>
-      <div className="auth-card__logo">HR</div>
+      <div className="auth-card__logo">ШТ</div>
       <div className="auth-card__header">
         <h1>Личный кабинет</h1>
         <p>Введите логин и пароль для входа</p>

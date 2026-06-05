@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       base: '/admin/',
       manifest: {
-        name: 'Admin Panel',
-        short_name: 'Admin',
+        name: 'Штаб',
+        short_name: 'Штаб',
         start_url: '/admin/',
         display: 'standalone',
         background_color: '#ffffff',
