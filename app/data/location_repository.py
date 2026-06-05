@@ -98,6 +98,7 @@ class LocationRepository:
     # ── Monthly plans ────────────────────────────────────────────
 
     def list_plans(self, month_key: str) -> list[LocationPlan]:
+        self._load()
         return [p for p in self._plans.values() if p.month_key == month_key]
 
     def get_plan(self, month_key: str, code: str) -> LocationPlan | None:
@@ -124,7 +125,12 @@ class LocationRepository:
         return plan
 
     def plans_map(self, month_key: str) -> dict[str, LocationPlan]:
-        """Return {location_code: LocationPlan} for the given month."""
+        """Return {location_code: LocationPlan} for the given month.
+
+        Always reloads from disk so the bot process sees plans saved by the
+        web-server process without needing a restart.
+        """
+        self._load()
         return {p.location_code: p for p in self._plans.values() if p.month_key == month_key}
 
 
