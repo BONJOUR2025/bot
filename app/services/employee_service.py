@@ -163,6 +163,8 @@ class EmployeeAPIService:
             payout_chat_key=data.payout_chat_key,
             archived=data.archived,
             archived_at=data.archived_at,
+            passport_url=data.passport_url or "",
+            external_code=data.external_code or "",
         )
         try:
             created = self.service.add_employee(employee)
@@ -213,6 +215,16 @@ class EmployeeAPIService:
         self.service.update_employee(
             employee_id, photo_url="/" + str(upload_path))
         return {"status": "photo_uploaded", "url": "/" + str(upload_path)}
+
+    def upload_employee_passport(self, employee_id: str, file_content: bytes, filename: str) -> dict:
+        import os
+        upload_dir = Path("static/uploads/employees")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        ext = Path(filename).suffix or ".jpg"
+        dest = upload_dir / f"{employee_id}_passport{ext}"
+        dest.write_bytes(file_content)
+        url = f"/static/uploads/employees/{employee_id}_passport{ext}"
+        return self.service.update_employee(employee_id, passport_url=url)
 
     async def delete_employee(self, employee_id: str) -> dict[str, str]:
         emp = self.service.get_employee(employee_id)

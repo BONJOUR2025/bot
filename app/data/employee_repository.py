@@ -60,6 +60,8 @@ class EmployeeRepository:
             "payout_chat_key": data.get("payout_chat_key"),
             "archived": bool(data.get("archived", False)),
             "archived_at": self._parse_datetime(data.get("archived_at")),
+            "passport_url": data.get("passport_url", ""),
+            "external_code": data.get("external_code", ""),
         }
         return Employee(**record)
 

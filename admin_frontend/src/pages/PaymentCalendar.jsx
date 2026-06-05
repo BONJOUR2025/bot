@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 
@@ -7,8 +7,6 @@ const MONTH_NAMES = [
   'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь',
 ];
 const DAY_NAMES = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-
-const CATEGORIES = ['Связь','Аренда','ПО','Коммунальные','Налоги','Страхование','Прочее'];
 
 function fmt(n) {
   return Number(n ?? 0).toLocaleString('ru-RU', { minimumFractionDigits: 0 });
@@ -57,20 +55,147 @@ function buildCalendarWeeks(year, month) {
   return weeks;
 }
 
+// ── Objects multiselect ───────────────────────────────────────────────────────
+
+function ObjectsSelect({ value, onChange, salons }) {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const selected = value || [];
+
+  function toggle(name) {
+    onChange(selected.includes(name) ? selected.filter(v => v !== name) : [...selected, name]);
+  }
+
+  function addCustom() {
+    const trimmed = input.trim();
+    if (!trimmed || selected.includes(trimmed)) { setInput(''); return; }
+    onChange([...selected, trimmed]);
+    setInput('');
+  }
+
+  const filtered = salons.filter(s => s.name.toLowerCase().includes(input.toLowerCase()) && !selected.includes(s.name));
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="min-h-[38px] w-full border rounded-lg px-2 py-1.5 text-sm flex flex-wrap gap-1 cursor-text focus-within:ring-2 focus-within:ring-blue-500 bg-white"
+        onClick={() => setOpen(true)}>
+        {selected.map(v => (
+          <span key={v} className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
+            {v}
+            <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }} className="hover:text-blue-600 font-bold">×</button>
+          </span>
+        ))}
+        <input className="flex-1 min-w-[120px] outline-none bg-transparent text-sm"
+          placeholder={selected.length === 0 ? 'Выберите или введите...' : ''}
+          value={input} onChange={e => { setInput(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } }} />
+      </div>
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {filtered.map(s => (
+            <button key={s.id} type="button" onMouseDown={e => { e.preventDefault(); toggle(s.name); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50">{s.name}</button>
+          ))}
+          {input.trim() && !salons.some(s => s.name === input.trim()) && !selected.includes(input.trim()) && (
+            <button type="button" onMouseDown={e => { e.preventDefault(); addCustom(); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-green-50 text-green-700 border-t">
+              + Добавить «{input.trim()}»</button>
+          )}
+          {filtered.length === 0 && !input.trim() && (
+            <div className="px-3 py-2 text-xs text-gray-400">Нет доступных салонов</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Categories panel ──────────────────────────────────────────────────────────
+
+function CategoriesPanel({ categories, onChanged }) {
+  const { showToast } = useToast();
+  const [newName, setNewName] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+
+  async function handleAdd() {
+    const name = newName.trim(); if (!name) return;
+    try { await api.post('/payment-calendar/categories', { name }); setNewName(''); onChanged(); }
+    catch (e) { showToast(e.response?.data?.detail || 'Ошибка', 'danger'); }
+  }
+  async function handleSaveEdit(id) {
+    const name = editingName.trim(); if (!name) return;
+    try { await api.patch(`/payment-calendar/categories/${id}`, { name }); setEditingId(null); onChanged(); }
+    catch (e) { showToast(e.response?.data?.detail || 'Ошибка', 'danger'); }
+  }
+  async function handleDelete(id) {
+    if (!confirm('Удалить категорию?')) return;
+    try { await api.delete(`/payment-calendar/categories/${id}`); onChanged(); }
+    catch (e) { showToast(e.response?.data?.detail || 'Ошибка', 'danger'); }
+  }
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
+      <h3 className="text-sm font-semibold text-gray-700">Категории платежей</h3>
+      <div className="space-y-1.5">
+        {categories.map(cat => (
+          <div key={cat.id} className="flex items-center gap-2">
+            {editingId === cat.id ? (
+              <>
+                <input autoFocus className="flex-1 border rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={editingName} onChange={e => setEditingName(e.target.value)}
+                  onKeyDown={e => { if (e.key==='Enter') handleSaveEdit(cat.id); if (e.key==='Escape') setEditingId(null); }} />
+                <button onClick={() => handleSaveEdit(cat.id)} className="px-2 py-1 text-xs rounded-lg bg-blue-600 text-white">✓</button>
+                <button onClick={() => setEditingId(null)} className="px-2 py-1 text-xs rounded-lg border border-gray-200">✕</button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 text-sm text-gray-700 px-2 py-1">{cat.name}</span>
+                <button onClick={() => { setEditingId(cat.id); setEditingName(cat.name); }}
+                  className="px-2 py-1 text-xs rounded-lg border border-gray-200 text-gray-500">✎</button>
+                <button onClick={() => handleDelete(cat.id)}
+                  className="px-2 py-1 text-xs rounded-lg border border-red-200 text-red-500">✕</button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 pt-1 border-t">
+        <input className="flex-1 border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Новая категория..." value={newName} onChange={e => setNewName(e.target.value)}
+          onKeyDown={e => { if (e.key==='Enter') handleAdd(); }} />
+        <button onClick={handleAdd} className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white">+ Добавить</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Schedule form modal ───────────────────────────────────────────────────────
 
-function ScheduleModal({ initial, onSave, onClose }) {
+function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
   const [form, setForm] = useState(
     initial ?? {
       name: '', planned_amount: '', day_of_month: '', category: '',
       responsible_name: '', responsible_tg_id: '', notify_days_before: 3, note: '',
+      objects: [],
     }
   );
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="font-semibold text-gray-800">
             {initial ? 'Редактировать платёж' : 'Новый платёж'}
@@ -100,8 +225,13 @@ function ScheduleModal({ initial, onSave, onClose }) {
             <select className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.category} onChange={e => set('category', e.target.value)}>
               <option value="">— не указана —</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Объект расхода</label>
+            <ObjectsSelect value={form.objects} onChange={v => set('objects', v)} salons={salons} />
+            <p className="text-[11px] text-gray-400 mt-1">Выберите салоны или введите произвольный текст</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -186,23 +316,36 @@ export default function PaymentCalendar() {
   const [month, setMonth] = useState(today.getMonth()); // 0-indexed
   const [records, setRecords] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [salons, setSalons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scheduleModal, setScheduleModal] = useState(null); // null | 'new' | {schedule obj}
   const [payModal, setPayModal] = useState(null);
-  const [tab, setTab] = useState('calendar'); // 'calendar' | 'schedules'
+  const [tab, setTab] = useState('calendar'); // 'calendar' | 'schedules' | 'settings'
   const [highlightDay, setHighlightDay] = useState(null);
 
   const yearMonth = `${year}-${String(month + 1).padStart(2, '0')}`;
 
+  const loadCategories = useCallback(async () => {
+    try {
+      const res = await api.get('/payment-calendar/categories');
+      setCategories(res.data);
+    } catch { /* silent */ }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [recRes, schRes] = await Promise.all([
+      const [recRes, schRes, catRes, salRes] = await Promise.all([
         api.get(`/payment-calendar/month/${yearMonth}`),
         api.get('/payment-calendar/schedules'),
+        api.get('/payment-calendar/categories'),
+        api.get('/salons/').catch(() => ({ data: [] })),
       ]);
       setRecords(recRes.data);
       setSchedules(schRes.data);
+      setCategories(catRes.data);
+      setSalons(salRes.data);
     } catch {
       showToast('Ошибка загрузки', 'danger');
     } finally {
@@ -284,6 +427,7 @@ export default function PaymentCalendar() {
         responsible_tg_id: form.responsible_tg_id,
         notify_days_before: parseInt(form.notify_days_before) || 3,
         note: form.note,
+        objects: form.objects || [],
       };
       if (isEdit) {
         await api.patch(`/payment-calendar/schedules/${form.id}`, payload);
@@ -328,7 +472,7 @@ export default function PaymentCalendar() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-        {[['calendar','Календарь'],['schedules','Настройки']].map(([k,l]) => (
+        {[['calendar','Календарь'],['schedules','Платежи'],['settings','Настройки']].map(([k,l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === k ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
             {l}
@@ -439,6 +583,9 @@ export default function PaymentCalendar() {
                                       {sc.category}
                                     </span>
                                   )}
+                                  {(sc.objects || []).map(obj => (
+                                    <span key={obj} className="text-xs px-2 py-0.5 bg-white/40 rounded-full border border-current/20">🏢 {obj}</span>
+                                  ))}
                                 </div>
                                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs opacity-75">
                                   <span>План: {fmt(sc.planned_amount)} ₽</span>
@@ -515,6 +662,9 @@ export default function PaymentCalendar() {
                       {!s.is_active && (
                         <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">Неактивен</span>
                       )}
+                      {(s.objects || []).map(obj => (
+                        <span key={obj} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100">🏢 {obj}</span>
+                      ))}
                     </div>
                     <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
                       <span>{fmt(s.planned_amount)} ₽</span>
@@ -545,11 +695,19 @@ export default function PaymentCalendar() {
         </div>
       )}
 
+      {tab === 'settings' && (
+        <div className="space-y-4 max-w-md">
+          <CategoriesPanel categories={categories} onChanged={loadCategories} />
+        </div>
+      )}
+
       {scheduleModal && (
         <ScheduleModal
           initial={scheduleModal === 'new' ? null : scheduleModal}
           onSave={handleSaveSchedule}
           onClose={() => setScheduleModal(null)}
+          categories={categories}
+          salons={salons}
         />
       )}
       {payModal && (

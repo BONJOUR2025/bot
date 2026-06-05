@@ -32,3 +32,5 @@ class Employee:
     payout_chat_key: Optional[str] = None
     archived: bool = False
     archived_at: Optional[datetime] = None
+    passport_url: str = ""
+    external_code: str = ""

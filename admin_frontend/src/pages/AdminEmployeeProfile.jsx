@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, FileDown, Archive, ExternalLink,
   Phone, CreditCard, MapPin, Shirt, Cake, StickyNote,
-  ShieldCheck, Building2, MessageCircle,
+  ShieldCheck, Building2, MessageCircle, Hash, FileText, Upload,
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
@@ -36,6 +36,7 @@ export default function AdminEmployeeProfile() {
   const [employee, setEmployee] = useState(null);
   const [cashierChats, setCashierChats] = useState([]);
   const [loading, setLoading] = useState(true);
+  const passportInputRef = useRef(null);
 
   useEffect(() => {
     Promise.all([
@@ -79,6 +80,20 @@ export default function AdminEmployeeProfile() {
   function formatDate(val) {
     if (!val) return '';
     return new Date(val).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  async function uploadPassport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await api.post(`employees/${id}/passport`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setEmployee(prev => ({ ...prev, passport_url: res.data?.passport_url || prev.passport_url }));
+      toast('Паспорт загружен', 'success');
+    } catch { toast('Ошибка загрузки паспорта', 'error'); }
   }
 
   async function archiveEmployee() {
@@ -205,7 +220,38 @@ export default function AdminEmployeeProfile() {
 
       <Section title="Системная информация">
         <InfoRow label="ID" value={employee.id} />
+        {employee.external_code && <InfoRow icon={Hash} label="Внешний код" value={employee.external_code} />}
         <InfoRow label="Создан" value={employee.created_at ? new Date(employee.created_at).toLocaleString('ru-RU') : ''} />
+      </Section>
+
+      <Section title="Документы">
+        <div className="flex flex-wrap items-center gap-3 py-1">
+          {employee.passport_url ? (
+            <a
+              href={employee.passport_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn flex items-center gap-1.5 text-sm"
+            >
+              <FileText size={14} /> Скан паспорта
+            </a>
+          ) : (
+            <span className="text-sm text-[color:var(--color-muted-foreground)]">Скан паспорта не загружен</span>
+          )}
+          <button
+            className="btn flex items-center gap-1.5 text-sm"
+            onClick={() => passportInputRef.current?.click()}
+          >
+            <Upload size={14} /> {employee.passport_url ? 'Обновить паспорт' : 'Загрузить паспорт'}
+          </button>
+          <input
+            ref={passportInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            className="hidden"
+            onChange={uploadPassport}
+          />
+        </div>
       </Section>
 
       {/* Related links */}
@@ -223,6 +269,12 @@ export default function AdminEmployeeProfile() {
           >
             <ExternalLink size={13} /> Расчёт зарплаты
           </a>
+          <Link
+            to={`/admin/masters?master=${encodeURIComponent(employee.full_name || employee.name)}`}
+            className="btn flex items-center gap-1.5 text-sm"
+          >
+            <ExternalLink size={13} /> Работы мастера
+          </Link>
         </div>
       </Section>
     </div>

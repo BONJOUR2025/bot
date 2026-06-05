@@ -24,7 +24,24 @@ def get_db():
 def init_db() -> None:
     """Create all tables that don't exist yet."""
     Base.metadata.create_all(bind=engine)
+    _migrate_columns()
     _run_migrations()
+
+
+def _migrate_columns() -> None:
+    with engine.connect() as conn:
+        _add_column_if_missing(conn, "payment_schedules", "objects", "TEXT DEFAULT '[]'")
+
+
+def _add_column_if_missing(conn, table, column, definition):
+    from sqlalchemy import text, inspect
+    inspector = inspect(conn)
+    if table not in inspector.get_table_names():
+        return
+    cols = {c["name"] for c in inspector.get_columns(table)}
+    if column not in cols:
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+        conn.commit()
 
 
 def _run_migrations() -> None:

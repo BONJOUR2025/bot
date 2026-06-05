@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -11,6 +11,14 @@ from app.data.payment_calendar_repository import (
 )
 
 
+class CategoryCreate(BaseModel):
+    name: str
+
+
+class CategoryUpdate(BaseModel):
+    name: str
+
+
 class ScheduleCreate(BaseModel):
     name: str
     planned_amount: float
@@ -20,6 +28,7 @@ class ScheduleCreate(BaseModel):
     responsible_tg_id: str = ""
     notify_days_before: int = 3
     note: str = ""
+    objects: List[str] = []
 
 
 class ScheduleUpdate(BaseModel):
@@ -32,6 +41,7 @@ class ScheduleUpdate(BaseModel):
     notify_days_before: Optional[int] = None
     is_active: Optional[bool] = None
     note: Optional[str] = None
+    objects: Optional[List[str]] = None
 
 
 class PayBody(BaseModel):
@@ -45,6 +55,33 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
 
     router = APIRouter(prefix="/payment-calendar", tags=["payment-calendar"])
     perm = require_permission("payment-calendar")
+
+    @router.get("/categories")
+    async def list_categories(_=Depends(perm)):
+        return repo.list_categories()
+
+    @router.post("/categories")
+    async def create_category(body: CategoryCreate, _=Depends(perm)):
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(400, "name required")
+        return repo.create_category(name)
+
+    @router.patch("/categories/{category_id}")
+    async def update_category(category_id: int, body: CategoryUpdate, _=Depends(perm)):
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(400, "name required")
+        result = repo.update_category(category_id, name)
+        if result is None:
+            raise HTTPException(404, "not found")
+        return result
+
+    @router.delete("/categories/{category_id}")
+    async def delete_category(category_id: int, _=Depends(perm)):
+        if not repo.delete_category(category_id):
+            raise HTTPException(404, "not found")
+        return {"ok": True}
 
     @router.get("/schedules")
     async def list_schedules(_=Depends(perm)):
