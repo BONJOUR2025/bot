@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   UserPlus,
@@ -12,6 +12,64 @@ import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+
+function ExternalUserSelect({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value || '');
+  const [options, setOptions] = useState([]);
+  const containerRef = useRef(null);
+
+  useEffect(() => { setQuery(value || ''); }, [value]);
+
+  useEffect(() => {
+    function onOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => {
+      api.get('employees/external-users', { params: { search: query } })
+        .then((res) => setOptions(res.data || []))
+        .catch(() => setOptions([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, open]);
+
+  function pick(option) {
+    onChange(option.description);
+    setQuery(option.description);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        className="modal-control"
+        placeholder="Поиск по базе ЗП..."
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {options.map((o) => (
+            <button key={o.user_id} type="button" onClick={() => pick(o)}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50">
+              {o.description} <span className="text-xs text-gray-400">№{o.user_id}</span>
+            </button>
+          ))}
+          {options.length === 0 && (
+            <div className="px-3 py-2 text-xs text-gray-400">Совпадений не найдено — можно вписать своё</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Employees() {
   const { toast } = useToast();
@@ -31,6 +89,7 @@ export default function Employees() {
     clothing_size: '',
     birthdate: '',
     note: '',
+    external_code: '',
     status: 'active',
     position: '',
     is_admin: false,
@@ -209,6 +268,7 @@ export default function Employees() {
       clothing_size: form.clothing_size || '',
       birthdate: form.birthdate || null,
       note: form.note || '',
+      external_code: form.external_code || '',
       status: form.status || 'active',
       position: form.position || '',
       is_admin: form.is_admin,
@@ -586,6 +646,11 @@ export default function Employees() {
                   <option value="inactive">Неактивный</option>
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Внешний код (сопоставление с ЗП)</label>
+              <ExternalUserSelect value={form.external_code} onChange={(v) => setForm({ ...form, external_code: v })} />
             </div>
 
             <div>

@@ -33,6 +33,14 @@ def create_employee_router(
             )
         ]
 
+    @router.get("/external-users")
+    async def list_external_users(
+        search: str = "",
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        from app.services.firebird_service import get_firebird_service
+        return get_firebird_service().get_users_list(search=search)
+
     @router.get("/{employee_id}", response_model=EmployeeOut)
     async def get_employee(
         employee_id: str,

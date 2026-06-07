@@ -67,7 +67,7 @@ from telegram.request import HTTPXRequest
 import datetime
 
 
-def create_application():
+def create_application(with_jobs: bool = True):
     # Настройка прокси и таймаутов
     proxy_url = settings.telegram_proxy
     request_kwargs = {
@@ -93,7 +93,8 @@ def create_application():
         .build()
     )
     register_all_handlers(app)
-    register_jobs(app)
+    if with_jobs:
+        register_jobs(app)
 
     return app
 

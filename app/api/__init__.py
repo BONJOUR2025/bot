@@ -57,7 +57,10 @@ def create_app() -> FastAPI:
 
     telegram_app = None
     if TOKEN and TOKEN != "dummy":
-        telegram_app = create_application()
+        # with_jobs=False: scheduled jobs (morning briefing, reminders, etc.) must run
+        # only in the bot process (app/main.py) — registering them here too would
+        # duplicate every scheduled message (e.g. the morning briefing sent twice).
+        telegram_app = create_application(with_jobs=False)
 
     # Статика для админки/React
     app.mount("/static", StaticFiles(directory="static"), name="static")

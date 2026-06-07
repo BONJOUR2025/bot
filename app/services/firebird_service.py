@@ -515,6 +515,28 @@ class FirebirdService:
             return None
 
 
+    def get_users_list(self, search: str = "") -> list[dict]:
+        """Load {user_id, description} list from USERS table for matching with bot employees."""
+        if not FIREBIRD_AVAILABLE:
+            return []
+        sql = "SELECT users.user_id, users.description FROM users"
+        params: list = []
+        search = (search or "").strip()
+        if search:
+            sql += " WHERE UPPER(users.description) LIKE UPPER(?)"
+            params.append(f"%{search}%")
+        sql += " ORDER BY users.description"
+        try:
+            conn = _connect()
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            rows = [{"user_id": r[0], "description": (r[1] or "").strip()} for r in cur.fetchall()]
+            conn.close()
+            return rows
+        except Exception as e:
+            logger.warning(f"get_users_list error: {e}")
+            return []
+
     def get_smses(self, date_from=None, date_to=None) -> list[dict]:
         """Load SMS records from SMSES table."""
         if not FIREBIRD_AVAILABLE:
