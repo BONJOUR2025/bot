@@ -95,6 +95,7 @@ async def handle_business_message(update, context):
                 # сопроводительным текстом, опечаткой в регистре или лишними пробелами —
                 # раньше строгий ^...$ матч по всей строке "ронял" такие сообщения,
                 # и привязка/запуск ИИ просто не происходили.
+                just_linked = False
                 if not candidate and text:
                     m = re.search(r'CAND-(\d+)-([A-Z0-9]{6})', text, re.IGNORECASE)
                     if m:
@@ -105,10 +106,11 @@ async def handle_business_message(update, context):
                             Candidate.telegram_link_code == norm_code,
                         ).first()
                         if c:
+                            just_linked = not c.telegram_chat_id
                             c.telegram_chat_id = chat_id
                             db.commit()
                             candidate = c
-                            log.info("Telegram matched by code: candidate_id=%s chat_id=%s", c.id, chat_id)
+                            log.info("Telegram matched by code: candidate_id=%s chat_id=%s just_linked=%s", c.id, chat_id, just_linked)
 
                 # Матчинг по контакту
                 if not candidate and msg.contact and msg.contact.phone_number:
@@ -138,10 +140,21 @@ async def handle_business_message(update, context):
                     candidate.follow_up_last_sent_at = None
                     db.commit()
 
+                    stage = getattr(candidate, 'stage', '')
+                    # Кандидата нужно "запустить" в общение либо когда он явно стоит на
+                    # этапе ожидания привязки, либо когда он только что ВПЕРВЫЕ привязался
+                    # по коду — независимо от текущего этапа (ссылку часто генерируют вручную
+                    # через UI, не меняя этап на "ждем_привязки", и раньше из-за этого
+                    # ИИ просто никогда не стартовал).
+                    should_start_conversation = (
+                        stage == 'ждем_привязки'
+                        or (just_linked and stage not in ('общение', 'отказ', 'нанят'))
+                    )
+
                     # Skip AI entirely if candidate is on pause
                     if getattr(candidate, 'is_paused', False):
                         log.info("AI skipped: candidate_id=%s is paused", candidate.id)
-                    elif getattr(candidate, 'stage', '') == 'ждем_привязки':
+                    elif should_start_conversation:
                         try:
                             candidate.stage = 'общение'
                             candidate.interview_phase = 'greeting'
@@ -161,7 +174,7 @@ async def handle_business_message(update, context):
                             asyncio.ensure_future(handle_candidate_message(candidate.id, msg_text))
                         except Exception as e:
                             log.warning("Stage transition error: %s", e)
-                    elif getattr(candidate, 'stage', '') == 'общение':
+                    elif stage == 'общение':
                         # If interview is already pending admin confirmation — AI stays silent
                         interview_pending = bool(getattr(candidate, 'pending_interview_date', None))
                         if interview_pending:

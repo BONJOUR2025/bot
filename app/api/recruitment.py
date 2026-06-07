@@ -788,6 +788,11 @@ def get_telegram_link(candidate_id: int, db: Session = Depends(get_db)):
         code = f"CAND-{candidate_id}-{token}"
         try:
             c.telegram_link_code = code
+            # Помечаем кандидата как ожидающего привязку — это не только для красоты:
+            # этап используется как один из триггеров запуска ИИ-собеседования при
+            # получении сообщения с кодом (см. business_connection.py).
+            if c.stage not in ('общение', 'отказ', 'нанят') and not c.telegram_chat_id:
+                c.stage = 'ждем_привязки'
             db.commit()
         except Exception:
             pass
