@@ -799,8 +799,13 @@ def get_telegram_link(candidate_id: int, db: Session = Depends(get_db)):
     cfg = ConfigService().load()
     personal_username = (cfg.get("tg_personal_username") or "").strip().lstrip("@")
     tg_link = None
+    prefilled_text = (
+        f"{code}\n\n"
+        f"(Не удаляйте и не изменяйте это сообщение — просто отправьте его, как есть, "
+        f"чтобы мы могли продолжить общение)"
+    )
     if personal_username:
-        tg_link = f"https://t.me/{personal_username}?text={quote(code)}"
+        tg_link = f"https://t.me/{personal_username}?text={quote(prefilled_text)}"
 
     return {"code": code, "tg_link": tg_link, "personal_username": personal_username}
 
