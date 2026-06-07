@@ -91,13 +91,18 @@ async def handle_business_message(update, context):
                 # ── Сообщение от кандидата ────────────────────────────────
 
                 # Матчинг по коду CAND-{id}-{token}
+                # Используем search + IGNORECASE: кандидат может прислать код с
+                # сопроводительным текстом, опечаткой в регистре или лишними пробелами —
+                # раньше строгий ^...$ матч по всей строке "ронял" такие сообщения,
+                # и привязка/запуск ИИ просто не происходили.
                 if not candidate and text:
-                    m = re.match(r'^CAND-(\d+)-[A-Z0-9]{6}$', text)
+                    m = re.search(r'CAND-(\d+)-([A-Z0-9]{6})', text, re.IGNORECASE)
                     if m:
                         cand_id = int(m.group(1))
+                        norm_code = f"CAND-{cand_id}-{m.group(2).upper()}"
                         c = db.query(Candidate).filter(
                             Candidate.id == cand_id,
-                            Candidate.telegram_link_code == text,
+                            Candidate.telegram_link_code == norm_code,
                         ).first()
                         if c:
                             c.telegram_chat_id = chat_id
