@@ -21,6 +21,8 @@ const navStructure = [
     name: 'Персонал',
     items: [
       { to: '/admin/employees',   label: 'Сотрудники',        permission: 'employees', icon: Users },
+      { to: '/admin/recruitment',    label: 'Подбор персонала', permission: 'employees', icon: UserPlus },
+      { to: '/admin/knowledge-base', label: 'База знаний',      permission: 'employees', icon: LibraryBig },
       { to: '/admin/archive',     label: 'Архив',             permission: 'employees', icon: Archive },
       { to: '/admin/schedule',    label: 'Расписание',        permission: 'employees', icon: CalendarRange },
       { to: '/admin/vacations',   label: 'Отпуска',           permission: 'vacations', icon: Umbrella },
@@ -40,6 +42,7 @@ const navStructure = [
       { to: '/admin/incentives',       label: 'Штрафы и премии',      permission: 'incentives',      icon: Award },
       { to: '/admin/cash-moves',       label: 'Кассовые перемещения', permission: 'cash-moves',      icon: ArrowLeftRight },
       { to: '/admin/payment-calendar', label: 'Платежный календарь',  permission: 'payment-calendar',icon: CalendarDays },
+      { to: '/admin/smses',            label: 'СМС Агбис',            permission: 'smses',           icon: MessageSquare },
     ],
   },
   {
