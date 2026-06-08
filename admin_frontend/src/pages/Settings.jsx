@@ -10,11 +10,11 @@ import SettingsTemplates from './settings/Templates.jsx';
 import SettingsDictionary from './settings/DictionarySettings.jsx';
 
 const TABS = [
-  { to: 'general',    label: 'Общие',         icon: SlidersHorizontal },
-  { to: 'telegram',   label: 'Telegram',      icon: Send },
-  { to: 'automation', label: 'Автоматизация', icon: Sparkles },
-  { to: 'templates',  label: 'Шаблоны',       icon: FileText },
-  { to: 'dictionary', label: 'Словарь',       icon: BookOpen },
+  { to: '/admin/settings/general',    label: 'Общие',         icon: SlidersHorizontal },
+  { to: '/admin/settings/telegram',   label: 'Telegram',      icon: Send },
+  { to: '/admin/settings/automation', label: 'Автоматизация', icon: Sparkles },
+  { to: '/admin/settings/templates',  label: 'Шаблоны',       icon: FileText },
+  { to: '/admin/settings/dictionary', label: 'Словарь',       icon: BookOpen },
 ];
 
 function SettingsLayout() {
@@ -27,6 +27,7 @@ function SettingsLayout() {
           <NavLink
             key={to}
             to={to}
+            end
             className={({ isActive }) =>
               `flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isActive
@@ -50,13 +51,13 @@ export default function Settings() {
   return (
     <Routes>
       <Route element={<SettingsLayout />}>
-        <Route index element={<Navigate to="general" replace />} />
+        <Route index element={<Navigate to="/admin/settings/general" replace />} />
         <Route path="general" element={<SettingsGeneral />} />
         <Route path="telegram" element={<SettingsTelegram />} />
         <Route path="automation" element={<SettingsAutomation />} />
         <Route path="templates" element={<SettingsTemplates />} />
         <Route path="dictionary" element={<SettingsDictionary />} />
-        <Route path="*" element={<Navigate to="general" replace />} />
+        <Route path="*" element={<Navigate to="/admin/settings/general" replace />} />
       </Route>
     </Routes>
   );
