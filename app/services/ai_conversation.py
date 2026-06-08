@@ -2,11 +2,44 @@
 import json
 import logging
 import re
+from datetime import date
 
 log = logging.getLogger(__name__)
 
 # Interview phase order
 PHASES = ["greeting", "screening", "experience", "motivation", "candidate_questions", "closing"]
+
+DEFAULT_AWAY_MESSAGE = (
+    "Здравствуйте! Мы получили ваше сообщение. Наш ассистент отвечает в рабочее время "
+    "({hours}) — обязательно продолжим общение, как только начнётся рабочий день. Спасибо за терпение!"
+)
+
+# In-memory dedup: candidate_id -> date when the "we'll reply during working hours"
+# message was last sent. Keeps a candidate writing repeatedly off-hours from being
+# bombarded with the same auto-reply — at most one per calendar day.
+_away_notified: dict[int, date] = {}
+
+
+async def _send_away_reply(c, db, cfg) -> None:
+    from app.models.recruitment import TelegramMessage
+    from app.services.notify import send_secretary_message
+    from app.services.work_hours import describe_hours
+
+    today = date.today()
+    if _away_notified.get(c.id) == today:
+        return
+    _away_notified[c.id] = today
+
+    msg_text = (cfg.get("automation_away_message") or "").strip() or DEFAULT_AWAY_MESSAGE
+    if "{hours}" in msg_text:
+        msg_text = msg_text.format(hours=describe_hours(cfg))
+
+    err = await send_secretary_message(c.telegram_chat_id, msg_text)
+    if err:
+        log.warning("AI: failed to send away-reply to candidate %s: %s", c.id, err)
+        return
+    db.add(TelegramMessage(candidate_id=c.id, direction="out", sent_by_ai=1, text=msg_text))
+    db.commit()
 
 SYSTEM_PROMPT = """Ты HR-ассистент компании. Ведёшь структурированное первичное интервью с кандидатом.
 
@@ -90,6 +123,12 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             return
 
         cfg = ConfigService().load()
+
+        from app.services.work_hours import is_working_now
+        if not is_working_now(cfg):
+            await _send_away_reply(c, db, cfg)
+            return
+
         vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
         global_kb = cfg.get("automation_knowledge_base", "").strip()
         vacancy_kb = getattr(vacancy, "knowledge_base", "").strip() if vacancy else ""

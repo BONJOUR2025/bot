@@ -1,37 +1,24 @@
 """Proactive follow-up for candidates who go silent during 'общение' stage."""
 import logging
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 log = logging.getLogger(__name__)
-
-MOSCOW_TZ = ZoneInfo("Europe/Moscow")
-WINDOW_START = 10  # 10:00 МСК
-WINDOW_END = 20    # 20:00 МСК
 
 DEFAULT_MSG_1 = "Здравствуйте! Остались ли у вас вопросы по вакансии? Готовы записаться на собеседование?"
 DEFAULT_MSG_2 = "Мы всё ещё ждём вашего ответа. Если вас интересует вакансия — напишите, будем рады помочь."
 
 
-def _now_msk() -> datetime:
-    return datetime.now(MOSCOW_TZ)
-
-
-def _is_in_window() -> bool:
-    return WINDOW_START <= _now_msk().hour < WINDOW_END
-
-
 async def run_follow_up_check():
     """Called every 15 min by job_queue. Checks all 'общение' candidates."""
-    if not _is_in_window():
-        return
-
     from app.db.session import SessionLocal
     from app.models.recruitment import Candidate
     from app.services.config_service import ConfigService
+    from app.services.work_hours import is_working_now
 
     cfg = ConfigService().load()
     if not cfg.get("follow_up_enabled"):
+        return
+    if not is_working_now(cfg):
         return
 
     delay_hours = float(cfg.get("follow_up_delay_hours") or 1)
