@@ -34,7 +34,6 @@ import Vacations from "./pages/Vacations";
 import Birthdays from "./pages/Birthdays";
 import Settings from "./pages/Settings";
 import Assets from "./pages/Assets";
-import AccessControl from "./pages/AccessControl";
 import Payroll from "./pages/Payroll";
 import Schedule from "./pages/Schedule";
 import Tasks from "./pages/Tasks";
@@ -89,8 +88,8 @@ export default function App() {
                 <Route path="birthdays" element={<Birthdays />} />
                 <Route path="assets" element={<Assets />} />
                 <Route path="dictionary" element={<Navigate to="/admin/settings/dictionary" replace />} />
+                <Route path="access" element={<Navigate to="/admin/settings/access" replace />} />
                 <Route path="settings/*" element={<Settings />} />
-                <Route path="access" element={<AccessControl />} />
                 <Route path="payroll" element={<Payroll />} />
                 <Route path="schedule" element={<Schedule />} />
                 <Route path="tasks" element={<Tasks />} />

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import api from '../api.js';
-import { useViewport } from '../providers/ViewportProvider.jsx';
+import api from '../../api.js';
+import { useViewport } from '../../providers/ViewportProvider.jsx';
 
 const emptyRole = { id: '', name: '', permissions: [], bot_buttons: [] };
 const emptyUser = {

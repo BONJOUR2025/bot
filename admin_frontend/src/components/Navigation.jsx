@@ -6,7 +6,7 @@ import {
   Umbrella, Cake, Package, Calculator, MapPin, Banknote,
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
-  Lock, Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig,
+  Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -64,7 +64,6 @@ const navStructure = [
     name: 'Система',
     items: [
       { to: '/admin/passwords', label: 'Пароли',    permission: 'passwords', icon: KeyRound },
-      { to: '/admin/access',    label: 'Доступ',    permission: 'access',    icon: Lock },
       { to: '/admin/settings',  label: 'Настройки', permission: 'settings',  icon: SettingsIcon },
     ],
   },

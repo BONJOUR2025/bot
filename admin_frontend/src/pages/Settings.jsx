@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import {
-  SlidersHorizontal, Send, Sparkles, FileText, BookOpen,
+  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock,
 } from 'lucide-react';
 
 import SettingsGeneral from './settings/General.jsx';
@@ -8,6 +8,7 @@ import SettingsTelegram from './settings/Telegram.jsx';
 import SettingsAutomation from './settings/Automation.jsx';
 import SettingsTemplates from './settings/Templates.jsx';
 import SettingsDictionary from './settings/DictionarySettings.jsx';
+import SettingsAccessControl from './settings/AccessControl.jsx';
 
 const TABS = [
   { to: '/admin/settings/general',    label: 'Общие',         icon: SlidersHorizontal },
@@ -15,6 +16,7 @@ const TABS = [
   { to: '/admin/settings/automation', label: 'Автоматизация', icon: Sparkles },
   { to: '/admin/settings/templates',  label: 'Шаблоны',       icon: FileText },
   { to: '/admin/settings/dictionary', label: 'Словарь',       icon: BookOpen },
+  { to: '/admin/settings/access',     label: 'Доступ',        icon: Lock },
 ];
 
 function SettingsLayout() {
@@ -57,6 +59,7 @@ export default function Settings() {
         <Route path="automation" element={<SettingsAutomation />} />
         <Route path="templates" element={<SettingsTemplates />} />
         <Route path="dictionary" element={<SettingsDictionary />} />
+        <Route path="access" element={<SettingsAccessControl />} />
         <Route path="*" element={<Navigate to="/admin/settings/general" replace />} />
       </Route>
     </Routes>
