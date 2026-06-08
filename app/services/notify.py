@@ -1,9 +1,39 @@
 """Send plain-text notifications to the configured notification_chat_id."""
 import asyncio
 import logging
+from datetime import datetime, timedelta
+
 import httpx
 
 log = logging.getLogger(__name__)
+
+# Secretary Mode (Telegram Business Connection) can silently drop — e.g. the
+# owner's phone/Telegram session goes offline over a weekend — and Telegram
+# pushes a business_connection update with is_enabled=False, which clears
+# tg_business_connection_id/tg_business_can_reply (see handle_business_connection).
+# Both the AI interview and the follow-up job route every candidate message
+# through send_secretary_message, and previously just logged a warning on the
+# early-return below — so neither feature appeared to "work" with no visible
+# cause. Alert the admin (rate-limited so a burst of candidate messages doesn't
+# spam them) so they know to reconnect Chat Automation.
+_DISCONNECT_ALERT_COOLDOWN = timedelta(hours=1)
+_last_disconnect_alert: datetime | None = None
+
+
+async def _alert_secretary_disconnected(reason: str) -> None:
+    global _last_disconnect_alert
+    now = datetime.utcnow()
+    if _last_disconnect_alert and (now - _last_disconnect_alert) < _DISCONNECT_ALERT_COOLDOWN:
+        return
+    _last_disconnect_alert = now
+    try:
+        await send_notification(
+            f"⚠️ <b>Secretary Mode отключён</b>\n{reason}\n\n"
+            f"Пока бот не переподключён, ИИ-ассистент и напоминания кандидатам "
+            f"работать не будут — переподключите Chat Automation в настройках Telegram."
+        )
+    except Exception as exc:
+        log.warning("Failed to alert admin about Secretary Mode disconnect: %s", exc)
 
 
 async def send_secretary_message(chat_id: str | int, text: str) -> str | None:
@@ -19,8 +49,14 @@ async def send_secretary_message(chat_id: str | int, text: str) -> str | None:
         can_reply = cfg.get("tg_business_can_reply", False)
 
         if not connection_id:
+            await _alert_secretary_disconnected(
+                "Подключение Chat Automation не найдено (tg_business_connection_id пуст)."
+            )
             return "Secretary Mode не подключён. Перейдите в Telegram → Настройки → Chat Automation и подключите бота."
         if not can_reply:
+            await _alert_secretary_disconnected(
+                "Подключение есть, но бот не может отвечать (can_reply=false)."
+            )
             return "Secretary Mode подключён, но без права отвечать (can_reply=false). Переподключите бота с разрешением отвечать."
 
         from app.config import TOKEN
