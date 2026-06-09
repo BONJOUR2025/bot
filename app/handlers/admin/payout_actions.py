@@ -132,7 +132,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     payout_type = request_to_approve.get("payout_type") or "Не указано"
     method = request_to_approve.get("method") or ""
     force_notify_cashier = bool(request_to_approve.get("force_notify_cashier"))
-    should_notify_cashier = method == "💳 На карту" or force_notify_cashier
+    should_notify_cashier = method in {"💳 На карту", "🤝 Наличными"} or force_notify_cashier
     cashier_chat_id: int | None = None
     cashier_chat_name = ""
     cashier_chat_key: str | None = None
