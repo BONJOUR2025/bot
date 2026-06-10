@@ -12,7 +12,7 @@ from telegram import (
     ReplyKeyboardMarkup,
 )
 from telegram.ext import ContextTypes, ConversationHandler
-from telegram.error import BadRequest
+from telegram.error import BadRequest, Forbidden
 import logging
 from pathlib import Path
 
@@ -154,7 +154,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if is_valid_user_id(user_id):
         try:
             await context.bot.send_message(chat_id=user_id, text=user_message)
-        except BadRequest as e:
+        except (BadRequest, Forbidden) as e:
             log(f"❌ Failed to send message to chat {user_id} — {e}")
             # Do not interrupt the payout process if user notification fails
     else:
@@ -307,9 +307,9 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if is_valid_user_id(user_id):
         try:
             await context.bot.send_message(chat_id=user_id, text=user_message)
-        except BadRequest as e:
+        except (BadRequest, Forbidden) as e:
             log(f"❌ Failed to send message to chat {user_id} — {e}")
-            raise
+            # Do not interrupt the payout process if user notification fails
     else:
         log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
 
