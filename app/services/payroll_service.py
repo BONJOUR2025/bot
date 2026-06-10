@@ -265,23 +265,39 @@ class PayrollService:
 
         self._user_id_to_code: dict[str, str] = {}
         self._full_name_to_code: dict[str, str] = {}
+        self._users_mtime: float | None = None
         self._load_user_mappings()
 
     def _load_user_mappings(self) -> None:
         if not self.users_file.exists():
             return
         try:
+            self._users_mtime = self.users_file.stat().st_mtime
             users = json.loads(self.users_file.read_text(encoding="utf-8"))
+            user_id_to_code: dict[str, str] = {}
+            full_name_to_code: dict[str, str] = {}
             for user_id, data in users.items():
                 name = data.get("name", "")
                 full_name = data.get("full_name", "")
                 code = _extract_code(name)
                 if code:
-                    self._user_id_to_code[str(user_id)] = code
+                    user_id_to_code[str(user_id)] = code
                     if full_name:
-                        self._full_name_to_code[full_name.strip().lower()] = code
+                        full_name_to_code[full_name.strip().lower()] = code
+            self._user_id_to_code = user_id_to_code
+            self._full_name_to_code = full_name_to_code
         except Exception as e:
             logger.error(f"Error loading user mappings: {e}")
+
+    def _refresh_user_mappings_if_changed(self) -> None:
+        try:
+            if not self.users_file.exists():
+                return
+            mtime = self.users_file.stat().st_mtime
+            if mtime != self._users_mtime:
+                self._load_user_mappings()
+        except Exception as e:
+            logger.error(f"Error checking user mappings freshness: {e}")
 
     # ── Excel ────────────────────────────────────────────────────
 
@@ -493,6 +509,7 @@ class PayrollService:
 
     async def calculate_payroll(self, month: str, year: int | None = None) -> tuple[list[PayrollRow], list[str]]:
         """Returns (rows, unknown_location_codes)."""
+        self._refresh_user_mappings_if_changed()
         month = month.strip().upper()
         month_num = MONTH_NAMES.get(month)
         if not month_num:
@@ -704,6 +721,7 @@ class PayrollService:
 
     def get_code_for_employee(self, employee_id: str | None = None, full_name: str | None = None) -> str | None:
         """Resolve payroll employee_code by employee_id (telegram id) or full_name."""
+        self._refresh_user_mappings_if_changed()
         if employee_id:
             code = self._user_id_to_code.get(str(employee_id))
             if code:
