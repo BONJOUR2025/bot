@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle,
   Download,
@@ -367,10 +367,25 @@ export default function Payouts() {
     window.refreshPage = load;
   }, []);
 
+  const employeesByPosition = useMemo(() => {
+    const groups = {};
+    for (const e of employees) {
+      const key = e.position || 'Без должности';
+      (groups[key] = groups[key] || []).push(e);
+    }
+    const displayName = (e) => (useFullName ? e.full_name || e.name : e.name || e.full_name) || '';
+    return Object.entries(groups)
+      .sort(([a], [b]) => a.localeCompare(b, 'ru'))
+      .map(([position, list]) => [
+        position,
+        [...list].sort((a, b) => displayName(a).localeCompare(displayName(b), 'ru')),
+      ]);
+  }, [employees, useFullName]);
+
   async function loadEmployees() {
     try {
       const res = await api.get('employees/', { params: { archived: false } });
-      setEmployees(res.data);
+      setEmployees(res.data.filter((e) => e.status !== 'inactive'));
     } catch (err) {
       console.error(err);
     }
@@ -978,10 +993,14 @@ export default function Payouts() {
               onChange={(e) => handleSelect(e.target.value)}
             >
               <option value="">Сотрудник</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {useFullName ? e.full_name || e.name : e.name || e.full_name}
-                </option>
+              {employeesByPosition.map(([position, list]) => (
+                <optgroup key={position} label={position}>
+                  {list.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {useFullName ? e.full_name || e.name : e.name || e.full_name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <div className="text-sm text-gray-600">
