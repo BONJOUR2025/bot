@@ -136,11 +136,12 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     cashier_chat_id: int | None = None
     cashier_chat_name = ""
     cashier_chat_key: str | None = None
+    users_map = load_users_map()
     if should_notify_cashier:
-        users_map = load_users_map()
         cashier_chat_id, cashier_chat_name, cashier_chat_key = _resolve_cashier_chat(
             user_id, users_map
         )
+    is_bot_user = bool(users_map.get(str(user_id), {}).get("bot_user"))
 
     user_message = (
         f"✅ Ваш запрос на выплату одобрен!\n"
@@ -148,17 +149,19 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"Сумма: {request_to_approve['amount']} ₽\n"
         f"Метод: {method or 'Не указан'}"
     )
-    log(
-        f"[Telegram] sending approval notice to {user_id} — text: '{user_message[:50]}'"
-    )
-    if is_valid_user_id(user_id):
+    if is_valid_user_id(user_id) and is_bot_user:
+        log(
+            f"[Telegram] sending approval notice to {user_id} — text: '{user_message[:50]}'"
+        )
         try:
             await context.bot.send_message(chat_id=user_id, text=user_message)
         except (BadRequest, Forbidden) as e:
             log(f"❌ Failed to send message to chat {user_id} — {e}")
             # Do not interrupt the payout process if user notification fails
     else:
-        log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
+        log(
+            f"⚠️ Skipping approval notice — user {user_id} is not marked as a bot user"
+        )
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n✅ Одобрено"
@@ -303,15 +306,19 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"Сумма: {request_to_deny['amount']} ₽\n"
         f"Метод: {request_to_deny['method']}"
     )
-    log(f"[Telegram] sending denial notice to {user_id} — text: '{user_message[:50]}'")
-    if is_valid_user_id(user_id):
+    users_map = load_users_map()
+    is_bot_user = bool(users_map.get(str(user_id), {}).get("bot_user"))
+    if is_valid_user_id(user_id) and is_bot_user:
+        log(f"[Telegram] sending denial notice to {user_id} — text: '{user_message[:50]}'")
         try:
             await context.bot.send_message(chat_id=user_id, text=user_message)
         except (BadRequest, Forbidden) as e:
             log(f"❌ Failed to send message to chat {user_id} — {e}")
             # Do not interrupt the payout process if user notification fails
     else:
-        log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
+        log(
+            f"⚠️ Skipping denial notice — user {user_id} is not marked as a bot user"
+        )
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n❌ Отклонено"
