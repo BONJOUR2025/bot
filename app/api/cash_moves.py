@@ -53,7 +53,6 @@ def create_cash_moves_router(
         return {
             "categories": repo.list_categories(),
             "valid_prefixes": repo.all_prefixes(),
-            "users": cfg.get_users(),
             "branches": cfg.get_branches(),
         }
 
@@ -104,22 +103,6 @@ def create_cash_moves_router(
             repo.assign(body.record_id, body.category, body.add_prefix or None)
         except KeyError as e:
             raise HTTPException(404, str(e))
-        return {"ok": True}
-
-    # ── Users mapping ────────────────────────────────────────────────
-
-    @router.get("/users")
-    async def list_users(_=Depends(perm)):
-        return [{"id": k, "name": v} for k, v in cfg.get_users().items()]
-
-    @router.post("/users")
-    async def upsert_user(body: MappingEntry, _=Depends(perm)):
-        cfg.upsert_user(body.id, body.name)
-        return {"ok": True}
-
-    @router.delete("/users/{uid}")
-    async def delete_user(uid: str, _=Depends(perm)):
-        cfg.delete_user(uid)
         return {"ok": True}
 
     # ── Branches mapping ─────────────────────────────────────────────
@@ -219,11 +202,14 @@ def create_cash_moves_router(
     @router.get("/by-id/{move_id}")
     async def get_cash_move(move_id: str, _=Depends(perm)):
         from app.services.firebird_service import get_firebird_service
+        from app.services.users import get_external_code_to_name_map
         row = get_firebird_service().get_cash_move_by_id(move_id)
         if row is None:
             raise HTTPException(404, "not found")
+        user_names = get_external_code_to_name_map()
+        owner_id = str(row.get("OWN_USR_ID") or "")
         row["dep_name"] = cfg.resolve_branch(row.get("DEP_SRC_ID"))
-        row["user_name"] = cfg.resolve_user(row.get("OWN_USR_ID"))
+        row["user_name"] = user_names.get(owner_id, owner_id or "—")
         return row
 
     @router.get("/")
@@ -234,15 +220,18 @@ def create_cash_moves_router(
     ):
         from app.services.firebird_service import get_firebird_service
         from app.data.payout_repository import PayoutRepository
+        from app.services.users import get_external_code_to_name_map
         rows = get_firebird_service().get_cash_moves(date_from=date_from, date_to=date_to)
         assignments = repo.get_assignments()
         payout_repo = PayoutRepository()
         linked_ids = payout_repo.linked_cash_move_ids()
         linked_payouts = payout_repo.linked_payouts_by_move_id()
+        user_names = get_external_code_to_name_map()
         for r in rows:
             rid = str(r.get("ID_KASSES_MOVE") or "")
+            owner_id = str(r.get("OWN_USR_ID") or "")
             r["dep_name"] = cfg.resolve_branch(r.get("DEP_SRC_ID"))
-            r["user_name"] = cfg.resolve_user(r.get("OWN_USR_ID"))
+            r["user_name"] = user_names.get(owner_id, owner_id or "—")
             category = repo.resolve_category(rid, r.get("BASIS"))
             r["category"] = category
             r["prefix_ok"] = category is not None

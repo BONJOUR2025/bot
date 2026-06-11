@@ -65,6 +65,16 @@ def load_users_map(archived: bool | None = False) -> Dict[str, Any]:
     }
 
 
+def get_external_code_to_name_map() -> Dict[str, str]:
+    """Map employee external_code (1С/Агбис user id) to the employee's name."""
+
+    return {
+        emp.external_code: emp.name
+        for emp in _repo.list_employees(archived=None)
+        if getattr(emp, "external_code", "")
+    }
+
+
 def save_users(users: Dict[str, Any]) -> None:
     """Persist provided user dict via the repository."""
     employees = []

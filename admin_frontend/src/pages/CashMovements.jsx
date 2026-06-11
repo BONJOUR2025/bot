@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   Search, X, AlertTriangle, CheckCircle, Download, RefreshCw,
   ChevronUp, ChevronDown, ChevronsUpDown,
-  Tag, Settings, Plus, Trash2, Edit2, Check, Users, Building2,
+  Tag, Settings, Plus, Trash2, Edit2, Check, Building2,
   LinkIcon, Unlink,
 } from 'lucide-react';
 import api from '../api';
@@ -620,7 +620,6 @@ export default function CashMovements() {
   const [showBreakdown, setShowBreakdown] = useState(true);
   const [showSalonBreakdown, setShowSalonBreakdown] = useState(true);
   const [showCatManager, setShowCatManager] = useState(false);
-  const [showUsersManager, setShowUsersManager] = useState(false);
   const [showBranchesManager, setShowBranchesManager] = useState(false);
   const [assignRecord, setAssignRecord]   = useState(null);
   const [createPayoutMove, setCreatePayoutMove] = useState(null);
@@ -801,10 +800,6 @@ export default function CashMovements() {
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-2xl font-semibold tracking-tight flex-1 min-w-0">Кассовые перемещения</h2>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => setShowUsersManager(true)}
-            className="btn flex items-center gap-1.5 border border-[color:var(--color-border)] px-2.5 py-1.5">
-            <Users size={15} /><span className="hidden sm:inline">Пользователи</span>
-          </button>
           <button onClick={() => setShowBranchesManager(true)}
             className="btn flex items-center gap-1.5 border border-[color:var(--color-border)] px-2.5 py-1.5">
             <Building2 size={15} /><span className="hidden sm:inline">Филиалы</span>
@@ -1275,17 +1270,6 @@ export default function CashMovements() {
           <span className="text-sm">Сумма: <span className="font-bold text-[color:var(--color-sidebar-primary-foreground)]">{fmtMoney(selectedSum)}</span></span>
           <button onClick={() => setSelected(new Set())} className="ml-2 p-1 rounded-full hover:bg-white/10 transition-colors"><X size={16} /></button>
         </div>
-      )}
-
-      {/* Users Manager */}
-      {showUsersManager && (
-        <MappingManager
-          title="Пользователи кассы (ID → имя)"
-          icon={Users}
-          endpoint="users"
-          onClose={() => setShowUsersManager(false)}
-          onChanged={() => loadData(dateFrom, dateTo)}
-        />
       )}
 
       {/* Branches Manager */}

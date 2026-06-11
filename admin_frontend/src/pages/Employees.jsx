@@ -40,20 +40,26 @@ function ExternalUserSelect({ value, onChange }) {
   }, [query, open]);
 
   function pick(option) {
-    onChange(option.description);
-    setQuery(option.description);
+    const code = String(option.user_id);
+    onChange(code);
+    setQuery(code);
     setOpen(false);
   }
 
+  const matched = options.find((o) => String(o.user_id) === String(value));
+
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative space-y-1">
       <input
-        className="modal-control"
-        placeholder="Поиск по базе ЗП..."
+        className="modal-control font-mono"
+        placeholder="Поиск по базе ЗП или ID из Агбис..."
         value={query}
         onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
       />
+      {matched && (
+        <div className="text-xs text-gray-500">{matched.description}</div>
+      )}
       {open && (
         <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-52 overflow-y-auto">
           {options.map((o) => (
@@ -63,7 +69,7 @@ function ExternalUserSelect({ value, onChange }) {
             </button>
           ))}
           {options.length === 0 && (
-            <div className="px-3 py-2 text-xs text-gray-400">Совпадений не найдено — можно вписать своё</div>
+            <div className="px-3 py-2 text-xs text-gray-400">Совпадений не найдено — можно вписать ID вручную</div>
           )}
         </div>
       )}
@@ -649,7 +655,7 @@ export default function Employees() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Внешний код (сопоставление с ЗП)</label>
+              <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Внешний код (ID в Агбис, для кассовых перемещений)</label>
               <ExternalUserSelect value={form.external_code} onChange={(v) => setForm({ ...form, external_code: v })} />
             </div>
 
