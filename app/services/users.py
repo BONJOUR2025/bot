@@ -66,11 +66,15 @@ def load_users_map(archived: bool | None = False) -> Dict[str, Any]:
 
 
 def get_external_code_to_name_map() -> Dict[str, str]:
-    """Map employee external_code (1С/Агбис user id) to the employee's name."""
+    """Map employee external_code (1С/Агбис user id) to the employee's name.
+
+    Reads from a fresh repository instance so newly assigned codes show up
+    without a server restart.
+    """
 
     return {
         emp.external_code: emp.name
-        for emp in _repo.list_employees(archived=None)
+        for emp in EmployeeRepository().list_employees(archived=None)
         if getattr(emp, "external_code", "")
     }
 
