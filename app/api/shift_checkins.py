@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.api.dependencies import require_permission
+from app.data.incentive_repository import IncentiveRepository
 from app.data.shift_checkin_repository import ShiftCheckinRepository
 from app.schemas.shift_checkin import ShiftCheckin, ShiftCheckinManualCreate
 from app.services.shift_checkin_service import ShiftCheckinService, get_shift_checkin_service
@@ -65,5 +66,25 @@ def create_shift_checkins_router(repo: ShiftCheckinRepository) -> APIRouter:
         if MEDIA_DIR not in photo_path.parents or not photo_path.is_file():
             raise HTTPException(status_code=404, detail="not_found")
         return FileResponse(photo_path)
+
+    @router.delete("/{checkin_id}")
+    async def delete_shift_checkin(
+        checkin_id: int,
+        current=Depends(require_permission("shift-checkins")),
+    ):
+        record = repo.get(checkin_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="not_found")
+
+        if record.get("photo_path"):
+            photo_path = (MEDIA_DIR / record["photo_path"]).resolve()
+            if MEDIA_DIR in photo_path.parents and photo_path.is_file():
+                photo_path.unlink()
+
+        if record.get("incentive_id"):
+            IncentiveRepository().delete(record["incentive_id"])
+
+        repo.delete(checkin_id)
+        return {"status": "deleted"}
 
     return router

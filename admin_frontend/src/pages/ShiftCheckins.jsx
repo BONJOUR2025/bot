@@ -2,10 +2,27 @@ import { useEffect, useState } from 'react';
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function dateRange(from, to) {
+  const dates = [];
+  if (!from || !to) return dates;
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  if (start > end) return dates;
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates.reverse();
+}
+
 export default function ShiftCheckins() {
   const [list, setList] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [filters, setFilters] = useState({ from: '', to: '' });
+  const [salons, setSalons] = useState([]);
+  const [filters, setFilters] = useState({ from: todayStr(), to: todayStr() });
   const [photoUrl, setPhotoUrl] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm());
@@ -22,8 +39,12 @@ export default function ShiftCheckins() {
 
   useEffect(() => {
     load();
-    loadEmployees();
   }, [filters]);
+
+  useEffect(() => {
+    loadEmployees();
+    loadSalons();
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -48,6 +69,15 @@ export default function ShiftCheckins() {
     try {
       const res = await api.get('employees/', { params: { archived: false } });
       setEmployees(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadSalons() {
+    try {
+      const res = await api.get('salons/', { params: { status: 'active' } });
+      setSalons(res.data.filter((s) => s.status === 'active'));
     } catch (err) {
       console.error(err);
     }
@@ -93,6 +123,16 @@ export default function ShiftCheckins() {
     }
   }
 
+  async function handleDelete(id) {
+    if (!window.confirm('Удалить запись вместе с фото?')) return;
+    try {
+      await api.delete(`shift-checkins/${id}`);
+      load();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   function fmtTime(iso) {
     if (!iso) return '—';
     try {
@@ -102,7 +142,48 @@ export default function ShiftCheckins() {
     }
   }
 
-  const rowColor = (item) => (item.penalty_amount ? 'bg-red-50' : '');
+  function fmtDate(dateStr) {
+    try {
+      return new Date(`${dateStr}T00:00:00`).toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        weekday: 'short',
+      });
+    } catch {
+      return dateStr;
+    }
+  }
+
+  function penaltyLabel(item) {
+    if (item.penalty_amount) {
+      return `${item.delay_minutes} мин — ${item.penalty_amount.toFixed(0)} ₽`;
+    }
+    if (item.no_schedule) return 'Нет графика';
+    return '—';
+  }
+
+  function deleteButton(item) {
+    return (
+      <button className="text-red-600" onClick={() => handleDelete(item.id)} title="Удалить запись">
+        🗑
+      </button>
+    );
+  }
+
+  function photoCell(item) {
+    return item.photo_path ? (
+      <button className="text-blue-600" onClick={() => openPhoto(item)}>
+        📷 Открыть
+      </button>
+    ) : (
+      <span className="text-gray-400">{item.manual ? 'Вручную' : '—'}</span>
+    );
+  }
+
+  const dates = dateRange(filters.from, filters.to);
+  const activeSalonIds = new Set(salons.map((s) => String(s.id)));
+  const otherItems = list.filter((item) => !activeSalonIds.has(String(item.salon_id)));
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -127,41 +208,90 @@ export default function ShiftCheckins() {
           ➕ Добавить вручную
         </button>
       </div>
-      <ResponsiveTable
-        data={list}
-        keyFn={(item) => item.id}
-        rowClass={rowColor}
-        emptyText="Нет данных"
-        columns={[
-          { label: 'Дата', key: 'date', primary: true },
-          { label: 'Сотрудник', key: 'employee_name' },
-          { label: 'Точка', render: (item) => item.salon_name || item.point || '—' },
-          { label: 'Открытие', render: (item) => fmtTime(item.sent_at) },
-          { label: 'По графику', render: (item) => item.expected_open_time || '—' },
-          {
-            label: 'Штраф',
-            render: (item) =>
-              item.penalty_amount
-                ? `${item.delay_minutes} мин — ${item.penalty_amount.toFixed(0)} ₽`
-                : item.no_schedule
-                ? 'Нет графика'
-                : '—',
-          },
-          {
-            label: 'Фото',
-            isAction: true,
-            cellClass: 'text-right',
-            render: (item) =>
-              item.photo_path ? (
-                <button className="text-blue-600" onClick={() => openPhoto(item)}>
-                  📷 Открыть
-                </button>
-              ) : (
-                <span className="text-gray-400">{item.manual ? 'Вручную' : '—'}</span>
-              ),
-          },
-        ]}
-      />
+
+      <div className="space-y-4">
+        {dates.map((date) => (
+          <div key={date} className="border rounded shadow bg-white overflow-hidden">
+            <div className="px-3 py-2 bg-gray-100 font-semibold text-sm">{fmtDate(date)}</div>
+            <div className="overflow-auto">
+              <table className="min-w-max w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="p-2 text-left whitespace-nowrap">Точка</th>
+                    <th className="p-2 text-left whitespace-nowrap">Сотрудник</th>
+                    <th className="p-2 text-left whitespace-nowrap">Открытие</th>
+                    <th className="p-2 text-left whitespace-nowrap">По графику</th>
+                    <th className="p-2 text-left whitespace-nowrap">Штраф</th>
+                    <th className="p-2 text-left whitespace-nowrap">Фото</th>
+                    <th className="p-2 text-right whitespace-nowrap"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {salons.map((salon) => {
+                    const checkins = list.filter(
+                      (item) => item.date === date && String(item.salon_id) === String(salon.id)
+                    );
+                    if (checkins.length === 0) {
+                      return (
+                        <tr key={salon.id} className="hover:bg-gray-50">
+                          <td className="p-2 font-medium">{salon.name}</td>
+                          <td className="p-2 text-gray-400" colSpan={5}>
+                            Нет отметки об открытии
+                          </td>
+                          <td className="p-2"></td>
+                        </tr>
+                      );
+                    }
+                    return checkins.map((item) => (
+                      <tr key={item.id} className={`hover:bg-gray-50 ${item.penalty_amount ? 'bg-red-50' : ''}`}>
+                        <td className="p-2 font-medium">{salon.name}</td>
+                        <td className="p-2">{item.employee_name}</td>
+                        <td className="p-2">{fmtTime(item.sent_at)}</td>
+                        <td className="p-2">{item.expected_open_time || '—'}</td>
+                        <td className="p-2">{penaltyLabel(item)}</td>
+                        <td className="p-2">{photoCell(item)}</td>
+                        <td className="p-2 text-right">{deleteButton(item)}</td>
+                      </tr>
+                    ));
+                  })}
+                  {salons.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="p-4 text-center text-gray-500">
+                        Нет активных салонов
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+        {dates.length === 0 && (
+          <div className="py-6 text-center text-gray-500 text-sm">Выберите период</div>
+        )}
+      </div>
+
+      {otherItems.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold tracking-tight text-gray-800">Прочие отметки</h3>
+          <ResponsiveTable
+            data={otherItems}
+            keyFn={(item) => item.id}
+            rowClass={(item) => (item.penalty_amount ? 'bg-red-50' : '')}
+            emptyText="Нет данных"
+            columns={[
+              { label: 'Дата', key: 'date', primary: true },
+              { label: 'Сотрудник', key: 'employee_name' },
+              { label: 'Точка', render: (item) => item.salon_name || item.point || '—' },
+              { label: 'Открытие', render: (item) => fmtTime(item.sent_at) },
+              { label: 'По графику', render: (item) => item.expected_open_time || '—' },
+              { label: 'Штраф', render: penaltyLabel },
+              { label: 'Фото', render: photoCell },
+              { label: '', isAction: true, cellClass: 'text-right', render: deleteButton },
+            ]}
+          />
+        </div>
+      )}
 
       {photoUrl && (
         <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && closePhoto()}>

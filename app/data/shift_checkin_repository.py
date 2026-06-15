@@ -72,6 +72,14 @@ class ShiftCheckinRepository:
                 return item
         return None
 
+    def delete(self, checkin_id: int) -> Optional[Dict[str, Any]]:
+        for i, item in enumerate(self._data):
+            if int(item.get("id", 0)) == int(checkin_id):
+                removed = self._data.pop(i)
+                self._save()
+                return removed
+        return None
+
     def reassign_employee(self, old_employee_id: str, new_employee_id: str) -> int:
         count = 0
         for item in self._data:
