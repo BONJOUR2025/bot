@@ -93,6 +93,20 @@ class CommentInput(BaseModel):
     comment: str
 
 
+class SaleTransferInput(BaseModel):
+    month: str
+    year: int
+    doc_num: str
+    category: str               # repair / cosmetics / shoes
+    amount: float = 0.0
+    from_code: str
+    to_code: str
+    from_name: str = ""
+    to_name: str = ""
+    order_date: str = ""
+    shoes_orders: list = []
+
+
 def create_payroll_router(
     payroll_service: PayrollService | None = None,
     plans_repo: SalesPlansRepository | None = None,
@@ -351,6 +365,67 @@ def create_payroll_router(
         else:
             _comments.delete_comment(mk, employee_code)
             return {"status": "deleted"}
+
+    # ── Sale transfers (move an order's sale between employees) ─────
+    @router.get("/order-lookup")
+    async def order_lookup(
+        doc_num: str = Query(...),
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        _check(current)
+        doc_num = doc_num.strip()
+        if not doc_num:
+            raise HTTPException(status_code=400, detail="empty_doc_num")
+        breakdown = _payroll.firebird.get_order_breakdown(doc_num)
+        if not breakdown.get("found"):
+            raise HTTPException(status_code=404, detail="order_not_found")
+        return breakdown
+
+    @router.get("/sale-transfers")
+    async def list_sale_transfers(
+        month: str = Query(...),
+        year: int = Query(...),
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        _check(current)
+        from app.services.sale_transfer_service import list_transfers
+        return list_transfers(make_month_key(month, year))
+
+    @router.post("/sale-transfers")
+    async def create_sale_transfer(
+        data: SaleTransferInput,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        _check(current)
+        from app.services.sale_transfer_service import create_transfer
+        author = getattr(current, "login", None) or getattr(current, "id", "admin")
+        try:
+            return create_transfer(
+                month_key=make_month_key(data.month, data.year),
+                doc_num=data.doc_num,
+                category=data.category,
+                amount=data.amount,
+                from_code=data.from_code,
+                to_code=data.to_code,
+                from_name=data.from_name,
+                to_name=data.to_name,
+                order_date=data.order_date,
+                shoes_orders=data.shoes_orders,
+                author=str(author),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @router.delete("/sale-transfers/{transfer_id}")
+    async def delete_sale_transfer(
+        transfer_id: int,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        _check(current)
+        from app.services.sale_transfer_service import delete_transfer
+        if not delete_transfer(transfer_id):
+            raise HTTPException(status_code=404, detail="not_found")
+        return {"status": "deleted"}
 
     # ── Excel export ───────────────────────────────────────────────
     @router.get("/export/excel")

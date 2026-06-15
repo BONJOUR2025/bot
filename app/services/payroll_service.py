@@ -494,6 +494,54 @@ class PayrollService:
                 penalties[code] = penalties.get(code, 0.0) + amt
         return bonuses, penalties
 
+    # ── Sale transfers ────────────────────────────────────────────
+
+    def _apply_sale_transfers(self, sales_data: dict, month_key: str) -> None:
+        """Move order sales between employees per manual corrections (hr.db).
+
+        Firebird stays untouched; we only adjust the in-memory aggregates:
+        subtract from the original seller and add to the new one.
+        """
+        try:
+            from app.services.sale_transfer_service import list_transfers
+            transfers = list_transfers(month_key)
+        except Exception as e:
+            logger.error(f"Sale transfers error: {e}")
+            return
+
+        def _ensure(code: str) -> dict:
+            entry = sales_data.get(code)
+            if entry is None:
+                entry = {"repair": 0.0, "cosmetics": 0.0, "shoes": 0.0, "shoes_orders": []}
+                sales_data[code] = entry
+            return entry
+
+        for t in transfers:
+            category = t.get("category")
+            from_code = t.get("from_code")
+            to_code = t.get("to_code")
+            if not from_code or not to_code or from_code == to_code:
+                continue
+            src = _ensure(from_code)
+            dst = _ensure(to_code)
+
+            if category in ("repair", "cosmetics"):
+                amount = float(t.get("amount") or 0)
+                src[category] = src.get(category, 0.0) - amount
+                dst[category] = dst.get(category, 0.0) + amount
+            elif category == "shoes":
+                doc_num = str(t.get("doc_num"))
+                src_orders = src.get("shoes_orders", []) or []
+                src["shoes_orders"] = [
+                    o for o in src_orders if str(o.get("doc_num")) != doc_num
+                ]
+                moved = t.get("shoes_orders") or [
+                    o for o in src_orders if str(o.get("doc_num")) == doc_num
+                ]
+                dst.setdefault("shoes_orders", []).extend(moved)
+                src["shoes"] = sum(o.get("kredit", 0.0) for o in src["shoes_orders"])
+                dst["shoes"] = sum(o.get("kredit", 0.0) for o in dst.get("shoes_orders", []))
+
     # ── Commission ────────────────────────────────────────────────
 
     def _commission(self, sales, plan, rate_hi, rate_lo):
@@ -529,6 +577,9 @@ class PayrollService:
         except Exception as e:
             logger.error(f"Firebird error: {e}")
             sales_data = {}
+
+        # Apply manual sale transfers (corrections layered on top of Firebird).
+        self._apply_sale_transfers(sales_data, month_key)
 
         advances_map = self._get_advances_after_last_salary()
         advances_month_map = self._get_advances_for_month(year, month_num)

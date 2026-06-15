@@ -7,7 +7,7 @@ import {
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
   Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig,
-  Clock,
+  Clock, Replace,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -38,6 +38,7 @@ const navStructure = [
     items: [
       { to: '/admin/payroll',          label: 'Расчёт зарплаты',      permission: 'payroll',         icon: Calculator },
       { to: '/admin/location-plans',   label: 'Планы по точкам',      permission: 'payroll',         icon: MapPin },
+      { to: '/admin/sale-transfers',   label: 'Перемещение продажи',  permission: 'payroll',         icon: Replace },
       { to: '/admin/masters',          label: 'Работы мастеров',      permission: 'payroll',         icon: Hammer },
       { to: '/admin/payouts',          label: 'Выплаты',              permission: 'payouts',         icon: Banknote },
       { to: '/admin/payouts-control',  label: 'Контроль выплат',      permission: 'payouts-control', icon: ShieldCheck },

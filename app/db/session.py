@@ -95,6 +95,22 @@ def _run_migrations() -> None:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )""",
+            """CREATE TABLE IF NOT EXISTS sale_transfers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                month_key TEXT NOT NULL,
+                doc_num TEXT NOT NULL,
+                category TEXT NOT NULL,
+                amount REAL NOT NULL DEFAULT 0,
+                from_code TEXT NOT NULL,
+                to_code TEXT NOT NULL,
+                from_name TEXT DEFAULT '',
+                to_name TEXT DEFAULT '',
+                order_date TEXT DEFAULT '',
+                shoes_orders TEXT DEFAULT '',
+                author TEXT DEFAULT '',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_sale_transfers_month_key ON sale_transfers(month_key)",
         ]:
             try:
                 conn.execute(text(stmt))

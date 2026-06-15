@@ -51,6 +51,63 @@ SHOES_CODES = (
     '147.15', '147.16', '147.17', '147.18', '147.19', '147.20', '147.21', '147.22',
 )
 
+REPAIR_FOLDER_IDS = (
+    215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
+    108401, 108402, 110409, 110410, 110411,
+    210266, 210267, 210268, 210269, 210270, 210271, 210272, 210273, 210274, 210275,
+    210276, 210277, 210278, 210279, 210280, 210281, 210282, 210283, 210284, 210285,
+    210286, 210287, 210288, 210289, 210290, 210291, 210292, 210293, 210294, 210295,
+    210296, 210297, 210298, 210299, 210300, 210301, 210302, 210303, 210304, 210305,
+    210306, 210307, 210308, 210309, 210310, 210311, 210312, 210313, 210314, 210315,
+    210316, 210317, 210318, 210319, 210320, 210321, 210322, 210323, 210324, 210325,
+    210326, 210327, 210328, 210329, 210330, 210331, 210332, 210333, 210334, 210335,
+    210336, 210337, 210338, 210339, 210340, 210341, 210342, 210343, 210344, 210345,
+    210346, 210347, 210348, 210349, 210350, 210351, 210352, 210353, 210355, 210356,
+    210357, 210358, 210359, 210360, 210361, 210363, 210364, 210365, 210366,
+    210377, 210378, 210379, 210380, 210381, 210382, 210383, 210384, 210385,
+    210386, 210387, 210388, 210389, 210390, 210391, 210392, 210393, 210394,
+    210395, 210396, 210397, 210399,
+)
+
+COSMETICS_FOLDER_IDS = (
+    107, 108, 109, 110, 111, 113, 114, 115, 116, 117, 118, 119, 120,
+    121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133,
+    134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146,
+    147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 159, 161,
+    162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174,
+    175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187,
+    188, 189, 190, 192, 193, 194, 195, 196, 198, 199, 200, 201, 202,
+    203, 204, 206, 207, 208, 209, 220, 222, 223, 229, 230, 232, 233,
+    109407, 110413, 210234, 210235, 210236, 210237, 210241, 210243,
+    210244, 210248, 210249, 210250, 210254, 210255, 210258, 210265,
+    210398,
+)
+
+_PAIR_STARTERS = {'0', '1'}
+
+
+def _parse_shoe_pairs(items: list[tuple]) -> list[float]:
+    """Parse ordered (code, kredit) records of one order into per-pair kredit sums.
+
+    A record with CODE in ('0','1') starts a new pair; following '147.x'
+    records add to the current pair until the next starter.
+    """
+    pairs: list[float] = []
+    current_kredit = 0.0
+    in_pair = False
+    for code, kredit in items:
+        if code in _PAIR_STARTERS:
+            if in_pair:
+                pairs.append(current_kredit)
+            current_kredit = 0.0
+            in_pair = True
+        else:
+            if in_pair:
+                current_kredit += kredit
+    if in_pair:
+        pairs.append(current_kredit)
+    return pairs
+
 
 class FirebirdService:
     """Service for connecting to Firebird database and querying sales data."""
@@ -66,23 +123,7 @@ class FirebirdService:
 
         start, end = _month_range(year, month)
 
-        folder_ids = (
-            215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
-            108401, 108402, 110409, 110410, 110411,
-            210266, 210267, 210268, 210269, 210270, 210271, 210272, 210273, 210274, 210275,
-            210276, 210277, 210278, 210279, 210280, 210281, 210282, 210283, 210284, 210285,
-            210286, 210287, 210288, 210289, 210290, 210291, 210292, 210293, 210294, 210295,
-            210296, 210297, 210298, 210299, 210300, 210301, 210302, 210303, 210304, 210305,
-            210306, 210307, 210308, 210309, 210310, 210311, 210312, 210313, 210314, 210315,
-            210316, 210317, 210318, 210319, 210320, 210321, 210322, 210323, 210324, 210325,
-            210326, 210327, 210328, 210329, 210330, 210331, 210332, 210333, 210334, 210335,
-            210336, 210337, 210338, 210339, 210340, 210341, 210342, 210343, 210344, 210345,
-            210346, 210347, 210348, 210349, 210350, 210351, 210352, 210353, 210355, 210356,
-            210357, 210358, 210359, 210360, 210361, 210363, 210364, 210365, 210366,
-            210377, 210378, 210379, 210380, 210381, 210382, 210383, 210384, 210385,
-            210386, 210387, 210388, 210389, 210390, 210391, 210392, 210393, 210394,
-            210395, 210396, 210397, 210399,
-        )
+        folder_ids = REPAIR_FOLDER_IDS
 
         sql = f"""
             SELECT
@@ -128,19 +169,7 @@ class FirebirdService:
 
         start, end = _month_range(year, month)
 
-        folder_ids = (
-            107, 108, 109, 110, 111, 113, 114, 115, 116, 117, 118, 119, 120,
-            121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133,
-            134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146,
-            147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 159, 161,
-            162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174,
-            175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187,
-            188, 189, 190, 192, 193, 194, 195, 196, 198, 199, 200, 201, 202,
-            203, 204, 206, 207, 208, 209, 220, 222, 223, 229, 230, 232, 233,
-            109407, 110413, 210234, 210235, 210236, 210237, 210241, 210243,
-            210244, 210248, 210249, 210250, 210254, 210255, 210258, 210265,
-            210398,
-        )
+        folder_ids = COSMETICS_FOLDER_IDS
 
         sql = f"""
             SELECT
@@ -245,33 +274,10 @@ class FirebirdService:
             return {}
 
         # Parse into pairs: CODE in ('0','1') starts a pair, sum following 147.x until next starter
-        _PAIR_STARTERS = {'0', '1'}
         out: dict[str, list[dict]] = {}
         for emp_code, orders in raw.items():
             for doc_num, items in orders.items():
-                pairs = []
-                current_kredit = 0.0
-                in_pair = False
-
-                for code, kredit in items:
-                    if code in _PAIR_STARTERS:
-                        # Save previous pair if exists
-                        if in_pair:
-                            pairs.append(current_kredit)
-                        # Start new pair
-                        current_kredit = 0.0
-                        in_pair = True
-                    else:
-                        # CODE='147.x' - add to current pair
-                        if in_pair:
-                            current_kredit += kredit
-
-                # Don't forget last pair
-                if in_pair:
-                    pairs.append(current_kredit)
-
-                # Add each pair as separate entry
-                for pair_kredit in pairs:
+                for pair_kredit in _parse_shoe_pairs(items):
                     out.setdefault(emp_code, []).append({
                         "doc_num": doc_num,
                         "kredit": pair_kredit,
@@ -305,6 +311,118 @@ class FirebirdService:
             }
             for code in all_codes
         }
+
+    def get_order_breakdown(self, doc_num: str) -> dict:
+        """Look up a single order by its number across repair / cosmetics / shoes.
+
+        Returns the current seller (order creator), order date and the amount
+        per category, so a sale can be reassigned to another employee.
+        Read-only — never modifies Firebird.
+        """
+        result = {
+            "doc_num": str(doc_num),
+            "found": False,
+            "order_date": "",
+            "seller_code": None,
+            "seller_name": "",
+            "repair": 0.0,
+            "cosmetics": 0.0,
+            "shoes_total": 0.0,
+            "shoes_orders": [],
+        }
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - cannot look up order")
+            return result
+
+        repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
+        cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
+        shoes_placeholders = ','.join(['?'] * len(SHOES_CODES))
+
+        sql_repair = f"""
+            SELECT users.description, SUM(doc_order_services.kredit), MAX(docs.doc_date)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE docs.doc_num = ?
+                AND tovars_tbl.folder_id IN ({repair_folders})
+            GROUP BY users.description
+        """
+        sql_cosmetics = f"""
+            SELECT users.description, SUM(doc_order_lines.kredit), MAX(docs.doc_date)
+            FROM doc_order_lines
+                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE docs_order_history.status_id = 5
+                AND docs.doc_num = ?
+                AND tovars_tbl.folder_id IN ({cosmetics_folders})
+            GROUP BY users.description
+        """
+        sql_shoes = f"""
+            SELECT users.description, tovars_tbl.code, doc_order_services.kredit, doc_order_services.id
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE docs.doc_num = ?
+                AND tovars_tbl.code IN ({shoes_placeholders})
+                AND EXISTS (
+                    SELECT 1 FROM docs_order_history
+                    WHERE doc_order_id = docs_order.id AND status_id = 5
+                )
+            ORDER BY doc_order_services.id
+        """
+
+        descriptions: list[str] = []
+
+        def _note_date(d) -> None:
+            if d and not result["order_date"]:
+                result["order_date"] = d.isoformat() if hasattr(d, "isoformat") else str(d)
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql_repair, (doc_num,))
+                for desc, s, d in cur.fetchall():
+                    result["repair"] += float(s or 0)
+                    descriptions.append(desc)
+                    _note_date(d)
+                cur.execute(sql_cosmetics, (doc_num,))
+                for desc, s, d in cur.fetchall():
+                    result["cosmetics"] += float(s or 0)
+                    descriptions.append(desc)
+                    _note_date(d)
+                cur.execute(sql_shoes, (doc_num, *SHOES_CODES))
+                shoe_items: list[tuple] = []
+                for desc, code, kredit, _svc_id in cur.fetchall():
+                    descriptions.append(desc)
+                    shoe_items.append((code, float(kredit or 0)))
+                for pair_kredit in _parse_shoe_pairs(shoe_items):
+                    result["shoes_orders"].append({"doc_num": str(doc_num), "kredit": pair_kredit})
+                result["shoes_total"] = sum(o["kredit"] for o in result["shoes_orders"])
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching order {doc_num}: {e}")
+            return result
+
+        for desc in descriptions:
+            code = _code_from_description(desc)
+            if code:
+                result["seller_code"] = code
+                result["seller_name"] = (desc or "").strip()
+                break
+
+        result["found"] = bool(
+            result["repair"] or result["cosmetics"] or result["shoes_orders"]
+        )
+        return result
 
 
     def get_daily_sales(self, date_from: date, date_to: date) -> list[dict]:

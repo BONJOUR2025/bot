@@ -44,6 +44,7 @@ import AdminEmployeeProfile from "./pages/AdminEmployeeProfile";
 import Salons from "./pages/Salons";
 import ShiftCheckins from "./pages/ShiftCheckins";
 import LocationPlans from "./pages/LocationPlans";
+import SaleTransfers from "./pages/SaleTransfers";
 import CashMovements from "./pages/CashMovements";
 import PaymentCalendar from "./pages/PaymentCalendar";
 import Smses from "./pages/Smses";
@@ -100,6 +101,7 @@ export default function App() {
                 <Route path="salons" element={<Salons />} />
                 <Route path="shift-checkins" element={<ShiftCheckins />} />
                 <Route path="location-plans" element={<LocationPlans />} />
+                <Route path="sale-transfers" element={<SaleTransfers />} />
                 <Route path="cash-moves" element={<CashMovements />} />
                 <Route path="payment-calendar" element={<PaymentCalendar />} />
                 <Route path="smses" element={<Smses />} />
