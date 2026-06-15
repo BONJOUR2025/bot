@@ -67,6 +67,12 @@ class IncentiveRepository:
         self._counter += 1
         return self._counter
 
+    def _recompute_counter(self) -> None:
+        self._counter = max(
+            (int(item.get("id", 0)) for item in self._data if str(item.get("id")).isdigit()),
+            default=0,
+        )
+
     def list(
         self,
         employee_id: Optional[str] = None,
@@ -74,6 +80,7 @@ class IncentiveRepository:
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
+        self._data = self._load()  # always fresh from disk (two-process setup)
         result = []
         for item in self._data:
             if employee_id and str(item.get("employee_id")) != str(employee_id):
@@ -89,6 +96,8 @@ class IncentiveRepository:
         return result
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        self._data = self._load()  # sync with disk before mutating
+        self._recompute_counter()
         if 'id' not in data or any(str(it.get('id')) == str(data['id']) for it in self._data):
             data['id'] = self._generate_id()
         self._data.append(data)
@@ -96,6 +105,7 @@ class IncentiveRepository:
         return data
 
     def update(self, item_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        self._data = self._load()  # sync with disk before mutating
         for item in self._data:
             if str(item.get('id')) == str(item_id):
                 if item.get('locked'):
@@ -106,6 +116,7 @@ class IncentiveRepository:
         return None
 
     def delete(self, item_id: str) -> bool:
+        self._data = self._load()  # sync with disk before mutating
         for item in self._data:
             if str(item.get('id')) == str(item_id):
                 if item.get('locked'):
@@ -116,6 +127,7 @@ class IncentiveRepository:
         return False
 
     def reassign_employee(self, old_employee_id: str, new_employee_id: str) -> int:
+        self._data = self._load()  # sync with disk before mutating
         count = 0
         for item in self._data:
             if str(item.get('employee_id')) == str(old_employee_id):
