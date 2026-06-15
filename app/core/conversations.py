@@ -11,6 +11,7 @@ from ..constants import (
     AdvanceReportStates,
     ManualPayoutStates,
     PayoutStates,
+    ShiftCheckinStates,
     PAYMENT_REQUEST_PATTERN,
 )
 from ..config import ADMIN_ID
@@ -19,6 +20,9 @@ from ..handlers.user import (
     view_salary_user,
     view_schedule_user,
     personal_cabinet,
+    open_salon_start,
+    open_salon_photo,
+    open_salon_cancel,
 )
 from ..handlers.user.payout import (
     request_payout_start,
@@ -228,8 +232,28 @@ def build_payout_conversation():
     )
 
 
+def build_shift_checkin_conversation():
+    return ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(r"^🏪 Открыть салон$"), open_salon_start)
+        ],
+        states={
+            ShiftCheckinStates.AWAITING_PHOTO: [
+                MessageHandler(filters.PHOTO, open_salon_photo),
+                MessageHandler(filters.Regex(r"^🏠 Домой$"), open_salon_cancel),
+            ],
+        },
+        fallbacks=[
+            CommandHandler("start", reset_and_start),
+            MessageHandler(filters.Regex(r"^(🏠 Домой|Назад|Отмена|❌ Отмена|🔙 Назад)$"), open_salon_cancel),
+        ],
+        per_chat=True,
+    )
+
+
 __all__ = [
     "build_admin_conversation",
     "build_manual_payout_conversation",
     "build_payout_conversation",
+    "build_shift_checkin_conversation",
 ]

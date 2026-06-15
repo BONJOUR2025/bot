@@ -43,6 +43,10 @@ class AdvanceReportStates(Enum):
     SELECT_STATUS = auto()
 
 
+class ShiftCheckinStates(Enum):
+    AWAITING_PHOTO = auto()
+
+
 PAYMENT_REQUEST_PATTERN = re.compile(
     r"^[\s\u00A0\u200b\u200c\uFEFF]*💰[\s\u00A0\u200b\u200c\uFEFF]*Запросить[\s\u00A0\u200b\u200c\uFEFF]*выплату[\s\u00A0\u200b\u200c\uFEFF]*$",
     re.IGNORECASE,

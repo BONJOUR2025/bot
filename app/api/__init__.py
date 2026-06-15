@@ -287,6 +287,16 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Shift check-ins (opening shift photo records)
+    from .shift_checkins import create_shift_checkins_router
+    from ..data.shift_checkin_repository import get_shift_checkin_repository
+
+    app.include_router(
+        create_shift_checkins_router(get_shift_checkin_repository()),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Location codes and monthly plans (for payroll auto-plan calculation)
     from .location_plans import create_location_plans_router
     from ..data.location_repository import get_location_repository

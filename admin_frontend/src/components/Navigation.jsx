@@ -9,6 +9,7 @@ import {
   TrendingUp, BarChart2,
   ListTodo, Megaphone, History,
   BookOpen, KeyRound, Lock, Settings as SettingsIcon,
+  Clock,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -31,6 +32,7 @@ const navStructure = [
       { to: '/admin/birthdays',  label: 'Дни рождения',  permission: 'birthdays', icon: Cake },
       { to: '/admin/assets',     label: 'Имущество',     permission: 'assets',    icon: Package },
       { to: '/admin/salons',     label: 'Салоны',        permission: 'salons',    icon: Store },
+      { to: '/admin/shift-checkins', label: 'Рабочее время', permission: 'shift-checkins', icon: Clock },
     ],
   },
   {
