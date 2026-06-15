@@ -29,9 +29,8 @@ async def open_salon_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return ConversationHandler.END
 
-    employee_name = user.get("full_name") or user.get("name") or ""
     service = get_shift_checkin_service()
-    point = await service.find_point_for_employee(employee_name, date.today())
+    point = await service.find_point_for_employee_id(user_id, date.today())
 
     if point:
         context.user_data["open_salon_point"] = point.model_dump()

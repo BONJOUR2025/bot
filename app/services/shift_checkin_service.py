@@ -4,6 +4,7 @@ import re
 from datetime import date, datetime
 from typing import Optional
 
+from app.data.employee_repository import EmployeeRepository
 from app.data.incentive_repository import IncentiveRepository
 from app.data.salon_repository import SalonRepository, get_salon_repository
 from app.data.shift_checkin_repository import ShiftCheckinRepository, get_shift_checkin_repository
@@ -29,11 +30,13 @@ class ShiftCheckinService:
         salon_repo: Optional[SalonRepository] = None,
         schedule_service: Optional[ScheduleService] = None,
         incentive_repo: Optional[IncentiveRepository] = None,
+        employee_repo: Optional[EmployeeRepository] = None,
     ) -> None:
         self._repo = repo or get_shift_checkin_repository()
         self._salons = salon_repo or get_salon_repository()
         self._schedule = schedule_service or ScheduleService()
         self._incentives = incentive_repo or IncentiveRepository()
+        self._employees = employee_repo or EmployeeRepository()
 
     async def find_point_for_employee(self, employee_name: str, day: date) -> Optional[SchedulePointOut]:
         """Find which point the employee is scheduled at on the given day."""
@@ -45,6 +48,18 @@ class ShiftCheckinService:
             if point.employee.strip().lower() == name:
                 return point
         return None
+
+    async def find_point_for_employee_id(self, employee_id: str, day: date) -> Optional[SchedulePointOut]:
+        """Find which point the employee is scheduled at, looked up by employee id.
+
+        The schedule (Excel "ИМЯ" column) is matched against the employee's short
+        ``name`` field — the same field used by the personal schedule lookup —
+        not ``full_name``.
+        """
+        employee = self._employees.get_employee(employee_id)
+        if not employee:
+            return None
+        return await self.find_point_for_employee(employee.name, day)
 
     def find_salon_by_code(self, code: str) -> Optional[Salon]:
         code = (code or "").strip().upper()
@@ -103,7 +118,7 @@ class ShiftCheckinService:
         sent_at = sent_at.astimezone(MOSCOW_TZ)
         today = sent_at.date()
 
-        point = await self.find_point_for_employee(employee_name, today)
+        point = await self.find_point_for_employee_id(employee_id, today)
         salon = self.find_salon_by_code(point.short) if point else None
 
         expected_open_time: Optional[str] = None
