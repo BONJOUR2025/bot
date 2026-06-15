@@ -18,57 +18,16 @@ function fmtInput(v) {
   return String(v);
 }
 
-// ── CodeManager ──────────────────────────────────────────────────
-function CodeManager({ codes, onAdd, onUpdate, onDelete }) {
-  const [adding, setAdding]   = useState(false);
-  const [newCode, setNewCode] = useState({ code: '', name: '' });
-  const [editing, setEditing] = useState(null);
-
-  function handleAdd() {
-    if (!newCode.code.trim() || !newCode.name.trim()) return;
-    onAdd(newCode.code.trim(), newCode.name.trim(), codes.length);
-    setNewCode({ code: '', name: '' });
-    setAdding(false);
-  }
-
+// ── CodeManager (read-only — codes come from «Салоны») ───────────
+function CodeManager({ codes }) {
   return (
     <div className="card p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-sm text-[color:var(--color-foreground)]">Точки продаж</h3>
-        <button
-          onClick={() => setAdding(v => !v)}
-          className="text-xs text-[color:var(--color-primary)] font-medium hover:underline"
-        >
-          {adding ? 'Отмена' : '+ Добавить'}
-        </button>
-      </div>
+      <h3 className="font-semibold text-sm text-[color:var(--color-foreground)]">Точки продаж</h3>
 
-      {adding && (
-        <div className="space-y-2 p-3 rounded-lg bg-[color:var(--color-muted)]/30 border border-[color:var(--color-border)]">
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Код (напр. «П»)</label>
-            <input
-              className="input w-full text-sm"
-              value={newCode.code}
-              onChange={e => setNewCode(v => ({ ...v, code: e.target.value }))}
-              placeholder="П"
-              maxLength={4}
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Название точки</label>
-            <input
-              className="input w-full text-sm"
-              value={newCode.name}
-              onChange={e => setNewCode(v => ({ ...v, name: e.target.value }))}
-              placeholder="Пассаж"
-              onKeyDown={e => e.key === 'Enter' && handleAdd()}
-            />
-          </div>
-          <button onClick={handleAdd} className="btn btn-primary w-full text-sm">Добавить</button>
-        </div>
-      )}
+      <p className="text-xs text-[color:var(--color-muted-foreground)]">
+        Список формируется из активных салонов с заполненным кодом. Чтобы добавить
+        точку или изменить код/название — откройте страницу «Салоны».
+      </p>
 
       <div className="divide-y divide-[color:var(--color-border)]">
         {codes.map(c => (
@@ -76,34 +35,12 @@ function CodeManager({ codes, onAdd, onUpdate, onDelete }) {
             <span className="w-9 h-7 flex items-center justify-center rounded-lg bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold flex-shrink-0">
               {c.code}
             </span>
-            {editing === c.code ? (
-              <EditCodeRow
-                code={c}
-                onSave={(name) => { onUpdate(c.code, name); setEditing(null); }}
-                onCancel={() => setEditing(null)}
-              />
-            ) : (
-              <>
-                <span className="flex-1 text-sm font-medium min-w-0 truncate">{c.name}</span>
-                <button
-                  onClick={() => setEditing(c.code)}
-                  className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)] flex-shrink-0"
-                >
-                  Изм.
-                </button>
-                <button
-                  onClick={() => onDelete(c.code)}
-                  className="text-xs text-red-400 hover:text-red-600 flex-shrink-0"
-                >
-                  Удал.
-                </button>
-              </>
-            )}
+            <span className="flex-1 text-sm font-medium min-w-0 truncate">{c.name}</span>
           </div>
         ))}
         {codes.length === 0 && (
           <p className="text-sm text-[color:var(--color-muted-foreground)] italic py-4 text-center">
-            Нет точек
+            Нет активных салонов с кодом
           </p>
         )}
       </div>
@@ -115,23 +52,6 @@ function CodeManager({ codes, onAdd, onUpdate, onDelete }) {
           </p>
         </div>
       )}
-    </div>
-  );
-}
-
-function EditCodeRow({ code, onSave, onCancel }) {
-  const [name, setName] = useState(code.name);
-  return (
-    <div className="flex flex-1 items-center gap-2 min-w-0">
-      <input
-        className="input flex-1 text-sm min-w-0"
-        value={name}
-        onChange={e => setName(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') onSave(name); if (e.key === 'Escape') onCancel(); }}
-        autoFocus
-      />
-      <button onClick={() => onSave(name)} className="text-xs text-[color:var(--color-primary)] font-medium flex-shrink-0">OK</button>
-      <button onClick={onCancel} className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">✕</button>
     </div>
   );
 }
@@ -150,7 +70,7 @@ function PlansTable({ codes, plans, onChange }) {
       <div className="space-y-3">
         {codes.length === 0 && (
           <div className="card px-4 py-8 text-center text-sm text-[color:var(--color-muted-foreground)] italic">
-            Добавьте точки выше
+            Нет активных салонов с кодом — задайте код салону на странице «Салоны»
           </div>
         )}
         {codes.map((c) => {
@@ -243,7 +163,7 @@ function PlansTable({ codes, plans, onChange }) {
           {codes.length === 0 && (
             <tr>
               <td colSpan={4} className="px-4 py-10 text-center text-sm text-[color:var(--color-muted-foreground)] italic">
-                Добавьте точки в панели слева
+                Нет активных салонов с кодом — задайте код салону на странице «Салоны»
               </td>
             </tr>
           )}
@@ -331,35 +251,6 @@ export default function LocationPlans() {
     }
   }
 
-  async function handleAddCode(code, name, sortOrder) {
-    try {
-      await api.post('/location-plans/codes', { code, name, sort_order: sortOrder });
-      await load();
-    } catch (e) {
-      setError(e.response?.data?.detail || e.message);
-    }
-  }
-
-  async function handleUpdateCode(code, name) {
-    try {
-      await api.patch(`/location-plans/codes/${encodeURIComponent(code)}`, { name });
-      setCodes(prev => prev.map(c => c.code === code ? { ...c, name } : c));
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  async function handleDeleteCode(code) {
-    if (!window.confirm(`Удалить точку «${code}»? Все планы по этой точке также будут удалены.`)) return;
-    try {
-      await api.delete(`/location-plans/codes/${encodeURIComponent(code)}`);
-      setCodes(prev => prev.filter(c => c.code !== code));
-      setPlans(prev => { const n = { ...prev }; delete n[code]; return n; });
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
   function prevMonth() {
     const idx = MONTHS.indexOf(month);
     if (idx === 0) { setMonth(MONTHS[11]); setYear(y => y - 1); }
@@ -422,13 +313,8 @@ export default function LocationPlans() {
         <div className="text-center py-12 text-[color:var(--color-muted-foreground)]">Загрузка...</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5 items-start">
-          {/* Left: code manager */}
-          <CodeManager
-            codes={codes}
-            onAdd={handleAddCode}
-            onUpdate={handleUpdateCode}
-            onDelete={handleDeleteCode}
-          />
+          {/* Left: code list (read-only, derived from «Салоны») */}
+          <CodeManager codes={codes} />
 
           {/* Right: plans table + save */}
           <div className="space-y-4">

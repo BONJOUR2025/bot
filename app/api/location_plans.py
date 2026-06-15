@@ -1,58 +1,22 @@
 from __future__ import annotations
 
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import require_permission
 from app.data.location_repository import LocationRepository
 from app.schemas.location_plan import (
-    LocationCode, LocationCodeCreate, LocationCodeUpdate,
-    LocationPlan, LocationPlanUpsert,
+    LocationCode, LocationPlan, LocationPlanUpsert,
 )
 
 
 def create_location_plans_router(repo: LocationRepository) -> APIRouter:
     router = APIRouter(prefix="/location-plans", tags=["LocationPlans"])
 
-    # ── Location codes ────────────────────────────────────────────
+    # ── Location codes (read-only, derived from «Салоны») ─────────
 
     @router.get("/codes", response_model=list[LocationCode])
     async def list_codes(current=Depends(require_permission("payroll"))):
         return repo.list_codes()
-
-    @router.post("/codes", response_model=LocationCode)
-    async def create_code(
-        data: LocationCodeCreate,
-        current=Depends(require_permission("payroll")),
-    ):
-        if repo.get_code(data.code):
-            raise HTTPException(status_code=400, detail="code_exists")
-        return repo.upsert_code(data.code, data.name, data.sort_order)
-
-    @router.patch("/codes/{code}", response_model=LocationCode)
-    async def update_code(
-        code: str,
-        data: LocationCodeUpdate,
-        current=Depends(require_permission("payroll")),
-    ):
-        existing = repo.get_code(code)
-        if not existing:
-            raise HTTPException(status_code=404, detail="not_found")
-        return repo.upsert_code(
-            code,
-            data.name if data.name is not None else existing.name,
-            data.sort_order if data.sort_order is not None else existing.sort_order,
-        )
-
-    @router.delete("/codes/{code}")
-    async def delete_code(
-        code: str,
-        current=Depends(require_permission("payroll")),
-    ):
-        if not repo.delete_code(code):
-            raise HTTPException(status_code=404, detail="not_found")
-        return {"status": "deleted"}
 
     # ── Monthly plans ─────────────────────────────────────────────
 

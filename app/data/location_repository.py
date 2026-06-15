@@ -3,26 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.data.json_storage import JsonStorage
+from app.data.salon_repository import get_salon_repository
 from app.schemas.location_plan import LocationCode, LocationPlan
 from app.settings import settings
 
-_DEFAULT_CODES = [
-    {"code": "Ц",  "name": "Цех",          "sort_order": 0},
-    {"code": "П",  "name": "Пассаж",       "sort_order": 1},
-    {"code": "А",  "name": "Академпарк",   "sort_order": 2},
-    {"code": "М",  "name": "Меркурий",     "sort_order": 3},
-    {"code": "Р",  "name": "Рио",          "sort_order": 4},
-    {"code": "Оз", "name": "Озерки",       "sort_order": 5},
-    {"code": "Ох", "name": "Охта-Молл",    "sort_order": 6},
-]
-
 
 class LocationRepository:
-    """Stores location codes (editable) and monthly plans per location."""
+    """Stores monthly plans per location.
+
+    The list of point codes is NOT stored here — it is derived from the
+    «Салоны» page (active salons that have a code filled in), so that codes are
+    managed in a single place. Plans are still keyed by salon code.
+    """
 
     def __init__(self, path: str | Path | None = None) -> None:
         self.storage = JsonStorage(path or settings.locations_file)
-        self._codes: dict[str, LocationCode] = {}
         self._plans: dict[str, LocationPlan] = {}   # key = "month_key|code"
         self._load()
 
@@ -33,13 +28,6 @@ class LocationRepository:
         if not isinstance(data, dict):
             data = {}
 
-        codes_raw = data.get("codes") or _DEFAULT_CODES
-        self._codes = {}
-        for item in codes_raw:
-            if isinstance(item, dict) and item.get("code"):
-                lc = LocationCode.from_dict(item)
-                self._codes[lc.code] = lc
-
         self._plans = {}
         for item in (data.get("plans") or []):
             if isinstance(item, dict) and item.get("location_code") and item.get("month_key"):
@@ -48,7 +36,6 @@ class LocationRepository:
 
     def _save(self) -> None:
         self.storage.save({
-            "codes": [c.to_dict() for c in sorted(self._codes.values(), key=lambda x: x.sort_order)],
             "plans": [p.to_dict() for p in self._plans.values()],
         })
 
@@ -56,49 +43,30 @@ class LocationRepository:
     def _plan_key(month_key: str, code: str) -> str:
         return f"{month_key}|{code}"
 
-    # ── Location codes ───────────────────────────────────────────
+    # ── Location codes (derived from «Салоны») ───────────────────
 
     def list_codes(self) -> list[LocationCode]:
-        self._load()  # always fresh from disk (two-process setup)
-        return sorted(self._codes.values(), key=lambda x: x.sort_order)
+        """Active salons with a non-empty code, mapped to point codes."""
+        salons = get_salon_repository().list_salons(status="active")
+        codes: list[LocationCode] = []
+        seen: set[str] = set()
+        for index, salon in enumerate(salons):
+            code = (salon.code or "").strip()
+            if not code or code in seen:
+                continue
+            seen.add(code)
+            codes.append(LocationCode(code=code, name=salon.name, sort_order=index))
+        return codes
 
     def get_code(self, code: str) -> LocationCode | None:
-        self._load()  # always fresh from disk (two-process setup)
-        return self._codes.get(code)
-
-    def upsert_code(self, code: str, name: str, sort_order: int | None = None) -> LocationCode:
-        self._load()  # sync with disk before mutating
-        existing = self._codes.get(code)
-        if existing:
-            existing.name = name
-            if sort_order is not None:
-                existing.sort_order = sort_order
-            lc = existing
-        else:
-            lc = LocationCode(
-                code=code, name=name,
-                sort_order=sort_order if sort_order is not None else len(self._codes),
-            )
-            self._codes[code] = lc
-        self._save()
-        return lc
-
-    def delete_code(self, code: str) -> bool:
-        self._load()  # sync with disk before mutating
-        if code not in self._codes:
-            return False
-        del self._codes[code]
-        # Also remove plans for this code
-        keys_to_del = [k for k in self._plans if k.endswith(f"|{code}")]
-        for k in keys_to_del:
-            del self._plans[k]
-        self._save()
-        return True
+        for lc in self.list_codes():
+            if lc.code == code:
+                return lc
+        return None
 
     def codes_dict(self) -> dict[str, str]:
-        """Return {code: name} for all locations."""
-        self._load()  # always fresh from disk (two-process setup)
-        return {c.code: c.name for c in self._codes.values()}
+        """Return {code: name} for all active salons with a code."""
+        return {lc.code: lc.name for lc in self.list_codes()}
 
     # ── Monthly plans ────────────────────────────────────────────
 

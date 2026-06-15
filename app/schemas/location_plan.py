@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class LocationCode(BaseModel):
@@ -44,17 +43,6 @@ class LocationPlan(BaseModel):
             cosmetics_plan=float(d.get("cosmetics_plan", 0)),
             shoes_plan=float(d.get("shoes_plan", 0)),
         )
-
-
-class LocationCodeCreate(BaseModel):
-    code: str
-    name: str
-    sort_order: int = 0
-
-
-class LocationCodeUpdate(BaseModel):
-    name: Optional[str] = None
-    sort_order: Optional[int] = None
 
 
 class LocationPlanUpsert(BaseModel):
