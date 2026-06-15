@@ -25,6 +25,7 @@ export default function ShiftCheckins() {
   const [filters, setFilters] = useState({ from: todayStr(), to: todayStr() });
   const [photoUrl, setPhotoUrl] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
 
@@ -99,7 +100,18 @@ export default function ShiftCheckins() {
   }
 
   function startCreate() {
+    setEditingId(null);
     setForm(emptyForm());
+    setShowForm(true);
+  }
+
+  function startEdit(item) {
+    setEditingId(item.id);
+    setForm({
+      employee_id: item.employee_id,
+      date: item.date,
+      time: (item.sent_at || '').slice(11, 16),
+    });
     setShowForm(true);
   }
 
@@ -108,13 +120,19 @@ export default function ShiftCheckins() {
     const employee = employees.find((e) => String(e.id) === String(form.employee_id));
     setSaving(true);
     try {
-      await api.post('shift-checkins/', {
+      const payload = {
         employee_id: form.employee_id,
         employee_name: employee?.full_name || employee?.name || '',
         date: form.date,
         time: form.time,
-      });
+      };
+      if (editingId) {
+        await api.patch(`shift-checkins/${editingId}`, payload);
+      } else {
+        await api.post('shift-checkins/', payload);
+      }
       setShowForm(false);
+      setEditingId(null);
       load();
     } catch (err) {
       console.error(err);
@@ -163,11 +181,16 @@ export default function ShiftCheckins() {
     return '—';
   }
 
-  function deleteButton(item) {
+  function actionButtons(item) {
     return (
-      <button className="text-red-600" onClick={() => handleDelete(item.id)} title="Удалить запись">
-        🗑
-      </button>
+      <div className="flex justify-end gap-2">
+        <button className="text-blue-600" onClick={() => startEdit(item)} title="Редактировать">
+          ✏️
+        </button>
+        <button className="text-red-600" onClick={() => handleDelete(item.id)} title="Удалить запись">
+          🗑
+        </button>
+      </div>
     );
   }
 
@@ -250,7 +273,7 @@ export default function ShiftCheckins() {
                         <td className="p-2">{item.expected_open_time || '—'}</td>
                         <td className="p-2">{penaltyLabel(item)}</td>
                         <td className="p-2">{photoCell(item)}</td>
-                        <td className="p-2 text-right">{deleteButton(item)}</td>
+                        <td className="p-2 text-right">{actionButtons(item)}</td>
                       </tr>
                     ));
                   })}
@@ -287,7 +310,7 @@ export default function ShiftCheckins() {
               { label: 'По графику', render: (item) => item.expected_open_time || '—' },
               { label: 'Штраф', render: penaltyLabel },
               { label: 'Фото', render: photoCell },
-              { label: '', isAction: true, cellClass: 'text-right', render: deleteButton },
+              { label: '', isAction: true, cellClass: 'text-right', render: actionButtons },
             ]}
           />
         </div>
@@ -307,9 +330,14 @@ export default function ShiftCheckins() {
       )}
 
       {showForm && (
-        <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && setShowForm(false)}>
+        <div
+          className="modal-backdrop"
+          onClick={(e) => e.target === e.currentTarget && (setShowForm(false), setEditingId(null))}
+        >
           <div className="modal-card max-w-md">
-            <h2 className="text-xl font-semibold">Отметка об открытии вручную</h2>
+            <h2 className="text-xl font-semibold">
+              {editingId ? 'Редактирование отметки об открытии' : 'Отметка об открытии вручную'}
+            </h2>
             <select
               className="modal-control"
               value={form.employee_id}
@@ -335,7 +363,13 @@ export default function ShiftCheckins() {
               onChange={(e) => setForm({ ...form, time: e.target.value })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
+              <button
+                className="btn bg-gray-200 text-gray-700 hover:bg-gray-300"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingId(null);
+                }}
+              >
                 Отмена
               </button>
               <button className="btn" onClick={saveForm} disabled={saving}>

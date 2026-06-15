@@ -118,14 +118,9 @@ class ShiftCheckinService:
         sent_at = sent_at.astimezone(MOSCOW_TZ)
         today = sent_at.date()
 
-        point = await self.find_point_for_employee_id(employee_id, today)
-        salon = self.find_salon_by_code(point.short) if point else None
-
-        expected_open_time: Optional[str] = None
-        delay_minutes = 0
-        penalty_amount: float = 0
-        if salon:
-            expected_open_time, delay_minutes, penalty_amount = self.compute_penalty(sent_at, salon)
+        point, salon, expected_open_time, delay_minutes, penalty_amount = await self._resolve_assignment(
+            employee_id, sent_at
+        )
 
         record = self._repo.create({
             "employee_id": employee_id,
@@ -146,21 +141,100 @@ class ShiftCheckinService:
         })
 
         if penalty_amount > 0:
-            incentive = self._incentives.create({
-                "employee_id": employee_id,
-                "name": employee_name,
-                "type": "penalty",
-                "amount": penalty_amount,
-                "reason": (
-                    f"Опоздание открытия точки «{salon.name}» на {delay_minutes} мин "
-                    f"(чек отправлен в {sent_at.strftime('%H:%M')}, открытие в {expected_open_time})"
-                ),
-                "date": today.isoformat(),
-                "added_by": added_by,
-            })
-            record = self._repo.update(record["id"], {"incentive_id": incentive["id"]}) or record
+            record = self._create_penalty(
+                record, employee_id, employee_name, salon, expected_open_time,
+                delay_minutes, penalty_amount, today, sent_at, added_by,
+            )
 
         return record
+
+    async def update_checkin(
+        self,
+        checkin_id: int,
+        employee_id: str,
+        employee_name: str,
+        sent_at: datetime,
+        added_by: str = "admin",
+    ) -> Optional[dict]:
+        existing = self._repo.get(checkin_id)
+        if not existing:
+            return None
+
+        sent_at = sent_at.astimezone(MOSCOW_TZ)
+        today = sent_at.date()
+
+        point, salon, expected_open_time, delay_minutes, penalty_amount = await self._resolve_assignment(
+            employee_id, sent_at
+        )
+
+        old_incentive_id = existing.get("incentive_id")
+        if old_incentive_id:
+            self._incentives.delete(old_incentive_id)
+
+        record = self._repo.update(checkin_id, {
+            "employee_id": employee_id,
+            "employee_name": employee_name,
+            "date": today.isoformat(),
+            "point": point.point if point else None,
+            "point_short": point.short if point else None,
+            "salon_id": salon.id if salon else None,
+            "salon_name": salon.name if salon else None,
+            "sent_at": sent_at.isoformat(),
+            "expected_open_time": expected_open_time,
+            "delay_minutes": delay_minutes,
+            "penalty_amount": penalty_amount,
+            "incentive_id": None,
+            "no_schedule": point is None,
+        })
+
+        if penalty_amount > 0:
+            record = self._create_penalty(
+                record, employee_id, employee_name, salon, expected_open_time,
+                delay_minutes, penalty_amount, today, sent_at, added_by,
+            )
+
+        return record
+
+    async def _resolve_assignment(
+        self, employee_id: str, sent_at: datetime
+    ) -> tuple[Optional[SchedulePointOut], Optional[Salon], Optional[str], int, float]:
+        point = await self.find_point_for_employee_id(employee_id, sent_at.date())
+        salon = self.find_salon_by_code(point.short) if point else None
+
+        expected_open_time: Optional[str] = None
+        delay_minutes = 0
+        penalty_amount: float = 0
+        if salon:
+            expected_open_time, delay_minutes, penalty_amount = self.compute_penalty(sent_at, salon)
+
+        return point, salon, expected_open_time, delay_minutes, penalty_amount
+
+    def _create_penalty(
+        self,
+        record: dict,
+        employee_id: str,
+        employee_name: str,
+        salon: Salon,
+        expected_open_time: Optional[str],
+        delay_minutes: int,
+        penalty_amount: float,
+        today: date,
+        sent_at: datetime,
+        added_by: str,
+    ) -> dict:
+        incentive = self._incentives.create({
+            "employee_id": employee_id,
+            "name": employee_name,
+            "type": "penalty",
+            "amount": penalty_amount,
+            "reason": (
+                f"Опоздание открытия точки «{salon.name}» на {delay_minutes} мин "
+                f"(чек отправлен в {sent_at.strftime('%H:%M')}, открытие в {expected_open_time})"
+            ),
+            "date": today.isoformat(),
+            "added_by": added_by,
+        })
+        return self._repo.update(record["id"], {"incentive_id": incentive["id"]}) or record
 
 
 _service: ShiftCheckinService | None = None

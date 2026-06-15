@@ -54,6 +54,29 @@ def create_shift_checkins_router(repo: ShiftCheckinRepository) -> APIRouter:
             added_by="admin",
         )
 
+    @router.patch("/{checkin_id}", response_model=ShiftCheckin)
+    async def update_shift_checkin(
+        checkin_id: int,
+        data: ShiftCheckinManualCreate,
+        current=Depends(require_permission("shift-checkins")),
+        service: ShiftCheckinService = Depends(get_shift_checkin_service),
+    ):
+        try:
+            sent_at = datetime.strptime(f"{data.date} {data.time}", "%Y-%m-%d %H:%M")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_datetime")
+        sent_at = sent_at.replace(tzinfo=MOSCOW_TZ)
+        record = await service.update_checkin(
+            checkin_id,
+            employee_id=data.employee_id,
+            employee_name=data.employee_name,
+            sent_at=sent_at,
+            added_by="admin",
+        )
+        if not record:
+            raise HTTPException(status_code=404, detail="not_found")
+        return record
+
     @router.get("/{checkin_id}/photo")
     async def get_shift_checkin_photo(
         checkin_id: int,
