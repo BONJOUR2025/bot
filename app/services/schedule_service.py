@@ -9,19 +9,19 @@ from openpyxl import load_workbook
 
 from ..config import EXCEL_FILE
 from ..core.constants import MONTHS_RU
+from ..data.salon_repository import get_salon_repository
 from ..schemas.schedule import SchedulePointOut
 
-POINTS = {
-    "Ц": "Цех",
-    "Ох": "Охта",
-    "М": "Меркурий",
-    "А": "Академка",
-    "Оз": "Озерки",
-    "П": "Пассаж",
-    "Р": "Рио",
-}
-
 _WEEKDAY_SHORT = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+
+
+def _get_points() -> Dict[str, str]:
+    """Map salon code -> salon name, as used by the Excel schedule."""
+    return {
+        salon.code: salon.name
+        for salon in get_salon_repository().list_salons()
+        if salon.code
+    }
 
 
 def _open_sheet(year: int, month: int):
@@ -57,12 +57,13 @@ class ScheduleService:
         except Exception:
             return []
 
+        points = _get_points()
         _, sheet = _open_sheet(day_date.year, day_date.month)
 
         if sheet is None:
             return [
                 SchedulePointOut(point=name, short=code, employee="")
-                for code, name in POINTS.items()
+                for code, name in points.items()
             ]
 
         day_col = None
@@ -77,18 +78,18 @@ class ScheduleService:
         if day_col is None:
             return [
                 SchedulePointOut(point=name, short=code, employee="")
-                for code, name in POINTS.items()
+                for code, name in points.items()
             ]
 
         assignments: Dict[str, str] = {}
         for row in range(3, sheet.max_row + 1):
             code = str(sheet.cell(row=row, column=day_col).value or "").strip()
-            if code not in POINTS or code in assignments:
+            if code not in points or code in assignments:
                 continue
             employee_cell = sheet.cell(row=row, column=1).value
             employee_name = str(employee_cell).strip() if employee_cell else ""
             assignments[code] = employee_name
-            if len(assignments) == len(POINTS):
+            if len(assignments) == len(points):
                 break
 
         return [
@@ -97,7 +98,7 @@ class ScheduleService:
                 short=code,
                 employee=assignments.get(code, ""),
             )
-            for code, name in POINTS.items()
+            for code, name in points.items()
         ]
 
     async def get_schedule_month(self, year: int, month: int) -> dict:
@@ -121,9 +122,10 @@ class ScheduleService:
                 for d in range(1, num_days + 1)
             ]
 
+        points = _get_points()
         _, sheet = _open_sheet(year, month)
         if sheet is None:
-            return {"employees": [], "days": _empty_days(), "points": POINTS}
+            return {"employees": [], "days": _empty_days(), "points": points}
 
         # Map day number → column index (row 1 or row 2 holds day numbers)
         day_cols: Dict[int, int] = {}
@@ -171,4 +173,4 @@ class ScheduleService:
                 "assignments": assignments,
             })
 
-        return {"employees": employees, "days": days, "points": POINTS}
+        return {"employees": employees, "days": days, "points": points}
