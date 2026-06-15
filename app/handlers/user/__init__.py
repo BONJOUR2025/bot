@@ -20,6 +20,7 @@ from .cabinet import (
     handle_admin_change_response,
 )
 from .ack import handle_acknowledgment
+from .shift_checkin import open_salon_start, open_salon_photo, open_salon_cancel
 
 
 __all__ = [
@@ -40,4 +41,7 @@ __all__ = [
     "handle_admin_change_response",
     "handle_acknowledgment",
     "payout",
+    "open_salon_start",
+    "open_salon_photo",
+    "open_salon_cancel",
 ]

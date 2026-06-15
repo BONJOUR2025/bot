@@ -17,6 +17,7 @@ from .conversations import (
     build_admin_conversation,
     build_manual_payout_conversation,
     build_payout_conversation,
+    build_shift_checkin_conversation,
 )
 from ..handlers.user import (
     handle_salary_request,
@@ -103,6 +104,7 @@ def _register_all_handlers(app):
     admin_conv_handler = build_admin_conversation()
     manual_payout_handler = build_manual_payout_conversation()
     payout_conv_handler = build_payout_conversation()
+    shift_checkin_conv_handler = build_shift_checkin_conversation()
     reset_filter = filters.Regex(r"^(🏠 Домой|🔙 Назад|❌ Отмена)$")
     # Log all callback button presses before other handlers process them
     app.add_handler(
@@ -127,6 +129,7 @@ def _register_all_handlers(app):
     app.add_handler(admin_conv_handler)
     app.add_handler(manual_payout_handler)
     app.add_handler(payout_conv_handler)
+    app.add_handler(shift_checkin_conv_handler)
     app.add_handler(CallbackQueryHandler(allow_payout, pattern=r"^allow_payout_"))
     app.add_handler(CallbackQueryHandler(deny_payout, pattern=r"^deny_payout_"))
     app.add_handler(

@@ -38,6 +38,7 @@ AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
     {"id": "passwords", "label": "Пароли"},
     {"id": "salons", "label": "Управление салонами"},
     {"id": "cash-moves", "label": "Кассовые перемещения"},
+    {"id": "shift-checkins", "label": "Рабочее время"},
     {"id": "smses", "label": "СМС Агбис"},
     {"id": "payment-calendar", "label": "Платежный календарь"},
 ]
@@ -74,6 +75,12 @@ BOT_BUTTON_CATALOG: list[dict[str, Any]] = [
         "text": "📚 База знаний",
     },
     {
+        "id": "user.open_salon",
+        "label": "🏪 Открыть салон",
+        "scope": "user",
+        "text": "🏪 Открыть салон",
+    },
+    {
         "id": "common.home",
         "label": "🏠 Домой",
         "scope": "common",
@@ -87,6 +94,7 @@ DEFAULT_USER_BUTTON_IDS: list[str] = [
     "user.request_payout",
     "user.view_schedule",
     "user.profile",
+    "user.open_salon",
 ]
 
 TOKEN_TTL_SECONDS = 60 * 60 * 12

@@ -42,6 +42,7 @@ import Masters from "./pages/Masters";
 import SalesAnalytics from "./pages/SalesAnalytics";
 import AdminEmployeeProfile from "./pages/AdminEmployeeProfile";
 import Salons from "./pages/Salons";
+import ShiftCheckins from "./pages/ShiftCheckins";
 import LocationPlans from "./pages/LocationPlans";
 import CashMovements from "./pages/CashMovements";
 import PaymentCalendar from "./pages/PaymentCalendar";
@@ -97,6 +98,7 @@ export default function App() {
                 <Route path="masters" element={<Masters />} />
                 <Route path="sales" element={<SalesAnalytics />} />
                 <Route path="salons" element={<Salons />} />
+                <Route path="shift-checkins" element={<ShiftCheckins />} />
                 <Route path="location-plans" element={<LocationPlans />} />
                 <Route path="cash-moves" element={<CashMovements />} />
                 <Route path="payment-calendar" element={<PaymentCalendar />} />
