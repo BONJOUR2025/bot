@@ -17,6 +17,7 @@ const emptyUser = {
   allowed_employee_ids: [],
   allowed_departments: [],
   employee_id: '',
+  hadLogin: false,
 };
 
 export default function AccessControl() {
@@ -194,11 +195,19 @@ export default function AccessControl() {
       allowed_employee_ids: Array.isArray(employeeScope) ? [...employeeScope] : [],
       allowed_departments: Array.isArray(departmentScope) ? [...departmentScope] : [],
       employee_id: user.employee_id || '',
+      hadLogin: user.has_login,
     });
   }
 
   function cancelUserForm() {
     setUserForm(null);
+  }
+
+  function editBotUserAccess(employeeId) {
+    const user = data.users.find((u) => String(u.employee_id) === String(employeeId));
+    if (!user) return;
+    startUserEdit(user);
+    document.getElementById('access-users-section')?.scrollIntoView({ behavior: 'smooth' });
   }
 
   async function submitUser(event) {
@@ -419,7 +428,7 @@ export default function AccessControl() {
         )}
       </section>
 
-      <section className="space-y-4">
+      <section id="access-users-section" className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Пользователи</h2>
           <button className="btn" onClick={startUserCreate}>Добавить пользователя</button>
@@ -428,7 +437,12 @@ export default function AccessControl() {
           <div className="space-y-3">
             {data.users.map((user) => (
               <div key={user.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{user.login}</div>
+                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex items-center justify-between">
+                  <span>{user.login || user.display_name || `#${user.id}`}</span>
+                  {!user.has_login && (
+                    <span className="text-xs font-normal text-gray-500 bg-gray-200 rounded px-2 py-0.5">Бот, без входа в админку</span>
+                  )}
+                </div>
                 <div className="px-4 py-2 space-y-1.5 text-sm">
                   <div className="flex justify-between"><span className="text-gray-500">ID</span><span>{user.id}</span></div>
                   {user.display_name && (
@@ -454,7 +468,9 @@ export default function AccessControl() {
                 </div>
                 <div className="px-4 py-2 border-t flex justify-end gap-3">
                   <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
-                  <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>Удалить</button>
+                  {user.has_login && (
+                    <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>Удалить</button>
+                  )}
                 </div>
               </div>
             ))}
@@ -465,9 +481,14 @@ export default function AccessControl() {
               <div key={user.id} className="border rounded p-4 bg-white shadow-sm">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                   <div className="space-y-1">
-                    <h3 className="text-lg font-semibold">{user.login}</h3>
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      {user.login || user.display_name || `#${user.id}`}
+                      {!user.has_login && (
+                        <span className="text-xs font-normal text-gray-500 bg-gray-200 rounded px-2 py-0.5">Бот, без входа в админку</span>
+                      )}
+                    </h3>
                     <p className="text-sm text-gray-500">ID: {user.id}</p>
-                    {user.display_name && (
+                    {user.display_name && user.login && (
                       <p className="text-sm text-gray-500">{user.display_name}</p>
                     )}
                     <p className="text-sm">Роль: {user.role_name || '—'}</p>
@@ -499,9 +520,11 @@ export default function AccessControl() {
                   </div>
                   <div className="flex gap-2">
                     <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
-                    <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>
-                      Удалить
-                    </button>
+                    {user.has_login && (
+                      <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>
+                        Удалить
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -511,7 +534,9 @@ export default function AccessControl() {
         {userForm && (
           <form className="border rounded p-4 bg-white space-y-4" onSubmit={submitUser}>
             <h3 className="text-lg font-semibold">
-              {isUserNew ? 'Новый пользователь' : `Редактирование пользователя «${userForm.login}»`}
+              {isUserNew
+                ? 'Новый пользователь'
+                : `Редактирование пользователя «${userForm.login || userForm.id}»`}
             </h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -537,8 +562,14 @@ export default function AccessControl() {
                   className="input w-full"
                   value={userForm.login}
                   onChange={(e) => setUserForm((prev) => ({ ...prev, login: e.target.value }))}
-                  required
+                  placeholder={isUserNew ? '' : 'Без логина (только для бота)'}
+                  required={isUserNew}
                 />
+                {!isUserNew && !userForm.login && (
+                  <p className="text-xs text-gray-500">
+                    Заполните логин и пароль, чтобы выдать доступ в админку.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700" htmlFor="user-password">
@@ -551,7 +582,7 @@ export default function AccessControl() {
                   value={userForm.password}
                   onChange={(e) => setUserForm((prev) => ({ ...prev, password: e.target.value }))}
                   placeholder={isUserNew ? '' : 'Оставьте пустым, чтобы не менять'}
-                  required={isUserNew}
+                  required={isUserNew || (!userForm.hadLogin && !!userForm.login)}
                 />
               </div>
               <div className="space-y-2">
@@ -790,6 +821,11 @@ export default function AccessControl() {
                       )}
                     </td>
                     <td className="px-3 py-2">
+                      {u.employee_id && (
+                        <button className="btn" onClick={() => editBotUserAccess(u.employee_id)}>
+                          ⚙️ Права и меню
+                        </button>
+                      )}
                       {!u.employee_id && (
                         <div className="flex gap-2 items-center">
                           <select

@@ -51,6 +51,7 @@ class RoleUpdate(BaseModel):
 class UserOut(BaseModel):
     id: str
     login: str
+    has_login: bool = True
     role_id: Optional[str] = None
     role_name: Optional[str] = None
     permissions: Optional[List[str]] = None

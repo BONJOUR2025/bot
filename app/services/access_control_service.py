@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.config import SECRET_KEY
+from app.data.bot_user_repository import BotUserRepository, get_bot_user_repository
 from app.data.employee_repository import EmployeeRepository
 from app.data.json_storage import JsonStorage
 
@@ -122,16 +123,57 @@ class AccessControlService:
         path: str | Path = "access_control.json",
         secret_key: str | None = None,
         employee_repo: EmployeeRepository | None = None,
+        bot_user_repo: BotUserRepository | None = None,
     ) -> None:
         self.storage = JsonStorage(path)
         self.secret_key = (secret_key or SECRET_KEY or "change_me").encode("utf-8")
         self.employee_repo = employee_repo or EmployeeRepository()
+        self.bot_user_repo = bot_user_repo or get_bot_user_repository()
         self._data: dict[str, Any] = self.storage.load() or {}
         self._ensure_defaults()
 
     # ------------------------------------------------------------------
     # internal helpers
     # ------------------------------------------------------------------
+    def _reload(self) -> None:
+        # always fresh from disk (two-process setup)
+        self._data = self.storage.load() or {}
+        self._ensure_defaults()
+        self._ensure_bot_users()
+
+    def _ensure_bot_users(self) -> None:
+        """Auto-create an access control entry for every employee reachable via the bot.
+
+        This lets bot users (matched the same way as the "Пользователи бота" admin
+        page: by Telegram id == employee id) be granted roles/permissions/menu
+        buttons from the "Пользователи" section without requiring an admin-panel login.
+        """
+        changed = False
+        for bot_user in self.bot_user_repo.list():
+            telegram_id = bot_user.get("telegram_id")
+            if not telegram_id:
+                continue
+            employee = self.employee_repo.get_employee(telegram_id)
+            if not employee:
+                continue
+            if self._get_user(employee.id):
+                continue
+            self._data.setdefault("users", []).append({
+                "id": employee.id,
+                "login": None,
+                "role_id": "employee",
+                "permissions": None,
+                "bot_buttons": None,
+                "salt": None,
+                "password_hash": None,
+                "employee_id": employee.id,
+                "allowed_employee_ids": None,
+                "allowed_departments": None,
+            })
+            changed = True
+        if changed:
+            self._persist()
+
     def _ensure_defaults(self) -> None:
         changed = False
         if "roles" not in self._data:
@@ -262,6 +304,7 @@ class AccessControlService:
     # public API
     # ------------------------------------------------------------------
     def list_roles(self) -> list[dict[str, Any]]:
+        self._reload()
         roles = []
         for role in self._data.get("roles", []):
             roles.append(
@@ -275,6 +318,7 @@ class AccessControlService:
         return roles
 
     def list_users(self) -> list[dict[str, Any]]:
+        self._reload()
         result: list[dict[str, Any]] = []
         for user in self._data.get("users", []):
             resolved = self.resolve_user(user.get("id"))
@@ -286,6 +330,7 @@ class AccessControlService:
                 {
                     "id": resolved.id,
                     "login": resolved.login,
+                    "has_login": bool(user.get("login")),
                     "role_id": resolved.role_id,
                     "role_name": resolved.role_name,
                     "permissions": user.get("permissions"),
@@ -323,6 +368,7 @@ class AccessControlService:
         return "*" in permissions or permission in permissions
 
     def create_role(self, data: dict[str, Any]) -> dict[str, Any]:
+        self._reload()
         role_id = data.get("id") or secrets.token_hex(6)
         if self._get_role(role_id):
             raise ValueError("role_exists")
@@ -337,6 +383,7 @@ class AccessControlService:
         return role
 
     def update_role(self, role_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        self._reload()
         role = self._get_role(role_id)
         if not role:
             raise ValueError("role_not_found")
@@ -350,12 +397,14 @@ class AccessControlService:
         return role
 
     def delete_role(self, role_id: str) -> None:
+        self._reload()
         if any(user.get("role_id") == role_id for user in self._data.get("users", [])):
             raise ValueError("role_in_use")
         self._data["roles"] = [r for r in self._data.get("roles", []) if r.get("id") != role_id]
         self._persist()
 
     def create_user(self, data: dict[str, Any]) -> dict[str, Any]:
+        self._reload()
         user_id = str(data.get("id") or secrets.token_hex(8))
         login = data.get("login")
         password = data.get("password")
@@ -393,6 +442,7 @@ class AccessControlService:
         return user_record
 
     def update_user(self, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        self._reload()
         user = self._get_user(user_id)
         if not user:
             raise ValueError("user_not_found")
@@ -427,6 +477,7 @@ class AccessControlService:
         return user
 
     def delete_user(self, user_id: str) -> None:
+        self._reload()
         self._data["users"] = [u for u in self._data.get("users", []) if u.get("id") != user_id]
         self._persist()
 
@@ -434,6 +485,7 @@ class AccessControlService:
     # authentication helpers
     # ------------------------------------------------------------------
     def authenticate(self, login: str, password: str) -> ResolvedUser | None:
+        self._reload()
         user_record = self._get_user_by_login(login)
         if not user_record:
             return None
@@ -454,6 +506,7 @@ class AccessControlService:
         return token
 
     def verify_token(self, token: str) -> ResolvedUser:
+        self._reload()
         try:
             decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
             user_id, issued_at_str, signature = decoded.split(":", 2)
@@ -494,7 +547,7 @@ class AccessControlService:
             employee_id = str(employee_id)
         return ResolvedUser(
             id=user_id,
-            login=record.get("login", ""),
+            login=record.get("login") or "",
             role_id=record.get("role_id"),
             role_name=role.get("name") if role else None,
             permissions=permissions,
@@ -633,6 +686,7 @@ class AccessControlService:
     # bot integration helpers
     # ------------------------------------------------------------------
     def get_bot_button_texts(self, user_id: str | None) -> list[str]:
+        self._reload()
         if not user_id:
             return self._buttons_to_text(DEFAULT_USER_BUTTON_IDS + ["common.home"])
         user = self.resolve_user(user_id)

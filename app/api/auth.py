@@ -149,6 +149,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         return UserOut(**{
             "id": resolved.id,
             "login": resolved.login,
+            "has_login": bool(record.get("login")),
             "role_id": resolved.role_id,
             "role_name": resolved.role_name,
             "permissions": record.get("permissions"),
@@ -182,6 +183,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         return UserOut(**{
             "id": resolved.id,
             "login": resolved.login,
+            "has_login": bool(record.get("login")),
             "role_id": resolved.role_id,
             "role_name": resolved.role_name,
             "permissions": record.get("permissions"),
