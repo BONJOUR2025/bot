@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from .dependencies import require_permission
 from app.settings import settings
+from app.utils.logger import LOGS_DIR
 
 # JSON files that can be cleaned up by archiving old records.
 # Each entry: (filename, date_field_name)
@@ -100,6 +101,46 @@ def create_system_router() -> APIRouter:
         if sys.platform == "win32" and parent and Path(parent) == p:
             parent = ""
         return {"path": str(p), "parent": parent, "items": items}
+
+    @router.get("/logs")
+    async def list_logs(_=Depends(perm)):
+        """List all log files under logs/ (general, errors, connections, per-user)."""
+        items = []
+        if LOGS_DIR.exists():
+            for p in sorted(LOGS_DIR.rglob("*.log*")):
+                if not p.is_file():
+                    continue
+                rel = p.relative_to(LOGS_DIR).as_posix()
+                stat = p.stat()
+                items.append({
+                    "name": rel,
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                })
+        return {"files": items}
+
+    @router.get("/logs/content")
+    async def log_content(
+        name: str = Query(...),
+        lines: int = Query(500, ge=1, le=5000),
+        _=Depends(perm),
+    ):
+        """Return the last N lines of a log file."""
+        base = LOGS_DIR.resolve()
+        path = (base / name).resolve()
+        if base not in path.parents and path != base:
+            raise HTTPException(status_code=400, detail="invalid_path")
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="not_found")
+
+        with path.open("r", encoding="utf-8", errors="replace") as f:
+            content_lines = f.readlines()
+        tail = content_lines[-lines:]
+        return {
+            "name": name,
+            "lines": len(content_lines),
+            "content": "".join(tail),
+        }
 
     @router.get("/status")
     async def system_status(_=Depends(perm)):

@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import {
-  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock,
+  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope,
 } from 'lucide-react';
 
 import SettingsGeneral from './settings/General.jsx';
@@ -9,14 +9,16 @@ import SettingsAutomation from './settings/Automation.jsx';
 import SettingsTemplates from './settings/Templates.jsx';
 import SettingsDictionary from './settings/DictionarySettings.jsx';
 import SettingsAccessControl from './settings/AccessControl.jsx';
+import SettingsDiagnostics from './settings/Diagnostics.jsx';
 
 const TABS = [
-  { to: '/admin/settings/general',    label: 'Общие',         icon: SlidersHorizontal },
-  { to: '/admin/settings/telegram',   label: 'Telegram',      icon: Send },
-  { to: '/admin/settings/automation', label: 'Автоматизация', icon: Sparkles },
-  { to: '/admin/settings/templates',  label: 'Шаблоны',       icon: FileText },
-  { to: '/admin/settings/dictionary', label: 'Словарь',       icon: BookOpen },
-  { to: '/admin/settings/access',     label: 'Доступ',        icon: Lock },
+  { to: '/admin/settings/general',     label: 'Общие',         icon: SlidersHorizontal },
+  { to: '/admin/settings/telegram',    label: 'Telegram',      icon: Send },
+  { to: '/admin/settings/automation',  label: 'Автоматизация', icon: Sparkles },
+  { to: '/admin/settings/templates',   label: 'Шаблоны',       icon: FileText },
+  { to: '/admin/settings/dictionary',  label: 'Словарь',       icon: BookOpen },
+  { to: '/admin/settings/access',      label: 'Доступ',        icon: Lock },
+  { to: '/admin/settings/diagnostics', label: 'Диагностика',   icon: Stethoscope },
 ];
 
 function SettingsLayout() {
@@ -60,6 +62,7 @@ export default function Settings() {
         <Route path="templates" element={<SettingsTemplates />} />
         <Route path="dictionary" element={<SettingsDictionary />} />
         <Route path="access" element={<SettingsAccessControl />} />
+        <Route path="diagnostics" element={<SettingsDiagnostics />} />
         <Route path="*" element={<Navigate to="/admin/settings/general" replace />} />
       </Route>
     </Routes>
