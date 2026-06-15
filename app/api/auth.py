@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 
 from app.schemas.auth import (
     AccessConfigResponse,
@@ -20,6 +20,7 @@ from app.services.access_control_service import (
     ResolvedUser,
     get_access_control_service,
 )
+from app.utils.logger import log_connection
 
 from .dependencies import get_current_user, require_permission
 
@@ -64,7 +65,9 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
     async def login(payload: LoginRequest, response: Response) -> LoginResponse:
         resolved = service.authenticate(payload.login, payload.password)
         if not resolved:
+            log_connection(f"Admin: failed login attempt for login={payload.login!r}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
+        log_connection(f"Admin: {resolved.login or resolved.id} logged in")
         token = service.issue_token(resolved.id)
         response.set_cookie(
             "access_token",
@@ -81,7 +84,13 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         return _to_auth_user(current)
 
     @router.post("/logout")
-    async def logout(response: Response) -> dict[str, str]:
+    async def logout(response: Response, access_token: str | None = Cookie(default=None)) -> dict[str, str]:
+        if access_token:
+            try:
+                resolved = service.verify_token(access_token)
+                log_connection(f"Admin: {resolved.login or resolved.id} logged out")
+            except ValueError:
+                pass
         response.delete_cookie("access_token")
         return {"status": "ok"}
 
