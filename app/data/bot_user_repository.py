@@ -25,6 +25,7 @@ class BotUserRepository:
             json.dump(self._data, f, ensure_ascii=False, indent=2)
 
     def list(self) -> List[Dict[str, Any]]:
+        self._data = self._load()  # always fresh from disk (two-process setup)
         result = []
         for telegram_id, item in self._data.items():
             result.append({"telegram_id": telegram_id, **item})
@@ -38,6 +39,7 @@ class BotUserRepository:
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
     ) -> None:
+        self._data = self._load()  # sync with disk before mutating
         telegram_id = str(telegram_id)
         now = datetime.utcnow().isoformat()
         record = self._data.get(telegram_id, {})
