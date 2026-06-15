@@ -347,19 +347,27 @@ class FirebirdService:
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE docs.doc_num = ?
                 AND tovars_tbl.folder_id IN ({repair_folders})
+                AND docs_order.id = (
+                    SELECT MAX(do2.id) FROM docs_order do2 WHERE do2.doc_id = docs_order.doc_id
+                )
             GROUP BY users.description
         """
         sql_cosmetics = f"""
             SELECT users.description, SUM(doc_order_lines.kredit), MAX(docs.doc_date)
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
-            WHERE docs_order_history.status_id = 5
-                AND docs.doc_num = ?
+            WHERE docs.doc_num = ?
                 AND tovars_tbl.folder_id IN ({cosmetics_folders})
+                AND docs_order.id = (
+                    SELECT MAX(do2.id) FROM docs_order do2 WHERE do2.doc_id = docs_order.doc_id
+                )
+                AND EXISTS (
+                    SELECT 1 FROM docs_order_history
+                    WHERE doc_order_id = docs_order.id AND status_id = 5
+                )
             GROUP BY users.description
         """
         sql_shoes = f"""
@@ -371,6 +379,9 @@ class FirebirdService:
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE docs.doc_num = ?
                 AND tovars_tbl.code IN ({shoes_placeholders})
+                AND docs_order.id = (
+                    SELECT MAX(do2.id) FROM docs_order do2 WHERE do2.doc_id = docs_order.doc_id
+                )
                 AND EXISTS (
                     SELECT 1 FROM docs_order_history
                     WHERE doc_order_id = docs_order.id AND status_id = 5

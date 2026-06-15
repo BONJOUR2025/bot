@@ -58,7 +58,7 @@ export default function SettingsDiagnostics() {
       setContent(res.data.content || '');
       setTotalLines(res.data.lines || 0);
       requestAnimationFrame(() => {
-        if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight;
+        if (preRef.current) preRef.current.scrollTop = 0;
       });
     } catch {
       toast('Ошибка загрузки лога', 'error');

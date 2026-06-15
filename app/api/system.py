@@ -139,7 +139,7 @@ def create_system_router() -> APIRouter:
         return {
             "name": name,
             "lines": len(content_lines),
-            "content": "".join(tail),
+            "content": "".join(reversed(tail)),
         }
 
     @router.get("/status")
