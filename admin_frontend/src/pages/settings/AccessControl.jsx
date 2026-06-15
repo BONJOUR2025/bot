@@ -207,7 +207,6 @@ export default function AccessControl() {
     const user = data.users.find((u) => String(u.employee_id) === String(employeeId));
     if (!user) return;
     startUserEdit(user);
-    document.getElementById('access-users-section')?.scrollIntoView({ behavior: 'smooth' });
   }
 
   async function submitUser(event) {
@@ -428,7 +427,7 @@ export default function AccessControl() {
         )}
       </section>
 
-      <section id="access-users-section" className="space-y-4">
+      <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Пользователи</h2>
           <button className="btn" onClick={startUserCreate}>Добавить пользователя</button>
@@ -532,7 +531,8 @@ export default function AccessControl() {
           </div>
         )}
         {userForm && (
-          <form className="border rounded p-4 bg-white space-y-4" onSubmit={submitUser}>
+          <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && cancelUserForm()}>
+            <form className="modal-card max-w-3xl space-y-4" onSubmit={submitUser}>
             <h3 className="text-lg font-semibold">
               {isUserNew
                 ? 'Новый пользователь'
@@ -779,7 +779,8 @@ export default function AccessControl() {
                 Отмена
               </button>
             </div>
-          </form>
+            </form>
+          </div>
         )}
       </section>
 
