@@ -310,6 +310,16 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Bot users (Telegram users who have started the bot, linkable to employees)
+    from .bot_users import create_bot_users_router
+    from ..data.bot_user_repository import get_bot_user_repository
+
+    app.include_router(
+        create_bot_users_router(get_bot_user_repository()),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Location codes and monthly plans (for payroll auto-plan calculation)
     from .location_plans import create_location_plans_router
     from ..data.location_repository import get_location_repository

@@ -63,6 +63,7 @@ VACATIONS_FILE = settings.vacations_file
 ADJUSTMENTS_FILE = settings.adjustments_file
 BONUSES_PENALTIES_FILE = settings.bonuses_penalties_file
 SHIFT_CHECKINS_FILE = settings.shift_checkins_file
+BOT_USERS_FILE = settings.bot_users_file
 ASSETS_FILE = settings.assets_file
 ADMIN_ID = settings.admin_id
 ADMIN_CHAT_ID = settings.admin_chat_id

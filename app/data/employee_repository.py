@@ -143,6 +143,16 @@ class EmployeeRepository:
             self._data.pop(employee_id)
             self._save()
 
+    def rekey_employee(self, old_id: str, new_id: str) -> Employee | None:
+        """Change the id (Telegram user id) of an existing employee record."""
+        old_id, new_id = str(old_id), str(new_id)
+        if old_id not in self._data or new_id in self._data:
+            return None
+        data = self._data.pop(old_id)
+        self._data[new_id] = data
+        self._save()
+        return self._create_employee(new_id, data)
+
     def save_employees(self, employees: List[Employee]) -> None:
         self._data = {e.id: _serialize(e) | {"id": e.id} for e in employees}
         for v in self._data.values():

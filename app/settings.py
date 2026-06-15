@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     # Файл для хранения отметок об открытии смены
     shift_checkins_file: str = Field("shift_checkins.json", validation_alias="SHIFT_CHECKINS_FILE")
 
+    # Файл для хранения пользователей бота (для привязки к сотрудникам)
+    bot_users_file: str = Field("bot_users.json", validation_alias="BOT_USERS_FILE")
+
     # Авито API (для авто-импорта откликов)
     avito_client_id: str = Field("", validation_alias="AVITO_CLIENT_ID")
     avito_client_secret: str = Field("", validation_alias="AVITO_CLIENT_SECRET")
