@@ -149,6 +149,7 @@ class EmployeeRepository:
         if old_id not in self._data or new_id in self._data:
             return None
         data = self._data.pop(old_id)
+        data["bot_user"] = True
         self._data[new_id] = data
         self._save()
         return self._create_employee(new_id, data)
