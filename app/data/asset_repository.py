@@ -86,3 +86,13 @@ class AssetRepository:
     def delete(self, item_id: str) -> None:
         self._data = [it for it in self._data if str(it.get('id')) != str(item_id)]
         self._save()
+
+    def reassign_employee(self, old_employee_id: str, new_employee_id: str) -> int:
+        count = 0
+        for item in self._data:
+            if str(item.get('employee_id')) == str(old_employee_id):
+                item['employee_id'] = str(new_employee_id)
+                count += 1
+        if count:
+            self._save()
+        return count

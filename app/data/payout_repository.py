@@ -182,6 +182,16 @@ class PayoutRepository:
             db.refresh(row)
             return self._row_to_dict(row)
 
+    def reassign_user(self, old_user_id: str, new_user_id: str) -> int:
+        with self._session() as db:
+            rows = db.query(AdvanceRequest).filter(
+                AdvanceRequest.user_id == str(old_user_id)
+            ).all()
+            for row in rows:
+                row.user_id = str(new_user_id)
+            db.commit()
+            return len(rows)
+
     def delete_many(self, ids: List[str]) -> None:
         int_ids = []
         for i in ids:

@@ -3,8 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies import require_permission
+from app.data.asset_repository import AssetRepository
 from app.data.bot_user_repository import BotUserRepository
 from app.data.employee_repository import EmployeeRepository
+from app.data.incentive_repository import IncentiveRepository
+from app.data.payout_repository import PayoutRepository
+from app.data.shift_checkin_repository import get_shift_checkin_repository
+from app.data.vacation_repository import VacationRepository
 from app.schemas.bot_user import BotUserLinkRequest, BotUserOut
 from app.services.access_control_service import ResolvedUser
 
@@ -36,9 +41,19 @@ def create_bot_users_router(repo: BotUserRepository) -> APIRouter:
         employees = EmployeeRepository()
         if employees.get_employee(telegram_id):
             raise HTTPException(status_code=400, detail="already_linked")
-        employee = employees.rekey_employee(payload.employee_id, telegram_id)
+        old_id = payload.employee_id
+        employee = employees.rekey_employee(old_id, telegram_id)
         if not employee:
             raise HTTPException(status_code=404, detail="employee_not_found")
+
+        # Re-point all records referencing the employee's old id at the new
+        # (Telegram) id, so the employee's history stays visible in their profile.
+        IncentiveRepository().reassign_employee(old_id, telegram_id)
+        VacationRepository().reassign_employee(old_id, telegram_id)
+        AssetRepository().reassign_employee(old_id, telegram_id)
+        get_shift_checkin_repository().reassign_employee(old_id, telegram_id)
+        PayoutRepository().reassign_user(old_id, telegram_id)
+
         item = next((u for u in repo.list() if u["telegram_id"] == telegram_id), None)
         return {
             **(item or {"telegram_id": telegram_id}),
@@ -47,3 +62,4 @@ def create_bot_users_router(repo: BotUserRepository) -> APIRouter:
         }
 
     return router
+
