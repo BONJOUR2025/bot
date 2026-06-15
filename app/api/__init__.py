@@ -46,6 +46,7 @@ from .payroll import create_payroll_router
 from .tasks import create_task_router
 from .passwords import create_password_router
 from .push import create_push_router
+from ..utils.logger import log_connection, log_user_action
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -64,6 +65,20 @@ def create_app() -> FastAPI:
 
     # Статика для админки/React
     app.mount("/static", StaticFiles(directory="static"), name="static")
+
+    @app.middleware("http")
+    async def log_api_activity(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path.startswith("/api") or path.startswith("/session"):
+            user = getattr(request.state, "user", None)
+            action = f"{request.method} {path} -> {response.status_code}"
+            if user:
+                label = user.login or user.display_name or user.id
+                log_user_action(user.id, label, action)
+            else:
+                log_user_action("anonymous", None, action)
+        return response
 
     @app.get("/status", response_class=HTMLResponse)
     async def status_page():
@@ -108,10 +123,12 @@ def create_app() -> FastAPI:
     async def session_login(payload: LoginRequest) -> JSONResponse:
         resolved = access_service.authenticate(payload.login, payload.password)
         if not resolved:
+            log_connection(f"Admin: failed login attempt for login={payload.login!r}")
             return JSONResponse(
                 {"detail": "invalid_credentials"},
                 status_code=status.HTTP_401_UNAUTHORIZED,
             )
+        log_connection(f"Admin: {resolved.login or resolved.id} logged in")
         token = access_service.issue_token(resolved.id)
         response = JSONResponse({"status": "ok", "token": token})
         response.set_cookie(
@@ -125,7 +142,13 @@ def create_app() -> FastAPI:
         return response
 
     @app.post("/session/logout", include_in_schema=False)
-    async def session_logout() -> JSONResponse:
+    async def session_logout(access_token: str | None = Cookie(default=None)) -> JSONResponse:
+        if access_token:
+            try:
+                resolved = access_service.verify_token(access_token)
+                log_connection(f"Admin: {resolved.login or resolved.id} logged out")
+            except ValueError:
+                pass
         response = JSONResponse({"status": "ok"})
         response.delete_cookie("access_token")
         return response

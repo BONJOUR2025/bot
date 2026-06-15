@@ -1,17 +1,17 @@
 import logging
 import re
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any
 
-# Настройка логирования: вывод в файл и консоль.
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("bot.log", encoding="utf-8"),
-        logging.StreamHandler(),
-    ],
-)
+LOGS_DIR = Path("logs")
+USERS_LOG_DIR = LOGS_DIR / "users"
+USERS_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+_MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
+_BACKUP_COUNT = 5
+
+_FORMATTER = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
 _TOKEN_PATTERN = re.compile(r"\b\d{10,}\b")
 
@@ -21,9 +21,87 @@ def _mask(value: str) -> str:
     return _TOKEN_PATTERN.sub("[REDACTED]", value)
 
 
+def _rotating_handler(path: Path, level: int = logging.INFO) -> RotatingFileHandler:
+    handler = RotatingFileHandler(
+        path, maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8"
+    )
+    handler.setFormatter(_FORMATTER)
+    handler.setLevel(level)
+    return handler
+
+
+# ----------------------------------------------------------------------
+# Root logger: everything goes to logs/app.log, errors also go to
+# logs/errors.log, and everything is mirrored to the console.
+# ----------------------------------------------------------------------
+_root_logger = logging.getLogger()
+_root_logger.setLevel(logging.INFO)
+_root_logger.addHandler(_rotating_handler(LOGS_DIR / "app.log"))
+_root_logger.addHandler(_rotating_handler(LOGS_DIR / "errors.log", level=logging.ERROR))
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(_FORMATTER)
+_root_logger.addHandler(_console_handler)
+
+
+# ----------------------------------------------------------------------
+# Connections log: bot start/stop, admin logins/logouts, telegram /start, etc.
+# Propagates to the root logger as well, so it's also visible in app.log.
+# ----------------------------------------------------------------------
+_connections_logger = logging.getLogger("connections")
+_connections_logger.setLevel(logging.INFO)
+_connections_logger.addHandler(_rotating_handler(LOGS_DIR / "connections.log"))
+
+
+# ----------------------------------------------------------------------
+# Per-user action log: logs/users/<id>.log — one file per bot/admin user.
+# Also propagates to the root logger.
+# ----------------------------------------------------------------------
+_user_loggers: dict[str, logging.Logger] = {}
+_SAFE_ID_PATTERN = re.compile(r"[^\w.-]+")
+
+
+def _safe_id(user_id: Any) -> str:
+    return _SAFE_ID_PATTERN.sub("_", str(user_id)) or "unknown"
+
+
+def _get_user_logger(user_id: Any) -> logging.Logger:
+    safe_id = _safe_id(user_id)
+    logger = _user_loggers.get(safe_id)
+    if logger is None:
+        logger = logging.getLogger(f"users.{safe_id}")
+        logger.setLevel(logging.INFO)
+        logger.addHandler(_rotating_handler(USERS_LOG_DIR / f"{safe_id}.log"))
+        _user_loggers[safe_id] = logger
+    return logger
+
+
 def log(message: Any) -> None:
     """
-    Логирует сообщение в файл bot.log и в консоль.
+    Логирует сообщение в общий файл logs/app.log и в консоль.
     Принимает любое значение, приводимое к строке.
     """
     logging.info(_mask(str(message)))
+
+
+def log_connection(message: Any) -> None:
+    """Логирует событие подключения/авторизации в logs/connections.log."""
+    _connections_logger.info(_mask(str(message)))
+
+
+def log_user_action(user_id: Any, label: str | None, action: str, **details: Any) -> None:
+    """
+    Логирует действие конкретного пользователя в его персональный файл
+    logs/users/<id>.log (и в общий лог).
+
+    ``user_id`` определяет имя файла (Telegram id или id пользователя админки).
+    ``label`` — человекочитаемое имя/логин, добавляется в начало записи.
+    ``action`` — описание действия, ``details`` — дополнительные поля key=value.
+    """
+    extra = ""
+    if details:
+        extra = " " + " ".join(f"{key}={value}" for key, value in details.items())
+    who = f"{user_id}"
+    if label and str(label) != str(user_id):
+        who = f"{user_id} ({label})"
+    message = f"[{who}] {action}{extra}"
+    _get_user_logger(user_id).info(_mask(message))

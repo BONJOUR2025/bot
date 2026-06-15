@@ -8,7 +8,7 @@ if sys.platform == "win32":
 
 from .core.application import create_application
 from .db.session import init_db
-from .utils.logger import log
+from .utils.logger import log, log_connection
 
 
 def main() -> None:
@@ -22,18 +22,22 @@ def main() -> None:
     init_db()
     app = create_application()
     log("🚀 Bot started and waiting for commands...")
-    app.run_polling(
-        bootstrap_retries=5,
-        allowed_updates=[
-            "message",
-            "edited_message",
-            "callback_query",
-            "business_connection",
-            "business_message",
-            "edited_business_message",
-            "deleted_business_messages",
-        ],
-    )
+    log_connection("Bot process started (polling)")
+    try:
+        app.run_polling(
+            bootstrap_retries=5,
+            allowed_updates=[
+                "message",
+                "edited_message",
+                "callback_query",
+                "business_connection",
+                "business_message",
+                "edited_business_message",
+                "deleted_business_messages",
+            ],
+        )
+    finally:
+        log_connection("Bot process stopped")
 
 
 if __name__ == "__main__":

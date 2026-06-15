@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 
 from app.services.access_control_service import (
     ResolvedUser,
@@ -9,6 +9,7 @@ from app.services.access_control_service import (
 
 
 async def get_current_user(
+    request: Request,
     authorization: str = Header(default=None),
     access_token: str | None = Cookie(default=None),
 ) -> ResolvedUser:
@@ -23,10 +24,12 @@ async def get_current_user(
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing_token")
     try:
-        return service.verify_token(token)
+        user = service.verify_token(token)
     except ValueError as exc:  # pragma: no cover - mapped to HTTP error
         detail = str(exc) or "invalid_token"
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+    request.state.user = user
+    return user
 
 
 def require_permission(permission: str):
