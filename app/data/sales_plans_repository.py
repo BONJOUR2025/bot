@@ -94,11 +94,13 @@ class SalesPlansRepository:
         self.storage.save(data)
 
     def list_plans(self, month_key: str | None = None) -> list[SalesPlan]:
+        self._reload_if_changed()
         if month_key is None:
             return list(self._plans.values())
         return [p for p in self._plans.values() if p.month_key == month_key]
 
     def get_plan(self, employee_code: str, month_key: str | None = None) -> SalesPlan | None:
+        self._reload_if_changed()
         if month_key:
             specific = self._plans.get(_plan_key(month_key, employee_code))
             if specific:
@@ -117,6 +119,7 @@ class SalesPlansRepository:
         force_max: list | None = None,
         force_min: list | None = None,
     ) -> SalesPlan:
+        self._reload_if_changed()
         key = _plan_key(month_key, employee_code)
         existing = self._plans.get(key)
         if existing:
@@ -152,6 +155,7 @@ class SalesPlansRepository:
         return plan
 
     def delete_plan(self, employee_code: str, month_key: str | None = None) -> bool:
+        self._reload_if_changed()
         key = _plan_key(month_key, employee_code)
         if key in self._plans:
             del self._plans[key]

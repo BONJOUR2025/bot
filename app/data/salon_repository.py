@@ -27,21 +27,25 @@ class SalonRepository:
         self.storage.save([s.to_dict() for s in self._salons.values()])
 
     def list_salons(self, status: str | None = None) -> list[Salon]:
+        self._load()  # always fresh from disk (two-process setup)
         salons = list(self._salons.values())
         if status:
             salons = [s for s in salons if s.status == status]
         return sorted(salons, key=lambda s: s.name)
 
     def get(self, salon_id: str) -> Salon | None:
+        self._load()  # always fresh from disk (two-process setup)
         return self._salons.get(salon_id)
 
     def create(self, data: SalonCreate) -> Salon:
+        self._load()  # sync with disk before mutating
         salon = new_salon(data)
         self._salons[salon.id] = salon
         self._save()
         return salon
 
     def update(self, salon_id: str, data: SalonUpdate) -> Salon | None:
+        self._load()  # sync with disk before mutating
         salon = self._salons.get(salon_id)
         if not salon:
             return None
@@ -54,6 +58,7 @@ class SalonRepository:
         return self._salons[salon_id]
 
     def delete(self, salon_id: str) -> bool:
+        self._load()  # sync with disk before mutating
         if salon_id not in self._salons:
             return False
         del self._salons[salon_id]

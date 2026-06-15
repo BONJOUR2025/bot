@@ -40,6 +40,7 @@ class PayrollSettlementRepository:
 
     def get_settlements_map(self, month_key: str) -> dict[str, bool]:
         """Return {employee_code: paid} for a given month."""
+        self._data = self._load()  # always fresh from disk (two-process setup)
         return {
             rec["employee_code"]: bool(rec.get("paid", False))
             for rec in self._data
@@ -47,6 +48,7 @@ class PayrollSettlementRepository:
         }
 
     def set_settlement(self, month_key: str, employee_code: str, paid: bool) -> dict[str, Any]:
+        self._data = self._load()  # sync with disk before mutating
         rec = self._find(month_key, employee_code)
         if rec:
             rec["paid"] = paid

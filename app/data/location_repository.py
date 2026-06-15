@@ -59,12 +59,15 @@ class LocationRepository:
     # ── Location codes ───────────────────────────────────────────
 
     def list_codes(self) -> list[LocationCode]:
+        self._load()  # always fresh from disk (two-process setup)
         return sorted(self._codes.values(), key=lambda x: x.sort_order)
 
     def get_code(self, code: str) -> LocationCode | None:
+        self._load()  # always fresh from disk (two-process setup)
         return self._codes.get(code)
 
     def upsert_code(self, code: str, name: str, sort_order: int | None = None) -> LocationCode:
+        self._load()  # sync with disk before mutating
         existing = self._codes.get(code)
         if existing:
             existing.name = name
@@ -81,6 +84,7 @@ class LocationRepository:
         return lc
 
     def delete_code(self, code: str) -> bool:
+        self._load()  # sync with disk before mutating
         if code not in self._codes:
             return False
         del self._codes[code]
@@ -93,15 +97,17 @@ class LocationRepository:
 
     def codes_dict(self) -> dict[str, str]:
         """Return {code: name} for all locations."""
+        self._load()  # always fresh from disk (two-process setup)
         return {c.code: c.name for c in self._codes.values()}
 
     # ── Monthly plans ────────────────────────────────────────────
 
     def list_plans(self, month_key: str) -> list[LocationPlan]:
-        self._load()
+        self._load()  # always fresh from disk (two-process setup)
         return [p for p in self._plans.values() if p.month_key == month_key]
 
     def get_plan(self, month_key: str, code: str) -> LocationPlan | None:
+        self._load()  # always fresh from disk (two-process setup)
         return self._plans.get(self._plan_key(month_key, code))
 
     def upsert_plan(
@@ -112,6 +118,7 @@ class LocationRepository:
         cosmetics_plan: float = 0.0,
         shoes_plan: float = 0.0,
     ) -> LocationPlan:
+        self._load()  # sync with disk before mutating
         key = self._plan_key(month_key, location_code)
         plan = LocationPlan(
             location_code=location_code,
