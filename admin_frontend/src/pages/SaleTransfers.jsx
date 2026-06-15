@@ -19,6 +19,16 @@ function fmt(v) {
   return Number(v).toLocaleString('ru');
 }
 
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('ru', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 export default function SaleTransfers() {
   const { toast } = useToast();
   const now = new Date();
@@ -235,22 +245,26 @@ export default function SaleTransfers() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)]">
-                <th className="text-left px-4 py-2">Заказ</th>
+                <th className="text-left px-4 py-2">Когда</th>
+                <th className="text-left px-3 py-2">Заказ</th>
                 <th className="text-left px-3 py-2">Категория</th>
                 <th className="text-right px-3 py-2">Сумма</th>
                 <th className="text-left px-3 py-2">От кого</th>
                 <th className="text-left px-3 py-2">Кому</th>
+                <th className="text-left px-3 py-2">Кто перенёс</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--color-border)]">
               {transfers.map(t => (
                 <tr key={t.id}>
-                  <td className="px-4 py-2 font-mono text-xs">{t.doc_num}</td>
+                  <td className="px-4 py-2 whitespace-nowrap text-xs text-[color:var(--color-muted-foreground)]">{fmtDateTime(t.created_at)}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{t.doc_num}</td>
                   <td className="px-3 py-2">{CATEGORY_LABELS[t.category] || t.category}</td>
                   <td className="px-3 py-2 text-right">{fmt(t.amount)} ₽</td>
                   <td className="px-3 py-2">{t.from_name || t.from_code}</td>
                   <td className="px-3 py-2">{t.to_name || t.to_code}</td>
+                  <td className="px-3 py-2 text-[color:var(--color-muted-foreground)]">{t.author || '—'}</td>
                   <td className="px-3 py-2 text-right">
                     <button onClick={() => removeTransfer(t.id)}
                       className="text-red-400 hover:text-red-600" title="Отменить">
