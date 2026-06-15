@@ -31,6 +31,12 @@ class ShiftCheckinRepository:
         self._counter += 1
         return self._counter
 
+    def _recompute_counter(self) -> None:
+        self._counter = max(
+            (int(item.get("id", 0)) for item in self._data if str(item.get("id")).isdigit()),
+            default=0,
+        )
+
     def list(
         self,
         date_from: Optional[str] = None,
@@ -38,6 +44,7 @@ class ShiftCheckinRepository:
         salon_id: Optional[str] = None,
         employee_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
+        self._data = self._load()  # always fresh from disk (two-process setup)
         result = []
         for item in self._data:
             if date_from and str(item.get("date", "")) < date_from:
@@ -53,18 +60,22 @@ class ShiftCheckinRepository:
         return result
 
     def get(self, checkin_id: int) -> Optional[Dict[str, Any]]:
+        self._data = self._load()  # always fresh from disk (two-process setup)
         for item in self._data:
             if int(item.get("id", 0)) == int(checkin_id):
                 return item
         return None
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        self._data = self._load()  # sync with disk before mutating
+        self._recompute_counter()
         data["id"] = self._generate_id()
         self._data.append(data)
         self._save()
         return data
 
     def update(self, checkin_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        self._data = self._load()  # sync with disk before mutating
         for item in self._data:
             if int(item.get("id", 0)) == int(checkin_id):
                 item.update(updates)
@@ -73,6 +84,7 @@ class ShiftCheckinRepository:
         return None
 
     def delete(self, checkin_id: int) -> Optional[Dict[str, Any]]:
+        self._data = self._load()  # sync with disk before mutating
         for i, item in enumerate(self._data):
             if int(item.get("id", 0)) == int(checkin_id):
                 removed = self._data.pop(i)
@@ -81,6 +93,7 @@ class ShiftCheckinRepository:
         return None
 
     def reassign_employee(self, old_employee_id: str, new_employee_id: str) -> int:
+        self._data = self._load()  # sync with disk before mutating
         count = 0
         for item in self._data:
             if str(item.get("employee_id")) == str(old_employee_id):
