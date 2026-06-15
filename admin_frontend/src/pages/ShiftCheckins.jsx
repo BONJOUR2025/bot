@@ -4,11 +4,25 @@ import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 export default function ShiftCheckins() {
   const [list, setList] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [filters, setFilters] = useState({ from: '', to: '' });
   const [photoUrl, setPhotoUrl] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyForm());
+  const [saving, setSaving] = useState(false);
+
+  function emptyForm() {
+    const now = new Date();
+    return {
+      employee_id: '',
+      date: now.toISOString().slice(0, 10),
+      time: now.toTimeString().slice(0, 5),
+    };
+  }
 
   useEffect(() => {
     load();
+    loadEmployees();
   }, [filters]);
 
   useEffect(() => {
@@ -30,6 +44,15 @@ export default function ShiftCheckins() {
     }
   }
 
+  async function loadEmployees() {
+    try {
+      const res = await api.get('employees/', { params: { archived: false } });
+      setEmployees(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   async function openPhoto(item) {
     try {
       const res = await api.get(`shift-checkins/${item.id}/photo`, { responseType: 'blob' });
@@ -43,6 +66,31 @@ export default function ShiftCheckins() {
   function closePhoto() {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
     setPhotoUrl(null);
+  }
+
+  function startCreate() {
+    setForm(emptyForm());
+    setShowForm(true);
+  }
+
+  async function saveForm() {
+    if (!form.employee_id || !form.date || !form.time) return;
+    const employee = employees.find((e) => String(e.id) === String(form.employee_id));
+    setSaving(true);
+    try {
+      await api.post('shift-checkins/', {
+        employee_id: form.employee_id,
+        employee_name: employee?.full_name || employee?.name || '',
+        date: form.date,
+        time: form.time,
+      });
+      setShowForm(false);
+      load();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function fmtTime(iso) {
@@ -75,6 +123,9 @@ export default function ShiftCheckins() {
         <button className="btn" onClick={load}>
           Применить
         </button>
+        <button className="btn ml-auto" onClick={startCreate}>
+          ➕ Добавить вручную
+        </button>
       </div>
       <ResponsiveTable
         data={list}
@@ -100,11 +151,14 @@ export default function ShiftCheckins() {
             label: 'Фото',
             isAction: true,
             cellClass: 'text-right',
-            render: (item) => (
-              <button className="text-blue-600" onClick={() => openPhoto(item)}>
-                📷 Открыть
-              </button>
-            ),
+            render: (item) =>
+              item.photo_path ? (
+                <button className="text-blue-600" onClick={() => openPhoto(item)}>
+                  📷 Открыть
+                </button>
+              ) : (
+                <span className="text-gray-400">{item.manual ? 'Вручную' : '—'}</span>
+              ),
           },
         ]}
       />
@@ -116,6 +170,46 @@ export default function ShiftCheckins() {
             <div className="flex justify-end pt-2">
               <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={closePhoto}>
                 Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showForm && (
+        <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="modal-card max-w-md">
+            <h2 className="text-xl font-semibold">Отметка об открытии вручную</h2>
+            <select
+              className="modal-control"
+              value={form.employee_id}
+              onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
+            >
+              <option value="">Сотрудник</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.full_name || e.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="date"
+              className="modal-control"
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+            />
+            <input
+              type="time"
+              className="modal-control"
+              value={form.time}
+              onChange={(e) => setForm({ ...form, time: e.target.value })}
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
+                Отмена
+              </button>
+              <button className="btn" onClick={saveForm} disabled={saving}>
+                Сохранить
               </button>
             </div>
           </div>

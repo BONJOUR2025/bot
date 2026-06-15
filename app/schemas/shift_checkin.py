@@ -16,5 +16,13 @@ class ShiftCheckin(BaseModel):
     delay_minutes: Optional[int] = None
     penalty_amount: Optional[float] = None
     incentive_id: Optional[int] = None
-    photo_path: str
+    photo_path: Optional[str] = None
     no_schedule: bool = False
+    manual: bool = False
+
+
+class ShiftCheckinManualCreate(BaseModel):
+    employee_id: str
+    employee_name: str
+    date: str
+    time: str

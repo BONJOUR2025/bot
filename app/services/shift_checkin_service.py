@@ -95,8 +95,10 @@ class ShiftCheckinService:
         self,
         employee_id: str,
         employee_name: str,
-        photo_path: str,
         sent_at: datetime,
+        photo_path: Optional[str] = None,
+        manual: bool = False,
+        added_by: str = "bot",
     ) -> dict:
         sent_at = sent_at.astimezone(MOSCOW_TZ)
         today = sent_at.date()
@@ -125,6 +127,7 @@ class ShiftCheckinService:
             "incentive_id": None,
             "photo_path": photo_path,
             "no_schedule": point is None,
+            "manual": manual,
         })
 
         if penalty_amount > 0:
@@ -138,7 +141,7 @@ class ShiftCheckinService:
                     f"(чек отправлен в {sent_at.strftime('%H:%M')}, открытие в {expected_open_time})"
                 ),
                 "date": today.isoformat(),
-                "added_by": "bot",
+                "added_by": added_by,
             })
             record = self._repo.update(record["id"], {"incentive_id": incentive["id"]}) or record
 
