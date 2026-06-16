@@ -362,10 +362,12 @@ export default function Payouts() {
   const [selected, setSelected] = useState(new Set());
 
   useEffect(() => {
-    load();
     loadEmployees();
     window.refreshPage = load;
   }, []);
+  useEffect(() => {
+    load();
+  }, [filters]);
 
   const employeesByPosition = useMemo(() => {
     const groups = {};
@@ -729,13 +731,13 @@ export default function Payouts() {
 
       <div className="flex flex-wrap gap-2 items-end">
         <input
-          className="border p-2 flex-grow rounded"
+          className="input flex-grow"
           placeholder="Поиск по ФИО"
           value={filters.query}
           onChange={(e) => setFilters({ ...filters, query: e.target.value })}
         />
         <select
-          className="border p-2 rounded"
+          className="input"
           value={filters.type}
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
         >
@@ -744,7 +746,7 @@ export default function Payouts() {
           <option value="Зарплата">Зарплата</option>
         </select>
         <select
-          className="border p-2 rounded"
+          className="input"
           value={filters.status}
           onChange={(e) => setFilters({ ...filters, status: e.target.value })}
         >
@@ -756,7 +758,7 @@ export default function Payouts() {
           ))}
         </select>
         <select
-          className="border p-2 rounded"
+          className="input"
           value={filters.method}
           onChange={(e) => setFilters({ ...filters, method: e.target.value })}
         >
@@ -767,23 +769,20 @@ export default function Payouts() {
         </select>
         <input
           type="date"
-          className="border p-2 rounded"
+          className="input"
           value={filters.from}
           onChange={(e) => setFilters({ ...filters, from: e.target.value })}
         />
         <input
           type="date"
-          className="border p-2 rounded"
+          className="input"
           value={filters.to}
           onChange={(e) => setFilters({ ...filters, to: e.target.value })}
         />
-        <button className="btn" onClick={load}>
-          Применить
-        </button>
-        <button className="btn bg-gray-300 text-gray-700 hover:bg-gray-400" onClick={resetFilters}>
+        <button className="btn btn-secondary" onClick={resetFilters}>
           Сбросить
         </button>
-        <button className="btn ml-auto" onClick={openCreate}>
+        <button className="btn btn-primary ml-auto" onClick={openCreate}>
           ➕ Новая
         </button>
       </div>

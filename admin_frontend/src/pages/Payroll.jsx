@@ -504,7 +504,7 @@ export default function Payroll() {
         params: { month, year: currentYear },
       });
       setPlans(res.data || []);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); toast('Ошибка загрузки планов', 'error'); }
   }
 
   async function loadComments(month) {

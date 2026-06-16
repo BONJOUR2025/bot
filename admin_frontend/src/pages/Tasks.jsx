@@ -7,6 +7,7 @@ import {
 import api from '../api';
 import Modal from '../components/Modal';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import { useToast } from '../providers/ToastProvider.jsx';
 
 // ── Constants ────────────────────────────────────────────────────
 const PRIORITIES = [
@@ -48,6 +49,7 @@ function toISODate(d) { return d.toISOString().slice(0, 10); }
 
 // ── Component ─────────────────────────────────────────────────────
 export default function Tasks() {
+  const { toast } = useToast();
   const emptyForm = {
     id: null, title: '', description: '', due_date: '', due_time: '',
     priority: 'medium', status: 'todo', category: '', tags: [], reminder_minutes: null,
@@ -79,7 +81,7 @@ export default function Tasks() {
         include_done: filters.includeDone,
       }});
       setTasks(res.data);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); toast('Ошибка загрузки задач', 'error'); }
   }, [filters]);
 
   const loadStats      = async () => { try { setStats((await api.get('tasks/stats')).data);      } catch {} };
@@ -100,14 +102,14 @@ export default function Tasks() {
     setShowForm(true);
   }
   async function saveForm() {
-    if (!form.title.trim()) { alert('Введите название задачи'); return; }
+    if (!form.title.trim()) { toast('Введите название задачи', 'warning'); return; }
     try {
       const payload = { ...form, due_time: form.due_time ? form.due_time + ':00' : null, tags: form.tags || [] };
       if (form.id) await api.put(`tasks/${form.id}`, payload);
       else         await api.post('tasks/', payload);
       setShowForm(false); setForm(emptyForm);
       loadTasks(); loadStats();
-    } catch { alert('Ошибка сохранения'); }
+    } catch { toast('Ошибка сохранения', 'error'); }
   }
   async function deleteTask(id) {
     if (!window.confirm('Удалить задачу?')) return;
@@ -129,12 +131,12 @@ export default function Tasks() {
   function startCreateCat() { setCatForm({ ...emptyCatForm }); setShowCatForm(true); }
   function startEditCat(cat) { setCatForm({ ...cat }); setShowCatForm(true); }
   async function saveCat() {
-    if (!catForm.name.trim()) { alert('Введите название'); return; }
+    if (!catForm.name.trim()) { toast('Введите название', 'warning'); return; }
     try {
       if (catForm.id) await api.put(`tasks/categories/${catForm.id}`, catForm);
       else            await api.post('tasks/categories', catForm);
       setShowCatForm(false); setCatForm(emptyCatForm); loadCategories();
-    } catch { alert('Ошибка сохранения'); }
+    } catch { toast('Ошибка сохранения', 'error'); }
   }
   async function deleteCat(id) {
     if (!window.confirm('Удалить категорию?')) return;

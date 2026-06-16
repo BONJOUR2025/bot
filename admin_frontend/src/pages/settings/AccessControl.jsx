@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../../api.js';
 import { useViewport } from '../../providers/ViewportProvider.jsx';
+import { useToast } from '../../providers/ToastProvider.jsx';
 
 const emptyRole = { id: '', name: '', permissions: [], bot_buttons: [] };
 const emptyUser = {
@@ -22,6 +23,7 @@ const emptyUser = {
 
 export default function AccessControl() {
   const { isMobile } = useViewport();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
@@ -78,7 +80,7 @@ export default function AccessControl() {
       loadBotUsers();
     } catch (err) {
       console.error(err);
-      alert('Не удалось привязать пользователя');
+      toast('Не удалось привязать пользователя', 'error');
     }
   }
 
@@ -139,7 +141,7 @@ export default function AccessControl() {
       load();
     } catch (err) {
       console.error(err);
-      alert('Не удалось сохранить роль');
+      toast('Не удалось сохранить роль', 'error');
     }
   }
 
@@ -150,7 +152,7 @@ export default function AccessControl() {
       load();
     } catch (err) {
       console.error(err);
-      alert('Не удалось удалить роль');
+      toast('Не удалось удалить роль', 'error');
     }
   }
 
@@ -236,7 +238,7 @@ export default function AccessControl() {
       load();
     } catch (err) {
       console.error(err);
-      alert('Не удалось сохранить пользователя');
+      toast('Не удалось сохранить пользователя', 'error');
     }
   }
 
@@ -247,7 +249,7 @@ export default function AccessControl() {
       load();
     } catch (err) {
       console.error(err);
-      alert('Не удалось удалить пользователя');
+      toast('Не удалось удалить пользователя', 'error');
     }
   }
 

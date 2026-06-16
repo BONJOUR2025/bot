@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import { useToast } from '../providers/ToastProvider.jsx';
 import IntegrationsModal from '../components/recruitment/IntegrationsModal.jsx';
 
 const STAGES = [
@@ -407,6 +408,7 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
 
 // ── Candidate detail modal ─────────────────────────────────────────
 function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory, onPauseToggle }) {
+  const { toast } = useToast();
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
   const isHh = candidate.source === 'hh' && candidate.external_id;
@@ -523,7 +525,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
       const res = await api.post(`/recruitment/candidates/${candidate.id}/toggle-pause`);
       setPaused(res.data.is_paused);
       onPauseToggle?.(candidate.id, res.data.is_paused);
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { toast(e.response?.data?.detail || e.message, 'error'); }
     finally { setToggling(false); }
   }
 
@@ -535,7 +537,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
       onResetHistory?.(candidate.id);
       onClose();
     } catch (e) {
-      alert(e.response?.data?.detail || e.message);
+      toast(e.response?.data?.detail || e.message, 'error');
     } finally { setResetting(false); }
   }
 
@@ -926,9 +928,9 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
               onClick={async () => {
                 try {
                   const res = await api.post(`/recruitment/candidates/${candidate.id}/test-automation`);
-                  alert(`Результат: ${res.data.result}`);
+                  toast(`Результат: ${res.data.result}`, 'success');
                 } catch (e) {
-                  alert(e.response?.data?.detail || e.message);
+                  toast(e.response?.data?.detail || e.message, 'error');
                 }
               }}
               className="btn text-xs flex items-center gap-1 text-[color:var(--color-muted-foreground)]"

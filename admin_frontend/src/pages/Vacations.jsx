@@ -46,8 +46,10 @@ export default function Vacations() {
 
   useEffect(() => {
     loadEmployees();
-    load();
   }, []);
+  useEffect(() => {
+    load();
+  }, [filters]);
 
   async function loadEmployees() {
     try {
@@ -55,6 +57,7 @@ export default function Vacations() {
       setEmployees(res.data);
     } catch (err) {
       console.error(err);
+      toast('Ошибка загрузки сотрудников', 'error');
     }
   }
 
@@ -154,7 +157,7 @@ export default function Vacations() {
       <div className="text-sm text-gray-600">Сегодня в отпуске — {todayCount} сотрудника</div>
       <div className="flex flex-wrap gap-2 items-end">
         <select
-          className="border p-2 rounded"
+          className="input"
           value={filters.type}
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
         >
@@ -163,7 +166,7 @@ export default function Vacations() {
           <option value="Больничный">Больничный</option>
         </select>
         <select
-          className="border p-2 rounded"
+          className="input"
           value={filters.employee}
           onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
         >
@@ -176,26 +179,23 @@ export default function Vacations() {
         </select>
         <input
           type="date"
-          className="border p-2 rounded"
+          className="input"
           value={filters.from}
           onChange={(e) => setFilters({ ...filters, from: e.target.value })}
         />
         <input
           type="date"
-          className="border p-2 rounded"
+          className="input"
           value={filters.to}
           onChange={(e) => setFilters({ ...filters, to: e.target.value })}
         />
         <input
-          className="border p-2 flex-grow rounded"
+          className="input flex-grow"
           placeholder="Поиск по ФИО"
           value={filters.query}
           onChange={(e) => setFilters({ ...filters, query: e.target.value })}
         />
-        <button className="btn" onClick={load}>
-          Применить
-        </button>
-        <button className="btn ml-auto" onClick={startCreate}>
+        <button className="btn btn-primary ml-auto" onClick={startCreate}>
           <Plus size={16} /> Добавить запись
         </button>
       </div>
