@@ -46,3 +46,7 @@ class AssetUpdate(BaseModel):
 class BulkIdsRequest(BaseModel):
     ids: list[int]
 
+
+class BulkCreateRequest(BaseModel):
+    items: list[AssetCreate]
+

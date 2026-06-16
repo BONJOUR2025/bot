@@ -8,6 +8,7 @@ if sys.platform == "win32":
 
 from .core.application import create_application
 from .db.session import init_db
+from .models.asset import Asset as _AssetModel  # noqa: F401 — registers table with Base
 from .utils.logger import log, log_connection
 
 

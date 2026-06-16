@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.schemas.asset import Asset, AssetCreate, AssetUpdate, BulkIdsRequest
+from app.schemas.asset import Asset, AssetCreate, AssetUpdate, BulkIdsRequest, BulkCreateRequest
 from app.services.asset_service import AssetService
 from app.services.access_control_service import AccessControlService, ResolvedUser
 
@@ -26,6 +26,15 @@ def create_asset_router(
             raise HTTPException(status_code=403, detail="forbidden")
 
     # --- Bulk endpoints must come before /{item_id} routes ---
+
+    @router.post("/bulk/create", response_model=list[Asset])
+    async def bulk_create_assets(
+        data: BulkCreateRequest, current: ResolvedUser = Depends(get_current_user)
+    ):
+        for item in data.items:
+            if not access_service.is_employee_visible(current, item.employee_id):
+                raise HTTPException(status_code=403, detail="forbidden")
+        return await service.bulk_create_assets(data.items)
 
     @router.post("/bulk/delete")
     async def bulk_delete(

@@ -3,7 +3,7 @@ from typing import List, Optional, TYPE_CHECKING
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.schemas.asset import Asset, AssetCreate, AssetUpdate
+from app.schemas.asset import Asset, AssetCreate, AssetUpdate, BulkCreateRequest
 from app.data.asset_repository import AssetRepository
 from app.utils import is_valid_user_id
 from app.utils.logger import log
@@ -35,6 +35,9 @@ class AssetService:
 
     async def delete_asset(self, item_id: str) -> None:
         self._repo.delete(item_id)
+
+    async def bulk_create_assets(self, items: list[AssetCreate]) -> list[Asset]:
+        return [await self.create_asset(item) for item in items]
 
     async def bulk_delete(self, ids: list) -> int:
         count = 0

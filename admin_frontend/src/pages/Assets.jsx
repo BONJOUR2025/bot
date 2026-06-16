@@ -10,32 +10,39 @@ function fmtDate(s) {
   return d.toLocaleDateString('ru');
 }
 
-const emptyForm = {
-  id: null,
-  employee_id: '',
-  employee_name: '',
-  position: '',
-  item_name: '',
-  size: '',
-  quantity: 1,
-  issue_date: '',
-  return_date: '',
+const today = () => new Date().toISOString().slice(0, 10);
+
+const emptyItemRow = () => ({
+  item_name:    '',
+  size:         '',
+  quantity:     1,
   service_life: '',
-};
+  issue_date:   today(),
+  return_date:  '',
+});
+
+const emptyEmployee = { employee_id: '', employee_name: '', position: '' };
 
 export default function Assets() {
   const { toast } = useToast();
+
   const [list, setList]               = useState([]);
   const [employees, setEmployees]     = useState([]);
   const [itemOptions, setItemOptions] = useState([]);
   const [posOptions, setPosOptions]   = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
   const [filters, setFilters]         = useState({ search: '', employee: '', dateFrom: '', dateTo: '' });
-  const [form, setForm]               = useState({ ...emptyForm, issue_date: new Date().toISOString().slice(0, 10) });
-  const [showForm, setShowForm]       = useState(false);
-  const [selected, setSelected]       = useState(new Set());
-  const [notifying, setNotifying]     = useState(new Set());
-  const allCheckRef                   = useRef(null);
+
+  // Modal state
+  const [showForm, setShowForm]   = useState(false);
+  const [editId, setEditId]       = useState(null);        // null = create mode
+  const [formEmp, setFormEmp]     = useState(emptyEmployee);
+  const [formItems, setFormItems] = useState([emptyItemRow()]);
+
+  // Bulk / notify
+  const [selected, setSelected]   = useState(new Set());
+  const [notifying, setNotifying] = useState(new Set());
+  const allCheckRef               = useRef(null);
 
   useEffect(() => {
     loadEmployees();
@@ -47,9 +54,7 @@ export default function Assets() {
     try {
       const res = await api.get('employees/', { params: { archived: false } });
       setEmployees(res.data);
-    } catch {
-      toast('Ошибка загрузки сотрудников', 'error');
-    }
+    } catch { toast('Ошибка загрузки сотрудников', 'error'); }
   }
 
   async function load() {
@@ -57,14 +62,10 @@ export default function Assets() {
       const res = await api.get('assets/');
       setList(res.data);
       setItemOptions(prev =>
-        Array.from(new Set([...prev, ...res.data.map(i => i.item_name).filter(Boolean)]))
-      );
+        Array.from(new Set([...prev, ...res.data.map(i => i.item_name).filter(Boolean)])));
       setSizeOptions(prev =>
-        Array.from(new Set([...prev, ...res.data.map(i => i.size).filter(Boolean)]))
-      );
-    } catch {
-      toast('Ошибка загрузки имущества', 'error');
-    }
+        Array.from(new Set([...prev, ...res.data.map(i => i.size).filter(Boolean)])));
+    } catch { toast('Ошибка загрузки имущества', 'error'); }
   }
 
   async function loadDictionary() {
@@ -76,7 +77,7 @@ export default function Assets() {
     } catch {}
   }
 
-  // --- Client-side filtering (reactive, no "Применить") ---
+  // Reactive client-side filtering
   const filtered = useMemo(() => list.filter(item => {
     if (filters.employee && String(item.employee_id) !== String(filters.employee)) return false;
     if (filters.search) {
@@ -88,53 +89,93 @@ export default function Assets() {
     return true;
   }), [list, filters]);
 
-  // Sync indeterminate state
   useEffect(() => {
-    if (allCheckRef.current) {
+    if (allCheckRef.current)
       allCheckRef.current.indeterminate = selected.size > 0 && selected.size < filtered.length;
-    }
   }, [selected, filtered]);
 
-  // --- CRUD ---
-  function startCreate() {
-    setForm({ ...emptyForm, issue_date: new Date().toISOString().slice(0, 10) });
+  // ---- Modal helpers ----
+  function openCreate() {
+    setEditId(null);
+    setFormEmp(emptyEmployee);
+    setFormItems([emptyItemRow()]);
     setShowForm(true);
   }
 
-  function startEdit(item) {
-    setForm({
-      ...item,
-      service_life: item.service_life ?? '',
-      return_date:  item.return_date  ?? '',
+  function openEdit(item) {
+    setEditId(item.id);
+    setFormEmp({
+      employee_id:   item.employee_id,
+      employee_name: item.employee_name,
+      position:      item.position || '',
     });
+    setFormItems([{
+      item_name:    item.item_name,
+      size:         item.size         || '',
+      quantity:     item.quantity     ?? 1,
+      service_life: item.service_life ?? '',
+      issue_date:   item.issue_date   || today(),
+      return_date:  item.return_date  || '',
+    }]);
     setShowForm(true);
+  }
+
+  function pickEmployee(id) {
+    const emp = employees.find(e => String(e.id) === String(id));
+    if (emp) {
+      setFormEmp({
+        employee_id:   emp.id,
+        employee_name: emp.full_name || emp.name,
+        position:      emp.position  || '',
+      });
+      // Pre-fill size on all rows from employee profile
+      if (emp.clothing_size) {
+        setFormItems(rows => rows.map(r => r.size ? r : { ...r, size: emp.clothing_size }));
+      }
+    } else {
+      setFormEmp(e => ({ ...e, employee_id: id, employee_name: '' }));
+    }
+  }
+
+  function setItemField(idx, field, value) {
+    setFormItems(rows => rows.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+  }
+
+  function addItemRow() { setFormItems(rows => [...rows, emptyItemRow()]); }
+  function removeItemRow(idx) {
+    setFormItems(rows => rows.length > 1 ? rows.filter((_, i) => i !== idx) : rows);
   }
 
   async function saveForm() {
-    if (!form.employee_id || !form.item_name) {
-      toast('Укажите сотрудника и наименование предмета', 'error');
-      return;
-    }
+    if (!formEmp.employee_id) { toast('Выберите сотрудника', 'error'); return; }
+    if (formItems.some(r => !r.item_name.trim())) { toast('Заполните название предмета', 'error'); return; }
+
+    const toPayload = r => ({
+      employee_id:   formEmp.employee_id,
+      employee_name: formEmp.employee_name,
+      position:      formEmp.position,
+      item_name:     r.item_name.trim(),
+      size:          r.size.trim(),
+      quantity:      Number(r.quantity) || 1,
+      service_life:  r.service_life !== '' ? Number(r.service_life) : null,
+      issue_date:    r.issue_date || today(),
+      return_date:   r.return_date || null,
+    });
+
     try {
-      const payload = {
-        ...form,
-        service_life: form.service_life !== '' ? Number(form.service_life) : null,
-        return_date:  form.return_date  || null,
-      };
-      if (form.id) {
-        await api.put(`assets/${form.id}`, payload);
+      if (editId !== null) {
+        await api.put(`assets/${editId}`, toPayload(formItems[0]));
         toast('Запись обновлена', 'success');
       } else {
-        await api.post('assets/', payload);
-        toast('Запись добавлена', 'success');
+        await api.post('assets/bulk/create', { items: formItems.map(toPayload) });
+        toast(`Добавлено: ${formItems.length} предм.`, 'success');
       }
       setShowForm(false);
       load();
-    } catch {
-      toast('Ошибка сохранения', 'error');
-    }
+    } catch { toast('Ошибка сохранения', 'error'); }
   }
 
+  // ---- CRUD ----
   async function remove(id) {
     if (!window.confirm('Удалить запись?')) return;
     try {
@@ -142,12 +183,10 @@ export default function Assets() {
       toast('Запись удалена', 'success');
       setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
       load();
-    } catch {
-      toast('Ошибка удаления', 'error');
-    }
+    } catch { toast('Ошибка удаления', 'error'); }
   }
 
-  // --- Notifications ---
+  // ---- Notify ----
   async function notifyOne(id) {
     setNotifying(prev => new Set([...prev, id]));
     try {
@@ -155,74 +194,51 @@ export default function Assets() {
       toast('Уведомление отправлено', 'success');
       load();
     } catch (e) {
-      const detail = e.response?.data?.detail;
-      toast(detail === 'no_telegram' ? 'У сотрудника нет Telegram' : 'Ошибка отправки', 'error');
+      const d = e.response?.data?.detail;
+      toast(d === 'no_telegram' ? 'У сотрудника нет Telegram' : 'Ошибка отправки', 'error');
     } finally {
       setNotifying(prev => { const n = new Set(prev); n.delete(id); return n; });
     }
   }
 
-  // --- Bulk ---
+  // ---- Bulk ----
   async function bulkDelete() {
     if (!selected.size) return;
-    if (!window.confirm(`Удалить ${selected.size} запис${selected.size === 1 ? 'ь' : 'и'}?`)) return;
+    if (!window.confirm(`Удалить ${selected.size} записей?`)) return;
     try {
       await api.post('assets/bulk/delete', { ids: [...selected] });
       toast(`Удалено: ${selected.size}`, 'success');
       setSelected(new Set());
       load();
-    } catch {
-      toast('Ошибка удаления', 'error');
-    }
+    } catch { toast('Ошибка удаления', 'error'); }
   }
 
   async function bulkNotify() {
     if (!selected.size) return;
     try {
       const res = await api.post('assets/bulk/notify', { ids: [...selected] });
-      toast(`Отправлено: ${res.data.sent}, ошибок: ${res.data.failed}`, res.data.sent > 0 ? 'success' : 'error');
+      toast(`Отправлено: ${res.data.sent}, ошибок: ${res.data.failed}`,
+        res.data.sent > 0 ? 'success' : 'error');
       load();
-    } catch {
-      toast('Ошибка рассылки', 'error');
-    }
+    } catch { toast('Ошибка рассылки', 'error'); }
   }
 
-  // --- Checkboxes ---
   function toggleRow(id) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
-
   function toggleAll() {
     setSelected(prev =>
       prev.size === filtered.length && filtered.length > 0
         ? new Set()
-        : new Set(filtered.map(i => i.id))
-    );
+        : new Set(filtered.map(i => i.id)));
   }
 
-  // --- Employee autofill ---
-  function handleSelectEmployee(id) {
-    const emp = employees.find(e => String(e.id) === String(id));
-    if (emp) {
-      setForm(f => ({
-        ...f,
-        employee_id:   emp.id,
-        employee_name: emp.full_name || emp.name,
-        position:      emp.position      || '',
-        size:          emp.clothing_size || '',
-      }));
-    } else {
-      setForm(f => ({ ...f, employee_id: id, employee_name: '' }));
-    }
-  }
-
-  // --- Stats ---
   const stats = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const t = today();
     return {
       total:     filtered.length,
       employees: new Set(filtered.map(i => i.employee_id)).size,
-      overdue:   filtered.filter(i => i.return_date && i.return_date < today && !i.acked_at).length,
+      overdue:   filtered.filter(i => i.return_date && i.return_date < t && !i.acked_at).length,
     };
   }, [filtered]);
 
@@ -233,7 +249,7 @@ export default function Assets() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <h2 className="text-2xl font-semibold">Имущество сотрудников</h2>
-        <button className="btn btn-primary flex items-center gap-2 sm:ml-auto w-fit" onClick={startCreate}>
+        <button className="btn btn-primary flex items-center gap-2 sm:ml-auto w-fit" onClick={openCreate}>
           <Plus size={16} /> Добавить
         </button>
       </div>
@@ -242,28 +258,19 @@ export default function Assets() {
       <div className="card p-3 flex flex-wrap gap-2 items-center">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)] pointer-events-none" />
-          <input
-            className="input pl-8 w-52"
-            placeholder="ФИО / предмет"
-            value={filters.search}
-            onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-          />
+          <input className="input pl-8 w-52" placeholder="ФИО / предмет"
+            value={filters.search} onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} />
         </div>
-        <select className="input" value={filters.employee} onChange={e => setFilters(f => ({ ...f, employee: e.target.value }))}>
+        <select className="input" value={filters.employee}
+          onChange={e => setFilters(f => ({ ...f, employee: e.target.value }))}>
           <option value="">Все сотрудники</option>
           {employees.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
         </select>
-        <input
-          type="date" className="input" title="Выдано с"
-          value={filters.dateFrom}
-          onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-        />
+        <input type="date" className="input" title="Выдано с"
+          value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))} />
         <span className="text-[color:var(--color-muted-foreground)] text-sm">—</span>
-        <input
-          type="date" className="input" title="Выдано по"
-          value={filters.dateTo}
-          onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-        />
+        <input type="date" className="input" title="Выдано по"
+          value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
         {hasFilters && (
           <button className="btn btn-secondary flex items-center gap-1 text-sm"
             onClick={() => setFilters({ search: '', employee: '', dateFrom: '', dateTo: '' })}>
@@ -279,8 +286,7 @@ export default function Assets() {
           <button className="btn btn-secondary text-sm flex items-center gap-1.5" onClick={bulkNotify}>
             <Bell size={14} /> Уведомить
           </button>
-          <button
-            className="btn text-sm flex items-center gap-1.5 bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+          <button className="btn text-sm flex items-center gap-1.5 bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
             onClick={bulkDelete}>
             <Trash2 size={14} /> Удалить
           </button>
@@ -307,17 +313,13 @@ export default function Assets() {
               <th className="text-center px-3 py-2.5 hidden sm:table-cell">Кол-во</th>
               <th className="text-left px-3 py-2.5">Выдано</th>
               <th className="text-left px-3 py-2.5 hidden lg:table-cell">Возврат</th>
-              <th className="text-left px-3 py-2.5 hidden xl:table-cell">Подтверждено</th>
+              <th className="text-left px-3 py-2.5 hidden xl:table-cell">Статус</th>
               <th className="w-24 px-3 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[color:var(--color-border)]">
             {filtered.length === 0 && (
-              <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-sm text-[color:var(--color-muted-foreground)] italic">
-                  Нет данных
-                </td>
-              </tr>
+              <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-[color:var(--color-muted-foreground)] italic">Нет данных</td></tr>
             )}
             {filtered.map(item => (
               <tr key={item.id}
@@ -343,26 +345,16 @@ export default function Assets() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center justify-end gap-0.5">
-                    <button
-                      title="Отправить уведомление в бот"
-                      disabled={notifying.has(item.id)}
+                    <button title="Уведомить в бот" disabled={notifying.has(item.id)}
                       onClick={() => notifyOne(item.id)}
-                      className={`p-1.5 rounded transition-colors ${
-                        notifying.has(item.id)
-                          ? 'opacity-40 cursor-not-allowed'
-                          : 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
-                      }`}>
+                      className={`p-1.5 rounded transition-colors ${notifying.has(item.id) ? 'opacity-40 cursor-not-allowed' : 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'}`}>
                       <Bell size={14} />
                     </button>
-                    <button
-                      title="Редактировать"
-                      onClick={() => startEdit(item)}
+                    <button title="Редактировать" onClick={() => openEdit(item)}
                       className="p-1.5 rounded text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-muted)] transition-colors">
                       <Pencil size={14} />
                     </button>
-                    <button
-                      title="Удалить"
-                      onClick={() => remove(item.id)}
+                    <button title="Удалить" onClick={() => remove(item.id)}
                       className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                       <Trash2 size={14} />
                     </button>
@@ -378,93 +370,113 @@ export default function Assets() {
       <div className="flex flex-wrap gap-4 text-sm text-[color:var(--color-muted-foreground)] px-1">
         <span>Записей: <b className="text-[color:var(--color-foreground)]">{stats.total}</b></span>
         <span>Сотрудников: <b className="text-[color:var(--color-foreground)]">{stats.employees}</b></span>
-        {stats.overdue > 0 && (
-          <span className="text-amber-600 font-medium">⚠️ Просрочено: {stats.overdue}</span>
-        )}
+        {stats.overdue > 0 && <span className="text-amber-600 font-medium">⚠️ Просрочено: {stats.overdue}</span>}
       </div>
 
       {/* Modal */}
       {showForm && (
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="modal-card max-w-xl">
-            <h2 className="text-xl font-semibold mb-4">{form.id ? 'Редактировать запись' : 'Новая запись'}</h2>
-            <div className="space-y-3">
+          <div className="modal-card max-w-3xl w-full">
+            <h2 className="text-xl font-semibold mb-4">
+              {editId !== null ? 'Редактировать запись' : 'Выдать имущество'}
+            </h2>
 
+            {/* Employee row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <div>
                 <label className="text-sm font-medium">Сотрудник *</label>
-                <select className="input mt-1 w-full" value={form.employee_id}
-                  onChange={e => handleSelectEmployee(e.target.value)}>
+                <select className="input mt-1 w-full" value={formEmp.employee_id}
+                  onChange={e => pickEmployee(e.target.value)}>
                   <option value="">Выберите сотрудника</option>
-                  {employees.map(e => (
-                    <option key={e.id} value={e.id}>{e.full_name || e.name}</option>
-                  ))}
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
                 </select>
               </div>
-
               <div>
                 <label className="text-sm font-medium">Должность</label>
                 <input className="input mt-1 w-full" list="asset-positions"
-                  placeholder="Должность" value={form.position}
-                  onChange={e => setForm(f => ({ ...f, position: e.target.value }))} />
-                <datalist id="asset-positions">
-                  {posOptions.map(o => <option key={o} value={o} />)}
-                </datalist>
+                  placeholder="Должность" value={formEmp.position}
+                  onChange={e => setFormEmp(f => ({ ...f, position: e.target.value }))} />
+                <datalist id="asset-positions">{posOptions.map(o => <option key={o} value={o} />)}</datalist>
               </div>
-
-              <div>
-                <label className="text-sm font-medium">Предмет *</label>
-                <input className="input mt-1 w-full" list="asset-items"
-                  placeholder="Например: Рабочая форма" value={form.item_name}
-                  onChange={e => setForm(f => ({ ...f, item_name: e.target.value }))} />
-                <datalist id="asset-items">
-                  {itemOptions.map(o => <option key={o} value={o} />)}
-                </datalist>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Размер</label>
-                <input className="input mt-1 w-full" list="asset-sizes"
-                  placeholder="Например: M или 42" value={form.size}
-                  onChange={e => setForm(f => ({ ...f, size: e.target.value }))} />
-                <datalist id="asset-sizes">
-                  {sizeOptions.map(o => <option key={o} value={o} />)}
-                </datalist>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium">Количество</label>
-                  <input type="number" min={1} className="input mt-1 w-full"
-                    value={form.quantity}
-                    onChange={e => setForm(f => ({ ...f, quantity: Number(e.target.value) }))} />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Срок службы (мес.)</label>
-                  <input type="number" min={0} className="input mt-1 w-full"
-                    placeholder="—" value={form.service_life}
-                    onChange={e => setForm(f => ({ ...f, service_life: e.target.value }))} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium">Дата выдачи</label>
-                  <input type="date" className="input mt-1 w-full"
-                    value={form.issue_date}
-                    onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Дата возврата</label>
-                  <input type="date" className="input mt-1 w-full"
-                    value={form.return_date}
-                    onChange={e => setForm(f => ({ ...f, return_date: e.target.value }))} />
-                </div>
-              </div>
-
             </div>
+
+            {/* Items table */}
+            <div className="border border-[color:var(--color-border)] rounded-lg overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
+                    <th className="text-left px-3 py-2">Предмет *</th>
+                    <th className="text-left px-3 py-2 w-28">Размер</th>
+                    <th className="text-center px-3 py-2 w-20">Кол-во</th>
+                    <th className="text-center px-3 py-2 w-24">Срок, мес.</th>
+                    <th className="text-left px-3 py-2 w-36">Дата выдачи</th>
+                    <th className="text-left px-3 py-2 w-36">Дата возврата</th>
+                    {editId === null && <th className="w-8 px-2 py-2"></th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[color:var(--color-border)]">
+                  {formItems.map((row, idx) => (
+                    <tr key={idx}>
+                      <td className="px-2 py-1.5">
+                        <input className="input w-full text-sm" list="asset-items"
+                          placeholder="Рабочая форма" value={row.item_name}
+                          onChange={e => setItemField(idx, 'item_name', e.target.value)} />
+                        <datalist id="asset-items">{itemOptions.map(o => <option key={o} value={o} />)}</datalist>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input className="input w-full text-sm" list="asset-sizes"
+                          placeholder="M / 42" value={row.size}
+                          onChange={e => setItemField(idx, 'size', e.target.value)} />
+                        <datalist id="asset-sizes">{sizeOptions.map(o => <option key={o} value={o} />)}</datalist>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="number" min={1} className="input w-full text-sm text-center"
+                          value={row.quantity}
+                          onChange={e => setItemField(idx, 'quantity', e.target.value)} />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="number" min={0} className="input w-full text-sm text-center"
+                          placeholder="—" value={row.service_life}
+                          onChange={e => setItemField(idx, 'service_life', e.target.value)} />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="date" className="input w-full text-sm"
+                          value={row.issue_date}
+                          onChange={e => setItemField(idx, 'issue_date', e.target.value)} />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="date" className="input w-full text-sm"
+                          value={row.return_date}
+                          onChange={e => setItemField(idx, 'return_date', e.target.value)} />
+                      </td>
+                      {editId === null && (
+                        <td className="px-2 py-1.5 text-center">
+                          <button onClick={() => removeItemRow(idx)} disabled={formItems.length === 1}
+                            className="p-1 rounded text-red-400 hover:text-red-600 disabled:opacity-30">
+                            <X size={14} />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {editId === null && (
+              <button className="btn btn-secondary text-sm flex items-center gap-1.5 mt-2"
+                onClick={addItemRow}>
+                <Plus size={13} /> Добавить предмет
+              </button>
+            )}
+
             <div className="flex justify-end gap-2 pt-4">
               <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Отмена</button>
-              <button className="btn btn-primary" onClick={saveForm}>Сохранить</button>
+              <button className="btn btn-primary" onClick={saveForm}>
+                {editId !== null
+                  ? 'Сохранить'
+                  : `Выдать ${formItems.length > 1 ? `${formItems.length} предмета` : 'предмет'}`}
+              </button>
             </div>
           </div>
         </div>

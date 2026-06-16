@@ -1,98 +1,107 @@
-import json
-import os
+"""Asset repository backed by SQLite (hr.db), shared safely between the
+bot process and the API server process via WAL mode.
+
+Replaces the previous JSON-file implementation which had an in-memory cache
+that caused stale reads when the other process wrote to the file.
+"""
 from typing import Any, Dict, List, Optional
 
-from app.config import ASSETS_FILE
+from sqlalchemy import text
+
+from app.db.session import engine
 from app.utils.logger import log
+
+_COLS = (
+    "id", "employee_id", "employee_name", "position", "item_name", "size",
+    "quantity", "issue_date", "return_date", "service_life",
+    "notified_at", "acked_at", "created_at",
+)
+
+
+def _row(row) -> Dict[str, Any]:
+    d = dict(row._mapping)
+    # Normalise created_at to string if present
+    if d.get("created_at") and not isinstance(d["created_at"], str):
+        d["created_at"] = str(d["created_at"])
+    return d
 
 
 class AssetRepository:
-    def __init__(self, file_path: Optional[str] = None) -> None:
-        self._file = file_path or ASSETS_FILE
-        log(f"\U0001F4C2 Loading assets from {self._file}")
-        self._data: List[Dict[str, Any]] = self._load()
-        self._counter = max(
-            (int(item.get("id", 0)) for item in self._data if str(item.get("id")).isdigit()),
-            default=0,
-        )
-
-    def _load(self) -> List[Dict[str, Any]]:
-        if not os.path.exists(self._file):
-            example = self._file.replace('.json', '.example.json')
-            if os.path.exists(example):
-                try:
-                    with open(example, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    with open(self._file, 'w', encoding='utf-8') as out:
-                        json.dump(data, out, ensure_ascii=False, indent=2)
-                    return data
-                except Exception as e:
-                    log(f"\u274C Failed reading example {example}: {e}")
-                    return []
-            log(f"\u274C {self._file} not found and no example")
-            return []
-        try:
-            with open(self._file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception as e:
-            log(f"\u274C Failed reading {self._file}: {e}")
-            data = []
-        if not data:
-            example = self._file.replace('.json', '.example.json')
-            if os.path.exists(example):
-                try:
-                    log(f"\u26A0\uFE0F Using example {example}")
-                    with open(example, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    with open(self._file, 'w', encoding='utf-8') as out:
-                        json.dump(data, out, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    log(f"\u274C Failed reading example {example}: {e}")
-                    data = []
-        return data
-
-    def _save(self) -> None:
-        with open(self._file, 'w', encoding='utf-8') as f:
-            json.dump(self._data, f, ensure_ascii=False, indent=2)
-
-    def _generate_id(self) -> int:
-        self._counter += 1
-        return self._counter
-
     def list(self, employee_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        result = []
-        for item in self._data:
-            if employee_id and str(item.get('employee_id')) != str(employee_id):
-                continue
-            result.append(item)
-        result.sort(key=lambda x: x.get('issue_date', ''))
-        return result
+        with engine.connect() as conn:
+            if employee_id:
+                rows = conn.execute(
+                    text("SELECT * FROM assets WHERE employee_id = :eid ORDER BY issue_date, id"),
+                    {"eid": str(employee_id)},
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    text("SELECT * FROM assets ORDER BY issue_date, id")
+                ).fetchall()
+        return [_row(r) for r in rows]
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        if 'id' not in data or any(str(it.get('id')) == str(data['id']) for it in self._data):
-            data['id'] = self._generate_id()
-        self._data.append(data)
-        self._save()
-        return data
+        params = {
+            "employee_id":   str(data.get("employee_id", "")),
+            "employee_name": data.get("employee_name") or "",
+            "position":      data.get("position") or "",
+            "item_name":     data.get("item_name") or "",
+            "size":          data.get("size") or "",
+            "quantity":      int(data.get("quantity") or 1),
+            "issue_date":    data.get("issue_date") or "",
+            "return_date":   data.get("return_date") or None,
+            "service_life":  int(data["service_life"]) if data.get("service_life") else None,
+            "notified_at":   data.get("notified_at") or None,
+            "acked_at":      data.get("acked_at") or None,
+        }
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("""
+                    INSERT INTO assets
+                        (employee_id, employee_name, position, item_name, size,
+                         quantity, issue_date, return_date, service_life,
+                         notified_at, acked_at)
+                    VALUES
+                        (:employee_id, :employee_name, :position, :item_name, :size,
+                         :quantity, :issue_date, :return_date, :service_life,
+                         :notified_at, :acked_at)
+                """),
+                params,
+            )
+            new_id = result.lastrowid
+        return {**params, "id": new_id}
 
     def update(self, item_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        for item in self._data:
-            if str(item.get('id')) == str(item_id):
-                item.update({k: v for k, v in updates.items() if v is not None})
-                self._save()
-                return item
-        return None
+        fields = {k: v for k, v in updates.items() if k != "id" and v is not None}
+        if not fields:
+            return self._get(item_id)
+        set_clause = ", ".join(f"{k} = :{k}" for k in fields)
+        with engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE assets SET {set_clause} WHERE id = :_id"),
+                {**fields, "_id": int(item_id)},
+            )
+        return self._get(item_id)
 
     def delete(self, item_id: str) -> None:
-        self._data = [it for it in self._data if str(it.get('id')) != str(item_id)]
-        self._save()
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM assets WHERE id = :id"),
+                {"id": int(item_id)},
+            )
+
+    def _get(self, item_id: str) -> Optional[Dict[str, Any]]:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT * FROM assets WHERE id = :id"),
+                {"id": int(item_id)},
+            ).fetchone()
+        return _row(row) if row else None
 
     def reassign_employee(self, old_employee_id: str, new_employee_id: str) -> int:
-        count = 0
-        for item in self._data:
-            if str(item.get('employee_id')) == str(old_employee_id):
-                item['employee_id'] = str(new_employee_id)
-                count += 1
-        if count:
-            self._save()
-        return count
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("UPDATE assets SET employee_id = :new WHERE employee_id = :old"),
+                {"new": str(new_employee_id), "old": str(old_employee_id)},
+            )
+        return result.rowcount
