@@ -13,6 +13,8 @@ class Asset(BaseModel):
     issue_date: str
     return_date: Optional[str] = None
     service_life: Optional[int] = None
+    notified_at: Optional[str] = None
+    acked_at: Optional[str] = None
 
 
 class AssetCreate(BaseModel):
@@ -37,4 +39,10 @@ class AssetUpdate(BaseModel):
     issue_date: Optional[str] = None
     return_date: Optional[str] = None
     service_life: Optional[int] = None
+    notified_at: Optional[str] = None
+    acked_at: Optional[str] = None
+
+
+class BulkIdsRequest(BaseModel):
+    ids: list[int]
 

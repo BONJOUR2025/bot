@@ -224,7 +224,7 @@ def create_app() -> FastAPI:
 
     from ..services.asset_service import AssetService
 
-    asset_service = AssetService()
+    asset_service = AssetService(telegram=telegram_service)
     app.include_router(
         create_asset_router(asset_service, access_service),
         prefix="/api",

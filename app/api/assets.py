@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.schemas.asset import Asset, AssetCreate, AssetUpdate
+from app.schemas.asset import Asset, AssetCreate, AssetUpdate, BulkIdsRequest
 from app.services.asset_service import AssetService
 from app.services.access_control_service import AccessControlService, ResolvedUser
 
@@ -25,6 +25,28 @@ def create_asset_router(
         if not access_service.is_employee_visible(current, owner):
             raise HTTPException(status_code=403, detail="forbidden")
 
+    # --- Bulk endpoints must come before /{item_id} routes ---
+
+    @router.post("/bulk/delete")
+    async def bulk_delete(
+        data: BulkIdsRequest, current: ResolvedUser = Depends(get_current_user)
+    ):
+        for item_id in data.ids:
+            _ensure_asset_access(str(item_id), current)
+        deleted = await service.bulk_delete(data.ids)
+        return {"deleted": deleted}
+
+    @router.post("/bulk/notify")
+    async def bulk_notify(
+        data: BulkIdsRequest, current: ResolvedUser = Depends(get_current_user)
+    ):
+        for item_id in data.ids:
+            _ensure_asset_access(str(item_id), current)
+        result = await service.bulk_notify(data.ids)
+        return result
+
+    # --- Standard CRUD ---
+
     @router.get("/", response_model=list[Asset])
     async def list_assets(
         employee_id: str | None = Query(None),
@@ -43,6 +65,19 @@ def create_asset_router(
         if not access_service.is_employee_visible(current, data.employee_id):
             raise HTTPException(status_code=403, detail="forbidden")
         return await service.create_asset(data)
+
+    @router.post("/{item_id}/notify")
+    async def notify_asset(
+        item_id: str, current: ResolvedUser = Depends(get_current_user)
+    ):
+        _ensure_asset_access(item_id, current)
+        result = await service.notify_asset(item_id)
+        if not result.get("ok"):
+            detail = result.get("detail", "error")
+            if detail == "not_found":
+                raise HTTPException(status_code=404, detail="not_found")
+            raise HTTPException(status_code=400, detail=detail)
+        return result
 
     @router.put("/{item_id}", response_model=Asset)
     async def update_asset(
