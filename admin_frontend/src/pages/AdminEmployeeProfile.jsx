@@ -13,8 +13,8 @@ function InfoRow({ icon: Icon, label, value }) {
   return (
     <div className="flex items-start gap-3 py-2.5 border-b border-[color:var(--color-border)] last:border-0">
       {Icon && <Icon size={15} className="mt-0.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
-      <span className="text-sm text-[color:var(--color-muted-foreground)] w-36 shrink-0">{label}</span>
-      <span className="text-sm font-medium break-words">{value}</span>
+      <span className="text-sm text-[color:var(--color-muted-foreground)] w-28 sm:w-36 shrink-0">{label}</span>
+      <span className="text-sm font-medium break-words min-w-0">{value}</span>
     </div>
   );
 }

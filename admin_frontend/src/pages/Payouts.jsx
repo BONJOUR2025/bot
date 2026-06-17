@@ -256,9 +256,9 @@ function MovementPickerModal({ payout, onLink, onClose }) {
           <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
         </div>
 
-        <div className="flex gap-2 mb-3">
-          <input type="date" className="input flex-1" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <input type="date" className="input flex-1" value={dateTo}   onChange={(e) => setDateTo(e.target.value)} />
+        <div className="flex flex-wrap gap-2 mb-3">
+          <input type="date" className="input flex-1 min-w-[130px]" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <input type="date" className="input flex-1 min-w-[130px]" value={dateTo}   onChange={(e) => setDateTo(e.target.value)} />
           <button className="btn btn--primary" onClick={loadMoves} disabled={loading}>
             {loading ? <RefreshCw size={14} className="animate-spin" /> : 'Найти'}
           </button>
@@ -269,8 +269,8 @@ function MovementPickerModal({ payout, onLink, onClose }) {
         ) : moves.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Нет движений за период</div>
         ) : (
-          <div className="overflow-y-auto flex-1">
-            <table className="w-full text-sm">
+          <div className="overflow-auto flex-1">
+            <table className="w-full min-w-[460px] text-sm">
               <thead className="sticky top-0 bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
                   <th className="px-3 py-2 text-left">Дата</th>

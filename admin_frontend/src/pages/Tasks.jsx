@@ -623,7 +623,8 @@ export default function Tasks() {
           </div>
 
           {/* 7-day grid */}
-          <div className="grid grid-cols-7 gap-1.5">
+          <div className="overflow-x-auto -mx-1 px-1">
+          <div className="grid grid-cols-7 gap-1.5 min-w-[640px]">
             {weekDays.map((day, i) => {
               const iso       = toISODate(day);
               const isTodayDay = iso === todayISO;
@@ -671,6 +672,7 @@ export default function Tasks() {
                 </div>
               );
             })}
+          </div>
           </div>
 
           {/* Undated tasks */}

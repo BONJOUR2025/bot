@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Save, ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Save, ChevronDown, ChevronRight, GripVertical, ArrowLeft } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const CATEGORIES = ['Общее', 'Регламенты', 'Технологии', 'Инструкции', 'Условия работы', 'Безопасность'];
 
 export default function KnowledgeBase() {
   const { toast } = useToast();
+  const { isMobile } = useViewport();
   const [docs, setDocs]           = useState([]);
   const [selected, setSelected]   = useState(null); // doc id
   const [form, setForm]           = useState({ title: '', category: 'Общее', content: '', order_idx: 0 });
@@ -86,7 +88,7 @@ export default function KnowledgeBase() {
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden gap-0">
       {/* Sidebar */}
-      <div className="w-64 shrink-0 border-r border-[color:var(--color-border)] flex flex-col bg-[color:var(--color-bg-secondary)]">
+      <div className={`${isMobile ? (selected ? 'hidden' : 'w-full') : 'w-64 shrink-0'} border-r border-[color:var(--color-border)] flex flex-col bg-[color:var(--color-bg-secondary)]`}>
         <div className="p-3 border-b border-[color:var(--color-border)] flex items-center justify-between">
           <span className="text-sm font-semibold">База знаний</span>
           <button onClick={createDoc} disabled={creating}
@@ -108,10 +110,16 @@ export default function KnowledgeBase() {
       </div>
 
       {/* Editor */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={`${isMobile && !selected ? 'hidden' : 'flex-1'} flex flex-col overflow-hidden`}>
         {selected ? (
           <>
             <div className="p-4 border-b border-[color:var(--color-border)] flex items-center gap-3 flex-wrap">
+              {isMobile && (
+                <button onClick={() => { if (!dirty || confirm('Есть несохранённые изменения. Выйти без сохранения?')) setSelected(null); }}
+                  className="icon-button shrink-0" aria-label="Назад к списку">
+                  <ArrowLeft size={18} />
+                </button>
+              )}
               <input className="input flex-1 min-w-0 font-medium" value={form.title}
                 onChange={e => change('title', e.target.value)} placeholder="Название документа" />
               <select className="input text-sm w-44 shrink-0" value={form.category}

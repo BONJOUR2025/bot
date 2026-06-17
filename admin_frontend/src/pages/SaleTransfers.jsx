@@ -242,7 +242,8 @@ export default function SaleTransfers() {
             Пока нет переносов
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm">
             <thead>
               <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)]">
                 <th className="text-left px-4 py-2">Когда</th>
@@ -275,6 +276,7 @@ export default function SaleTransfers() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

@@ -592,7 +592,7 @@ export default function Masters() {
           {/* KPI — заказы */}
           <div>
             <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Заказы</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <KpiCard label="Всего заказов" value={kpi.ordersTotal} />
               <KpiCard label="Выполнено" value={kpi.ordersDone} accent />
               <KpiCard label="В работе" value={kpi.ordersInWork} />

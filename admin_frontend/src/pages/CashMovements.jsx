@@ -1264,7 +1264,7 @@ export default function CashMovements() {
 
       {/* Floating selection bar */}
       {selectedCount > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3 rounded-2xl shadow-2xl bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] border border-[color:var(--color-sidebar-border)]">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 max-w-[calc(100vw-1rem)] px-5 py-3 rounded-2xl shadow-2xl bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] border border-[color:var(--color-sidebar-border)]">
           <span className="text-sm font-medium">Выбрано: <span className="font-bold">{selectedCount}</span></span>
           <span className="w-px h-5 bg-[color:var(--color-sidebar-border)]" />
           <span className="text-sm">Сумма: <span className="font-bold text-[color:var(--color-sidebar-primary-foreground)]">{fmtMoney(selectedSum)}</span></span>

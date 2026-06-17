@@ -595,7 +595,7 @@ export default function Employees() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Имя *</label>
                 <input className="modal-control" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
