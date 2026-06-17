@@ -152,7 +152,7 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
         def esc(v) -> str:
             return str(v or "—").replace("`", "'")
 
-        amount = f"{schedule['planned_amount']:,.0f}".replace(",", " ")
+        amount = f"{schedule['planned_amount']:,.2f}".replace(",", " ").replace(".", ",")
         text = (
             "📋 *Просьба оплатить счёт*\n\n"
             "```\n"
