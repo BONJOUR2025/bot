@@ -188,9 +188,11 @@ function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
     initial ?? {
       name: '', planned_amount: '', day_of_month: '', category: '',
       responsible_name: '', responsible_tg_id: '', notify_days_before: 3, note: '',
-      objects: [],
+      objects: [], seller: '', pay_from: '',
     }
   );
+  const [invoiceFile, setInvoiceFile] = useState(null);
+  const [notifyCashier, setNotifyCashier] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   return (
@@ -255,10 +257,40 @@ function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
             <textarea rows={2} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.note} onChange={e => set('note', e.target.value)} />
           </div>
+
+          <div className="border-t pt-3 mt-1 space-y-3">
+            <p className="text-xs font-medium text-gray-600">Отправка счёта кассиру</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Продавец</label>
+                <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="ООО «Ромашка»" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Платим от</label>
+                <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={form.pay_from} onChange={e => set('pay_from', e.target.value)} placeholder="ИП Иванов / Салон на Ленина" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Файл счёта</label>
+              <input type="file" accept="image/*,application/pdf"
+                className="w-full text-sm border rounded-lg px-3 py-2 file:mr-2 file:text-xs file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1"
+                onChange={e => setInvoiceFile(e.target.files?.[0] || null)} />
+              {!invoiceFile && form.invoice_file_url && (
+                <a href={form.invoice_file_url} target="_blank" rel="noreferrer"
+                  className="text-[11px] text-blue-600 hover:underline mt-1 inline-block">Текущий файл счёта</a>
+              )}
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={notifyCashier} onChange={e => setNotifyCashier(e.target.checked)} />
+              Отправить кассиру в Telegram
+            </label>
+          </div>
         </div>
         <div className="p-4 border-t flex gap-2 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Отмена</button>
-          <button onClick={() => onSave(form)}
+          <button onClick={() => onSave(form, { invoiceFile, notifyCashier })}
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
             Сохранить
           </button>
@@ -415,7 +447,7 @@ export default function PaymentCalendar() {
     } catch { showToast('Ошибка', 'danger'); }
   }
 
-  async function handleSaveSchedule(form) {
+  async function handleSaveSchedule(form, { invoiceFile, notifyCashier } = {}) {
     try {
       const isEdit = scheduleModal !== 'new';
       const payload = {
@@ -428,13 +460,27 @@ export default function PaymentCalendar() {
         notify_days_before: parseInt(form.notify_days_before) || 3,
         note: form.note,
         objects: form.objects || [],
+        seller: form.seller || '',
+        pay_from: form.pay_from || '',
       };
+      let scheduleId = form.id;
       if (isEdit) {
         await api.patch(`/payment-calendar/schedules/${form.id}`, payload);
         showToast('Платёж обновлён', 'success');
       } else {
-        await api.post('/payment-calendar/schedules', payload);
+        const res = await api.post('/payment-calendar/schedules', payload);
+        scheduleId = res.data.id;
         showToast('Платёж добавлен', 'success');
+      }
+      if (notifyCashier && scheduleId) {
+        try {
+          const fd = new FormData();
+          if (invoiceFile) fd.append('invoice', invoiceFile);
+          const res = await api.post(`/payment-calendar/schedules/${scheduleId}/send-to-cashier`, fd);
+          showToast(res.data.ok ? 'Счёт отправлен кассиру' : 'Не удалось отправить кассиру в Telegram', res.data.ok ? 'success' : 'danger');
+        } catch (e) {
+          showToast(e.response?.data?.detail || 'Ошибка отправки кассиру', 'danger');
+        }
       }
       setScheduleModal(null);
       load();

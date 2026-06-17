@@ -35,6 +35,9 @@ class PaymentSchedule(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     note = Column(Text, nullable=True, default="")
     objects = Column(Text, nullable=True, default="[]")
+    seller = Column(String, nullable=True, default="")
+    pay_from = Column(String, nullable=True, default="")
+    invoice_file_url = Column(String, nullable=True, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     records = relationship("PaymentRecord", back_populates="schedule", cascade="all, delete-orphan")
@@ -56,6 +59,9 @@ class PaymentSchedule(Base):
             "is_active": self.is_active,
             "note": self.note or "",
             "objects": objects,
+            "seller": self.seller or "",
+            "pay_from": self.pay_from or "",
+            "invoice_file_url": self.invoice_file_url or "",
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

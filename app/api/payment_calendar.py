@@ -1,7 +1,8 @@
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from .dependencies import require_permission
@@ -29,6 +30,8 @@ class ScheduleCreate(BaseModel):
     notify_days_before: int = 3
     note: str = ""
     objects: List[str] = []
+    seller: str = ""
+    pay_from: str = ""
 
 
 class ScheduleUpdate(BaseModel):
@@ -42,6 +45,8 @@ class ScheduleUpdate(BaseModel):
     is_active: Optional[bool] = None
     note: Optional[str] = None
     objects: Optional[List[str]] = None
+    seller: Optional[str] = None
+    pay_from: Optional[str] = None
 
 
 class PayBody(BaseModel):
@@ -106,6 +111,56 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
         if not repo.delete_schedule(schedule_id):
             raise HTTPException(404, "not found")
         return {"ok": True}
+
+    @router.post("/schedules/{schedule_id}/send-to-cashier")
+    async def send_to_cashier(
+        schedule_id: int,
+        invoice: Optional[UploadFile] = File(None),
+        _=Depends(perm),
+    ):
+        schedule = repo.get_schedule(schedule_id)
+        if schedule is None:
+            raise HTTPException(404, "not found")
+
+        invoice_path: Optional[Path] = None
+        if invoice is not None and invoice.filename:
+            content = await invoice.read()
+            upload_dir = Path("static/uploads/payment_calendar")
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            ext = Path(invoice.filename).suffix or ""
+            invoice_path = upload_dir / f"{schedule_id}{ext}"
+            invoice_path.write_bytes(content)
+            schedule = repo.update_schedule(
+                schedule_id, {"invoice_file_url": f"/static/uploads/payment_calendar/{schedule_id}{ext}"}
+            )
+        elif schedule.get("invoice_file_url"):
+            invoice_path = Path(schedule["invoice_file_url"].lstrip("/"))
+
+        from app.services.config_service import ConfigService
+        chat_id = str(ConfigService().load().get("payment_calendar_cashier_chat_id") or "").strip()
+        if not chat_id:
+            raise HTTPException(400, "Telegram ID кассира не настроен (Настройки → Telegram)")
+
+        def esc(v) -> str:
+            return str(v or "—").replace("`", "'")
+
+        amount = f"{schedule['planned_amount']:,.0f}".replace(",", " ")
+        text = (
+            "📋 *Просьба оплатить счёт*\n\n"
+            "```\n"
+            f"Товар/Услуга : {esc(schedule['name'])}\n"
+            f"Продавец     : {esc(schedule.get('seller'))}\n"
+            f"Сумма        : {amount} ₽\n"
+            f"Платим от    : {esc(schedule.get('pay_from'))}\n"
+            "```"
+        )
+
+        from app.services.notify import send_chat_document, send_chat_message
+        sent = await send_chat_message(chat_id, text, parse_mode="Markdown")
+        if invoice_path and invoice_path.exists():
+            await send_chat_document(chat_id, str(invoice_path), caption="Счёт на оплату")
+
+        return {"ok": sent, "schedule": schedule}
 
     @router.get("/month/{year_month}")
     async def get_month(year_month: str, _=Depends(perm)):

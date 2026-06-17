@@ -42,6 +42,9 @@ def init_db() -> None:
 def _migrate_columns() -> None:
     with engine.connect() as conn:
         _add_column_if_missing(conn, "payment_schedules", "objects", "TEXT DEFAULT '[]'")
+        _add_column_if_missing(conn, "payment_schedules", "seller", "TEXT DEFAULT ''")
+        _add_column_if_missing(conn, "payment_schedules", "pay_from", "TEXT DEFAULT ''")
+        _add_column_if_missing(conn, "payment_schedules", "invoice_file_url", "TEXT DEFAULT ''")
 
 
 def _add_column_if_missing(conn, table, column, definition):

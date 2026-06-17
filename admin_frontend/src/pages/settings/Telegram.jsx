@@ -66,6 +66,9 @@ export default function SettingsTelegram() {
               </button>
             </div>
           </Field>
+          <Field label="payment_calendar_cashier_chat_id" hint="Telegram ID кассира — куда отправляются просьбы оплатить счёт из Платёжного календаря">
+            <input className="input w-full font-mono" placeholder="123456789" {...register('payment_calendar_cashier_chat_id')} />
+          </Field>
         </div>
       </Section>
 
