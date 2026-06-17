@@ -156,9 +156,10 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
         )
 
         from app.services.notify import send_chat_document, send_chat_message
-        sent = await send_chat_message(chat_id, text, parse_mode="Markdown")
         if invoice_path and invoice_path.exists():
-            await send_chat_document(chat_id, str(invoice_path), caption="Счёт на оплату")
+            sent = await send_chat_document(chat_id, str(invoice_path), caption=text, parse_mode="Markdown")
+        else:
+            sent = await send_chat_message(chat_id, text, parse_mode="Markdown")
 
         return {"ok": sent, "schedule": schedule}
 
