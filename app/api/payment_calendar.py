@@ -153,6 +153,8 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
             return str(v or "—").replace("`", "'")
 
         amount = f"{schedule['planned_amount']:,.2f}".replace(",", " ").replace(".", ",")
+        objects = schedule.get("objects") or []
+        objects_line = f"Объекты      : {esc(', '.join(objects))}\n" if objects else ""
         text = (
             "📋 *Просьба оплатить счёт*\n\n"
             "```\n"
@@ -160,6 +162,7 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
             f"Продавец     : {esc(schedule.get('seller'))}\n"
             f"Сумма        : {amount} ₽\n"
             f"Платим от    : {esc(schedule.get('pay_from'))}\n"
+            f"{objects_line}"
             "```"
         )
 
