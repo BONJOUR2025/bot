@@ -3,6 +3,7 @@ import {
   Plus, Pencil, Trash2, Check, RotateCcw, Calendar, Clock,
   Filter, LayoutGrid, List, AlertCircle, CheckCircle2, Circle,
   PlayCircle, ChevronLeft, ChevronRight, Settings2, FolderPlus, X,
+  Bell, Loader2,
 } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -62,9 +63,18 @@ export default function Tasks() {
   const [showForm, setShowForm]     = useState(false);
   const [tagInput, setTagInput]     = useState('');
 
-  const [viewMode, setViewMode]     = useState('board');
-  const [filters, setFilters]       = useState({ status: '', priority: '', category: '', includeDone: true });
+  const [viewMode, setViewMode]     = useState(() => localStorage.getItem('tasks_view_mode') || 'board');
+  const [filters, setFilters]       = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('tasks_filters'));
+      if (saved) return saved;
+    } catch {}
+    return { status: '', priority: '', category: '', includeDone: true };
+  });
   const [weekStart, setWeekStart]   = useState(() => getMonday(new Date()));
+  const [loading, setLoading]       = useState(true);
+  const [selected, setSelected]     = useState(new Set());
+  const [dragOverCol, setDragOverCol] = useState(null);
 
   const [categories, setCategories]           = useState([]);
   const [showCatManager, setShowCatManager]   = useState(false);
@@ -73,6 +83,7 @@ export default function Tasks() {
 
   // ── Data loading ──────────────────────────────────────────────
   const loadTasks = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await api.get('tasks/', { params: {
         status:       filters.status   || undefined,
@@ -82,13 +93,16 @@ export default function Tasks() {
       }});
       setTasks(res.data);
     } catch (err) { console.error(err); toast('Ошибка загрузки задач', 'error'); }
+    finally { setLoading(false); }
   }, [filters]);
 
   const loadStats      = async () => { try { setStats((await api.get('tasks/stats')).data);      } catch {} };
   const loadCategories = async () => { try { setCategories((await api.get('tasks/categories')).data); } catch {} };
 
-  useEffect(() => { loadTasks(); loadStats(); loadCategories(); }, []);
-  useEffect(() => { loadTasks(); }, [filters]);
+  useEffect(() => { loadStats(); loadCategories(); }, []);
+  useEffect(() => { loadTasks(); setSelected(new Set()); }, [filters]);
+  useEffect(() => { localStorage.setItem('tasks_view_mode', viewMode); }, [viewMode]);
+  useEffect(() => { localStorage.setItem('tasks_filters', JSON.stringify(filters)); }, [filters]);
 
   // ── Task CRUD ─────────────────────────────────────────────────
   function startCreate(preDate = '') {
@@ -103,26 +117,68 @@ export default function Tasks() {
   }
   async function saveForm() {
     if (!form.title.trim()) { toast('Введите название задачи', 'warning'); return; }
+    const isEdit = !!form.id;
     try {
       const payload = { ...form, due_time: form.due_time ? form.due_time + ':00' : null, tags: form.tags || [] };
-      if (form.id) await api.put(`tasks/${form.id}`, payload);
-      else         await api.post('tasks/', payload);
+      if (isEdit) await api.put(`tasks/${form.id}`, payload);
+      else        await api.post('tasks/', payload);
       setShowForm(false); setForm(emptyForm);
+      toast(isEdit ? 'Задача обновлена' : 'Задача создана', 'success');
       loadTasks(); loadStats();
     } catch { toast('Ошибка сохранения', 'error'); }
   }
   async function deleteTask(id) {
     if (!window.confirm('Удалить задачу?')) return;
-    await api.delete(`tasks/${id}`);
-    loadTasks(); loadStats();
+    try {
+      await api.delete(`tasks/${id}`);
+      toast('Задача удалена', 'success');
+      loadTasks(); loadStats();
+    } catch { toast('Ошибка удаления', 'error'); }
   }
-  async function completeTask(id) { await api.post(`tasks/${id}/complete`); loadTasks(); loadStats(); }
-  async function reopenTask(id)   { await api.post(`tasks/${id}/reopen`);   loadTasks(); loadStats(); }
-  async function updateStatus(id, status) { await api.put(`tasks/${id}`, { status }); loadTasks(); loadStats(); }
+  async function completeTask(id) {
+    try { await api.post(`tasks/${id}/complete`); loadTasks(); loadStats(); }
+    catch { toast('Ошибка', 'error'); }
+  }
+  async function reopenTask(id) {
+    try { await api.post(`tasks/${id}/reopen`); loadTasks(); loadStats(); }
+    catch { toast('Ошибка', 'error'); }
+  }
+  async function updateStatus(id, status) {
+    try { await api.put(`tasks/${id}`, { status }); loadTasks(); loadStats(); }
+    catch { toast('Ошибка обновления статуса', 'error'); }
+  }
+
+  async function bulkComplete() {
+    try {
+      await Promise.all([...selected].map(id => api.post(`tasks/${id}/complete`)));
+      toast('Задачи выполнены', 'success');
+      setSelected(new Set());
+      loadTasks(); loadStats();
+    } catch { toast('Ошибка выполнения', 'error'); }
+  }
+  async function bulkDelete() {
+    if (!window.confirm(`Удалить ${selected.size} задач?`)) return;
+    try {
+      await Promise.all([...selected].map(id => api.delete(`tasks/${id}`)));
+      toast('Задачи удалены', 'success');
+      setSelected(new Set());
+      loadTasks(); loadStats();
+    } catch { toast('Ошибка удаления', 'error'); }
+  }
+  function toggleSelect(id) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function toggleSelectAll() {
+    setSelected(prev => prev.size === tasks.length ? new Set() : new Set(tasks.map(t => t.id)));
+  }
 
   function addTag() {
     const t = tagInput.trim();
-    if (t && !form.tags.includes(t)) setForm({ ...form, tags: [...form.tags, t] });
+    if (t && !form.tags.some(x => x.toLowerCase() === t.toLowerCase())) setForm({ ...form, tags: [...form.tags, t] });
     setTagInput('');
   }
   function removeTag(t) { setForm({ ...form, tags: form.tags.filter(x => x !== t) }); }
@@ -132,15 +188,31 @@ export default function Tasks() {
   function startEditCat(cat) { setCatForm({ ...cat }); setShowCatForm(true); }
   async function saveCat() {
     if (!catForm.name.trim()) { toast('Введите название', 'warning'); return; }
+    const isEdit = !!catForm.id;
     try {
-      if (catForm.id) await api.put(`tasks/categories/${catForm.id}`, catForm);
-      else            await api.post('tasks/categories', catForm);
-      setShowCatForm(false); setCatForm(emptyCatForm); loadCategories();
+      if (isEdit) await api.put(`tasks/categories/${catForm.id}`, catForm);
+      else        await api.post('tasks/categories', catForm);
+      setShowCatForm(false); setCatForm(emptyCatForm);
+      toast(isEdit ? 'Категория обновлена' : 'Категория создана', 'success');
+      loadCategories();
     } catch { toast('Ошибка сохранения', 'error'); }
   }
-  async function deleteCat(id) {
-    if (!window.confirm('Удалить категорию?')) return;
-    await api.delete(`tasks/categories/${id}`); loadCategories();
+  async function deleteCat(cat) {
+    try {
+      const res = await api.get('tasks/', { params: { category: cat.name, include_done: true } });
+      const count = res.data.length;
+      const msg = count > 0
+        ? `Категория «${cat.name}» используется в ${count} задачах. Удалить категорию? Задачи останутся без категории.`
+        : `Удалить категорию «${cat.name}»?`;
+      if (!window.confirm(msg)) return;
+    } catch {
+      if (!window.confirm(`Удалить категорию «${cat.name}»?`)) return;
+    }
+    try {
+      await api.delete(`tasks/categories/${cat.id}`);
+      toast('Категория удалена', 'success');
+      loadCategories(); loadTasks();
+    } catch { toast('Ошибка удаления категории', 'error'); }
   }
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -173,7 +245,7 @@ export default function Tasks() {
   }
 
   // ── Task card (shared by all views) ──────────────────────────
-  function TaskCard({ task, compact = false }) {
+  function TaskCard({ task, compact = false, draggable = false }) {
     const pri = getPri(task.priority);
     const cat = getCat(task.category);
     const over = isOverdue(task);
@@ -181,7 +253,9 @@ export default function Tasks() {
     const leftColor = cat?.color || (over ? '#ef4444' : tod ? '#eab308' : null);
 
     return (
-      <div className="bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-colors"
+      <div className={`bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-colors ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        draggable={draggable}
+        onDragStart={draggable ? (e) => { e.dataTransfer.setData('text/plain', String(task.id)); e.dataTransfer.effectAllowed = 'move'; } : undefined}
         style={leftColor ? { borderLeftWidth: 3, borderLeftColor: leftColor } : {}}>
         <div className={compact ? 'p-2' : 'p-4'}>
           {/* Title row */}
@@ -216,6 +290,9 @@ export default function Tasks() {
               )}
               {task.due_time && (
                 <span className="flex items-center gap-0.5"><Clock size={10} />{task.due_time.slice(0, 5)}</span>
+              )}
+              {task.reminder_minutes != null && (
+                <span title={`Напоминание за ${task.reminder_minutes} мин`}><Bell size={10} /></span>
               )}
               {compact && cat && (
                 <span className="text-xs" style={{ color: cat.color }}>{cat.icon}</span>
@@ -318,21 +395,37 @@ export default function Tasks() {
         </div>
       </div>
 
+      {/* ── Loading ───────────────────────────────────────────── */}
+      {loading && (
+        <div className="flex items-center justify-center py-20 text-gray-400">
+          <Loader2 className="animate-spin mr-2" size={20} /> Загрузка задач...
+        </div>
+      )}
+
       {/* ── Board ─────────────────────────────────────────────── */}
-      {viewMode === 'board' && (
+      {!loading && viewMode === 'board' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {STATUSES.map(st => {
             const Icon = st.icon;
             const col  = byStatus[st.value] || [];
             return (
-              <div key={st.value} className="bg-[var(--color-bg)] rounded-lg p-4">
+              <div key={st.value}
+                className={`bg-[var(--color-bg)] rounded-lg p-4 transition-colors ${dragOverCol === st.value ? 'ring-2 ring-[var(--color-primary)]' : ''}`}
+                onDragOver={e => { e.preventDefault(); setDragOverCol(st.value); }}
+                onDragLeave={() => setDragOverCol(prev => prev === st.value ? null : prev)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setDragOverCol(null);
+                  const id = e.dataTransfer.getData('text/plain');
+                  if (id) updateStatus(Number(id), st.value);
+                }}>
                 <div className={`flex items-center gap-2 mb-4 ${st.color}`}>
                   <Icon size={18} />
                   <h3 className="font-medium">{st.label}</h3>
                   <span className="ml-auto bg-[var(--color-bg-secondary)] px-2 py-0.5 rounded text-sm">{col.length}</span>
                 </div>
                 <div className="space-y-3">
-                  {col.map(t => <TaskCard key={t.id} task={t} />)}
+                  {col.map(t => <TaskCard key={t.id} task={t} draggable />)}
                   {col.length === 0 && <div className="text-center text-gray-500 py-8">Нет задач</div>}
                 </div>
               </div>
@@ -342,8 +435,17 @@ export default function Tasks() {
       )}
 
       {/* ── List ──────────────────────────────────────────────── */}
-      {viewMode === 'list' && (
-        isMobile ? (
+      {!loading && viewMode === 'list' && (
+        <>
+          {selected.size > 0 && (
+            <div className="flex items-center gap-3 bg-[var(--color-primary-muted)] border border-[var(--color-primary)] rounded-lg px-4 py-2 mb-3">
+              <span className="text-sm font-medium">Выбрано: {selected.size}</span>
+              <button className="btn btn--sm flex items-center gap-1" onClick={bulkComplete}><Check size={14} />Выполнить</button>
+              <button className="btn btn--sm flex items-center gap-1 text-red-400" onClick={bulkDelete}><Trash2 size={14} />Удалить</button>
+              <button className="btn btn--sm ml-auto" onClick={() => setSelected(new Set())}>Отмена</button>
+            </div>
+          )}
+        {isMobile ? (
           <div className="space-y-3">
             {tasks.map(task => {
               const pri  = getPri(task.priority);
@@ -354,6 +456,7 @@ export default function Tasks() {
                 <div key={task.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
                   <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">
                     <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={selected.has(task.id)} onChange={() => toggleSelect(task.id)} />
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pri.dot }} />
                       <span className={task.status === 'done' ? 'line-through text-gray-500' : ''}>{task.title}</span>
                     </div>
@@ -410,6 +513,9 @@ export default function Tasks() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-[var(--color-border)] text-left text-sm text-gray-400">
+                <th className="p-3 w-8">
+                  <input type="checkbox" checked={selected.size === tasks.length && tasks.length > 0} onChange={toggleSelectAll} />
+                </th>
                 <th className="p-3">Задача</th>
                 <th className="p-3 hidden md:table-cell">Категория</th>
                 <th className="p-3">Срок</th>
@@ -428,6 +534,9 @@ export default function Tasks() {
                   <tr key={task.id}
                     className={`border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]
                       ${over ? 'bg-red-500/5' : tod ? 'bg-yellow-500/5' : ''}`}>
+                    <td className="p-3">
+                      <input type="checkbox" checked={selected.has(task.id)} onChange={() => toggleSelect(task.id)} />
+                    </td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         {cat && <span className="w-1 h-7 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />}
@@ -487,16 +596,17 @@ export default function Tasks() {
                 );
               })}
               {tasks.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-500">Нет задач</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-500">Нет задач</td></tr>
               )}
             </tbody>
           </table>
         </div>
-        )
+        )}
+        </>
       )}
 
       {/* ── Calendar / Diary ──────────────────────────────────── */}
-      {viewMode === 'calendar' && (
+      {!loading && viewMode === 'calendar' && (
         <div className="space-y-4">
           {/* Week nav */}
           <div className="flex items-center gap-2">
@@ -545,7 +655,7 @@ export default function Tasks() {
                   </div>
 
                   {/* Tasks in this day */}
-                  <div className="p-1 flex-1 space-y-1 overflow-y-auto" style={{ maxHeight: 280 }}>
+                  <div className="p-1 flex-1 space-y-1 overflow-y-auto" style={{ maxHeight: '60vh' }}>
                     {dayTasks.map(task => <TaskCard key={task.id} task={task} compact />)}
                   </div>
 
@@ -579,7 +689,7 @@ export default function Tasks() {
       )}
 
       {/* ── Task form modal ────────────────────────────────────── */}
-      <Modal isOpen={showForm}>
+      <Modal isOpen={showForm} onClose={() => { setShowForm(false); setForm(emptyForm); }}>
         <div className="modal-card" style={{ maxWidth: '32rem' }}>
           <h3 className="text-xl font-semibold mb-4">
             {form.id ? 'Редактировать задачу' : 'Новая задача'}
@@ -632,7 +742,7 @@ export default function Tasks() {
                   {categories.map(c => <option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
                 </select>
                 <button type="button" className="btn" title="Управление категориями"
-                  onClick={() => { setShowForm(false); setShowCatManager(true); }}>
+                  onClick={() => setShowCatManager(true)}>
                   <Settings2 size={16} />
                 </button>
               </div>
@@ -675,7 +785,7 @@ export default function Tasks() {
       </Modal>
 
       {/* ── Category manager modal ─────────────────────────────── */}
-      <Modal isOpen={showCatManager}>
+      <Modal isOpen={showCatManager} onClose={() => setShowCatManager(false)}>
         <div className="modal-card" style={{ maxWidth: '28rem' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold">Категории задач</h3>
@@ -692,7 +802,7 @@ export default function Tasks() {
                 <span className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
                 <button onClick={() => { setShowCatManager(false); startEditCat(cat); }}
                   className="p-1.5 hover:bg-[var(--color-bg-secondary)] rounded"><Pencil size={14} /></button>
-                <button onClick={() => deleteCat(cat.id)} className="p-1.5 hover:bg-red-500/20 rounded">
+                <button onClick={() => deleteCat(cat)} className="p-1.5 hover:bg-red-500/20 rounded">
                   <Trash2 size={14} className="text-red-400" /></button>
               </div>
             ))}
@@ -706,7 +816,7 @@ export default function Tasks() {
       </Modal>
 
       {/* ── Category form modal ────────────────────────────────── */}
-      <Modal isOpen={showCatForm}>
+      <Modal isOpen={showCatForm} onClose={() => { setShowCatForm(false); setCatForm(emptyCatForm); }}>
         <div className="modal-card" style={{ maxWidth: '26rem' }}>
           <h3 className="text-xl font-semibold mb-4">
             {catForm.id ? 'Редактировать категорию' : 'Новая категория'}

@@ -440,12 +440,12 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
 
   async function handleSave() {
     if (!userId) { toast('Выберите сотрудника', 'error'); return; }
-    const emp = employees.find((e) => String(e.user_id) === String(userId));
-    if (!emp) return;
+    const emp = employees.find((e) => String(e.id) === String(userId));
+    if (!emp) { toast('Сотрудник не найден', 'error'); return; }
     setSaving(true);
     try {
       const res = await api.post('payouts/', {
-        user_id: String(emp.user_id),
+        user_id: String(emp.id),
         name: emp.name || '',
         phone: emp.phone || '',
         card_number: emp.card_number || '',
@@ -523,7 +523,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
               <select className="input w-full" value={userId} onChange={(e) => setUserId(e.target.value)}>
                 <option value="">Выберите сотрудника…</option>
                 {employees.map((e) => (
-                  <option key={e.user_id} value={e.user_id}>{e.name}</option>
+                  <option key={e.id} value={e.id}>{e.name}</option>
                 ))}
               </select>
             </div>
