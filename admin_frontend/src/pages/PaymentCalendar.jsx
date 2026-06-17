@@ -124,7 +124,7 @@ function ObjectsSelect({ value, onChange, salons }) {
 // ── Categories panel ──────────────────────────────────────────────────────────
 
 function CategoriesPanel({ categories, onChanged }) {
-  const { showToast } = useToast();
+  const { toast } = useToast();
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
@@ -132,17 +132,17 @@ function CategoriesPanel({ categories, onChanged }) {
   async function handleAdd() {
     const name = newName.trim(); if (!name) return;
     try { await api.post('/payment-calendar/categories', { name }); setNewName(''); onChanged(); }
-    catch (e) { showToast(e.response?.data?.detail || 'Ошибка', 'danger'); }
+    catch (e) { toast(e.response?.data?.detail || 'Ошибка', 'danger'); }
   }
   async function handleSaveEdit(id) {
     const name = editingName.trim(); if (!name) return;
     try { await api.patch(`/payment-calendar/categories/${id}`, { name }); setEditingId(null); onChanged(); }
-    catch (e) { showToast(e.response?.data?.detail || 'Ошибка', 'danger'); }
+    catch (e) { toast(e.response?.data?.detail || 'Ошибка', 'danger'); }
   }
   async function handleDelete(id) {
     if (!confirm('Удалить категорию?')) return;
     try { await api.delete(`/payment-calendar/categories/${id}`); onChanged(); }
-    catch (e) { showToast(e.response?.data?.detail || 'Ошибка', 'danger'); }
+    catch (e) { toast(e.response?.data?.detail || 'Ошибка', 'danger'); }
   }
 
   return (
@@ -394,7 +394,7 @@ function DetailModal({ schedule, record, onClose, onEdit }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PaymentCalendar() {
-  const { showToast } = useToast();
+  const { toast } = useToast();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-indexed
@@ -432,7 +432,7 @@ export default function PaymentCalendar() {
       setCategories(catRes.data);
       setSalons(salRes.data);
     } catch {
-      showToast('Ошибка загрузки', 'danger');
+      toast('Ошибка загрузки', 'danger');
     } finally {
       setLoading(false);
     }
@@ -480,24 +480,24 @@ export default function PaymentCalendar() {
     try {
       await api.post(`/payment-calendar/records/${recordId}/pay`, { actual_amount: actualAmount, comment });
       setPayModal(null);
-      showToast('Оплата отмечена', 'success');
+      toast('Оплата отмечена', 'success');
       load();
-    } catch { showToast('Ошибка', 'danger'); }
+    } catch { toast('Ошибка', 'danger'); }
   }
 
   async function handleSkip(recordId) {
     try {
       await api.post(`/payment-calendar/records/${recordId}/skip`);
-      showToast('Платёж пропущен', 'success');
+      toast('Платёж пропущен', 'success');
       load();
-    } catch { showToast('Ошибка', 'danger'); }
+    } catch { toast('Ошибка', 'danger'); }
   }
 
   async function handleReset(recordId) {
     try {
       await api.post(`/payment-calendar/records/${recordId}/reset`);
       load();
-    } catch { showToast('Ошибка', 'danger'); }
+    } catch { toast('Ошибка', 'danger'); }
   }
 
   async function handleSaveSchedule(form, { invoiceFile, notifyCashier } = {}) {
@@ -519,14 +519,14 @@ export default function PaymentCalendar() {
       };
       if (isEdit) {
         await api.patch(`/payment-calendar/schedules/${form.id}`, payload);
-        showToast('Платёж обновлён', 'success');
+        toast('Платёж обновлён', 'success');
       } else {
         const res = await api.post('/payment-calendar/schedules', payload);
         scheduleId = res.data.id;
-        showToast('Платёж добавлен', 'success');
+        toast('Платёж добавлен', 'success');
       }
     } catch (e) {
-      showToast(e.response?.data?.detail || 'Ошибка', 'danger');
+      toast(e.response?.data?.detail || 'Ошибка', 'danger');
       return;
     }
 
@@ -542,13 +542,13 @@ export default function PaymentCalendar() {
         fd.append('notify', notifyCashier ? 'true' : 'false');
         const res = await api.post(`/payment-calendar/schedules/${scheduleId}/send-to-cashier`, fd);
         if (notifyCashier) {
-          showToast(res.data.ok ? 'Счёт отправлен кассиру' : 'Не удалось отправить кассиру в Telegram', res.data.ok ? 'success' : 'danger');
+          toast(res.data.ok ? 'Счёт отправлен кассиру' : 'Не удалось отправить кассиру в Telegram', res.data.ok ? 'success' : 'danger');
         } else if (invoiceFile) {
-          showToast('Файл счёта приложен', 'success');
+          toast('Файл счёта приложен', 'success');
         }
         load();
       } catch (e) {
-        showToast(e.response?.data?.detail || 'Ошибка отправки кассиру', 'danger');
+        toast(e.response?.data?.detail || 'Ошибка отправки кассиру', 'danger');
       }
     }
   }
@@ -557,16 +557,16 @@ export default function PaymentCalendar() {
     if (!confirm('Удалить этот платёж?')) return;
     try {
       await api.delete(`/payment-calendar/schedules/${id}`);
-      showToast('Удалено', 'success');
+      toast('Удалено', 'success');
       load();
-    } catch { showToast('Ошибка', 'danger'); }
+    } catch { toast('Ошибка', 'danger'); }
   }
 
   async function handleToggleActive(sched) {
     try {
       await api.patch(`/payment-calendar/schedules/${sched.id}`, { is_active: !sched.is_active });
       load();
-    } catch { showToast('Ошибка', 'danger'); }
+    } catch { toast('Ошибка', 'danger'); }
   }
 
   return (
