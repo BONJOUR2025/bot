@@ -339,6 +339,58 @@ function PayModal({ record, onPay, onClose }) {
   );
 }
 
+// ── Payment detail card ───────────────────────────────────────────────────────
+
+function DetailModal({ schedule, record, onClose, onEdit }) {
+  const url = schedule.invoice_file_url;
+  const isPdf = url && url.toLowerCase().endsWith('.pdf');
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="font-semibold text-gray-800">{schedule.name}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <div className="p-4 space-y-4 text-sm">
+          <div className="grid grid-cols-2 gap-2 text-gray-700">
+            <div><span className="text-gray-400">Сумма:</span> {fmt(schedule.planned_amount)} ₽</div>
+            <div><span className="text-gray-400">День месяца:</span> {schedule.day_of_month}</div>
+            {schedule.category && <div><span className="text-gray-400">Категория:</span> {schedule.category}</div>}
+            {record && <div><span className="text-gray-400">Статус:</span> {record.status === 'paid' ? 'Оплачено' : record.status === 'skipped' ? 'Пропущено' : 'Ожидает'}</div>}
+            {schedule.seller && <div><span className="text-gray-400">Продавец:</span> {schedule.seller}</div>}
+            {schedule.pay_from && <div><span className="text-gray-400">Платим от:</span> {schedule.pay_from}</div>}
+            {schedule.responsible_name && <div><span className="text-gray-400">Ответственный:</span> {schedule.responsible_name}</div>}
+            {(schedule.objects || []).length > 0 && <div className="col-span-2"><span className="text-gray-400">Объекты:</span> {schedule.objects.join(', ')}</div>}
+          </div>
+          {schedule.note && <p className="text-gray-500 text-xs border-t pt-2">{schedule.note}</p>}
+
+          <div className="border-t pt-3">
+            <p className="text-xs font-medium text-gray-600 mb-2">Счёт</p>
+            {url ? (
+              <>
+                {isPdf ? (
+                  <iframe src={url} className="w-full h-72 border rounded-lg" title="Счёт" />
+                ) : (
+                  <img src={url} alt="Счёт" className="max-h-72 rounded-lg border mx-auto" />
+                )}
+                <a href={url} target="_blank" rel="noreferrer"
+                  className="text-xs text-blue-600 hover:underline mt-2 inline-block">Открыть в новой вкладке</a>
+              </>
+            ) : (
+              <p className="text-xs text-gray-400 italic">Файл счёта не приложен</p>
+            )}
+          </div>
+        </div>
+        <div className="p-4 border-t flex gap-2 justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Закрыть</button>
+          <button onClick={onEdit} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">Редактировать</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PaymentCalendar() {
@@ -353,6 +405,7 @@ export default function PaymentCalendar() {
   const [loading, setLoading] = useState(true);
   const [scheduleModal, setScheduleModal] = useState(null); // null | 'new' | {schedule obj}
   const [payModal, setPayModal] = useState(null);
+  const [detailItem, setDetailItem] = useState(null); // { schedule, record? }
   const [tab, setTab] = useState('calendar'); // 'calendar' | 'schedules' | 'settings'
   const [highlightDay, setHighlightDay] = useState(null);
 
@@ -448,8 +501,9 @@ export default function PaymentCalendar() {
   }
 
   async function handleSaveSchedule(form, { invoiceFile, notifyCashier } = {}) {
+    const isEdit = scheduleModal !== 'new';
+    let scheduleId = form.id;
     try {
-      const isEdit = scheduleModal !== 'new';
       const payload = {
         name: form.name,
         planned_amount: parseFloat(form.planned_amount) || 0,
@@ -463,7 +517,6 @@ export default function PaymentCalendar() {
         seller: form.seller || '',
         pay_from: form.pay_from || '',
       };
-      let scheduleId = form.id;
       if (isEdit) {
         await api.patch(`/payment-calendar/schedules/${form.id}`, payload);
         showToast('Платёж обновлён', 'success');
@@ -472,20 +525,31 @@ export default function PaymentCalendar() {
         scheduleId = res.data.id;
         showToast('Платёж добавлен', 'success');
       }
-      if (notifyCashier && scheduleId) {
-        try {
-          const fd = new FormData();
-          if (invoiceFile) fd.append('invoice', invoiceFile);
-          const res = await api.post(`/payment-calendar/schedules/${scheduleId}/send-to-cashier`, fd);
-          showToast(res.data.ok ? 'Счёт отправлен кассиру' : 'Не удалось отправить кассиру в Telegram', res.data.ok ? 'success' : 'danger');
-        } catch (e) {
-          showToast(e.response?.data?.detail || 'Ошибка отправки кассиру', 'danger');
-        }
-      }
-      setScheduleModal(null);
-      load();
     } catch (e) {
       showToast(e.response?.data?.detail || 'Ошибка', 'danger');
+      return;
+    }
+
+    // Close & refresh right away — attaching the file / notifying the cashier
+    // happens in the background and must not block the list from updating.
+    setScheduleModal(null);
+    load();
+
+    if (scheduleId && (invoiceFile || notifyCashier)) {
+      try {
+        const fd = new FormData();
+        if (invoiceFile) fd.append('invoice', invoiceFile);
+        fd.append('notify', notifyCashier ? 'true' : 'false');
+        const res = await api.post(`/payment-calendar/schedules/${scheduleId}/send-to-cashier`, fd);
+        if (notifyCashier) {
+          showToast(res.data.ok ? 'Счёт отправлен кассиру' : 'Не удалось отправить кассиру в Telegram', res.data.ok ? 'success' : 'danger');
+        } else if (invoiceFile) {
+          showToast('Файл счёта приложен', 'success');
+        }
+        load();
+      } catch (e) {
+        showToast(e.response?.data?.detail || 'Ошибка отправки кассиру', 'danger');
+      }
     }
   }
 
@@ -619,7 +683,8 @@ export default function PaymentCalendar() {
                         const sc = r.schedule ?? {};
                         const cls = statusColor(r.status, day, today, year, month);
                         return (
-                          <div key={r.id} className={`border rounded-xl p-3 sm:p-4 ${cls}`}>
+                          <div key={r.id} onClick={() => setDetailItem({ schedule: sc, record: r })}
+                            className={`border rounded-xl p-3 sm:p-4 cursor-pointer hover:brightness-95 transition-[filter] ${cls}`}>
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -628,6 +693,9 @@ export default function PaymentCalendar() {
                                     <span className="text-xs px-2 py-0.5 bg-white/60 rounded-full border border-current/20">
                                       {sc.category}
                                     </span>
+                                  )}
+                                  {sc.invoice_file_url && (
+                                    <span className="text-xs px-2 py-0.5 bg-white/60 rounded-full border border-current/20">📎</span>
                                   )}
                                   {(sc.objects || []).map(obj => (
                                     <span key={obj} className="text-xs px-2 py-0.5 bg-white/40 rounded-full border border-current/20">🏢 {obj}</span>
@@ -645,7 +713,7 @@ export default function PaymentCalendar() {
                                   {r.comment && <span>💬 {r.comment}</span>}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
                                 {r.status === 'pending' && (
                                   <>
                                     <button onClick={() => setPayModal(r)}
@@ -697,7 +765,8 @@ export default function PaymentCalendar() {
           ) : (
             <div className="space-y-2">
               {schedules.map(s => (
-                <div key={s.id} className={`bg-white border rounded-xl p-4 flex items-center justify-between gap-3
+                <div key={s.id} onClick={() => setDetailItem({ schedule: s })}
+                  className={`bg-white border rounded-xl p-4 flex items-center justify-between gap-3 cursor-pointer hover:border-blue-200 hover:bg-blue-50/30 transition-colors
                   ${!s.is_active ? 'opacity-50' : ''}`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -707,6 +776,9 @@ export default function PaymentCalendar() {
                       )}
                       {!s.is_active && (
                         <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">Неактивен</span>
+                      )}
+                      {s.invoice_file_url && (
+                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">📎</span>
                       )}
                       {(s.objects || []).map(obj => (
                         <span key={obj} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100">🏢 {obj}</span>
@@ -720,7 +792,7 @@ export default function PaymentCalendar() {
                     </div>
                     {s.note && <p className="text-xs text-gray-400 mt-1 truncate">{s.note}</p>}
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
                     <button onClick={() => handleToggleActive(s)}
                       className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
                       {s.is_active ? 'Откл' : 'Вкл'}
@@ -758,6 +830,14 @@ export default function PaymentCalendar() {
       )}
       {payModal && (
         <PayModal record={payModal} onPay={handlePay} onClose={() => setPayModal(null)} />
+      )}
+      {detailItem && (
+        <DetailModal
+          schedule={detailItem.schedule}
+          record={detailItem.record}
+          onClose={() => setDetailItem(null)}
+          onEdit={() => { setScheduleModal(detailItem.schedule); setDetailItem(null); }}
+        />
       )}
     </div>
   );

@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from .dependencies import require_permission
@@ -116,6 +116,7 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
     async def send_to_cashier(
         schedule_id: int,
         invoice: Optional[UploadFile] = File(None),
+        notify: bool = Form(True),
         _=Depends(perm),
     ):
         schedule = repo.get_schedule(schedule_id)
@@ -135,6 +136,9 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
             )
         elif schedule.get("invoice_file_url"):
             invoice_path = Path(schedule["invoice_file_url"].lstrip("/"))
+
+        if not notify:
+            return {"ok": True, "schedule": schedule}
 
         from app.services.config_service import ConfigService
         chat_id = str(ConfigService().load().get("payment_calendar_cashier_chat_id") or "").strip()
