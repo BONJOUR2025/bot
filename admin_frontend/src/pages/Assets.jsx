@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Pencil, Trash2, Plus, Bell, Search, X } from 'lucide-react';
+import { Pencil, Trash2, Plus, Bell, Search, X, ChevronRight, Package, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
+import Modal from '../components/Modal.jsx';
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -11,6 +12,22 @@ function fmtDate(s) {
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+function initials(name) {
+  return (name || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+}
+
+const AVATAR_COLORS = [
+  'bg-blue-100 text-blue-700', 'bg-violet-100 text-violet-700', 'bg-emerald-100 text-emerald-700',
+  'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700', 'bg-cyan-100 text-cyan-700',
+  'bg-orange-100 text-orange-700', 'bg-fuchsia-100 text-fuchsia-700',
+];
+
+function avatarColor(seed) {
+  let h = 0;
+  for (const ch of String(seed || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
 
 const emptyItemRow = () => ({
   item_name:    '',
@@ -39,10 +56,13 @@ export default function Assets() {
   const [formEmp, setFormEmp]     = useState(emptyEmployee);
   const [formItems, setFormItems] = useState([emptyItemRow()]);
 
-  // Bulk / notify
+  // Bulk / notify (selection is by employee_id)
   const [selected, setSelected]   = useState(new Set());
   const [notifying, setNotifying] = useState(new Set());
   const allCheckRef               = useRef(null);
+
+  // Detail card
+  const [detailEmpId, setDetailEmpId] = useState(null);
 
   useEffect(() => {
     loadEmployees();
@@ -89,10 +109,45 @@ export default function Assets() {
     return true;
   }), [list, filters]);
 
+  // Group filtered items by employee for the summary table
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const item of filtered) {
+      const key = String(item.employee_id);
+      if (!map.has(key)) {
+        map.set(key, {
+          employee_id:   item.employee_id,
+          employee_name: item.employee_name,
+          position:      item.position,
+          items:         [],
+        });
+      }
+      map.get(key).items.push(item);
+    }
+    const t = today();
+    return Array.from(map.values()).map(g => {
+      const totalQty   = g.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+      const overdue     = g.items.filter(i => i.return_date && i.return_date < t && !i.acked_at).length;
+      const pendingAck  = g.items.filter(i => !i.acked_at).length;
+      const lastIssue   = g.items.reduce((max, i) => (i.issue_date || '') > max ? (i.issue_date || '') : max, '');
+      return { ...g, totalQty, overdue, pendingAck, lastIssue };
+    }).sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || ''));
+  }, [filtered]);
+
+  const detailGroup = useMemo(
+    () => grouped.find(g => String(g.employee_id) === String(detailEmpId)) || null,
+    [grouped, detailEmpId]
+  );
+
   useEffect(() => {
     if (allCheckRef.current)
-      allCheckRef.current.indeterminate = selected.size > 0 && selected.size < filtered.length;
-  }, [selected, filtered]);
+      allCheckRef.current.indeterminate = selected.size > 0 && selected.size < grouped.length;
+  }, [selected, grouped]);
+
+  useEffect(() => {
+    // Close the detail card if its employee no longer has any matching items (deleted / filtered out)
+    if (detailEmpId !== null && !detailGroup) setDetailEmpId(null);
+  }, [detailEmpId, detailGroup]);
 
   // ---- Modal helpers ----
   function openCreate() {
@@ -201,36 +256,44 @@ export default function Assets() {
     }
   }
 
-  // ---- Bulk ----
+  // ---- Bulk (operates on all asset items belonging to selected employees) ----
+  function selectedItemIds() {
+    return grouped.filter(g => selected.has(String(g.employee_id)))
+      .flatMap(g => g.items.map(i => i.id));
+  }
+
   async function bulkDelete() {
-    if (!selected.size) return;
-    if (!window.confirm(`Удалить ${selected.size} записей?`)) return;
+    const ids = selectedItemIds();
+    if (!ids.length) return;
+    if (!window.confirm(`Удалить ${ids.length} записей у ${selected.size} сотрудник(ов)?`)) return;
     try {
-      await api.post('assets/bulk/delete', { ids: [...selected] });
-      toast(`Удалено: ${selected.size}`, 'success');
+      await api.post('assets/bulk/delete', { ids });
+      toast(`Удалено: ${ids.length}`, 'success');
       setSelected(new Set());
       load();
     } catch { toast('Ошибка удаления', 'error'); }
   }
 
   async function bulkNotify() {
-    if (!selected.size) return;
+    const ids = selectedItemIds();
+    if (!ids.length) return;
     try {
-      const res = await api.post('assets/bulk/notify', { ids: [...selected] });
+      const res = await api.post('assets/bulk/notify', { ids });
       toast(`Отправлено: ${res.data.sent}, ошибок: ${res.data.failed}`,
         res.data.sent > 0 ? 'success' : 'error');
       load();
     } catch { toast('Ошибка рассылки', 'error'); }
   }
 
-  function toggleRow(id) {
-    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  function toggleRow(employeeId) {
+    const key = String(employeeId);
+    setSelected(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
   }
   function toggleAll() {
     setSelected(prev =>
-      prev.size === filtered.length && filtered.length > 0
+      prev.size === grouped.length && grouped.length > 0
         ? new Set()
-        : new Set(filtered.map(i => i.id)));
+        : new Set(grouped.map(g => String(g.employee_id))));
   }
 
   const stats = useMemo(() => {
@@ -282,7 +345,7 @@ export default function Assets() {
       {/* Bulk toolbar */}
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--color-border)] px-4 py-2.5 bg-[color:var(--color-muted)]/30">
-          <span className="text-sm font-medium">Выбрано: {selected.size}</span>
+          <span className="text-sm font-medium">Выбрано сотрудников: {selected.size}</span>
           <button className="btn btn-secondary text-sm flex items-center gap-1.5" onClick={bulkNotify}>
             <Bell size={14} /> Уведомить
           </button>
@@ -296,69 +359,68 @@ export default function Assets() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — one row per employee */}
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)]">
               <th className="w-9 px-3 py-2.5">
                 <input type="checkbox" ref={allCheckRef}
-                  checked={filtered.length > 0 && selected.size === filtered.length}
-                  onChange={toggleAll} />
+                  checked={grouped.length > 0 && selected.size === grouped.length}
+                  onChange={toggleAll} onClick={e => e.stopPropagation()} />
               </th>
-              <th className="text-left px-3 py-2.5">ФИО</th>
+              <th className="text-left px-3 py-2.5">Сотрудник</th>
               <th className="text-left px-3 py-2.5 hidden md:table-cell">Должность</th>
-              <th className="text-left px-3 py-2.5">Предмет</th>
-              <th className="text-left px-3 py-2.5 hidden sm:table-cell">Размер</th>
+              <th className="text-center px-3 py-2.5">Предметов</th>
               <th className="text-center px-3 py-2.5 hidden sm:table-cell">Кол-во</th>
-              <th className="text-left px-3 py-2.5">Выдано</th>
-              <th className="text-left px-3 py-2.5 hidden lg:table-cell">Возврат</th>
-              <th className="text-left px-3 py-2.5 hidden xl:table-cell">Статус</th>
-              <th className="w-24 px-3 py-2.5"></th>
+              <th className="text-left px-3 py-2.5 hidden lg:table-cell">Посл. выдача</th>
+              <th className="text-left px-3 py-2.5">Статус</th>
+              <th className="w-10 px-3 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[color:var(--color-border)]">
-            {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-[color:var(--color-muted-foreground)] italic">Нет данных</td></tr>
+            {grouped.length === 0 && (
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-[color:var(--color-muted-foreground)] italic">Нет данных</td></tr>
             )}
-            {filtered.map(item => (
-              <tr key={item.id}
-                className={selected.has(item.id)
+            {grouped.map(g => (
+              <tr key={g.employee_id}
+                onClick={() => setDetailEmpId(g.employee_id)}
+                className={`cursor-pointer transition-colors ${selected.has(String(g.employee_id))
                   ? 'bg-[color:var(--color-primary)]/5'
-                  : 'hover:bg-[color:var(--color-muted)]/10'}>
-                <td className="px-3 py-2">
-                  <input type="checkbox" checked={selected.has(item.id)} onChange={() => toggleRow(item.id)} />
+                  : 'hover:bg-[color:var(--color-muted)]/10'}`}>
+                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selected.has(String(g.employee_id))} onChange={() => toggleRow(g.employee_id)} />
                 </td>
-                <td className="px-3 py-2 font-medium">{item.employee_name}</td>
-                <td className="px-3 py-2 hidden md:table-cell text-[color:var(--color-muted-foreground)] text-xs">{item.position || '—'}</td>
-                <td className="px-3 py-2">{item.item_name}</td>
-                <td className="px-3 py-2 hidden sm:table-cell">{item.size || '—'}</td>
-                <td className="px-3 py-2 text-center hidden sm:table-cell">{item.quantity}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.issue_date)}</td>
-                <td className="px-3 py-2 hidden lg:table-cell whitespace-nowrap">{fmtDate(item.return_date)}</td>
-                <td className="px-3 py-2 hidden xl:table-cell">
-                  {item.acked_at
-                    ? <span className="text-green-600 text-xs font-medium">✅ {item.acked_at}</span>
-                    : item.notified_at
-                      ? <span className="text-[color:var(--color-muted-foreground)] text-xs">📤 {item.notified_at}</span>
-                      : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center justify-end gap-0.5">
-                    <button title="Уведомить в бот" disabled={notifying.has(item.id)}
-                      onClick={() => notifyOne(item.id)}
-                      className={`p-1.5 rounded transition-colors ${notifying.has(item.id) ? 'opacity-40 cursor-not-allowed' : 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'}`}>
-                      <Bell size={14} />
-                    </button>
-                    <button title="Редактировать" onClick={() => openEdit(item)}
-                      className="p-1.5 rounded text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-muted)] transition-colors">
-                      <Pencil size={14} />
-                    </button>
-                    <button title="Удалить" onClick={() => remove(item.id)}
-                      className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                      <Trash2 size={14} />
-                    </button>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold shrink-0 ${avatarColor(g.employee_name)}`}>
+                      {initials(g.employee_name) || '?'}
+                    </span>
+                    <span className="font-medium">{g.employee_name}</span>
                   </div>
+                </td>
+                <td className="px-3 py-2.5 hidden md:table-cell text-[color:var(--color-muted-foreground)] text-xs">{g.position || '—'}</td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[color:var(--color-muted)]">
+                    <Package size={11} /> {g.items.length}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-center hidden sm:table-cell">{g.totalQty}</td>
+                <td className="px-3 py-2.5 hidden lg:table-cell whitespace-nowrap text-[color:var(--color-muted-foreground)]">{fmtDate(g.lastIssue)}</td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {g.overdue > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                        <AlertTriangle size={11} /> {g.overdue}
+                      </span>
+                    )}
+                    {g.pendingAck > 0
+                      ? <span className="text-xs text-[color:var(--color-muted-foreground)]">⏳ не подтвердил {g.pendingAck}</span>
+                      : <span className="text-xs text-green-600 font-medium">✅ всё подтверждено</span>}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  <ChevronRight size={16} className="text-[color:var(--color-muted-foreground)] inline-block" />
                 </td>
               </tr>
             ))}
@@ -373,114 +435,200 @@ export default function Assets() {
         {stats.overdue > 0 && <span className="text-amber-600 font-medium">⚠️ Просрочено: {stats.overdue}</span>}
       </div>
 
-      {/* Modal */}
-      {showForm && (
-        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+      {/* Employee detail card */}
+      <Modal isOpen={!!detailGroup} onClose={() => setDetailEmpId(null)}>
+        {detailGroup && (
           <div className="modal-card max-w-3xl w-full">
-            <h2 className="text-xl font-semibold mb-4">
-              {editId !== null ? 'Редактировать запись' : 'Выдать имущество'}
-            </h2>
-
-            {/* Employee row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="text-sm font-medium">Сотрудник *</label>
-                <select className="input mt-1 w-full" value={formEmp.employee_id}
-                  onChange={e => pickEmployee(e.target.value)}>
-                  <option value="">Выберите сотрудника</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
-                </select>
+            <div className="flex items-start gap-3 mb-5">
+              <span className={`flex items-center justify-center w-12 h-12 rounded-full text-base font-semibold shrink-0 ${avatarColor(detailGroup.employee_name)}`}>
+                {initials(detailGroup.employee_name) || '?'}
+              </span>
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold">{detailGroup.employee_name}</h2>
+                <p className="text-sm text-[color:var(--color-muted-foreground)]">{detailGroup.position || '—'}</p>
               </div>
-              <div>
-                <label className="text-sm font-medium">Должность</label>
-                <input className="input mt-1 w-full" list="asset-positions"
-                  placeholder="Должность" value={formEmp.position}
-                  onChange={e => setFormEmp(f => ({ ...f, position: e.target.value }))} />
-                <datalist id="asset-positions">{posOptions.map(o => <option key={o} value={o} />)}</datalist>
-              </div>
+              <button className="btn btn-secondary flex items-center gap-1.5 text-sm shrink-0"
+                onClick={() => { const empId = detailGroup.employee_id; setDetailEmpId(null); openCreate(); pickEmployee(empId); }}>
+                <Plus size={14} /> Выдать ещё
+              </button>
+              <button className="p-1.5 rounded text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-muted)] shrink-0"
+                onClick={() => setDetailEmpId(null)}>
+                <X size={18} />
+              </button>
             </div>
 
-            {/* Items table */}
-            <div className="border border-[color:var(--color-border)] rounded-lg overflow-x-auto">
+            <div className="flex flex-wrap gap-4 text-sm mb-4 px-1">
+              <span>Предметов: <b>{detailGroup.items.length}</b></span>
+              <span>Кол-во всего: <b>{detailGroup.totalQty}</b></span>
+              {detailGroup.overdue > 0 && (
+                <span className="text-amber-600 font-medium flex items-center gap-1"><AlertTriangle size={13} /> Просрочено: {detailGroup.overdue}</span>
+              )}
+            </div>
+
+            <div className="border border-[color:var(--color-border)] rounded-lg overflow-x-auto max-h-[55vh] overflow-y-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
-                    <th className="text-left px-3 py-2">Предмет *</th>
-                    <th className="text-left px-3 py-2 w-28">Размер</th>
-                    <th className="text-center px-3 py-2 w-20">Кол-во</th>
-                    <th className="text-center px-3 py-2 w-24">Срок, мес.</th>
-                    <th className="text-left px-3 py-2 w-36">Дата выдачи</th>
-                    <th className="text-left px-3 py-2 w-36">Дата возврата</th>
-                    {editId === null && <th className="w-8 px-2 py-2"></th>}
+                <thead className="sticky top-0">
+                  <tr className="bg-[color:var(--color-muted)]/60 text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
+                    <th className="text-left px-3 py-2">Предмет</th>
+                    <th className="text-left px-3 py-2 hidden sm:table-cell">Размер</th>
+                    <th className="text-center px-3 py-2">Кол-во</th>
+                    <th className="text-left px-3 py-2">Выдано</th>
+                    <th className="text-left px-3 py-2 hidden lg:table-cell">Возврат</th>
+                    <th className="text-left px-3 py-2 hidden md:table-cell">Статус</th>
+                    <th className="w-24 px-3 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[color:var(--color-border)]">
-                  {formItems.map((row, idx) => (
-                    <tr key={idx}>
-                      <td className="px-2 py-1.5">
-                        <input className="input w-full text-sm" list="asset-items"
-                          placeholder="Рабочая форма" value={row.item_name}
-                          onChange={e => setItemField(idx, 'item_name', e.target.value)} />
-                        <datalist id="asset-items">{itemOptions.map(o => <option key={o} value={o} />)}</datalist>
+                  {detailGroup.items.map(item => (
+                    <tr key={item.id} className="hover:bg-[color:var(--color-muted)]/10">
+                      <td className="px-3 py-2.5 font-medium">{item.item_name}</td>
+                      <td className="px-3 py-2.5 hidden sm:table-cell">{item.size || '—'}</td>
+                      <td className="px-3 py-2.5 text-center">{item.quantity}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">{fmtDate(item.issue_date)}</td>
+                      <td className="px-3 py-2.5 hidden lg:table-cell whitespace-nowrap">{fmtDate(item.return_date)}</td>
+                      <td className="px-3 py-2.5 hidden md:table-cell">
+                        {item.acked_at
+                          ? <span className="text-green-600 text-xs font-medium">✅ {item.acked_at}</span>
+                          : item.notified_at
+                            ? <span className="text-[color:var(--color-muted-foreground)] text-xs">📤 {item.notified_at}</span>
+                            : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
                       </td>
-                      <td className="px-2 py-1.5">
-                        <input className="input w-full text-sm" list="asset-sizes"
-                          placeholder="M / 42" value={row.size}
-                          onChange={e => setItemField(idx, 'size', e.target.value)} />
-                        <datalist id="asset-sizes">{sizeOptions.map(o => <option key={o} value={o} />)}</datalist>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input type="number" min={1} className="input w-full text-sm text-center"
-                          value={row.quantity}
-                          onChange={e => setItemField(idx, 'quantity', e.target.value)} />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input type="number" min={0} className="input w-full text-sm text-center"
-                          placeholder="—" value={row.service_life}
-                          onChange={e => setItemField(idx, 'service_life', e.target.value)} />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input type="date" className="input w-full text-sm"
-                          value={row.issue_date}
-                          onChange={e => setItemField(idx, 'issue_date', e.target.value)} />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input type="date" className="input w-full text-sm"
-                          value={row.return_date}
-                          onChange={e => setItemField(idx, 'return_date', e.target.value)} />
-                      </td>
-                      {editId === null && (
-                        <td className="px-2 py-1.5 text-center">
-                          <button onClick={() => removeItemRow(idx)} disabled={formItems.length === 1}
-                            className="p-1 rounded text-red-400 hover:text-red-600 disabled:opacity-30">
-                            <X size={14} />
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <button title="Уведомить в бот" disabled={notifying.has(item.id)}
+                            onClick={() => notifyOne(item.id)}
+                            className={`p-1.5 rounded transition-colors ${notifying.has(item.id) ? 'opacity-40 cursor-not-allowed' : 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'}`}>
+                            <Bell size={14} />
                           </button>
-                        </td>
-                      )}
+                          <button title="Редактировать" onClick={() => openEdit(item)}
+                            className="p-1.5 rounded text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-muted)] transition-colors">
+                            <Pencil size={14} />
+                          </button>
+                          <button title="Удалить" onClick={() => remove(item.id)}
+                            className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {editId === null && (
-              <button className="btn btn-secondary text-sm flex items-center gap-1.5 mt-2"
-                onClick={addItemRow}>
-                <Plus size={13} /> Добавить предмет
-              </button>
-            )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Отмена</button>
-              <button className="btn btn-primary" onClick={saveForm}>
-                {editId !== null
-                  ? 'Сохранить'
-                  : `Выдать ${formItems.length > 1 ? `${formItems.length} предмета` : 'предмет'}`}
-              </button>
+            <div className="flex justify-end pt-4">
+              <button className="btn btn-secondary" onClick={() => setDetailEmpId(null)}>Закрыть</button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Create / edit modal */}
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)}>
+        <div className="modal-card max-w-4xl w-full">
+          <h2 className="text-xl font-semibold mb-4">
+            {editId !== null ? 'Редактировать запись' : 'Выдать имущество'}
+          </h2>
+
+          {/* Employee row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="text-sm font-medium">Сотрудник *</label>
+              <select className="input mt-1 w-full" value={formEmp.employee_id}
+                onChange={e => pickEmployee(e.target.value)}>
+                <option value="">Выберите сотрудника</option>
+                {employees.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Должность</label>
+              <input className="input mt-1 w-full" list="asset-positions"
+                placeholder="Должность" value={formEmp.position}
+                onChange={e => setFormEmp(f => ({ ...f, position: e.target.value }))} />
+              <datalist id="asset-positions">{posOptions.map(o => <option key={o} value={o} />)}</datalist>
+            </div>
+          </div>
+
+          {/* Items table */}
+          <div className="border border-[color:var(--color-border)] rounded-lg overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
+                  <th className="text-left px-3 py-2 min-w-[180px]">Предмет *</th>
+                  <th className="text-left px-3 py-2 w-32">Размер</th>
+                  <th className="text-center px-3 py-2 w-24">Кол-во</th>
+                  <th className="text-center px-3 py-2 w-28">Срок, мес.</th>
+                  <th className="text-left px-3 py-2 w-44">Дата выдачи</th>
+                  <th className="text-left px-3 py-2 w-44">Дата возврата</th>
+                  {editId === null && <th className="w-8 px-2 py-2"></th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[color:var(--color-border)]">
+                {formItems.map((row, idx) => (
+                  <tr key={idx}>
+                    <td className="px-2 py-2">
+                      <input className="input w-full text-sm" list="asset-items"
+                        placeholder="Рабочая форма" value={row.item_name}
+                        onChange={e => setItemField(idx, 'item_name', e.target.value)} />
+                      <datalist id="asset-items">{itemOptions.map(o => <option key={o} value={o} />)}</datalist>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input className="input w-full text-sm" list="asset-sizes"
+                        placeholder="M / 42" value={row.size}
+                        onChange={e => setItemField(idx, 'size', e.target.value)} />
+                      <datalist id="asset-sizes">{sizeOptions.map(o => <option key={o} value={o} />)}</datalist>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="number" min={1} className="input w-full text-sm text-center"
+                        value={row.quantity}
+                        onChange={e => setItemField(idx, 'quantity', e.target.value)} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="number" min={0} className="input w-full text-sm text-center"
+                        placeholder="—" value={row.service_life}
+                        onChange={e => setItemField(idx, 'service_life', e.target.value)} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="date" className="input w-full text-sm"
+                        value={row.issue_date}
+                        onChange={e => setItemField(idx, 'issue_date', e.target.value)} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="date" className="input w-full text-sm"
+                        value={row.return_date}
+                        onChange={e => setItemField(idx, 'return_date', e.target.value)} />
+                    </td>
+                    {editId === null && (
+                      <td className="px-2 py-2 text-center">
+                        <button onClick={() => removeItemRow(idx)} disabled={formItems.length === 1}
+                          className="p-1 rounded text-red-400 hover:text-red-600 disabled:opacity-30">
+                          <X size={14} />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {editId === null && (
+            <button className="btn btn-secondary text-sm flex items-center gap-1.5 mt-2"
+              onClick={addItemRow}>
+              <Plus size={13} /> Добавить предмет
+            </button>
+          )}
+
+          <div className="flex justify-end gap-2 pt-4">
+            <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Отмена</button>
+            <button className="btn btn-primary" onClick={saveForm}>
+              {editId !== null
+                ? 'Сохранить'
+                : `Выдать ${formItems.length > 1 ? `${formItems.length} предмета` : 'предмет'}`}
+            </button>
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }
