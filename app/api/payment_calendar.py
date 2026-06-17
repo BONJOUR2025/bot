@@ -159,11 +159,19 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
             "```"
         )
 
+        year_month = datetime.utcnow().strftime("%Y-%m")
+        record = repo.get_or_create_record(schedule_id, year_month)
+        reply_markup = {
+            "inline_keyboard": [[{"text": "✅ Оплачено", "callback_data": f"paycal_paid_{record['id']}"}]]
+        }
+
         from app.services.notify import send_chat_document, send_chat_message
         if invoice_path and invoice_path.exists():
-            sent = await send_chat_document(chat_id, str(invoice_path), caption=text, parse_mode="Markdown")
+            sent = await send_chat_document(
+                chat_id, str(invoice_path), caption=text, parse_mode="Markdown", reply_markup=reply_markup
+            )
         else:
-            sent = await send_chat_message(chat_id, text, parse_mode="Markdown")
+            sent = await send_chat_message(chat_id, text, parse_mode="Markdown", reply_markup=reply_markup)
 
         return {"ok": sent, "schedule": schedule}
 

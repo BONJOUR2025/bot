@@ -62,6 +62,7 @@ from ..handlers.media_archive import archive_media
 from ..handlers.business_connection import handle_business_connection, handle_business_message
 from ..handlers.knowledge_base import handle_kb_entry, handle_kb_question, KB_CHAT
 from ..handlers.admin.asset_actions import handle_asset_ack
+from ..handlers.admin.payment_calendar_actions import handle_payment_calendar_paid
 from ..handlers.interview_decision import build_interview_decision_handlers
 from ..handlers.quick_task import build_quick_task_handler
 from ..handlers.vacancy_setup import build_vacancy_setup_handler
@@ -213,6 +214,7 @@ def _register_all_handlers(app):
     app.add_handler(CallbackQueryHandler(mark_sent, pattern=r"^mark_sent_"))
     app.add_handler(CallbackQueryHandler(handle_acknowledgment, pattern=r"^ack_"))
     app.add_handler(CallbackQueryHandler(handle_asset_ack, pattern=r"^asset_ack_"))
+    app.add_handler(CallbackQueryHandler(handle_payment_calendar_paid, pattern=r"^paycal_paid_"))
 
     # Knowledge base Q&A conversation
     kb_conv = ConversationHandler(

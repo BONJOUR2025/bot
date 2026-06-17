@@ -146,7 +146,9 @@ async def send_notification_with_keyboard(text: str, buttons: list) -> bool:
         return False
 
 
-async def send_chat_message(chat_id: str | int, text: str, parse_mode: str = "Markdown") -> bool:
+async def send_chat_message(
+    chat_id: str | int, text: str, parse_mode: str = "Markdown", reply_markup: dict | None = None
+) -> bool:
     """Send a plain message to an arbitrary chat_id (not tied to any config key).
     Returns True on success, never raises."""
     try:
@@ -160,6 +162,8 @@ async def send_chat_message(chat_id: str | int, text: str, parse_mode: str = "Ma
 
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         payload = {"chat_id": int(chat_id), "text": text, "parse_mode": parse_mode}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
 
         client_kwargs: dict = {"timeout": 10.0}
         if proxy:
@@ -177,7 +181,13 @@ async def send_chat_message(chat_id: str | int, text: str, parse_mode: str = "Ma
         return False
 
 
-async def send_chat_document(chat_id: str | int, file_path: str, caption: str = "", parse_mode: str = "Markdown") -> bool:
+async def send_chat_document(
+    chat_id: str | int,
+    file_path: str,
+    caption: str = "",
+    parse_mode: str = "Markdown",
+    reply_markup: dict | None = None,
+) -> bool:
     """Send a file already on disk as a Telegram document to an arbitrary chat_id."""
     try:
         from app.config import TOKEN
@@ -196,6 +206,9 @@ async def send_chat_document(chat_id: str | int, file_path: str, caption: str = 
         if caption:
             data["caption"] = caption
             data["parse_mode"] = parse_mode
+        if reply_markup:
+            import json as _json
+            data["reply_markup"] = _json.dumps(reply_markup)
 
         client_kwargs: dict = {"timeout": 30.0}
         if proxy:

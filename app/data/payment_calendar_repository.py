@@ -125,6 +125,20 @@ class PaymentCalendarRepository:
 
         return sorted(result, key=lambda x: x.get("schedule", {}).get("day_of_month", 0))
 
+    def get_or_create_record(self, schedule_id: int, year_month: str) -> Dict:
+        with self._session() as db:
+            row = (
+                db.query(PaymentRecord)
+                .filter(PaymentRecord.schedule_id == schedule_id, PaymentRecord.year_month == year_month)
+                .first()
+            )
+            if not row:
+                row = PaymentRecord(schedule_id=schedule_id, year_month=year_month, status="pending")
+                db.add(row)
+                db.commit()
+                db.refresh(row)
+            return row.to_dict()
+
     def update_record(self, record_id: int, data: Dict) -> Optional[Dict]:
         with self._session() as db:
             row = db.query(PaymentRecord).filter(PaymentRecord.id == record_id).first()
