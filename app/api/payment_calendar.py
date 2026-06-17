@@ -143,6 +143,10 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
         from app.services.config_service import ConfigService
         chat_id = str(ConfigService().load().get("payment_calendar_cashier_chat_id") or "").strip()
         if not chat_id:
+            from app.utils.logger import log_payment_calendar
+            log_payment_calendar(
+                f"send-to-cashier schedule_id={schedule_id}: payment_calendar_cashier_chat_id не настроен"
+            )
             raise HTTPException(400, "Telegram ID кассира не настроен (Настройки → Telegram)")
 
         def esc(v) -> str:

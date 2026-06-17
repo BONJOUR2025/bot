@@ -151,10 +151,12 @@ async def send_chat_message(
 ) -> bool:
     """Send a plain message to an arbitrary chat_id (not tied to any config key).
     Returns True on success, never raises."""
+    from app.utils.logger import log_payment_calendar
     try:
         from app.config import TOKEN
         if not TOKEN:
             log.warning("send_chat_message: telegram bot token not configured")
+            log_payment_calendar("send_chat_message failed: telegram bot token not configured")
             return False
 
         from app.settings import settings
@@ -173,11 +175,16 @@ async def send_chat_message(
             r = await client.post(url, json=payload)
 
         if r.status_code == 200:
+            log_payment_calendar(f"send_chat_message ok chat_id={chat_id}")
             return True
         log.warning("send_chat_message failed chat_id=%s: HTTP %s — %s", chat_id, r.status_code, r.text[:200])
+        log_payment_calendar(
+            f"send_chat_message failed chat_id={chat_id}: HTTP {r.status_code} — {r.text[:300]}"
+        )
         return False
     except Exception as exc:
         log.warning("send_chat_message error: %s", exc)
+        log_payment_calendar(f"send_chat_message error chat_id={chat_id}: {exc!r}")
         return False
 
 
@@ -189,13 +196,18 @@ async def send_chat_document(
     reply_markup: dict | None = None,
 ) -> bool:
     """Send a file already on disk as a Telegram document to an arbitrary chat_id."""
+    from app.utils.logger import log_payment_calendar
     try:
         from app.config import TOKEN
         if not TOKEN:
             log.warning("send_chat_document: telegram bot token not configured")
+            log_payment_calendar("send_chat_document failed: telegram bot token not configured")
             return False
         if not Path(file_path).exists():
             log.warning("send_chat_document: file not found: %s", file_path)
+            log_payment_calendar(
+                f"send_chat_document failed: file not found: {file_path} (cwd={Path.cwd()})"
+            )
             return False
 
         from app.settings import settings
@@ -220,11 +232,16 @@ async def send_chat_document(
                 r = await client.post(url, data=data, files=files)
 
         if r.status_code == 200:
+            log_payment_calendar(f"send_chat_document ok chat_id={chat_id} file={file_path}")
             return True
         log.warning("send_chat_document failed chat_id=%s: HTTP %s — %s", chat_id, r.status_code, r.text[:200])
+        log_payment_calendar(
+            f"send_chat_document failed chat_id={chat_id} file={file_path}: HTTP {r.status_code} — {r.text[:300]}"
+        )
         return False
     except Exception as exc:
         log.warning("send_chat_document error: %s", exc)
+        log_payment_calendar(f"send_chat_document error chat_id={chat_id} file={file_path}: {exc!r}")
         return False
 
 

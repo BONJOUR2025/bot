@@ -88,6 +88,16 @@ def log_connection(message: Any) -> None:
     _connections_logger.info(_mask(str(message)))
 
 
+_payment_calendar_logger = logging.getLogger("payment_calendar")
+_payment_calendar_logger.setLevel(logging.INFO)
+_payment_calendar_logger.addHandler(_rotating_handler(LOGS_DIR / "payment_calendar.log"))
+
+
+def log_payment_calendar(message: Any) -> None:
+    """Логирует события отправки счетов кассиру в logs/payment_calendar.log."""
+    _payment_calendar_logger.info(_mask(str(message)))
+
+
 def log_user_action(user_id: Any, label: str | None, action: str, **details: Any) -> None:
     """
     Логирует действие конкретного пользователя в его персональный файл
