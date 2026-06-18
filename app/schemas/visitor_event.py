@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class VisitorEventIngest(BaseModel):
-    salon_id: str
+    salon_code: str
     direction: Literal["in", "out"]
     count: int = Field(default=1, ge=1, le=100)
     device_id: Optional[str] = None

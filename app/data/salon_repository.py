@@ -37,6 +37,16 @@ class SalonRepository:
         self._load()  # always fresh from disk (two-process setup)
         return self._salons.get(salon_id)
 
+    def get_by_code(self, code: str) -> Salon | None:
+        self._load()  # always fresh from disk (two-process setup)
+        code = (code or "").strip().lower()
+        if not code:
+            return None
+        for salon in self._salons.values():
+            if (salon.code or "").strip().lower() == code:
+                return salon
+        return None
+
     def create(self, data: SalonCreate) -> Salon:
         self._load()  # sync with disk before mutating
         salon = new_salon(data)

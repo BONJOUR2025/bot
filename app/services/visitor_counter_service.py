@@ -9,6 +9,7 @@ from app.data.visitor_event_repository import (
     VisitorEventRepository,
     get_visitor_event_repository,
 )
+from app.schemas.salon import Salon
 from app.schemas.visitor_event import VisitorDailySummary, VisitorEventIngest
 
 
@@ -21,13 +22,13 @@ class VisitorCounterService:
         self._repo = repo or get_visitor_event_repository()
         self._salon_repo = salon_repo or get_salon_repository()
 
-    def salon_exists(self, salon_id: str) -> bool:
-        return self._salon_repo.get(salon_id) is not None
+    def get_salon_by_code(self, code: str) -> Optional[Salon]:
+        return self._salon_repo.get_by_code(code)
 
-    def record_event(self, data: VisitorEventIngest) -> dict:
+    def record_event(self, data: VisitorEventIngest, salon: Salon) -> dict:
         return self._repo.create(
             {
-                "salon_id": data.salon_id,
+                "salon_id": salon.id,
                 "direction": data.direction,
                 "count": data.count,
                 "device_id": data.device_id,

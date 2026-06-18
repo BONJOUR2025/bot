@@ -1,17 +1,33 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.api.dependencies import require_permission
-from app.config import VISITOR_COUNTER_API_KEY
+from app.settings import settings
 from app.schemas.visitor_event import VisitorDailySummary, VisitorEvent, VisitorEventIngest
 from app.services.visitor_counter_service import VisitorCounterService
 
 
+def _current_api_key() -> str:
+    # Read fresh from config.json so a key saved via the admin UI takes effect
+    # immediately, without requiring a server restart (mirrors other settings
+    # such as PAYROLL_EXCEL_FILE — see app/api/system.py::_get_payroll_excel_path).
+    try:
+        data = json.loads(Path("config.json").read_text(encoding="utf-8"))
+        if key := data.get("VISITOR_COUNTER_API_KEY"):
+            return str(key)
+    except Exception:
+        pass
+    return settings.visitor_counter_api_key
+
+
 def _check_device_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> None:
-    if not VISITOR_COUNTER_API_KEY or x_api_key != VISITOR_COUNTER_API_KEY:
+    expected = _current_api_key()
+    if not expected or x_api_key != expected:
         raise HTTPException(status_code=401, detail="invalid_api_key")
 
 
@@ -24,9 +40,10 @@ def create_visitor_counter_device_router(service: VisitorCounterService) -> APIR
         data: VisitorEventIngest,
         _: None = Depends(_check_device_api_key),
     ) -> dict[str, str]:
-        if not service.salon_exists(data.salon_id):
+        salon = service.get_salon_by_code(data.salon_code)
+        if not salon:
             raise HTTPException(status_code=404, detail="salon_not_found")
-        service.record_event(data)
+        service.record_event(data, salon)
         return {"status": "ok"}
 
     return router

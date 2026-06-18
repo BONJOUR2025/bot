@@ -66,7 +66,6 @@ ADJUSTMENTS_FILE = settings.adjustments_file
 BONUSES_PENALTIES_FILE = settings.bonuses_penalties_file
 SHIFT_CHECKINS_FILE = settings.shift_checkins_file
 VISITOR_EVENTS_FILE = settings.visitor_events_file
-VISITOR_COUNTER_API_KEY = settings.visitor_counter_api_key
 BOT_USERS_FILE = settings.bot_users_file
 ASSETS_FILE = settings.assets_file
 ADMIN_ID = settings.admin_id
