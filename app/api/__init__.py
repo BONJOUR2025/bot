@@ -466,6 +466,20 @@ def create_app() -> FastAPI:
             return HTMLResponse(index_path.read_text(encoding="utf-8"))
         return Response(status_code=404)
 
+    @app.get("/manifest.json", include_in_schema=False)
+    async def manifest_json():
+        file_path = frontend_path / "manifest.json"
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        return Response(status_code=404)
+
+    @app.get("/icons/{filename}", include_in_schema=False)
+    async def pwa_icons(filename: str):
+        file_path = frontend_path / "icons" / filename
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        return Response(status_code=404)
+
     @app.get("/login", include_in_schema=False)
     async def login_root(request: Request):
         index_path = frontend_path / "index.html"

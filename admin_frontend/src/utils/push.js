@@ -9,6 +9,15 @@ function urlB64ToUint8Array(base64String) {
 
 const SW_PATH = '/admin/sw.js';
 
+export function isIosNonStandalone() {
+  const isIos = /iP(hone|od|ad)/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone =
+    window.navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+  return isIos && !isStandalone;
+}
+
 export async function registerSW() {
   if (!('serviceWorker' in navigator)) return null;
   const reg = await navigator.serviceWorker.register(SW_PATH);
@@ -53,19 +62,23 @@ export async function unsubscribePush(employeeId) {
 }
 
 export async function getPushState(employeeId) {
+  const iosNonStandalone = isIosNonStandalone();
+
   if (!window.isSecureContext) {
-    return { supported: false, notSecure: true, subscribed: false };
+    return { supported: false, notSecure: true, subscribed: false, iosNonStandalone };
   }
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    return { supported: false, subscribed: false };
+    return { supported: false, subscribed: false, iosNonStandalone };
   }
 
   const permission = Notification.permission;
-  if (permission === 'denied') return { supported: true, subscribed: false, denied: true };
+  if (permission === 'denied') {
+    return { supported: true, subscribed: false, denied: true, iosNonStandalone };
+  }
 
   const reg = await navigator.serviceWorker.getRegistration(SW_PATH);
-  if (!reg) return { supported: true, subscribed: false };
+  if (!reg) return { supported: true, subscribed: false, iosNonStandalone };
 
   const subscription = await reg.pushManager.getSubscription();
-  return { supported: true, subscribed: !!subscription };
+  return { supported: true, subscribed: !!subscription, iosNonStandalone };
 }

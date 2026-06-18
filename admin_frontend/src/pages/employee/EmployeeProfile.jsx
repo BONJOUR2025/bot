@@ -216,6 +216,12 @@ export default function EmployeeProfile() {
 
           <div className="emp-profile-section emp-profile-section--push">
             <div className="emp-profile-section__title">Уведомления</div>
+            {pushState.iosNonStandalone && (
+              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-faint)', marginBottom: '0.5rem' }}>
+                На iPhone уведомления сохраняются только если сайт добавлен на главный экран:
+                нажмите «Поделиться» → «На экран «Домой»», затем откройте приложение оттуда и включите уведомления.
+              </p>
+            )}
             {!pushState.supported ? (
               <p style={{ fontSize: '0.8rem', color: 'var(--color-text-faint)', margin: 0 }}>
                 {pushState.notSecure
