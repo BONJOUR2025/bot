@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.api.dependencies import require_permission
 from app.settings import settings
-from app.schemas.visitor_event import VisitorDailySummary, VisitorEvent, VisitorEventIngest
+from app.schemas.visitor_event import (
+    VisitorCounterResetRequest,
+    VisitorCounterTotal,
+    VisitorDailySummary,
+    VisitorEvent,
+    VisitorEventIngest,
+)
 from app.services.visitor_counter_service import VisitorCounterService
 
 
@@ -69,5 +75,20 @@ def create_visitor_counter_router(service: VisitorCounterService) -> APIRouter:
         current=Depends(require_permission("visitor-counters")),
     ):
         return service.daily_summary(date_from=date_from, date_to=date_to, salon_id=salon_id)
+
+    @router.get("/totals", response_model=list[VisitorCounterTotal])
+    async def visitor_events_totals(
+        salon_id: Optional[str] = Query(None),
+        current=Depends(require_permission("visitor-counters")),
+    ):
+        return service.totals(salon_id=salon_id)
+
+    @router.post("/reset")
+    async def reset_visitor_counter(
+        body: VisitorCounterResetRequest,
+        current=Depends(require_permission("visitor-counters")),
+    ) -> dict[str, object]:
+        salons = service.reset_counter(salon_id=body.salon_id)
+        return {"status": "ok", "reset_salons": [s.id for s in salons]}
 
     return router

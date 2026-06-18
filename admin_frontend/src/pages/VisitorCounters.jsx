@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Users, Copy, RefreshCw, KeyRound, Link as LinkIcon,
+  Users, Copy, RefreshCw, KeyRound, Link as LinkIcon, RotateCcw,
 } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis,
@@ -9,6 +9,11 @@ import {
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
+
+function fmtDateTime(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('ru-RU');
+}
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -33,11 +38,14 @@ const TABS = [
 ];
 
 export default function VisitorCounters() {
+  const { toast } = useToast();
   const [tab, setTab] = useState('table');
   const [summary, setSummary] = useState([]);
   const [salons, setSalons] = useState([]);
   const [filters, setFilters] = useState({ from: daysAgoStr(13), to: todayStr(), salon_id: '' });
   const [loading, setLoading] = useState(true);
+  const [cumulative, setCumulative] = useState([]);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     loadSalons();
@@ -46,6 +54,10 @@ export default function VisitorCounters() {
   useEffect(() => {
     load();
   }, [filters]);
+
+  useEffect(() => {
+    loadCumulative();
+  }, [filters.salon_id]);
 
   async function loadSalons() {
     try {
@@ -72,6 +84,49 @@ export default function VisitorCounters() {
       setLoading(false);
     }
   }
+
+  async function loadCumulative() {
+    try {
+      const params = { salon_id: filters.salon_id || undefined };
+      const res = await api.get('visitor-events/totals', { params });
+      setCumulative(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function handleReset() {
+    const scopeLabel = filters.salon_id
+      ? salons.find((s) => s.id === filters.salon_id)?.name || 'выбранный салон'
+      : 'все салоны';
+    if (!confirm(`Сбросить счётчик «Всего посетителей» для: ${scopeLabel}?\nИстория событий и таблица/аналитика не удаляются — сбрасывается только накопленный итог.`)) {
+      return;
+    }
+    setResetting(true);
+    try {
+      await api.post('visitor-events/reset', { salon_id: filters.salon_id || null });
+      toast('Счётчик сброшен', 'success');
+      loadCumulative();
+    } catch (err) {
+      console.error(err);
+      toast('Ошибка сброса счётчика', 'error');
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  const cumulativeTotal = cumulative.reduce(
+    (acc, row) => ({
+      in: acc.in + row.in_count,
+      out: acc.out + row.out_count,
+    }),
+    { in: 0, out: 0 }
+  );
+  const lastResetAt = cumulative
+    .map((row) => row.reset_at)
+    .filter(Boolean)
+    .sort()
+    .pop();
 
   const totals = summary.reduce(
     (acc, row) => ({
@@ -148,9 +203,25 @@ export default function VisitorCounters() {
         </div>
       </div>
 
+      <div className="app-card flex flex-wrap items-center justify-between gap-4 p-4">
+        <div>
+          <div className="text-xs text-gray-500">Всего посетителей{lastResetAt ? ` (с ${fmtDateTime(lastResetAt)})` : ''}</div>
+          <div className="text-2xl font-semibold text-gray-900">{cumulativeTotal.in}</div>
+          <div className="text-xs text-gray-500 mt-1">Вышло: {cumulativeTotal.out} · Сейчас в зале: {cumulativeTotal.in - cumulativeTotal.out}</div>
+        </div>
+        <button
+          type="button"
+          className="btn flex items-center gap-1.5"
+          onClick={handleReset}
+          disabled={resetting}
+        >
+          <RotateCcw size={14} /> Сбросить счётчик
+        </button>
+      </div>
+
       <div className="flex gap-4 text-sm text-gray-600">
-        <span>Всего вошло: <strong className="text-gray-900">{totals.in}</strong></span>
-        <span>Всего вышло: <strong className="text-gray-900">{totals.out}</strong></span>
+        <span>Вошло за период: <strong className="text-gray-900">{totals.in}</strong></span>
+        <span>Вышло за период: <strong className="text-gray-900">{totals.out}</strong></span>
       </div>
 
       {tab === 'table' && (

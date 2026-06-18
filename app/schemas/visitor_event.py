@@ -28,3 +28,16 @@ class VisitorDailySummary(BaseModel):
     in_count: int
     out_count: int
     net: int
+
+
+class VisitorCounterTotal(BaseModel):
+    salon_id: str
+    salon_name: Optional[str] = None
+    in_count: int
+    out_count: int
+    net: int
+    reset_at: Optional[str] = None
+
+
+class VisitorCounterResetRequest(BaseModel):
+    salon_id: Optional[str] = None

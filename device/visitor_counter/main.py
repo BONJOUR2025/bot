@@ -18,15 +18,16 @@ wifi.active(True)
 wifi.connect(WIFI_SSID, WIFI_PASSWORD)
 while not wifi.isconnected():
     time.sleep(0.5)
-print("WiFi OK")
+print("WiFi OK:", wifi.ifconfig()[0])
 
+# D7=GPIO13 — датчик входа, D1=GPIO5 — датчик выхода.
 # PULL_UP — иначе пин может висеть в воздухе (floating) и не фиксировать
 # переход 1->0, из-за чего срабатывания в одну из сторон не регистрируются.
-sensor1 = machine.Pin(13, machine.Pin.IN, machine.Pin.PULL_UP)
-sensor2 = machine.Pin(5, machine.Pin.IN, machine.Pin.PULL_UP)
+sensor_in = machine.Pin(13, machine.Pin.IN, machine.Pin.PULL_UP)
+sensor_out = machine.Pin(5, machine.Pin.IN, machine.Pin.PULL_UP)
 
-prev1 = sensor1.value()
-prev2 = sensor2.value()
+prev_in = sensor_in.value()
+prev_out = sensor_out.value()
 
 
 def send_event(direction):
@@ -42,38 +43,37 @@ def send_event(direction):
         s.send(req.encode())
         s.recv(512)
         s.close()
+        print("Отправлено:", direction)
     except Exception as e:
-        print("Ошибка отправки на relay:", e)
+        print("Ошибка:", e)
 
 
 print("Старт")
-
 last_debug = time.ticks_ms()
 
 while True:
-    d1 = sensor1.value()
-    d2 = sensor2.value()
+    d_in = sensor_in.value()
+    d_out = sensor_out.value()
 
-    if prev1 == 1 and d1 == 0:
+    # Вошёл — sensor_in сработал первым
+    if prev_in == 1 and d_in == 0:
         time.sleep_ms(50)
-        if sensor2.value() != 0:
-            print("Вошёл")
+        if sensor_out.value() != 0:
+            print(">>> Вошёл")
             send_event("in")
 
-    if prev2 == 1 and d2 == 0:
+    # Вышел — sensor_out сработал первым
+    if prev_out == 1 and d_out == 0:
         time.sleep_ms(50)
-        if sensor1.value() != 0:
-            print("Вышел")
+        if sensor_in.value() != 0:
+            print(">>> Вышел")
             send_event("out")
 
-    prev1 = d1
-    prev2 = d2
+    prev_in = d_in
+    prev_out = d_out
 
-    # Раз в секунду печатаем сырые значения датчиков — если sensor2 здесь
-    # никогда не показывает 0 при проходе человека, значит проблема в
-    # датчике/проводке, а не в логике направления.
     if time.ticks_diff(time.ticks_ms(), last_debug) > 1000:
-        print("sensor1=", d1, "sensor2=", d2)
+        print("in=", d_in, "out=", d_out)
         last_debug = time.ticks_ms()
 
     time.sleep_ms(50)
