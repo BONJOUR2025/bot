@@ -46,6 +46,7 @@ export default function VisitorCounters() {
   const [loading, setLoading] = useState(true);
   const [cumulative, setCumulative] = useState([]);
   const [resetting, setResetting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadSalons();
@@ -92,6 +93,15 @@ export default function VisitorCounters() {
       setCumulative(res.data);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await Promise.all([load(), loadCumulative(), loadSalons()]);
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -146,9 +156,19 @@ export default function VisitorCounters() {
 
   return (
     <div className="space-y-6">
-      <h2 className="flex items-center gap-2 text-2xl font-semibold">
-        <Users size={24} /> Счётчик посетителей
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-2xl font-semibold">
+          <Users size={24} /> Счётчик посетителей
+        </h2>
+        <button
+          type="button"
+          className="btn flex items-center gap-1.5"
+          onClick={handleRefresh}
+          disabled={refreshing}
+        >
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> Обновить
+        </button>
+      </div>
 
       <nav className="flex flex-wrap gap-1.5 border-b border-[color:var(--color-border)] pb-3">
         {TABS.map(({ id, label }) => (
