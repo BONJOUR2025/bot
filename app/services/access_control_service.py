@@ -40,6 +40,7 @@ AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
     {"id": "salons", "label": "Управление салонами"},
     {"id": "cash-moves", "label": "Кассовые перемещения"},
     {"id": "shift-checkins", "label": "Рабочее время"},
+    {"id": "visitor-counters", "label": "Счётчик посетителей"},
     {"id": "smses", "label": "СМС Агбис"},
     {"id": "payment-calendar", "label": "Платежный календарь"},
     {"id": "leave-requests", "label": "Заявки на отгул/отсутствие"},

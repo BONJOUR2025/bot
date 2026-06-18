@@ -7,7 +7,7 @@ import {
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
   Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig,
-  Clock, Replace, CalendarOff, MessageCircle,
+  Clock, Replace, CalendarOff, MessageCircle, Users2,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -32,6 +32,7 @@ const navStructure = [
       { to: '/admin/assets',      label: 'Имущество',         permission: 'assets',    icon: Package },
       { to: '/admin/salons',      label: 'Салоны',            permission: 'salons',    icon: Store },
       { to: '/admin/shift-checkins', label: 'Рабочее время',  permission: 'shift-checkins', icon: Clock },
+      { to: '/admin/visitor-counters', label: 'Счётчик посетителей', permission: 'visitor-counters', icon: Users2 },
     ],
   },
   {

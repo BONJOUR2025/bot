@@ -54,6 +54,7 @@ import CashMovements from "./pages/CashMovements";
 import PaymentCalendar from "./pages/PaymentCalendar";
 import Smses from "./pages/Smses";
 import Recruitment from "./pages/Recruitment";
+import VisitorCounters from "./pages/VisitorCounters";
 
 export default function App() {
   return (
@@ -107,6 +108,7 @@ export default function App() {
                 <Route path="sales" element={<SalesAnalytics />} />
                 <Route path="salons" element={<Salons />} />
                 <Route path="shift-checkins" element={<ShiftCheckins />} />
+                <Route path="visitor-counters" element={<VisitorCounters />} />
                 <Route path="location-plans" element={<LocationPlans />} />
                 <Route path="sale-transfers" element={<SaleTransfers />} />
                 <Route path="cash-moves" element={<CashMovements />} />

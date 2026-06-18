@@ -355,6 +355,25 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Visitor counter (ESP8266 etc.) — ingest endpoint is protected by a static
+    # API key (devices can't hold a user session), admin endpoints by permission.
+    from .visitor_counters import (
+        create_visitor_counter_device_router,
+        create_visitor_counter_router,
+    )
+    from ..services.visitor_counter_service import get_visitor_counter_service
+
+    visitor_counter_service = get_visitor_counter_service()
+    app.include_router(
+        create_visitor_counter_device_router(visitor_counter_service),
+        prefix="/api",
+    )
+    app.include_router(
+        create_visitor_counter_router(visitor_counter_service),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Bot users (Telegram users who have started the bot, linkable to employees)
     from .bot_users import create_bot_users_router
     from ..data.bot_user_repository import get_bot_user_repository

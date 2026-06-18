@@ -106,6 +106,12 @@ class Settings(BaseSettings):
     # Файл для хранения отметок об открытии смены
     shift_checkins_file: str = Field("shift_checkins.json", validation_alias="SHIFT_CHECKINS_FILE")
 
+    # Файл для хранения событий счётчика посетителей
+    visitor_events_file: str = Field("visitor_events.json", validation_alias="VISITOR_EVENTS_FILE")
+
+    # Статический API-ключ для устройств-счётчиков посетителей (ESP8266 и т.п.)
+    visitor_counter_api_key: str = Field("", validation_alias="VISITOR_COUNTER_API_KEY")
+
     # Файл для хранения пользователей бота (для привязки к сотрудникам)
     bot_users_file: str = Field("bot_users.json", validation_alias="BOT_USERS_FILE")
 
