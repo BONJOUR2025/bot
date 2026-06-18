@@ -7,7 +7,7 @@ import {
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
   Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig,
-  Clock, Replace,
+  Clock, Replace, CalendarOff, MessageCircle,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -27,6 +27,7 @@ const navStructure = [
       { to: '/admin/archive',     label: 'Архив',             permission: 'employees', icon: Archive },
       { to: '/admin/schedule',    label: 'Расписание',        permission: 'employees', icon: CalendarRange },
       { to: '/admin/vacations',   label: 'Отпуска',           permission: 'vacations', icon: Umbrella },
+      { to: '/admin/leave-requests', label: 'Заявки на отгул', permission: 'leave-requests', icon: CalendarOff },
       { to: '/admin/birthdays',   label: 'Дни рождения',      permission: 'birthdays', icon: Cake },
       { to: '/admin/assets',      label: 'Имущество',         permission: 'assets',    icon: Package },
       { to: '/admin/salons',      label: 'Салоны',            permission: 'salons',    icon: Store },
@@ -61,6 +62,7 @@ const navStructure = [
       { to: '/admin/tasks',     label: 'Задачи',            permission: 'tasks',     icon: ListTodo },
       { to: '/admin/broadcast', label: 'Рассылка',          permission: 'broadcast', icon: Megaphone },
       { to: '/admin/messages',  label: 'История сообщений', permission: 'messages',  icon: History },
+      { to: '/admin/employee-messages', label: 'Сообщения от сотрудников', permission: 'employee-messages', icon: MessageCircle },
     ],
   },
   {

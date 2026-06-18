@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     vacations_file: str = Field(
         "vacations.json", validation_alias="VACATIONS_FILE"
     )
+    leave_requests_file: str = Field(
+        "leave_requests.json", validation_alias="LEAVE_REQUESTS_FILE"
+    )
+    employee_messages_file: str = Field(
+        "employee_messages.json", validation_alias="EMPLOYEE_MESSAGES_FILE"
+    )
     bonuses_penalties_file: str = Field(
         "bonuses_penalties.json",
         validation_alias="BONUSES_PENALTIES_FILE",

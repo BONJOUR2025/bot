@@ -10,3 +10,6 @@ class EmployeeStatus(Enum):
 
 # Unified payout status list used across backend and frontend
 PAYOUT_STATUSES = ["Ожидает", "Одобрено", "Отклонено", "Выплачено"]
+
+# Unified leave request status list used across backend and frontend
+LEAVE_REQUEST_STATUSES = ["Ожидает", "Одобрено", "Отклонено"]

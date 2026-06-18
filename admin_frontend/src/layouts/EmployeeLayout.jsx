@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, Menu, X, DollarSign, CreditCard, Calendar, User } from 'lucide-react';
+import { LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, CalendarOff, MessageCircle } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 
 const NAV_ITEMS = [
   { to: '/employee/salary', label: 'Зарплата', icon: DollarSign },
   { to: '/employee/payouts', label: 'Авансы', icon: CreditCard },
+  { to: '/employee/history', label: 'История', icon: History },
   { to: '/employee/schedule', label: 'График', icon: Calendar },
+  { to: '/employee/leave-requests', label: 'Отгулы', icon: CalendarOff },
+  { to: '/employee/feedback', label: 'Связь', icon: MessageCircle },
   { to: '/employee/profile', label: 'Профиль', icon: User },
 ];
 

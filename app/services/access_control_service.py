@@ -42,6 +42,8 @@ AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
     {"id": "shift-checkins", "label": "Рабочее время"},
     {"id": "smses", "label": "СМС Агбис"},
     {"id": "payment-calendar", "label": "Платежный календарь"},
+    {"id": "leave-requests", "label": "Заявки на отгул/отсутствие"},
+    {"id": "employee-messages", "label": "Сообщения от сотрудников"},
 ]
 
 BOT_BUTTON_CATALOG: list[dict[str, Any]] = [

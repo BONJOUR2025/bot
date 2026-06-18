@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Bell, BellOff, Pencil, Check, X, Camera } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
+import { useToast } from '../../providers/ToastProvider.jsx';
 import { subscribePush, unsubscribePush, getPushState } from '../../utils/push.js';
 
 function Row({ label, value }) {
@@ -14,13 +15,61 @@ function Row({ label, value }) {
   );
 }
 
+function EditableRow({ label, value, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || '');
+  const [saving, setSaving] = useState(false);
+
+  if (!editing) {
+    return (
+      <div className="emp-profile-row">
+        <span className="emp-profile-row__label">{label}</span>
+        <span className="emp-profile-row__value" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {value || '—'}
+          <button type="button" className="icon-button" style={{ padding: '0.15rem' }}
+            onClick={() => { setDraft(value || ''); setEditing(true); }} aria-label={`Изменить ${label}`}>
+            <Pencil size={13} />
+          </button>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="emp-profile-row">
+      <span className="emp-profile-row__label">{label}</span>
+      <span className="emp-profile-row__value" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+        <input
+          className="input"
+          style={{ minWidth: 0 }}
+          value={draft}
+          autoFocus
+          disabled={saving}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); }}
+        />
+        <button type="button" className="icon-button" disabled={saving}
+          onClick={async () => { setSaving(true); await onSave(draft); setSaving(false); setEditing(false); }} aria-label="Сохранить">
+          <Check size={14} />
+        </button>
+        <button type="button" className="icon-button" disabled={saving} onClick={() => setEditing(false)} aria-label="Отмена">
+          <X size={14} />
+        </button>
+      </span>
+    </div>
+  );
+}
+
 export default function EmployeeProfile() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const employeeId = user?.employee_id;
+  const fileInputRef = useRef(null);
 
   const [employee, setEmployee] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [pushState, setPushState] = useState({ supported: false, subscribed: false });
   const [pushLoading, setPushLoading] = useState(false);
@@ -37,6 +86,34 @@ export default function EmployeeProfile() {
 
     getPushState(employeeId).then(setPushState);
   }, [employeeId]);
+
+  const saveField = async (field, value) => {
+    try {
+      const res = await api.patch(`/employees/${employeeId}/self`, { [field]: value });
+      setEmployee(res.data);
+      toast('Сохранено', 'success');
+    } catch {
+      toast('Не удалось сохранить', 'error');
+    }
+  };
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await api.post(`/employees/${employeeId}/photo`, fd);
+      setEmployee((emp) => ({ ...emp, photo_url: res.data.url }));
+      toast('Фото обновлено', 'success');
+    } catch {
+      toast('Не удалось загрузить фото', 'error');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const handlePushToggle = async () => {
     setPushLoading(true);
@@ -79,11 +156,26 @@ export default function EmployeeProfile() {
 
       {employee && (
         <div className="emp-profile-card">
-          {employee.photo_url && (
-            <div className="emp-profile-card__photo">
+          <div className="emp-profile-card__photo" style={{ position: 'relative', display: 'inline-block' }}>
+            {employee.photo_url ? (
               <img src={employee.photo_url} alt={employee.name} />
-            </div>
-          )}
+            ) : (
+              <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'var(--color-bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Camera size={24} style={{ color: 'var(--color-text-faint)' }} />
+              </div>
+            )}
+            <button
+              type="button"
+              className="icon-button"
+              style={{ position: 'absolute', bottom: -4, right: -4, background: 'var(--color-bg)', borderRadius: '50%' }}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              aria-label="Изменить фото"
+            >
+              <Pencil size={13} />
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
+          </div>
 
           <div className="emp-profile-card__name">
             {employee.full_name || employee.name}
@@ -94,13 +186,13 @@ export default function EmployeeProfile() {
 
           <div className="emp-profile-section">
             <div className="emp-profile-section__title">Контакты</div>
-            <Row label="Телефон" value={employee.phone} />
+            <EditableRow label="Телефон" value={employee.phone} onSave={(v) => saveField('phone', v)} />
           </div>
 
           <div className="emp-profile-section">
             <div className="emp-profile-section__title">Реквизиты</div>
-            <Row label="Карта" value={employee.card_number} />
-            <Row label="Банк" value={employee.bank} />
+            <EditableRow label="Карта" value={employee.card_number} onSave={(v) => saveField('card_number', v)} />
+            <EditableRow label="Банк" value={employee.bank} onSave={(v) => saveField('bank', v)} />
           </div>
 
           <div className="emp-profile-section">

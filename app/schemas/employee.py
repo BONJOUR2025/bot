@@ -34,6 +34,14 @@ class EmployeeUpdate(EmployeeBase):
     id: Optional[str] = None
 
 
+class EmployeeSelfUpdate(BaseModel):
+    """Subset of fields an employee may edit about themselves."""
+
+    phone: Optional[str] = None
+    card_number: Optional[str] = None
+    bank: Optional[str] = None
+
+
 class EmployeeOut(EmployeeBase):
     id: str
     created_at: datetime

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
-from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeOut
+from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeOut, EmployeeSelfUpdate
 from app.services.employee_service import EmployeeAPIService
 from app.services.pdf_profile import generate_employee_pdf
 from app.data.payout_repository import PayoutRepository
@@ -54,6 +54,21 @@ def create_employee_router(
         if not employee:
             raise HTTPException(status_code=404, detail="not_found")
         return employee
+
+    @router.patch("/{employee_id}/self", response_model=EmployeeOut)
+    async def update_self(
+        employee_id: str,
+        data: EmployeeSelfUpdate,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        if current.employee_id != employee_id:
+            raise HTTPException(status_code=403, detail="forbidden")
+        emp = service.service.update_employee(
+            employee_id, **data.dict(exclude_unset=True)
+        )
+        if not emp:
+            raise HTTPException(status_code=404, detail="not_found")
+        return EmployeeOut(**emp.__dict__)
 
     @router.post("/", response_model=EmployeeOut)
     async def create(

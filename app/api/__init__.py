@@ -21,6 +21,8 @@ from ..config import TOKEN
 from ..core.application import create_application
 from ..services.adjustment_service import AdjustmentService
 from ..services.employee_service import EmployeeAPIService, EmployeeService
+from ..services.employee_message_service import EmployeeMessageService
+from ..services.leave_request_service import LeaveRequestService
 from ..services.message_service import MessageService
 from ..services.payout_service import PayoutService
 from ..services.salary_service import SalaryService
@@ -35,6 +37,8 @@ from .config import create_config_router
 from .dependencies import get_current_user
 from .dictionary import create_dictionary_router
 from .employees import create_employee_router
+from .employee_messages import create_employee_message_router
+from .leave_requests import create_leave_request_router
 from .incentives import create_incentive_router
 from .messages import create_message_router
 from .payouts import create_payout_router
@@ -204,6 +208,24 @@ def create_app() -> FastAPI:
     vacation_service = VacationService()
     app.include_router(
         create_vacation_router(vacation_service, access_service),
+        prefix="/api",
+        dependencies=protected,
+    )
+
+    leave_request_service = LeaveRequestService(
+        telegram_service=telegram_service, push_service=push_service
+    )
+    app.include_router(
+        create_leave_request_router(leave_request_service, access_service),
+        prefix="/api",
+        dependencies=protected,
+    )
+
+    employee_message_service = EmployeeMessageService(
+        telegram_service=telegram_service, push_service=push_service
+    )
+    app.include_router(
+        create_employee_message_router(employee_message_service, access_service),
         prefix="/api",
         dependencies=protected,
     )

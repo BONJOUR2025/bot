@@ -18,6 +18,9 @@ import EmployeeSalary from "./pages/employee/EmployeeSalary.jsx";
 import EmployeePayouts from "./pages/employee/EmployeePayouts.jsx";
 import EmployeeSchedule from "./pages/employee/EmployeeSchedule.jsx";
 import EmployeeProfile from "./pages/employee/EmployeeProfile.jsx";
+import EmployeeHistory from "./pages/employee/EmployeeHistory.jsx";
+import EmployeeLeaveRequests from "./pages/employee/EmployeeLeaveRequests.jsx";
+import EmployeeFeedback from "./pages/employee/EmployeeFeedback.jsx";
 
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard";
@@ -31,6 +34,8 @@ import Broadcast from "./pages/Broadcast";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import MessageHistory from "./pages/MessageHistory";
 import Vacations from "./pages/Vacations";
+import LeaveRequests from "./pages/LeaveRequests";
+import EmployeeMessages from "./pages/EmployeeMessages";
 import Birthdays from "./pages/Birthdays";
 import Settings from "./pages/Settings";
 import Assets from "./pages/Assets";
@@ -87,6 +92,8 @@ export default function App() {
                 <Route path="broadcast" element={<Broadcast />} />
                 <Route path="messages" element={<MessageHistory />} />
                 <Route path="vacations" element={<Vacations />} />
+                <Route path="leave-requests" element={<LeaveRequests />} />
+                <Route path="employee-messages" element={<EmployeeMessages />} />
                 <Route path="birthdays" element={<Birthdays />} />
                 <Route path="assets" element={<Assets />} />
                 <Route path="dictionary" element={<Navigate to="/admin/settings/dictionary" replace />} />
@@ -123,6 +130,9 @@ export default function App() {
                 <Route path="payouts" element={<EmployeePayouts />} />
                 <Route path="schedule" element={<EmployeeSchedule />} />
                 <Route path="profile" element={<EmployeeProfile />} />
+                <Route path="history" element={<EmployeeHistory />} />
+                <Route path="leave-requests" element={<EmployeeLeaveRequests />} />
+                <Route path="feedback" element={<EmployeeFeedback />} />
               </Route>
 
               {/* Фолбэк */}

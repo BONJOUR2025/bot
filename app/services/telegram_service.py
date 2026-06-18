@@ -414,6 +414,21 @@ class TelegramService:
         )
         return result.message_id
 
+    async def send_employee_message_to_admin(self, name: str, message: str) -> None:
+        """Notify the admin chat about a message sent by an employee from their personal area."""
+        if self.bot is None:
+            log("⚠️ Telegram bot not configured; cannot notify admin")
+            raise TelegramNotConfiguredError("Telegram bot not configured")
+        if not ADMIN_CHAT_ID:
+            log("⚠️ ADMIN_CHAT_ID not configured; cannot notify admin")
+            return
+        text = f"💬 Сообщение от сотрудника\n\n👤 {name}\n\n{message}"
+        try:
+            await self.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
+        except BadRequest as exc:
+            log(f"❌ Failed to send message to chat {ADMIN_CHAT_ID} — {exc}")
+            raise TelegramAPIError(str(exc)) from exc
+
     async def send_payout_request_to_admin(self, payout: Dict[str, Any]) -> None:
         """Notify the admin chat about a payout request."""
         if self.bot is None:
