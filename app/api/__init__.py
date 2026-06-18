@@ -121,7 +121,7 @@ def create_app() -> FastAPI:
                 return RedirectResponse(url="/admin", status_code=302)
             except ValueError:
                 pass
-        return RedirectResponse(url="/admin/login", status_code=302)
+        return RedirectResponse(url="/login", status_code=302)
 
     @app.post("/session/login", include_in_schema=False)
     async def session_login(payload: LoginRequest) -> JSONResponse:
