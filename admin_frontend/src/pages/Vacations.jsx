@@ -4,9 +4,11 @@ import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 export default function Vacations() {
   const { toast } = useToast();
+  const { isMobile } = useViewport();
 
   const emptyForm = {
     id: null,
@@ -260,71 +262,115 @@ export default function Vacations() {
             →
           </button>
         </div>
-        <div className="overflow-auto border rounded shadow bg-white">
-          <table className="min-w-[900px] text-xs">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="p-1 text-left sticky left-0 bg-gray-50 z-10">Сотрудник</th>
-                {days.map((d) => (
-                  <th key={d} className="p-1 w-6 text-center">
-                    {d}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {empIds.map((eid) => {
-                const emp = employees.find((e) => String(e.id) === String(eid));
-                const name = emp ? emp.full_name || emp.name : '';
-                return (
-                  <tr key={eid} className="hover:bg-gray-50">
-                    <th className="p-2 text-left sticky left-0 bg-white z-10">
-                      {name}
-                    </th>
-                    {days.map((d) => {
-                      const dateStr = new Date(year, month, d)
-                        .toISOString()
-                        .slice(0, 10);
-                      const vac = vacations.find(
-                        (v) =>
-                          String(v.employee_id) === String(eid) &&
-                          v.start_date <= dateStr &&
-                          v.end_date >= dateStr
-                      );
-                      let cls = '';
-                      let title = '';
-                      if (vac) {
-                        title = `${formatDateRange(vac.start_date, vac.end_date)}${
-                          vac.comment ? ' ' + vac.comment : ''
-                        }`;
-                        if (vac.end_date < todayStr) cls = 'bg-gray-300';
-                        else if (
-                          vac.start_date <= todayStr &&
-                          vac.end_date >= todayStr
-                        )
-                          cls = 'bg-yellow-200';
-                        else cls = 'bg-green-200';
-                      } else {
-                        const dow = new Date(year, month, d).getDay();
-                        if (dow === 0 || dow === 6) cls = 'bg-gray-50';
-                      }
+        {isMobile ? (
+          <div className="space-y-3">
+            {empIds.length === 0 && (
+              <div className="py-6 text-center text-gray-500 text-sm">Нет данных</div>
+            )}
+            {empIds.map((eid) => {
+              const emp = employees.find((e) => String(e.id) === String(eid));
+              const name = emp ? emp.full_name || emp.name : '';
+              const empVacations = vacations
+                .filter((v) => String(v.employee_id) === String(eid))
+                .filter((v) => {
+                  const monthStart = new Date(year, month, 1).toISOString().slice(0, 10);
+                  const monthEnd = new Date(year, month, daysCount).toISOString().slice(0, 10);
+                  return v.start_date <= monthEnd && v.end_date >= monthStart;
+                });
+              return (
+                <div key={eid} className="border rounded-xl bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">
+                    {name}
+                  </div>
+                  <div className="px-4 py-2 space-y-2">
+                    {empVacations.map((v) => {
+                      let dotCls = 'bg-green-200';
+                      if (v.end_date < todayStr) dotCls = 'bg-gray-300';
+                      else if (v.start_date <= todayStr && v.end_date >= todayStr)
+                        dotCls = 'bg-yellow-200';
                       return (
-                        <td key={d} className={`border p-1 ${cls}`} title={title} />
+                        <div key={v.id} className="flex items-center gap-2 text-sm">
+                          <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${dotCls}`} />
+                          <span className="flex-1">{formatDateRange(v.start_date, v.end_date)}</span>
+                          <span className="text-gray-500 text-xs">{v.type}</span>
+                        </div>
                       );
                     })}
-                  </tr>
-                );
-              })}
-              {empIds.length === 0 && (
+                    {empVacations.length === 0 && (
+                      <div className="text-sm text-gray-400">Нет записей в этом месяце</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="overflow-x-auto border rounded shadow bg-white">
+            <table className="min-w-[900px] text-xs">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan={days.length + 1} className="p-4 text-center text-gray-500">
-                    Нет данных
-                  </td>
+                  <th className="p-1 text-left sticky left-0 bg-gray-50 z-10">Сотрудник</th>
+                  {days.map((d) => (
+                    <th key={d} className="p-1 w-6 text-center">
+                      {d}
+                    </th>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {empIds.map((eid) => {
+                  const emp = employees.find((e) => String(e.id) === String(eid));
+                  const name = emp ? emp.full_name || emp.name : '';
+                  return (
+                    <tr key={eid} className="hover:bg-gray-50">
+                      <th className="p-2 text-left sticky left-0 bg-white z-10">
+                        {name}
+                      </th>
+                      {days.map((d) => {
+                        const dateStr = new Date(year, month, d)
+                          .toISOString()
+                          .slice(0, 10);
+                        const vac = vacations.find(
+                          (v) =>
+                            String(v.employee_id) === String(eid) &&
+                            v.start_date <= dateStr &&
+                            v.end_date >= dateStr
+                        );
+                        let cls = '';
+                        let title = '';
+                        if (vac) {
+                          title = `${formatDateRange(vac.start_date, vac.end_date)}${
+                            vac.comment ? ' ' + vac.comment : ''
+                          }`;
+                          if (vac.end_date < todayStr) cls = 'bg-gray-300';
+                          else if (
+                            vac.start_date <= todayStr &&
+                            vac.end_date >= todayStr
+                          )
+                            cls = 'bg-yellow-200';
+                          else cls = 'bg-green-200';
+                        } else {
+                          const dow = new Date(year, month, d).getDay();
+                          if (dow === 0 || dow === 6) cls = 'bg-gray-50';
+                        }
+                        return (
+                          <td key={d} className={`border p-1 ${cls}`} title={title} />
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                {empIds.length === 0 && (
+                  <tr>
+                    <td colSpan={days.length + 1} className="p-4 text-center text-gray-500">
+                      Нет данных
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {showForm && (

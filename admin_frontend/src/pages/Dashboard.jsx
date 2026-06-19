@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useViewport } from '../providers/ViewportProvider.jsx';
 import {
   Wallet, CheckCircle2, Palmtree, AlertTriangle,
   ArrowRight, CalendarDays, ClipboardList, Clock,
@@ -10,6 +9,7 @@ import {
 import api from '../api';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import Skeleton, { SkeletonCard } from '../components/ui/Skeleton.jsx';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -136,7 +136,6 @@ function Empty({ text = 'Нет данных' }) {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { isMobile } = useViewport();
   const [pending, setPending]     = useState([]);
   const [approved, setApproved]   = useState([]);
   const [vacations, setVacations] = useState([]);
@@ -458,69 +457,73 @@ export default function Dashboard() {
             const totCosmetics = rows.reduce((s, r) => s + r.cosmetics, 0);
             const totShoes     = rows.reduce((s, r) => s + r.shoes, 0);
             const totTotal     = totRepair + totCosmetics + totShoes;
-            return isMobile ? (
-              <div className="space-y-3">
-                {rows.map((r) => {
-                  const total = r.repair + r.cosmetics + r.shoes;
-                  return (
-                    <div key={r.description} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                      <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium" style={{ color: 'var(--color-text)' }}>{r.description}</div>
-                      <div className="px-4 py-2 space-y-1.5 text-sm">
-                        <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Ремонт</span><span style={{ color: 'var(--color-text-muted)' }}>{r.repair ? fmt(r.repair) + ' ₽' : '—'}</span></div>
-                        <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Косметика</span><span style={{ color: 'var(--color-text-muted)' }}>{r.cosmetics ? fmt(r.cosmetics) + ' ₽' : '—'}</span></div>
-                        <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Обувь</span><span style={{ color: 'var(--color-text-muted)' }}>{r.shoes ? fmt(r.shoes) + ' ₽' : '—'}</span></div>
-                        <div className="flex justify-between font-semibold"><span style={{ color: 'var(--color-text)' }}>Итого</span><span style={{ color: 'var(--color-primary)' }}>{fmt(total)} ₽</span></div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>Итого</div>
-                  <div className="px-4 py-2 space-y-1.5 text-sm">
-                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Ремонт</span><span>{fmt(totRepair)} ₽</span></div>
-                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Косметика</span><span>{fmt(totCosmetics)} ₽</span></div>
-                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Обувь</span><span>{fmt(totShoes)} ₽</span></div>
-                    <div className="flex justify-between font-semibold"><span style={{ color: 'var(--color-text)' }}>Всего</span><span style={{ color: 'var(--color-primary)' }}>{fmt(totTotal)} ₽</span></div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto -mx-6">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[color:var(--color-border)] text-left text-xs text-[color:var(--color-text-muted)]">
-                      <th className="px-6 pb-2 font-medium">Сотрудник</th>
-                      <th className="px-4 pb-2 text-right font-medium">Ремонт</th>
-                      <th className="px-4 pb-2 text-right font-medium">Косметика</th>
-                      <th className="px-4 pb-2 text-right font-medium">Обувь</th>
-                      <th className="px-4 pb-2 text-right font-medium">Итого</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[color:var(--color-border)]">
-                    {rows.map((r) => {
-                      const total = r.repair + r.cosmetics + r.shoes;
+            const salesRows = [
+              ...rows,
+              { description: 'Итого', repair: totRepair, cosmetics: totCosmetics, shoes: totShoes, isTotal: true },
+            ];
+            return (
+              <ResponsiveTable
+                data={salesRows}
+                keyFn={(r) => r.description}
+                rowClass={(r) => (r.isTotal ? 'font-semibold' : '')}
+                emptyText="Нет данных по продажам за сегодня"
+                columns={[
+                  {
+                    label: 'Сотрудник',
+                    primary: true,
+                    headerClass: 'pl-6',
+                    cellClass: 'pl-6 font-medium',
+                    render: (r) => (
+                      <span style={{ color: r.isTotal ? 'var(--color-text-muted)' : 'var(--color-text)' }}>
+                        {r.description}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Ремонт',
+                    headerClass: 'text-right',
+                    cellClass: 'text-right',
+                    render: (r) => (
+                      <span style={{ color: 'var(--color-text-muted)' }}>
+                        {r.isTotal ? `${fmt(r.repair)} ₽` : (r.repair ? fmt(r.repair) + ' ₽' : '—')}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Косметика',
+                    headerClass: 'text-right',
+                    cellClass: 'text-right',
+                    render: (r) => (
+                      <span style={{ color: 'var(--color-text-muted)' }}>
+                        {r.isTotal ? `${fmt(r.cosmetics)} ₽` : (r.cosmetics ? fmt(r.cosmetics) + ' ₽' : '—')}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Обувь',
+                    headerClass: 'text-right',
+                    cellClass: 'text-right',
+                    render: (r) => (
+                      <span style={{ color: 'var(--color-text-muted)' }}>
+                        {r.isTotal ? `${fmt(r.shoes)} ₽` : (r.shoes ? fmt(r.shoes) + ' ₽' : '—')}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Итого',
+                    headerClass: 'text-right',
+                    cellClass: 'text-right',
+                    render: (r) => {
+                      const total = r.isTotal ? totTotal : r.repair + r.cosmetics + r.shoes;
                       return (
-                        <tr key={r.description} className="hover:bg-[color:var(--color-control-bg)] transition-colors">
-                          <td className="px-6 py-2.5 font-medium text-[color:var(--color-text)]">{r.description}</td>
-                          <td className="px-4 py-2.5 text-right text-[color:var(--color-text-muted)]">{r.repair ? fmt(r.repair) + ' ₽' : '—'}</td>
-                          <td className="px-4 py-2.5 text-right text-[color:var(--color-text-muted)]">{r.cosmetics ? fmt(r.cosmetics) + ' ₽' : '—'}</td>
-                          <td className="px-4 py-2.5 text-right text-[color:var(--color-text-muted)]">{r.shoes ? fmt(r.shoes) + ' ₽' : '—'}</td>
-                          <td className="px-4 py-2.5 text-right font-semibold text-[color:var(--color-primary)]">{fmt(total)} ₽</td>
-                        </tr>
+                        <span className="font-semibold" style={{ color: 'var(--color-primary)' }}>
+                          {fmt(total)} ₽
+                        </span>
                       );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-[color:var(--color-border)] font-semibold text-[color:var(--color-text)]">
-                      <td className="px-6 py-2.5 text-xs text-[color:var(--color-text-muted)]">Итого</td>
-                      <td className="px-4 py-2.5 text-right">{fmt(totRepair)} ₽</td>
-                      <td className="px-4 py-2.5 text-right">{fmt(totCosmetics)} ₽</td>
-                      <td className="px-4 py-2.5 text-right">{fmt(totShoes)} ₽</td>
-                      <td className="px-4 py-2.5 text-right text-[color:var(--color-primary)]">{fmt(totTotal)} ₽</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                    },
+                  },
+                ]}
+              />
             );
           })()}
         </Card>
@@ -540,73 +543,76 @@ export default function Dashboard() {
             const totSalary = rows.reduce((s, r) => s + (r.total_salary ?? 0), 0);
             const totDone   = rows.reduce((s, r) => s + (r.services_done ?? 0), 0);
             const totWarn   = rows.reduce((s, r) => s + (r.warnings_count ?? 0), 0);
-            return isMobile ? (
-              <div className="space-y-3">
-                {rows.map((m) => (
-                  <div key={m.master} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium" style={{ color: 'var(--color-text)' }}>{m.master}</div>
-                    <div className="px-4 py-2 space-y-1.5 text-sm">
-                      <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Услуг</span><span style={{ color: 'var(--color-text-muted)' }}>{m.services_done}</span></div>
-                      <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Выручка</span><span>{fmt(m.total_kredit)} ₽</span></div>
-                      <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>ЗП мастера</span><span style={{ color: 'var(--color-success)', fontWeight: 600 }}>{fmt(m.total_salary)} ₽</span></div>
-                      {m.warnings_count > 0 && (
-                        <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Предупреждения</span><Badge tone="danger">{m.warnings_count}</Badge></div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                <div className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>Итого</div>
-                  <div className="px-4 py-2 space-y-1.5 text-sm">
-                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Услуг</span><span>{totDone}</span></div>
-                    <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Выручка</span><span>{fmt(totKredit)} ₽</span></div>
-                    <div className="flex justify-between font-semibold"><span style={{ color: 'var(--color-text-muted)' }}>ЗП мастеров</span><span style={{ color: 'var(--color-success)' }}>{fmt(totSalary)} ₽</span></div>
-                    {totWarn > 0 && (
-                      <div className="flex justify-between"><span style={{ color: 'var(--color-text-muted)' }}>Предупреждения</span><Badge tone="danger">{totWarn}</Badge></div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto -mx-6">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[color:var(--color-border)] text-left text-xs text-[color:var(--color-text-muted)]">
-                      <th className="px-6 pb-2 font-medium">Мастер</th>
-                      <th className="px-4 pb-2 text-right font-medium">Услуг</th>
-                      <th className="px-4 pb-2 text-right font-medium">Выручка</th>
-                      <th className="px-4 pb-2 text-right font-medium">ЗП мастера</th>
-                      <th className="px-4 pb-2 text-center font-medium">⚠️</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[color:var(--color-border)]">
-                    {rows.map((m) => (
-                      <tr key={m.master} className="hover:bg-[color:var(--color-control-bg)] transition-colors">
-                        <td className="px-6 py-2.5 font-medium text-[color:var(--color-text)]">{m.master}</td>
-                        <td className="px-4 py-2.5 text-right text-[color:var(--color-text-muted)]">{m.services_done}</td>
-                        <td className="px-4 py-2.5 text-right">{fmt(m.total_kredit)} ₽</td>
-                        <td className="px-4 py-2.5 text-right font-semibold text-[color:var(--color-success)]">{fmt(m.total_salary)} ₽</td>
-                        <td className="px-4 py-2.5 text-center">
-                          {m.warnings_count > 0
-                            ? <Badge tone="danger">{m.warnings_count}</Badge>
-                            : <span className="text-[color:var(--color-text-muted)] opacity-40">—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-[color:var(--color-border)] font-semibold text-[color:var(--color-text)]">
-                      <td className="px-6 py-2.5 text-xs text-[color:var(--color-text-muted)]">Итого</td>
-                      <td className="px-4 py-2.5 text-right">{totDone}</td>
-                      <td className="px-4 py-2.5 text-right">{fmt(totKredit)} ₽</td>
-                      <td className="px-4 py-2.5 text-right text-[color:var(--color-success)]">{fmt(totSalary)} ₽</td>
-                      <td className="px-4 py-2.5 text-center">
-                        {totWarn > 0 ? <Badge tone="danger">{totWarn}</Badge> : '—'}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+            const masterRows = [
+              ...rows,
+              {
+                master: 'Итого',
+                services_done: totDone,
+                total_kredit: totKredit,
+                total_salary: totSalary,
+                warnings_count: totWarn,
+                isTotal: true,
+              },
+            ];
+            return (
+              <ResponsiveTable
+                data={masterRows}
+                keyFn={(m) => m.master}
+                rowClass={(m) => (m.isTotal ? 'font-semibold' : '')}
+                emptyText="Нет данных по мастерам за сегодня"
+                columns={[
+                  {
+                    label: 'Мастер',
+                    primary: true,
+                    headerClass: 'pl-6',
+                    cellClass: 'pl-6 font-medium',
+                    render: (m) => (
+                      <span style={{ color: m.isTotal ? 'var(--color-text-muted)' : 'var(--color-text)' }}>
+                        {m.master}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Услуг',
+                    headerClass: 'text-right',
+                    cellClass: 'text-right',
+                    render: (m) => (
+                      <span style={{ color: m.isTotal ? undefined : 'var(--color-text-muted)' }}>
+                        {m.services_done}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Выручка',
+                    headerClass: 'text-right',
+                    cellClass: 'text-right',
+                    render: (m) => <span>{fmt(m.total_kredit)} ₽</span>,
+                  },
+                  {
+                    label: 'ЗП мастера',
+                    headerClass: 'text-right',
+                    cellClass: 'text-right',
+                    render: (m) => (
+                      <span className="font-semibold" style={{ color: 'var(--color-success)' }}>
+                        {fmt(m.total_salary)} ₽
+                      </span>
+                    ),
+                  },
+                  {
+                    label: '⚠️',
+                    headerClass: 'text-center',
+                    cellClass: 'text-center',
+                    render: (m) =>
+                      m.warnings_count > 0 ? (
+                        <Badge tone="danger">{m.warnings_count}</Badge>
+                      ) : m.isTotal ? (
+                        '—'
+                      ) : (
+                        <span className="text-[color:var(--color-text-muted)] opacity-40">—</span>
+                      ),
+                  },
+                ]}
+              />
             );
           })()}
         </Card>

@@ -3,6 +3,7 @@ import { Pencil, Trash2, Plus, Bell, Search, X, ChevronRight, Package, AlertTria
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -360,72 +361,102 @@ export default function Assets() {
       )}
 
       {/* Table — one row per employee */}
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)]">
-              <th className="w-9 px-3 py-2.5">
-                <input type="checkbox" ref={allCheckRef}
-                  checked={grouped.length > 0 && selected.size === grouped.length}
-                  onChange={toggleAll} onClick={e => e.stopPropagation()} />
-              </th>
-              <th className="text-left px-3 py-2.5">Сотрудник</th>
-              <th className="text-left px-3 py-2.5 hidden md:table-cell">Должность</th>
-              <th className="text-center px-3 py-2.5">Предметов</th>
-              <th className="text-center px-3 py-2.5 hidden sm:table-cell">Кол-во</th>
-              <th className="text-left px-3 py-2.5 hidden lg:table-cell">Посл. выдача</th>
-              <th className="text-left px-3 py-2.5">Статус</th>
-              <th className="w-10 px-3 py-2.5"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[color:var(--color-border)]">
-            {grouped.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-[color:var(--color-muted-foreground)] italic">Нет данных</td></tr>
-            )}
-            {grouped.map(g => (
-              <tr key={g.employee_id}
-                onClick={() => setDetailEmpId(g.employee_id)}
-                className={`cursor-pointer transition-colors ${selected.has(String(g.employee_id))
-                  ? 'bg-[color:var(--color-primary)]/5'
-                  : 'hover:bg-[color:var(--color-muted)]/10'}`}>
-                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                  <input type="checkbox" checked={selected.has(String(g.employee_id))} onChange={() => toggleRow(g.employee_id)} />
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <span className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold shrink-0 ${avatarColor(g.employee_name)}`}>
-                      {initials(g.employee_name) || '?'}
-                    </span>
-                    <span className="font-medium">{g.employee_name}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2.5 hidden md:table-cell text-[color:var(--color-muted-foreground)] text-xs">{g.position || '—'}</td>
-                <td className="px-3 py-2.5 text-center">
-                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[color:var(--color-muted)]">
-                    <Package size={11} /> {g.items.length}
+      <div className="flex items-center gap-2 px-1 text-sm text-[color:var(--color-muted-foreground)]">
+        <input type="checkbox" ref={allCheckRef}
+          checked={grouped.length > 0 && selected.size === grouped.length}
+          onChange={toggleAll} />
+        <span>Выбрать всех</span>
+      </div>
+      <div className="card overflow-hidden">
+        <ResponsiveTable
+          data={grouped}
+          keyFn={g => g.employee_id}
+          emptyText="Нет данных"
+          rowClass={g => selected.has(String(g.employee_id))
+            ? 'bg-[color:var(--color-primary)]/5'
+            : 'hover:bg-[color:var(--color-muted)]/10'}
+          columns={[
+            {
+              label: '',
+              headerClass: 'w-9',
+              cellClass: 'w-9',
+              render: g => (
+                <input type="checkbox" checked={selected.has(String(g.employee_id))}
+                  onChange={() => toggleRow(g.employee_id)} onClick={e => e.stopPropagation()} />
+              ),
+            },
+            {
+              label: 'Сотрудник',
+              primary: true,
+              render: g => (
+                <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setDetailEmpId(g.employee_id)}>
+                  <span className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold shrink-0 ${avatarColor(g.employee_name)}`}>
+                    {initials(g.employee_name) || '?'}
                   </span>
-                </td>
-                <td className="px-3 py-2.5 text-center hidden sm:table-cell">{g.totalQty}</td>
-                <td className="px-3 py-2.5 hidden lg:table-cell whitespace-nowrap text-[color:var(--color-muted-foreground)]">{fmtDate(g.lastIssue)}</td>
-                <td className="px-3 py-2.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {g.overdue > 0 && (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                        <AlertTriangle size={11} /> {g.overdue}
-                      </span>
-                    )}
-                    {g.pendingAck > 0
-                      ? <span className="text-xs text-[color:var(--color-muted-foreground)]">⏳ не подтвердил {g.pendingAck}</span>
-                      : <span className="text-xs text-green-600 font-medium">✅ всё подтверждено</span>}
-                  </div>
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <ChevronRight size={16} className="text-[color:var(--color-muted-foreground)] inline-block" />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <span className="font-medium">{g.employee_name}</span>
+                </div>
+              ),
+            },
+            {
+              label: 'Должность',
+              mobileHide: true,
+              headerClass: 'hidden md:table-cell',
+              cellClass: 'hidden md:table-cell text-[color:var(--color-muted-foreground)] text-xs',
+              render: g => g.position || '—',
+            },
+            {
+              label: 'Предметов',
+              headerClass: 'text-center',
+              cellClass: 'text-center',
+              render: g => (
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[color:var(--color-muted)]">
+                  <Package size={11} /> {g.items.length}
+                </span>
+              ),
+            },
+            {
+              label: 'Кол-во',
+              mobileHide: true,
+              headerClass: 'hidden sm:table-cell text-center',
+              cellClass: 'hidden sm:table-cell text-center',
+              render: g => g.totalQty,
+            },
+            {
+              label: 'Посл. выдача',
+              mobileHide: true,
+              headerClass: 'hidden lg:table-cell',
+              cellClass: 'hidden lg:table-cell whitespace-nowrap text-[color:var(--color-muted-foreground)]',
+              render: g => fmtDate(g.lastIssue),
+            },
+            {
+              label: 'Статус',
+              render: g => (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {g.overdue > 0 && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                      <AlertTriangle size={11} /> {g.overdue}
+                    </span>
+                  )}
+                  {g.pendingAck > 0
+                    ? <span className="text-xs text-[color:var(--color-muted-foreground)]">⏳ не подтвердил {g.pendingAck}</span>
+                    : <span className="text-xs text-green-600 font-medium">✅ всё подтверждено</span>}
+                </div>
+              ),
+            },
+            {
+              label: '',
+              isAction: true,
+              headerClass: 'w-10',
+              cellClass: 'text-right',
+              render: g => (
+                <button onClick={() => setDetailEmpId(g.employee_id)} title="Подробнее"
+                  className="p-1 rounded text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-muted)]">
+                  <ChevronRight size={16} />
+                </button>
+              ),
+            },
+          ]}
+        />
       </div>
 
       {/* Stats */}
@@ -438,12 +469,12 @@ export default function Assets() {
       {/* Employee detail card */}
       <Modal isOpen={!!detailGroup} onClose={() => setDetailEmpId(null)}>
         {detailGroup && (
-          <div className="modal-card max-w-3xl w-full">
-            <div className="flex items-start gap-3 mb-5">
+          <div className="modal-card w-full max-w-3xl sm:mx-4">
+            <div className="flex items-start gap-3 mb-5 flex-wrap">
               <span className={`flex items-center justify-center w-12 h-12 rounded-full text-base font-semibold shrink-0 ${avatarColor(detailGroup.employee_name)}`}>
                 {initials(detailGroup.employee_name) || '?'}
               </span>
-              <div className="flex-1">
+              <div className="flex-1 min-w-[140px]">
                 <h2 className="text-xl font-semibold">{detailGroup.employee_name}</h2>
                 <p className="text-sm text-[color:var(--color-muted-foreground)]">{detailGroup.position || '—'}</p>
               </div>
@@ -465,55 +496,52 @@ export default function Assets() {
               )}
             </div>
 
-            <div className="border border-[color:var(--color-border)] rounded-lg overflow-x-auto max-h-[55vh] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0">
-                  <tr className="bg-[color:var(--color-muted)]/60 text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
-                    <th className="text-left px-3 py-2">Предмет</th>
-                    <th className="text-left px-3 py-2 hidden sm:table-cell">Размер</th>
-                    <th className="text-center px-3 py-2">Кол-во</th>
-                    <th className="text-left px-3 py-2">Выдано</th>
-                    <th className="text-left px-3 py-2 hidden lg:table-cell">Возврат</th>
-                    <th className="text-left px-3 py-2 hidden md:table-cell">Статус</th>
-                    <th className="w-24 px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[color:var(--color-border)]">
-                  {detailGroup.items.map(item => (
-                    <tr key={item.id} className="hover:bg-[color:var(--color-muted)]/10">
-                      <td className="px-3 py-2.5 font-medium">{item.item_name}</td>
-                      <td className="px-3 py-2.5 hidden sm:table-cell">{item.size || '—'}</td>
-                      <td className="px-3 py-2.5 text-center">{item.quantity}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">{fmtDate(item.issue_date)}</td>
-                      <td className="px-3 py-2.5 hidden lg:table-cell whitespace-nowrap">{fmtDate(item.return_date)}</td>
-                      <td className="px-3 py-2.5 hidden md:table-cell">
-                        {item.acked_at
-                          ? <span className="text-green-600 text-xs font-medium">✅ {item.acked_at}</span>
-                          : item.notified_at
-                            ? <span className="text-[color:var(--color-muted-foreground)] text-xs">📤 {item.notified_at}</span>
-                            : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center justify-end gap-0.5">
-                          <button title="Уведомить в бот" disabled={notifying.has(item.id)}
-                            onClick={() => notifyOne(item.id)}
-                            className={`p-1.5 rounded transition-colors ${notifying.has(item.id) ? 'opacity-40 cursor-not-allowed' : 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'}`}>
-                            <Bell size={14} />
-                          </button>
-                          <button title="Редактировать" onClick={() => openEdit(item)}
-                            className="p-1.5 rounded text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-muted)] transition-colors">
-                            <Pencil size={14} />
-                          </button>
-                          <button title="Удалить" onClick={() => remove(item.id)}
-                            className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="max-h-[55vh] overflow-y-auto">
+              <ResponsiveTable
+                data={detailGroup.items}
+                keyFn={item => item.id}
+                columns={[
+                  { label: 'Предмет', primary: true, render: item => <span className="font-medium">{item.item_name}</span> },
+                  { label: 'Размер', mobileHide: true, headerClass: 'hidden sm:table-cell', cellClass: 'hidden sm:table-cell', render: item => item.size || '—' },
+                  { label: 'Кол-во', headerClass: 'text-center', cellClass: 'text-center', render: item => item.quantity },
+                  { label: 'Выдано', cellClass: 'whitespace-nowrap', render: item => fmtDate(item.issue_date) },
+                  { label: 'Возврат', mobileHide: true, headerClass: 'hidden lg:table-cell', cellClass: 'hidden lg:table-cell whitespace-nowrap', render: item => fmtDate(item.return_date) },
+                  {
+                    label: 'Статус',
+                    mobileHide: true,
+                    headerClass: 'hidden md:table-cell',
+                    cellClass: 'hidden md:table-cell',
+                    render: item => item.acked_at
+                      ? <span className="text-green-600 text-xs font-medium">✅ {item.acked_at}</span>
+                      : item.notified_at
+                        ? <span className="text-[color:var(--color-muted-foreground)] text-xs">📤 {item.notified_at}</span>
+                        : <span className="text-[color:var(--color-muted-foreground)]">—</span>,
+                  },
+                  {
+                    label: '',
+                    isAction: true,
+                    headerClass: 'w-24',
+                    cellClass: 'text-right',
+                    render: item => (
+                      <div className="flex items-center justify-end gap-0.5">
+                        <button title="Уведомить в бот" disabled={notifying.has(item.id)}
+                          onClick={() => notifyOne(item.id)}
+                          className={`p-1.5 rounded transition-colors ${notifying.has(item.id) ? 'opacity-40 cursor-not-allowed' : 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'}`}>
+                          <Bell size={14} />
+                        </button>
+                        <button title="Редактировать" onClick={() => openEdit(item)}
+                          className="p-1.5 rounded text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-muted)] transition-colors">
+                          <Pencil size={14} />
+                        </button>
+                        <button title="Удалить" onClick={() => remove(item.id)}
+                          className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
             </div>
 
             <div className="flex justify-end pt-4">
@@ -525,7 +553,7 @@ export default function Assets() {
 
       {/* Create / edit modal */}
       <Modal isOpen={showForm} onClose={() => setShowForm(false)}>
-        <div className="modal-card max-w-4xl w-full">
+        <div className="modal-card w-full max-w-4xl sm:mx-4">
           <h2 className="text-xl font-semibold mb-4">
             {editId !== null ? 'Редактировать запись' : 'Выдать имущество'}
           </h2>

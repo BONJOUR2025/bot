@@ -299,9 +299,6 @@ export default function SalesAnalytics() {
     return m;
   }, [employees]);
 
-  /* row value for selected categories */
-  const rowCatValue = (r) => activeCats.reduce((s, k) => s + (r[k] || 0), 0);
-
   /* period grouping */
   const { periods, cells, allPeriodsCount } = useMemo(() => {
     const c = {};
@@ -614,17 +611,17 @@ export default function SalesAnalytics() {
                     const pct    = plan > 0 ? e.total / plan * 100 : null;
                     const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
                     return (
-                      <div key={e.code} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                        <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{empName(e.code)}</div>
+                      <div key={e.code} className="border border-[color:var(--color-border)] rounded-xl bg-[color:var(--color-card)] shadow-sm overflow-hidden">
+                        <div className="px-4 py-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-sm font-medium">{empName(e.code)}</div>
                         <div className="px-4 py-2 space-y-1.5 text-sm">
-                          <div className="flex justify-between"><span className="text-gray-500">Ремонт/Химчистка</span><span>{Math.round(e.repair || 0).toLocaleString('ru-RU')}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-500">Косметика</span><span>{Math.round(e.cosmetics || 0).toLocaleString('ru-RU')}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-500">Обувь</span><span>{Math.round(e.shoes || 0).toLocaleString('ru-RU')}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-500">Итого</span><span className="font-medium">{Math.round(e.total).toLocaleString('ru-RU')}</span></div>
-                          {showPlan && <div className="flex justify-between"><span className="text-gray-500">План</span><span className="text-[color:var(--color-muted-foreground)]">{plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—'}</span></div>}
-                          {showPlan && <div className="flex justify-between"><span className="text-gray-500">%</span><span className={`font-medium ${pct == null ? '' : pct >= 100 ? 'text-green-600' : pct >= 75 ? 'text-yellow-600' : 'text-red-500'}`}>{fmtPct(pct)}</span></div>}
-                          <div className="flex justify-between"><span className="text-gray-500">Дней</span><span className="text-[color:var(--color-muted-foreground)]">{e.activeDays}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-500">Ср/день</span><span>{Math.round(avgDay).toLocaleString('ru-RU')}</span></div>
+                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Ремонт/Химчистка</span><span>{Math.round(e.repair || 0).toLocaleString('ru-RU')}</span></div>
+                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Косметика</span><span>{Math.round(e.cosmetics || 0).toLocaleString('ru-RU')}</span></div>
+                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Обувь</span><span>{Math.round(e.shoes || 0).toLocaleString('ru-RU')}</span></div>
+                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Итого</span><span className="font-medium">{Math.round(e.total).toLocaleString('ru-RU')}</span></div>
+                          {showPlan && <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">План</span><span className="text-[color:var(--color-muted-foreground)]">{plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—'}</span></div>}
+                          {showPlan && <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">%</span><span className={`font-medium ${pct == null ? '' : pct >= 100 ? 'text-green-600' : pct >= 75 ? 'text-yellow-600' : 'text-red-500'}`}>{fmtPct(pct)}</span></div>}
+                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Дней</span><span className="text-[color:var(--color-muted-foreground)]">{e.activeDays}</span></div>
+                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Ср/день</span><span>{Math.round(avgDay).toLocaleString('ru-RU')}</span></div>
                         </div>
                       </div>
                     );
@@ -735,11 +732,10 @@ export default function SalesAnalytics() {
                 </table>
               </div>
 
-              {/* Mobile cards */}
+              {/* Mobile cards — mirrors the desktop pivot, one card per period with all employees listed */}
               <div className="sm:hidden divide-y divide-[color:var(--color-border)]">
                 {periods.map((key) => {
                   const rowTotal = employees.reduce((s, e) => s + (cells[key]?.[e.code] || 0), 0);
-                  const active   = employees.filter((e) => (cells[key]?.[e.code] || 0) > 0);
                   return (
                     <div key={key} className="p-3 space-y-1.5">
                       <div className="flex items-center justify-between">
@@ -748,14 +744,17 @@ export default function SalesAnalytics() {
                           {Math.round(rowTotal).toLocaleString('ru-RU')} ₽
                         </span>
                       </div>
-                      {active.length > 0 && (
+                      {employees.length > 0 && (
                         <div className="space-y-0.5">
-                          {active.map((e) => (
-                            <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
-                              <span>{empName(e.code)}</span>
-                              <span className="tabular-nums">{Math.round(cells[key][e.code]).toLocaleString('ru-RU')} ₽</span>
-                            </div>
-                          ))}
+                          {employees.map((e) => {
+                            const v = cells[key]?.[e.code] || 0;
+                            return (
+                              <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
+                                <span>{empName(e.code)}</span>
+                                <span className="tabular-nums">{v === 0 ? '—' : `${Math.round(v).toLocaleString('ru-RU')} ₽`}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -769,10 +768,10 @@ export default function SalesAnalytics() {
                     </span>
                   </div>
                   <div className="mt-1 space-y-0.5">
-                    {employees.map((e) => (colTotals[e.code] || 0) > 0 && (
+                    {employees.map((e) => (
                       <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
                         <span>{empName(e.code)}</span>
-                        <span className="tabular-nums">{Math.round(colTotals[e.code]).toLocaleString('ru-RU')} ₽</span>
+                        <span className="tabular-nums">{Math.round(colTotals[e.code] || 0).toLocaleString('ru-RU')} ₽</span>
                       </div>
                     ))}
                   </div>

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
-import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const DEFAULT_CATEGORY_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
@@ -46,8 +46,6 @@ export default function Passwords() {
     icon: '🔐',
     color: '#6366f1',
   };
-
-  const { isMobile } = useViewport();
 
   const [entries, setEntries] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -382,219 +380,128 @@ export default function Passwords() {
                 <span className="ml-auto text-sm text-gray-400">{catEntries.length}</span>
               </div>
 
-              {isMobile ? (
-                <div className="space-y-3 p-3">
-                  {catEntries.map((entry) => (
-                    <div key={entry.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                      <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex items-center gap-2">
+              <ResponsiveTable
+                data={catEntries}
+                keyFn={(entry) => entry.id}
+                emptyText="Нет записей"
+                columns={[
+                  {
+                    label: 'Название',
+                    primary: true,
+                    headerClass: 'w-10',
+                    render: (entry) => (
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={() => toggleFavorite(entry.id)}
                           className={`p-1 rounded ${entry.is_favorite ? 'text-yellow-400' : 'text-gray-500 hover:text-yellow-400'}`}
                         >
                           <Star size={15} fill={entry.is_favorite ? 'currentColor' : 'none'} />
                         </button>
-                        <span>{entry.title}</span>
-                      </div>
-                      <div className="px-4 py-2 space-y-1.5 text-sm">
-                        {entry.username && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-500">Логин</span>
-                            <div className="flex items-center gap-1">
-                              <span className="font-mono">{entry.username}</span>
-                              <button
-                                onClick={() => copyToClipboard(entry.username, `user-${entry.id}`)}
-                                className="p-1 hover:bg-gray-100 rounded"
-                              >
-                                {copiedId === `user-${entry.id}` ? (
-                                  <Check size={13} className="text-green-400" />
-                                ) : (
-                                  <Copy size={13} className="text-gray-400" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500">Пароль</span>
-                          <div className="flex items-center gap-1">
-                            <span className="font-mono">
-                              {visiblePasswords.has(entry.id) ? entry.password : '••••••••'}
-                            </span>
-                            <button
-                              onClick={() => togglePasswordVisibility(entry.id)}
-                              className="p-1 hover:bg-gray-100 rounded"
-                            >
-                              {visiblePasswords.has(entry.id) ? (
-                                <EyeOff size={13} className="text-gray-400" />
-                              ) : (
-                                <Eye size={13} className="text-gray-400" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => copyToClipboard(entry.password, `pass-${entry.id}`)}
-                              className="p-1 hover:bg-gray-100 rounded"
-                            >
-                              {copiedId === `pass-${entry.id}` ? (
-                                <Check size={13} className="text-green-400" />
-                              ) : (
-                                <Copy size={13} className="text-gray-400" />
-                              )}
-                            </button>
-                          </div>
+                        <div>
+                          <div className="font-medium">{entry.title}</div>
+                          {entry.notes && (
+                            <div className="text-xs text-gray-400 truncate max-w-[200px]">{entry.notes}</div>
+                          )}
                         </div>
-                        {entry.url && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-500">URL</span>
-                            <a
-                              href={entry.url.startsWith('http') ? entry.url : `https://${entry.url}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-blue-400 hover:underline text-sm"
-                            >
-                              <ExternalLink size={13} />
-                              <span className="truncate max-w-[150px]">{entry.url}</span>
-                            </a>
-                          </div>
-                        )}
-                        {entry.notes && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Заметки</span>
-                            <span className="truncate max-w-[180px] text-right">{entry.notes}</span>
-                          </div>
-                        )}
                       </div>
-                      <div className="px-4 py-2 border-t flex justify-end gap-3">
+                    ),
+                  },
+                  {
+                    label: 'Логин',
+                    headerClass: 'hidden md:table-cell',
+                    cellClass: 'hidden md:table-cell',
+                    render: (entry) => entry.username && (
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-sm">{entry.username}</span>
+                        <button
+                          onClick={() => copyToClipboard(entry.username, `user-${entry.id}`)}
+                          className="p-1 hover:bg-[var(--color-bg-secondary)] rounded"
+                          title="Копировать"
+                        >
+                          {copiedId === `user-${entry.id}` ? (
+                            <Check size={13} className="text-green-400" />
+                          ) : (
+                            <Copy size={13} className="text-gray-400" />
+                          )}
+                        </button>
+                      </div>
+                    ),
+                  },
+                  {
+                    label: 'Пароль',
+                    render: (entry) => (
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-sm">
+                          {visiblePasswords.has(entry.id) ? entry.password : '••••••••'}
+                        </span>
+                        <button
+                          onClick={() => togglePasswordVisibility(entry.id)}
+                          className="p-1 hover:bg-[var(--color-bg-secondary)] rounded"
+                          title={visiblePasswords.has(entry.id) ? 'Скрыть' : 'Показать'}
+                        >
+                          {visiblePasswords.has(entry.id) ? (
+                            <EyeOff size={13} className="text-gray-400" />
+                          ) : (
+                            <Eye size={13} className="text-gray-400" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(entry.password, `pass-${entry.id}`)}
+                          className="p-1 hover:bg-[var(--color-bg-secondary)] rounded"
+                          title="Копировать"
+                        >
+                          {copiedId === `pass-${entry.id}` ? (
+                            <Check size={13} className="text-green-400" />
+                          ) : (
+                            <Copy size={13} className="text-gray-400" />
+                          )}
+                        </button>
+                      </div>
+                    ),
+                  },
+                  {
+                    label: 'URL',
+                    mobileHide: true,
+                    headerClass: 'hidden lg:table-cell',
+                    cellClass: 'hidden lg:table-cell',
+                    render: (entry) => entry.url && (
+                      <a
+                        href={entry.url.startsWith('http') ? entry.url : `https://${entry.url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-blue-400 hover:underline text-sm"
+                      >
+                        <ExternalLink size={13} />
+                        <span className="truncate max-w-[150px]">{entry.url}</span>
+                      </a>
+                    ),
+                  },
+                  {
+                    label: 'Действия',
+                    isAction: true,
+                    headerClass: 'text-right',
+                    cellClass: 'text-right',
+                    render: (entry) => (
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => startEditEntry(entry)}
                           className="p-1.5 hover:bg-[var(--color-bg)] rounded"
+                          title="Редактировать"
                         >
                           <Pencil size={16} />
                         </button>
                         <button
                           onClick={() => deleteEntry(entry.id)}
                           className="p-1.5 hover:bg-red-500/20 rounded"
+                          title="Удалить"
                         >
                           <Trash2 size={16} className="text-red-400" />
                         </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-[var(--color-border)] text-left text-sm text-gray-400">
-                    <th className="p-3 w-10"></th>
-                    <th className="p-3">Название</th>
-                    <th className="p-3 hidden md:table-cell">Логин</th>
-                    <th className="p-3">Пароль</th>
-                    <th className="p-3 hidden lg:table-cell">URL</th>
-                    <th className="p-3 text-right">Действия</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {catEntries.map((entry) => (
-                    <tr
-                      key={entry.id}
-                      className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]"
-                    >
-                      <td className="p-3">
-                        <button
-                          onClick={() => toggleFavorite(entry.id)}
-                          className={`p-1 rounded ${entry.is_favorite ? 'text-yellow-400' : 'text-gray-500 hover:text-yellow-400'}`}
-                        >
-                          <Star size={16} fill={entry.is_favorite ? 'currentColor' : 'none'} />
-                        </button>
-                      </td>
-                      <td className="p-3">
-                        <div className="font-medium">{entry.title}</div>
-                        {entry.notes && (
-                          <div className="text-xs text-gray-400 truncate max-w-[200px]">{entry.notes}</div>
-                        )}
-                      </td>
-                      <td className="p-3 hidden md:table-cell">
-                        {entry.username && (
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm">{entry.username}</span>
-                            <button
-                              onClick={() => copyToClipboard(entry.username, `user-${entry.id}`)}
-                              className="p-1 hover:bg-[var(--color-bg-secondary)] rounded"
-                              title="Копировать"
-                            >
-                              {copiedId === `user-${entry.id}` ? (
-                                <Check size={14} className="text-green-400" />
-                              ) : (
-                                <Copy size={14} className="text-gray-400" />
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm">
-                            {visiblePasswords.has(entry.id) ? entry.password : '••••••••'}
-                          </span>
-                          <button
-                            onClick={() => togglePasswordVisibility(entry.id)}
-                            className="p-1 hover:bg-[var(--color-bg-secondary)] rounded"
-                            title={visiblePasswords.has(entry.id) ? 'Скрыть' : 'Показать'}
-                          >
-                            {visiblePasswords.has(entry.id) ? (
-                              <EyeOff size={14} className="text-gray-400" />
-                            ) : (
-                              <Eye size={14} className="text-gray-400" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => copyToClipboard(entry.password, `pass-${entry.id}`)}
-                            className="p-1 hover:bg-[var(--color-bg-secondary)] rounded"
-                            title="Копировать"
-                          >
-                            {copiedId === `pass-${entry.id}` ? (
-                              <Check size={14} className="text-green-400" />
-                            ) : (
-                              <Copy size={14} className="text-gray-400" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="p-3 hidden lg:table-cell">
-                        {entry.url && (
-                          <a
-                            href={entry.url.startsWith('http') ? entry.url : `https://${entry.url}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-blue-400 hover:underline text-sm"
-                          >
-                            <ExternalLink size={14} />
-                            <span className="truncate max-w-[150px]">{entry.url}</span>
-                          </a>
-                        )}
-                      </td>
-                      <td className="p-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => startEditEntry(entry)}
-                            className="p-1.5 hover:bg-[var(--color-bg)] rounded"
-                            title="Редактировать"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                          <button
-                            onClick={() => deleteEntry(entry.id)}
-                            className="p-1.5 hover:bg-red-500/20 rounded"
-                            title="Удалить"
-                          >
-                            <Trash2 size={16} className="text-red-400" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              )}
+                    ),
+                  },
+                ]}
+              />
             </div>
           );
         })}
@@ -612,7 +519,7 @@ export default function Passwords() {
 
       {/* Entry Form Modal */}
       <Modal isOpen={showEntryForm}>
-        <div className="modal-card" style={{ maxWidth: '32rem' }}>
+        <div className="modal-card max-w-lg">
             <h3 className="text-xl font-semibold mb-4">
               {entryForm.id ? 'Редактировать запись' : 'Новая запись'}
             </h3>

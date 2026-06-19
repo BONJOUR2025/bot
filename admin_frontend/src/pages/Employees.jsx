@@ -10,8 +10,8 @@ import {
 import api from '../api';
 import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
-import { useViewport } from '../providers/ViewportProvider.jsx';
 
 function ExternalUserSelect({ value, onChange }) {
   const [open, setOpen] = useState(false);
@@ -79,7 +79,6 @@ function ExternalUserSelect({ value, onChange }) {
 
 export default function Employees() {
   const { toast } = useToast();
-  const { isMobile } = useViewport();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -367,19 +366,19 @@ export default function Employees() {
       <UpcomingBirthdays />
       <div className="flex flex-wrap gap-2 items-center">
         <input
-          className="input flex-grow"
+          className="input flex-1 min-w-[140px]"
           placeholder="Фильтр по ФИО"
           value={filterName}
           onChange={(e) => setFilterName(e.target.value)}
         />
         <input
-          className="input flex-grow"
+          className="input flex-1 min-w-[140px]"
           placeholder="Фильтр по телефону"
           value={filterPhone}
           onChange={(e) => setFilterPhone(e.target.value)}
         />
         <select
-          className="input"
+          className="input w-full sm:w-auto"
           value={sort}
           onChange={(e) => setSort(e.target.value)}
         >
@@ -387,21 +386,21 @@ export default function Employees() {
           <option value="name">По имени</option>
           <option value="position">По должности</option>
         </select>
-        <button className="btn" onClick={downloadPdf}>
+        <button className="btn w-full sm:w-auto" onClick={downloadPdf}>
           <FileDown size={16} /> Экспорт PDF
         </button>
-        <button className="btn" onClick={startCreate}>
+        <button className="btn w-full sm:w-auto" onClick={startCreate}>
           <UserPlus size={16} /> Добавить сотрудника
         </button>
         <button
-          className="btn bg-red-600 hover:bg-red-700 disabled:opacity-50"
+          className="btn w-full sm:w-auto bg-red-600 hover:bg-red-700 disabled:opacity-50"
           disabled={!selected.length}
           onClick={deleteSelected}
         >
           <Trash2 size={16} /> Удалить выбранных
         </button>
         <Link
-          className="btn bg-gray-100 text-gray-800 hover:bg-gray-200"
+          className="btn w-full sm:w-auto bg-gray-100 text-gray-800 hover:bg-gray-200"
           to="/admin/archive"
         >
           <Archive size={16} /> Архив
@@ -416,159 +415,113 @@ export default function Employees() {
         <div className="border rounded shadow bg-white p-4">
           <SkeletonTable rows={8} cols={6} />
         </div>
-      ) : isMobile ? (
-        <div className="space-y-3">
-          {sortedList.length === 0 && (
-            <div className="py-6 text-center text-gray-500 text-sm">Нет сотрудников</div>
-          )}
-          {sortedList.map((e) => {
-            const canArchive = e.status !== 'active';
-            return (
-              <div
-                key={e.id}
-                className={`border rounded-xl bg-white shadow-sm overflow-hidden cursor-pointer ${e.is_admin ? 'border-orange-200' : ''} ${e.status !== 'active' ? 'opacity-70' : ''}`}
-                onClick={() => navigate(`/admin/employees/${e.id}`)}
-              >
-                <div className="px-4 py-3 border-b bg-gray-50 flex items-center gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer" onClick={(ev) => ev.stopPropagation()}>
-                    <input type="checkbox" checked={selected.includes(e.id)} onChange={(ev) => toggleSelect(e.id, ev.target.checked)} />
-                  </label>
-                  {e.photo_url ? (
-                    <img src={e.photo_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                      <span className="text-gray-400 text-xs">—</span>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{e.full_name}</div>
-                    <div className="text-xs text-gray-500">{e.position}</div>
-                  </div>
-                  {e.is_admin && <span className="text-xs text-orange-600 font-medium shrink-0">Админ</span>}
-                </div>
-                <div className="px-4 py-2 space-y-1.5 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Телефон</span>
-                    <span>{e.phone}</span>
-                  </div>
-                  {e.birthdate && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">День рождения</span>
-                      <span>{formatDateRu(e.birthdate)}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="px-4 py-2 border-t flex justify-end gap-3" onClick={(ev) => ev.stopPropagation()}>
-                  <button className="text-blue-600" onClick={() => startEdit(e)}><Pencil size={18} /></button>
-                  <a href={`/api/employees/${e.id}/profile.pdf`} className="text-gray-600" title="PDF"><FileDown size={18} /></a>
-                  <button
-                    className={canArchive ? 'text-amber-600' : 'text-gray-300'}
-                    onClick={() => { if (canArchive) moveToArchive(e.id); }}
-                    disabled={!canArchive}
-                    title={canArchive ? 'В архив' : 'Сначала переведите в inactive'}
-                  >
-                    <Archive size={18} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       ) : (
-        <div className="overflow-auto border rounded shadow bg-white">
-          <table className="min-w-[900px] text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="p-2"></th>
-                <th className="p-2 text-left">Фото</th>
-                <th className="p-2 text-left">Имя</th>
-                <th className="p-2 text-left">ФИО</th>
-                <th className="p-2 text-left">Телефон</th>
-                <th className="p-2 text-left">День рождения</th>
-                <th className="p-2 text-left">Должность</th>
-                <th className="p-2 text-left">Роль</th>
-                <th className="p-2 text-left">Создан</th>
-                <th className="p-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {sortedList.map((e) => {
+        <ResponsiveTable
+          data={sortedList}
+          keyFn={(e) => e.id}
+          emptyText="Нет сотрудников"
+          rowClass={(e) => `cursor-pointer ${e.is_admin ? 'bg-orange-50 hover:bg-orange-100' : 'hover:bg-blue-50'} ${e.status !== 'active' ? 'opacity-60' : ''}`}
+          columns={[
+            {
+              label: '',
+              cellClass: 'w-10',
+              render: (e) => (
+                <span onClick={(ev) => ev.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(e.id)}
+                    onChange={(ev) => toggleSelect(e.id, ev.target.checked)}
+                  />
+                </span>
+              ),
+            },
+            {
+              label: 'Фото',
+              mobileHide: true,
+              render: (e) => (
+                <span onClick={(ev) => ev.stopPropagation()}>
+                  {e.photo_url ? (
+                    <img
+                      src={e.photo_url}
+                      alt=""
+                      className="w-8 h-8 rounded-full object-cover cursor-pointer"
+                      onClick={() => window.open(e.photo_url, '_blank')}
+                    />
+                  ) : (
+                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                      <span className="text-gray-500 text-xs">—</span>
+                    </div>
+                  )}
+                </span>
+              ),
+            },
+            {
+              label: 'ФИО',
+              primary: true,
+              render: (e) => (
+                <span onClick={() => navigate(`/admin/employees/${e.id}`)}>
+                  {e.full_name}
+                  {e.is_admin && <span className="ml-2 text-xs text-orange-600 font-medium">Админ</span>}
+                </span>
+              ),
+            },
+            { label: 'Имя', key: 'name', mobileHide: true },
+            { label: 'Телефон', key: 'phone' },
+            {
+              label: 'День рождения',
+              render: (e) => formatDateRu(e.birthdate),
+            },
+            { label: 'Должность', key: 'position' },
+            {
+              label: 'Роль',
+              mobileHide: true,
+              render: (e) => (e.is_admin ? 'Админ' : 'Польз.'),
+            },
+            {
+              label: 'Создан',
+              mobileHide: true,
+              cellClass: 'text-gray-400 text-xs',
+              render: (e) => new Date(e.created_at).toLocaleDateString(),
+            },
+            {
+              label: '',
+              isAction: true,
+              cellClass: 'text-right',
+              render: (e) => {
                 const canArchive = e.status !== 'active';
                 const archiveTitle = canArchive
                   ? 'Перенести в архив'
                   : 'Переведите сотрудника в статус inactive, чтобы архивировать';
                 return (
-                  <tr
-                    key={e.id}
-                    className={`cursor-pointer hover:bg-blue-50 transition-colors ${e.is_admin ? 'bg-orange-50 hover:bg-orange-100' : ''} ${
-                      e.status !== 'active' ? 'opacity-60' : ''
-                    }`}
-                    onClick={() => navigate(`/admin/employees/${e.id}`)}
-                  >
-                  <td className="p-2" onClick={(ev) => ev.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(e.id)}
-                      onChange={(ev) => toggleSelect(e.id, ev.target.checked)}
-                    />
-                  </td>
-                  <td className="p-2" onClick={(ev) => ev.stopPropagation()}>
-                    {e.photo_url ? (
-                      <img
-                        src={e.photo_url}
-                        alt="" className="w-8 h-8 rounded-full object-cover cursor-pointer"
-                        onClick={() => window.open(e.photo_url, '_blank')}
-                      />
-                    ) : (
-                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-gray-500 text-xs">—</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-2 font-medium">{e.name}</td>
-                  <td className="p-2">{e.full_name}</td>
-                  <td className="p-2">{e.phone}</td>
-                  <td className="p-2">{formatDateRu(e.birthdate)}</td>
-                  <td className="p-2">{e.position}</td>
-                  <td className="p-2">{e.is_admin ? 'Админ' : 'Польз.'}</td>
-                  <td className="p-2 text-gray-400 text-xs">{new Date(e.created_at).toLocaleDateString()}</td>
-                  <td className="p-2 text-right" onClick={(ev) => ev.stopPropagation()}>
+                  <span className="inline-flex items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
                     <button className="text-blue-600" onClick={() => startEdit(e)} title="Редактировать">
                       <Pencil size={16} />
                     </button>
                     <a
                       href={`/api/employees/${e.id}/profile.pdf`}
-                      className="text-gray-600 ml-2"
+                      className="text-gray-600"
                       title="Скачать PDF"
                     >
                       <FileDown size={16} />
                     </a>
                     <button
-                      className={`ml-2 ${
+                      className={
                         canArchive
                           ? 'text-amber-600 hover:text-amber-800'
                           : 'cursor-not-allowed text-gray-400'
-                      }`}
+                      }
                       onClick={() => { if (canArchive) moveToArchive(e.id); }}
                       disabled={!canArchive}
                       title={archiveTitle}
                     >
                       <Archive size={16} className={!canArchive ? 'opacity-50' : ''} />
                     </button>
-                  </td>
-                </tr>
+                  </span>
                 );
-              })}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan="10" className="p-4 text-center text-gray-500">
-                    Нет сотрудников
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              },
+            },
+          ]}
+        />
       )}
 
       {showForm && (

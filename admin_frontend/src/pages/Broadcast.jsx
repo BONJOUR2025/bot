@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Send, User, MessageSquare, Trash2, FileText } from 'lucide-react';
 import api from '../api';
-import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 export default function Broadcast() {
-  const { isMobile } = useViewport();
   const [message, setMessage] = useState('');
   const [employees, setEmployees] = useState([]);
   const [selected, setSelected] = useState([]);
@@ -259,35 +258,15 @@ export default function Broadcast() {
               {m.broadcast && openBroadcast === m.id && (
                 <div className="mt-2">
                   <div className="font-medium whitespace-pre-wrap mb-2">{m.message}</div>
-                  {isMobile ? (
-                    <div className="space-y-3">
-                      {m.recipients?.map((r) => (
-                        <div key={r.user_id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                          <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{r.name}</div>
-                          <div className="px-4 py-2 space-y-1.5 text-sm">
-                            <div className="flex justify-between"><span className="text-gray-500">Статус</span><span>{r.status}</span></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <table className="w-full text-sm border">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="text-left p-1 border">Получатель</th>
-                          <th className="text-left p-1 border">Статус</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {m.recipients?.map((r) => (
-                          <tr key={r.user_id}>
-                            <td className="p-1 border">{r.name}</td>
-                            <td className="p-1 border">{r.status}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                  <ResponsiveTable
+                    data={m.recipients || []}
+                    keyFn={(r) => r.user_id}
+                    emptyText="Нет получателей"
+                    columns={[
+                      { label: 'Получатель', key: 'name', primary: true },
+                      { label: 'Статус', key: 'status' },
+                    ]}
+                  />
                 </div>
               )}
             </li>

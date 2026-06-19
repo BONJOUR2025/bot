@@ -812,7 +812,7 @@ export default function Payroll() {
           ))}
         </div>
       ) : (
-        <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
           <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
             <thead>
               <tr className="bg-[color:var(--color-table-header)]">
@@ -969,7 +969,7 @@ export default function Payroll() {
           {auditLog.length === 0 ? (
             <p className="text-sm text-[color:var(--color-muted-foreground)]">Изменений за этот месяц нет.</p>
           ) : (
-            <div className="overflow-auto max-h-64">
+            <div className="overflow-x-auto max-h-64">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">

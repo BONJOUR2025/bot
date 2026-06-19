@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
-import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const warningDescriptions = {
   limit_exceeded: 'Сумма выплат за месяц превышает лимит',
@@ -14,7 +14,6 @@ const warningDescriptions = {
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
 
 export default function PayoutsControl() {
-  const { isMobile } = useViewport();
   const [list, setList] = useState([]);
   const [filters, setFilters] = useState({
     type: '',
@@ -122,7 +121,7 @@ export default function PayoutsControl() {
         <button className="btn" onClick={load}>
           Применить
         </button>
-        <div className="flex flex-wrap gap-2 border border-gray-300 rounded p-2 bg-gray-50 text-xs">
+        <div className="flex flex-wrap gap-2 border border-gray-300 rounded p-2 bg-gray-50 text-xs w-full sm:w-auto">
           {Object.keys(warningDescriptions).map((w) => (
             <label key={w} className="flex items-center gap-1">
               <input
@@ -135,84 +134,45 @@ export default function PayoutsControl() {
           ))}
         </div>
       </div>
-      {isMobile ? (
-        <div className="space-y-3">
-          {filtered.map((p) => (
-            <div key={p.id} className={`border rounded-xl bg-white shadow-sm overflow-hidden ${rowColor(p.warnings)}`}>
-              <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{p.name}</div>
-              <div className="px-4 py-2 space-y-1.5 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Сумма</span><span className="text-blue-800 font-medium">{p.amount} ₽</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Тип</span><span>{p.type}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Статус</span><span>{p.status}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Дата</span><span className="text-xs">{p.date}</span></div>
-                {p.warnings.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {p.warnings.map((w) => (
-                      <span key={w} title={warningDescriptions[w]} className="inline-block bg-gray-200 px-1 rounded text-xs">{w}</span>
-                    ))}
-                  </div>
-                )}
+      <ResponsiveTable
+        data={filtered}
+        keyFn={(p) => p.id}
+        rowClass={(p) => rowColor(p.warnings)}
+        emptyText="Нет данных"
+        columns={[
+          { label: 'ФИО', key: 'name', primary: true },
+          { label: 'Тип', key: 'type' },
+          { label: 'Способ', key: 'method' },
+          {
+            label: 'Сумма',
+            render: (p) => (
+              <span className="text-blue-800 font-medium">{p.amount} ₽</span>
+            ),
+          },
+          { label: 'Статус', key: 'status' },
+          {
+            label: 'Дата',
+            render: (p) => <span className="text-xs">{p.date}</span>,
+          },
+          {
+            label: '⚠️ Предупреждения',
+            render: (p) => (
+              <div className="flex flex-wrap gap-1">
+                {p.warnings.map((w) => (
+                  <span
+                    key={w}
+                    title={warningDescriptions[w]}
+                    className="inline-block bg-gray-200 px-1 rounded text-xs"
+                  >
+                    {w}
+                  </span>
+                ))}
               </div>
-            </div>
-          ))}
-          {filtered.length === 0 && (
-            <div className="border rounded-xl bg-white shadow-sm p-4 text-center text-gray-500 italic">Нет данных</div>
-          )}
-        </div>
-      ) : (
-        <div className="overflow-auto border rounded shadow">
-          <table className="min-w-[1100px] divide-y divide-gray-200 bg-white text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left">ФИО</th>
-                <th className="px-4 py-2 text-left">Тип</th>
-                <th className="px-4 py-2 text-left">Способ</th>
-                <th className="px-4 py-2 text-left">Сумма</th>
-                <th className="px-4 py-2 text-left">Статус</th>
-                <th className="px-4 py-2 text-left">Дата</th>
-                <th className="px-4 py-2 text-left">⚠️ Предупреждения</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map((p) => (
-                <tr key={p.id} className={rowColor(p.warnings)}>
-                  <td className="px-4 py-2">{p.name}</td>
-                  <td className="px-4 py-2">{p.type}</td>
-                  <td className="px-4 py-2">{p.method}</td>
-                  <td className="px-4 py-2 text-blue-800 font-medium">
-                    {p.amount} ₽
-                  </td>
-                  <td className="px-4 py-2">{p.status}</td>
-                  <td className="px-4 py-2 text-xs">{p.date}</td>
-                  <td className="px-4 py-2 space-x-1">
-                    {p.warnings.map((w) => (
-                      <span
-                        key={w}
-                        title={warningDescriptions[w]}
-                        className="inline-block bg-gray-200 px-1 rounded text-xs mr-1"
-                      >
-                        {w}
-                      </span>
-                    ))}
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="px-4 py-3 text-center text-gray-500 italic">
-                    Нет данных
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
-
-
-
-
 
