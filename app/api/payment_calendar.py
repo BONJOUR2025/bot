@@ -149,22 +149,8 @@ def create_payment_calendar_router(repo: Optional[PaymentCalendarRepository] = N
             )
             raise HTTPException(400, "Telegram ID кассира не настроен (Настройки → Telegram)")
 
-        def esc(v) -> str:
-            return str(v or "—").replace("`", "'")
-
-        amount = f"{schedule['planned_amount']:,.2f}".replace(",", " ").replace(".", ",")
-        objects = schedule.get("objects") or []
-        objects_line = f"Объекты      : {esc(', '.join(objects))}\n" if objects else ""
-        text = (
-            "📋 *Просьба оплатить счёт*\n\n"
-            "```\n"
-            f"Товар/Услуга : {esc(schedule['name'])}\n"
-            f"Продавец     : {esc(schedule.get('seller'))}\n"
-            f"Сумма        : {amount} ₽\n"
-            f"Платим от    : {esc(schedule.get('pay_from'))}\n"
-            f"{objects_line}"
-            "```"
-        )
+        from app.services.payment_calendar_text import build_invoice_text
+        text = build_invoice_text(schedule)
 
         year_month = datetime.utcnow().strftime("%Y-%m")
         record = repo.get_or_create_record(schedule_id, year_month)

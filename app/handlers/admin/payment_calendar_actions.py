@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from app.data.payment_calendar_repository import PaymentCalendarRepository
+from app.services.payment_calendar_text import build_invoice_text
 
 
 async def handle_payment_calendar_paid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -19,15 +20,15 @@ async def handle_payment_calendar_paid(update: Update, context: ContextTypes.DEF
 
     await query.answer("✅ Отмечено как оплачено")
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
-    mark = f"\n\n✅ *Оплачено* {now}"
+    # Rebuild the original markdown from the schedule data instead of reusing
+    # query.message.text/caption — Telegram returns those with markdown syntax
+    # already stripped (entities, not literal "*"/"```"), so re-parsing them
+    # with parse_mode would lose the original formatting.
+    text = build_invoice_text(record["schedule"]) + f"\n\n✅ *Оплачено* {now}"
     try:
         if query.message.caption is not None:
-            await query.edit_message_caption(
-                caption=(query.message.caption or "") + mark, parse_mode="Markdown", reply_markup=None
-            )
+            await query.edit_message_caption(caption=text, parse_mode="Markdown", reply_markup=None)
         else:
-            await query.edit_message_text(
-                text=(query.message.text or "") + mark, parse_mode="Markdown", reply_markup=None
-            )
+            await query.edit_message_text(text=text, parse_mode="Markdown", reply_markup=None)
     except Exception:
         pass
