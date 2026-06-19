@@ -27,8 +27,8 @@ async def handle_payment_calendar_paid(update: Update, context: ContextTypes.DEF
     text = build_invoice_text(record["schedule"]) + f"\n\n✅ *Оплачено* {now}"
     try:
         if query.message.caption is not None:
-            await query.edit_message_caption(caption=text, parse_mode="Markdown", reply_markup=None)
+            await query.edit_message_caption(caption=text, parse_mode="Markdown")
         else:
-            await query.edit_message_text(text=text, parse_mode="Markdown", reply_markup=None)
+            await query.edit_message_text(text=text, parse_mode="Markdown")
     except Exception:
         pass
