@@ -6,7 +6,13 @@ from typing import Optional
 from app.db.session import get_db
 from app.models.knowledge import KnowledgeDocument
 
-router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+from .dependencies import require_permission
+
+router = APIRouter(
+    prefix="/knowledge",
+    tags=["knowledge"],
+    dependencies=[Depends(require_permission("employees"))],
+)
 
 
 class DocCreate(BaseModel):

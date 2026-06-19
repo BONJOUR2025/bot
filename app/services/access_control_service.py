@@ -370,22 +370,47 @@ class AccessControlService:
         permissions = user.permissions or []
         return "*" in permissions or permission in permissions
 
-    def create_role(self, data: dict[str, Any]) -> dict[str, Any]:
+    def _check_privilege_escalation(
+        self, actor: ResolvedUser | None, granted_permissions: Iterable[str]
+    ) -> None:
+        """Forbid granting a role/user permissions the acting user doesn't hold.
+
+        Without this, anyone with the "access" permission could hand out
+        (or take for themselves) permissions beyond their own — including
+        owner-level access — by editing a role or user record directly.
+        """
+        if actor is None:
+            return
+        actor_permissions = set(actor.permissions or [])
+        extra = set(granted_permissions) - actor_permissions
+        if extra:
+            raise ValueError("privilege_escalation")
+
+    def create_role(
+        self, data: dict[str, Any], actor: ResolvedUser | None = None
+    ) -> dict[str, Any]:
         self._reload()
         role_id = data.get("id") or secrets.token_hex(6)
         if self._get_role(role_id):
             raise ValueError("role_exists")
+        permissions = self._validate_permissions(data.get("permissions")) or []
+        resolved_permissions = (
+            [p["id"] for p in AVAILABLE_PERMISSIONS] if "*" in permissions else permissions
+        )
+        self._check_privilege_escalation(actor, resolved_permissions)
         role = {
             "id": role_id,
             "name": data.get("name", role_id),
-            "permissions": self._validate_permissions(data.get("permissions")) or [],
+            "permissions": permissions,
             "bot_buttons": self._validate_buttons(data.get("bot_buttons")) or [],
         }
         self._data.setdefault("roles", []).append(role)
         self._persist()
         return role
 
-    def update_role(self, role_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    def update_role(
+        self, role_id: str, data: dict[str, Any], actor: ResolvedUser | None = None
+    ) -> dict[str, Any]:
         self._reload()
         role = self._get_role(role_id)
         if not role:
@@ -393,7 +418,12 @@ class AccessControlService:
         if "name" in data and data["name"]:
             role["name"] = data["name"]
         if "permissions" in data:
-            role["permissions"] = self._validate_permissions(data.get("permissions")) or []
+            permissions = self._validate_permissions(data.get("permissions")) or []
+            resolved_permissions = (
+                [p["id"] for p in AVAILABLE_PERMISSIONS] if "*" in permissions else permissions
+            )
+            self._check_privilege_escalation(actor, resolved_permissions)
+            role["permissions"] = permissions
         if "bot_buttons" in data:
             role["bot_buttons"] = self._validate_buttons(data.get("bot_buttons")) or []
         self._persist()
@@ -406,7 +436,9 @@ class AccessControlService:
         self._data["roles"] = [r for r in self._data.get("roles", []) if r.get("id") != role_id]
         self._persist()
 
-    def create_user(self, data: dict[str, Any]) -> dict[str, Any]:
+    def create_user(
+        self, data: dict[str, Any], actor: ResolvedUser | None = None
+    ) -> dict[str, Any]:
         self._reload()
         user_id = str(data.get("id") or secrets.token_hex(8))
         login = data.get("login")
@@ -418,7 +450,8 @@ class AccessControlService:
         if self._get_user_by_login(login):
             raise ValueError("login_exists")
         role_id = data.get("role_id")
-        if role_id and not self._get_role(role_id):
+        role = self._get_role(role_id) if role_id else None
+        if role_id and not role:
             raise ValueError("role_not_found")
         salt, password_hash = self._hash_password(password)
         raw_employee_id = data.get("employee_id")
@@ -426,11 +459,12 @@ class AccessControlService:
         raw_allowed = data.get("allowed_employee_ids")
         if raw_allowed is None and employee_id:
             raw_allowed = [employee_id]
+        permissions = self._validate_permissions(data.get("permissions"))
         user_record = {
             "id": user_id,
             "login": login,
             "role_id": role_id,
-            "permissions": self._validate_permissions(data.get("permissions")),
+            "permissions": permissions,
             "bot_buttons": self._validate_buttons(data.get("bot_buttons")),
             "salt": salt,
             "password_hash": password_hash,
@@ -440,11 +474,16 @@ class AccessControlService:
                 data.get("allowed_departments")
             ),
         }
+        self._check_privilege_escalation(
+            actor, self._resolve_permissions(user_record, role)
+        )
         self._data.setdefault("users", []).append(user_record)
         self._persist()
         return user_record
 
-    def update_user(self, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    def update_user(
+        self, user_id: str, data: dict[str, Any], actor: ResolvedUser | None = None
+    ) -> dict[str, Any]:
         self._reload()
         user = self._get_user(user_id)
         if not user:
@@ -476,6 +515,8 @@ class AccessControlService:
         if "employee_id" in data:
             raw_emp = data.get("employee_id")
             user["employee_id"] = str(raw_emp) if raw_emp else None
+        role = self._get_role(user.get("role_id"))
+        self._check_privilege_escalation(actor, self._resolve_permissions(user, role))
         self._persist()
         return user
 
@@ -548,6 +589,14 @@ class AccessControlService:
         employee_id = record.get("employee_id") or None
         if employee_id:
             employee_id = str(employee_id)
+            # An employee account (has employee_id) with no scope explicitly set by
+            # an admin defaults to "self only" — not "unrestricted". Without this,
+            # every self-service employee account (allowed_employee_ids defaults to
+            # None) would be treated as having full visibility into and authority
+            # over every other employee's payouts/leave-requests/etc, since None
+            # means "unrestricted" for admin/manager accounts.
+            if allowed_employee_ids is None and allowed_departments is None:
+                allowed_employee_ids = [employee_id]
         return ResolvedUser(
             id=user_id,
             login=record.get("login") or "",

@@ -13,6 +13,8 @@ from app.db.session import get_db
 from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage, UnlinkedTelegramMessage
 from app.settings import settings
 
+from .dependencies import require_permission
+
 
 def _hh_creds() -> tuple[str, str]:
     return settings.hh_client_id, settings.hh_client_secret
@@ -22,7 +24,11 @@ def _hh_creds() -> tuple[str, str]:
 # Stored in-process during the brief OAuth redirect roundtrip (seconds)
 _pending_hh_redirect_uri: str = ""
 
-router = APIRouter(prefix="/recruitment", tags=["Recruitment"])
+router = APIRouter(
+    prefix="/recruitment",
+    tags=["Recruitment"],
+    dependencies=[Depends(require_permission("employees"))],
+)
 
 VALID_STAGES = ["отклик", "собеседование", "ждем", "ждем_привязки", "общение", "отказ", "нанят"]
 VALID_SOURCES = ["hh", "avito", "manual", "other"]

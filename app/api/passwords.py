@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.schemas.password import (
@@ -13,6 +13,10 @@ from app.schemas.password import (
     PasswordStats,
 )
 from app.services.password_service import PasswordService
+
+from .dependencies import require_permission
+
+PASSWORDS_PERMISSION = "passwords"
 
 
 class GeneratePasswordRequest(BaseModel):
@@ -33,7 +37,11 @@ class ReorderCategoriesRequest(BaseModel):
 
 
 def create_password_router(service: PasswordService) -> APIRouter:
-    router = APIRouter(prefix="/passwords", tags=["Passwords"])
+    router = APIRouter(
+        prefix="/passwords",
+        tags=["Passwords"],
+        dependencies=[Depends(require_permission(PASSWORDS_PERMISSION))],
+    )
 
     # ==================== ENTRIES ====================
 

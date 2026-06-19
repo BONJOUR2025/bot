@@ -1,16 +1,22 @@
 import json
 import logging
 
-from fastapi import APIRouter, Body, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from app.services.config_service import ConfigService
+
+from .dependencies import require_permission
 
 log = logging.getLogger(__name__)
 
 
 def create_config_router(service: ConfigService) -> APIRouter:
-    router = APIRouter(prefix="/config", tags=["Config"])
+    router = APIRouter(
+        prefix="/config",
+        tags=["Config"],
+        dependencies=[Depends(require_permission("settings"))],
+    )
 
     @router.get("/", response_model=dict)
     async def get_config():

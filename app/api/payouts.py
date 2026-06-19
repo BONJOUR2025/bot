@@ -10,10 +10,12 @@ from app.schemas.payout import Payout, PayoutCreate, PayoutUpdate
 from app.services.payout_service import PayoutService
 from app.services.access_control_service import AccessControlService, ResolvedUser
 
-from .dependencies import get_current_user
+from .dependencies import get_current_user, require_permission
 
 
 MANAGE_DATES_PERMISSION = "payouts-manage-dates"
+PAYOUTS_PERMISSION = "payouts"
+PAYOUTS_CONTROL_PERMISSION = "payouts-control"
 
 
 class BulkStatusRequest(BaseModel):
@@ -99,7 +101,7 @@ def create_payout_router(
     async def update_payout(
         payout_id: str,
         update: PayoutUpdate,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
     ):
         _ensure_access(payout_id, current)
         if update.timestamp is not None and not access_service.user_has_permission(
@@ -132,7 +134,7 @@ def create_payout_router(
     async def set_status(
         payout_id: str,
         body: PayoutUpdate,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
     ):
         if body.status is None:
             raise HTTPException(status_code=400, detail="status required")
@@ -147,7 +149,7 @@ def create_payout_router(
 
     @router.post("/{payout_id}/approve", response_model=Payout)
     async def approve(
-        payout_id: str, current: ResolvedUser = Depends(get_current_user)
+        payout_id: str, current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION))
     ):
         _ensure_access(payout_id, current)
         updated = await service.update_status(payout_id, PAYOUT_STATUSES[1])
@@ -159,7 +161,7 @@ def create_payout_router(
 
     @router.post("/{payout_id}/reject", response_model=Payout)
     async def reject(
-        payout_id: str, current: ResolvedUser = Depends(get_current_user)
+        payout_id: str, current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION))
     ):
         _ensure_access(payout_id, current)
         updated = await service.update_status(payout_id, PAYOUT_STATUSES[2])
@@ -171,7 +173,7 @@ def create_payout_router(
 
     @router.post("/{payout_id}/mark_paid", response_model=Payout)
     async def mark_paid(
-        payout_id: str, current: ResolvedUser = Depends(get_current_user)
+        payout_id: str, current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION))
     ):
         _ensure_access(payout_id, current)
         updated = await service.update_status(payout_id, PAYOUT_STATUSES[3])
@@ -183,7 +185,7 @@ def create_payout_router(
 
     @router.delete("/{payout_id}")
     async def delete_payout(
-        payout_id: str, current: ResolvedUser = Depends(get_current_user)
+        payout_id: str, current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION))
     ):
         _ensure_access(payout_id, current)
         deleted = await service.delete_payout(payout_id)
@@ -200,7 +202,7 @@ def create_payout_router(
     async def link_move(
         payout_id: str,
         body: LinkMoveRequest,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
     ):
         _ensure_access(payout_id, current)
         updated = await service.link_cash_move(payout_id, body.move_id)
@@ -211,7 +213,7 @@ def create_payout_router(
     @router.delete("/{payout_id}/move-link", response_model=Payout)
     async def unlink_move(
         payout_id: str,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
     ):
         _ensure_access(payout_id, current)
         updated = await service.unlink_cash_move(payout_id)
@@ -221,7 +223,7 @@ def create_payout_router(
 
     @router.post("/{payout_id}/find-move")
     async def find_move(
-        payout_id: int, current: ResolvedUser = Depends(get_current_user)
+        payout_id: int, current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION))
     ):
         _ensure_access(str(payout_id), current)
         move_id = await service.find_cash_move_for_payout(payout_id)
@@ -229,7 +231,7 @@ def create_payout_router(
 
     @router.post("/bulk-find-moves")
     async def bulk_find_moves(
-        body: BulkIdsRequest, current: ResolvedUser = Depends(get_current_user)
+        body: BulkIdsRequest, current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION))
     ):
         for payout_id in body.ids:
             _ensure_access(str(payout_id), current)
@@ -242,7 +244,7 @@ def create_payout_router(
     @router.post("/bulk-status")
     async def bulk_status(
         body: BulkStatusRequest,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
     ):
         if body.status not in PAYOUT_STATUSES:
             raise HTTPException(status_code=400, detail="invalid status")
@@ -252,7 +254,7 @@ def create_payout_router(
         return {"ok": True, "updated": count}
 
     @router.delete("/")
-    async def delete_many(ids: str, current: ResolvedUser = Depends(get_current_user)):
+    async def delete_many(ids: str, current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION))):
         id_list = [i for i in ids.split(",") if i]
         for payout_id in id_list:
             _ensure_access(payout_id, current)
@@ -297,7 +299,7 @@ def create_payout_router(
         employee_id: Optional[str] = None,
         department: Optional[str] = None,
         status: Optional[str] = None,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_CONTROL_PERMISSION)),
     ):
         allowed = access_service.visible_employee_ids(current)
         if allowed is not None and employee_id and employee_id not in allowed:

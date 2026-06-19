@@ -1,13 +1,19 @@
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.services.adjustment_service import AdjustmentService
 from app.schemas.adjustment import Adjustment
 
+from .dependencies import require_permission
+
 
 def create_adjustment_router(service: AdjustmentService) -> APIRouter:
-    router = APIRouter(prefix="/adjustments", tags=["adjustments"])
+    router = APIRouter(
+        prefix="/adjustments",
+        tags=["adjustments"],
+        dependencies=[Depends(require_permission("payroll"))],
+    )
 
     @router.get("/", response_model=List[Adjustment])
     async def list_adjustments() -> List[Adjustment]:

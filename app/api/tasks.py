@@ -1,15 +1,21 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.schemas.task import Task, TaskCreate, TaskUpdate, TaskStats
 from app.schemas.task_category import TaskCategory, TaskCategoryCreate, TaskCategoryUpdate
 from app.services.task_service import TaskService
 from app.services.task_category_service import TaskCategoryService
 
+from .dependencies import require_permission
+
 
 def create_task_router(task_service: TaskService) -> APIRouter:
-    router = APIRouter(prefix="/tasks", tags=["Tasks"])
+    router = APIRouter(
+        prefix="/tasks",
+        tags=["Tasks"],
+        dependencies=[Depends(require_permission("tasks"))],
+    )
     cat_service = TaskCategoryService()
 
     # ── Categories ─────────────────────────────────────────────────

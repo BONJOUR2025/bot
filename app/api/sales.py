@@ -4,11 +4,17 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from .dependencies import require_permission
 
 
 def create_sales_router() -> APIRouter:
-    router = APIRouter(prefix="/sales", tags=["Sales"])
+    router = APIRouter(
+        prefix="/sales",
+        tags=["Sales"],
+        dependencies=[Depends(require_permission("payroll"))],
+    )
 
     @router.get("/daily")
     async def get_daily_sales(

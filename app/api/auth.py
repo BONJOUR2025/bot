@@ -33,6 +33,7 @@ ERROR_MAP = {
     "login_exists": (status.HTTP_400_BAD_REQUEST, "login_exists"),
     "user_not_found": (status.HTTP_404_NOT_FOUND, "user_not_found"),
     "login_password_required": (status.HTTP_400_BAD_REQUEST, "login_password_required"),
+    "privilege_escalation": (status.HTTP_403_FORBIDDEN, "privilege_escalation"),
 }
 
 
@@ -115,7 +116,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         user: ResolvedUser = Depends(require_permission("access")),
     ) -> RoleOut:
         try:
-            role = service.create_role(payload.dict())
+            role = service.create_role(payload.dict(), actor=user)
         except ValueError as exc:
             _handle_error(exc)
         return RoleOut(**role)
@@ -127,7 +128,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         user: ResolvedUser = Depends(require_permission("access")),
     ) -> RoleOut:
         try:
-            role = service.update_role(role_id, payload.dict(exclude_unset=True))
+            role = service.update_role(role_id, payload.dict(exclude_unset=True), actor=user)
         except ValueError as exc:
             _handle_error(exc)
         return RoleOut(**role)
@@ -149,7 +150,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         user: ResolvedUser = Depends(require_permission("access")),
     ) -> UserOut:
         try:
-            record = service.create_user(payload.dict())
+            record = service.create_user(payload.dict(), actor=user)
         except ValueError as exc:
             _handle_error(exc)
         resolved = service.resolve_user(record.get("id"))
@@ -183,7 +184,7 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         user: ResolvedUser = Depends(require_permission("access")),
     ) -> UserOut:
         try:
-            record = service.update_user(user_id, payload.dict(exclude_unset=True))
+            record = service.update_user(user_id, payload.dict(exclude_unset=True), actor=user)
         except ValueError as exc:
             _handle_error(exc)
         resolved = service.resolve_user(user_id)

@@ -4,11 +4,17 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from .dependencies import require_permission
 
 
 def create_masters_router() -> APIRouter:
-    router = APIRouter(prefix="/masters", tags=["Masters"])
+    router = APIRouter(
+        prefix="/masters",
+        tags=["Masters"],
+        dependencies=[Depends(require_permission("payroll"))],
+    )
 
     @router.get("/works")
     async def get_works(

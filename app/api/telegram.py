@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.message import MessageRequest, BroadcastRequest, SentMessage
 from app.services.telegram_service import (
     TelegramAPIError,
@@ -10,12 +10,14 @@ from app.services.telegram_service import (
 )
 from app.data.employee_repository import EmployeeRepository
 
+from .dependencies import require_permission
+
 
 def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
     router = APIRouter(prefix="/telegram", tags=["Telegram"])
     service = TelegramService(repo)
 
-    @router.post("/send_message")
+    @router.post("/send_message", dependencies=[Depends(require_permission("broadcast"))])
     async def send_message(data: MessageRequest):
         if service.bot is None:
             raise HTTPException(status_code=400, detail="Telegram token not configured")
@@ -66,7 +68,7 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
                 },
             ) from exc
 
-    @router.post("/broadcast")
+    @router.post("/broadcast", dependencies=[Depends(require_permission("broadcast"))])
     async def broadcast(data: BroadcastRequest):
         if service.bot is None:
             raise HTTPException(status_code=400, detail="Telegram token not configured")
@@ -110,11 +112,15 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
                 },
             ) from exc
 
-    @router.get("/sent_messages", response_model=list[SentMessage])
+    @router.get(
+        "/sent_messages",
+        response_model=list[SentMessage],
+        dependencies=[Depends(require_permission("messages"))],
+    )
     async def sent_messages() -> list[SentMessage]:
         return [SentMessage(**m) for m in service._load_log()]
 
-    @router.delete("/sent_messages/{entry_id}")
+    @router.delete("/sent_messages/{entry_id}", dependencies=[Depends(require_permission("messages"))])
     async def delete_sent_message(entry_id: str):
         service.delete_log_entry(entry_id)
         return {"status": "deleted"}
