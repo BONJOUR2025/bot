@@ -3,8 +3,8 @@ import {
   Users, Copy, RefreshCw, KeyRound, Link as LinkIcon, RotateCcw,
 } from 'lucide-react';
 import {
-  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip,
 } from 'recharts';
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
@@ -45,7 +45,7 @@ export default function VisitorCounters() {
   const [filters, setFilters] = useState({ from: daysAgoStr(13), to: todayStr(), salon_id: '' });
   const [loading, setLoading] = useState(true);
   const [cumulative, setCumulative] = useState([]);
-  const [resetting, setResetting] = useState(false);
+  const [resetting, setResetting] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function VisitorCounters() {
 
   useEffect(() => {
     loadCumulative();
-  }, [filters.salon_id]);
+  }, []);
 
   async function loadSalons() {
     try {
@@ -88,8 +88,7 @@ export default function VisitorCounters() {
 
   async function loadCumulative() {
     try {
-      const params = { salon_id: filters.salon_id || undefined };
-      const res = await api.get('visitor-events/totals', { params });
+      const res = await api.get('visitor-events/totals');
       setCumulative(res.data);
     } catch (err) {
       console.error(err);
@@ -105,38 +104,22 @@ export default function VisitorCounters() {
     }
   }
 
-  async function handleReset() {
-    const scopeLabel = filters.salon_id
-      ? salons.find((s) => s.id === filters.salon_id)?.name || 'выбранный салон'
-      : 'все салоны';
-    if (!confirm(`Сбросить счётчик «Всего посетителей» для: ${scopeLabel}?\nИстория событий и таблица/аналитика не удаляются — сбрасывается только накопленный итог.`)) {
+  async function handleReset(salonId, salonName) {
+    if (!confirm(`Полностью обнулить счётчик «${salonName}»?\nИстория событий и таблица/аналитика не удаляются — обнуляется только накопленный итог этой точки.`)) {
       return;
     }
-    setResetting(true);
+    setResetting(salonId);
     try {
-      await api.post('visitor-events/reset', { salon_id: filters.salon_id || null });
-      toast('Счётчик сброшен', 'success');
+      await api.post('visitor-events/reset', { salon_id: salonId });
+      toast(`Счётчик «${salonName}» обнулён`, 'success');
       loadCumulative();
     } catch (err) {
       console.error(err);
-      toast('Ошибка сброса счётчика', 'error');
+      toast('Ошибка обнуления счётчика', 'error');
     } finally {
-      setResetting(false);
+      setResetting(null);
     }
   }
-
-  const cumulativeTotal = cumulative.reduce(
-    (acc, row) => ({
-      in: acc.in + row.in_count,
-      out: acc.out + row.out_count,
-    }),
-    { in: 0, out: 0 }
-  );
-  const lastResetAt = cumulative
-    .map((row) => row.reset_at)
-    .filter(Boolean)
-    .sort()
-    .pop();
 
   const totals = summary.reduce(
     (acc, row) => ({
@@ -223,20 +206,29 @@ export default function VisitorCounters() {
         </div>
       </div>
 
-      <div className="app-card flex flex-wrap items-center justify-between gap-4 p-4">
-        <div>
-          <div className="text-xs text-gray-500">Всего посетителей{lastResetAt ? ` (с ${fmtDateTime(lastResetAt)})` : ''}</div>
-          <div className="text-2xl font-semibold text-gray-900">{cumulativeTotal.in}</div>
-          <div className="text-xs text-gray-500 mt-1">Вышло: {cumulativeTotal.out} · Сейчас в зале: {cumulativeTotal.in - cumulativeTotal.out}</div>
-        </div>
-        <button
-          type="button"
-          className="btn flex items-center gap-1.5"
-          onClick={handleReset}
-          disabled={resetting}
-        >
-          <RotateCcw size={14} /> Сбросить счётчик
-        </button>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {cumulative.map((row) => (
+          <div key={row.salon_id} className="app-card flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <div className="text-xs text-gray-500">
+                {row.salon_name || row.salon_id}{row.reset_at ? ` · с ${fmtDateTime(row.reset_at)}` : ''}
+              </div>
+              <div className="text-2xl font-semibold text-gray-900">{row.in_count}</div>
+              <div className="text-xs text-gray-500 mt-1">Вышло: {row.out_count} · Сейчас в зале: {row.net}</div>
+            </div>
+            <button
+              type="button"
+              className="btn flex items-center gap-1.5"
+              onClick={() => handleReset(row.salon_id, row.salon_name || row.salon_id)}
+              disabled={resetting === row.salon_id}
+            >
+              <RotateCcw size={14} /> Обнулить
+            </button>
+          </div>
+        ))}
+        {cumulative.length === 0 && (
+          <p className="text-sm text-gray-500">Нет салонов с данными счётчика.</p>
+        )}
       </div>
 
       <div className="flex gap-4 text-sm text-gray-600">
@@ -268,26 +260,24 @@ function VisitorAnalytics({ summary, loading }) {
   const chartData = useMemo(() => {
     const byDate = new Map();
     for (const row of summary) {
-      const entry = byDate.get(row.date) || { date: row.date, in_count: 0, out_count: 0 };
-      entry.in_count += row.in_count;
-      entry.out_count += row.out_count;
+      const entry = byDate.get(row.date) || { date: row.date, visits: 0 };
+      entry.visits += row.in_count;
       byDate.set(row.date, entry);
     }
     return Array.from(byDate.values())
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((row) => ({ ...row, label: fmtDate(row.date), net: row.in_count - row.out_count }));
+      .map((row) => ({ ...row, label: fmtDate(row.date) }));
   }, [summary]);
 
   const bySalon = useMemo(() => {
     const map = new Map();
     for (const row of summary) {
       const key = row.salon_name || row.salon_id;
-      const entry = map.get(key) || { name: key, in_count: 0, out_count: 0 };
-      entry.in_count += row.in_count;
-      entry.out_count += row.out_count;
+      const entry = map.get(key) || { name: key, visits: 0 };
+      entry.visits += row.in_count;
       map.set(key, entry);
     }
-    return Array.from(map.values()).sort((a, b) => b.in_count - a.in_count);
+    return Array.from(map.values()).sort((a, b) => b.visits - a.visits);
   }, [summary]);
 
   if (loading) return <p className="text-gray-500">Загрузка…</p>;
@@ -302,33 +292,28 @@ function VisitorAnalytics({ summary, loading }) {
   return (
     <div className="space-y-6">
       <div className="app-card p-4">
-        <h3 className="font-semibold mb-3">Посещаемость по дням</h3>
+        <h3 className="font-semibold mb-3">Посещений по дням</h3>
         <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 8 }}>
+          <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e7eb)" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} width={40} />
             <Tooltip />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="in_count" name="Вошло" fill="#22c55e" isAnimationActive={false} />
-            <Bar dataKey="out_count" name="Вышло" fill="#ef4444" isAnimationActive={false} />
-            <Line dataKey="net" name="Сейчас в зале" type="monotone" stroke="#6366f1" strokeWidth={2} dot={false} isAnimationActive={false} />
-          </ComposedChart>
+            <Bar dataKey="visits" name="Посещений" fill="#6366f1" isAnimationActive={false} />
+          </BarChart>
         </ResponsiveContainer>
       </div>
 
       <div className="app-card p-4">
         <h3 className="font-semibold mb-3">По салонам (за период)</h3>
         <ResponsiveContainer width="100%" height={Math.max(200, bySalon.length * 44)}>
-          <ComposedChart data={bySalon} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 8 }}>
+          <BarChart data={bySalon} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e7eb)" />
             <XAxis type="number" tick={{ fontSize: 11 }} />
             <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
             <Tooltip />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="in_count" name="Вошло" fill="#22c55e" isAnimationActive={false} />
-            <Bar dataKey="out_count" name="Вышло" fill="#ef4444" isAnimationActive={false} />
-          </ComposedChart>
+            <Bar dataKey="visits" name="Посещений" fill="#6366f1" isAnimationActive={false} />
+          </BarChart>
         </ResponsiveContainer>
       </div>
     </div>
