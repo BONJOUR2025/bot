@@ -18,8 +18,8 @@ export default function RequireAuth({ children }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Employee without admin permissions ended up in /admin — redirect to their home
-  if (!user.permissions?.length) {
+  // Employee account ended up in /admin (e.g. via a stale link) — redirect to their home
+  if (user.employee_id || !user.permissions?.length) {
     return <Navigate to={getHomeForUser(user)} replace />;
   }
 

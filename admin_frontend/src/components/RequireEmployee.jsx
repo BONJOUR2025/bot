@@ -17,5 +17,10 @@ export default function RequireEmployee({ children }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Admin/owner accounts (no employee_id) belong in the admin panel, not the employee portal
+  if (!user.employee_id) {
+    return <Navigate to="/admin" replace />;
+  }
+
   return children;
 }

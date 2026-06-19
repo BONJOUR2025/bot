@@ -5,8 +5,11 @@ import { useViewport } from '../providers/ViewportProvider.jsx';
 
 export function getHomeForUser(user) {
   if (!user) return '/login';
-  if (user.permissions?.length > 0) return '/admin';
+  // employee_id is only ever set on employee accounts (see access_control_service.py) —
+  // check it before permissions, since an employee can also hold scoped admin
+  // permissions (e.g. "payouts") without being an admin/owner.
   if (user.employee_id) return '/employee/salary';
+  if (user.permissions?.length > 0) return '/admin';
   return '/admin';
 }
 
