@@ -1554,7 +1554,7 @@ export default function Recruitment() {
           <h1 className="text-xl font-bold">Подбор персонала</h1>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">CRM кандидатов по вакансиям</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isMobile && (
             <button onClick={() => setShowVacList(v => !v)} className="btn btn-secondary text-sm">
               {showVacList ? 'Скрыть вакансии' : 'Вакансии'}

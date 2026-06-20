@@ -167,6 +167,13 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  /* Grid items default to min-width: auto (their content's min-content
+     size), which lets a too-wide descendant (an unwrapped flex row, a
+     raw table) blow out the whole page on narrow screens instead of
+     scrolling locally. min-width: 0 lets this column shrink to the
+     actual grid track so overflow is contained where it occurs. */
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
@@ -349,6 +356,12 @@ a:hover { text-decoration: underline; }
   font-family: inherit;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
+/* globals.css loads after Tailwind's utility layer, so plain `.input`
+   padding here otherwise wins over a `pl-*` utility on the same element
+   (used to clear a leading search icon), pushing the placeholder text
+   under the icon. */
+.input.pl-8 { padding-left: 2rem; }
+
 .input:focus,
 .input-field:focus,
 .modal-control:focus,

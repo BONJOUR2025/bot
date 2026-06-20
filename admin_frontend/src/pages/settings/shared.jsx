@@ -21,7 +21,7 @@ export function Field({ label, hint, children }) {
     <div>
       <label className="block text-sm font-medium mb-1">{label}</label>
       {children}
-      {hint && <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1 break-words">{hint}</p>}
     </div>
   );
 }

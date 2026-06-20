@@ -92,17 +92,17 @@ export default function SettingsGeneral() {
             <StatusDot ok={status?.firebird?.ok} loading={statusLoading} />
           </div>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <FileSpreadsheet size={16} className="text-[color:var(--color-muted-foreground)]" />
-              <div>
+            <div className="flex items-center gap-3 min-w-0">
+              <FileSpreadsheet size={16} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
+              <div className="min-w-0">
                 <div className="text-sm font-medium">Excel-файл расчёта зарплаты</div>
                 {status?.payroll_excel?.path && (
-                  <div className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5 font-mono truncate max-w-xs">
+                  <div className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5 font-mono truncate">
                     {status.payroll_excel.path}
                   </div>
                 )}
                 {status?.payroll_excel?.error && (
-                  <div className="text-xs text-red-600 mt-0.5">{status.payroll_excel.error}</div>
+                  <div className="text-xs text-red-600 mt-0.5 break-words">{status.payroll_excel.error}</div>
                 )}
               </div>
             </div>
