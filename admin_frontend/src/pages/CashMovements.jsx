@@ -544,9 +544,9 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
           </div>
         ) : (
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex gap-2 mb-2 shrink-0">
-              <input type="date" className="input flex-1" value={linkDateFrom} onChange={(e) => setLinkDateFrom(e.target.value)} />
-              <input type="date" className="input flex-1" value={linkDateTo}   onChange={(e) => setLinkDateTo(e.target.value)} />
+            <div className="flex flex-wrap gap-2 mb-2 shrink-0">
+              <input type="date" className="input flex-1 min-w-[130px]" value={linkDateFrom} onChange={(e) => setLinkDateFrom(e.target.value)} />
+              <input type="date" className="input flex-1 min-w-[130px]" value={linkDateTo}   onChange={(e) => setLinkDateTo(e.target.value)} />
               <button className="btn btn--primary shrink-0" onClick={loadPayouts} disabled={loadingPayouts}>
                 {loadingPayouts ? <RefreshCw size={13} className="animate-spin" /> : 'Найти'}
               </button>
@@ -556,7 +556,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
             ) : payoutsList.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-[color:var(--color-muted-foreground)] text-sm">Нет выплат за период</div>
             ) : (
-              <div className="overflow-y-auto flex-1">
+              <div className="overflow-auto flex-1">
                 <table className="min-w-full text-sm">
                   <thead className="sticky top-0 bg-[color:var(--color-bg-secondary)] text-xs uppercase text-[color:var(--color-muted-foreground)]">
                     <tr>

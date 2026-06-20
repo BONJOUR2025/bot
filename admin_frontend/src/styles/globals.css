@@ -438,6 +438,12 @@ select option { color: #0f172a; background-color: #ffffff; }
 .modal-card label { color: var(--color-text-muted); font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem; }
 .modal-card .helper-text { color: var(--color-text-faint); font-size: 0.8rem; }
 .modal-card input[type='file'] { padding: 0.4rem 0; color: var(--color-modal-text); }
+/* .modal-card defaults to display:grid above; pages that add Tailwind's
+   flex/flex-col utilities alongside modal-card expect an actual flex
+   column. Bump specificity so that intent wins instead of silently
+   becoming a single-column grid (which lets wide children, e.g. tables,
+   force every sibling row to their own overflow width). */
+.modal-card.flex { display: flex; }
 
 select, option, textarea {
   color: var(--color-control-text);
