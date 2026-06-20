@@ -229,7 +229,7 @@ export default function Schedule() {
                 <thead>
                   {/* Строка: дни */}
                   <tr>
-                    <th className="sticky left-0 z-20 min-w-[150px] border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2 text-left text-[color:var(--color-muted-foreground)]">
+                    <th className="sticky left-0 z-20 min-w-[150px] border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] px-3 py-2 text-left text-[color:var(--color-muted-foreground)]">
                       Сотрудник
                     </th>
                     {data.days.map(d => {
@@ -242,7 +242,7 @@ export default function Schedule() {
                           className={`min-w-[36px] border-b border-r border-[color:var(--color-border)] px-1 py-2 text-center font-semibold
                             ${isToday   ? 'bg-[color:var(--color-primary)] text-white'                    : ''}
                             ${isWeekend && !isToday ? 'bg-red-50 text-red-500 dark:bg-red-900/20 dark:text-red-400' : ''}
-                            ${!isToday && !isWeekend ? 'bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)]' : ''}
+                            ${!isToday && !isWeekend ? 'bg-[color:var(--color-modal-bg)] text-[color:var(--color-muted-foreground)]' : ''}
                           `}
                         >
                           <div>{d.day}</div>
@@ -257,8 +257,8 @@ export default function Schedule() {
                   {filteredEmps.map((emp, ri) => (
                     <tr key={emp}
                       className={ri % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
-                      <td className="sticky left-0 z-10 border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-1.5 font-medium whitespace-nowrap"
-                        style={{ background: ri % 2 === 1 ? 'var(--color-card)' : 'var(--color-card)' }}>
+                      <td className="sticky left-0 z-10 border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] px-3 py-1.5 font-medium whitespace-nowrap"
+                        style={{ background: ri % 2 === 1 ? 'var(--color-modal-bg)' : 'var(--color-modal-bg)' }}>
                         {emp}
                       </td>
                       {data.days.map(d => {

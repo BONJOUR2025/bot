@@ -421,8 +421,12 @@ function SalonDrawer({ salon, employees, onEdit, onDelete, onClose }) {
   const assignedEmps = (salon.employees || []).map(id => empMap[id]).filter(Boolean);
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-lg bg-[color:var(--color-card)] shadow-2xl flex flex-col h-full overflow-hidden border-l border-[color:var(--color-border)]">
+    <div
+      className="fixed inset-0 z-40 flex justify-end backdrop-blur-sm"
+      style={{ background: 'var(--color-modal-backdrop)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-lg bg-[color:var(--color-modal-bg)] shadow-2xl flex flex-col h-full overflow-hidden border-l border-[color:var(--color-border)]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-[color:var(--color-border)]">
           <div className="flex items-center gap-3 min-w-0">

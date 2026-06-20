@@ -116,7 +116,7 @@ function MultiSelect({ options, selected, onChange, placeholder = 'Все' }) {
         <ChevronDown size={14} className={`flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute z-50 top-full mt-1 w-full min-w-[180px] rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-card)] shadow-xl overflow-hidden max-h-64 overflow-y-auto">
+        <div className="absolute z-50 top-full mt-1 w-full min-w-[180px] rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] shadow-xl overflow-hidden max-h-64 overflow-y-auto">
           <button
             type="button"
             onClick={() => onChange(new Set())}
@@ -173,7 +173,7 @@ const ChartTooltip = ({ active, payload, label, nameMap }) => {
   const items = payload.filter((p) => p.dataKey !== '_ma');
   const ma    = payload.find((p)  => p.dataKey === '_ma');
   return (
-    <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-3 text-sm shadow-lg max-w-[240px]">
+    <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] p-3 text-sm shadow-lg max-w-[240px]">
       <div className="font-medium mb-1.5">{label}</div>
       {items.map((p) => (
         <div key={p.dataKey} className="flex items-center gap-2 leading-5">
@@ -611,7 +611,7 @@ export default function SalesAnalytics() {
                     const pct    = plan > 0 ? e.total / plan * 100 : null;
                     const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
                     return (
-                      <div key={e.code} className="border border-[color:var(--color-border)] rounded-xl bg-[color:var(--color-card)] shadow-sm overflow-hidden">
+                      <div key={e.code} className="border border-[color:var(--color-border)] rounded-xl bg-[color:var(--color-modal-bg)] shadow-sm overflow-hidden">
                         <div className="px-4 py-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-sm font-medium">{empName(e.code)}</div>
                         <div className="px-4 py-2 space-y-1.5 text-sm">
                           <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Ремонт/Химчистка</span><span>{Math.round(e.repair || 0).toLocaleString('ru-RU')}</span></div>
@@ -692,7 +692,7 @@ export default function SalesAnalytics() {
                 <table className="w-full text-sm" style={{ minWidth: `${Math.max(400, 120 + employees.length * 110)}px` }}>
                   <thead>
                     <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
-                      <th className="px-4 py-3 text-left sticky left-0 bg-[color:var(--color-card)]">Период</th>
+                      <th className="px-4 py-3 text-left sticky left-0 bg-[color:var(--color-modal-bg)]">Период</th>
                       {employees.map((e) => (
                         <th key={e.code} className="px-3 py-3 text-right">{empName(e.code)}</th>
                       ))}
