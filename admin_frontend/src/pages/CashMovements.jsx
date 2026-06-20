@@ -545,8 +545,8 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
         ) : (
           <div className="flex flex-col flex-1 min-h-0">
             <div className="flex flex-wrap gap-2 mb-2 shrink-0">
-              <input type="date" className="input flex-1 min-w-[130px]" value={linkDateFrom} onChange={(e) => setLinkDateFrom(e.target.value)} />
-              <input type="date" className="input flex-1 min-w-[130px]" value={linkDateTo}   onChange={(e) => setLinkDateTo(e.target.value)} />
+              <input type="date" className="input flex-1" value={linkDateFrom} onChange={(e) => setLinkDateFrom(e.target.value)} />
+              <input type="date" className="input flex-1" value={linkDateTo}   onChange={(e) => setLinkDateTo(e.target.value)} />
               <button className="btn btn--primary shrink-0" onClick={loadPayouts} disabled={loadingPayouts}>
                 {loadingPayouts ? <RefreshCw size={13} className="animate-spin" /> : 'Найти'}
               </button>

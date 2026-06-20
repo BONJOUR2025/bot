@@ -377,6 +377,17 @@ a:hover { text-decoration: underline; }
 .input-field::placeholder,
 .modal-control::placeholder { color: var(--color-control-placeholder); }
 .form-field textarea { resize: vertical; min-height: 100px; }
+/* iOS Safari collapses native date/time inputs to near-zero width when
+   they sit in a flex row with width:100% and no explicit size — the
+   rendered date text then overflows past the shrunk box, unclipped.
+   A min-width keeps the box (and therefore the text) sane. */
+input[type='date'],
+input[type='datetime-local'],
+input[type='time'],
+input[type='month'],
+input[type='week'] {
+  min-width: 150px;
+}
 
 /* Select arrow */
 select {
