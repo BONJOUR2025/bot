@@ -1,5 +1,11 @@
 # Runtime database (generated locally — do not commit)
 hr.db
+hr.db-shm
+hr.db-wal
+cash_categories.json
+cash_config.json
+push_vapid_keys.json
+salons.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
