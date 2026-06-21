@@ -106,18 +106,20 @@ export default function PayoutsControl() {
           <option value="cash">Наличными</option>
           <option value="account">На счёт</option>
         </select>
-        <input
-          type="date"
-          className="border border-gray-300 p-2 rounded text-sm"
-          value={filters.from}
-          onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-        />
-        <input
-          type="date"
-          className="border border-gray-300 p-2 rounded text-sm"
-          value={filters.to}
-          onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-        />
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
+          <input
+            type="date"
+            className="border border-gray-300 p-2 rounded text-sm w-full sm:w-auto"
+            value={filters.from}
+            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+          />
+          <input
+            type="date"
+            className="border border-gray-300 p-2 rounded text-sm w-full sm:w-auto"
+            value={filters.to}
+            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+          />
+        </div>
         <button className="btn" onClick={load}>
           Применить
         </button>

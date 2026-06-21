@@ -179,18 +179,20 @@ export default function Vacations() {
             </option>
           ))}
         </select>
-        <input
-          type="date"
-          className="input"
-          value={filters.from}
-          onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-        />
-        <input
-          type="date"
-          className="input"
-          value={filters.to}
-          onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-        />
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
+          <input
+            type="date"
+            className="input w-full sm:w-auto"
+            value={filters.from}
+            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+          />
+          <input
+            type="date"
+            className="input w-full sm:w-auto"
+            value={filters.to}
+            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+          />
+        </div>
         <input
           className="input flex-grow"
           placeholder="Поиск по ФИО"

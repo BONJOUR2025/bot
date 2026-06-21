@@ -126,18 +126,20 @@ export default function Incentives() {
           <option value="bonus">Премия</option>
           <option value="penalty">Штраф</option>
         </select>
-        <input
-          type="date"
-          className="border p-2"
-          value={filters.from}
-          onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-        />
-        <input
-          type="date"
-          className="border p-2"
-          value={filters.to}
-          onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-        />
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
+          <input
+            type="date"
+            className="border p-2 w-full sm:w-auto"
+            value={filters.from}
+            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+          />
+          <input
+            type="date"
+            className="border p-2 w-full sm:w-auto"
+            value={filters.to}
+            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+          />
+        </div>
         <button className="btn" onClick={load}>
           Применить
         </button>
