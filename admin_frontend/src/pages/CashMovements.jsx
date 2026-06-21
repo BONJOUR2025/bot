@@ -544,10 +544,10 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
           </div>
         ) : (
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex flex-wrap gap-2 mb-2 shrink-0">
-              <input type="date" className="input flex-1" value={linkDateFrom} onChange={(e) => setLinkDateFrom(e.target.value)} />
-              <input type="date" className="input flex-1" value={linkDateTo}   onChange={(e) => setLinkDateTo(e.target.value)} />
-              <button className="btn btn--primary shrink-0" onClick={loadPayouts} disabled={loadingPayouts}>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 mb-2 shrink-0">
+              <input type="date" className="input w-full sm:w-auto sm:flex-1" value={linkDateFrom} onChange={(e) => setLinkDateFrom(e.target.value)} />
+              <input type="date" className="input w-full sm:w-auto sm:flex-1" value={linkDateTo}   onChange={(e) => setLinkDateTo(e.target.value)} />
+              <button className="btn btn--primary w-full sm:w-auto shrink-0" onClick={loadPayouts} disabled={loadingPayouts}>
                 {loadingPayouts ? <RefreshCw size={13} className="animate-spin" /> : 'Найти'}
               </button>
             </div>
@@ -828,20 +828,22 @@ export default function CashMovements() {
         </div>
 
         {/* Date range */}
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end">
+          <div className="w-full sm:w-auto">
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата с</label>
-            <input type="date" className="input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <input type="date" className="input w-full sm:w-auto" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата по</label>
-            <input type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <input type="date" className="input w-full sm:w-auto" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          <button onClick={handleApply} disabled={loading} className="btn btn--primary">Применить</button>
-          {(dateFrom || dateTo) && (
-            <button onClick={() => { setDateFrom(''); setDateTo(''); loadData('',''); }}
-              className="btn bg-gray-200 text-gray-700 hover:bg-gray-300"><X size={14} /></button>
-          )}
+          <div className="flex gap-2">
+            <button onClick={handleApply} disabled={loading} className="btn btn--primary flex-1 sm:flex-initial">Применить</button>
+            {(dateFrom || dateTo) && (
+              <button onClick={() => { setDateFrom(''); setDateTo(''); loadData('',''); }}
+                className="btn bg-gray-200 text-gray-700 hover:bg-gray-300"><X size={14} /></button>
+            )}
+          </div>
         </div>
 
         {/* Основание search */}
