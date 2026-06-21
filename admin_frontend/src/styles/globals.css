@@ -446,7 +446,14 @@ select option { color: #0f172a; background-color: #ffffff; }
 }
 .modal-card h1, .modal-card h2, .modal-card h3 { margin: 0; color: var(--color-modal-text); }
 .modal-card p, .modal-card span, .modal-card li { color: var(--color-modal-text); }
-.modal-card label { color: var(--color-text-muted); font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem; }
+/* display:flex was previously forced on every label here, but plain text
+   field labels (no Tailwind flex utility of their own) need normal block
+   wrapping — as a flex item, a long unbroken label text can't wrap and
+   blows out the whole grid column (and everything in it) past the modal's
+   edge, unclipped on Safari. Checkbox/icon labels already set their own
+   `flex items-center gap-*` utility classes directly, so this is redundant
+   for them and harmful for everything else. */
+.modal-card label { color: var(--color-text-muted); font-size: 0.875rem; }
 .modal-card .helper-text { color: var(--color-text-faint); font-size: 0.8rem; }
 .modal-card input[type='file'] { padding: 0.4rem 0; color: var(--color-modal-text); }
 /* .modal-card defaults to display:grid above; pages that add Tailwind's
