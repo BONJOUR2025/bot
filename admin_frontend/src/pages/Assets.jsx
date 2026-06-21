@@ -330,11 +330,13 @@ export default function Assets() {
           <option value="">Все сотрудники</option>
           {employees.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
         </select>
-        <input type="date" className="input" title="Выдано с"
-          value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))} />
-        <span className="text-[color:var(--color-muted-foreground)] text-sm">—</span>
-        <input type="date" className="input" title="Выдано по"
-          value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center w-full sm:w-auto">
+          <input type="date" className="input w-full sm:w-auto" title="Выдано с"
+            value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))} />
+          <span className="text-[color:var(--color-muted-foreground)] text-sm hidden sm:inline">—</span>
+          <input type="date" className="input w-full sm:w-auto" title="Выдано по"
+            value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
+        </div>
         {hasFilters && (
           <button className="btn btn-secondary flex items-center gap-1 text-sm"
             onClick={() => setFilters({ search: '', employee: '', dateFrom: '', dateTo: '' })}>

@@ -170,21 +170,21 @@ export default function VisitorCounters() {
         ))}
       </nav>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
+        <div className="w-full sm:w-auto">
           <label className="block text-xs text-gray-500 mb-1">С даты</label>
           <input
             type="date"
-            className="input"
+            className="input w-full sm:w-auto"
             value={filters.from}
             onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
           />
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="block text-xs text-gray-500 mb-1">По дату</label>
           <input
             type="date"
-            className="input"
+            className="input w-full sm:w-auto"
             value={filters.to}
             onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
           />

@@ -149,16 +149,16 @@ export default function Smses() {
       {/* Filters */}
       <div className="app-card p-4 space-y-3">
         {/* Date range */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <input type="date" className="input" value={dateFrom}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center">
+          <input type="date" className="input w-full sm:w-auto" value={dateFrom}
             onChange={e => setDateFrom(e.target.value)} />
-          <span className="text-[color:var(--color-muted-foreground)] text-sm">—</span>
-          <input type="date" className="input" value={dateTo}
+          <span className="text-[color:var(--color-muted-foreground)] text-sm hidden sm:inline">—</span>
+          <input type="date" className="input w-full sm:w-auto" value={dateTo}
             onChange={e => setDateTo(e.target.value)} />
           <button onClick={handleApply} disabled={loading}
-            className="btn btn--primary">Применить</button>
+            className="btn btn--primary w-full sm:w-auto">Применить</button>
           <button onClick={() => { setDateFrom(''); setDateTo(''); loadData('', ''); }}
-            disabled={loading} className="btn text-sm">Сбросить даты</button>
+            disabled={loading} className="btn text-sm w-full sm:w-auto">Сбросить даты</button>
         </div>
 
         {/* Search */}

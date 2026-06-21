@@ -256,10 +256,10 @@ function MovementPickerModal({ payout, onLink, onClose }) {
           <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-3">
-          <input type="date" className="input flex-1 min-w-[130px]" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <input type="date" className="input flex-1 min-w-[130px]" value={dateTo}   onChange={(e) => setDateTo(e.target.value)} />
-          <button className="btn btn--primary" onClick={loadMoves} disabled={loading}>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 mb-3">
+          <input type="date" className="input w-full sm:w-auto sm:flex-1" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <input type="date" className="input w-full sm:w-auto sm:flex-1" value={dateTo}   onChange={(e) => setDateTo(e.target.value)} />
+          <button className="btn btn--primary w-full sm:w-auto" onClick={loadMoves} disabled={loading}>
             {loading ? <RefreshCw size={14} className="animate-spin" /> : 'Найти'}
           </button>
         </div>
@@ -767,18 +767,20 @@ export default function Payouts() {
           <option value="🏦 Из кассы">Из кассы</option>
           <option value="🤝 Наличными">Наличными</option>
         </select>
-        <input
-          type="date"
-          className="input"
-          value={filters.from}
-          onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-        />
-        <input
-          type="date"
-          className="input"
-          value={filters.to}
-          onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-        />
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
+          <input
+            type="date"
+            className="input w-full sm:w-auto"
+            value={filters.from}
+            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+          />
+          <input
+            type="date"
+            className="input w-full sm:w-auto"
+            value={filters.to}
+            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+          />
+        </div>
         <button className="btn btn-secondary" onClick={resetFilters}>
           Сбросить
         </button>
