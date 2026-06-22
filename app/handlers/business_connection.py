@@ -78,7 +78,7 @@ async def handle_business_message(update, context):
 
     try:
         from app.db.session import SessionLocal
-        from app.models.recruitment import Candidate, TelegramMessage, UnlinkedTelegramMessage
+        from app.models.recruitment import Candidate, TelegramMessage
         import re
 
         db = SessionLocal()
@@ -201,16 +201,7 @@ async def handle_business_message(update, context):
                         # Detect if candidate refused or asked to postpone
                         asyncio.ensure_future(_check_candidate_refusal(candidate.id, msg_text))
                 else:
-                    msg_text = text or ('[контакт]' if msg.contact else '[медиа]')
-                    unlinked = UnlinkedTelegramMessage(
-                        chat_id=chat_id,
-                        sender_name=sender_name,
-                        text=msg_text,
-                        tg_message_id=str(msg.message_id),
-                    )
-                    db.add(unlinked)
-                    db.commit()
-                    log.info("Saved unlinked TG message from chat_id=%s name=%s", chat_id, sender_name)
+                    log.info("Ignored TG message from unlinked chat_id=%s name=%s", chat_id, sender_name)
 
             else:
                 # ── Сообщение от администратора ───────────────────────────

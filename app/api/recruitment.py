@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.recruitment import (
-    Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage, UnlinkedTelegramMessage,
+    Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage,
     HiringStrategy, KnowledgeBaseEntry,
 )
 from app.settings import settings
@@ -1030,67 +1030,6 @@ def get_telegram_link(candidate_id: int, db: Session = Depends(get_db)):
     return {"code": code, "tg_link": tg_link, "personal_username": personal_username}
 
 
-# ── Unlinked Telegram messages ─────────────────────────────────────
-
-@router.get("/unlinked-tg")
-def list_unlinked_tg(db: Session = Depends(get_db)):
-    try:
-        msgs = db.query(UnlinkedTelegramMessage).order_by(
-            UnlinkedTelegramMessage.created_at.desc()
-        ).limit(100).all()
-        return [m.to_dict() for m in msgs]
-    except Exception:
-        return []
-
-
-class LinkTgRequest(BaseModel):
-    candidate_id: int
-
-@router.post("/unlinked-tg/{msg_id}/link")
-def link_unlinked_tg(msg_id: int, data: LinkTgRequest, db: Session = Depends(get_db)):
-    try:
-        msg = db.query(UnlinkedTelegramMessage).filter(
-            UnlinkedTelegramMessage.id == msg_id
-        ).first()
-        if not msg:
-            raise HTTPException(404, "Message not found")
-        c = db.query(Candidate).filter(Candidate.id == data.candidate_id).first()
-        if not c:
-            raise HTTPException(404, "Candidate not found")
-        # Link chat_id to candidate
-        c.telegram_chat_id = msg.chat_id
-        db.commit()
-        # Move message to TelegramMessage
-        tg_msg = TelegramMessage(
-            candidate_id=c.id,
-            direction="in",
-            text=msg.text,
-            tg_message_id=msg.tg_message_id,
-        )
-        db.add(tg_msg)
-        db.delete(msg)
-        db.commit()
-        return {"status": "linked", "candidate": c.to_dict()}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(500, str(exc))
-
-
-@router.delete("/unlinked-tg/{msg_id}")
-def delete_unlinked_tg(msg_id: int, db: Session = Depends(get_db)):
-    try:
-        msg = db.query(UnlinkedTelegramMessage).filter(
-            UnlinkedTelegramMessage.id == msg_id
-        ).first()
-        if msg:
-            db.delete(msg)
-            db.commit()
-    except Exception:
-        pass
-    return {"status": "deleted"}
-
-
 # ── Notifications summary ──────────────────────────────────────────
 
 @router.get("/notifications")
@@ -1124,11 +1063,6 @@ def get_notifications(db: Session = Depends(get_db)):
             unread_tg = 0
 
     try:
-        unlinked_tg = db.execute(text("SELECT COUNT(*) FROM unlinked_telegram_messages")).scalar() or 0
-    except Exception:
-        unlinked_tg = 0
-
-    try:
         cutoff_24h = datetime.utcnow() - timedelta(hours=24)
         pending_tg = db.query(Candidate).filter(
             Candidate.stage == "ждем_привязки",
@@ -1141,7 +1075,6 @@ def get_notifications(db: Session = Depends(get_db)):
         "new_candidates": new_candidates,
         "unread_hh": unread_hh,
         "unread_tg": unread_tg,
-        "unlinked_tg": unlinked_tg,
         "pending_tg_24h": pending_tg,
     }
 

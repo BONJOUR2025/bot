@@ -98,14 +98,6 @@ def _run_migrations() -> None:
             "ALTER TABLE vacancies ADD COLUMN strategy_id INTEGER",
             "ALTER TABLE vacancies ADD COLUMN extra_instructions TEXT DEFAULT ''",
             "ALTER TABLE candidates ADD COLUMN pending_decline_suggested_at DATETIME",
-            """CREATE TABLE IF NOT EXISTS unlinked_telegram_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat_id TEXT NOT NULL,
-                sender_name TEXT DEFAULT '',
-                text TEXT NOT NULL DEFAULT '',
-                tg_message_id TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )""",
             """CREATE TABLE IF NOT EXISTS knowledge_documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,

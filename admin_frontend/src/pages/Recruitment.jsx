@@ -3,7 +3,7 @@ import {
   Plus, X, Phone, Mail, FileText,
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
-  ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Bell, Zap,
+  ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Zap,
   Pause, Play, Check, AlertTriangle, BookOpen, Sparkles, ListChecks,
 } from 'lucide-react';
 import api from '../api';
@@ -1782,26 +1782,6 @@ export default function Recruitment() {
     } catch (e) { setError(e.response?.data?.detail || e.message); }
   }
 
-  const [unlinkedTg, setUnlinkedTg] = useState([]);
-  const [unlinkedLinkTarget, setUnlinkedLinkTarget] = useState({}); // msgId -> candidateId
-  const [unlinkedOpen, setUnlinkedOpen] = useState(false);
-  const [unlinkedSearch, setUnlinkedSearch] = useState('');
-
-  const [allCandidates, setAllCandidates] = useState([]);
-
-  const loadUnlinkedTg = useCallback(async () => {
-    try {
-      const res = await api.get('/recruitment/unlinked-tg');
-      setUnlinkedTg(res.data || []);
-    } catch (e) { /* ignore */ }
-  }, []);
-
-  useEffect(() => { loadUnlinkedTg(); }, [loadUnlinkedTg]);
-
-  useEffect(() => {
-    api.get('/recruitment/candidates').then(r => setAllCandidates(r.data || [])).catch(() => {});
-  }, []);
-
   function toggleSelection(id) {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -2359,105 +2339,6 @@ export default function Recruitment() {
         />
       )}
 
-      {/* Unlinked TG messages section */}
-      {unlinkedTg.length > 0 && (
-        <div className="mx-6 sm:mx-10 mt-6 mb-6">
-          <button
-            onClick={() => setUnlinkedOpen(o => !o)}
-            className="w-full flex items-center gap-2 px-5 py-3 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors"
-          >
-            <Bell size={15} className="text-amber-600 shrink-0" />
-            <span className="text-sm font-semibold text-amber-800">Непривязанные сообщения Telegram</span>
-            <span className="ml-1 text-xs bg-amber-200 text-amber-800 rounded-full px-2 py-0.5">{unlinkedTg.length}</span>
-            <ChevronDown size={15} className={`ml-auto text-amber-500 transition-transform ${unlinkedOpen ? 'rotate-180' : ''}`} />
-          </button>
-
-          {unlinkedOpen && (
-            <div className="mt-1 rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
-              {/* Search */}
-              <div className="px-4 py-2 border-b border-amber-100">
-                <input
-                  className="input w-full text-sm py-1.5"
-                  placeholder="Поиск кандидата для привязки..."
-                  value={unlinkedSearch}
-                  onChange={e => setUnlinkedSearch(e.target.value)}
-                />
-              </div>
-              <div className="divide-y divide-amber-100">
-                {unlinkedTg.map(msg => {
-                  // Build grouped options filtered by search
-                  const search = unlinkedSearch.toLowerCase();
-                  const byVacancy = {};
-                  allCandidates.forEach(c => {
-                    if (search && !c.name.toLowerCase().startsWith(search)) return;
-                    const vTitle = c.vacancy_title || `Вакансия #${c.vacancy_id}`;
-                    if (!byVacancy[vTitle]) byVacancy[vTitle] = [];
-                    byVacancy[vTitle].push(c);
-                  });
-
-                  return (
-                    <div key={msg.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
-                          <span>{msg.sender_name || 'Неизвестный'}</span>
-                          <span className="text-xs text-amber-500 font-mono font-normal">{msg.chat_id}</span>
-                        </div>
-                        <p className="text-sm text-amber-800 truncate mt-0.5">{msg.text}</p>
-                        <p className="text-xs text-amber-400 mt-0.5">
-                          {msg.created_at ? new Date(msg.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <select
-                          className="input text-sm py-1 px-2 max-w-[200px]"
-                          value={unlinkedLinkTarget[msg.id] || ''}
-                          onChange={e => setUnlinkedLinkTarget(prev => ({ ...prev, [msg.id]: e.target.value }))}
-                        >
-                          <option value="">— выбрать кандидата —</option>
-                          {Object.entries(byVacancy).map(([vTitle, cands]) => (
-                            <optgroup key={vTitle} label={vTitle}>
-                              {cands.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}{c.age ? `, ${c.age} л.` : ''}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                        <button
-                          onClick={async () => {
-                            const candId = unlinkedLinkTarget[msg.id];
-                            if (!candId) return;
-                            try {
-                              await api.post(`/recruitment/unlinked-tg/${msg.id}/link`, { candidate_id: Number(candId) });
-                              await loadUnlinkedTg();
-                              await loadCandidates();
-                            } catch (e) { setError(e.response?.data?.detail || e.message); }
-                          }}
-                          disabled={!unlinkedLinkTarget[msg.id]}
-                          className="btn btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
-                        >
-                          Привязать
-                        </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await api.delete(`/recruitment/unlinked-tg/${msg.id}`);
-                              await loadUnlinkedTg();
-                            } catch (e) { setError(e.response?.data?.detail || e.message); }
-                          }}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-amber-200 text-amber-500 hover:text-amber-700 transition-colors"
-                          title="Удалить"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

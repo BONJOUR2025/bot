@@ -274,25 +274,6 @@ class VacancyLink(Base):
         }
 
 
-class UnlinkedTelegramMessage(Base):
-    __tablename__ = "unlinked_telegram_messages"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    chat_id = Column(String, nullable=False)
-    sender_name = Column(String, nullable=True, default="")
-    text = Column(Text, nullable=False, default="")
-    tg_message_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "chat_id": self.chat_id,
-            "sender_name": self.sender_name or "",
-            "text": self.text,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-        }
-
-
 class TelegramMessage(Base):
     """Messages exchanged with candidates via Telegram Secretary Mode."""
     __tablename__ = "telegram_messages"

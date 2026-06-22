@@ -4,7 +4,7 @@ import {
   Wallet, CheckCircle2, Palmtree, AlertTriangle,
   ArrowRight, CalendarDays, ClipboardList, Clock,
   ListTodo, CirclePlay, RefreshCw, Scissors,
-  UserPlus, MessageSquare, Send, UserRoundSearch,
+  UserPlus, MessageSquare, Send,
 } from 'lucide-react';
 import api from '../api';
 import Card from '../components/ui/Card';
@@ -275,15 +275,6 @@ export default function Dashboard() {
             tone={recruitNotifs.unread_tg > 0 ? 'warning' : 'neutral'}
             to="/admin/recruitment"
           />
-          {recruitNotifs.unlinked_tg > 0 && (
-            <StatCard
-              icon={UserRoundSearch}
-              label="Непривязанные TG"
-              value={recruitNotifs.unlinked_tg}
-              tone="danger"
-              to="/admin/recruitment"
-            />
-          )}
           {recruitNotifs.pending_tg_24h > 0 && (
             <StatCard
               icon={Clock}
