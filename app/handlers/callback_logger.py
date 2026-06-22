@@ -5,7 +5,12 @@ from ..utils.logger import log, log_user_action
 
 
 def _user_label(user) -> str:
-    return f"@{user.username}" if user.username else user.full_name
+    parts = []
+    if user.username:
+        parts.append(f"@{user.username}")
+    if user.full_name:
+        parts.append(user.full_name)
+    return " ".join(parts) if parts else str(user.id)
 
 
 async def log_button_press(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

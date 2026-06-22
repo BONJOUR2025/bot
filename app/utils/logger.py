@@ -13,13 +13,6 @@ _BACKUP_COUNT = 5
 
 _FORMATTER = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
-_TOKEN_PATTERN = re.compile(r"\b\d{10,}\b")
-
-
-def _mask(value: str) -> str:
-    """Mask digits that look like chat ids or tokens."""
-    return _TOKEN_PATTERN.sub("[REDACTED]", value)
-
 
 def _rotating_handler(path: Path, level: int = logging.INFO) -> RotatingFileHandler:
     handler = RotatingFileHandler(
@@ -53,8 +46,8 @@ _connections_logger.addHandler(_rotating_handler(LOGS_DIR / "connections.log"))
 
 
 # ----------------------------------------------------------------------
-# Per-user action log: logs/users/<id>.log — one file per bot/admin user.
-# Also propagates to the root logger.
+# Per-user action log: logs/users/<id>_<username>_<name>.log — one file
+# per bot/admin user. Also propagates to the root logger.
 # ----------------------------------------------------------------------
 _user_loggers: dict[str, logging.Logger] = {}
 _SAFE_ID_PATTERN = re.compile(r"[^\w.-]+")
@@ -64,13 +57,21 @@ def _safe_id(user_id: Any) -> str:
     return _SAFE_ID_PATTERN.sub("_", str(user_id)) or "unknown"
 
 
-def _get_user_logger(user_id: Any) -> logging.Logger:
+def _safe_label(label: Any) -> str:
+    return _SAFE_ID_PATTERN.sub("_", str(label)).strip("_")
+
+
+def _get_user_logger(user_id: Any, label: str | None = None) -> logging.Logger:
     safe_id = _safe_id(user_id)
     logger = _user_loggers.get(safe_id)
     if logger is None:
+        filename = safe_id
+        safe_label = _safe_label(label) if label and str(label) != str(user_id) else ""
+        if safe_label:
+            filename = f"{safe_id}_{safe_label}"
         logger = logging.getLogger(f"users.{safe_id}")
         logger.setLevel(logging.INFO)
-        logger.addHandler(_rotating_handler(USERS_LOG_DIR / f"{safe_id}.log"))
+        logger.addHandler(_rotating_handler(USERS_LOG_DIR / f"{filename}.log"))
         _user_loggers[safe_id] = logger
     return logger
 
@@ -80,12 +81,12 @@ def log(message: Any) -> None:
     Логирует сообщение в общий файл logs/app.log и в консоль.
     Принимает любое значение, приводимое к строке.
     """
-    logging.info(_mask(str(message)))
+    logging.info(str(message))
 
 
 def log_connection(message: Any) -> None:
     """Логирует событие подключения/авторизации в logs/connections.log."""
-    _connections_logger.info(_mask(str(message)))
+    _connections_logger.info(str(message))
 
 
 _payment_calendar_logger = logging.getLogger("payment_calendar")
@@ -95,17 +96,18 @@ _payment_calendar_logger.addHandler(_rotating_handler(LOGS_DIR / "payment_calend
 
 def log_payment_calendar(message: Any) -> None:
     """Логирует события отправки счетов кассиру в logs/payment_calendar.log."""
-    _payment_calendar_logger.info(_mask(str(message)))
+    _payment_calendar_logger.info(str(message))
 
 
 def log_user_action(user_id: Any, label: str | None, action: str, **details: Any) -> None:
     """
     Логирует действие конкретного пользователя в его персональный файл
-    logs/users/<id>.log (и в общий лог).
+    logs/users/<id>_<username>_<имя>.log (и в общий лог).
 
-    ``user_id`` определяет имя файла (Telegram id или id пользователя админки).
-    ``label`` — человекочитаемое имя/логин, добавляется в начало записи.
-    ``action`` — описание действия, ``details`` — дополнительные поля key=value.
+    ``user_id`` и ``label`` определяют имя файла (Telegram id + юзернейм/имя,
+    либо id и логин пользователя админки). ``label`` также добавляется в
+    начало записи. ``action`` — описание действия, ``details`` —
+    дополнительные поля key=value.
     """
     extra = ""
     if details:
@@ -114,4 +116,4 @@ def log_user_action(user_id: Any, label: str | None, action: str, **details: Any
     if label and str(label) != str(user_id):
         who = f"{user_id} ({label})"
     message = f"[{who}] {action}{extra}"
-    _get_user_logger(user_id).info(_mask(message))
+    _get_user_logger(user_id, label).info(message)
