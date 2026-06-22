@@ -10,7 +10,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.recruitment import Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage, UnlinkedTelegramMessage
+from app.models.recruitment import (
+    Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage, UnlinkedTelegramMessage,
+    HiringStrategy, KnowledgeBaseEntry,
+)
 from app.settings import settings
 
 from .dependencies import require_permission
@@ -42,6 +45,7 @@ class VacancyCreate(BaseModel):
     knowledge_base: Optional[str] = ""
     interview_location: Optional[str] = ""
     is_open: bool = True
+    strategy_id: Optional[int] = None
 
 class VacancyUpdate(BaseModel):
     title: Optional[str] = None
@@ -49,6 +53,73 @@ class VacancyUpdate(BaseModel):
     knowledge_base: Optional[str] = None
     interview_location: Optional[str] = None
     is_open: Optional[bool] = None
+    strategy_id: Optional[int] = None
+    # extra_instructions is AI-facing text — can only be set together with
+    # confirmed=True, after the admin has seen the AI pre-check result for it.
+    extra_instructions: Optional[str] = None
+    confirmed: bool = False
+
+
+class StrategyCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
+    sources_str: Optional[str] = ""
+    follow_up_enabled: bool = False
+    follow_up_delay_hours: int = 24
+    follow_up_message_1: Optional[str] = ""
+    follow_up_message_2: Optional[str] = ""
+    decline_after_hours: Optional[int] = None
+    hh_message_with_link: Optional[str] = ""
+    hh_message_no_link: Optional[str] = ""
+    away_message: Optional[str] = ""
+    ai_model: Optional[str] = None
+
+class StrategyUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
+    sources_str: Optional[str] = None
+    follow_up_enabled: Optional[bool] = None
+    follow_up_delay_hours: Optional[int] = None
+    follow_up_message_1: Optional[str] = None
+    follow_up_message_2: Optional[str] = None
+    decline_after_hours: Optional[int] = None
+    hh_message_with_link: Optional[str] = None
+    hh_message_no_link: Optional[str] = None
+    away_message: Optional[str] = None
+    ai_model: Optional[str] = None
+
+
+class KBEntryCreate(BaseModel):
+    scope: str  # "global" | "vacancy"
+    vacancy_id: Optional[int] = None
+    category: Optional[str] = ""
+    question: str
+    answer: str
+    confirmed: bool = False  # must be True — set only after AI pre-check was shown
+
+class KBEntryUpdate(BaseModel):
+    category: Optional[str] = None
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    confirmed: bool = False
+
+
+class AITextCheckRequest(BaseModel):
+    text: str
+    scope: str  # "global" | "vacancy"
+    vacancy_id: Optional[int] = None
+    field_label: Optional[str] = "запись базы знаний"
+
+class AISuggestQuestionsRequest(BaseModel):
+    title: str
+    description: Optional[str] = ""
+
+class DeclineSuggestionResolve(BaseModel):
+    action: str  # "decline" | "dismiss"
 
 class CandidateCreate(BaseModel):
     vacancy_id: int
@@ -118,9 +189,11 @@ def list_vacancies(include_closed: bool = Query(False), db: Session = Depends(ge
 
 @router.post("/vacancies")
 def create_vacancy(data: VacancyCreate, db: Session = Depends(get_db)):
+    if data.strategy_id is not None and not db.query(HiringStrategy).filter(HiringStrategy.id == data.strategy_id).first():
+        raise HTTPException(404, "Strategy not found")
     v = Vacancy(title=data.title, description=data.description,
                 knowledge_base=data.knowledge_base, interview_location=data.interview_location,
-                is_open=data.is_open)
+                is_open=data.is_open, strategy_id=data.strategy_id)
     db.add(v); db.commit(); db.refresh(v)
     return v.to_dict()
 
@@ -129,11 +202,22 @@ def update_vacancy(vacancy_id: int, data: VacancyUpdate, db: Session = Depends(g
     v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
     if not v:
         raise HTTPException(404, "Vacancy not found")
+    if data.extra_instructions is not None and not data.confirmed:
+        raise HTTPException(
+            400,
+            "Особые инструкции для ИИ нельзя сохранить без предварительной ИИ-проверки. "
+            "Запустите проверку текста (POST /recruitment/ai/check-text) и повторите запрос с confirmed=true.",
+        )
     if data.title is not None: v.title = data.title
     if data.description is not None: v.description = data.description
     if data.knowledge_base is not None: v.knowledge_base = data.knowledge_base
     if data.interview_location is not None: v.interview_location = data.interview_location
     if data.is_open is not None: v.is_open = data.is_open
+    if data.extra_instructions is not None: v.extra_instructions = data.extra_instructions
+    if data.strategy_id is not None:
+        if data.strategy_id and not db.query(HiringStrategy).filter(HiringStrategy.id == data.strategy_id).first():
+            raise HTTPException(404, "Strategy not found")
+        v.strategy_id = data.strategy_id
     db.commit(); db.refresh(v)
     return v.to_dict()
 
@@ -206,6 +290,171 @@ async def calibrate_knowledge_base(vacancy_id: int, db: Session = Depends(get_db
         return {"result": result or ""}
     except Exception as e:
         raise HTTPException(500, f"Ошибка AI: {e}")
+
+
+# ── Hiring strategies ──────────────────────────────────────────────
+
+@router.get("/strategies")
+def list_strategies(db: Session = Depends(get_db)):
+    return [s.to_dict() for s in db.query(HiringStrategy).order_by(HiringStrategy.is_builtin.desc(), HiringStrategy.name).all()]
+
+
+@router.post("/strategies")
+def create_strategy(data: StrategyCreate, db: Session = Depends(get_db)):
+    s = HiringStrategy(**data.dict())
+    db.add(s); db.commit(); db.refresh(s)
+    return s.to_dict()
+
+
+@router.patch("/strategies/{strategy_id}")
+def update_strategy(strategy_id: int, data: StrategyUpdate, db: Session = Depends(get_db)):
+    s = db.query(HiringStrategy).filter(HiringStrategy.id == strategy_id).first()
+    if not s:
+        raise HTTPException(404, "Strategy not found")
+    for field, val in data.dict(exclude_unset=True).items():
+        setattr(s, field, val)
+    s.updated_at = datetime.utcnow()
+    db.commit(); db.refresh(s)
+    return s.to_dict()
+
+
+@router.delete("/strategies/{strategy_id}")
+def delete_strategy(strategy_id: int, db: Session = Depends(get_db)):
+    s = db.query(HiringStrategy).filter(HiringStrategy.id == strategy_id).first()
+    if not s:
+        raise HTTPException(404, "Strategy not found")
+    if s.is_builtin:
+        raise HTTPException(400, "Встроенные стратегии нельзя удалить")
+    in_use = db.query(Vacancy).filter(Vacancy.strategy_id == strategy_id).count()
+    if in_use:
+        raise HTTPException(400, f"Стратегия используется в {in_use} вакансии(ях) — сначала смените стратегию у них")
+    db.delete(s); db.commit()
+    return {"status": "deleted"}
+
+
+# ── Knowledge base entries (scoped) ────────────────────────────────
+
+@router.get("/knowledge-base")
+def list_kb_entries(scope: Optional[str] = Query(None), vacancy_id: Optional[int] = Query(None),
+                     db: Session = Depends(get_db)):
+    q = db.query(KnowledgeBaseEntry)
+    if scope: q = q.filter(KnowledgeBaseEntry.scope == scope)
+    if vacancy_id is not None: q = q.filter(KnowledgeBaseEntry.vacancy_id == vacancy_id)
+    return [e.to_dict() for e in q.order_by(KnowledgeBaseEntry.created_at.desc()).all()]
+
+
+@router.post("/knowledge-base")
+def create_kb_entry(data: KBEntryCreate, db: Session = Depends(get_db)):
+    if data.scope not in ("global", "vacancy"):
+        raise HTTPException(400, "scope must be 'global' or 'vacancy'")
+    if data.scope == "vacancy" and not data.vacancy_id:
+        raise HTTPException(400, "vacancy_id обязателен для scope='vacancy'")
+    if not data.confirmed:
+        raise HTTPException(
+            400,
+            "Нельзя сохранить запись базы знаний без предварительной ИИ-проверки. "
+            "Сначала вызовите POST /recruitment/ai/check-text, покажите результат админу, "
+            "затем повторите запрос с confirmed=true.",
+        )
+    e = KnowledgeBaseEntry(
+        scope=data.scope, vacancy_id=data.vacancy_id if data.scope == "vacancy" else None,
+        category=data.category or "", question=data.question, answer=data.answer,
+        ai_checked=True,
+    )
+    db.add(e); db.commit(); db.refresh(e)
+    return e.to_dict()
+
+
+@router.patch("/knowledge-base/{entry_id}")
+def update_kb_entry(entry_id: int, data: KBEntryUpdate, db: Session = Depends(get_db)):
+    e = db.query(KnowledgeBaseEntry).filter(KnowledgeBaseEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(404, "Entry not found")
+    if data.answer is not None and not data.confirmed:
+        raise HTTPException(
+            400,
+            "Изменения ответа нужно подтвердить ИИ-проверкой перед сохранением (confirmed=true).",
+        )
+    if data.category is not None: e.category = data.category
+    if data.question is not None: e.question = data.question
+    if data.answer is not None:
+        e.answer = data.answer
+        e.ai_checked = True
+    e.updated_at = datetime.utcnow()
+    db.commit(); db.refresh(e)
+    return e.to_dict()
+
+
+@router.delete("/knowledge-base/{entry_id}")
+def delete_kb_entry(entry_id: int, db: Session = Depends(get_db)):
+    e = db.query(KnowledgeBaseEntry).filter(KnowledgeBaseEntry.id == entry_id).first()
+    if not e:
+        raise HTTPException(404, "Entry not found")
+    db.delete(e); db.commit()
+    return {"status": "deleted"}
+
+
+# ── AI pre-check gate ───────────────────────────────────────────────
+
+@router.post("/ai/check-text")
+def ai_check_text(data: AITextCheckRequest, db: Session = Depends(get_db)):
+    """Mandatory pre-save check for any AI-facing text. The frontend must
+    call this and show the result to the admin before any save that touches
+    KB entries / extra_instructions can be confirmed."""
+    from app.services.config_service import ConfigService
+    from app.services.ai_text_check import check_text
+
+    if data.scope not in ("global", "vacancy"):
+        raise HTTPException(400, "scope must be 'global' or 'vacancy'")
+    vacancy_title = None
+    if data.vacancy_id:
+        v = db.query(Vacancy).filter(Vacancy.id == data.vacancy_id).first()
+        vacancy_title = v.title if v else None
+
+    cfg = ConfigService().load()
+    return check_text(cfg, data.text, data.scope, vacancy_title=vacancy_title,
+                       field_label=data.field_label or "запись базы знаний")
+
+
+@router.post("/ai/suggest-questions")
+def ai_suggest_questions(data: AISuggestQuestionsRequest):
+    """Used by the vacancy-creation wizard to proactively propose a list of
+    likely candidate questions for the admin to answer (instead of leaving
+    the admin to invent the FAQ from scratch)."""
+    from app.services.config_service import ConfigService
+    from app.services.ai_text_check import generate_candidate_questions
+
+    cfg = ConfigService().load()
+    questions = generate_candidate_questions(cfg, data.title, data.description or "")
+    return {"questions": questions}
+
+
+@router.get("/vacancies/{vacancy_id}/checklist")
+def vacancy_checklist(vacancy_id: int, db: Session = Depends(get_db)):
+    """Computed (not stored) readiness checklist — what's still missing
+    before this vacancy is safe to launch with AI automation."""
+    from app.services.config_service import ConfigService
+    from app.services.llm_client import get_client
+
+    v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not v:
+        raise HTTPException(404, "Vacancy not found")
+
+    cfg = ConfigService().load()
+    has_global_kb = db.query(KnowledgeBaseEntry).filter(KnowledgeBaseEntry.scope == "global").count() > 0
+    has_vacancy_kb = db.query(KnowledgeBaseEntry).filter(
+        KnowledgeBaseEntry.scope == "vacancy", KnowledgeBaseEntry.vacancy_id == vacancy_id
+    ).count() > 0
+
+    items = [
+        {"key": "api_key", "label": "Настроен Anthropic API-ключ", "done": bool(get_client(cfg))},
+        {"key": "knowledge_base", "label": "Есть хотя бы один пункт базы знаний (общий или для вакансии)",
+         "done": has_global_kb or has_vacancy_kb},
+        {"key": "interview_location", "label": "Указано место/формат собеседования",
+         "done": bool((v.interview_location or "").strip() or (cfg.get("automation_interview_location") or "").strip())},
+        {"key": "strategy", "label": "Выбрана стратегия найма", "done": bool(v.strategy_id)},
+    ]
+    return {"items": items, "ready": all(i["done"] for i in items)}
 
 
 # ── Candidates ─────────────────────────────────────────────────────
@@ -434,6 +683,30 @@ def reset_candidate_history(candidate_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "reset", "messages_deleted": deleted}
+
+
+@router.post("/candidates/{candidate_id}/decline-suggestion")
+def resolve_decline_suggestion(candidate_id: int, data: DeclineSuggestionResolve, db: Session = Depends(get_db)):
+    """Admin's explicit decision on a system-suggested decline. The system
+    never changes stage on its own — only ever sets pending_decline_suggested_at
+    and notifies the admin; this endpoint is the only place stage actually
+    changes as a result of a decline suggestion."""
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    if data.action not in ("decline", "dismiss"):
+        raise HTTPException(400, "action must be 'decline' or 'dismiss'")
+
+    if data.action == "decline":
+        c.stage = "отказ"
+    else:
+        # Give the candidate more time: reset follow-up timer for one more cycle
+        c.follow_up_count = 0
+        c.follow_up_last_sent_at = datetime.utcnow()
+    c.pending_decline_suggested_at = None
+    c.updated_at = datetime.utcnow()
+    db.commit(); db.refresh(c)
+    return c.to_dict()
 
 
 @router.post("/candidates/{candidate_id}/toggle-pause")

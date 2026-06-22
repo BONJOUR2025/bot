@@ -18,14 +18,21 @@ def set_enabled(val: bool) -> None:
     _enabled = val
 
 
-def matches_filters(candidate, cfg: dict) -> bool:
-    """Check if candidate matches automation filters (flat config keys)."""
-    if not cfg:
-        return True
+def matches_filters(candidate, cfg: dict, strategy=None) -> bool:
+    """Check if candidate matches automation filters.
 
-    age_min = cfg.get("automation_age_min")
-    age_max = cfg.get("automation_age_max")
-    sources_str = cfg.get("automation_sources_str", "")
+    If the candidate's vacancy has a HiringStrategy assigned, the strategy's
+    filters are authoritative and global config filters are ignored —
+    there is no dual-path fallback once a strategy is set.
+    """
+    if strategy is not None:
+        age_min, age_max, sources_str = strategy.age_min, strategy.age_max, strategy.sources_str or ""
+    elif cfg:
+        age_min = cfg.get("automation_age_min")
+        age_max = cfg.get("automation_age_max")
+        sources_str = cfg.get("automation_sources_str", "")
+    else:
+        return True
 
     # Age range
     try:
@@ -73,7 +80,12 @@ async def trigger_for_candidate(candidate_id: int, force: bool = False) -> str:
 
         cfg = ConfigService().load()
 
-        if not force and not matches_filters(c, cfg):
+        from app.models.recruitment import Vacancy
+        from app.services.strategy_resolver import get_strategy
+        vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+        strategy = get_strategy(db, vacancy)
+
+        if not force and not matches_filters(c, cfg, strategy):
             return "skipped: filters not matched"
 
         # Only for hh candidates that have external_id
@@ -110,14 +122,20 @@ async def trigger_for_candidate(candidate_id: int, force: bool = False) -> str:
                 "{link}\n\n"
                 "⚠️ Важно: не изменяйте текст сообщения — это нужно для автоматической идентификации."
             )
-            tpl = (cfg.get("automation_hh_message_with_link") or "").strip() or default_tpl
+            tpl = (
+                (strategy.hh_message_with_link if strategy else None)
+                or cfg.get("automation_hh_message_with_link") or ""
+            ).strip() or default_tpl
             message = tpl.format(name=name_short, link=tg_link, code=code)
         else:
             default_tpl = (
                 "{name}, здравствуйте! Для удобного общения напишите нам в Telegram: "
                 "@{username}.\nПри написании укажите код: {code}"
             )
-            tpl = (cfg.get("automation_hh_message_no_link") or "").strip() or default_tpl
+            tpl = (
+                (strategy.hh_message_no_link if strategy else None)
+                or cfg.get("automation_hh_message_no_link") or ""
+            ).strip() or default_tpl
             message = tpl.format(
                 name=name_short,
                 code=code,

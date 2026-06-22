@@ -37,6 +37,8 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _migrate_columns()
     _run_migrations()
+    _seed_hiring_strategies()
+    _migrate_recruitment_kb_and_strategy_defaults()
 
 
 def _migrate_columns() -> None:
@@ -93,6 +95,9 @@ def _run_migrations() -> None:
             "ALTER TABLE candidates ADD COLUMN interview_phase TEXT DEFAULT 'greeting'",
             "ALTER TABLE vacancies ADD COLUMN knowledge_base TEXT DEFAULT ''",
             "ALTER TABLE vacancies ADD COLUMN interview_location TEXT DEFAULT ''",
+            "ALTER TABLE vacancies ADD COLUMN strategy_id INTEGER",
+            "ALTER TABLE vacancies ADD COLUMN extra_instructions TEXT DEFAULT ''",
+            "ALTER TABLE candidates ADD COLUMN pending_decline_suggested_at DATETIME",
             """CREATE TABLE IF NOT EXISTS unlinked_telegram_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 chat_id TEXT NOT NULL,
@@ -203,3 +208,124 @@ def _migrate_assets_from_json() -> None:
         log(f"✅ Migrated {len(data)} assets from {json_file} to DB")
     except Exception:
         pass
+
+
+_BUILTIN_STRATEGIES = [
+    dict(
+        name="Стандартный отбор",
+        description="Без автоматических фильтров и без агрессивных сроков. Безопасный вариант по умолчанию.",
+        is_builtin=True,
+        follow_up_enabled=False,
+        follow_up_delay_hours=24,
+        decline_after_hours=None,
+    ),
+    dict(
+        name="Быстрый найм",
+        description="Короткие сроки напоминаний, предложение отказа через 48ч без ответа (требует подтверждения админа).",
+        is_builtin=True,
+        follow_up_enabled=False,
+        follow_up_delay_hours=2,
+        decline_after_hours=48,
+    ),
+    dict(
+        name="Точный подбор",
+        description="Долгие сроки, отказ никогда не предлагается автоматически — только вручную.",
+        is_builtin=True,
+        follow_up_enabled=False,
+        follow_up_delay_hours=48,
+        decline_after_hours=None,
+    ),
+    dict(
+        name="Массовый набор",
+        description="Для потокового найма большого числа кандидатов одной вакансии.",
+        is_builtin=True,
+        follow_up_enabled=False,
+        follow_up_delay_hours=4,
+        decline_after_hours=72,
+    ),
+]
+
+
+def _seed_hiring_strategies() -> None:
+    """One-time seed of builtin Strategy presets. Idempotent — does nothing
+    if any builtin strategies already exist."""
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        try:
+            count = conn.execute(text("SELECT COUNT(*) FROM hiring_strategies WHERE is_builtin = 1")).scalar()
+        except Exception:
+            return
+        if count:
+            return
+    with engine.begin() as conn:
+        for s in _BUILTIN_STRATEGIES:
+            conn.execute(text("""
+                INSERT INTO hiring_strategies
+                    (name, description, is_builtin, follow_up_enabled, follow_up_delay_hours, decline_after_hours,
+                     follow_up_message_1, follow_up_message_2, hh_message_with_link, hh_message_no_link, away_message)
+                VALUES
+                    (:name, :description, :is_builtin, :follow_up_enabled, :follow_up_delay_hours, :decline_after_hours,
+                     '', '', '', '', '')
+            """), s)
+
+
+def _migrate_recruitment_kb_and_strategy_defaults() -> None:
+    """One-time recruitment-feature rollout migration:
+    - assigns the "Стандартный отбор" builtin strategy to any vacancy that
+      doesn't have a strategy yet (so existing vacancies keep working);
+    - moves legacy free-text Vacancy.knowledge_base into a vacancy-scoped
+      KnowledgeBaseEntry row (flagged ai_checked=False for admin review);
+    - forces follow_up_enabled=False in config.json exactly once, regardless
+      of any pre-existing value, per explicit safety requirement.
+    Gated by a marker key in config.json so it only ever runs once.
+    """
+    from sqlalchemy import text
+    try:
+        from app.services.config_service import ConfigService
+        cfg_service = ConfigService()
+        cfg = cfg_service.load()
+    except Exception:
+        cfg = None
+
+    if cfg is not None and cfg.get("strategy_feature_migrated_v1"):
+        return
+
+    with engine.begin() as conn:
+        try:
+            default_id = conn.execute(
+                text("SELECT id FROM hiring_strategies WHERE is_builtin = 1 AND name = 'Стандартный отбор' LIMIT 1")
+            ).scalar()
+        except Exception:
+            default_id = None
+
+        if default_id:
+            try:
+                conn.execute(
+                    text("UPDATE vacancies SET strategy_id = :sid WHERE strategy_id IS NULL"),
+                    {"sid": default_id},
+                )
+            except Exception:
+                pass
+
+        try:
+            rows = conn.execute(
+                text("SELECT id, knowledge_base FROM vacancies WHERE knowledge_base IS NOT NULL AND knowledge_base != ''")
+            ).fetchall()
+            for vid, kb_text in rows:
+                conn.execute(text("""
+                    INSERT INTO knowledge_base_entries
+                        (scope, vacancy_id, category, question, answer, ai_checked, ai_check_summary)
+                    VALUES
+                        ('vacancy', :vid, 'Перенесено автоматически', 'Старая база знаний вакансии', :answer, 0,
+                         'Перенесено из старого текстового поля при обновлении системы — рекомендуем проверить и подтвердить через ИИ-проверку.')
+                """), {"vid": vid, "answer": kb_text})
+        except Exception:
+            pass
+
+    if cfg is not None:
+        try:
+            cfg["follow_up_enabled"] = False
+            cfg["strategy_feature_migrated_v1"] = True
+            cfg_service.save(cfg)
+        except Exception:
+            pass

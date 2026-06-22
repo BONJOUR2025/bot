@@ -9,20 +9,22 @@ DEFAULT_MSG_2 = "Мы всё ещё ждём вашего ответа. Если
 
 
 async def run_follow_up_check():
-    """Called every 15 min by job_queue. Checks all 'общение' candidates."""
+    """Called every 15 min by job_queue. Checks all 'общение' candidates.
+
+    Each candidate's vacancy may have its own HiringStrategy with its own
+    follow_up_enabled/delay/messages — resolved per-candidate, not once
+    globally, since different vacancies can run different strategies.
+    """
     from app.db.session import SessionLocal
-    from app.models.recruitment import Candidate
+    from app.models.recruitment import Candidate, Vacancy
     from app.services.config_service import ConfigService
     from app.services.work_hours import is_working_now
+    from app.services.strategy_resolver import get_strategy
 
     cfg = ConfigService().load()
-    if not cfg.get("follow_up_enabled"):
-        return
     if not is_working_now(cfg):
         return
 
-    delay_hours = float(cfg.get("follow_up_delay_hours") or 1)
-    delay = timedelta(hours=delay_hours)
     now_utc = datetime.utcnow()
 
     db = SessionLocal()
@@ -37,21 +39,58 @@ async def run_follow_up_check():
 
         for c in candidates:
             try:
-                await _process(c, db, cfg, delay, now_utc)
+                vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+                strategy = get_strategy(db, vacancy)
+
+                # No strategy assigned → fall back to legacy global cfg toggle
+                # (kept only so very old vacancies without a strategy don't
+                # silently lose follow-ups they had before this migration —
+                # but the migration also force-disables this cfg key once).
+                if strategy is not None:
+                    if not strategy.follow_up_enabled:
+                        continue
+                    delay = timedelta(hours=float(strategy.follow_up_delay_hours or 1))
+                    msg_1 = (strategy.follow_up_message_1 or "").strip() or DEFAULT_MSG_1
+                    msg_2 = (strategy.follow_up_message_2 or "").strip() or DEFAULT_MSG_2
+                    decline_after_hours = strategy.decline_after_hours
+                else:
+                    if not cfg.get("follow_up_enabled"):
+                        continue
+                    delay = timedelta(hours=float(cfg.get("follow_up_delay_hours") or 1))
+                    msg_1 = (cfg.get("follow_up_message_1") or "").strip() or DEFAULT_MSG_1
+                    msg_2 = (cfg.get("follow_up_message_2") or "").strip() or DEFAULT_MSG_2
+                    decline_after_hours = None
+
+                await _process(c, db, delay, now_utc, msg_1, msg_2, decline_after_hours)
             except Exception as e:
                 log.warning("follow_up: error for candidate_id=%s: %s", c.id, e)
     finally:
         db.close()
 
 
-async def _process(c, db, cfg, delay: timedelta, now_utc: datetime):
+async def _process(c, db, delay: timedelta, now_utc: datetime, msg_1: str, msg_2: str,
+                    decline_after_hours):
     from app.models.recruitment import TelegramMessage
     from app.services.notify import send_secretary_message, send_notification
 
     count = c.follow_up_count or 0
 
     if count >= 3:
-        return  # уже уведомили, больше не трогаем
+        # Follow-ups exhausted. If the strategy allows decline-suggestion and
+        # enough time has passed since the last follow-up with no reply,
+        # flag it for the admin — never auto-decline.
+        if decline_after_hours and not c.pending_decline_suggested_at:
+            reference = c.follow_up_last_sent_at
+            if reference and now_utc - reference >= timedelta(hours=float(decline_after_hours)):
+                c.pending_decline_suggested_at = now_utc
+                db.commit()
+                await send_notification(
+                    f"🔕 <b>Предложение отказа</b>\n"
+                    f"Кандидат <b>{c.name}</b> не отвечает уже более {decline_after_hours}ч после напоминаний.\n"
+                    f"Решение принимаете вы — откройте карточку кандидата, чтобы отказать или продолжить ждать."
+                )
+                log.info("follow_up: decline suggested for candidate_id=%s", c.id)
+        return
 
     if count == 0:
         # Отсчёт от последнего входящего сообщения кандидата
@@ -73,9 +112,7 @@ async def _process(c, db, cfg, delay: timedelta, now_utc: datetime):
         return  # ещё рано
 
     if count < 2:
-        msg_key = "follow_up_message_1" if count == 0 else "follow_up_message_2"
-        default = DEFAULT_MSG_1 if count == 0 else DEFAULT_MSG_2
-        msg_text = (cfg.get(msg_key) or "").strip() or default
+        msg_text = msg_1 if count == 0 else msg_2
 
         # Race condition check: re-query to see if a new "in" message arrived after reference
         last_in_recheck = db.query(TelegramMessage).filter(

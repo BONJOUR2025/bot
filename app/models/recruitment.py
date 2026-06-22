@@ -5,19 +5,127 @@ from datetime import datetime
 from app.db.base_class import Base
 
 
+class HiringStrategy(Base):
+    """Named automation preset (filters, follow-ups, hh templates, AI model).
+
+    Once a vacancy has a strategy assigned, the strategy is the sole source
+    of truth for these parameters — there is no global-config fallback for
+    a vacancy that has a strategy. follow_up_enabled defaults to False for
+    every strategy (builtin or admin-created) by design.
+    """
+    __tablename__ = "hiring_strategies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True, default="")
+    is_builtin = Column(Boolean, nullable=False, default=False)
+
+    age_min = Column(Integer, nullable=True)
+    age_max = Column(Integer, nullable=True)
+    sources_str = Column(String, nullable=True, default="")  # comma-separated, empty = any
+
+    follow_up_enabled = Column(Boolean, nullable=False, default=False)
+    follow_up_delay_hours = Column(Integer, nullable=False, default=24)
+    follow_up_message_1 = Column(Text, nullable=True, default="")
+    follow_up_message_2 = Column(Text, nullable=True, default="")
+
+    # If set, after follow-ups are exhausted with no reply for this many hours
+    # the admin gets a decline *suggestion* — never an automatic decline.
+    decline_after_hours = Column(Integer, nullable=True)
+
+    hh_message_with_link = Column(Text, nullable=True, default="")
+    hh_message_no_link = Column(Text, nullable=True, default="")
+    away_message = Column(Text, nullable=True, default="")
+    ai_model = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description or "",
+            "is_builtin": bool(self.is_builtin),
+            "age_min": self.age_min,
+            "age_max": self.age_max,
+            "sources_str": self.sources_str or "",
+            "follow_up_enabled": bool(self.follow_up_enabled),
+            "follow_up_delay_hours": self.follow_up_delay_hours,
+            "follow_up_message_1": self.follow_up_message_1 or "",
+            "follow_up_message_2": self.follow_up_message_2 or "",
+            "decline_after_hours": self.decline_after_hours,
+            "hh_message_with_link": self.hh_message_with_link or "",
+            "hh_message_no_link": self.hh_message_no_link or "",
+            "away_message": self.away_message or "",
+            "ai_model": self.ai_model,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class KnowledgeBaseEntry(Base):
+    """One scoped fact for the AI candidate-conversation knowledge base.
+
+    scope='global' entries apply to every vacancy; scope='vacancy' entries
+    apply only to vacancy_id. Structural scoping (instead of one free-text
+    blob) is what prevents a vacancy-specific fact from silently leaking
+    into every other vacancy's conversations.
+    """
+    __tablename__ = "knowledge_base_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scope = Column(String, nullable=False, default="global")  # "global" | "vacancy"
+    vacancy_id = Column(Integer, ForeignKey("vacancies.id", ondelete="CASCADE"), nullable=True, index=True)
+    category = Column(String, nullable=True, default="")
+    question = Column(String, nullable=False, default="")
+    answer = Column(Text, nullable=False, default="")
+    ai_checked = Column(Boolean, nullable=False, default=False)
+    ai_check_summary = Column(Text, nullable=True, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    vacancy = relationship("Vacancy")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "scope": self.scope,
+            "vacancy_id": self.vacancy_id,
+            "vacancy_title": self.vacancy.title if self.vacancy else None,
+            "category": self.category or "",
+            "question": self.question or "",
+            "answer": self.answer or "",
+            "ai_checked": bool(self.ai_checked),
+            "ai_check_summary": self.ai_check_summary or "",
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class Vacancy(Base):
     __tablename__ = "vacancies"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True, default="")
+    # Deprecated free-text KB blob — kept for backward compatibility with old
+    # data only. New knowledge goes into scoped KnowledgeBaseEntry rows so the
+    # UI/AI always know exactly which vacancy (or "all vacancies") a fact
+    # belongs to, instead of one untyped string that's easy to mix up.
     knowledge_base = Column(Text, nullable=True, default="")
     interview_location = Column(String, nullable=True, default="")
     is_open = Column(Boolean, nullable=False, default=True)
+    strategy_id = Column(Integer, ForeignKey("hiring_strategies.id", ondelete="SET NULL"), nullable=True)
+    # Free-text per-vacancy overrides ("не предлагай собеседование раньше пятницы" etc.)
+    # — applied on top of whatever strategy is selected, never silently merged
+    # into the global/strategy knowledge base.
+    extra_instructions = Column(Text, nullable=True, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     candidates = relationship("Candidate", back_populates="vacancy", cascade="all, delete-orphan")
     links = relationship("VacancyLink", back_populates="vacancy", cascade="all, delete-orphan")
+    strategy = relationship("HiringStrategy")
 
     def to_dict(self):
         return {
@@ -27,6 +135,9 @@ class Vacancy(Base):
             "knowledge_base": self.knowledge_base or "",
             "interview_location": self.interview_location or "",
             "is_open": self.is_open,
+            "strategy_id": self.strategy_id,
+            "strategy_name": self.strategy.name if self.strategy else None,
+            "extra_instructions": self.extra_instructions or "",
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -59,6 +170,7 @@ class Candidate(Base):
     is_paused = Column(Boolean, nullable=False, default=False)
     interview_phase = Column(String, nullable=True, default="greeting")  # structured interview phase
     has_unread_hh_msg = Column(Integer, nullable=False, default=0)
+    pending_decline_suggested_at = Column(DateTime, nullable=True)  # AI/follow-up suggests decline, admin decides
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -81,6 +193,7 @@ class Candidate(Base):
             "telegram_chat_id": self.telegram_chat_id or "",
             "telegram_username": self.telegram_username or "",
             "is_paused": bool(self.is_paused),
+            "pending_decline_suggested_at": self.pending_decline_suggested_at.isoformat() if self.pending_decline_suggested_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

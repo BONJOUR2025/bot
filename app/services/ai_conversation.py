@@ -30,7 +30,11 @@ async def _send_away_reply(c, db, cfg) -> None:
         return
     _away_notified[c.id] = today
 
-    msg_text = (cfg.get("automation_away_message") or "").strip() or DEFAULT_AWAY_MESSAGE
+    from app.models.recruitment import Vacancy
+    from app.services.strategy_resolver import get_strategy, get_away_message
+    vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+    strategy = get_strategy(db, vacancy)
+    msg_text = get_away_message(strategy, cfg) or DEFAULT_AWAY_MESSAGE
     if "{hours}" in msg_text:
         msg_text = msg_text.format(hours=describe_hours(cfg))
 
@@ -96,18 +100,6 @@ SYSTEM_PROMPT = """Ты HR-ассистент компании. Ведёшь с�
 - Не задавай два вопроса подряд — один за раз"""
 
 
-def _build_knowledge_base_block(global_kb: str, vacancy_kb: str) -> str:
-    global_kb = global_kb.strip()
-    vacancy_kb = vacancy_kb.strip()
-    if global_kb and vacancy_kb:
-        return (
-            "Общая база знаний (компания):\n" + global_kb +
-            "\n\nБаза знаний вакансии (приоритет выше):\n" + vacancy_kb +
-            "\n\nПри противоречии — используй данные вакансии."
-        )
-    return "База знаний:\n" + (vacancy_kb or global_kb)
-
-
 async def handle_candidate_message(candidate_id: int, message_text: str) -> None:
     """Process incoming TG message for a candidate in 'общение' stage."""
     from app.db.session import SessionLocal
@@ -129,14 +121,17 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             await _send_away_reply(c, db, cfg)
             return
 
-        vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
-        global_kb = cfg.get("automation_knowledge_base", "").strip()
-        vacancy_kb = getattr(vacancy, "knowledge_base", "").strip() if vacancy else ""
-        interview_location = (
-            getattr(vacancy, "interview_location", "") or cfg.get("automation_interview_location", "")
-        ).strip()
+        from app.services.strategy_resolver import (
+            get_strategy, build_ai_context_block, get_interview_location, get_ai_model,
+        )
 
-        if not global_kb and not vacancy_kb:
+        vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+        strategy = get_strategy(db, vacancy)
+        kb_block = build_ai_context_block(db, vacancy)
+        interview_location = get_interview_location(vacancy, cfg)
+        ai_model = get_ai_model(strategy)
+
+        if not kb_block:
             await send_notification(
                 f"🤖 <b>AI: нет базы знаний</b>\nКандидат <b>{c.name}</b> написал, "
                 f"но база знаний пуста. Подключитесь к диалогу вручную.\n\nСообщение: {message_text[:200]}"
@@ -171,7 +166,6 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         if not messages or messages[-1]["content"] != message_text:
             messages.append({"role": "user", "content": message_text})
 
-        kb_block = _build_knowledge_base_block(global_kb, vacancy_kb)
         system = SYSTEM_PROMPT.format(
             phase=phase,
             knowledge_base=kb_block,
@@ -179,7 +173,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         )
 
         try:
-            raw = chat(cfg, messages, system=system, max_tokens=300)
+            raw = chat(cfg, messages, system=system, model=ai_model, max_tokens=300)
             if not raw:
                 await send_notification(
                     f"⚠️ <b>AI ошибка</b>\nAPI key не настроен для кандидата <b>{c.name}</b>."
