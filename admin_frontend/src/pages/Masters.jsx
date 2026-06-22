@@ -257,10 +257,11 @@ function MastersSummaryTable({ rows, onMasterClick }) {
 }
 
 export default function Masters() {
-  const today = new Date().toISOString().slice(0, 10);
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
-  const [dateFrom, setDateFrom] = useState(monthAgo);
+  const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo, setDateTo]     = useState(today);
   const [statusFilter, setStatusFilter]     = useState('Все');
   const [masterSearch, setMasterSearch]     = useState('');

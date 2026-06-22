@@ -133,6 +133,16 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
             <X size={18} />
           </button>
         )}
+        {!isMobile && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+            className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)] transition-colors ${isCollapsed ? '' : 'ml-auto'}`}
+          >
+            {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        )}
       </div>
 
       {/* Nav items */}

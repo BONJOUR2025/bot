@@ -4,7 +4,7 @@ import {
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Zap,
-  Pause, Play, Check, AlertTriangle, BookOpen, Sparkles, ListChecks,
+  Pause, Play, Check, AlertTriangle, BookOpen, Sparkles, ListChecks, Copy,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -1736,6 +1736,7 @@ function InterviewSchedule({ onCandidateClick }) {
 // ── Main page ──────────────────────────────────────────────────────
 export default function Recruitment() {
   const { isMobile } = useViewport();
+  const { toast } = useToast();
   const [vacancies,       setVacancies]       = useState([]);
   const [selectedId,      setSelectedId]      = useState(null);
   const [candidates,      setCandidates]      = useState([]);
@@ -1878,6 +1879,15 @@ export default function Recruitment() {
       setVacancies(prev => prev.filter(v => v.id !== id));
       if (selectedId === id) setSelectedId(vacancies.find(v => v.id !== id)?.id || null);
     } catch (e) { setError(e.message); }
+  }
+
+  async function duplicateVacancy(id) {
+    try {
+      const res = await api.post(`/recruitment/vacancies/${id}/duplicate`);
+      setVacancies(prev => [res.data, ...prev]);
+      setSelectedId(res.data.id);
+      toast('Вакансия скопирована — описание, стратегия и база знаний перенесены', 'success');
+    } catch (e) { toast(e.response?.data?.detail || e.message, 'error'); }
   }
 
   function handleVacancySaved(saved) {
@@ -2106,6 +2116,11 @@ export default function Recruitment() {
                             className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
                             <Pencil size={11} />
                           </button>
+                          <button onClick={e => { e.stopPropagation(); duplicateVacancy(v.id); }}
+                            title="Дублировать (для повторной публикации)"
+                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
+                            <Copy size={11} />
+                          </button>
                           <button onClick={e => { e.stopPropagation(); deleteVacancy(v.id); }}
                             className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-red-400">
                             <Trash2 size={11} />
@@ -2140,6 +2155,13 @@ export default function Recruitment() {
                   }`}
                 >
                   {selected.is_open ? '● Открыта' : '○ Закрыта'}
+                </button>
+                <button
+                  onClick={() => duplicateVacancy(selected.id)}
+                  title="Создать новую вакансию с теми же данными — для повторной публикации"
+                  className="text-xs font-medium px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                >
+                  <Copy size={12} /> Дублировать
                 </button>
                 <button
                   onClick={() => { if (selectionMode) exitSelection(); else setSelectionMode(true); }}

@@ -228,6 +228,42 @@ def delete_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
     db.delete(v); db.commit()
     return {"status": "deleted"}
 
+@router.post("/vacancies/{vacancy_id}/duplicate")
+def duplicate_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
+    """Create a fresh open vacancy by copying title/description/strategy/
+    interview_location/extra_instructions and all vacancy-scoped knowledge
+    base entries from an existing (typically closed) vacancy — so
+    republishing a recurring vacancy doesn't require re-entering everything.
+    """
+    src = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not src: raise HTTPException(404, "Vacancy not found")
+
+    new_title = src.title if src.is_open else f"{src.title} (копия)"
+    v = Vacancy(
+        title=new_title,
+        description=src.description,
+        knowledge_base=src.knowledge_base,
+        interview_location=src.interview_location,
+        is_open=True,
+        strategy_id=src.strategy_id,
+        extra_instructions=src.extra_instructions,
+    )
+    db.add(v); db.commit(); db.refresh(v)
+
+    entries = db.query(KnowledgeBaseEntry).filter(
+        KnowledgeBaseEntry.scope == "vacancy", KnowledgeBaseEntry.vacancy_id == vacancy_id
+    ).all()
+    for e in entries:
+        db.add(KnowledgeBaseEntry(
+            scope="vacancy", vacancy_id=v.id, category=e.category, question=e.question,
+            answer=e.answer, ai_checked=e.ai_checked, ai_check_summary=e.ai_check_summary,
+        ))
+    db.commit()
+
+    d = v.to_dict()
+    d["candidate_count"] = 0
+    return d
+
 # ── Hiring strategies ──────────────────────────────────────────────
 
 @router.get("/strategies")
