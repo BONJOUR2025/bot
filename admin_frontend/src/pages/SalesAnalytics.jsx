@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
-import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 /* ── constants ───────────────────────────────────────────── */
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -193,7 +193,6 @@ const ChartTooltip = ({ active, payload, label, nameMap }) => {
 
 /* ── main component ──────────────────────────────────────── */
 export default function SalesAnalytics() {
-  const { isMobile } = useViewport();
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
   const [dateFrom, setDateFrom] = useState(monthAgo);
@@ -604,78 +603,51 @@ export default function SalesAnalytics() {
               <div className="p-4 border-b border-[color:var(--color-border)]">
                 <h3 className="font-semibold">Итоги по сотрудникам</h3>
               </div>
-              {isMobile ? (
-                <div className="space-y-3 p-3">
-                  {empSummary.map((e) => {
-                    const plan   = planTotals[e.code] || 0;
-                    const pct    = plan > 0 ? e.total / plan * 100 : null;
-                    const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
-                    return (
-                      <div key={e.code} className="border border-[color:var(--color-border)] rounded-xl bg-[color:var(--color-modal-bg)] shadow-sm overflow-hidden">
-                        <div className="px-4 py-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-sm font-medium">{empName(e.code)}</div>
-                        <div className="px-4 py-2 space-y-1.5 text-sm">
-                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Ремонт/Химчистка</span><span>{Math.round(e.repair || 0).toLocaleString('ru-RU')}</span></div>
-                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Косметика</span><span>{Math.round(e.cosmetics || 0).toLocaleString('ru-RU')}</span></div>
-                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Обувь</span><span>{Math.round(e.shoes || 0).toLocaleString('ru-RU')}</span></div>
-                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Итого</span><span className="font-medium">{Math.round(e.total).toLocaleString('ru-RU')}</span></div>
-                          {showPlan && <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">План</span><span className="text-[color:var(--color-muted-foreground)]">{plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—'}</span></div>}
-                          {showPlan && <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">%</span><span className={`font-medium ${pct == null ? '' : pct >= 100 ? 'text-green-600' : pct >= 75 ? 'text-yellow-600' : 'text-red-500'}`}>{fmtPct(pct)}</span></div>}
-                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Дней</span><span className="text-[color:var(--color-muted-foreground)]">{e.activeDays}</span></div>
-                          <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Ср/день</span><span>{Math.round(avgDay).toLocaleString('ru-RU')}</span></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm min-w-[580px]">
-                    <thead>
-                      <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
-                        <th className="px-4 py-3 text-left">Сотрудник</th>
-                        {CATEGORIES.map(({ key, label }) => (
-                          <th key={key} className="px-3 py-3 text-right">{label}</th>
-                        ))}
-                        <th className="px-3 py-3 text-right">Итого</th>
-                        {showPlan && <th className="px-3 py-3 text-right">План</th>}
-                        {showPlan && <th className="px-3 py-3 text-right">%</th>}
-                        <th className="px-3 py-3 text-right">Дней</th>
-                        <th className="px-3 py-3 text-right">Ср/день</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {empSummary.map((e, i) => {
-                        const plan   = planTotals[e.code] || 0;
-                        const pct    = plan > 0 ? e.total / plan * 100 : null;
-                        const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
+              <div className="p-3">
+                <ResponsiveTable
+                  data={empSummary}
+                  keyFn={(e) => e.code}
+                  emptyText="Нет данных"
+                  columns={[
+                    { label: 'Сотрудник', primary: true, render: (e) => empName(e.code) },
+                    ...CATEGORIES.map(({ key, label }) => ({
+                      label,
+                      render: (e) => Math.round(e[key] || 0).toLocaleString('ru-RU'),
+                    })),
+                    {
+                      label: 'Итого',
+                      render: (e) => <span className="font-medium">{Math.round(e.total).toLocaleString('ru-RU')}</span>,
+                    },
+                    ...(showPlan ? [{
+                      label: 'План',
+                      render: (e) => {
+                        const plan = planTotals[e.code] || 0;
+                        return plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—';
+                      },
+                    }] : []),
+                    ...(showPlan ? [{
+                      label: '%',
+                      render: (e) => {
+                        const plan = planTotals[e.code] || 0;
+                        const pct  = plan > 0 ? e.total / plan * 100 : null;
                         return (
-                          <tr key={e.code} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
-                            <td className="px-4 py-2 font-medium">{empName(e.code)}</td>
-                            {CATEGORIES.map(({ key }) => (
-                              <td key={key} className="px-3 py-2 text-right tabular-nums">
-                                {Math.round(e[key] || 0).toLocaleString('ru-RU')}
-                              </td>
-                            ))}
-                            <td className="px-3 py-2 text-right font-medium tabular-nums">{Math.round(e.total).toLocaleString('ru-RU')}</td>
-                            {showPlan && (
-                              <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-muted-foreground)]">
-                                {plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—'}
-                              </td>
-                            )}
-                            {showPlan && (
-                              <td className={`px-3 py-2 text-right tabular-nums font-medium ${pct == null ? '' : pct >= 100 ? 'text-green-600' : pct >= 75 ? 'text-yellow-600' : 'text-red-500'}`}>
-                                {fmtPct(pct)}
-                              </td>
-                            )}
-                            <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-muted-foreground)]">{e.activeDays}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{Math.round(avgDay).toLocaleString('ru-RU')}</td>
-                          </tr>
+                          <span className={`font-medium ${pct == null ? '' : pct >= 100 ? 'text-green-600' : pct >= 75 ? 'text-yellow-600' : 'text-red-500'}`}>
+                            {fmtPct(pct)}
+                          </span>
                         );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      },
+                    }] : []),
+                    { label: 'Дней', key: 'activeDays' },
+                    {
+                      label: 'Ср/день',
+                      render: (e) => {
+                        const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
+                        return Math.round(avgDay).toLocaleString('ru-RU');
+                      },
+                    },
+                  ]}
+                />
+              </div>
             </div>
           )}
 
@@ -687,95 +659,61 @@ export default function SalesAnalytics() {
                 <span className="text-sm text-[color:var(--color-muted-foreground)]">{periods.length} строк</span>
               </div>
 
-              {/* Desktop */}
-              <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm" style={{ minWidth: `${Math.max(400, 120 + employees.length * 110)}px` }}>
-                  <thead>
-                    <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
-                      <th className="px-4 py-3 text-left sticky left-0 bg-[color:var(--color-modal-bg)]">Период</th>
-                      {employees.map((e) => (
-                        <th key={e.code} className="px-3 py-3 text-right">{empName(e.code)}</th>
-                      ))}
-                      <th className="px-3 py-3 text-right font-semibold">Итого</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {periods.map((key, i) => {
-                      const rowTotal = employees.reduce((s, e) => s + (cells[key]?.[e.code] || 0), 0);
-                      return (
-                        <tr key={key} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
-                          <td className="px-4 py-2 font-medium sticky left-0 bg-inherit">{getPeriodLabel(key, gran)}</td>
-                          {employees.map((e) => {
-                            const v = cells[key]?.[e.code] || 0;
-                            return (
-                              <td key={e.code} className={`px-3 py-2 text-right tabular-nums ${v === 0 ? 'text-[color:var(--color-muted-foreground)]' : ''}`}>
-                                {v === 0 ? '—' : Math.round(v).toLocaleString('ru-RU')}
-                              </td>
-                            );
-                          })}
-                          <td className="px-3 py-2 text-right font-medium tabular-nums">{Math.round(rowTotal).toLocaleString('ru-RU')}</td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="border-t-2 border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 font-semibold">
-                      <td className="px-4 py-2 sticky left-0 bg-inherit">Итого</td>
-                      {employees.map((e) => (
-                        <td key={e.code} className="px-3 py-2 text-right tabular-nums text-[color:var(--color-primary)]">
-                          {Math.round(colTotals[e.code] || 0).toLocaleString('ru-RU')}
-                        </td>
-                      ))}
-                      <td className="px-3 py-2 text-right tabular-nums text-[color:var(--color-primary)]">
-                        {Math.round(colTotals._grand || 0).toLocaleString('ru-RU')}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile cards — mirrors the desktop pivot, one card per period with all employees listed */}
-              <div className="sm:hidden divide-y divide-[color:var(--color-border)]">
-                {periods.map((key) => {
-                  const rowTotal = employees.reduce((s, e) => s + (cells[key]?.[e.code] || 0), 0);
-                  return (
-                    <div key={key} className="p-3 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-sm">{getPeriodLabel(key, gran)}</span>
-                        <span className="font-semibold text-[color:var(--color-primary)] text-sm tabular-nums">
-                          {Math.round(rowTotal).toLocaleString('ru-RU')} ₽
+              <div className="p-3">
+                <ResponsiveTable
+                  data={[
+                    ...periods.map((key) => ({
+                      key,
+                      isTotal: false,
+                      label: getPeriodLabel(key, gran),
+                      rowTotal: employees.reduce((s, e) => s + (cells[key]?.[e.code] || 0), 0),
+                    })),
+                    {
+                      key: '_total',
+                      isTotal: true,
+                      label: 'Итого',
+                      rowTotal: colTotals._grand || 0,
+                    },
+                  ]}
+                  keyFn={(row) => row.key}
+                  rowClass={(row) => row.isTotal ? 'border-t-2 border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 font-semibold' : ''}
+                  emptyText="Нет данных"
+                  columns={[
+                    {
+                      label: 'Период',
+                      primary: true,
+                      headerClass: 'sticky left-0 bg-[color:var(--color-modal-bg)]',
+                      cellClass: 'sticky left-0 bg-inherit font-medium',
+                      render: (row) => row.label,
+                    },
+                    ...employees.map((e) => ({
+                      label: empName(e.code),
+                      render: (row) => {
+                        if (row.isTotal) {
+                          return (
+                            <span className="text-[color:var(--color-primary)]">
+                              {Math.round(colTotals[e.code] || 0).toLocaleString('ru-RU')}
+                            </span>
+                          );
+                        }
+                        const v = cells[row.key]?.[e.code] || 0;
+                        return (
+                          <span className={v === 0 ? 'text-[color:var(--color-muted-foreground)]' : ''}>
+                            {v === 0 ? '—' : Math.round(v).toLocaleString('ru-RU')}
+                          </span>
+                        );
+                      },
+                    })),
+                    {
+                      label: 'Итого',
+                      render: (row) => (
+                        <span className={row.isTotal ? 'text-[color:var(--color-primary)]' : 'font-medium'}>
+                          {Math.round(row.rowTotal || 0).toLocaleString('ru-RU')}
                         </span>
-                      </div>
-                      {employees.length > 0 && (
-                        <div className="space-y-0.5">
-                          {employees.map((e) => {
-                            const v = cells[key]?.[e.code] || 0;
-                            return (
-                              <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
-                                <span>{empName(e.code)}</span>
-                                <span className="tabular-nums">{v === 0 ? '—' : `${Math.round(v).toLocaleString('ru-RU')} ₽`}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                <div className="p-3 bg-[color:var(--color-muted)]/30 font-semibold">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Итого</span>
-                    <span className="text-[color:var(--color-primary)] tabular-nums">
-                      {Math.round(colTotals._grand || 0).toLocaleString('ru-RU')} ₽
-                    </span>
-                  </div>
-                  <div className="mt-1 space-y-0.5">
-                    {employees.map((e) => (
-                      <div key={e.code} className="flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
-                        <span>{empName(e.code)}</span>
-                        <span className="tabular-nums">{Math.round(colTotals[e.code] || 0).toLocaleString('ru-RU')} ₽</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                      ),
+                    },
+                  ]}
+                />
               </div>
             </div>
           )}

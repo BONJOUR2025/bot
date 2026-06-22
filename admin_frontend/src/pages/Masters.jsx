@@ -3,6 +3,7 @@ import { Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, Al
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const fmt    = (v) => (v == null ? '—' : v);
 const fmtRub = (v) => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽');
@@ -407,14 +408,15 @@ export default function Masters() {
     URL.revokeObjectURL(url);
   }
 
-  const SortTh = ({ col, children, className = '' }) => (
-    <th
-      className={`px-4 py-3 cursor-pointer select-none hover:text-[color:var(--color-text-primary)] transition-colors ${className}`}
+  const sortLabel = (col, text) => (
+    <button
+      type="button"
       onClick={() => toggleSort(col)}
+      className="cursor-pointer select-none hover:text-[color:var(--color-text-primary)] transition-colors inline-flex items-center bg-transparent border-0 p-0"
     >
-      {children}
+      {text}
       <SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
-    </th>
+    </button>
   );
 
   return (
@@ -609,111 +611,95 @@ export default function Masters() {
               <span className="text-sm text-[color:var(--color-muted-foreground)]">{filtered.length} строк</span>
             </div>
 
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm min-w-[700px]">
-                <thead>
-                  <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] text-xs uppercase tracking-wide">
-                    <SortTh col="status" className="text-left">Статус</SortTh>
-                    <th className="px-4 py-3 text-amber-600 text-xs uppercase tracking-wide"></th>
-                    <SortTh col="description" className="text-left">Мастер</SortTh>
-                    <SortTh col="doc_num" className="text-left">Заказ</SortTh>
-                    <SortTh col="code" className="text-left">Код</SortTh>
-                    <SortTh col="name" className="text-left">Услуга</SortTh>
-                    <SortTh col="service_group" className="text-left">Группа</SortTh>
-                    <SortTh col="in_time" className="text-right">Приём</SortTh>
-                    <SortTh col="out_time" className="text-right">Выдача</SortTh>
-                    <SortTh col="duration_min" className="text-right">Длит.</SortTh>
-                    <SortTh col="master_salary" className="text-right">ЗП</SortTh>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.slice(0, 500).map((r, i) => (
-                    <tr key={r.service_id ?? i}
-                      className={`${r.warnings?.length > 0 ? 'bg-amber-50/60 dark:bg-amber-900/10' : i % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}`}>
-                      <td className="px-4 py-2">
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2">
-                        {r.warnings?.length > 0 && (
-                          <span title={r.warnings.join('\n')} className="cursor-help">
-                            <AlertTriangle size={14} className="text-amber-500" />
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 font-medium">{fmt(r.description)}</td>
-                      <td className="px-4 py-2 text-[color:var(--color-muted-foreground)]">{fmt(r.doc_num)}</td>
-                      <td className="px-4 py-2 font-mono text-xs">{fmt(r.code)}</td>
-                      <td className="px-4 py-2">{fmt(r.name)}</td>
-                      <td className="px-4 py-2 text-[color:var(--color-muted-foreground)]">{fmt(r.service_group)}</td>
-                      <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtDt(r.in_time)}</td>
-                      <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtDt(r.out_time)}</td>
-                      <td className="px-4 py-2 text-right">{fmtMin(r.duration_min)}</td>
-                      <td className="px-4 py-2 text-right font-medium text-[color:var(--color-primary)]">{fmtRub(r.master_salary)}</td>
-                    </tr>
-                  ))}
-                  {filtered.length > 500 && (
-                    <tr>
-                      <td colSpan={11} className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)]">
-                        Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile cards */}
-            <div className="sm:hidden divide-y divide-[color:var(--color-border)]">
-              {sorted.slice(0, 500).map((r, i) => (
-                <div key={r.service_id ?? i} className={`p-3 space-y-1.5 ${r.warnings?.length > 0 ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
-                        {r.status}
+            <ResponsiveTable
+              data={sorted.slice(0, 500)}
+              keyFn={(r) => r.service_id ?? `${r.doc_num}-${r.code}-${r.in_time}`}
+              rowClass={(r) => r.warnings?.length > 0 ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}
+              emptyText="Нет данных"
+              columns={[
+                {
+                  key: 'status',
+                  label: sortLabel('status', 'Статус'),
+                  render: (r) => (
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
+                      {r.status}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'warning',
+                  label: '',
+                  render: (r) => (
+                    r.warnings?.length > 0 && (
+                      <span title={r.warnings.join('\n')} className="cursor-help">
+                        <AlertTriangle size={14} className="text-amber-500" />
                       </span>
-                      {r.warnings?.length > 0 && (
-                        <AlertTriangle size={13} className="text-amber-500" title={r.warnings.join('\n')} />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
-                      {r.master_salary != null && (
-                        <span className="font-medium text-[color:var(--color-primary)]">{fmtRub(r.master_salary)}</span>
-                      )}
-                      <span>{fmtMin(r.duration_min)}</span>
-                    </div>
-                  </div>
-                  <div className="font-medium text-sm">{fmt(r.description)}</div>
-                  <div className="text-sm">{fmt(r.name)}</div>
-                  {r.warnings?.length > 0 && (
-                    <div className="space-y-0.5">
-                      {r.warnings.map((w, wi) => (
-                        <div key={wi} className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
-                          <AlertTriangle size={11} className="mt-0.5 shrink-0" />
-                          <span>{w}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[color:var(--color-muted-foreground)]">
-                    <span>Заказ: {fmt(r.doc_num)}</span>
-                    <span>Код: {fmt(r.code)}</span>
-                    {r.service_group && <span>{r.service_group}</span>}
-                  </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[color:var(--color-muted-foreground)]">
-                    {r.in_time && <span>Приём: {fmtDt(r.in_time)}</span>}
-                    {r.out_time && <span>Выдача: {fmtDt(r.out_time)}</span>}
-                  </div>
-                </div>
-              ))}
-              {filtered.length > 500 && (
-                <div className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)]">
-                  Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
-                </div>
-              )}
-            </div>
+                    )
+                  ),
+                },
+                {
+                  key: 'description',
+                  label: sortLabel('description', 'Мастер'),
+                  primary: true,
+                  render: (r) => fmt(r.description),
+                },
+                {
+                  key: 'doc_num',
+                  label: sortLabel('doc_num', 'Заказ'),
+                  mobileHide: true,
+                  cellClass: 'text-[color:var(--color-muted-foreground)]',
+                  render: (r) => fmt(r.doc_num),
+                },
+                {
+                  key: 'code',
+                  label: sortLabel('code', 'Код'),
+                  mobileHide: true,
+                  cellClass: 'font-mono text-xs',
+                  render: (r) => fmt(r.code),
+                },
+                {
+                  key: 'name',
+                  label: sortLabel('name', 'Услуга'),
+                  render: (r) => fmt(r.name),
+                },
+                {
+                  key: 'service_group',
+                  label: sortLabel('service_group', 'Группа'),
+                  mobileHide: true,
+                  cellClass: 'text-[color:var(--color-muted-foreground)]',
+                  render: (r) => fmt(r.service_group),
+                },
+                {
+                  key: 'in_time',
+                  label: sortLabel('in_time', 'Приём'),
+                  cellClass: 'text-right text-[color:var(--color-muted-foreground)]',
+                  render: (r) => fmtDt(r.in_time),
+                },
+                {
+                  key: 'out_time',
+                  label: sortLabel('out_time', 'Выдача'),
+                  cellClass: 'text-right text-[color:var(--color-muted-foreground)]',
+                  render: (r) => fmtDt(r.out_time),
+                },
+                {
+                  key: 'duration_min',
+                  label: sortLabel('duration_min', 'Длит.'),
+                  cellClass: 'text-right',
+                  render: (r) => fmtMin(r.duration_min),
+                },
+                {
+                  key: 'master_salary',
+                  label: sortLabel('master_salary', 'ЗП'),
+                  cellClass: 'text-right font-medium text-[color:var(--color-primary)]',
+                  render: (r) => fmtRub(r.master_salary),
+                },
+              ]}
+            />
+            {filtered.length > 500 && (
+              <div className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)] border-t border-[color:var(--color-border)]">
+                Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
+              </div>
+            )}
           </div>
         </>
       )}

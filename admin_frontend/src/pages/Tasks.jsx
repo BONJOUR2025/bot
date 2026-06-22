@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
-import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 
 // ── Constants ────────────────────────────────────────────────────
@@ -220,8 +220,6 @@ export default function Tasks() {
   const getCat = n => categories.find(c => c.name === n);
   const isOverdue  = t => t.status !== 'done' && t.due_date && t.due_date < todayISO;
   const isToday    = t => t.due_date === todayISO;
-
-  const { isMobile } = useViewport();
 
   const todayISO = new Date().toISOString().slice(0, 10);
 
@@ -445,48 +443,94 @@ export default function Tasks() {
               <button className="btn btn--sm ml-auto" onClick={() => setSelected(new Set())}>Отмена</button>
             </div>
           )}
-        {isMobile ? (
-          <div className="space-y-3">
-            {tasks.map(task => {
-              const pri  = getPri(task.priority);
-              const cat  = getCat(task.category);
-              const over = isOverdue(task);
-              const tod  = isToday(task);
-              return (
-                <div key={task.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">
+        {tasks.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <input type="checkbox" checked={selected.size === tasks.length && tasks.length > 0} onChange={toggleSelectAll} />
+            Выбрать все
+          </label>
+        )}
+        <div className="bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] overflow-hidden">
+          <ResponsiveTable
+            data={tasks}
+            keyFn={task => task.id}
+            rowClass={task => isOverdue(task) ? 'bg-red-500/5' : isToday(task) ? 'bg-yellow-500/5' : ''}
+            emptyText="Нет задач"
+            columns={[
+              {
+                label: 'Выбор',
+                headerClass: 'w-8',
+                render: task => (
+                  <input type="checkbox" checked={selected.has(task.id)} onChange={() => toggleSelect(task.id)} />
+                ),
+              },
+              {
+                label: 'Задача',
+                primary: true,
+                render: task => {
+                  const cat = getCat(task.category);
+                  return (
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={selected.has(task.id)} onChange={() => toggleSelect(task.id)} />
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pri.dot }} />
-                      <span className={task.status === 'done' ? 'line-through text-gray-500' : ''}>{task.title}</span>
-                    </div>
-                  </div>
-                  <div className="px-4 py-2 space-y-1.5 text-sm">
-                    {cat && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Категория</span>
-                        <span className="text-xs px-2 py-0.5 rounded" style={{ background: cat.color + '22', color: cat.color }}>{cat.icon} {cat.name}</span>
+                      {cat && <span className="w-1 h-7 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />}
+                      <div>
+                        <div className={task.status === 'done' ? 'line-through text-gray-500' : ''}>{task.title}</div>
+                        {task.description && <div className="text-xs text-gray-400 truncate max-w-xs">{task.description}</div>}
                       </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Приоритет</span>
-                      <span>{pri.label}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Срок</span>
-                      <span className={over ? 'text-red-400' : tod ? 'text-yellow-400' : ''}>
-                        {task.due_date ? `${task.due_date}${task.due_time ? ' ' + task.due_time.slice(0, 5) : ''}` : '—'}
-                      </span>
+                  );
+                },
+              },
+              {
+                label: 'Категория',
+                headerClass: 'hidden md:table-cell',
+                cellClass: 'hidden md:table-cell',
+                render: task => {
+                  const cat = getCat(task.category);
+                  return cat ? (
+                    <span className="text-xs px-2 py-0.5 rounded" style={{ background: cat.color + '22', color: cat.color }}>
+                      {cat.icon} {cat.name}
+                    </span>
+                  ) : null;
+                },
+              },
+              {
+                label: 'Срок',
+                render: task => {
+                  const over = isOverdue(task);
+                  const tod  = isToday(task);
+                  return task.due_date ? (
+                    <span className={over ? 'text-red-400' : tod ? 'text-yellow-400' : ''}>
+                      {task.due_date}
+                      {task.due_time && <span className="ml-1 text-gray-400">{task.due_time.slice(0, 5)}</span>}
+                    </span>
+                  ) : '—';
+                },
+              },
+              {
+                label: 'Приоритет',
+                render: task => {
+                  const pri = getPri(task.priority);
+                  return (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: pri.dot }} />
+                      <span className="text-sm hidden lg:inline">{pri.label}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Статус</span>
-                      <select className="input-field text-sm py-0.5" value={task.status}
-                        onChange={e => updateStatus(task.id, e.target.value)}>
-                        {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="px-4 py-2 border-t flex justify-end gap-3">
+                  );
+                },
+              },
+              {
+                label: 'Статус',
+                render: task => (
+                  <select className="input-field text-sm py-1" value={task.status}
+                    onChange={e => updateStatus(task.id, e.target.value)}>
+                    {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                ),
+              },
+              {
+                label: 'Действия',
+                isAction: true,
+                render: task => (
+                  <div className="flex items-center justify-end gap-1">
                     {task.status !== 'done' ? (
                       <button onClick={() => completeTask(task.id)} className="p-1.5 hover:bg-green-500/20 rounded">
                         <Check size={16} className="text-green-400" />
@@ -503,105 +547,11 @@ export default function Tasks() {
                       <Trash2 size={16} className="text-red-400" />
                     </button>
                   </div>
-                </div>
-              );
-            })}
-            {tasks.length === 0 && <div className="text-center text-gray-500 py-8">Нет задач</div>}
-          </div>
-        ) : (
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[var(--color-border)] text-left text-sm text-gray-400">
-                <th className="p-3 w-8">
-                  <input type="checkbox" checked={selected.size === tasks.length && tasks.length > 0} onChange={toggleSelectAll} />
-                </th>
-                <th className="p-3">Задача</th>
-                <th className="p-3 hidden md:table-cell">Категория</th>
-                <th className="p-3">Срок</th>
-                <th className="p-3">Приоритет</th>
-                <th className="p-3">Статус</th>
-                <th className="p-3 text-right">Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.map(task => {
-                const pri  = getPri(task.priority);
-                const cat  = getCat(task.category);
-                const over = isOverdue(task);
-                const tod  = isToday(task);
-                return (
-                  <tr key={task.id}
-                    className={`border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]
-                      ${over ? 'bg-red-500/5' : tod ? 'bg-yellow-500/5' : ''}`}>
-                    <td className="p-3">
-                      <input type="checkbox" checked={selected.has(task.id)} onChange={() => toggleSelect(task.id)} />
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        {cat && <span className="w-1 h-7 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />}
-                        <div>
-                          <div className={task.status === 'done' ? 'line-through text-gray-500' : ''}>{task.title}</div>
-                          {task.description && <div className="text-xs text-gray-400 truncate max-w-xs">{task.description}</div>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-3 hidden md:table-cell">
-                      {cat && (
-                        <span className="text-xs px-2 py-0.5 rounded" style={{ background: cat.color + '22', color: cat.color }}>
-                          {cat.icon} {cat.name}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-sm">
-                      {task.due_date && (
-                        <span className={over ? 'text-red-400' : tod ? 'text-yellow-400' : ''}>
-                          {task.due_date}
-                          {task.due_time && <span className="ml-1 text-gray-400">{task.due_time.slice(0, 5)}</span>}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: pri.dot }} />
-                        <span className="text-sm hidden lg:inline">{pri.label}</span>
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <select className="input-field text-sm py-1" value={task.status}
-                        onChange={e => updateStatus(task.id, e.target.value)}>
-                        {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center justify-end gap-1">
-                        {task.status !== 'done' ? (
-                          <button onClick={() => completeTask(task.id)} className="p-1.5 hover:bg-green-500/20 rounded">
-                            <Check size={16} className="text-green-400" />
-                          </button>
-                        ) : (
-                          <button onClick={() => reopenTask(task.id)} className="p-1.5 hover:bg-blue-500/20 rounded">
-                            <RotateCcw size={16} className="text-blue-400" />
-                          </button>
-                        )}
-                        <button onClick={() => startEdit(task)} className="p-1.5 hover:bg-[var(--color-bg)] rounded">
-                          <Pencil size={16} />
-                        </button>
-                        <button onClick={() => deleteTask(task.id)} className="p-1.5 hover:bg-red-500/20 rounded">
-                          <Trash2 size={16} className="text-red-400" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {tasks.length === 0 && (
-                <tr><td colSpan={7} className="p-8 text-center text-gray-500">Нет задач</td></tr>
-              )}
-            </tbody>
-          </table>
+                ),
+              },
+            ]}
+          />
         </div>
-        )}
         </>
       )}
 

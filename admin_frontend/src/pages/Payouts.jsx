@@ -16,7 +16,7 @@ import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
-import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const MAX_AMOUNT = 100000;
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
@@ -270,40 +270,42 @@ function MovementPickerModal({ payout, onLink, onClose }) {
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Нет движений за период</div>
         ) : (
           <div className="overflow-auto flex-1">
-            <table className="w-full min-w-[460px] text-sm">
-              <thead className="sticky top-0 bg-gray-50 text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 text-left">Дата</th>
-                  <th className="px-3 py-2 text-left">Филиал</th>
-                  <th className="px-3 py-2 text-left">Основание</th>
-                  <th className="px-3 py-2 text-right">Сумма</th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {moves.map((m) => (
-                  <tr key={m.ID_KASSES_MOVE} className={`hover:bg-gray-50 ${m.has_payout ? 'opacity-50' : ''}`}>
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">{m.DK_DATE}</td>
-                    <td className="px-3 py-2 max-w-[120px] truncate" title={m.dep_name}>{m.dep_name || '—'}</td>
-                    <td className="px-3 py-2 font-mono text-xs max-w-xs truncate" title={m.BASIS}>{m.BASIS || '—'}</td>
-                    <td className="px-3 py-2 text-right font-medium whitespace-nowrap">
+            <ResponsiveTable
+              data={moves}
+              keyFn={(m) => m.ID_KASSES_MOVE}
+              rowClass={(m) => (m.has_payout ? 'opacity-50' : '')}
+              columns={[
+                { label: 'Дата', primary: true, render: (m) => <span className="whitespace-nowrap text-xs">{m.DK_DATE}</span> },
+                { label: 'Филиал', render: (m) => m.dep_name || '—' },
+                {
+                  label: 'Основание',
+                  render: (m) => <span className="font-mono text-xs">{m.BASIS || '—'}</span>,
+                },
+                {
+                  label: 'Сумма',
+                  render: (m) => (
+                    <span className="font-medium whitespace-nowrap">
                       {Number(m.SUMM).toLocaleString('ru-RU')} ₽
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        className="btn btn--primary text-xs px-2 py-1 disabled:opacity-50"
-                        disabled={linking === m.ID_KASSES_MOVE}
-                        onClick={() => handleLink(String(m.ID_KASSES_MOVE))}
-                      >
-                        {linking === m.ID_KASSES_MOVE
-                          ? <RefreshCw size={12} className="animate-spin" />
-                          : 'Привязать'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </span>
+                  ),
+                },
+                {
+                  label: '',
+                  isAction: true,
+                  render: (m) => (
+                    <button
+                      className="btn btn--primary text-xs px-2 py-1 disabled:opacity-50"
+                      disabled={linking === m.ID_KASSES_MOVE}
+                      onClick={() => handleLink(String(m.ID_KASSES_MOVE))}
+                    >
+                      {linking === m.ID_KASSES_MOVE
+                        ? <RefreshCw size={12} className="animate-spin" />
+                        : 'Привязать'}
+                    </button>
+                  ),
+                },
+              ]}
+            />
           </div>
         )}
       </div>
@@ -314,7 +316,6 @@ function MovementPickerModal({ payout, onLink, onClose }) {
 export default function Payouts() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { isMobile } = useViewport();
   const canManageDates = Boolean(
     user?.permissions?.includes('*') || user?.permissions?.includes(MANAGE_DATES_PERMISSION),
   );
@@ -837,111 +838,75 @@ export default function Payouts() {
         <div className="border rounded shadow bg-white p-4">
           <SkeletonTable rows={8} cols={7} />
         </div>
-      ) : isMobile ? (
-        <div className="space-y-3">
-          {payouts.length === 0 && (
-            <div className="py-6 text-center text-gray-500 text-sm italic">Нет данных</div>
-          )}
-          {payouts.map((p) => (
-            <div key={p.id} className={`border rounded-xl bg-white shadow-sm overflow-hidden ${selected.has(p.id) ? 'ring-2 ring-blue-400' : ''}`}>
-              <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
-                <label className="flex items-center gap-2 font-medium text-sm cursor-pointer">
-                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
-                  {p.name}
-                </label>
-                <span className={`px-2 py-0.5 rounded text-xs ${statusColor(p.status)}`}>{p.status}</span>
-              </div>
-              <div className="px-4 py-2 space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Сумма</span>
-                  <span className="font-semibold text-blue-800">{p.amount} ₽</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Тип / Способ</span>
-                  <span>{p.payout_type} · {p.method}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Дата</span>
-                  <span className="text-xs">{formatDateTime(p.timestamp)}</span>
-                </div>
-              </div>
-              <div className="px-4 py-2 border-t flex justify-end gap-3">
-                <button onClick={() => openEdit(p)} className="text-blue-600" title="Редактировать"><Pencil size={18} /></button>
-                {p.status === 'Ожидает' && (
-                  <button onClick={() => updateStatus(p.id, 'Одобрено')} className="text-green-600" title="Одобрить"><CheckCircle size={18} /></button>
-                )}
-                {p.status === 'Ожидает' && (
-                  <button onClick={() => updateStatus(p.id, 'Отклонено')} className="text-red-600" title="Отказать"><XCircle size={18} /></button>
-                )}
-                {p.status === 'Одобрено' && (
-                  <button onClick={() => updateStatus(p.id, 'Выплачено')} className="text-indigo-600" title="Отметить выплаченным"><Download size={18} /></button>
-                )}
-                <button onClick={() => remove(p.id)} className="text-gray-500" title="Удалить"><Trash2 size={18} /></button>
-              </div>
-            </div>
-          ))}
-        </div>
       ) : (
-        <div className="overflow-auto border rounded shadow">
-          <table className="min-w-[1100px] divide-y divide-gray-200 bg-white text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-2 py-2 w-8">
-                  <input
-                    type="checkbox"
-                    checked={payouts.length > 0 && selected.size === payouts.length}
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <th className="px-2 py-2 w-8" title="Связь с кассовым движением"></th>
-                <th className="px-4 py-2 text-left">ФИО</th>
-                <th className="px-4 py-2 text-left">Тип</th>
-                <th className="px-4 py-2 text-left">Способ</th>
-                <th className="px-4 py-2 text-left">Сумма</th>
-                <th className="px-4 py-2 text-left">Статус</th>
-                <th className="px-4 py-2 text-left">Дата</th>
-                <th className="px-4 py-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {payouts.map((p) => (
-                <tr key={p.id} className={`hover:bg-gray-50 ${selected.has(p.id) ? 'bg-blue-50' : ''}`}>
-                  <td className="px-2 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(p.id)}
-                      onChange={() => toggleSelect(p.id)}
-                    />
-                  </td>
-                  <td className="px-2 py-2 text-center">
-                    {findingMoves.has(p.id) || (moveMatchesLoading && moveMatches[p.id] == null)
-                      ? <RefreshCw size={13} className="mx-auto animate-spin text-gray-400" />
-                      : moveMatches[p.id]?.matched
-                        ? <button
-                            onClick={() => setQuickViewPayout(p)}
-                            title={`Движение привязано: ${moveMatches[p.id].move_id} — нажмите для просмотра`}
-                            className="p-0.5 rounded hover:bg-green-100 transition-colors"
-                          >
-                            <LinkIcon size={14} className="mx-auto text-green-500" />
-                          </button>
-                        : moveMatches[p.id] != null
-                          ? <button onClick={() => findMoveForPayout(p.id)} title="Кассовое движение не найдено — нажмите для повторного поиска">
-                              <Unlink size={14} className="text-amber-400 hover:text-amber-600" />
-                            </button>
-                          : <button onClick={() => findMoveForPayout(p.id)} title="Найти кассовое движение">
-                              <Search size={13} className="text-gray-300 hover:text-gray-500" />
-                            </button>
-                    }
-                  </td>
-                  <td className="px-4 py-2">{p.name}</td>
-                  <td className="px-4 py-2">{p.payout_type}</td>
-                  <td className="px-4 py-2">{p.method}</td>
-                  <td className="px-4 py-2 text-blue-800 font-medium">{p.amount} ₽</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-1 rounded text-xs ${statusColor(p.status)}`}>{p.status}</span>
-                  </td>
-                  <td className="px-4 py-2 text-xs">{formatDateTime(p.timestamp)}</td>
-                  <td className="px-4 py-2 space-x-1 whitespace-nowrap">
+        <>
+          {payouts.length > 0 && (
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={selected.size === payouts.length}
+                onChange={toggleSelectAll}
+              />
+              Выбрать все
+            </label>
+          )}
+          <ResponsiveTable
+            data={payouts}
+            keyFn={(p) => p.id}
+            rowClass={(p) => (selected.has(p.id) ? 'bg-blue-50' : '')}
+            emptyText="Нет данных"
+            columns={[
+              {
+                label: '',
+                render: (p) => (
+                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                ),
+              },
+              {
+                label: 'Движение',
+                render: (p) =>
+                  findingMoves.has(p.id) || (moveMatchesLoading && moveMatches[p.id] == null) ? (
+                    <RefreshCw size={13} className="animate-spin text-gray-400" />
+                  ) : moveMatches[p.id]?.matched ? (
+                    <button
+                      onClick={() => setQuickViewPayout(p)}
+                      title={`Движение привязано: ${moveMatches[p.id].move_id} — нажмите для просмотра`}
+                      className="p-0.5 rounded hover:bg-green-100 transition-colors"
+                    >
+                      <LinkIcon size={14} className="text-green-500" />
+                    </button>
+                  ) : moveMatches[p.id] != null ? (
+                    <button onClick={() => findMoveForPayout(p.id)} title="Кассовое движение не найдено — нажмите для повторного поиска">
+                      <Unlink size={14} className="text-amber-400 hover:text-amber-600" />
+                    </button>
+                  ) : (
+                    <button onClick={() => findMoveForPayout(p.id)} title="Найти кассовое движение">
+                      <Search size={13} className="text-gray-300 hover:text-gray-500" />
+                    </button>
+                  ),
+              },
+              { label: 'ФИО', key: 'name', primary: true },
+              { label: 'Тип', key: 'payout_type' },
+              { label: 'Способ', key: 'method' },
+              {
+                label: 'Сумма',
+                render: (p) => <span className="text-blue-800 font-medium">{p.amount} ₽</span>,
+              },
+              {
+                label: 'Статус',
+                render: (p) => (
+                  <span className={`px-2 py-1 rounded text-xs ${statusColor(p.status)}`}>{p.status}</span>
+                ),
+              },
+              {
+                label: 'Дата',
+                render: (p) => <span className="text-xs">{formatDateTime(p.timestamp)}</span>,
+              },
+              {
+                label: '',
+                isAction: true,
+                render: (p) => (
+                  <div className="flex justify-end gap-2">
                     <button onClick={() => openEdit(p)} className="text-blue-600 hover:text-blue-800" title="Редактировать"><Pencil size={16} /></button>
                     {p.status === 'Ожидает' && (
                       <button onClick={() => updateStatus(p.id, 'Одобрено')} className="text-green-600 hover:text-green-800" title="Одобрить"><CheckCircle size={16} /></button>
@@ -953,17 +918,12 @@ export default function Payouts() {
                       <button onClick={() => updateStatus(p.id, 'Выплачено')} className="text-indigo-600 hover:text-indigo-800" title="Отметить выплаченным"><Download size={16} /></button>
                     )}
                     <button onClick={() => remove(p.id)} className="text-gray-500 hover:text-gray-800" title="Удалить"><Trash2 size={16} /></button>
-                  </td>
-                </tr>
-              ))}
-              {payouts.length === 0 && (
-                <tr>
-                  <td colSpan="9" className="px-4 py-3 text-center text-gray-500 italic">Нет данных</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                ),
+              },
+            ]}
+          />
+        </>
       )}
 
       <div className="flex gap-3 items-center">

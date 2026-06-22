@@ -233,62 +233,53 @@ export default function ShiftCheckins() {
       </div>
 
       <div className="space-y-4">
-        {dates.map((date) => (
-          <div key={date} className="border rounded shadow bg-white overflow-hidden">
-            <div className="px-3 py-2 bg-gray-100 font-semibold text-sm">{fmtDate(date)}</div>
-            <div className="overflow-auto">
-              <table className="min-w-max w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="p-2 text-left whitespace-nowrap">Точка</th>
-                    <th className="p-2 text-left whitespace-nowrap">Сотрудник</th>
-                    <th className="p-2 text-left whitespace-nowrap">Открытие</th>
-                    <th className="p-2 text-left whitespace-nowrap">По графику</th>
-                    <th className="p-2 text-left whitespace-nowrap">Штраф</th>
-                    <th className="p-2 text-left whitespace-nowrap">Фото</th>
-                    <th className="p-2 text-right whitespace-nowrap"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {salons.map((salon) => {
-                    const checkins = list.filter(
-                      (item) => item.date === date && String(item.salon_id) === String(salon.id)
-                    );
-                    if (checkins.length === 0) {
-                      return (
-                        <tr key={salon.id} className="hover:bg-gray-50">
-                          <td className="p-2 font-medium">{salon.name}</td>
-                          <td className="p-2 text-gray-400" colSpan={5}>
-                            Нет отметки об открытии
-                          </td>
-                          <td className="p-2"></td>
-                        </tr>
-                      );
-                    }
-                    return checkins.map((item) => (
-                      <tr key={item.id} className={`hover:bg-gray-50 ${item.penalty_amount ? 'bg-red-50' : ''}`}>
-                        <td className="p-2 font-medium">{salon.name}</td>
-                        <td className="p-2">{item.employee_name}</td>
-                        <td className="p-2">{fmtTime(item.sent_at)}</td>
-                        <td className="p-2">{item.expected_open_time || '—'}</td>
-                        <td className="p-2">{penaltyLabel(item)}</td>
-                        <td className="p-2">{photoCell(item)}</td>
-                        <td className="p-2 text-right">{actionButtons(item)}</td>
-                      </tr>
-                    ));
-                  })}
-                  {salons.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="p-4 text-center text-gray-500">
-                        Нет активных салонов
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+        {dates.map((date) => {
+          const rows = salons.flatMap((salon) => {
+            const checkins = list.filter(
+              (item) => item.date === date && String(item.salon_id) === String(salon.id)
+            );
+            if (checkins.length === 0) {
+              return [{ id: `salon-${salon.id}`, salon, noCheckin: true }];
+            }
+            return checkins.map((item) => ({ id: item.id, salon, item }));
+          });
+          return (
+            <div key={date} className="border rounded shadow bg-white overflow-hidden">
+              <div className="px-3 py-2 bg-gray-100 font-semibold text-sm">{fmtDate(date)}</div>
+              <ResponsiveTable
+                data={rows}
+                keyFn={(row) => row.id}
+                rowClass={(row) => (row.item?.penalty_amount ? 'bg-red-50' : '')}
+                emptyText="Нет активных салонов"
+                columns={[
+                  { label: 'Точка', render: (row) => row.salon.name, primary: true },
+                  {
+                    label: 'Сотрудник',
+                    render: (row) =>
+                      row.noCheckin ? (
+                        <span className="text-gray-400">Нет отметки об открытии</span>
+                      ) : (
+                        row.item.employee_name
+                      ),
+                  },
+                  { label: 'Открытие', render: (row) => (row.noCheckin ? '—' : fmtTime(row.item.sent_at)) },
+                  {
+                    label: 'По графику',
+                    render: (row) => (row.noCheckin ? '—' : row.item.expected_open_time || '—'),
+                  },
+                  { label: 'Штраф', render: (row) => (row.noCheckin ? '—' : penaltyLabel(row.item)) },
+                  { label: 'Фото', render: (row) => (row.noCheckin ? '—' : photoCell(row.item)) },
+                  {
+                    label: '',
+                    isAction: true,
+                    cellClass: 'text-right',
+                    render: (row) => (row.noCheckin ? null : actionButtons(row.item)),
+                  },
+                ]}
+              />
             </div>
-          </div>
-        ))}
+          );
+        })}
         {dates.length === 0 && (
           <div className="py-6 text-center text-gray-500 text-sm">Выберите период</div>
         )}

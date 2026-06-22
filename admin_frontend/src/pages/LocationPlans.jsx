@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import { ChevronDown, ChevronUp, Info } from 'lucide-react';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const MONTHS = [
   'ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ',
@@ -58,125 +59,65 @@ function CodeManager({ codes }) {
 
 // ── Plans table ──────────────────────────────────────────────────
 function PlansTable({ codes, plans, onChange }) {
-  const { isMobile } = useViewport();
-
   function handleChange(code, field, raw) {
     const val = parseFloat(raw.replace(/\s/g, '')) || 0;
     onChange(code, field, val);
-  }
-
-  if (isMobile) {
-    return (
-      <div className="space-y-3">
-        {codes.length === 0 && (
-          <div className="card px-4 py-8 text-center text-sm text-[color:var(--color-muted-foreground)] italic">
-            Нет активных салонов с кодом — задайте код салону на странице «Салоны»
-          </div>
-        )}
-        {codes.map((c) => {
-          const p = plans[c.code] || {};
-          return (
-            <div key={c.code} className="card overflow-hidden">
-              <div className="px-4 py-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/20 text-sm font-semibold flex items-center gap-2">
-                <span className="w-7 h-6 flex items-center justify-center rounded bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold">
-                  {c.code}
-                </span>
-                {c.name}
-              </div>
-              <div className="px-4 py-3 space-y-2 text-sm">
-                {[
-                  { field: 'repair_plan', label: 'Ремонт / Химчистка' },
-                  { field: 'cosmetics_plan', label: 'Косметика' },
-                  { field: 'shoes_plan', label: 'Обувь' },
-                ].map(({ field, label }) => (
-                  <div key={field} className="flex items-center justify-between gap-3">
-                    <span className="text-[color:var(--color-muted-foreground)]">{label}</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      className="input text-right w-28 text-sm"
-                      value={fmtInput(p[field])}
-                      onChange={e => handleChange(c.code, field, e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
   }
 
   const totalRepair = codes.reduce((s, c) => s + (plans[c.code]?.repair_plan || 0), 0);
   const totalCosmetics = codes.reduce((s, c) => s + (plans[c.code]?.cosmetics_plan || 0), 0);
   const totalShoes = codes.reduce((s, c) => s + (plans[c.code]?.shoes_plan || 0), 0);
 
+  const renderInput = (c, field) => {
+    const p = plans[c.code] || {};
+    return (
+      <input
+        type="text"
+        inputMode="numeric"
+        className="input text-right w-full text-sm min-w-[90px]"
+        value={fmtInput(p[field])}
+        onChange={e => handleChange(c.code, field, e.target.value)}
+        placeholder="0"
+      />
+    );
+  };
+
+  const columns = [
+    {
+      label: 'Точка',
+      primary: true,
+      render: (c) => (
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-6 flex items-center justify-center rounded bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold flex-shrink-0">
+            {c.code}
+          </span>
+          <span className="font-medium truncate">{c.name}</span>
+        </div>
+      ),
+    },
+    { label: 'Ремонт / Химчистка, ₽', render: (c) => renderInput(c, 'repair_plan') },
+    { label: 'Косметика, ₽', render: (c) => renderInput(c, 'cosmetics_plan') },
+    { label: 'Обувь, ₽', render: (c) => renderInput(c, 'shoes_plan') },
+  ];
+
   return (
     <div className="card overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30">
-            <th className="text-left px-4 py-3 text-xs font-semibold text-[color:var(--color-muted-foreground)] w-[35%]">
-              Точка
-            </th>
-            <th className="text-right px-3 py-3 text-xs font-semibold text-[color:var(--color-muted-foreground)] whitespace-nowrap">
-              Ремонт / Химчистка, ₽
-            </th>
-            <th className="text-right px-3 py-3 text-xs font-semibold text-[color:var(--color-muted-foreground)] whitespace-nowrap">
-              Косметика, ₽
-            </th>
-            <th className="text-right px-3 py-3 text-xs font-semibold text-[color:var(--color-muted-foreground)] whitespace-nowrap">
-              Обувь, ₽
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[color:var(--color-border)]">
-          {codes.map((c, i) => {
-            const p = plans[c.code] || {};
-            return (
-              <tr key={c.code} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/10' : ''}>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-7 h-6 flex items-center justify-center rounded bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold flex-shrink-0">
-                      {c.code}
-                    </span>
-                    <span className="font-medium truncate">{c.name}</span>
-                  </div>
-                </td>
-                {['repair_plan', 'cosmetics_plan', 'shoes_plan'].map(field => (
-                  <td key={field} className="px-2 py-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      className="input text-right w-full text-sm min-w-[90px]"
-                      value={fmtInput(p[field])}
-                      onChange={e => handleChange(c.code, field, e.target.value)}
-                      placeholder="0"
-                    />
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-          {codes.length === 0 && (
-            <tr>
-              <td colSpan={4} className="px-4 py-10 text-center text-sm text-[color:var(--color-muted-foreground)] italic">
-                Нет активных салонов с кодом — задайте код салону на странице «Салоны»
-              </td>
-            </tr>
-          )}
-          {codes.length > 0 && (
-            <tr className="bg-[color:var(--color-muted)]/40 font-semibold border-t-2 border-[color:var(--color-border)]">
-              <td className="px-4 py-2.5 text-sm">Итого</td>
-              <td className="px-3 py-2.5 text-right text-sm">{fmt(totalRepair)} ₽</td>
-              <td className="px-3 py-2.5 text-right text-sm">{fmt(totalCosmetics)} ₽</td>
-              <td className="px-3 py-2.5 text-right text-sm">{fmt(totalShoes)} ₽</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <ResponsiveTable
+        data={codes}
+        keyFn={(c) => c.code}
+        columns={columns}
+        emptyText="Нет активных салонов с кодом — задайте код салону на странице «Салоны»"
+      />
+      {codes.length > 0 && (
+        <div className="px-4 py-2.5 bg-[color:var(--color-muted)]/40 font-semibold border-t-2 border-[color:var(--color-border)] flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>Итого</span>
+          <div className="flex flex-wrap gap-4">
+            <span>Ремонт / Химчистка: {fmt(totalRepair)} ₽</span>
+            <span>Косметика: {fmt(totalCosmetics)} ₽</span>
+            <span>Обувь: {fmt(totalShoes)} ₽</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

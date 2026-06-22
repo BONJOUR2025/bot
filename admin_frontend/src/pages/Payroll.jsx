@@ -9,6 +9,7 @@ import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const fmt = (v) => (v === null || v === undefined || v === 0 ? '—' : Number(v).toLocaleString('ru-RU'));
 const fmtMoney = (v) => (v === null || v === undefined || v === 0 ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
@@ -969,29 +970,27 @@ export default function Payroll() {
           {auditLog.length === 0 ? (
             <p className="text-sm text-[color:var(--color-muted-foreground)]">Изменений за этот месяц нет.</p>
           ) : (
-            <div className="overflow-x-auto max-h-64">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-[color:var(--color-muted-foreground)] border-b border-[color:var(--color-border)]">
-                    <th className="pb-1 text-left pr-4">Время</th>
-                    <th className="pb-1 text-left pr-4">Кто</th>
-                    <th className="pb-1 text-left pr-4">Действие</th>
-                    <th className="pb-1 text-left">Сотрудник</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[color:var(--color-border)]">
-                  {auditLog.map((e) => (
-                    <tr key={e.id} className="hover:bg-[color:var(--color-muted)] transition-colors">
-                      <td className="py-1.5 pr-4 text-xs text-[color:var(--color-muted-foreground)] whitespace-nowrap">
-                        {new Date(e.timestamp).toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
-                      </td>
-                      <td className="py-1.5 pr-4 text-xs font-mono">{e.actor}</td>
-                      <td className="py-1.5 pr-4 font-medium">{e.action}</td>
-                      <td className="py-1.5 text-[color:var(--color-muted-foreground)]">{e.employee_name}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="max-h-64 overflow-y-auto">
+              <ResponsiveTable
+                data={auditLog}
+                keyFn={(e) => e.id}
+                columns={[
+                  {
+                    label: 'Время',
+                    primary: true,
+                    render: (e) =>
+                      new Date(e.timestamp).toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }),
+                  },
+                  { label: 'Кто', render: (e) => <span className="font-mono">{e.actor}</span> },
+                  { label: 'Действие', render: (e) => <span className="font-medium">{e.action}</span> },
+                  { label: 'Сотрудник', key: 'employee_name' },
+                ]}
+              />
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../../api.js';
 import { useViewport } from '../../providers/ViewportProvider.jsx';
 import { useToast } from '../../providers/ToastProvider.jsx';
+import ResponsiveTable from '../../components/ui/ResponsiveTable.jsx';
 
 const emptyRole = { id: '', name: '', permissions: [], bot_buttons: [] };
 const emptyUser = {
@@ -792,75 +793,61 @@ export default function AccessControl() {
           Все, кто хотя бы раз запускал бота (/start), с указанием Telegram ID и юзернейма. Можно привязать
           запись к существующему сотруднику — бот начнёт узнавать его по этому Telegram ID.
         </p>
-        {botUsers.length === 0 ? (
-          <p className="text-sm text-gray-500">Пока никто не запускал бота.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm border rounded bg-white">
-              <thead>
-                <tr className="bg-gray-50 text-left">
-                  <th className="px-3 py-2">Telegram ID</th>
-                  <th className="px-3 py-2">Username</th>
-                  <th className="px-3 py-2">Имя</th>
-                  <th className="px-3 py-2">Первый запуск</th>
-                  <th className="px-3 py-2">Последний запуск</th>
-                  <th className="px-3 py-2">Сотрудник</th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {botUsers.map((u) => (
-                  <tr key={u.telegram_id} className="border-t">
-                    <td className="px-3 py-2">{u.telegram_id}</td>
-                    <td className="px-3 py-2">{u.username ? `@${u.username}` : '—'}</td>
-                    <td className="px-3 py-2">{[u.first_name, u.last_name].filter(Boolean).join(' ') || '—'}</td>
-                    <td className="px-3 py-2">{fmtDateTime(u.first_seen)}</td>
-                    <td className="px-3 py-2">{fmtDateTime(u.last_seen)}</td>
-                    <td className="px-3 py-2">
-                      {u.employee_id ? (
-                        u.employee_name || `#${u.employee_id}`
-                      ) : (
-                        <span className="text-gray-400">Не привязан</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {u.employee_id && (
-                        <button className="btn" onClick={() => editBotUserAccess(u.employee_id)}>
-                          ⚙️ Права и меню
-                        </button>
-                      )}
-                      {!u.employee_id && (
-                        <div className="flex gap-2 items-center">
-                          <select
-                            className="input"
-                            value={linkSelections[u.telegram_id] || ''}
-                            onChange={(e) =>
-                              setLinkSelections((prev) => ({ ...prev, [u.telegram_id]: e.target.value }))
-                            }
-                          >
-                            <option value="">Сотрудник…</option>
-                            {data.available_employees.map((emp) => (
-                              <option key={emp.id} value={emp.id}>
-                                {emp.name}{emp.department ? ` · ${emp.department}` : ''}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            className="btn"
-                            disabled={!linkSelections[u.telegram_id]}
-                            onClick={() => linkBotUser(u.telegram_id)}
-                          >
-                            Связать
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <ResponsiveTable
+          data={botUsers}
+          keyFn={(u) => u.telegram_id}
+          emptyText="Пока никто не запускал бота."
+          columns={[
+            { label: 'Telegram ID', key: 'telegram_id' },
+            { label: 'Username', primary: true, render: (u) => (u.username ? `@${u.username}` : '—') },
+            { label: 'Имя', render: (u) => [u.first_name, u.last_name].filter(Boolean).join(' ') || '—' },
+            { label: 'Первый запуск', render: (u) => fmtDateTime(u.first_seen) },
+            { label: 'Последний запуск', render: (u) => fmtDateTime(u.last_seen) },
+            {
+              label: 'Сотрудник',
+              render: (u) =>
+                u.employee_id ? (
+                  u.employee_name || `#${u.employee_id}`
+                ) : (
+                  <span className="text-gray-400">Не привязан</span>
+                ),
+            },
+            {
+              label: '',
+              isAction: true,
+              render: (u) =>
+                u.employee_id ? (
+                  <button className="btn" onClick={() => editBotUserAccess(u.employee_id)}>
+                    ⚙️ Права и меню
+                  </button>
+                ) : (
+                  <div className="flex gap-2 items-center">
+                    <select
+                      className="input"
+                      value={linkSelections[u.telegram_id] || ''}
+                      onChange={(e) =>
+                        setLinkSelections((prev) => ({ ...prev, [u.telegram_id]: e.target.value }))
+                      }
+                    >
+                      <option value="">Сотрудник…</option>
+                      {data.available_employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name}{emp.department ? ` · ${emp.department}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="btn"
+                      disabled={!linkSelections[u.telegram_id]}
+                      onClick={() => linkBotUser(u.telegram_id)}
+                    >
+                      Связать
+                    </button>
+                  </div>
+                ),
+            },
+          ]}
+        />
       </section>
     </div>
   );

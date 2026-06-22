@@ -45,8 +45,8 @@ export default function ResponsiveTable({
                 </div>
               )}
               <div className="px-4 py-2 space-y-1.5">
-                {bodyColumns.map((col) => (
-                  <div key={col.label} className="flex justify-between items-start gap-2 text-sm">
+                {bodyColumns.map((col, ci) => (
+                  <div key={col.key ?? ci} className="flex justify-between items-start gap-2 text-sm">
                     <span className="text-gray-500 shrink-0">{col.label}</span>
                     <span className="text-right">
                       {col.render ? col.render(row) : row[col.key] ?? '—'}
@@ -71,8 +71,8 @@ export default function ResponsiveTable({
       <table className="min-w-max w-full text-sm">
         <thead className="bg-gray-50">
           <tr>
-            {columns.map((col) => (
-              <th key={col.label} className={`p-2 text-left whitespace-nowrap ${col.headerClass || ''}`}>
+            {columns.map((col, ci) => (
+              <th key={col.key ?? ci} className={`p-2 text-left whitespace-nowrap ${col.headerClass || ''}`}>
                 {col.label}
               </th>
             ))}
@@ -81,8 +81,8 @@ export default function ResponsiveTable({
         <tbody className="divide-y">
           {data.map((row) => (
             <tr key={keyFn(row)} className={`hover:bg-gray-50 ${rowClass?.(row) || ''}`}>
-              {columns.map((col) => (
-                <td key={col.label} className={`p-2 ${col.cellClass || ''}`}>
+              {columns.map((col, ci) => (
+                <td key={col.key ?? ci} className={`p-2 ${col.cellClass || ''}`}>
                   {col.render ? col.render(row) : row[col.key] ?? ''}
                 </td>
               ))}

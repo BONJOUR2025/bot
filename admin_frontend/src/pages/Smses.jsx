@@ -3,7 +3,7 @@ import { RefreshCw, Search, Download, MessageSquare } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
-import { useViewport } from '../providers/ViewportProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const CHANNELS = ['СМС', 'Push', 'MAX'];
 const STATUSES = ['Доставлено', 'Не доставлено', 'В работе'];
@@ -40,7 +40,6 @@ function SortIcon({ field, sort }) {
 
 export default function Smses() {
   const { toast } = useToast();
-  const { isMobile } = useViewport();
   const [rows, setRows]         = useState([]);
   const [loading, setLoading]   = useState(false);
   const [dateFrom, setDateFrom] = useState(isoMStart());
@@ -126,8 +125,6 @@ export default function Smses() {
     URL.revokeObjectURL(url);
   }
 
-  const thCls = 'px-3 py-3 text-xs font-semibold uppercase tracking-wide select-none cursor-pointer hover:text-[color:var(--color-primary)]';
-
   return (
     <div className="space-y-5 max-w-full pb-20">
       {/* Header */}
@@ -166,6 +163,27 @@ export default function Smses() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
           <input className="input pl-8 w-full" placeholder="Телефон или текст…"
             value={query} onChange={e => setQuery(e.target.value)} />
+        </div>
+
+        {/* Sort */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-[color:var(--color-muted-foreground)]">Сортировка:</span>
+          {[
+            { field: 'DTTM', label: 'Дата/время' },
+            { field: 'PHONE', label: 'Телефон' },
+            { field: 'OPER_STATUS', label: 'Статус' },
+            { field: 'channel', label: 'Канал' },
+          ].map(({ field, label }) => (
+            <button key={field}
+              onClick={() => toggleSort(field)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1 ${
+                sort.field === field
+                  ? 'bg-[color:var(--color-primary)] text-white border-transparent'
+                  : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]'
+              }`}>
+              {label} <SortIcon field={field} sort={sort} />
+            </button>
+          ))}
         </div>
 
         {/* Channel filter */}
@@ -255,67 +273,45 @@ export default function Smses() {
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
           {safeRows.length === 0 ? 'Нет данных' : 'Нет записей по заданным фильтрам'}
         </div>
-      ) : isMobile ? (
-        <div className="space-y-3">
-          {filtered.map(row => (
-            <div key={row.ID} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium font-mono">{row.PHONE || '—'}</div>
-              <div className="px-4 py-2 space-y-1.5 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Дата/время</span><span className="font-mono text-xs">{fmtDateTime(row.DTTM)}</span></div>
-                <div className="flex justify-between items-center"><span className="text-gray-500">Статус</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.OPER_STATUS] || 'bg-gray-100 text-gray-600'}`}>{row.OPER_STATUS || '—'}</span></div>
-                <div className="flex justify-between items-center"><span className="text-gray-500">Канал</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${CHANNEL_COLORS[row.channel] || ''}`}>{row.channel}</span></div>
-                <div className="flex flex-col gap-0.5"><span className="text-gray-500">Текст</span><span className="text-xs break-words whitespace-pre-wrap">{row.TXT || '—'}</span></div>
-              </div>
-            </div>
-          ))}
-        </div>
       ) : (
-        <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
-          <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
-            <thead>
-              <tr className="bg-[color:var(--color-table-header)]">
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('DTTM')}>
-                  <span className="inline-flex items-center gap-1">Дата/время <SortIcon field="DTTM" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('PHONE')}>
-                  <span className="inline-flex items-center gap-1">Телефон <SortIcon field="PHONE" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('OPER_STATUS')}>
-                  <span className="inline-flex items-center gap-1">Статус <SortIcon field="OPER_STATUS" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('channel')}>
-                  <span className="inline-flex items-center gap-1">Канал <SortIcon field="channel" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-left`}>Текст</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[color:var(--color-border)]">
-              {filtered.map(row => (
-                <tr key={row.ID} className="hover:bg-[color:var(--color-bg-secondary)] transition-colors">
-                  <td className="px-3 py-2.5 whitespace-nowrap text-[color:var(--color-muted-foreground)] text-xs font-mono">
-                    {fmtDateTime(row.DTTM)}
-                  </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap font-mono text-xs">
-                    {row.PHONE || '—'}
-                  </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.OPER_STATUS] || 'bg-gray-100 text-gray-600'}`}>
-                      {row.OPER_STATUS || '—'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${CHANNEL_COLORS[row.channel] || ''}`}>
-                      {row.channel}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 max-w-md">
-                    <span className="text-xs line-clamp-2 whitespace-pre-wrap break-words">{row.TXT || '—'}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ResponsiveTable
+          data={filtered}
+          keyFn={(row) => row.ID}
+          emptyText="Нет данных"
+          columns={[
+            {
+              label: 'Дата/время',
+              render: (row) => <span className="font-mono text-xs">{fmtDateTime(row.DTTM)}</span>,
+            },
+            {
+              label: 'Телефон',
+              render: (row) => <span className="font-mono text-xs">{row.PHONE || '—'}</span>,
+              primary: true,
+            },
+            {
+              label: 'Статус',
+              render: (row) => (
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.OPER_STATUS] || 'bg-gray-100 text-gray-600'}`}>
+                  {row.OPER_STATUS || '—'}
+                </span>
+              ),
+            },
+            {
+              label: 'Канал',
+              render: (row) => (
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${CHANNEL_COLORS[row.channel] || ''}`}>
+                  {row.channel}
+                </span>
+              ),
+            },
+            {
+              label: 'Текст',
+              render: (row) => (
+                <span className="text-xs whitespace-pre-wrap break-words">{row.TXT || '—'}</span>
+              ),
+            },
+          ]}
+        />
       )}
 
       {!loading && filtered.length > 0 && (

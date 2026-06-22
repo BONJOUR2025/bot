@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Search, ArrowRight, Trash2, AlertTriangle, Info } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
+import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const MONTHS = [
   'ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ',
@@ -283,43 +284,64 @@ export default function SaleTransfers() {
             Пока нет переносов
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-max text-sm">
-            <thead>
-              <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)]">
-                <th className="text-left px-4 py-2">Когда</th>
-                <th className="text-left px-3 py-2">Заказ</th>
-                <th className="text-left px-3 py-2">Из категории</th>
-                <th className="text-left px-3 py-2">В категорию</th>
-                <th className="text-right px-3 py-2">Сумма</th>
-                <th className="text-left px-3 py-2">От кого</th>
-                <th className="text-left px-3 py-2">Кому</th>
-                <th className="text-left px-3 py-2">Кто перенёс</th>
-                <th className="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[color:var(--color-border)]">
-              {transfers.map(t => (
-                <tr key={t.id}>
-                  <td className="px-4 py-2 whitespace-nowrap text-xs text-[color:var(--color-muted-foreground)]">{fmtDateTime(t.created_at)}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{t.doc_num}</td>
-                  <td className="px-3 py-2">{CATEGORY_LABELS[t.from_category] || t.from_category}</td>
-                  <td className="px-3 py-2">{CATEGORY_LABELS[t.to_category] || t.to_category}</td>
-                  <td className="px-3 py-2 text-right">{fmt(t.amount)} ₽</td>
-                  <td className="px-3 py-2">{t.from_name || t.from_code}</td>
-                  <td className="px-3 py-2">{t.to_name || t.to_code}</td>
-                  <td className="px-3 py-2 text-[color:var(--color-muted-foreground)]">{t.author || '—'}</td>
-                  <td className="px-3 py-2 text-right">
-                    <button onClick={() => removeTransfer(t.id)}
-                      className="text-red-400 hover:text-red-600" title="Отменить">
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <ResponsiveTable
+            data={transfers}
+            keyFn={(t) => t.id}
+            emptyText="Пока нет переносов"
+            columns={[
+              {
+                label: 'Когда',
+                render: (t) => (
+                  <span className="whitespace-nowrap text-xs text-[color:var(--color-muted-foreground)]">
+                    {fmtDateTime(t.created_at)}
+                  </span>
+                ),
+              },
+              {
+                label: 'Заказ',
+                key: 'doc_num',
+                primary: true,
+                render: (t) => <span className="font-mono text-xs">{t.doc_num}</span>,
+              },
+              {
+                label: 'Из категории',
+                render: (t) => CATEGORY_LABELS[t.from_category] || t.from_category,
+              },
+              {
+                label: 'В категорию',
+                render: (t) => CATEGORY_LABELS[t.to_category] || t.to_category,
+              },
+              {
+                label: 'Сумма',
+                render: (t) => <span className="text-right">{fmt(t.amount)} ₽</span>,
+              },
+              {
+                label: 'От кого',
+                render: (t) => t.from_name || t.from_code,
+              },
+              {
+                label: 'Кому',
+                render: (t) => t.to_name || t.to_code,
+              },
+              {
+                label: 'Кто перенёс',
+                mobileHide: true,
+                render: (t) => (
+                  <span className="text-[color:var(--color-muted-foreground)]">{t.author || '—'}</span>
+                ),
+              },
+              {
+                label: 'Действия',
+                isAction: true,
+                render: (t) => (
+                  <button onClick={() => removeTransfer(t.id)}
+                    className="text-red-400 hover:text-red-600" title="Отменить">
+                    <Trash2 size={15} />
+                  </button>
+                ),
+              },
+            ]}
+          />
         )}
       </div>
     </div>
