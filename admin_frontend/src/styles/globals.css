@@ -440,6 +440,14 @@ select option { color: #0f172a; background-color: #ffffff; }
   box-shadow: var(--shadow-xl);
   padding: 1.75rem 2rem;
   display: grid;
+  /* Without an explicit track size, a single implicit "auto" column sizes
+     itself off the widest descendant's preferred width — e.g. a native
+     <input type="date"> on iOS Safari reports a preferred width wider than
+     its box. That then inflates this whole column (and therefore every
+     other row sharing it), pushing every field's right edge past the
+     modal's border. minmax(0, 1fr) caps the column at the container's
+     actual width no matter what's nested inside. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.875rem;
   backdrop-filter: blur(20px);
   animation: slideUp var(--transition) forwards;
