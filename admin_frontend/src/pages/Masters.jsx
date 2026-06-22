@@ -440,11 +440,11 @@ export default function Masters() {
       {/* Filters */}
       <div className="app-card p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата от</label>
             <input type="date" className="input w-full" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата до</label>
             <input type="date" className="input w-full" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
