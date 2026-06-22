@@ -55,28 +55,8 @@ const WIZARD_STEPS = [
   { key: 'checklist', label: 'Готовность' },
 ];
 
-// Step 1 — basic info + legacy KB textarea
-function StepBasic({ title, setTitle, description, setDesc, interviewLoc, setLoc, knowledgeBase, setKb, vacancyId, onNext }) {
-  const [aiLoading, setAiLoading] = useState(null);
-  const [aiTab, setAiTab]         = useState(null);
-  const [aiResults, setAiResults] = useState({});
-  const [legacyOpen, setLegacyOpen] = useState(false);
-
-  async function runAi(mode) {
-    if (!vacancyId) return;
-    setAiLoading(mode);
-    setAiTab(mode);
-    try {
-      const endpoint = mode === 'analyze'
-        ? `/recruitment/vacancies/${vacancyId}/analyze-kb`
-        : `/recruitment/vacancies/${vacancyId}/calibrate-kb`;
-      const res = await api.post(endpoint);
-      setAiResults(prev => ({ ...prev, [mode]: res.data.result }));
-    } catch (e) {
-      setAiResults(prev => ({ ...prev, [mode]: 'Ошибка: ' + (e.response?.data?.detail || e.message) }));
-    } finally { setAiLoading(null); }
-  }
-
+// Step 1 — basic info
+function StepBasic({ title, setTitle, description, setDesc, interviewLoc, setLoc, onNext }) {
   return (
     <div className="space-y-3">
       <div>
@@ -93,58 +73,6 @@ function StepBasic({ title, setTitle, description, setDesc, interviewLoc, setLoc
         <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Место собеседований</label>
         <input className="input w-full" value={interviewLoc} onChange={e => setLoc(e.target.value)}
           placeholder="Адрес или ссылка на онлайн-встречу" />
-      </div>
-
-      <div className="border border-[color:var(--color-border)] rounded-xl p-3">
-        <button type="button" onClick={() => setLegacyOpen(o => !o)}
-          className="w-full flex items-center justify-between text-xs font-medium text-[color:var(--color-muted-foreground)]">
-          <span>Устаревшая база знаний (миграция)</span>
-          <ChevronDown size={13} className={`transition-transform ${legacyOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {legacyOpen && (
-          <div className="mt-2 space-y-2">
-            <p className="text-xs text-[color:var(--color-muted-foreground)]">
-              Старое текстовое поле, оставлено для совместимости. Новые вопросы и ответы добавляйте на шаге «Вопросы кандидатов» —
-              там данные привязываются к конкретной вакансии надёжно и не перепутаются с другими вакансиями.
-            </p>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs text-[color:var(--color-muted-foreground)] block">База знаний для AI (старое поле)</label>
-              {vacancyId && (
-                <div className="flex gap-2 shrink-0">
-                  <button type="button" onClick={() => runAi('analyze')} disabled={!!aiLoading}
-                    className="text-xs text-[color:var(--color-primary)] hover:underline disabled:opacity-50">
-                    {aiLoading === 'analyze' ? '⏳' : '✦'} Что добавить?
-                  </button>
-                  <span className="text-[color:var(--color-muted-foreground)]">·</span>
-                  <button type="button" onClick={() => runAi('calibrate')} disabled={!!aiLoading}
-                    className="text-xs text-[color:var(--color-primary)] hover:underline disabled:opacity-50">
-                    {aiLoading === 'calibrate' ? '⏳' : '◎'} Калибровка
-                  </button>
-                </div>
-              )}
-            </div>
-            <textarea className="input w-full min-h-[80px] resize-y text-sm" value={knowledgeBase}
-              onChange={e => { setKb(e.target.value); setAiTab(null); }}
-              placeholder={"График: 5/2, 9:00–18:00\nЗарплата: от 60 000 ₽\nТребования: ...\nУсловия: ..."} />
-            {aiTab && aiResults[aiTab] && (
-              <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-3">
-                <div className="flex gap-3 mb-2 text-xs font-medium">
-                  <button onClick={() => setAiTab('analyze')}
-                    className={`pb-0.5 border-b-2 ${aiTab === 'analyze' ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]' : 'border-transparent text-[color:var(--color-muted-foreground)]'}`}>
-                    Пробелы
-                  </button>
-                  {aiResults.calibrate && (
-                    <button onClick={() => setAiTab('calibrate')}
-                      className={`pb-0.5 border-b-2 ${aiTab === 'calibrate' ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]' : 'border-transparent text-[color:var(--color-muted-foreground)]'}`}>
-                      Калибровка
-                    </button>
-                  )}
-                </div>
-                <pre className="whitespace-pre-wrap text-xs leading-relaxed font-sans">{aiResults[aiTab]}</pre>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -492,7 +420,6 @@ function VacancyModal({ vacancy, onClose, onSave }) {
 
   const [title, setTitle]         = useState(vacancy?.title || '');
   const [description, setDesc]    = useState(vacancy?.description || '');
-  const [knowledgeBase, setKb]    = useState(vacancy?.knowledge_base || '');
   const [interviewLoc, setLoc]    = useState(vacancy?.interview_location || '');
   const [strategyId, setStrategyId] = useState(vacancy?.strategy_id || null);
   const [extraInstructions, setExtraInstructions] = useState(vacancy?.extra_instructions || '');
@@ -504,7 +431,7 @@ function VacancyModal({ vacancy, onClose, onSave }) {
     if (!title.trim()) return;
     setSaving(true);
     try {
-      const payload = { title, description, knowledge_base: knowledgeBase, interview_location: interviewLoc, strategy_id: strategyId };
+      const payload = { title, description, interview_location: interviewLoc, strategy_id: strategyId };
       const res = vacancyId
         ? await api.patch(`/recruitment/vacancies/${vacancyId}`, payload)
         : await api.post('/recruitment/vacancies', payload);
@@ -554,8 +481,6 @@ function VacancyModal({ vacancy, onClose, onSave }) {
               title={title} setTitle={setTitle}
               description={description} setDesc={setDesc}
               interviewLoc={interviewLoc} setLoc={setLoc}
-              knowledgeBase={knowledgeBase} setKb={setKb}
-              vacancyId={vacancyId}
               onNext={() => saveBasicAndStrategy('strategy')}
             />
           )}
