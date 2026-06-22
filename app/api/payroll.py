@@ -97,7 +97,8 @@ class SaleTransferInput(BaseModel):
     month: str
     year: int
     doc_num: str
-    category: str               # repair / cosmetics / shoes
+    from_category: str          # repair / cosmetics / shoes
+    to_category: str            # repair / cosmetics / shoes
     amount: float = 0.0
     from_code: str
     to_code: str
@@ -403,7 +404,8 @@ def create_payroll_router(
             return create_transfer(
                 month_key=make_month_key(data.month, data.year),
                 doc_num=data.doc_num,
-                category=data.category,
+                from_category=data.from_category,
+                to_category=data.to_category,
                 amount=data.amount,
                 from_code=data.from_code,
                 to_code=data.to_code,

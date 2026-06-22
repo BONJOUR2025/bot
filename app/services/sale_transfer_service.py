@@ -33,7 +33,8 @@ def create_transfer(
     *,
     month_key: str,
     doc_num: str,
-    category: str,
+    from_category: str,
+    to_category: str,
     amount: float,
     from_code: str,
     to_code: str,
@@ -43,12 +44,12 @@ def create_transfer(
     shoes_orders: list | None = None,
     author: str = "",
 ) -> dict:
-    if category not in CATEGORIES:
+    if from_category not in CATEGORIES or to_category not in CATEGORIES:
         raise ValueError("invalid_category")
     if not from_code or not to_code:
         raise ValueError("missing_employee")
-    if from_code == to_code:
-        raise ValueError("same_employee")
+    if from_code == to_code and from_category == to_category:
+        raise ValueError("no_op")
 
     db = SessionLocal()
     try:
@@ -57,7 +58,8 @@ def create_transfer(
             .filter(
                 SaleTransfer.month_key == month_key,
                 SaleTransfer.doc_num == str(doc_num),
-                SaleTransfer.category == category,
+                SaleTransfer.category == from_category,
+                SaleTransfer.to_category == to_category,
             )
             .first()
         )
@@ -67,7 +69,8 @@ def create_transfer(
         transfer = SaleTransfer(
             month_key=month_key,
             doc_num=str(doc_num),
-            category=category,
+            category=from_category,
+            to_category=to_category,
             amount=float(amount or 0),
             from_code=from_code,
             to_code=to_code,

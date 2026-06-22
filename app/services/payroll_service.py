@@ -497,10 +497,13 @@ class PayrollService:
     # ── Sale transfers ────────────────────────────────────────────
 
     def _apply_sale_transfers(self, sales_data: dict, month_key: str) -> None:
-        """Move order sales between employees per manual corrections (hr.db).
+        """Move order sales between employees and/or categories per manual
+        corrections (hr.db).
 
         Firebird stays untouched; we only adjust the in-memory aggregates:
-        subtract from the original seller and add to the new one.
+        subtract from the original employee/category and add to the new one.
+        The destination category's commission rate applies from then on,
+        since it's just a regular sale in that category once moved.
         """
         try:
             from app.services.sale_transfer_service import list_transfers
@@ -517,30 +520,40 @@ class PayrollService:
             return entry
 
         for t in transfers:
-            category = t.get("category")
+            from_category = t.get("from_category") or t.get("category")
+            to_category = t.get("to_category") or from_category
             from_code = t.get("from_code")
             to_code = t.get("to_code")
-            if not from_code or not to_code or from_code == to_code:
+            amount = float(t.get("amount") or 0)
+            doc_num = str(t.get("doc_num"))
+            if not from_code or not to_code:
+                continue
+            if from_code == to_code and from_category == to_category:
                 continue
             src = _ensure(from_code)
             dst = _ensure(to_code)
 
-            if category in ("repair", "cosmetics"):
-                amount = float(t.get("amount") or 0)
-                src[category] = src.get(category, 0.0) - amount
-                dst[category] = dst.get(category, 0.0) + amount
-            elif category == "shoes":
-                doc_num = str(t.get("doc_num"))
+            moved_orders = None
+            if from_category == "shoes":
                 src_orders = src.get("shoes_orders", []) or []
+                moved_orders = t.get("shoes_orders") or [
+                    o for o in src_orders if str(o.get("doc_num")) == doc_num
+                ]
                 src["shoes_orders"] = [
                     o for o in src_orders if str(o.get("doc_num")) != doc_num
                 ]
-                moved = t.get("shoes_orders") or [
-                    o for o in src_orders if str(o.get("doc_num")) == doc_num
-                ]
-                dst.setdefault("shoes_orders", []).extend(moved)
                 src["shoes"] = sum(o.get("kredit", 0.0) for o in src["shoes_orders"])
+            else:
+                src[from_category] = src.get(from_category, 0.0) - amount
+
+            if to_category == "shoes":
+                orders = moved_orders if moved_orders is not None else [
+                    {"doc_num": doc_num, "kredit": amount}
+                ]
+                dst.setdefault("shoes_orders", []).extend(orders)
                 dst["shoes"] = sum(o.get("kredit", 0.0) for o in dst.get("shoes_orders", []))
+            else:
+                dst[to_category] = dst.get(to_category, 0.0) + amount
 
     # ── Commission ────────────────────────────────────────────────
 

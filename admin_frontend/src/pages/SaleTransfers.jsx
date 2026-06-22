@@ -8,6 +8,8 @@ const MONTHS = [
   'ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ',
 ];
 
+const CATEGORIES = ['repair', 'cosmetics', 'shoes'];
+
 const CATEGORY_LABELS = {
   repair: 'Ремонт / Химчистка',
   cosmetics: 'Косметика',
@@ -38,7 +40,8 @@ export default function SaleTransfers() {
   const [docNum, setDocNum]       = useState('');
   const [looking, setLooking]     = useState(false);
   const [order, setOrder]         = useState(null);   // breakdown from /order-lookup
-  const [targets, setTargets]     = useState({});     // {category: to_code}
+  // {category: { amount, toCategory, toCode }}
+  const [rowState, setRowState]   = useState({});
   const [submitting, setSubmitting] = useState(false);
 
   const [employees, setEmployees] = useState([]);     // [{code, name}]
@@ -67,10 +70,14 @@ export default function SaleTransfers() {
     if (!num) return;
     setLooking(true);
     setOrder(null);
-    setTargets({});
+    setRowState({});
     try {
       const res = await api.get('/payroll/order-lookup', { params: { doc_num: num } });
       setOrder(res.data);
+      const rows = categoryRows(res.data);
+      setRowState(Object.fromEntries(rows.map(r => (
+        [r.key, { amount: r.amount, toCategory: r.key, toCode: '' }]
+      ))));
     } catch (e) {
       if (e.response?.status === 404) toast('Заказ не найден', 'error');
       else toast('Ошибка поиска заказа', 'error');
@@ -88,17 +95,29 @@ export default function SaleTransfers() {
     ].filter(r => r.amount && r.amount > 0);
   }
 
-  async function transfer(category, amount) {
-    const toCode = targets[category];
+  function updateRow(category, patch) {
+    setRowState(s => ({ ...s, [category]: { ...s[category], ...patch } }));
+  }
+
+  async function transfer(category) {
+    const row = rowState[category];
+    const toCode = row?.toCode;
+    const toCategory = row?.toCategory || category;
+    const amount = Number(row?.amount) || 0;
     if (!toCode) { toast('Выберите сотрудника', 'error'); return; }
-    if (toCode === order.seller_code) { toast('Это тот же сотрудник', 'error'); return; }
+    if (!amount || amount <= 0) { toast('Укажите сумму', 'error'); return; }
+    if (toCode === order.seller_code && toCategory === category) {
+      toast('Нет изменений — тот же сотрудник и та же категория', 'error');
+      return;
+    }
     const toEmp = employees.find(e => e.code === toCode);
     setSubmitting(true);
     try {
       await api.post('/payroll/sale-transfers', {
         month, year,
         doc_num: order.doc_num,
-        category,
+        from_category: category,
+        to_category: toCategory,
         amount,
         from_code: order.seller_code,
         from_name: order.seller_name,
@@ -111,8 +130,8 @@ export default function SaleTransfers() {
       await loadMonthData();
     } catch (e) {
       const detail = e.response?.data?.detail;
-      if (detail === 'transfer_exists') toast('Этот заказ уже перенесён в этой категории', 'error');
-      else if (detail === 'same_employee') toast('Нельзя перенести самому себе', 'error');
+      if (detail === 'transfer_exists') toast('Этот заказ уже перенесён в эту категорию/этому сотруднику', 'error');
+      else if (detail === 'no_op') toast('Нет изменений — тот же сотрудник и та же категория', 'error');
       else toast('Ошибка переноса', 'error');
     } finally {
       setSubmitting(false);
@@ -150,7 +169,8 @@ export default function SaleTransfers() {
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold">Перемещение продажи</h1>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
-            Перенос продажи с одного сотрудника на другого. База Агбис (Firebird) не меняется —
+            Перенос суммы продажи между сотрудниками и/или категориями (например, продажу
+            ошибочно провели как ремонт вместо косметики). База Агбис (Firebird) не меняется —
             корректировка учитывается только в расчёте зарплаты и боте.
           </p>
         </div>
@@ -165,7 +185,7 @@ export default function SaleTransfers() {
 
       <div className="rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800 px-4 py-3 flex items-start gap-2">
         <Info size={15} className="flex-shrink-0 text-blue-500 mt-0.5" />
-        <span>Перенос применяется к выбранному месяцу: у текущего продавца сумма вычитается, новому — прибавляется. Это может изменить выполнение плана и ставку комиссии у обоих.</span>
+        <span>Перенос применяется к выбранному месяцу: из исходной категории/сотрудника сумма вычитается, в целевую категорию/сотруднику — прибавляется. Комиссия считается по ставке целевой категории. Это может изменить выполнение плана и ставку комиссии у обоих.</span>
       </div>
 
       {/* Lookup */}
@@ -199,33 +219,54 @@ export default function SaleTransfers() {
                 <AlertTriangle size={15} /> В заказе нет сумм по комиссионным категориям.
               </div>
             ) : (
-              <div className="space-y-2">
-                {rows.map(({ key, amount }) => (
-                  <div key={key} className="flex flex-wrap items-center gap-2 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
-                    <div className="min-w-[150px]">
-                      <div className="text-sm font-medium">{CATEGORY_LABELS[key]}</div>
-                      <div className="text-sm text-[color:var(--color-muted-foreground)]">{fmt(amount)} ₽</div>
+              <div className="space-y-3">
+                {rows.map(({ key, amount }) => {
+                  const row = rowState[key] || { amount, toCategory: key, toCode: '' };
+                  return (
+                    <div key={key} className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
+                      <div className="min-w-[150px]">
+                        <div className="text-sm font-medium">{CATEGORY_LABELS[key]}</div>
+                        <div className="text-sm text-[color:var(--color-muted-foreground)]">из {fmt(amount)} ₽</div>
+                      </div>
+                      <input
+                        type="number"
+                        className="input text-sm w-full sm:w-28"
+                        value={row.amount}
+                        min={0}
+                        onChange={e => updateRow(key, { amount: e.target.value })}
+                        title="Сумма к переносу"
+                      />
+                      <ArrowRight size={16} className="text-[color:var(--color-muted-foreground)] hidden sm:inline self-center" />
+                      <select
+                        className="input text-sm w-full sm:w-auto sm:min-w-[150px]"
+                        value={row.toCategory}
+                        onChange={e => updateRow(key, { toCategory: e.target.value })}
+                        title="В какую категорию"
+                      >
+                        {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+                      </select>
+                      <select
+                        className="input text-sm w-full sm:w-auto sm:flex-1 sm:min-w-[160px]"
+                        value={row.toCode}
+                        onChange={e => updateRow(key, { toCode: e.target.value })}
+                      >
+                        <option value="">Кому перенести…</option>
+                        {employees.map(e => (
+                          <option key={e.code} value={e.code}>
+                            {e.name} ({e.code}){e.code === order.seller_code ? ' — тот же сотрудник' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => transfer(key)}
+                        disabled={submitting || !row.toCode}
+                        className="btn btn-primary text-sm disabled:opacity-50 w-full sm:w-auto"
+                      >
+                        Перенести
+                      </button>
                     </div>
-                    <ArrowRight size={16} className="text-[color:var(--color-muted-foreground)]" />
-                    <select
-                      className="input text-sm flex-1 min-w-[160px]"
-                      value={targets[key] || ''}
-                      onChange={e => setTargets(t => ({ ...t, [key]: e.target.value }))}
-                    >
-                      <option value="">Кому перенести…</option>
-                      {employees
-                        .filter(e => e.code !== order.seller_code)
-                        .map(e => <option key={e.code} value={e.code}>{e.name} ({e.code})</option>)}
-                    </select>
-                    <button
-                      onClick={() => transfer(key, amount)}
-                      disabled={submitting || !targets[key]}
-                      className="btn btn-primary text-sm disabled:opacity-50"
-                    >
-                      Перенести
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -248,7 +289,8 @@ export default function SaleTransfers() {
               <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-xs text-[color:var(--color-muted-foreground)]">
                 <th className="text-left px-4 py-2">Когда</th>
                 <th className="text-left px-3 py-2">Заказ</th>
-                <th className="text-left px-3 py-2">Категория</th>
+                <th className="text-left px-3 py-2">Из категории</th>
+                <th className="text-left px-3 py-2">В категорию</th>
                 <th className="text-right px-3 py-2">Сумма</th>
                 <th className="text-left px-3 py-2">От кого</th>
                 <th className="text-left px-3 py-2">Кому</th>
@@ -261,7 +303,8 @@ export default function SaleTransfers() {
                 <tr key={t.id}>
                   <td className="px-4 py-2 whitespace-nowrap text-xs text-[color:var(--color-muted-foreground)]">{fmtDateTime(t.created_at)}</td>
                   <td className="px-3 py-2 font-mono text-xs">{t.doc_num}</td>
-                  <td className="px-3 py-2">{CATEGORY_LABELS[t.category] || t.category}</td>
+                  <td className="px-3 py-2">{CATEGORY_LABELS[t.from_category] || t.from_category}</td>
+                  <td className="px-3 py-2">{CATEGORY_LABELS[t.to_category] || t.to_category}</td>
                   <td className="px-3 py-2 text-right">{fmt(t.amount)} ₽</td>
                   <td className="px-3 py-2">{t.from_name || t.from_code}</td>
                   <td className="px-3 py-2">{t.to_name || t.to_code}</td>

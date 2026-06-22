@@ -8,11 +8,11 @@ from app.db.base_class import Base
 
 class SaleTransfer(Base):
     """A manual correction that moves a single order's sale from one employee
-    to another, layered on top of the read-only Firebird data.
+    and/or category to another, layered on top of the read-only Firebird data.
 
     Firebird is never modified — transfers are applied in-memory during payroll
     calculation (and therefore in the bot too), subtracting the amount from the
-    original seller and adding it to the new one for the given month.
+    original employee/category and adding it to the new one for the given month.
     """
 
     __tablename__ = "sale_transfers"
@@ -20,7 +20,8 @@ class SaleTransfer(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     month_key = Column(String, nullable=False, index=True)   # "ИЮНЬ_2026"
     doc_num = Column(String, nullable=False, index=True)
-    category = Column(String, nullable=False)                # repair / cosmetics / shoes
+    category = Column(String, nullable=False)                # source category: repair / cosmetics / shoes
+    to_category = Column(String)                              # destination category; NULL = same as `category`
     amount = Column(Float, nullable=False, default=0.0)
     from_code = Column(String, nullable=False)
     to_code = Column(String, nullable=False)
@@ -41,7 +42,8 @@ class SaleTransfer(Base):
             "id": self.id,
             "month_key": self.month_key,
             "doc_num": self.doc_num,
-            "category": self.category,
+            "from_category": self.category,
+            "to_category": self.to_category or self.category,
             "amount": self.amount,
             "from_code": self.from_code,
             "to_code": self.to_code,
