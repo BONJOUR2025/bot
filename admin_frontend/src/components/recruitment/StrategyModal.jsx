@@ -68,21 +68,28 @@ function StrategyForm({ strategy, onClose, onSaved }) {
 
   return (
     <div className="modal-backdrop" style={{ zIndex: 90 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-card max-w-lg w-full flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
+      <div className="modal-card max-w-4xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '92vh' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold">{strategy ? 'Редактировать стратегию' : 'Новая стратегия'}</h3>
           <button onClick={onClose} className="text-xl text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] leading-none">&times;</button>
         </div>
-        <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Название *</label>
-            <input className="input w-full" value={form.name} onChange={set('name')} placeholder="Стандартный отбор" autoFocus />
+        <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Название *</label>
+              <input className="input w-full" value={form.name} onChange={set('name')} placeholder="Стандартный отбор" autoFocus />
+            </div>
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Источники (через запятую)</label>
+              <input className="input w-full" value={form.sources_str} onChange={set('sources_str')} placeholder="hh, avito, manual" />
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1">К каким источникам вакансий применять эту стратегию.</p>
+            </div>
           </div>
           <div>
             <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Описание</label>
-            <textarea className="input w-full min-h-[50px] resize-none" value={form.description} onChange={set('description')} />
+            <textarea className="input w-full min-h-[50px] resize-none" value={form.description} onChange={set('description')} placeholder="Короткая заметка для себя — что это за стратегия и когда её применять" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Возраст от</label>
               <input type="number" className="input w-full" value={form.age_min} onChange={set('age_min')} />
@@ -91,26 +98,29 @@ function StrategyForm({ strategy, onClose, onSaved }) {
               <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Возраст до</label>
               <input type="number" className="input w-full" value={form.age_max} onChange={set('age_max')} />
             </div>
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Авто-отказ после (часов)</label>
+              <input type="number" className="input w-full" value={form.decline_after_hours} onChange={set('decline_after_hours')} placeholder="Никогда" />
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Источники (через запятую)</label>
-            <input className="input w-full" value={form.sources_str} onChange={set('sources_str')} placeholder="hh, avito, manual" />
-          </div>
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Отказывать автоматически после (часов, пусто = никогда)</label>
-            <input type="number" className="input w-full" value={form.decline_after_hours} onChange={set('decline_after_hours')} placeholder="Никогда" />
-          </div>
+          <p className="text-[11px] text-[color:var(--color-muted-foreground)] -mt-2">
+            Возраст — фильтр для подбора стратегии под вакансию. Авто-отказ — если кандидат не ответил указанное число часов, его переводят в «отказ»; пусто = никогда не отказывать автоматически.
+          </p>
           <div className="rounded-xl border border-[color:var(--color-border)] p-3 space-y-2">
             <div className="flex items-center gap-2">
               <input type="checkbox" id="followUpEnabled" checked={form.follow_up_enabled} onChange={set('follow_up_enabled')} className="rounded" />
               <label htmlFor="followUpEnabled" className="text-sm font-medium cursor-pointer">Авто-напоминания (follow-up)</label>
             </div>
+            <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+              Если кандидат замолчал, через указанное время ему отправляется напоминание (сообщение №1), а ещё через такое же время — второе (сообщение №2).
+            </p>
             {form.follow_up_enabled && (
-              <div className="space-y-2 pl-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-1">
                 <div>
                   <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Задержка перед напоминанием (часов)</label>
                   <input type="number" className="input w-full" value={form.follow_up_delay_hours} onChange={set('follow_up_delay_hours')} />
                 </div>
+                <div></div>
                 <div>
                   <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Сообщение №1</label>
                   <textarea className="input w-full min-h-[50px] resize-none text-sm" value={form.follow_up_message_1} onChange={set('follow_up_message_1')} />
@@ -122,24 +132,32 @@ function StrategyForm({ strategy, onClose, onSaved }) {
               </div>
             )}
           </div>
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Сообщение hh.ru (если есть ссылка на Telegram)</label>
-            <textarea className="input w-full min-h-[50px] resize-none text-sm" value={form.hh_message_with_link} onChange={set('hh_message_with_link')} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Сообщение hh.ru (если есть ссылка на Telegram)</label>
+              <textarea className="input w-full min-h-[70px] resize-none text-sm" value={form.hh_message_with_link} onChange={set('hh_message_with_link')} />
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1">Отправляется кандидатам с hh.ru, которые сразу указали Telegram.</p>
+            </div>
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Сообщение hh.ru (без ссылки)</label>
+              <textarea className="input w-full min-h-[70px] resize-none text-sm" value={form.hh_message_no_link} onChange={set('hh_message_no_link')} />
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1">Отправляется, если кандидат с hh.ru не указал Telegram — обычно с просьбой написать вручную.</p>
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Сообщение hh.ru (без ссылки)</label>
-            <textarea className="input w-full min-h-[50px] resize-none text-sm" value={form.hh_message_no_link} onChange={set('hh_message_no_link')} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Сообщение «вне рабочего времени»</label>
+              <textarea className="input w-full min-h-[70px] resize-none text-sm" value={form.away_message} onChange={set('away_message')} />
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1">Показывается, если кандидат написал, когда никто не работает.</p>
+            </div>
+            <div>
+              <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Модель ИИ</label>
+              <input className="input w-full" value={form.ai_model} onChange={set('ai_model')} placeholder="claude-sonnet-4-6 (по умолчанию)" />
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1">Оставьте пустым, чтобы использовать модель по умолчанию.</p>
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Сообщение «вне рабочего времени»</label>
-            <textarea className="input w-full min-h-[50px] resize-none text-sm" value={form.away_message} onChange={set('away_message')} />
-          </div>
-          <div>
-            <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Модель ИИ</label>
-            <input className="input w-full" value={form.ai_model} onChange={set('ai_model')} placeholder="claude-sonnet-4-6 (по умолчанию)" />
-          </div>
-          <div className="rounded-xl border border-[color:var(--color-border)] p-3">
-            <label className="text-xs font-medium mb-2 block">Этапы интервью (конструктор сценария)</label>
+          <div className="rounded-xl border border-[color:var(--color-border)] p-3 md:p-4">
+            <label className="text-sm font-medium mb-1 block">Этапы интервью (конструктор сценария)</label>
             {form.stages ? (
               <StageBuilder
                 stages={form.stages}

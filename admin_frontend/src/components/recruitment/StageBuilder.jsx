@@ -1,4 +1,4 @@
-import { ArrowUp, ArrowDown, Trash2, Plus, CornerDownRight, RotateCcw, GripVertical } from 'lucide-react';
+import { ArrowUp, ArrowDown, Trash2, Plus, CornerDownRight, RotateCcw, GripVertical, HelpCircle } from 'lucide-react';
 
 function slugify(title, existingIds, fallbackIdx) {
   const base = (title || '')
@@ -65,14 +65,14 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <p className="text-xs text-[color:var(--color-muted-foreground)]">
           Каждый этап — это шаг разговора. ИИ ведёт диалог по инструкции текущего этапа и сам решает,
           когда условие перехода выполнено, переключаясь на следующий этап.
         </p>
         {onResetDefault && (
           <button type="button" onClick={onResetDefault}
-            className="flex-shrink-0 text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] flex items-center gap-1 ml-2">
+            className="flex-shrink-0 text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] flex items-center gap-1">
             <RotateCcw size={12} /> Сбросить
           </button>
         )}
@@ -84,10 +84,12 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
       )}
 
       {stages.map((s, idx) => (
-        <div key={idx} className="rounded-xl border border-[color:var(--color-border)] p-3 space-y-2 bg-[color:var(--color-muted)]/30">
+        <div key={idx} className="rounded-xl border border-[color:var(--color-border)] p-3 md:p-4 space-y-3 bg-[color:var(--color-muted)]/30">
           <div className="flex items-center gap-2">
             <GripVertical size={14} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-            <span className="text-xs font-mono text-[color:var(--color-muted-foreground)] flex-shrink-0 w-5">{idx + 1}.</span>
+            <span className="flex items-center justify-center text-xs font-semibold flex-shrink-0 w-6 h-6 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]">
+              {idx + 1}
+            </span>
             <input
               className="input flex-1 text-sm font-medium"
               value={s.title}
@@ -95,72 +97,88 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
               placeholder="Название этапа"
             />
             <div className="flex items-center gap-0.5 flex-shrink-0">
-              <button type="button" onClick={() => move(idx, -1)} disabled={idx === 0}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] disabled:opacity-30">
-                <ArrowUp size={12} />
+              <button type="button" onClick={() => move(idx, -1)} disabled={idx === 0} title="Поднять"
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] disabled:opacity-30">
+                <ArrowUp size={13} />
               </button>
-              <button type="button" onClick={() => move(idx, 1)} disabled={idx === stages.length - 1}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] disabled:opacity-30">
-                <ArrowDown size={12} />
+              <button type="button" onClick={() => move(idx, 1)} disabled={idx === stages.length - 1} title="Опустить"
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] disabled:opacity-30">
+                <ArrowDown size={13} />
               </button>
-              <button type="button" onClick={() => removeStage(idx)}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-red-400">
-                <Trash2 size={12} />
+              <button type="button" onClick={() => removeStage(idx)} title="Удалить этап"
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-red-400">
+                <Trash2 size={13} />
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pl-6">
-            <span className="text-[10px] text-[color:var(--color-muted-foreground)] flex-shrink-0">ID</span>
+          <div className="pl-8 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-[color:var(--color-muted-foreground)] flex-shrink-0">ID</span>
             <input
-              className={`input text-xs font-mono py-1 w-40 ${idCounts[s.id] > 1 ? 'border-red-400' : ''}`}
+              className={`input text-xs font-mono py-1 w-44 ${idCounts[s.id] > 1 ? 'border-red-400' : ''}`}
               value={s.id}
               onChange={e => renameId(idx, e.target.value.trim())}
             />
+            <span className="inline-flex items-center gap-1 text-[11px] text-[color:var(--color-muted-foreground)]" title="Технический идентификатор этапа. Используется внутри переходов — менять не обязательно, но должен быть уникальным.">
+              <HelpCircle size={12} /> внутренний код этапа, не обязательно менять
+            </span>
             {idCounts[s.id] > 1 && (
-              <span className="text-[10px] text-red-500">id повторяется у другого этапа</span>
+              <span className="text-[11px] text-red-500 font-medium">id повторяется у другого этапа</span>
             )}
           </div>
 
-          <textarea
-            className="input w-full min-h-[60px] resize-none text-sm pl-6"
-            style={{ width: 'calc(100% - 0px)' }}
-            value={s.instructions}
-            onChange={e => update(idx, { instructions: e.target.value })}
-            placeholder="Что ИИ должен сделать на этом этапе (что сказать, какие вопросы задать)"
-          />
+          <div className="pl-8">
+            <label className="text-[11px] text-[color:var(--color-muted-foreground)] mb-1 block">Что ИИ делает на этом этапе</label>
+            <textarea
+              className="input w-full min-h-[90px] resize-y text-sm"
+              value={s.instructions}
+              onChange={e => update(idx, { instructions: e.target.value })}
+              placeholder="Что ИИ должен сделать на этом этапе: что сказать, какие вопросы задать кандидату"
+            />
+          </div>
 
-          <div className="pl-6 space-y-1.5">
-            <p className="text-[10px] text-[color:var(--color-muted-foreground)]">Переходы дальше</p>
+          <div className="pl-8 space-y-2">
+            <div>
+              <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">Переходы дальше</p>
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+                Когда условие выполнено, ИИ переключается на выбранный этап. Условие можно оставить пустым —
+                тогда переход сработает сразу, как только ИИ закончит говорить на этом этапе.
+              </p>
+            </div>
             {(s.transitions || []).length === 0 && (
               <p className="text-[11px] text-red-500">
                 Нет ни одного перехода — разговор зависнет на этом этапе навсегда.
               </p>
             )}
             {(s.transitions || []).map((t, tIdx) => (
-              <div key={tIdx} className="flex items-center gap-1.5">
-                <CornerDownRight size={12} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-                <input
-                  className="input text-xs py-1 flex-1"
-                  value={t.condition}
-                  onChange={e => updateTransition(idx, tIdx, { condition: e.target.value })}
-                  placeholder="Условие (например: кандидат согласен) — можно оставить пустым"
-                />
-                <span className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">→</span>
-                <select
-                  className="input text-xs py-1 flex-shrink-0 w-36"
-                  value={t.next}
-                  onChange={e => updateTransition(idx, tIdx, { next: e.target.value })}
-                >
-                  {stages.filter((_, i) => i !== idx).map(other => (
-                    <option key={other.id} value={other.id}>{other.title || other.id}</option>
-                  ))}
-                  <option value="done">Завершить диалог</option>
-                </select>
-                <button type="button" onClick={() => removeTransition(idx, tIdx)}
-                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-red-400 flex-shrink-0">
-                  <Trash2 size={11} />
-                </button>
+              <div key={tIdx} className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-background)] p-2 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <CornerDownRight size={12} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
+                  <span className="text-[11px] text-[color:var(--color-muted-foreground)] flex-shrink-0">Если:</span>
+                  <input
+                    className="input text-xs py-1 flex-1 min-w-0"
+                    value={t.condition}
+                    onChange={e => updateTransition(idx, tIdx, { condition: e.target.value })}
+                    placeholder="например: кандидат согласен — можно оставить пустым"
+                  />
+                  <button type="button" onClick={() => removeTransition(idx, tIdx)} title="Удалить переход"
+                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-red-400 flex-shrink-0">
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 pl-[18px]">
+                  <span className="text-[11px] text-[color:var(--color-muted-foreground)] flex-shrink-0">→ перейти на:</span>
+                  <select
+                    className="input text-xs py-1 flex-1 min-w-0"
+                    value={t.next}
+                    onChange={e => updateTransition(idx, tIdx, { next: e.target.value })}
+                  >
+                    {stages.filter((_, i) => i !== idx).map(other => (
+                      <option key={other.id} value={other.id}>{other.title || other.id}</option>
+                    ))}
+                    <option value="done">Завершить диалог</option>
+                  </select>
+                </div>
               </div>
             ))}
             <button type="button" onClick={() => addTransition(idx)}
