@@ -163,8 +163,16 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
                 data = json.loads(m_json.group())
                 reply_text = (data.get("msg") or "").strip()
                 next_phase = data.get("next_phase") or None
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning(
+                    "AI interview: failed to parse JSON response for candidate %s: %s | raw=%r",
+                    candidate_id, e, raw[:300],
+                )
+        else:
+            log.warning(
+                "AI interview: response had no JSON for candidate %s | raw=%r",
+                candidate_id, raw[:300],
+            )
         if not reply_text:
             reply_text = raw.replace("**", "").replace("__", "").strip()
 
@@ -191,25 +199,59 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         # Generate profile when interview ends
         if next_phase == "done":
             import asyncio
-            asyncio.ensure_future(_generate_candidate_profile(candidate_id))
+            task = asyncio.ensure_future(_generate_candidate_profile(candidate_id))
+            task.add_done_callback(lambda t, cid=candidate_id: _log_profile_task_exception(t, cid))
 
     finally:
         db.close()
 
 
+def _log_profile_task_exception(task, candidate_id: int) -> None:
+    """asyncio.ensure_future swallows exceptions unless someone checks the task —
+    without this, a crash in _generate_candidate_profile means the admin never
+    gets the candidate profile and nothing in the logs says why."""
+    exc = task.exception() if not task.cancelled() else None
+    if exc:
+        log.error("_generate_candidate_profile failed for candidate %s: %s", candidate_id, exc, exc_info=exc)
+
+
 async def _generate_candidate_profile(candidate_id: int) -> None:
-    """Analyze full conversation and send structured candidate profile to admin."""
+    """Analyze full conversation and send structured candidate profile to admin.
+    If profile generation fails at any step, still alert the admin that the
+    interview finished — otherwise a candidate reaching "done" while this
+    pipeline breaks looks, from the admin's side, like nothing happened at all."""
+    from app.services.notify import send_notification
+
+    candidate_name = None
+    success = False
+    try:
+        success, candidate_name = await _generate_candidate_profile_inner(candidate_id)
+    except Exception as e:
+        log.error("Candidate profile generation crashed for candidate_id=%s: %s", candidate_id, e, exc_info=e)
+
+    if not success:
+        await send_notification(
+            f"⚠️ <b>Интервью завершено, но профиль не сформирован</b>\n"
+            f"Кандидат ID {candidate_id}{f' ({candidate_name})' if candidate_name else ''} прошёл интервью, "
+            f"но при формировании профиля произошла ошибка. Посмотрите диалог вручную."
+        )
+
+
+async def _generate_candidate_profile_inner(candidate_id: int) -> tuple[bool, str | None]:
+    """Returns (success, candidate_name). candidate_name is set as soon as known,
+    for use in fallback error messages even when generation fails partway through."""
     from app.db.session import SessionLocal
     from app.models.recruitment import Candidate, TelegramMessage
     from app.services.config_service import ConfigService
     from app.services.notify import send_notification
     from app.services.llm_client import chat
 
+    candidate_name = None
     db = SessionLocal()
     try:
         c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
         if not c:
-            return
+            return True, None  # candidate gone — nothing to alert about
         candidate_name = c.name  # read before session closes
 
         history = db.query(TelegramMessage).filter(
@@ -244,16 +286,25 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
 
     raw = chat(cfg, [{"role": "user", "content": prompt}], model="claude-sonnet-4-6", max_tokens=600)
     if not raw:
-        return
+        log.error("Candidate profile generation: empty AI response for candidate_id=%s", candidate_id)
+        return False, candidate_name
 
     m = re.search(r'\{.*\}', raw, re.DOTALL)
     if not m:
-        return
+        log.error(
+            "Candidate profile generation: no JSON in AI response for candidate_id=%s | raw=%r",
+            candidate_id, raw[:300],
+        )
+        return False, candidate_name
 
     try:
         p = json.loads(m.group())
-    except Exception:
-        return
+    except Exception as e:
+        log.error(
+            "Candidate profile generation: failed to parse JSON for candidate_id=%s: %s | raw=%r",
+            candidate_id, e, raw[:300],
+        )
+        return False, candidate_name
 
     rec_emoji = {"invite": "✅", "reserve": "🔶", "reject": "❌"}.get(p.get("recommendation", ""), "❓")
     strengths = "\n".join(f"  + {s}" for s in (p.get("strengths") or []))
@@ -277,5 +328,13 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
         text += f"\n{tags}\n"
     text += f"\n{rec_emoji} <b>Рекомендация:</b> {p.get('recommendation_reason', '')}"
 
-    await send_notification(text)
-    log.info("Candidate profile sent for candidate_id=%s score=%s", candidate_id, p.get("score"))
+    sent = await send_notification(text)
+    if sent:
+        log.info("Candidate profile sent for candidate_id=%s score=%s", candidate_id, p.get("score"))
+    else:
+        log.error(
+            "Candidate profile generation: send_notification failed for candidate_id=%s "
+            "(check notification_chat_id config) — profile lost: %s",
+            candidate_id, text[:200],
+        )
+    return sent, candidate_name
