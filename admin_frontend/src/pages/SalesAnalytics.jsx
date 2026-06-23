@@ -9,7 +9,10 @@ import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 /* ── constants ───────────────────────────────────────────── */
-const TODAY = new Date().toISOString().slice(0, 10);
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const TODAY = toLocalDateStr(new Date());
 const MONTHS_RU = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 const MONTHS_KEY_RU = ['ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ','ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ'];
 const CHART_COLORS = ['#6366f1','#22c55e','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#a3e635'];
@@ -194,7 +197,7 @@ const ChartTooltip = ({ active, payload, label, nameMap }) => {
 /* ── main component ──────────────────────────────────────── */
 export default function SalesAnalytics() {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const monthStart = toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
 
   const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo,   setDateTo]   = useState(TODAY);

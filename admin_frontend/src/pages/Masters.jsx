@@ -256,10 +256,14 @@ function MastersSummaryTable({ rows, onMasterClick }) {
   );
 }
 
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function Masters() {
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const today = toLocalDateStr(now);
+  const monthStart = toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
 
   const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo, setDateTo]     = useState(today);
