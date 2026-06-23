@@ -19,26 +19,19 @@ async def handle_setup_callback(update, context):
     from app.db.session import SessionLocal
     from app.models.recruitment import Vacancy
     from app.services.config_service import ConfigService
-    from app.services.vacancy_readiness import get_missing_questions
+    from app.services.vacancy_readiness import get_missing_questions, build_readiness_kb_text
 
     db = SessionLocal()
     try:
         v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
         title = v.title if v else f"#{vacancy_id}"
-        # read all needed fields before closing session
-        v_snapshot = {"title": title, "knowledge_base": getattr(v, "knowledge_base", "") or "",
-                      "id": vacancy_id} if v else None
+        kb_text = build_readiness_kb_text(db, v) if v else ""
     finally:
         db.close()
 
     cfg = ConfigService().load()
 
-    class _V:  # lightweight stand-in so get_missing_questions works without a live session
-        def __init__(self, d):
-            self.title = d["title"]
-            self.knowledge_base = d["knowledge_base"]
-
-    questions = await get_missing_questions(_V(v_snapshot), cfg) if v_snapshot else []
+    questions = await get_missing_questions(title, kb_text, cfg) if v else []
     context.user_data["setup_questions"] = questions
 
     q_text = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(questions)) if questions else "(все данные уже есть)"
