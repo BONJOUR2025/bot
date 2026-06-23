@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Pencil, Trash2, Plus, Loader2, Star } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../../providers/ToastProvider.jsx';
+import StageBuilder from './StageBuilder.jsx';
 
 const EMPTY_FORM = {
   name: '', description: '', age_min: '', age_max: '', sources_str: '',
   follow_up_enabled: false, follow_up_delay_hours: '', follow_up_message_1: '', follow_up_message_2: '',
   decline_after_hours: '', hh_message_with_link: '', hh_message_no_link: '', away_message: '', ai_model: '',
+  stages: null,
 };
 
 function StrategyForm({ strategy, onClose, onSaved }) {
@@ -27,10 +29,21 @@ function StrategyForm({ strategy, onClose, onSaved }) {
         hh_message_no_link: strategy.hh_message_no_link || '',
         away_message: strategy.away_message || '',
         ai_model: strategy.ai_model || '',
+        stages: strategy.stages || null,
       }
     : EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+
+  useEffect(() => {
+    if (form.stages) return;
+    api.get('/recruitment/default-stages').then(res => setForm(f => ({ ...f, stages: res.data }))).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function resetStagesToDefault() {
+    if (!window.confirm('Заменить текущие этапы стандартным сценарием? Несохранённые изменения этапов будут потеряны.')) return;
+    api.get('/recruitment/default-stages').then(res => setForm(f => ({ ...f, stages: res.data }))).catch(e => toast(e.message, 'error'));
+  }
 
   async function save() {
     if (!form.name.trim()) return;
@@ -125,6 +138,18 @@ function StrategyForm({ strategy, onClose, onSaved }) {
             <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Модель ИИ</label>
             <input className="input w-full" value={form.ai_model} onChange={set('ai_model')} placeholder="claude-sonnet-4-6 (по умолчанию)" />
           </div>
+          <div className="rounded-xl border border-[color:var(--color-border)] p-3">
+            <label className="text-xs font-medium mb-2 block">Этапы интервью (конструктор сценария)</label>
+            {form.stages ? (
+              <StageBuilder
+                stages={form.stages}
+                onChange={stages => setForm(f => ({ ...f, stages }))}
+                onResetDefault={resetStagesToDefault}
+              />
+            ) : (
+              <div className="text-center py-4 text-sm text-[color:var(--color-muted-foreground)]">Загрузка...</div>
+            )}
+          </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="btn btn-secondary">Отмена</button>
@@ -205,6 +230,7 @@ export default function StrategyModal({ onClose, onChanged }) {
                 <div className="flex items-center gap-3 mt-1.5 text-xs text-[color:var(--color-muted-foreground)] flex-wrap">
                   <span>{s.follow_up_enabled ? `Напоминания: вкл. (через ${s.follow_up_delay_hours ?? '?'} ч.)` : 'Напоминания: выкл.'}</span>
                   <span>Авто-отказ: {s.decline_after_hours != null ? `${s.decline_after_hours} ч.` : 'никогда'}</span>
+                  <span>{s.stages?.length ?? 0} этап(ов) интервью</span>
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">

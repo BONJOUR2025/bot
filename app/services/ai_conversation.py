@@ -6,9 +6,6 @@ from datetime import date
 
 log = logging.getLogger(__name__)
 
-# Interview phase order
-PHASES = ["greeting", "screening", "experience", "motivation", "candidate_questions", "closing"]
-
 DEFAULT_AWAY_MESSAGE = (
     "Здравствуйте! Мы получили ваше сообщение. Наш ассистент отвечает в рабочее время "
     "({hours}) — обязательно продолжим общение, как только начнётся рабочий день. Спасибо за терпение!"
@@ -56,43 +53,10 @@ SYSTEM_PROMPT = """Ты HR-ассистент компании. Ведёшь с�
 
 ━━━ ИНСТРУКЦИИ ПО ФАЗАМ ━━━
 
-ФАЗА greeting — Приветствие:
-Представься как HR-ассистент компании, упомяни название роли, скажи что задашь несколько вопросов
-для первичного знакомства (10–15 минут). Спроси готов ли кандидат.
-→ next_phase: "screening" когда кандидат выразил готовность
-
-ФАЗА screening — Deal-breaker скрининг:
-Проверь 2–3 критичных параметра из базы знаний (локация, формат работы, зарплатные ожидания).
-Задавай по одному вопросу. Если кандидат не подходит — вежливо заверши.
-→ next_phase: "experience" когда все deal-breakers проверены и кандидат подходит
-→ next_phase: "rejected" если не соответствует
-
-ФАЗА experience — Опыт и стек:
-Задавай открытые ситуационные вопросы: «Расскажите о проекте где...», «Что именно было сложно и как справились?»
-Уточняй по ответам. Задай 2–3 вопроса суммарно.
-→ next_phase: "motivation" после 2–3 вопросов
-
-ФАЗА motivation — Мотивация:
-Спроси почему меняет работу, что важно в следующем месте, цели на 1–2 года.
-Нейтральная позиция без осуждения.
-→ next_phase: "candidate_questions" после ответа
-
-ФАЗА candidate_questions — Вопросы кандидата:
-Скажи: «Что вам важно узнать о роли или команде?»
-Отвечай честно на всё что есть в базе знаний. Чего нет — «Зафиксирую, рекрутер ответит отдельно».
-→ next_phase: "closing" когда вопросы исчерпаны
-
-ФАЗА closing — Финал:
-Поблагодари за время. Скажи чёткий следующий шаг: «Передам ваш профиль рекрутеру, ответ получите
-до [срок из базы знаний или "в течение 2–3 рабочих дней"]. Если появятся вопросы — пишите сюда.»
-→ next_phase: "done"
-
-ФАЗА rejected — Отказ по deal-breaker:
-Вежливо и честно объясни что вакансия не совпадает с условиями кандидата. Без осуждения.
-→ next_phase: "done"
+{phases_block}
 
 ━━━ ПРАВИЛА ━━━
-- Отвечай ТОЛЬКО в JSON: {"msg": "текст для кандидата", "next_phase": "фаза или null"}
+- Отвечай ТОЛЬКО в JSON: {{"msg": "текст для кандидата", "next_phase": "фаза или null"}}
 - next_phase = null если текущая фаза продолжается
 - Максимум 3 коротких предложения в msg
 - Нейтрально-деловой тон, без клише и корпоративного новояза
@@ -138,20 +102,26 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             )
             return
 
-        phase = getattr(c, "interview_phase", None) or "greeting"
+        from app.services.interview_stages import get_stages, render_stages_block
+        stages = get_stages(strategy)
+        stage_ids = [s["id"] for s in stages]
+
+        phase = getattr(c, "interview_phase", None) or stage_ids[0]
         if phase == "done":
             return
+        if phase not in stage_ids:
+            phase = stage_ids[0]
 
-        # If candidate already has conversation history but phase is still "greeting",
-        # they pre-date the structured interview — skip to experience phase
-        if phase == "greeting":
+        # If candidate already has conversation history but phase is still the
+        # first stage, they pre-date the structured interview — skip ahead
+        if phase == stage_ids[0]:
             existing_count = db.query(TelegramMessage).filter(
                 TelegramMessage.candidate_id == candidate_id,
                 TelegramMessage.direction == "in",
             ).count()
-            if existing_count > 1:  # more than the current message
-                phase = "experience"
-                c.interview_phase = "experience"
+            if existing_count > 1 and len(stage_ids) > 1:  # more than the current message
+                phase = stage_ids[1]
+                c.interview_phase = phase
                 db.commit()
 
         history = db.query(TelegramMessage).filter(
@@ -170,6 +140,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             phase=phase,
             knowledge_base=kb_block,
             interview_location=interview_location or "уточняется",
+            phases_block=render_stages_block(stages),
         )
 
         try:

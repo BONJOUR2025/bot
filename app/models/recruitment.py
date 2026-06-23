@@ -38,10 +38,15 @@ class HiringStrategy(Base):
     away_message = Column(Text, nullable=True, default="")
     ai_model = Column(String, nullable=True)
 
+    # JSON list of interview stages (see app/services/interview_stages.py).
+    # Null/empty = use the built-in default flow.
+    stages_json = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
+        from app.services.interview_stages import get_stages
         return {
             "id": self.id,
             "name": self.name,
@@ -59,6 +64,7 @@ class HiringStrategy(Base):
             "hh_message_no_link": self.hh_message_no_link or "",
             "away_message": self.away_message or "",
             "ai_model": self.ai_model,
+            "stages": get_stages(self),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

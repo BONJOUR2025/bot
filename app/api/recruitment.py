@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import RedirectResponse
@@ -64,6 +64,18 @@ class VacancyTemplateCreate(BaseModel):
     name: str
 
 
+class StageTransition(BaseModel):
+    condition: Optional[str] = ""
+    next: str
+
+
+class Stage(BaseModel):
+    id: str
+    title: str
+    instructions: Optional[str] = ""
+    transitions: List[StageTransition] = []
+
+
 class StrategyCreate(BaseModel):
     name: str
     description: Optional[str] = ""
@@ -79,6 +91,7 @@ class StrategyCreate(BaseModel):
     hh_message_no_link: Optional[str] = ""
     away_message: Optional[str] = ""
     ai_model: Optional[str] = None
+    stages: Optional[List[Stage]] = None
 
 class StrategyUpdate(BaseModel):
     name: Optional[str] = None
@@ -95,6 +108,7 @@ class StrategyUpdate(BaseModel):
     hh_message_no_link: Optional[str] = None
     away_message: Optional[str] = None
     ai_model: Optional[str] = None
+    stages: Optional[List[Stage]] = None
 
 
 class KBEntryCreate(BaseModel):
@@ -359,9 +373,35 @@ def list_strategies(db: Session = Depends(get_db)):
     return [s.to_dict() for s in db.query(HiringStrategy).order_by(HiringStrategy.is_builtin.desc(), HiringStrategy.name).all()]
 
 
+@router.get("/default-stages")
+def get_default_stages():
+    from app.services.interview_stages import DEFAULT_STAGES
+    return DEFAULT_STAGES
+
+
+def _pop_stages_json(payload: dict) -> dict:
+    """Pulls the "stages" key (list of Stage dicts) out of a request payload
+    and converts it to the stages_json column value, validating it first."""
+    import json
+    from app.services.interview_stages import validate_stages
+
+    if "stages" not in payload:
+        return payload
+    stages = payload.pop("stages")
+    if stages is None:
+        payload["stages_json"] = None
+        return payload
+    try:
+        validate_stages(stages)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    payload["stages_json"] = json.dumps(stages, ensure_ascii=False)
+    return payload
+
+
 @router.post("/strategies")
 def create_strategy(data: StrategyCreate, db: Session = Depends(get_db)):
-    s = HiringStrategy(**data.dict())
+    s = HiringStrategy(**_pop_stages_json(data.dict()))
     db.add(s); db.commit(); db.refresh(s)
     return s.to_dict()
 
@@ -371,7 +411,7 @@ def update_strategy(strategy_id: int, data: StrategyUpdate, db: Session = Depend
     s = db.query(HiringStrategy).filter(HiringStrategy.id == strategy_id).first()
     if not s:
         raise HTTPException(404, "Strategy not found")
-    for field, val in data.dict(exclude_unset=True).items():
+    for field, val in _pop_stages_json(data.dict(exclude_unset=True)).items():
         setattr(s, field, val)
     s.updated_at = datetime.utcnow()
     db.commit(); db.refresh(s)
