@@ -18,21 +18,12 @@ def set_enabled(val: bool) -> None:
     _enabled = val
 
 
-def matches_filters(candidate, cfg: dict, strategy=None) -> bool:
-    """Check if candidate matches automation filters.
-
-    If the candidate's vacancy has a HiringStrategy assigned, the strategy's
-    filters are authoritative and global config filters are ignored —
-    there is no dual-path fallback once a strategy is set.
-    """
-    if strategy is not None:
-        age_min, age_max, sources_str = strategy.age_min, strategy.age_max, strategy.sources_str or ""
-    elif cfg:
-        age_min = cfg.get("automation_age_min")
-        age_max = cfg.get("automation_age_max")
-        sources_str = cfg.get("automation_sources_str", "")
-    else:
+def matches_filters(candidate, strategy=None) -> bool:
+    """Check if candidate matches the age/source filters of the candidate's
+    HiringStrategy. No strategy assigned → no filtering (always matches)."""
+    if strategy is None:
         return True
+    age_min, age_max, sources_str = strategy.age_min, strategy.age_max, strategy.sources_str or ""
 
     # Age range
     try:
@@ -85,7 +76,7 @@ async def trigger_for_candidate(candidate_id: int, force: bool = False) -> str:
         vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
         strategy = get_strategy(db, vacancy)
 
-        if not force and not matches_filters(c, cfg, strategy):
+        if not force and not matches_filters(c, strategy):
             return "skipped: filters not matched"
 
         # Only for hh candidates that have external_id
@@ -113,29 +104,29 @@ async def trigger_for_candidate(candidate_id: int, force: bool = False) -> str:
             tg_link = None
             link_text = f"Код для привязки: {code}"
 
-        # Build message
+        # Build message — templates live only on the HiringStrategy now, no
+        # hardcoded fallback: an unconfigured template means the admin needs
+        # to fill it in, not a silently-injected default.
         name_short = c.name.split()[0] if c.name else "Здравствуйте"
         if tg_link:
-            default_tpl = (
-                "{name}, здравствуйте! Для удобного общения приглашаем вас в Telegram.\n\n"
-                "Пожалуйста, перейдите по ссылке и нажмите «Отправить» — это займёт 5 секунд:\n"
-                "{link}\n\n"
-                "⚠️ Важно: не изменяйте текст сообщения — это нужно для автоматической идентификации."
-            )
-            tpl = (
-                (strategy.hh_message_with_link if strategy else None)
-                or cfg.get("automation_hh_message_with_link") or ""
-            ).strip() or default_tpl
+            tpl = (strategy.hh_message_with_link or "").strip() if strategy else ""
+            if not tpl:
+                from app.services.notify import send_notification
+                await send_notification(
+                    f"⚠️ <b>Нет шаблона hh.ru</b>\nУ стратегии найма кандидата <b>{c.name}</b> "
+                    "не задан шаблон сообщения «с Telegram-ссылкой». Заполните его в стратегии."
+                )
+                return "error: no_hh_template_with_link"
             message = tpl.format(name=name_short, link=tg_link, code=code)
         else:
-            default_tpl = (
-                "{name}, здравствуйте! Для удобного общения напишите нам в Telegram: "
-                "@{username}.\nПри написании укажите код: {code}"
-            )
-            tpl = (
-                (strategy.hh_message_no_link if strategy else None)
-                or cfg.get("automation_hh_message_no_link") or ""
-            ).strip() or default_tpl
+            tpl = (strategy.hh_message_no_link or "").strip() if strategy else ""
+            if not tpl:
+                from app.services.notify import send_notification
+                await send_notification(
+                    f"⚠️ <b>Нет шаблона hh.ru</b>\nУ стратегии найма кандидата <b>{c.name}</b> "
+                    "не задан шаблон сообщения «без ссылки». Заполните его в стратегии."
+                )
+                return "error: no_hh_template_no_link"
             message = tpl.format(
                 name=name_short,
                 code=code,

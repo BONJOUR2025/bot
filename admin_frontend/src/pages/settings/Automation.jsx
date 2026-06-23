@@ -41,27 +41,11 @@ export default function SettingsAutomation() {
       </Section>
 
       <Section title="Автоматизация найма">
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 mb-3 text-sm text-amber-900">
-          ⚠️ <b>Эти фильтры и шаблоны — запасной вариант (legacy).</b> Как только у вакансии выбрана
-          «Стратегия найма» (см. карточку вакансии на странице «Подбор»), именно стратегия определяет
-          фильтры, follow-up и шаблоны сообщений hh.ru для этой вакансии — настройки ниже на неё уже
-          не влияют. Используйте поля ниже только для вакансий без назначенной стратегии.
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-          <Field label="Возраст от" hint="Минимальный возраст кандидата (только для вакансий без стратегии)">
-            <input type="number" className="input w-full" {...register('automation_age_min')} placeholder="18" />
-          </Field>
-          <Field label="Возраст до" hint="Максимальный возраст кандидата (только для вакансий без стратегии)">
-            <input type="number" className="input w-full" {...register('automation_age_max')} placeholder="60" />
-          </Field>
-          <Field label="Источники" hint="hh, avito, manual — через запятую. Пусто = все. (только для вакансий без стратегии)">
-            <input className="input w-full" {...register('automation_sources_str')} placeholder="hh,avito" />
-          </Field>
-        </div>
-        <Field label="База знаний (общая, устаревший формат)" hint="Общая для ВСЕХ вакансий без своей базы знаний — будьте внимательны и не пишите сюда условия конкретной вакансии. Новые записи рекомендуем добавлять через «Базу знаний» на странице вакансии — там явно видно, к какой вакансии или к какой их группе относится запись.">
-          <textarea className="input w-full min-h-[100px] resize-y text-sm" {...register('automation_knowledge_base')}
-            placeholder={"Компания занимается...\nГрафик работы: ...\nЗарплата: ...\nТребования: ..."} />
-        </Field>
+        <p className="text-sm text-[color:var(--color-muted-foreground)] mb-3">
+          Фильтры кандидатов, follow-up и шаблоны сообщений hh.ru настраиваются в «Стратегии найма»
+          (страница «Подбор» → карточка вакансии). Здесь остаются только общие параметры, не зависящие
+          от стратегии конкретной вакансии.
+        </p>
         <Field label="Место собеседований (по умолчанию)" hint="Используется если у вакансии не задан свой адрес.">
           <input className="input w-full" {...register('automation_interview_location')} placeholder="г. Москва, ул. Примерная, 1" />
         </Field>
@@ -99,46 +83,6 @@ export default function SettingsAutomation() {
               placeholder={"Ты HR-ассистент компании. Отвечаешь на вопросы кандидата о вакансии.\n\nБаза знаний:\n{knowledge_base}\n\nМесто собеседований: {interview_location}\n\nПравила..."} />
           </Field>
         </div>
-        <Field
-          label="Шаблон сообщения на hh.ru (с Telegram-ссылкой)"
-          hint="Отправляется кандидату автоматикой. Плейсхолдеры: {name} — имя, {link} — ссылка на TG (обязательно!), {code} — код привязки."
-        >
-          <textarea className="input w-full min-h-[100px] resize-y text-sm font-mono" {...register('automation_hh_message_with_link')}
-            placeholder={"{name}, здравствуйте! Для удобного общения перейдите по ссылке и нажмите «Отправить»:\n{link}\n\n⚠️ Не изменяйте текст сообщения."} />
-        </Field>
-        <Field
-          label="Шаблон сообщения на hh.ru (без ссылки)"
-          hint="Используется когда Telegram username не настроен. Плейсхолдеры: {name}, {code} (обязательно!), {username}."
-        >
-          <textarea className="input w-full min-h-[80px] resize-y text-sm font-mono" {...register('automation_hh_message_no_link')}
-            placeholder={"{name}, здравствуйте! Напишите нам в Telegram @{username} и укажите код: {code}"} />
-        </Field>
-      </Section>
-
-      <Section title="Follow-up (реактивация молчащих кандидатов)">
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 mb-3 text-sm text-amber-900">
-          ⚠️ <b>Тоже legacy-запасной вариант.</b> Follow-up для вакансий с назначенной стратегией
-          настраивается в самой стратегии (страница «Подбор» → «Стратегии найма») и по умолчанию выключен.
-          Поля ниже работают только для вакансий без стратегии и по умолчанию тоже выключены.
-        </div>
-        <Field label="" hint="Бот пишет кандидату сам, если тот замолчал — в рамках рабочих часов, заданных выше. Только для вакансий без стратегии.">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" {...register('follow_up_enabled')} />
-            <span className="text-sm">Включить follow-up</span>
-          </label>
-        </Field>
-        <Field label="Задержка перед follow-up (часов)" hint="Сколько часов молчания кандидата до первого и каждого последующего напоминания.">
-          <input type="number" className="input w-full" {...register('follow_up_delay_hours')}
-            placeholder="1" min="0.5" max="72" step="0.5" />
-        </Field>
-        <Field label="Текст первого follow-up" hint="Пусто = стандартный текст.">
-          <textarea className="input w-full min-h-[70px] resize-y text-sm" {...register('follow_up_message_1')}
-            placeholder="Здравствуйте! Остались ли у вас вопросы по вакансии? Готовы записаться на собеседование?" />
-        </Field>
-        <Field label="Текст второго follow-up" hint="Отправляется если после первого тоже нет ответа. Пусто = стандартный текст.">
-          <textarea className="input w-full min-h-[70px] resize-y text-sm" {...register('follow_up_message_2')}
-            placeholder="Мы всё ещё ждём вашего ответа. Если вас интересует вакансия — напишите, будем рады помочь." />
-        </Field>
       </Section>
 
       <div>

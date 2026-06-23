@@ -39,6 +39,7 @@ def init_db() -> None:
     _run_migrations()
     _seed_hiring_strategies()
     _migrate_recruitment_kb_and_strategy_defaults()
+    _backfill_builtin_strategy_message_defaults()
 
 
 def _migrate_columns() -> None:
@@ -202,6 +203,19 @@ def _migrate_assets_from_json() -> None:
         pass
 
 
+DEFAULT_FOLLOW_UP_MESSAGE_1 = "Здравствуйте! Остались ли у вас вопросы по вакансии? Готовы записаться на собеседование?"
+DEFAULT_FOLLOW_UP_MESSAGE_2 = "Мы всё ещё ждём вашего ответа. Если вас интересует вакансия — напишите, будем рады помочь."
+DEFAULT_HH_MESSAGE_WITH_LINK = (
+    "{name}, здравствуйте! Для удобного общения приглашаем вас в Telegram.\n\n"
+    "Пожалуйста, перейдите по ссылке и нажмите «Отправить» — это займёт 5 секунд:\n"
+    "{link}\n\n"
+    "⚠️ Важно: не изменяйте текст сообщения — это нужно для автоматической идентификации."
+)
+DEFAULT_HH_MESSAGE_NO_LINK = (
+    "{name}, здравствуйте! Для удобного общения напишите нам в Telegram: "
+    "@{username}.\nПри написании укажите код: {code}"
+)
+
 _BUILTIN_STRATEGIES = [
     dict(
         name="Стандартный отбор",
@@ -257,8 +271,14 @@ def _seed_hiring_strategies() -> None:
                      follow_up_message_1, follow_up_message_2, hh_message_with_link, hh_message_no_link, away_message)
                 VALUES
                     (:name, :description, :is_builtin, :follow_up_enabled, :follow_up_delay_hours, :decline_after_hours,
-                     '', '', '', '', '')
-            """), s)
+                     :msg1, :msg2, :hh_with_link, :hh_no_link, '')
+            """), {
+                **s,
+                "msg1": DEFAULT_FOLLOW_UP_MESSAGE_1,
+                "msg2": DEFAULT_FOLLOW_UP_MESSAGE_2,
+                "hh_with_link": DEFAULT_HH_MESSAGE_WITH_LINK,
+                "hh_no_link": DEFAULT_HH_MESSAGE_NO_LINK,
+            })
 
 
 def _migrate_recruitment_kb_and_strategy_defaults() -> None:
@@ -318,6 +338,55 @@ def _migrate_recruitment_kb_and_strategy_defaults() -> None:
         try:
             cfg["follow_up_enabled"] = False
             cfg["strategy_feature_migrated_v1"] = True
+            cfg_service.save(cfg)
+        except Exception:
+            pass
+
+
+def _backfill_builtin_strategy_message_defaults() -> None:
+    """One-time migration: the global automation fallback (age/source filters,
+    hh.ru templates, follow-up) has been removed — strategies are now the
+    sole source of these templates. Existing installs seeded builtin
+    strategies with blank templates (the defaults used to live as hardcoded
+    Python fallbacks), so backfill those blank columns with the same default
+    text, now visible and editable directly in the strategy UI.
+    Gated by a marker key in config.json so it only ever runs once.
+    """
+    from sqlalchemy import text
+    try:
+        from app.services.config_service import ConfigService
+        cfg_service = ConfigService()
+        cfg = cfg_service.load()
+    except Exception:
+        cfg = None
+
+    if cfg is not None and cfg.get("strategy_template_defaults_backfilled_v1"):
+        return
+
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("""
+                UPDATE hiring_strategies SET follow_up_message_1 = :v
+                WHERE is_builtin = 1 AND (follow_up_message_1 IS NULL OR follow_up_message_1 = '')
+            """), {"v": DEFAULT_FOLLOW_UP_MESSAGE_1})
+            conn.execute(text("""
+                UPDATE hiring_strategies SET follow_up_message_2 = :v
+                WHERE is_builtin = 1 AND (follow_up_message_2 IS NULL OR follow_up_message_2 = '')
+            """), {"v": DEFAULT_FOLLOW_UP_MESSAGE_2})
+            conn.execute(text("""
+                UPDATE hiring_strategies SET hh_message_with_link = :v
+                WHERE is_builtin = 1 AND (hh_message_with_link IS NULL OR hh_message_with_link = '')
+            """), {"v": DEFAULT_HH_MESSAGE_WITH_LINK})
+            conn.execute(text("""
+                UPDATE hiring_strategies SET hh_message_no_link = :v
+                WHERE is_builtin = 1 AND (hh_message_no_link IS NULL OR hh_message_no_link = '')
+            """), {"v": DEFAULT_HH_MESSAGE_NO_LINK})
+        except Exception:
+            pass
+
+    if cfg is not None:
+        try:
+            cfg["strategy_template_defaults_backfilled_v1"] = True
             cfg_service.save(cfg)
         except Exception:
             pass

@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MSG_1 = "Здравствуйте! Остались ли у вас вопросы по вакансии? Готовы записаться на собеседование?"
-DEFAULT_MSG_2 = "Мы всё ещё ждём вашего ответа. Если вас интересует вакансия — напишите, будем рады помочь."
+# Dedup so a candidate stuck on a misconfigured (blank message) strategy
+# doesn't get re-notified about it every 15 minutes.
+_missing_msg_notified: set[tuple[int, int]] = set()
 
 
 async def run_follow_up_check():
@@ -42,24 +43,14 @@ async def run_follow_up_check():
                 vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
                 strategy = get_strategy(db, vacancy)
 
-                # No strategy assigned → fall back to legacy global cfg toggle
-                # (kept only so very old vacancies without a strategy don't
-                # silently lose follow-ups they had before this migration —
-                # but the migration also force-disables this cfg key once).
-                if strategy is not None:
-                    if not strategy.follow_up_enabled:
-                        continue
-                    delay = timedelta(hours=float(strategy.follow_up_delay_hours or 1))
-                    msg_1 = (strategy.follow_up_message_1 or "").strip() or DEFAULT_MSG_1
-                    msg_2 = (strategy.follow_up_message_2 or "").strip() or DEFAULT_MSG_2
-                    decline_after_hours = strategy.decline_after_hours
-                else:
-                    if not cfg.get("follow_up_enabled"):
-                        continue
-                    delay = timedelta(hours=float(cfg.get("follow_up_delay_hours") or 1))
-                    msg_1 = (cfg.get("follow_up_message_1") or "").strip() or DEFAULT_MSG_1
-                    msg_2 = (cfg.get("follow_up_message_2") or "").strip() or DEFAULT_MSG_2
-                    decline_after_hours = None
+                # Follow-up is configured solely on the HiringStrategy now —
+                # no vacancy strategy means no follow-up for that candidate.
+                if strategy is None or not strategy.follow_up_enabled:
+                    continue
+                delay = timedelta(hours=float(strategy.follow_up_delay_hours or 1))
+                msg_1 = (strategy.follow_up_message_1 or "").strip()
+                msg_2 = (strategy.follow_up_message_2 or "").strip()
+                decline_after_hours = strategy.decline_after_hours
 
                 await _process(c, db, delay, now_utc, msg_1, msg_2, decline_after_hours)
             except Exception as e:
@@ -113,6 +104,16 @@ async def _process(c, db, delay: timedelta, now_utc: datetime, msg_1: str, msg_2
 
     if count < 2:
         msg_text = msg_1 if count == 0 else msg_2
+        if not msg_text:
+            key = (c.id, count)
+            if key not in _missing_msg_notified:
+                _missing_msg_notified.add(key)
+                log.warning("follow_up: no message text configured for candidate_id=%s (count=%d)", c.id, count)
+                await send_notification(
+                    f"⚠️ <b>Нет текста напоминания</b>\nУ стратегии найма кандидата <b>{c.name}</b> "
+                    f"включены напоминания, но не заполнен текст сообщения №{count + 1}. Заполните его в стратегии."
+                )
+            return
 
         # Race condition check: re-query to see if a new "in" message arrived after reference
         last_in_recheck = db.query(TelegramMessage).filter(
