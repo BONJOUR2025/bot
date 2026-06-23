@@ -87,7 +87,10 @@ def generate_candidate_questions(cfg: dict, title: str, description: str) -> lis
         'Верни ТОЛЬКО JSON: {"questions": [{"category": "...", "question": "..."}]}'
     )
     try:
-        raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=900)
+        # 900 tokens is not enough headroom for ~24 Russian-language questions —
+        # Cyrillic text costs noticeably more tokens per character than Latin,
+        # and a truncated response means invalid (cut-off) JSON below.
+        raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=2000)
     except Exception as e:
         log.warning("generate_candidate_questions failed: %s", e)
         raise RuntimeError(f"Ошибка запроса к Anthropic: {e}") from e
