@@ -397,7 +397,10 @@ def ai_suggest_questions(data: AISuggestQuestionsRequest):
     from app.services.ai_text_check import generate_candidate_questions
 
     cfg = ConfigService().load()
-    questions = generate_candidate_questions(cfg, data.title, data.description or "")
+    try:
+        questions = generate_candidate_questions(cfg, data.title, data.description or "")
+    except RuntimeError as e:
+        raise HTTPException(502, detail=str(e))
     return {"questions": questions}
 
 

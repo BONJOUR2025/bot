@@ -66,8 +66,16 @@ def check_text(cfg: dict, text: str, scope: str, vacancy_title: str = None,
 
 def generate_candidate_questions(cfg: dict, title: str, description: str) -> list:
     """Returns [{"category": str, "question": str}, ...] — likely candidate
-    questions for this vacancy, to seed the vacancy-creation wizard's KB step."""
+    questions for this vacancy, to seed the vacancy-creation wizard's KB step.
+
+    Raises RuntimeError with a human-readable reason on any failure (no API
+    key, API error, unparseable response) instead of returning an empty list
+    — the caller surfaces this to the admin so a misconfiguration doesn't
+    look like "AI decided there are no questions"."""
     from app.services.llm_client import chat
+
+    if not (cfg.get("anthropic_api_key") or "").strip():
+        raise RuntimeError("Не задан Anthropic API Key (Настройки → Автоматизация).")
 
     prompt = (
         f"Вакансия: {title}\n"
@@ -82,15 +90,15 @@ def generate_candidate_questions(cfg: dict, title: str, description: str) -> lis
         raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=900)
     except Exception as e:
         log.warning("generate_candidate_questions failed: %s", e)
-        raw = None
+        raise RuntimeError(f"Ошибка запроса к Anthropic: {e}") from e
 
     if not raw:
-        return []
+        raise RuntimeError("Anthropic не вернул ответ (проверьте API-ключ и логи сервера).")
     m = re.search(r"\{.*\}", raw, re.DOTALL)
     if not m:
-        return []
+        raise RuntimeError("Не удалось распознать JSON в ответе ИИ.")
     try:
         data = json.loads(m.group())
-        return data.get("questions") or []
-    except Exception:
-        return []
+    except Exception as e:
+        raise RuntimeError(f"Ответ ИИ не похож на валидный JSON: {e}") from e
+    return data.get("questions") or []
