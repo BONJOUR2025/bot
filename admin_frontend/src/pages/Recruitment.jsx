@@ -79,7 +79,7 @@ function StepBasic({ title, setTitle, description, setDesc, interviewLoc, setLoc
 }
 
 // Step 2 — strategy picker
-function StepStrategy({ strategyId, setStrategyId, onManage }) {
+function StepStrategy({ strategyId, onSelect, onManage }) {
   const [strategies, setStrategies] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -108,7 +108,7 @@ function StepStrategy({ strategyId, setStrategyId, onManage }) {
                 strategyId === s.id ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/5' : 'border-[color:var(--color-border)] hover:bg-[color:var(--color-muted)]/20'
               }`}>
               <input type="radio" name="strategy" className="mt-1" checked={strategyId === s.id}
-                onChange={() => setStrategyId(s.id)} />
+                onChange={() => onSelect(s.id)} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{s.name}</span>
@@ -442,6 +442,16 @@ function VacancyModal({ vacancy, onClose, onSave }) {
     } finally { setSaving(false); }
   }
 
+  // Selecting a strategy is a one-click radio action, not a form submit —
+  // it has to persist immediately, otherwise jumping to another step (via
+  // the step pills, not just "Далее") silently drops the selection.
+  async function handleSelectStrategy(id) {
+    setStrategyId(id);
+    if (!vacancyId) return;
+    const res = await api.patch(`/recruitment/vacancies/${vacancyId}`, { strategy_id: id });
+    onSave(res.data);
+  }
+
   const stepIdx = WIZARD_STEPS.findIndex(s => s.key === step);
   const canJumpFreely = isEdit || !!vacancyId;
 
@@ -485,7 +495,7 @@ function VacancyModal({ vacancy, onClose, onSave }) {
             />
           )}
           {step === 'strategy' && (
-            <StepStrategy strategyId={strategyId} setStrategyId={setStrategyId} onManage={() => setShowStrategyMgmt(true)} />
+            <StepStrategy strategyId={strategyId} onSelect={handleSelectStrategy} onManage={() => setShowStrategyMgmt(true)} />
           )}
           {step === 'questions' && (
             <StepQuestions vacancyId={vacancyId} title={title} description={description} vacancyTitle={vacancyTitle || title}
