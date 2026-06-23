@@ -150,4 +150,7 @@ admin_frontend/node_modules/
 
 # Local config with secrets (token, proxy credentials)
 config.json
+cash_categories.json
+cash_config.json
+push_vapid_keys.json
 
