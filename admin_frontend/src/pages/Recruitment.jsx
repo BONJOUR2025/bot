@@ -476,7 +476,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           </div>
 
           {/* Name + stage */}
-          <div className="flex-1 min-w-0 pb-0.5">
+          <div className="flex-1 min-w-0 pb-0.5 pr-9">
             <h2 className="text-lg font-semibold leading-tight truncate">
               {candidate.name}
             </h2>
@@ -574,7 +574,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 <div className="flex items-center gap-3 px-4 py-3">
                   <Phone size={15} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
                   <a href={`tel:${candidate.phone}`}
-                    className="flex-1 text-sm font-medium text-[color:var(--color-foreground)] hover:text-[color:var(--color-primary)] transition-colors">
+                    className="flex-1 min-w-0 truncate text-sm font-medium text-[color:var(--color-foreground)] hover:text-[color:var(--color-primary)] transition-colors">
                     {candidate.phone}
                   </a>
                   {tg && (
@@ -852,8 +852,12 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
         )}
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-6 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10">
+          <button onClick={() => { onClose(); onEdit(candidate); }}
+            className="order-1 sm:order-2 w-full sm:w-auto btn btn-primary text-sm flex items-center justify-center gap-1.5">
+            <Pencil size={14} /> Редактировать
+          </button>
+          <div className="order-2 sm:order-1 flex items-center gap-2 flex-wrap">
             <button onClick={() => { onDelete(candidate.id); onClose(); }}
               className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition-colors">
               <Trash2 size={14} /> Удалить
@@ -874,10 +878,6 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
               Запустить автоматизацию
             </button>
           </div>
-          <button onClick={() => { onClose(); onEdit(candidate); }}
-            className="btn btn-primary text-sm flex items-center gap-1.5">
-            <Pencil size={14} /> Редактировать
-          </button>
         </div>
       </div>
     </div>
