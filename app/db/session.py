@@ -144,6 +144,8 @@ def _run_migrations() -> None:
             "ALTER TABLE candidates ADD COLUMN stages_snapshot_json TEXT",
             "ALTER TABLE vacancies ADD COLUMN deal_breakers_json TEXT",
             "ALTER TABLE vacancy_templates ADD COLUMN deal_breakers_json TEXT",
+            "ALTER TABLE vacancies ADD COLUMN custom_questions_json TEXT",
+            "ALTER TABLE vacancy_templates ADD COLUMN custom_questions_json TEXT",
         ]:
             try:
                 conn.execute(text(stmt))

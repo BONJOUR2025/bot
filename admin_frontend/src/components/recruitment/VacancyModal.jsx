@@ -12,12 +12,13 @@ import useAiCheckGate from './useAiCheckGate.js';
 
 // ── Vacancy wizard ─────────────────────────────────────────────────
 const WIZARD_STEPS = [
-  { key: 'basic',        label: 'Основное' },
-  { key: 'dealbreakers', label: 'Дил-брейкеры' },
-  { key: 'strategy',     label: 'Стратегия найма' },
-  { key: 'questions',    label: 'Вопросы кандидатов' },
-  { key: 'extra',        label: 'Особые инструкции' },
-  { key: 'checklist',    label: 'Готовность' },
+  { key: 'basic',         label: 'Основное' },
+  { key: 'dealbreakers',  label: 'Дил-брейкеры' },
+  { key: 'askquestions',  label: 'Вопросы для кандидата' },
+  { key: 'strategy',      label: 'Стратегия найма' },
+  { key: 'questions',     label: 'Вопросы кандидатов' },
+  { key: 'extra',         label: 'Особые инструкции' },
+  { key: 'checklist',     label: 'Готовность' },
 ];
 
 const DEAL_BREAKER_SUGGESTIONS = [
@@ -128,6 +129,74 @@ function StepDealBreakers({ vacancyId, dealBreakers, setDealBreakers, onPatched 
 
       <button onClick={save} disabled={saving} className="btn btn-primary text-sm">
         {saving ? 'Сохранение...' : 'Сохранить критерии'}
+      </button>
+    </div>
+  );
+}
+
+// Step 1.6 — specific questions to ask the candidate; answers go into the
+// final AI-generated profile sent to the recruiter, not used as a filter.
+function StepAskQuestions({ vacancyId, questions, setQuestions, onPatched }) {
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  function updateRow(idx, value) {
+    setQuestions(rows => rows.map((r, i) => i === idx ? value : r));
+  }
+  function removeRow(idx) {
+    setQuestions(rows => rows.filter((_, i) => i !== idx));
+  }
+  function addRow() {
+    setQuestions(rows => [...rows, '']);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const cleaned = questions.filter(q => q.trim());
+      const res = await api.patch(`/recruitment/vacancies/${vacancyId}`, { custom_questions: cleaned });
+      onPatched?.(res.data);
+      toast('Сохранено', 'success');
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message, 'error');
+    } finally { setSaving(false); }
+  }
+
+  if (!vacancyId) {
+    return <p className="text-sm text-[color:var(--color-muted-foreground)]">Сначала сохраните основное на шаге 1.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-[color:var(--color-muted-foreground)]">
+        Вопросы, которые ИИ обязательно задаст кандидату в ходе интервью — это не критерий отбора (как
+        дил-брейкеры), просто конкретная информация, которую вы хотите получить. Ответы попадут в
+        финальное резюме кандидата, которое бот пришлёт вам после интервью.
+      </p>
+
+      {questions.length === 0 && (
+        <p className="text-xs text-amber-600">Пока не указано ни одного вопроса.</p>
+      )}
+
+      {questions.map((q, idx) => (
+        <div key={idx} className="flex items-center gap-1.5">
+          <input className="input text-sm flex-1 min-w-0" value={q}
+            onChange={e => updateRow(idx, e.target.value)}
+            placeholder="Например: Готовы ли к командировкам?" />
+          <button type="button" onClick={() => removeRow(idx)} title="Удалить вопрос"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-red-400 flex-shrink-0">
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+
+      <button type="button" onClick={addRow}
+        className="text-xs text-[color:var(--color-primary)] flex items-center gap-1 hover:underline">
+        <Plus size={13} /> Добавить вопрос
+      </button>
+
+      <button onClick={save} disabled={saving} className="btn btn-primary text-sm">
+        {saving ? 'Сохранение...' : 'Сохранить вопросы'}
       </button>
     </div>
   );
@@ -479,6 +548,7 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
   const [strategyId, setStrategyId] = useState(vacancy?.strategy_id || null);
   const [extraInstructions, setExtraInstructions] = useState(vacancy?.extra_instructions || '');
   const [dealBreakers, setDealBreakers] = useState(vacancy?.deal_breakers || []);
+  const [customQuestions, setCustomQuestions] = useState(vacancy?.custom_questions || []);
   const [saving, setSaving] = useState(false);
   const [showStrategyMgmt, setShowStrategyMgmt] = useState(false);
   const [showKb, setShowKb] = useState(false);
@@ -510,6 +580,7 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
 
   function handlePatched(data) {
     setDealBreakers(data.deal_breakers || []);
+    setCustomQuestions(data.custom_questions || []);
     onSave(data);
   }
 
@@ -558,6 +629,10 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
           {step === 'dealbreakers' && (
             <StepDealBreakers vacancyId={vacancyId} dealBreakers={dealBreakers}
               setDealBreakers={setDealBreakers} onPatched={handlePatched} />
+          )}
+          {step === 'askquestions' && (
+            <StepAskQuestions vacancyId={vacancyId} questions={customQuestions}
+              setQuestions={setCustomQuestions} onPatched={handlePatched} />
           )}
           {step === 'strategy' && (
             <StepStrategy strategyId={strategyId} onSelect={handleSelectStrategy} onManage={() => setShowStrategyMgmt(true)} />

@@ -231,7 +231,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
 async def _generate_candidate_profile(candidate_id: int) -> None:
     """Analyze full conversation and send structured candidate profile to admin."""
     from app.db.session import SessionLocal
-    from app.models.recruitment import Candidate, TelegramMessage
+    from app.models.recruitment import Candidate, TelegramMessage, Vacancy
     from app.services.config_service import ConfigService
     from app.services.notify import send_notification
     from app.services.llm_client import chat
@@ -242,6 +242,14 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
         if not c:
             return
         candidate_name = c.name  # read before session closes
+
+        custom_questions = []
+        vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+        if vacancy and vacancy.custom_questions_json:
+            try:
+                custom_questions = json.loads(vacancy.custom_questions_json) or []
+            except Exception:
+                custom_questions = []
 
         history = db.query(TelegramMessage).filter(
             TelegramMessage.candidate_id == candidate_id
@@ -256,10 +264,19 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
         db.close()
 
     cfg = ConfigService().load()
+    custom_questions_block = ""
+    if custom_questions:
+        q_lines = "\n".join(f'- "{q}"' for q in custom_questions)
+        custom_questions_block = (
+            f"\n\nРекрутер просил задать кандидату эти вопросы — найди в транскрипте ответ на каждый "
+            f"(или null, если кандидат не ответил) и верни их в поле custom_answers:\n{q_lines}"
+        )
+
     prompt = (
         f"Проанализируй интервью с кандидатом на вакансию и составь профиль.\n\n"
         f"Кандидат: {candidate_name}\n\n"
-        f"Транскрипт интервью:\n{transcript}\n\n"
+        f"Транскрипт интервью:\n{transcript}"
+        f"{custom_questions_block}\n\n"
         "Верни ТОЛЬКО JSON:\n"
         '{"score": 0-100, '
         '"score_reason": "1-2 предложения почему такой балл", '
@@ -270,7 +287,9 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
         '"red_flags": ["флаг 1"], '
         '"summary": "5-7 строк — резюме кандидата для рекрутера", '
         '"recommendation": "invite/reserve/reject", '
-        '"recommendation_reason": "краткое обоснование"}'
+        '"recommendation_reason": "краткое обоснование"'
+        + (', "custom_answers": [{"question": "...", "answer": "... или null"}]' if custom_questions else "")
+        + '}'
     )
 
     raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=600)
@@ -290,6 +309,9 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
     strengths = "\n".join(f"  + {s}" for s in (p.get("strengths") or []))
     flags = "\n".join(f"  ⚠ {f}" for f in (p.get("red_flags") or []))
     tags = " ".join(f"#{t.replace(' ', '_')}" for t in (p.get("tags") or []))
+    custom_answers = "\n".join(
+        f"  • {a.get('question', '')}: {a.get('answer') or '—'}" for a in (p.get("custom_answers") or [])
+    )
 
     text = (
         f"👤 <b>Профиль кандидата: {candidate_name}</b>\n\n"
@@ -300,6 +322,8 @@ async def _generate_candidate_profile(candidate_id: int) -> None:
         text += f"<b>Сильные стороны:</b>\n{strengths}\n\n"
     if flags:
         text += f"<b>Красные флаги:</b>\n{flags}\n\n"
+    if custom_answers:
+        text += f"<b>Ответы на вопросы рекрутера:</b>\n{custom_answers}\n\n"
     if p.get("salary_expectation"):
         text += f"<b>Ожидания по ЗП:</b> {p['salary_expectation']}\n"
     if p.get("availability"):
