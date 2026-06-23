@@ -1364,10 +1364,10 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 }
               }}
               className="btn text-xs flex items-center gap-1 text-[color:var(--color-muted-foreground)]"
-              title="Запустить автоматизацию для этого кандидата (игнорирует глобальный переключатель)"
+              title="Реально отправляет сообщение hh.ru и переводит кандидата на следующий шаг — только для этого кандидата, даже если глобальная автоматизация выключена"
             >
               <Zap size={12} />
-              Тест авто
+              Запустить автоматизацию
             </button>
           </div>
           <button onClick={() => { onClose(); onEdit(candidate); }}
