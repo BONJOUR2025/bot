@@ -114,7 +114,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
     <nav className={`flex h-full min-h-screen flex-col bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] shadow-xl transition-all duration-200 ${isMobile ? 'w-full' : isCollapsed ? 'w-[64px]' : 'w-[280px]'}`}>
 
       {/* Logo */}
-      <div className={`flex items-center gap-4 px-4 pb-5 pt-7 ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
+      <div className={`flex pb-5 pt-7 ${isCollapsed ? 'flex-col items-center gap-2 px-0' : 'items-center gap-4 px-6'}`}>
         <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[0_10px_30px_rgba(0,0,0,0.12)] text-sm font-bold">
           ЦУ
         </div>
