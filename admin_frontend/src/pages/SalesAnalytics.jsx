@@ -193,9 +193,10 @@ const ChartTooltip = ({ active, payload, label, nameMap }) => {
 
 /* ── main component ──────────────────────────────────────── */
 export default function SalesAnalytics() {
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
-  const [dateFrom, setDateFrom] = useState(monthAgo);
+  const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo,   setDateTo]   = useState(TODAY);
   const [gran,     setGran]     = useState('day');
   const [hideZero, setHideZero] = useState(false);
