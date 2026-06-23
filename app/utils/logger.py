@@ -50,6 +50,7 @@ _connections_logger.addHandler(_rotating_handler(LOGS_DIR / "connections.log"))
 # per bot/admin user. Also propagates to the root logger.
 # ----------------------------------------------------------------------
 _user_loggers: dict[str, logging.Logger] = {}
+_user_log_filenames: dict[str, str] = {}
 _SAFE_ID_PATTERN = re.compile(r"[^\w.-]+")
 
 
@@ -63,16 +64,39 @@ def _safe_label(label: Any) -> str:
 
 def _get_user_logger(user_id: Any, label: str | None = None) -> logging.Logger:
     safe_id = _safe_id(user_id)
+    filename = safe_id
+    safe_label = _safe_label(label) if label and str(label) != str(user_id) else ""
+    if safe_label:
+        filename = f"{safe_id}_{safe_label}"
+
     logger = _user_loggers.get(safe_id)
+    prev_filename = _user_log_filenames.get(safe_id)
+
+    if logger is not None and (prev_filename == filename or prev_filename != safe_id):
+        # Either the name is unchanged, or we already have a labeled
+        # filename — never downgrade back to a bare id on a later call
+        # that happens to arrive without a label.
+        return logger
+
     if logger is None:
-        filename = safe_id
-        safe_label = _safe_label(label) if label and str(label) != str(user_id) else ""
-        if safe_label:
-            filename = f"{safe_id}_{safe_label}"
         logger = logging.getLogger(f"users.{safe_id}")
         logger.setLevel(logging.INFO)
-        logger.addHandler(_rotating_handler(USERS_LOG_DIR / f"{filename}.log"))
-        _user_loggers[safe_id] = logger
+    else:
+        # A fuller label showed up after the file was created with a
+        # shorter name (e.g. first log call happened before the
+        # username was known) — move the log onto the new filename
+        # instead of leaving it stuck with the old one forever.
+        for old_handler in list(logger.handlers):
+            logger.removeHandler(old_handler)
+            old_handler.close()
+        old_path = USERS_LOG_DIR / f"{prev_filename}.log"
+        new_path = USERS_LOG_DIR / f"{filename}.log"
+        if old_path.exists() and not new_path.exists():
+            old_path.rename(new_path)
+
+    logger.addHandler(_rotating_handler(USERS_LOG_DIR / f"{filename}.log"))
+    _user_loggers[safe_id] = logger
+    _user_log_filenames[safe_id] = filename
     return logger
 
 
