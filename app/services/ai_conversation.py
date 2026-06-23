@@ -102,6 +102,13 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             )
             return
 
+        custom_questions = []
+        if vacancy and vacancy.custom_questions_json:
+            try:
+                custom_questions = json.loads(vacancy.custom_questions_json) or []
+            except Exception:
+                custom_questions = []
+
         from app.services.interview_stages import get_stages, render_stages_block
 
         # The stage graph is frozen onto the candidate the first time their
@@ -156,7 +163,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             phase=phase,
             knowledge_base=kb_block,
             interview_location=interview_location or "уточняется",
-            phases_block=render_stages_block(stages),
+            phases_block=render_stages_block(stages, custom_questions),
         )
 
         try:

@@ -93,11 +93,24 @@ def get_stages(strategy) -> list:
     return DEFAULT_STAGES
 
 
-def render_stages_block(stages: list) -> str:
-    """Render the stage list into the "ФАЗА ..." prompt block the AI reads."""
+def render_stages_block(stages: list, custom_questions: list | None = None) -> str:
+    """Render the stage list into the "ФАЗА ..." prompt block the AI reads.
+
+    Stages flagged with ask_custom_questions=True get the vacancy's
+    custom_questions (set in the vacancy editor, not the strategy) appended
+    to their instructions — this pins "ask these" to a specific point in the
+    script instead of leaving the AI to pick a moment on its own."""
     blocks = []
     for s in stages:
-        lines = [f"ФАЗА {s['id']} — {s.get('title', '')}:", (s.get('instructions') or '').strip()]
+        instructions = (s.get('instructions') or '').strip()
+        if s.get("ask_custom_questions") and custom_questions:
+            q_lines = "\n".join(f"- {q.strip()}" for q in custom_questions if q.strip())
+            if q_lines:
+                instructions += (
+                    "\n\nОбязательно задай (не критерий отбора — просто собери ответ для финального "
+                    "резюме, по одному вопросу за раз):\n" + q_lines
+                )
+        lines = [f"ФАЗА {s['id']} — {s.get('title', '')}:", instructions]
         for t in s.get("transitions") or []:
             cond = (t.get("condition") or "").strip()
             nxt = t.get("next") or "done"

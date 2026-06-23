@@ -83,6 +83,11 @@ class Stage(BaseModel):
     title: str
     instructions: Optional[str] = ""
     transitions: List[StageTransition] = []
+    # If true, the vacancy's custom_questions (set in the vacancy editor, not
+    # the strategy) get appended to this stage's instructions when rendered
+    # for a specific candidate — pins "ask these" to a concrete point in the
+    # script instead of leaving the AI to pick a moment on its own.
+    ask_custom_questions: bool = False
 
 
 class StrategyCreate(BaseModel):

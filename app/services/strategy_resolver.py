@@ -52,22 +52,10 @@ def build_ai_context_block(db, vacancy) -> str:
             "Критичные условия вакансии (deal-breakers) — обязательно сверь каждое из них с кандидатом:\n" + db_lines
         )
 
-    # Specific questions the recruiter wants asked — not a pass/fail filter
-    # like deal-breakers, just facts to collect so the answers land in the
-    # final candidate profile instead of getting lost in free chat.
-    custom_questions = []
-    if vacancy and getattr(vacancy, "custom_questions_json", None):
-        try:
-            custom_questions = json.loads(vacancy.custom_questions_json) or []
-        except Exception:
-            custom_questions = []
-    cq_lines = "\n".join(f"- {q.strip()}" for q in custom_questions if q.strip())
-    if cq_lines:
-        parts.append(
-            "Дополнительные вопросы для кандидата (это не критерий отбора — просто задай их "
-            "в удобный момент интервью и зафиксируй ответ, он попадёт в итоговое резюме для рекрутера):\n"
-            + cq_lines
-        )
+    # Note: the vacancy's custom_questions are NOT injected here — they're
+    # pinned to a specific stage instead (see interview_stages.render_stages_block
+    # + Stage.ask_custom_questions), so the admin controls exactly when in the
+    # script they get asked, rather than leaving the AI to pick a moment.
 
     if global_entries:
         lines = "\n".join(f"- {e.question.strip()}: {e.answer.strip()}" for e in global_entries if e.answer)

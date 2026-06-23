@@ -137,6 +137,24 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
             />
           </div>
 
+          <div className="pl-8 flex items-start gap-2">
+            <input
+              type="checkbox"
+              id={`ask-cq-${idx}`}
+              checked={!!s.ask_custom_questions}
+              onChange={e => update(idx, { ask_custom_questions: e.target.checked })}
+              className="rounded mt-0.5"
+            />
+            <label htmlFor={`ask-cq-${idx}`} className="text-xs cursor-pointer">
+              Задать здесь вопросы вакансии для кандидата
+              <span className="block text-[11px] text-[color:var(--color-muted-foreground)] mt-0.5">
+                Список вопросов настраивается в редакторе конкретной вакансии (шаг «Вопросы для кандидата»),
+                не здесь — стратегия общая для всех вакансий. Если включить, ИИ обязательно задаст их именно
+                на этом этапе, а ответы попадут в финальное резюме кандидата.
+              </span>
+            </label>
+          </div>
+
           <div className="pl-8 space-y-2">
             <div>
               <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">Переходы дальше</p>
