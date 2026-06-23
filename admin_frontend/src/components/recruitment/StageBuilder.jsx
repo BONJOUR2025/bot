@@ -1,4 +1,4 @@
-import { ArrowUp, ArrowDown, Trash2, Plus, CornerDownRight, RotateCcw, GripVertical, HelpCircle } from 'lucide-react';
+import { ArrowUp, ArrowDown, Trash2, Plus, CornerDownRight, RotateCcw, GripVertical, HelpCircle, MessageCircleQuestion } from 'lucide-react';
 
 function slugify(title, existingIds, fallbackIdx) {
   const base = (title || '')
@@ -31,6 +31,17 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
   function addStage() {
     const id = slugify('', ids, stages.length);
     onChange([...stages, { id, title: 'Новый этап', instructions: '', transitions: [] }]);
+  }
+
+  function addQuestionsStage() {
+    const id = slugify('Вопросы вакансии', ids, stages.length);
+    onChange([...stages, {
+      id,
+      title: 'Вопросы вакансии',
+      instructions: 'Задай кандидату вопросы вакансии ниже, по одному за раз. Дождись ответа на каждый.',
+      ask_custom_questions: true,
+      transitions: [],
+    }]);
   }
 
   function removeStage(idx) {
@@ -96,6 +107,13 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
               onChange={e => update(idx, { title: e.target.value })}
               placeholder="Название этапа"
             />
+            {s.ask_custom_questions && (
+              <span
+                className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 rounded-full px-2 py-1"
+                title="На этом этапе ИИ задаст вопросы вакансии, настроенные в редакторе вакансии">
+                <MessageCircleQuestion size={12} /> Вопросы вакансии
+              </span>
+            )}
             <div className="flex items-center gap-0.5 flex-shrink-0">
               <button type="button" onClick={() => move(idx, -1)} disabled={idx === 0} title="Поднять"
                 className="w-7 h-7 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] disabled:opacity-30">
@@ -137,23 +155,12 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
             />
           </div>
 
-          <div className="pl-8 flex items-start gap-2">
-            <input
-              type="checkbox"
-              id={`ask-cq-${idx}`}
-              checked={!!s.ask_custom_questions}
-              onChange={e => update(idx, { ask_custom_questions: e.target.checked })}
-              className="rounded mt-0.5"
-            />
-            <label htmlFor={`ask-cq-${idx}`} className="text-xs cursor-pointer">
-              Задать здесь вопросы вакансии для кандидата
-              <span className="block text-[11px] text-[color:var(--color-muted-foreground)] mt-0.5">
-                Список вопросов настраивается в редакторе конкретной вакансии (шаг «Вопросы для кандидата»),
-                не здесь — стратегия общая для всех вакансий. Если включить, ИИ обязательно задаст их именно
-                на этом этапе, а ответы попадут в финальное резюме кандидата.
-              </span>
-            </label>
-          </div>
+          {s.ask_custom_questions && (
+            <p className="pl-8 text-[11px] text-[color:var(--color-muted-foreground)]">
+              Список вопросов настраивается в редакторе конкретной вакансии (шаг «Вопросы для кандидата»),
+              не здесь — стратегия общая для всех вакансий. Ответы попадут в финальное резюме кандидата.
+            </p>
+          )}
 
           <div className="pl-8 space-y-2">
             <div>
@@ -207,10 +214,17 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
         </div>
       ))}
 
-      <button type="button" onClick={addStage}
-        className="btn btn-secondary text-sm w-full flex items-center justify-center gap-1.5">
-        <Plus size={14} /> Добавить этап
-      </button>
+      <div className="flex gap-2">
+        <button type="button" onClick={addStage}
+          className="btn btn-secondary text-sm flex-1 flex items-center justify-center gap-1.5">
+          <Plus size={14} /> Добавить этап
+        </button>
+        <button type="button" onClick={addQuestionsStage}
+          title="Добавить этап, на котором ИИ задаст вопросы вакансии (настраиваются в редакторе вакансии)"
+          className="btn btn-secondary text-sm flex-1 flex items-center justify-center gap-1.5">
+          <MessageCircleQuestion size={14} /> Этап с вопросами вакансии
+        </button>
+      </div>
     </div>
   );
 }
