@@ -127,6 +127,13 @@ class Vacancy(Base):
     # — applied on top of whatever strategy is selected, never silently merged
     # into the global/strategy knowledge base.
     extra_instructions = Column(Text, nullable=True, default="")
+    # Structured "checklist" of must-match criteria (e.g. location, work
+    # format, salary expectation) as a flexible [{"label", "value"}, ...]
+    # list — fed into the AI context block so a strategy stage that says
+    # "проверь deal-breakers" has concrete facts to check against, instead
+    # of relying on free-text knowledge-base entries the AI has to infer
+    # relevance from.
+    deal_breakers_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     candidates = relationship("Candidate", back_populates="vacancy", cascade="all, delete-orphan")
@@ -134,6 +141,13 @@ class Vacancy(Base):
     strategy = relationship("HiringStrategy")
 
     def to_dict(self):
+        import json
+        deal_breakers = []
+        if self.deal_breakers_json:
+            try:
+                deal_breakers = json.loads(self.deal_breakers_json) or []
+            except Exception:
+                deal_breakers = []
         return {
             "id": self.id,
             "title": self.title,
@@ -144,6 +158,7 @@ class Vacancy(Base):
             "strategy_id": self.strategy_id,
             "strategy_name": self.strategy.name if self.strategy else None,
             "extra_instructions": self.extra_instructions or "",
+            "deal_breakers": deal_breakers,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -167,6 +182,7 @@ class VacancyTemplate(Base):
     strategy_id = Column(Integer, ForeignKey("hiring_strategies.id", ondelete="SET NULL"), nullable=True)
     extra_instructions = Column(Text, nullable=True, default="")
     kb_entries_json = Column(Text, nullable=True, default="[]")  # [{"category", "question", "answer"}]
+    deal_breakers_json = Column(Text, nullable=True)  # [{"label", "value"}]
     created_at = Column(DateTime, default=datetime.utcnow)
 
     strategy = relationship("HiringStrategy")
@@ -177,6 +193,10 @@ class VacancyTemplate(Base):
             kb_entries = json.loads(self.kb_entries_json or "[]")
         except Exception:
             kb_entries = []
+        try:
+            deal_breakers = json.loads(self.deal_breakers_json or "[]")
+        except Exception:
+            deal_breakers = []
         return {
             "id": self.id,
             "name": self.name,
@@ -187,6 +207,7 @@ class VacancyTemplate(Base):
             "strategy_name": self.strategy.name if self.strategy else None,
             "extra_instructions": self.extra_instructions or "",
             "kb_entries_count": len(kb_entries),
+            "deal_breakers": deal_breakers,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

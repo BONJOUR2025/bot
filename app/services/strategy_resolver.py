@@ -20,6 +20,7 @@ def build_ai_context_block(db, vacancy) -> str:
     """Build the structured, explicitly-scoped knowledge-base text block fed
     to the AI prompt. Returns "" if nothing is configured anywhere, so the
     caller's "no KB configured — notify admin" path keeps working."""
+    import json
     from app.models.recruitment import KnowledgeBaseEntry
 
     global_entries = db.query(KnowledgeBaseEntry).filter(KnowledgeBaseEntry.scope == "global").all()
@@ -31,6 +32,26 @@ def build_ai_context_block(db, vacancy) -> str:
         ).all()
 
     parts = []
+
+    # Structured deal-breakers go first — a stage instruction like "проверь
+    # deal-breakers" only reliably produces the right questions if the AI is
+    # handed concrete label/value facts to check against, not just told
+    # "look in the knowledge base" and left to infer which entries are relevant.
+    deal_breakers = []
+    if vacancy and getattr(vacancy, "deal_breakers_json", None):
+        try:
+            deal_breakers = json.loads(vacancy.deal_breakers_json) or []
+        except Exception:
+            deal_breakers = []
+    db_lines = "\n".join(
+        f"- {d.get('label', '').strip()}: {d.get('value', '').strip()}"
+        for d in deal_breakers if d.get("label") and d.get("value")
+    )
+    if db_lines:
+        parts.append(
+            "Критичные условия вакансии (deal-breakers) — обязательно сверь каждое из них с кандидатом:\n" + db_lines
+        )
+
     if global_entries:
         lines = "\n".join(f"- {e.question.strip()}: {e.answer.strip()}" for e in global_entries if e.answer)
         if lines:

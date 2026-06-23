@@ -39,6 +39,11 @@ VALID_SOURCES = ["hh", "avito", "manual", "other"]
 
 # ── Pydantic schemas ───────────────────────────────────────────────
 
+class DealBreaker(BaseModel):
+    label: str
+    value: str
+
+
 class VacancyCreate(BaseModel):
     title: str
     description: Optional[str] = ""
@@ -46,6 +51,7 @@ class VacancyCreate(BaseModel):
     interview_location: Optional[str] = ""
     is_open: bool = True
     strategy_id: Optional[int] = None
+    deal_breakers: Optional[List[DealBreaker]] = None
 
 class VacancyUpdate(BaseModel):
     title: Optional[str] = None
@@ -58,6 +64,7 @@ class VacancyUpdate(BaseModel):
     # confirmed=True, after the admin has seen the AI pre-check result for it.
     extra_instructions: Optional[str] = None
     confirmed: bool = False
+    deal_breakers: Optional[List[DealBreaker]] = None
 
 
 class VacancyTemplateCreate(BaseModel):
@@ -191,6 +198,20 @@ class SendMessageRequest(BaseModel):
     text: str
 
 
+def _serialize_deal_breakers(deal_breakers: Optional[List[DealBreaker]]) -> Optional[str]:
+    """Converts a DealBreaker list into the deal_breakers_json column value,
+    dropping rows where label or value was left blank."""
+    import json
+
+    if deal_breakers is None:
+        return None
+    cleaned = [
+        {"label": d.label.strip(), "value": d.value.strip()}
+        for d in deal_breakers if d.label.strip() and d.value.strip()
+    ]
+    return json.dumps(cleaned, ensure_ascii=False)
+
+
 # ── Vacancies ──────────────────────────────────────────────────────
 
 @router.get("/vacancies")
@@ -211,7 +232,8 @@ def create_vacancy(data: VacancyCreate, db: Session = Depends(get_db)):
         raise HTTPException(404, "Strategy not found")
     v = Vacancy(title=data.title, description=data.description,
                 knowledge_base=data.knowledge_base, interview_location=data.interview_location,
-                is_open=data.is_open, strategy_id=data.strategy_id)
+                is_open=data.is_open, strategy_id=data.strategy_id,
+                deal_breakers_json=_serialize_deal_breakers(data.deal_breakers))
     db.add(v); db.commit(); db.refresh(v)
     return v.to_dict()
 
@@ -236,6 +258,8 @@ def update_vacancy(vacancy_id: int, data: VacancyUpdate, db: Session = Depends(g
         if data.strategy_id and not db.query(HiringStrategy).filter(HiringStrategy.id == data.strategy_id).first():
             raise HTTPException(404, "Strategy not found")
         v.strategy_id = data.strategy_id
+    if data.deal_breakers is not None:
+        v.deal_breakers_json = _serialize_deal_breakers(data.deal_breakers)
     db.commit(); db.refresh(v)
     return v.to_dict()
 
@@ -265,6 +289,7 @@ def duplicate_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
         is_open=True,
         strategy_id=src.strategy_id,
         extra_instructions=src.extra_instructions,
+        deal_breakers_json=src.deal_breakers_json,
     )
     db.add(v); db.commit(); db.refresh(v)
 
@@ -316,6 +341,7 @@ def save_vacancy_as_template(vacancy_id: int, data: VacancyTemplateCreate, db: S
         strategy_id=v.strategy_id,
         extra_instructions=v.extra_instructions,
         kb_entries_json=json.dumps(kb_snapshot, ensure_ascii=False),
+        deal_breakers_json=v.deal_breakers_json,
     )
     db.add(t); db.commit(); db.refresh(t)
     return t.to_dict()
@@ -338,6 +364,7 @@ def create_vacancy_from_template(template_id: int, db: Session = Depends(get_db)
         is_open=True,
         strategy_id=t.strategy_id,
         extra_instructions=t.extra_instructions,
+        deal_breakers_json=t.deal_breakers_json,
     )
     db.add(v); db.commit(); db.refresh(v)
 

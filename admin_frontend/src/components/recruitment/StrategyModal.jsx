@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Pencil, Trash2, Plus, Loader2, Star } from 'lucide-react';
+import { X, Pencil, Trash2, Plus, Loader2, Star, Briefcase } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../../providers/ToastProvider.jsx';
 import StageBuilder from './StageBuilder.jsx';
+import VacancyModal from './VacancyModal.jsx';
 
 const EMPTY_FORM = {
   name: '', description: '', age_min: '', age_max: '', sources_str: '',
@@ -11,8 +12,10 @@ const EMPTY_FORM = {
   stages: null,
 };
 
-function StrategyForm({ strategy, onClose, onSaved }) {
+function StrategyForm({ strategy, onClose, onSaved, zIndex }) {
   const { toast } = useToast();
+  const [vacancies, setVacancies] = useState([]);
+  const [vacancyModal, setVacancyModal] = useState(null);
   const [form, setForm] = useState(() => strategy
     ? {
         name: strategy.name || '',
@@ -39,6 +42,18 @@ function StrategyForm({ strategy, onClose, onSaved }) {
     if (form.stages) return;
     api.get('/recruitment/default-stages').then(res => setForm(f => ({ ...f, stages: res.data }))).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!strategy) return;
+    api.get('/recruitment/vacancies?include_closed=true')
+      .then(res => setVacancies((res.data || []).filter(v => v.strategy_id === strategy.id)))
+      .catch(() => {});
+  }, [strategy]);
+
+  function handleVacancySaved(saved) {
+    setVacancies(prev => prev.map(v => v.id === saved.id ? saved : v).filter(v => v.strategy_id === strategy.id));
+    setVacancyModal(saved);
+  }
 
   function resetStagesToDefault() {
     if (!window.confirm('Заменить текущие этапы стандартным сценарием? Несохранённые изменения этапов будут потеряны.')) return;
@@ -67,13 +82,31 @@ function StrategyForm({ strategy, onClose, onSaved }) {
   }
 
   return (
-    <div className="modal-backdrop" style={{ zIndex: 90 }} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" style={{ zIndex: zIndex || 90 }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-4xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '92vh' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold">{strategy ? 'Редактировать стратегию' : 'Новая стратегия'}</h3>
           <button onClick={onClose} className="text-xl text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] leading-none">&times;</button>
         </div>
         <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+          {strategy && vacancies.length > 0 && (
+            <div className="rounded-xl border border-[color:var(--color-border)] p-3">
+              <p className="text-xs font-medium mb-2 flex items-center gap-1.5">
+                <Briefcase size={13} /> Вакансии с этой стратегией
+              </p>
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)] mb-2">
+                Deal-breakers, вопросы и особые инструкции настраиваются в редакторе самой вакансии — откройте его прямо отсюда, не закрывая конструктор сценария.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {vacancies.map(v => (
+                  <button key={v.id} type="button" onClick={() => setVacancyModal(v)}
+                    className="text-xs px-2 py-1 rounded-full border border-[color:var(--color-border)] hover:bg-[color:var(--color-muted)]/40 flex items-center gap-1">
+                    <Pencil size={11} /> {v.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-[color:var(--color-muted-foreground)] mb-1 block">Название *</label>
@@ -176,11 +209,20 @@ function StrategyForm({ strategy, onClose, onSaved }) {
           </button>
         </div>
       </div>
+
+      {vacancyModal && (
+        <VacancyModal
+          vacancy={vacancyModal}
+          onClose={() => setVacancyModal(null)}
+          onSave={handleVacancySaved}
+          zIndex={(zIndex || 90) + 5}
+        />
+      )}
     </div>
   );
 }
 
-export default function StrategyModal({ onClose, onChanged }) {
+export default function StrategyModal({ onClose, onChanged, zIndex }) {
   const { toast } = useToast();
   const [strategies, setStrategies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -219,7 +261,7 @@ export default function StrategyModal({ onClose, onChanged }) {
   }
 
   return (
-    <div className="modal-backdrop" style={{ zIndex: 85 }} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" style={{ zIndex: zIndex || 85 }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold">Стратегии найма</h3>
@@ -276,6 +318,7 @@ export default function StrategyModal({ onClose, onChanged }) {
           strategy={form === 'new' ? null : form}
           onClose={() => setForm(null)}
           onSaved={handleSaved}
+          zIndex={(zIndex || 85) + 5}
         />
       )}
     </div>
