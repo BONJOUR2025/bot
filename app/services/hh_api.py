@@ -303,6 +303,15 @@ async def get_messages(access_token: str, neg_id: str) -> list[dict]:
         ]
 
 
+_HH_ERROR_HINTS = {
+    "disabled_by_employer": (
+        "hh.ru запретил переписку по этому отклику — обычно это значит, что вакансия "
+        "на hh.ru архивирована/закрыта, либо у вашего тарифа нет доступа к сообщениям "
+        "по этому отклику. Сообщение не отправлено, проверьте вакансию на hh.ru."
+    ),
+}
+
+
 async def send_message(access_token: str, neg_id: str, text: str) -> dict:
     """Send a message to a candidate in a negotiation."""
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -312,6 +321,17 @@ async def send_message(access_token: str, neg_id: str, text: str) -> dict:
             data={"message": text},
         )
         if r.status_code not in (200, 201):
+            hint = None
+            try:
+                errors = (r.json() or {}).get("errors") or []
+                for err in errors:
+                    hint = _HH_ERROR_HINTS.get(err.get("value"))
+                    if hint:
+                        break
+            except Exception:
+                pass
+            if hint:
+                raise ValueError(f"hh.ru: не удалось отправить сообщение — {hint}")
             raise ValueError(f"hh.ru: не удалось отправить сообщение ({r.status_code}): {r.text[:200]}")
         return r.json() if r.content else {}
 
