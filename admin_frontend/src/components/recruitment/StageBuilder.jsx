@@ -12,6 +12,8 @@ function slugify(title, existingIds, fallbackIdx) {
 
 export default function StageBuilder({ stages, onChange, onResetDefault }) {
   const ids = stages.map(s => s.id);
+  const idCounts = ids.reduce((acc, id) => ({ ...acc, [id]: (acc[id] || 0) + 1 }), {});
+  const reachesDone = stages.some(s => (s.transitions || []).some(t => t.next === 'done'));
 
   function update(idx, patch) {
     onChange(stages.map((s, i) => i === idx ? { ...s, ...patch } : s));
@@ -75,6 +77,11 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
           </button>
         )}
       </div>
+      {!reachesDone && (
+        <p className="text-xs text-red-500 -mt-1">
+          Ни один переход не ведёт к «Завершить диалог» — интервью никогда не закончится.
+        </p>
+      )}
 
       {stages.map((s, idx) => (
         <div key={idx} className="rounded-xl border border-[color:var(--color-border)] p-3 space-y-2 bg-[color:var(--color-muted)]/30">
@@ -106,10 +113,13 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
           <div className="flex items-center gap-2 pl-6">
             <span className="text-[10px] text-[color:var(--color-muted-foreground)] flex-shrink-0">ID</span>
             <input
-              className="input text-xs font-mono py-1 w-40"
+              className={`input text-xs font-mono py-1 w-40 ${idCounts[s.id] > 1 ? 'border-red-400' : ''}`}
               value={s.id}
               onChange={e => renameId(idx, e.target.value.trim())}
             />
+            {idCounts[s.id] > 1 && (
+              <span className="text-[10px] text-red-500">id повторяется у другого этапа</span>
+            )}
           </div>
 
           <textarea
@@ -122,6 +132,11 @@ export default function StageBuilder({ stages, onChange, onResetDefault }) {
 
           <div className="pl-6 space-y-1.5">
             <p className="text-[10px] text-[color:var(--color-muted-foreground)]">Переходы дальше</p>
+            {(s.transitions || []).length === 0 && (
+              <p className="text-[11px] text-red-500">
+                Нет ни одного перехода — разговор зависнет на этом этапе навсегда.
+              </p>
+            )}
             {(s.transitions || []).map((t, tIdx) => (
               <div key={tIdx} className="flex items-center gap-1.5">
                 <CornerDownRight size={12} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />

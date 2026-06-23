@@ -141,6 +141,7 @@ def _run_migrations() -> None:
             )""",
             "CREATE INDEX IF NOT EXISTS ix_assets_employee_id ON assets(employee_id)",
             "ALTER TABLE hiring_strategies ADD COLUMN stages_json TEXT",
+            "ALTER TABLE candidates ADD COLUMN stages_snapshot_json TEXT",
         ]:
             try:
                 conn.execute(text(stmt))

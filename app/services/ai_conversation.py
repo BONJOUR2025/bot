@@ -103,7 +103,23 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             return
 
         from app.services.interview_stages import get_stages, render_stages_block
-        stages = get_stages(strategy)
+
+        # The stage graph is frozen onto the candidate the first time their
+        # interview is processed, so a later edit to the strategy's stages
+        # (rename/delete) never disrupts a conversation already in progress —
+        # only candidates who haven't started yet pick up the new graph.
+        stages = None
+        if c.stages_snapshot_json:
+            try:
+                parsed = json.loads(c.stages_snapshot_json)
+                if isinstance(parsed, list) and parsed:
+                    stages = parsed
+            except Exception:
+                stages = None
+        if stages is None:
+            stages = get_stages(strategy)
+            c.stages_snapshot_json = json.dumps(stages, ensure_ascii=False)
+            db.commit()
         stage_ids = [s["id"] for s in stages]
 
         phase = getattr(c, "interview_phase", None) or stage_ids[0]
@@ -172,11 +188,22 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         if not reply_text:
             reply_text = raw.replace("**", "").replace("__", "").strip()
 
-        # Update phase
+        # Update phase — only along a transition actually declared for the
+        # current stage, so the builder's drawn arrows are an enforced state
+        # machine rather than just descriptive prompt text the AI could ignore.
         if next_phase and next_phase != phase:
-            c.interview_phase = next_phase
-            db.commit()
-            log.info("Interview phase: candidate_id=%s %s → %s", candidate_id, phase, next_phase)
+            current_stage = next((s for s in stages if s["id"] == phase), None)
+            allowed = {t.get("next") for t in (current_stage.get("transitions") or [])} if current_stage else set()
+            if next_phase in allowed:
+                c.interview_phase = next_phase
+                db.commit()
+                log.info("Interview phase: candidate_id=%s %s → %s", candidate_id, phase, next_phase)
+            else:
+                log.warning(
+                    "AI tried undeclared phase transition for candidate %s: %s → %s (ignored, staying on %s)",
+                    candidate_id, phase, next_phase, phase,
+                )
+                next_phase = None
 
         # Send reply to candidate
         err = await send_secretary_message(c.telegram_chat_id, reply_text)

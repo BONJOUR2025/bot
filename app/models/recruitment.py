@@ -218,6 +218,10 @@ class Candidate(Base):
     interview_notified_at = Column(DateTime, nullable=True)  # last time admin was notified about interview
     is_paused = Column(Boolean, nullable=False, default=False)
     interview_phase = Column(String, nullable=True, default="greeting")  # structured interview phase
+    # Frozen copy of the strategy's stage graph, taken the first time this
+    # candidate's interview is processed — so later edits to the strategy's
+    # stages (rename/delete) never disrupt a conversation already in progress.
+    stages_snapshot_json = Column(Text, nullable=True)
     has_unread_hh_msg = Column(Integer, nullable=False, default=0)
     pending_decline_suggested_at = Column(DateTime, nullable=True)  # AI/follow-up suggests decline, admin decides
     created_at = Column(DateTime, default=datetime.utcnow)

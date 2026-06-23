@@ -153,7 +153,7 @@ function StrategyForm({ strategy, onClose, onSaved }) {
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="btn btn-secondary">Отмена</button>
-          <button onClick={save} disabled={saving || !form.name.trim()} className="btn btn-primary">
+          <button onClick={save} disabled={saving || !form.name.trim() || !form.stages} className="btn btn-primary">
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>

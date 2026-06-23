@@ -110,7 +110,14 @@ def render_stages_block(stages: list) -> str:
 
 
 def validate_stages(stages: list) -> None:
-    """Raises ValueError with a human-readable message if the stage list is malformed."""
+    """Raises ValueError with a human-readable message if the stage list is malformed.
+
+    Beyond structural checks (unique ids, valid transition targets), this also
+    rejects graphs that could trap a candidate forever: every stage must have
+    at least one transition, and at least one transition anywhere must lead
+    to "done" — otherwise the AI is never told how to leave some stage, or
+    the interview can never actually finish (no candidate profile is ever
+    generated, since that's only triggered by reaching "done")."""
     if not stages:
         raise ValueError("Должен быть хотя бы один этап.")
     ids = [s.get("id", "").strip() for s in stages]
@@ -119,10 +126,26 @@ def validate_stages(stages: list) -> None:
     if len(set(ids)) != len(ids):
         raise ValueError("Идентификаторы этапов должны быть уникальными.")
     valid_targets = set(ids) | {"done"}
+    reaches_done = False
     for s in stages:
         if not (s.get("title") or "").strip():
             raise ValueError(f"У этапа «{s.get('id')}» должно быть название.")
-        for t in s.get("transitions") or []:
-            nxt = t.get("next")
-            if nxt and nxt not in valid_targets:
+        transitions = s.get("transitions") or []
+        if not transitions:
+            raise ValueError(
+                f"У этапа «{s.get('id')}» нет ни одного перехода — разговор зависнет "
+                f"на нём навсегда. Добавьте хотя бы один переход."
+            )
+        for t in transitions:
+            nxt = (t.get("next") or "").strip()
+            if not nxt:
+                raise ValueError(f"У перехода в этапе «{s.get('id')}» не указан следующий этап.")
+            if nxt not in valid_targets:
                 raise ValueError(f"Переход на неизвестный этап «{nxt}» (в этапе «{s.get('id')}»).")
+            if nxt == "done":
+                reaches_done = True
+    if not reaches_done:
+        raise ValueError(
+            "Ни один переход во всём сценарии не ведёт к завершению диалога — "
+            "интервью никогда не закончится. Добавьте переход «Завершить диалог» хотя бы где-то."
+        )
