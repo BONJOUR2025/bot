@@ -67,6 +67,24 @@ def build_ai_context_block(db, vacancy) -> str:
             title = vacancy.title if vacancy else ""
             parts.append(f"База знаний вакансии «{title}» (приоритет выше общей базы):\n" + lines)
 
+    document_ids = []
+    if vacancy and getattr(vacancy, "knowledge_document_ids_json", None):
+        try:
+            document_ids = json.loads(vacancy.knowledge_document_ids_json) or []
+        except Exception:
+            document_ids = []
+    if document_ids:
+        from app.models.knowledge import KnowledgeDocument
+        documents = db.query(KnowledgeDocument).filter(KnowledgeDocument.id.in_(document_ids)).all()
+        doc_lines = "\n\n".join(
+            f"=== {d.title.strip()} ===\n{d.content.strip()}" for d in documents if (d.content or "").strip()
+        )
+        if doc_lines:
+            parts.append(
+                "Материалы базы знаний компании, выбранные для этой вакансии "
+                "(используй для ответов на вопросы кандидата):\n" + doc_lines
+            )
+
     extra = (getattr(vacancy, "extra_instructions", "") or "").strip() if vacancy else ""
     if extra:
         parts.append(

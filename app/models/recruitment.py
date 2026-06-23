@@ -141,6 +141,12 @@ class Vacancy(Base):
     # the interview transcript into the final profile sent to the recruiter.
     # [str, ...]
     custom_questions_json = Column(Text, nullable=True)
+    # IDs of KnowledgeDocument rows (the free-text "База знаний" page, e.g.
+    # "О компании") explicitly granted to this vacancy's candidate-facing AI
+    # context. Opt-in rather than auto-including everything — those documents
+    # are written for the internal staff assistant and may contain things
+    # irrelevant or inappropriate to hand a candidate. [int, ...]
+    knowledge_document_ids_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     candidates = relationship("Candidate", back_populates="vacancy", cascade="all, delete-orphan")
@@ -161,6 +167,12 @@ class Vacancy(Base):
                 custom_questions = json.loads(self.custom_questions_json) or []
             except Exception:
                 custom_questions = []
+        knowledge_document_ids = []
+        if self.knowledge_document_ids_json:
+            try:
+                knowledge_document_ids = json.loads(self.knowledge_document_ids_json) or []
+            except Exception:
+                knowledge_document_ids = []
         return {
             "id": self.id,
             "title": self.title,
@@ -173,6 +185,7 @@ class Vacancy(Base):
             "extra_instructions": self.extra_instructions or "",
             "deal_breakers": deal_breakers,
             "custom_questions": custom_questions,
+            "knowledge_document_ids": knowledge_document_ids,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -198,6 +211,7 @@ class VacancyTemplate(Base):
     kb_entries_json = Column(Text, nullable=True, default="[]")  # [{"category", "question", "answer"}]
     deal_breakers_json = Column(Text, nullable=True)  # [{"label", "value"}]
     custom_questions_json = Column(Text, nullable=True)  # [str, ...]
+    knowledge_document_ids_json = Column(Text, nullable=True)  # [int, ...]
     created_at = Column(DateTime, default=datetime.utcnow)
 
     strategy = relationship("HiringStrategy")
@@ -216,6 +230,10 @@ class VacancyTemplate(Base):
             custom_questions = json.loads(self.custom_questions_json or "[]")
         except Exception:
             custom_questions = []
+        try:
+            knowledge_document_ids = json.loads(self.knowledge_document_ids_json or "[]")
+        except Exception:
+            knowledge_document_ids = []
         return {
             "id": self.id,
             "name": self.name,
@@ -228,6 +246,7 @@ class VacancyTemplate(Base):
             "kb_entries_count": len(kb_entries),
             "deal_breakers": deal_breakers,
             "custom_questions": custom_questions,
+            "knowledge_document_ids": knowledge_document_ids,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

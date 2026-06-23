@@ -53,6 +53,7 @@ class VacancyCreate(BaseModel):
     strategy_id: Optional[int] = None
     deal_breakers: Optional[List[DealBreaker]] = None
     custom_questions: Optional[List[str]] = None
+    knowledge_document_ids: Optional[List[int]] = None
 
 class VacancyUpdate(BaseModel):
     title: Optional[str] = None
@@ -67,6 +68,7 @@ class VacancyUpdate(BaseModel):
     confirmed: bool = False
     deal_breakers: Optional[List[DealBreaker]] = None
     custom_questions: Optional[List[str]] = None
+    knowledge_document_ids: Optional[List[int]] = None
 
 
 class VacancyTemplateCreate(BaseModel):
@@ -230,6 +232,16 @@ def _serialize_custom_questions(questions: Optional[List[str]]) -> Optional[str]
     return json.dumps(cleaned, ensure_ascii=False)
 
 
+def _serialize_knowledge_document_ids(ids: Optional[List[int]]) -> Optional[str]:
+    """Converts a list of KnowledgeDocument ids into the
+    knowledge_document_ids_json column value."""
+    import json
+
+    if ids is None:
+        return None
+    return json.dumps(list(dict.fromkeys(ids)), ensure_ascii=False)
+
+
 # ── Vacancies ──────────────────────────────────────────────────────
 
 @router.get("/vacancies")
@@ -252,7 +264,8 @@ def create_vacancy(data: VacancyCreate, db: Session = Depends(get_db)):
                 knowledge_base=data.knowledge_base, interview_location=data.interview_location,
                 is_open=data.is_open, strategy_id=data.strategy_id,
                 deal_breakers_json=_serialize_deal_breakers(data.deal_breakers),
-                custom_questions_json=_serialize_custom_questions(data.custom_questions))
+                custom_questions_json=_serialize_custom_questions(data.custom_questions),
+                knowledge_document_ids_json=_serialize_knowledge_document_ids(data.knowledge_document_ids))
     db.add(v); db.commit(); db.refresh(v)
     return v.to_dict()
 
@@ -281,6 +294,8 @@ def update_vacancy(vacancy_id: int, data: VacancyUpdate, db: Session = Depends(g
         v.deal_breakers_json = _serialize_deal_breakers(data.deal_breakers)
     if data.custom_questions is not None:
         v.custom_questions_json = _serialize_custom_questions(data.custom_questions)
+    if data.knowledge_document_ids is not None:
+        v.knowledge_document_ids_json = _serialize_knowledge_document_ids(data.knowledge_document_ids)
     db.commit(); db.refresh(v)
     return v.to_dict()
 
@@ -312,6 +327,7 @@ def duplicate_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
         extra_instructions=src.extra_instructions,
         deal_breakers_json=src.deal_breakers_json,
         custom_questions_json=src.custom_questions_json,
+        knowledge_document_ids_json=src.knowledge_document_ids_json,
     )
     db.add(v); db.commit(); db.refresh(v)
 
@@ -365,6 +381,7 @@ def save_vacancy_as_template(vacancy_id: int, data: VacancyTemplateCreate, db: S
         kb_entries_json=json.dumps(kb_snapshot, ensure_ascii=False),
         deal_breakers_json=v.deal_breakers_json,
         custom_questions_json=v.custom_questions_json,
+        knowledge_document_ids_json=v.knowledge_document_ids_json,
     )
     db.add(t); db.commit(); db.refresh(t)
     return t.to_dict()
@@ -389,6 +406,7 @@ def create_vacancy_from_template(template_id: int, db: Session = Depends(get_db)
         extra_instructions=t.extra_instructions,
         deal_breakers_json=t.deal_breakers_json,
         custom_questions_json=t.custom_questions_json,
+        knowledge_document_ids_json=t.knowledge_document_ids_json,
     )
     db.add(v); db.commit(); db.refresh(v)
 

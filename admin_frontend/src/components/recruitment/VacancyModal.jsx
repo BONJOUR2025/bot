@@ -15,6 +15,7 @@ const WIZARD_STEPS = [
   { key: 'basic',         label: 'Основное' },
   { key: 'dealbreakers',  label: 'Дил-брейкеры' },
   { key: 'askquestions',  label: 'Вопросы для кандидата' },
+  { key: 'kbdocs',        label: 'Материалы базы знаний' },
   { key: 'strategy',      label: 'Стратегия найма' },
   { key: 'questions',     label: 'Вопросы кандидатов' },
   { key: 'extra',         label: 'Особые инструкции' },
@@ -197,6 +198,82 @@ function StepAskQuestions({ vacancyId, questions, setQuestions, onPatched }) {
 
       <button onClick={save} disabled={saving} className="btn btn-primary text-sm">
         {saving ? 'Сохранение...' : 'Сохранить вопросы'}
+      </button>
+    </div>
+  );
+}
+
+// Step 1.7 — opt specific "База знаний" documents (the standalone internal
+// staff-assistant page) into this vacancy's candidate-facing AI context.
+// Opt-in only: those documents are written for staff and may contain things
+// irrelevant or inappropriate to hand a candidate.
+function StepKbDocuments({ vacancyId, documentIds, setDocumentIds, onPatched }) {
+  const [docs, setDocs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    api.get('/knowledge/documents')
+      .then(r => setDocs(r.data || []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function toggle(id) {
+    setDocumentIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await api.patch(`/recruitment/vacancies/${vacancyId}`, { knowledge_document_ids: documentIds });
+      onPatched?.(res.data);
+      toast('Сохранено', 'success');
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message, 'error');
+    } finally { setSaving(false); }
+  }
+
+  if (!vacancyId) {
+    return <p className="text-sm text-[color:var(--color-muted-foreground)]">Сначала сохраните основное на шаге 1.</p>;
+  }
+
+  const grouped = {};
+  for (const d of docs) {
+    const cat = d.category || 'Общее';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(d);
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-[color:var(--color-muted-foreground)]">
+        Выберите материалы со страницы «База знаний», которые ИИ-ассистент сможет использовать,
+        отвечая кандидату на вопросы по этой вакансии (например, общая информация о компании).
+      </p>
+
+      {loading ? (
+        <div className="text-center py-6 text-sm text-[color:var(--color-muted-foreground)]">Загрузка...</div>
+      ) : docs.length === 0 ? (
+        <p className="text-xs text-amber-600">В базе знаний пока нет материалов.</p>
+      ) : (
+        Object.entries(grouped).map(([cat, items]) => (
+          <div key={cat}>
+            <p className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wide mb-2">{cat}</p>
+            <div className="space-y-1.5">
+              {items.map(d => (
+                <label key={d.id} className="flex items-start gap-2 rounded-lg border border-[color:var(--color-border)] p-2 cursor-pointer hover:bg-[color:var(--color-muted)]/20">
+                  <input type="checkbox" className="mt-0.5" checked={documentIds.includes(d.id)} onChange={() => toggle(d.id)} />
+                  <span className="text-sm">{d.title}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+
+      <button onClick={save} disabled={saving} className="btn btn-primary text-sm">
+        {saving ? 'Сохранение...' : 'Сохранить'}
       </button>
     </div>
   );
@@ -549,6 +626,7 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
   const [extraInstructions, setExtraInstructions] = useState(vacancy?.extra_instructions || '');
   const [dealBreakers, setDealBreakers] = useState(vacancy?.deal_breakers || []);
   const [customQuestions, setCustomQuestions] = useState(vacancy?.custom_questions || []);
+  const [kbDocumentIds, setKbDocumentIds] = useState(vacancy?.knowledge_document_ids || []);
   const [saving, setSaving] = useState(false);
   const [showStrategyMgmt, setShowStrategyMgmt] = useState(false);
   const [showKb, setShowKb] = useState(false);
@@ -581,6 +659,7 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
   function handlePatched(data) {
     setDealBreakers(data.deal_breakers || []);
     setCustomQuestions(data.custom_questions || []);
+    setKbDocumentIds(data.knowledge_document_ids || []);
     onSave(data);
   }
 
@@ -633,6 +712,10 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
           {step === 'askquestions' && (
             <StepAskQuestions vacancyId={vacancyId} questions={customQuestions}
               setQuestions={setCustomQuestions} onPatched={handlePatched} />
+          )}
+          {step === 'kbdocs' && (
+            <StepKbDocuments vacancyId={vacancyId} documentIds={kbDocumentIds}
+              setDocumentIds={setKbDocumentIds} onPatched={handlePatched} />
           )}
           {step === 'strategy' && (
             <StepStrategy strategyId={strategyId} onSelect={handleSelectStrategy} onManage={() => setShowStrategyMgmt(true)} />
