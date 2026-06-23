@@ -284,12 +284,24 @@ class Candidate(Base):
     stages_snapshot_json = Column(Text, nullable=True)
     has_unread_hh_msg = Column(Integer, nullable=False, default=0)
     pending_decline_suggested_at = Column(DateTime, nullable=True)  # AI/follow-up suggests decline, admin decides
+    # AI-generated post-interview profile (score/summary/strengths/etc, see
+    # _generate_candidate_profile_inner) — persisted here so the admin can
+    # view it in the UI, not just as a one-shot Telegram notification.
+    profile_json = Column(Text, nullable=True)
+    profile_generated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     vacancy = relationship("Vacancy", back_populates="candidates")
 
     def to_dict(self):
+        import json
+        profile = None
+        if self.profile_json:
+            try:
+                profile = json.loads(self.profile_json)
+            except Exception:
+                profile = None
         return {
             "id": self.id,
             "vacancy_id": self.vacancy_id,
@@ -307,6 +319,8 @@ class Candidate(Base):
             "telegram_username": self.telegram_username or "",
             "is_paused": bool(self.is_paused),
             "pending_decline_suggested_at": self.pending_decline_suggested_at.isoformat() if self.pending_decline_suggested_at else None,
+            "profile": profile,
+            "profile_generated_at": self.profile_generated_at.isoformat() if self.profile_generated_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

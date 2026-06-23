@@ -2,7 +2,7 @@
 import json
 import logging
 import re
-from datetime import date
+from datetime import date, datetime
 
 log = logging.getLogger(__name__)
 
@@ -362,6 +362,16 @@ async def _generate_candidate_profile_inner(candidate_id: int) -> tuple[bool, st
             candidate_id, e, raw[:300],
         )
         return False, candidate_name
+
+    db = SessionLocal()
+    try:
+        c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if c:
+            c.profile_json = json.dumps(p, ensure_ascii=False)
+            c.profile_generated_at = datetime.utcnow()
+            db.commit()
+    finally:
+        db.close()
 
     rec_emoji = {"invite": "✅", "reserve": "🔶", "reject": "❌"}.get(p.get("recommendation", ""), "❓")
     strengths = "\n".join(f"  + {s}" for s in (p.get("strengths") or []))

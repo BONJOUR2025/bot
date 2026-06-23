@@ -534,6 +534,16 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           >
             <MessageCircle size={13} /> Telegram
           </button>
+          <button
+            onClick={() => setTab('profile')}
+            className={`text-sm font-medium py-2.5 px-4 border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === 'profile'
+                ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
+                : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+            }`}
+          >
+            <Sparkles size={13} /> Профиль ИИ
+          </button>
         </div>
 
         {/* ── Body ── */}
@@ -848,6 +858,110 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 </button>
               </div>
             </>)}
+          </div>
+        )}
+
+        {tab === 'profile' && (
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {!candidate.profile ? (
+              <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8">
+                Профиль появится здесь после того, как кандидат закончит интервью с ИИ-ассистентом.
+              </div>
+            ) : (() => {
+              const p = candidate.profile;
+              const recBadge = {
+                invite:  { label: '✅ Пригласить', color: 'bg-emerald-100 text-emerald-700' },
+                reserve: { label: '🔶 В резерв',    color: 'bg-amber-100 text-amber-700' },
+                reject:  { label: '❌ Отказать',    color: 'bg-red-100 text-red-700' },
+              }[p.recommendation] || { label: '❓ Не определено', color: 'bg-gray-100 text-gray-600' };
+              return (
+                <>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-semibold">{p.score ?? '?'}</span>
+                      <span className="text-sm text-[color:var(--color-muted-foreground)]">/ 100</span>
+                    </div>
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${recBadge.color}`}>{recBadge.label}</span>
+                  </div>
+                  {p.score_reason && (
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{p.score_reason}</p>
+                  )}
+
+                  {p.summary && (
+                    <div className="rounded-xl border border-[color:var(--color-border)] p-3.5">
+                      <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1.5 uppercase tracking-wide">Резюме</p>
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{p.summary}</p>
+                    </div>
+                  )}
+
+                  {!!(p.strengths || []).length && (
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3.5">
+                      <p className="text-xs font-medium text-emerald-700 mb-1.5 uppercase tracking-wide">Сильные стороны</p>
+                      <ul className="space-y-1">
+                        {p.strengths.map((s, i) => <li key={i} className="text-sm text-emerald-900">+ {s}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {!!(p.red_flags || []).length && (
+                    <div className="rounded-xl border border-red-100 bg-red-50 p-3.5">
+                      <p className="text-xs font-medium text-red-700 mb-1.5 uppercase tracking-wide">Красные флаги</p>
+                      <ul className="space-y-1">
+                        {p.red_flags.map((f, i) => <li key={i} className="text-sm text-red-900">⚠ {f}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {!!(p.custom_answers || []).length && (
+                    <div className="rounded-xl border border-[color:var(--color-border)] p-3.5">
+                      <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1.5 uppercase tracking-wide">Ответы на вопросы рекрутера</p>
+                      <div className="space-y-1.5">
+                        {p.custom_answers.map((a, i) => (
+                          <p key={i} className="text-sm"><span className="font-medium">{a.question}:</span> {a.answer || '—'}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(p.salary_expectation || p.availability) && (
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {p.salary_expectation && (
+                        <div className="rounded-xl border border-[color:var(--color-border)] p-3">
+                          <p className="text-xs text-[color:var(--color-muted-foreground)] mb-0.5">Ожидания по ЗП</p>
+                          <p>{p.salary_expectation}</p>
+                        </div>
+                      )}
+                      {p.availability && (
+                        <div className="rounded-xl border border-[color:var(--color-border)] p-3">
+                          <p className="text-xs text-[color:var(--color-muted-foreground)] mb-0.5">Доступность</p>
+                          <p>{p.availability}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!!(p.tags || []).length && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.tags.map((t, i) => (
+                        <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">#{t}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {p.recommendation_reason && (
+                    <p className="text-xs text-[color:var(--color-muted-foreground)] pt-2 border-t border-[color:var(--color-border)]">
+                      {p.recommendation_reason}
+                    </p>
+                  )}
+
+                  {candidate.profile_generated_at && (
+                    <p className="text-xs text-[color:var(--color-muted-foreground)] flex items-center gap-1.5">
+                      <Clock size={12} /> Сформирован {fmtMsgTime(candidate.profile_generated_at)}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
