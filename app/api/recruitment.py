@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.recruitment import (
     Candidate, RecruitmentSource, Vacancy, VacancyLink, TelegramMessage,
-    HiringStrategy, KnowledgeBaseEntry,
+    HiringStrategy, KnowledgeBaseEntry, VacancyTemplate,
 )
 from app.settings import settings
 
@@ -58,6 +58,10 @@ class VacancyUpdate(BaseModel):
     # confirmed=True, after the admin has seen the AI pre-check result for it.
     extra_instructions: Optional[str] = None
     confirmed: bool = False
+
+
+class VacancyTemplateCreate(BaseModel):
+    name: str
 
 
 class StrategyCreate(BaseModel):
@@ -264,6 +268,90 @@ def duplicate_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
     d["candidate_count"] = 0
     return d
 
+
+# ── Vacancy templates (persistent, independent of live vacancies) ──
+
+@router.get("/vacancy-templates")
+def list_vacancy_templates(db: Session = Depends(get_db)):
+    return [t.to_dict() for t in db.query(VacancyTemplate).order_by(VacancyTemplate.created_at.desc()).all()]
+
+
+@router.post("/vacancies/{vacancy_id}/save-as-template")
+def save_vacancy_as_template(vacancy_id: int, data: VacancyTemplateCreate, db: Session = Depends(get_db)):
+    """Snapshot a vacancy (incl. its vacancy-scoped knowledge base) into a
+    standalone template that survives the vacancy being closed or deleted."""
+    import json
+
+    v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not v:
+        raise HTTPException(404, "Vacancy not found")
+
+    entries = db.query(KnowledgeBaseEntry).filter(
+        KnowledgeBaseEntry.scope == "vacancy", KnowledgeBaseEntry.vacancy_id == vacancy_id
+    ).all()
+    kb_snapshot = [
+        {"category": e.category or "", "question": e.question, "answer": e.answer}
+        for e in entries
+    ]
+
+    t = VacancyTemplate(
+        name=data.name,
+        title=v.title,
+        description=v.description,
+        interview_location=v.interview_location,
+        strategy_id=v.strategy_id,
+        extra_instructions=v.extra_instructions,
+        kb_entries_json=json.dumps(kb_snapshot, ensure_ascii=False),
+    )
+    db.add(t); db.commit(); db.refresh(t)
+    return t.to_dict()
+
+
+@router.post("/vacancy-templates/{template_id}/create-vacancy")
+def create_vacancy_from_template(template_id: int, db: Session = Depends(get_db)):
+    """Spin up a fresh open vacancy from a saved template, replaying its
+    knowledge-base snapshot into new vacancy-scoped KnowledgeBaseEntry rows."""
+    import json
+
+    t = db.query(VacancyTemplate).filter(VacancyTemplate.id == template_id).first()
+    if not t:
+        raise HTTPException(404, "Template not found")
+
+    v = Vacancy(
+        title=t.title,
+        description=t.description,
+        interview_location=t.interview_location,
+        is_open=True,
+        strategy_id=t.strategy_id,
+        extra_instructions=t.extra_instructions,
+    )
+    db.add(v); db.commit(); db.refresh(v)
+
+    try:
+        kb_snapshot = json.loads(t.kb_entries_json or "[]")
+    except Exception:
+        kb_snapshot = []
+    for entry in kb_snapshot:
+        db.add(KnowledgeBaseEntry(
+            scope="vacancy", vacancy_id=v.id, category=entry.get("category") or "",
+            question=entry.get("question") or "", answer=entry.get("answer") or "",
+        ))
+    db.commit()
+
+    d = v.to_dict()
+    d["candidate_count"] = 0
+    return d
+
+
+@router.delete("/vacancy-templates/{template_id}")
+def delete_vacancy_template(template_id: int, db: Session = Depends(get_db)):
+    t = db.query(VacancyTemplate).filter(VacancyTemplate.id == template_id).first()
+    if not t:
+        raise HTTPException(404, "Template not found")
+    db.delete(t); db.commit()
+    return {"status": "deleted"}
+
+
 # ── Hiring strategies ──────────────────────────────────────────────
 
 @router.get("/strategies")
@@ -300,6 +388,9 @@ def delete_strategy(strategy_id: int, db: Session = Depends(get_db)):
     in_use = db.query(Vacancy).filter(Vacancy.strategy_id == strategy_id).count()
     if in_use:
         raise HTTPException(400, f"Стратегия используется в {in_use} вакансии(ях) — сначала смените стратегию у них")
+    in_templates = db.query(VacancyTemplate).filter(VacancyTemplate.strategy_id == strategy_id).count()
+    if in_templates:
+        raise HTTPException(400, f"Стратегия используется в {in_templates} шаблоне(ах) вакансий — сначала смените стратегию у них")
     db.delete(s); db.commit()
     return {"status": "deleted"}
 

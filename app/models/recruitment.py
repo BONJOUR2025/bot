@@ -142,6 +142,49 @@ class Vacancy(Base):
         }
 
 
+class VacancyTemplate(Base):
+    """A saved vacancy preset, kept independent of any live Vacancy row so it
+    survives closing/deleting actual vacancies — used purely to spin up a new
+    vacancy "on the basis of" it later, without re-entering everything.
+
+    Vacancy-scoped knowledge base entries can't be FK'd here (they belong to
+    a real vacancy_id), so they're snapshotted as JSON instead and replayed
+    into fresh KnowledgeBaseEntry rows when a vacancy is created from this template.
+    """
+    __tablename__ = "vacancy_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True, default="")
+    interview_location = Column(String, nullable=True, default="")
+    strategy_id = Column(Integer, ForeignKey("hiring_strategies.id", ondelete="SET NULL"), nullable=True)
+    extra_instructions = Column(Text, nullable=True, default="")
+    kb_entries_json = Column(Text, nullable=True, default="[]")  # [{"category", "question", "answer"}]
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    strategy = relationship("HiringStrategy")
+
+    def to_dict(self):
+        import json
+        try:
+            kb_entries = json.loads(self.kb_entries_json or "[]")
+        except Exception:
+            kb_entries = []
+        return {
+            "id": self.id,
+            "name": self.name,
+            "title": self.title,
+            "description": self.description or "",
+            "interview_location": self.interview_location or "",
+            "strategy_id": self.strategy_id,
+            "strategy_name": self.strategy.name if self.strategy else None,
+            "extra_instructions": self.extra_instructions or "",
+            "kb_entries_count": len(kb_entries),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Candidate(Base):
     __tablename__ = "candidates"
 

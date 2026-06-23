@@ -4,7 +4,7 @@ import {
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Zap,
-  Pause, Play, Check, AlertTriangle, BookOpen, Sparkles, ListChecks, Copy,
+  Pause, Play, Check, AlertTriangle, BookOpen, Sparkles, ListChecks, Copy, FileStack,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -12,6 +12,7 @@ import { useToast } from '../providers/ToastProvider.jsx';
 import IntegrationsModal from '../components/recruitment/IntegrationsModal.jsx';
 import StrategyModal from '../components/recruitment/StrategyModal.jsx';
 import KnowledgeBaseModal from '../components/recruitment/KnowledgeBaseModal.jsx';
+import VacancyTemplatesModal from '../components/recruitment/VacancyTemplatesModal.jsx';
 import ScopeBadge from '../components/recruitment/ScopeBadge.jsx';
 import AiCheckPanel from '../components/recruitment/AiCheckPanel.jsx';
 import useAiCheckGate from '../components/recruitment/useAiCheckGate.js';
@@ -1762,6 +1763,7 @@ export default function Recruitment() {
   const [showIntegrations,setShowIntegrations]= useState(false);
   const [showStrategies,  setShowStrategies]  = useState(false);
   const [showGlobalKb,    setShowGlobalKb]    = useState(false);
+  const [showTemplates,   setShowTemplates]   = useState(false);
   const [hhToast,         setHhToast]         = useState('');
   // bulk selection
   const [selectionMode,   setSelectionMode]   = useState(false);
@@ -1900,6 +1902,15 @@ export default function Recruitment() {
     } catch (e) { toast(e.response?.data?.detail || e.message, 'error'); }
   }
 
+  async function saveVacancyAsTemplate(v) {
+    const name = window.prompt('Название шаблона', v.title);
+    if (!name || !name.trim()) return;
+    try {
+      await api.post(`/recruitment/vacancies/${v.id}/save-as-template`, { name: name.trim() });
+      toast('Шаблон сохранён — он переживёт закрытие или удаление этой вакансии', 'success');
+    } catch (e) { toast(e.response?.data?.detail || e.message, 'error'); }
+  }
+
   function handleVacancySaved(saved) {
     setVacancies(prev => {
       const exists = prev.find(v => v.id === saved.id);
@@ -2019,6 +2030,13 @@ export default function Recruitment() {
           >
             <BookOpen size={15} /> Общая база знаний
           </button>
+          <button
+            onClick={() => setShowTemplates(true)}
+            className="btn btn-secondary text-sm flex items-center gap-1.5"
+            title="Сохранённые шаблоны вакансий — создать новую вакансию на основе одного из них"
+          >
+            <FileStack size={15} /> Шаблоны вакансий
+          </button>
           <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-hidden">
             <button
               onClick={() => setMainView('funnel')}
@@ -2131,6 +2149,11 @@ export default function Recruitment() {
                             className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
                             <Copy size={11} />
                           </button>
+                          <button onClick={e => { e.stopPropagation(); saveVacancyAsTemplate(v); }}
+                            title="Сохранить как шаблон (постоянное хранилище)"
+                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
+                            <FileStack size={11} />
+                          </button>
                           <button onClick={e => { e.stopPropagation(); deleteVacancy(v.id); }}
                             className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-red-400">
                             <Trash2 size={11} />
@@ -2172,6 +2195,13 @@ export default function Recruitment() {
                   className="text-xs font-medium px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
                 >
                   <Copy size={12} /> Дублировать
+                </button>
+                <button
+                  onClick={() => saveVacancyAsTemplate(selected)}
+                  title="Сохранить в постоянное хранилище шаблонов — переживёт закрытие или удаление вакансии"
+                  className="text-xs font-medium px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                >
+                  <FileStack size={12} /> Сохранить как шаблон
                 </button>
                 <button
                   onClick={() => { if (selectionMode) exitSelection(); else setSelectionMode(true); }}
@@ -2357,6 +2387,13 @@ export default function Recruitment() {
 
       {showGlobalKb && (
         <KnowledgeBaseModal scope="global" onClose={() => setShowGlobalKb(false)} />
+      )}
+
+      {showTemplates && (
+        <VacancyTemplatesModal
+          onClose={() => setShowTemplates(false)}
+          onCreated={v => { setVacancies(prev => [v, ...prev]); setSelectedId(v.id); }}
+        />
       )}
 
       {selectionMode && selectedIds.size > 0 && (
