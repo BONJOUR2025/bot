@@ -385,7 +385,7 @@ async def _generate_candidate_profile_inner(candidate_id: int) -> tuple[bool, st
         + '}'
     )
 
-    raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=600)
+    raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=1500)
     if not raw:
         log.error("Candidate profile generation: empty AI response for candidate_id=%s", candidate_id)
         return False, candidate_name
