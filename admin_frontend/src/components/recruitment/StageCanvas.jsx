@@ -1,11 +1,11 @@
 import { useRef, useState, useLayoutEffect, useCallback } from 'react';
 import {
   Trash2, Plus, CornerDownRight, RotateCcw, GripVertical, HelpCircle,
-  MessageCircleQuestion, ChevronDown, ChevronUp, LayoutGrid, Flag,
+  MessageCircleQuestion, ChevronDown, ChevronUp, LayoutGrid, Flag, ArrowRight,
 } from 'lucide-react';
 
-const BLOCK_W = 260;
-const CANVAS_W = 2400;
+const BLOCK_W = 320;
+const CANVAS_W = 2600;
 const CANVAS_H = 1400;
 const DONE_ID = '__done__';
 
@@ -49,7 +49,7 @@ function autoLayout(stages) {
     const col = depth[i];
     const row = colCounts[col] || 0;
     colCounts[col] = row + 1;
-    positions[i] = { x: 40 + col * 320, y: 40 + row * 220 };
+    positions[i] = { x: 40 + col * 400, y: 40 + row * 260 };
   });
   return positions;
 }
@@ -58,6 +58,9 @@ export default function StageCanvas({ stages, onChange, onResetDefault }) {
   const ids = stages.map(s => s.id);
   const idCounts = ids.reduce((acc, id) => ({ ...acc, [id]: (acc[id] || 0) + 1 }), {});
   const reachesDone = stages.some(s => (s.transitions || []).some(t => t.next === 'done'));
+  const titleOf = targetId => targetId === 'done'
+    ? 'Завершить диалог'
+    : (stages.find(s => s.id === targetId)?.title || targetId);
 
   const [expanded, setExpanded] = useState(() => new Set());
   const [, setRectsVersion] = useState(0);
@@ -207,8 +210,9 @@ export default function StageCanvas({ stages, onChange, onResetDefault }) {
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs text-[color:var(--color-muted-foreground)]">
-          Перетаскивайте блоки за заголовок, чтобы расположить сценарий удобно. Клик по блоку раскрывает
-          редактирование. Линии показывают переходы между этапами.
+          Перетаскивайте блоки за серую полоску с заголовком, чтобы расположить сценарий удобно.
+          Стрелка <ArrowRight size={11} className="inline -mt-0.5" /> на блоке и в его шапке ведут к
+          этапу, на который ИИ переключится дальше.
         </p>
         <div className="flex items-center gap-3 flex-shrink-0">
           <button type="button" onClick={rearrange}
@@ -222,6 +226,12 @@ export default function StageCanvas({ stages, onChange, onResetDefault }) {
             </button>
           )}
         </div>
+      </div>
+      <div className="flex items-center gap-4 flex-wrap text-[11px] text-[color:var(--color-muted-foreground)] bg-[color:var(--color-muted)]/30 rounded-lg px-3 py-2">
+        <span className="flex items-center gap-1.5"><GripVertical size={12} /> перетащить блок</span>
+        <span className="flex items-center gap-1.5"><ChevronDown size={12} /> открыть редактирование этапа</span>
+        <span className="flex items-center gap-1.5"><ArrowRight size={12} /> переход к другому этапу</span>
+        <span className="flex items-center gap-1.5"><Flag size={12} /> этап завершает диалог</span>
       </div>
       {!reachesDone && (
         <p className="text-xs text-red-500">
@@ -304,9 +314,30 @@ export default function StageCanvas({ stages, onChange, onResetDefault }) {
                 </div>
 
                 {!isExpanded ? (
-                  <p className="px-2.5 py-2 text-[11px] text-[color:var(--color-muted-foreground)] line-clamp-2">
-                    {s.instructions || 'Нет инструкции'}
-                  </p>
+                  <div className="px-2.5 py-2 space-y-2">
+                    <p className="text-[11px] text-[color:var(--color-muted-foreground)] line-clamp-2">
+                      {s.instructions || 'Нет инструкции'}
+                    </p>
+                    {(s.transitions || []).length === 0 ? (
+                      <p className="text-[11px] text-red-500 flex items-center gap-1">
+                        <ArrowRight size={11} /> нет переходов — диалог зависнет здесь
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        {(s.transitions || []).map((t, tIdx) => (
+                          <span key={tIdx}
+                            className={`inline-flex items-center gap-1.5 text-[11px] rounded-full px-2 py-1 self-start ${
+                              t.next === 'done' ? 'bg-slate-100 text-slate-600' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                            }`}
+                            title={t.condition ? `Если: ${t.condition}` : 'Без условия — переход сразу'}
+                          >
+                            {t.next === 'done' ? <Flag size={11} /> : <ArrowRight size={11} />}
+                            {titleOf(t.next)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="p-2.5 space-y-2.5 border-t border-[color:var(--color-border)]">
                     <input

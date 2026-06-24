@@ -472,7 +472,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
 
   return (
     <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-card max-w-lg w-full flex flex-col overflow-hidden p-0">
+      <div className="modal-card max-w-xl w-full flex flex-col overflow-hidden p-0">
 
         {/* ── Header with photo ── */}
         <div className="relative flex items-end gap-4 px-6 pt-6 pb-4 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/20">
@@ -516,22 +516,28 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           </button>
         </div>
 
-        {/* ── Tabs ── */}
-        <div className="flex overflow-x-auto border-b border-[color:var(--color-border)] px-3 sm:px-6">
+        {/* ── Tabs ──
+            The modal itself is a fixed, fairly narrow width (max-w-xl) on every
+            device — a phone and a 4K monitor render the same px-wide box here.
+            So labels must stay compact unconditionally; sizing them off the
+            viewport (sm:) was the bug: desktop viewports got full-length labels
+            that didn't actually fit this box, overflowing invisibly (no visible
+            scrollbar) whenever the 4th hh.ru tab was present. */}
+        <div className="flex overflow-x-auto border-b border-[color:var(--color-border)] px-3">
           <button
             onClick={() => setTab('info')}
-            className={`flex-shrink-0 whitespace-nowrap text-xs sm:text-sm font-medium py-2.5 px-2 sm:px-4 border-b-2 transition-colors ${
+            className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors ${
               tab === 'info'
                 ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                 : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
             }`}
           >
-            Информация
+            Инфо
           </button>
           {isHh && (
             <button
               onClick={() => setTab('chat')}
-              className={`flex-shrink-0 whitespace-nowrap text-xs sm:text-sm font-medium py-2.5 px-2 sm:px-4 border-b-2 transition-colors flex items-center gap-1 sm:gap-1.5 ${
+              className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors flex items-center gap-1 ${
                 tab === 'chat'
                   ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                   : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
@@ -542,23 +548,23 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           )}
           <button
             onClick={() => setTab('tg')}
-            className={`flex-shrink-0 whitespace-nowrap text-xs sm:text-sm font-medium py-2.5 px-2 sm:px-4 border-b-2 transition-colors flex items-center gap-1 sm:gap-1.5 ${
+            className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors flex items-center gap-1 ${
               tab === 'tg'
                 ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                 : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
             }`}
           >
-            <MessageCircle size={13} /> <span className="sm:hidden">TG</span><span className="hidden sm:inline">Telegram</span>
+            <MessageCircle size={13} /> TG
           </button>
           <button
             onClick={() => setTab('profile')}
-            className={`flex-shrink-0 whitespace-nowrap text-xs sm:text-sm font-medium py-2.5 px-2 sm:px-4 border-b-2 transition-colors flex items-center gap-1 sm:gap-1.5 ${
+            className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors flex items-center gap-1 ${
               tab === 'profile'
                 ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                 : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
             }`}
           >
-            <Sparkles size={13} /> <span className="sm:hidden">Профиль</span><span className="hidden sm:inline">Профиль ИИ</span>
+            <Sparkles size={13} /> ИИ
           </button>
         </div>
 
