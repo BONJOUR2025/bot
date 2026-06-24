@@ -136,6 +136,11 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
 
         phase = getattr(c, "interview_phase", None) or stage_ids[0]
         if phase == "done":
+            # Interview already closed and profile already sent — but the
+            # candidate kept writing (e.g. a natural follow-up right after the
+            # goodbye message). Answer from the knowledge base instead of
+            # going silent, but never reopen the phase machine or the profile.
+            await _handle_post_interview_message(c, db, cfg, message_text, kb_block)
             return
         if phase not in stage_ids:
             phase = stage_ids[0]
@@ -213,6 +218,7 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         # Update phase — only along a transition actually declared for the
         # current stage, so the builder's drawn arrows are an enforced state
         # machine rather than just descriptive prompt text the AI could ignore.
+        cascaded_stage = None
         if next_phase and next_phase != phase:
             current_stage = next((s for s in stages if s["id"] == phase), None)
             allowed = {t.get("next") for t in (current_stage.get("transitions") or [])} if current_stage else set()
@@ -225,11 +231,20 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
                 # the current one). Waiting for another incoming message to reach
                 # "done" would hang forever since the candidate has no reason to
                 # write again, so cascade straight through.
+                #
+                # Whichever stage we land in right before cascading is captured —
+                # the AI's single reply for this turn was generated while "seeing"
+                # every stage's instructions at once, so it may have answered an
+                # unrelated question and never actually delivered that stage's own
+                # content (e.g. the goodbye / "profile sent to recruiter" message).
+                # We re-generate and deliver that stage's content separately below
+                # to guarantee the candidate actually receives it.
                 while True:
                     s = next((st for st in stages if st["id"] == c.interview_phase), None)
                     trs = (s.get("transitions") or []) if s else []
                     if len(trs) != 1 or (trs[0].get("condition") or "").strip():
                         break
+                    cascaded_stage = s
                     nxt = trs[0].get("next") or "done"
                     if nxt == c.interview_phase:
                         break
@@ -278,6 +293,14 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
                 f"вкладка Telegram, и ответьте."
             )
 
+        # If the cascade skipped through a stage (e.g. "closing") within this
+        # same turn, the main reply above may never have actually delivered
+        # that stage's content (it was generated answering whatever the
+        # candidate's message was about). Send it as a guaranteed second
+        # message so the candidate is actually told the interview is over.
+        if cascaded_stage and next_phase == "done":
+            await _send_cascaded_stage_message(c, db, cfg, cascaded_stage, kb_block, ai_model)
+
         # Generate profile when interview ends
         if next_phase == "done":
             import asyncio
@@ -286,6 +309,100 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
 
     finally:
         db.close()
+
+
+async def _send_cascaded_stage_message(c, db, cfg, stage: dict, kb_block: str, ai_model) -> None:
+    """Generate and deliver the content of a stage the cascade skipped through
+    within the same turn (see comment at the cascade loop), so its content
+    (e.g. a goodbye / "profile sent to recruiter" message) actually reaches
+    the candidate instead of silently vanishing."""
+    from app.models.recruitment import TelegramMessage
+    from app.services.notify import send_secretary_message
+    from app.services.llm_client import chat
+
+    instructions = (stage.get("instructions") or "").strip()
+    if not instructions:
+        return
+
+    system = (
+        "Ты HR-ассистент компании. Интервью с кандидатом только что завершилось.\n\n"
+        f"База знаний о вакансии:\n{kb_block}\n\n"
+        f"Задача для этого сообщения: {instructions}\n\n"
+        "Напиши ТОЛЬКО текст сообщения кандидату, без JSON и пояснений. "
+        "Максимум 3 коротких предложения, на «вы», по-русски, нейтрально-деловой тон."
+    )
+    try:
+        raw = chat(cfg, [{"role": "user", "content": "Сформулируй сообщение"}], system=system, model=ai_model, max_tokens=200)
+    except Exception as e:
+        log.warning("Cascaded stage message AI error for candidate %s: %s", c.id, e)
+        return
+    if not raw:
+        return
+    text = raw.replace("**", "").replace("__", "").strip()
+
+    err = await send_secretary_message(c.telegram_chat_id, text)
+    if err:
+        log.warning("AI: failed to send cascaded stage message to candidate %s: %s", c.id, err)
+        return
+    db.add(TelegramMessage(candidate_id=c.id, direction="out", sent_by_ai=1, text=text))
+    db.commit()
+
+
+async def _handle_post_interview_message(c, db, cfg, message_text: str, kb_block: str) -> None:
+    """Interview already closed (phase == 'done') but the candidate kept writing —
+    e.g. a natural follow-up question right after the goodbye message. Answer
+    from the knowledge base same as during the interview, but never reopen the
+    phase machine or regenerate the profile."""
+    from app.models.recruitment import TelegramMessage
+    from app.services.notify import send_secretary_message, send_notification
+    from app.services.llm_client import chat
+
+    system = (
+        "Ты HR-ассистент компании. Интервью с кандидатом уже завершено, его профиль передан рекрутеру.\n\n"
+        f"База знаний о вакансии:\n{kb_block}\n\n"
+        "Кандидат написал ещё одно сообщение после завершения интервью. Ответь ТОЛЬКО в JSON: "
+        '{"msg": "текст для кандидата", "unanswered_question": "вопрос кандидата или null"}\n'
+        "unanswered_question ставь ТОЛЬКО если в базе знаний вообще нет relevant информации по теме — "
+        "иначе отвечай по существу, кратко. Максимум 3 коротких предложения, на «вы», по-русски."
+    )
+    try:
+        raw = chat(cfg, [{"role": "user", "content": message_text}], system=system, max_tokens=300)
+    except Exception as e:
+        log.warning("Post-interview AI error for candidate %s: %s", c.id, e)
+        return
+    if not raw:
+        return
+
+    reply_text = None
+    unanswered_question = None
+    m_json = re.search(r'\{.*\}', raw, re.DOTALL)
+    if m_json:
+        try:
+            data = json.loads(m_json.group())
+            reply_text = (data.get("msg") or "").strip()
+            unanswered_question = (data.get("unanswered_question") or "").strip() or None
+        except Exception:
+            pass
+    if not reply_text:
+        reply_text = raw.replace("**", "").replace("__", "").strip()
+
+    err = await send_secretary_message(c.telegram_chat_id, reply_text)
+    if not err:
+        db.add(TelegramMessage(candidate_id=c.id, direction="out", sent_by_ai=1, text=reply_text))
+        db.commit()
+
+    c.pending_question = unanswered_question
+    c.pending_question_asked_at = datetime.utcnow() if unanswered_question else None
+    db.commit()
+
+    if unanswered_question:
+        await send_notification(
+            f"❓ <b>Кандидат задал вопрос без ответа в базе знаний (после интервью)</b>\n"
+            f"Кандидат: <b>{c.name}</b>\n"
+            f"Вопрос: «{unanswered_question}»\n\n"
+            f"Ассистент сказал, что вы ответите прямо в этом чате — зайдите в карточку кандидата, "
+            f"вкладка Telegram, и ответьте."
+        )
 
 
 def _log_profile_task_exception(task, candidate_id: int) -> None:
