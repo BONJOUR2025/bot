@@ -890,6 +890,29 @@ def reset_candidate_history(candidate_id: int, db: Session = Depends(get_db)):
     return {"status": "reset", "messages_deleted": deleted}
 
 
+@router.post("/candidates/{candidate_id}/generate-profile")
+async def generate_candidate_profile_now(candidate_id: int, db: Session = Depends(get_db)):
+    """Manually (re)generate the candidate profile — recovery tool for
+    interviews that finished (reached the closing message) but never
+    formally reached phase "done", e.g. candidates stuck before the fix
+    that cascades a stage with only an unconditional transition straight
+    through to "done" instead of waiting for a message that never comes."""
+    from app.services.ai_conversation import _generate_candidate_profile_inner
+
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    if c.interview_phase != "done":
+        c.interview_phase = "done"
+        db.commit()
+
+    success, _ = await _generate_candidate_profile_inner(candidate_id)
+    if not success:
+        raise HTTPException(500, "Не удалось сформировать профиль — посмотрите логи")
+    db.refresh(c)
+    return c.to_dict()
+
+
 @router.post("/candidates/{candidate_id}/decline-suggestion")
 def resolve_decline_suggestion(candidate_id: int, data: DeclineSuggestionResolve, db: Session = Depends(get_db)):
     """Admin's explicit decision on a system-suggested decline. The system

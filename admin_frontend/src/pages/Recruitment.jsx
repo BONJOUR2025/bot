@@ -300,7 +300,7 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
 }
 
 // ── Candidate detail modal ─────────────────────────────────────────
-function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory, onPauseToggle, onDeclineSuggestion }) {
+function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory, onPauseToggle, onDeclineSuggestion, onProfileGenerated }) {
   const { toast } = useToast();
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
@@ -313,6 +313,9 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const [toggling, setToggling] = useState(false);
   const [pendingDecline, setPendingDecline] = useState(candidate.pending_decline_suggested_at || null);
   const [decliningAction, setDecliningAction] = useState(null); // 'decline' | 'dismiss' | null
+  const [generatingProfile, setGeneratingProfile] = useState(false);
+  const [localProfile, setLocalProfile] = useState(null);
+  const [localProfileAt, setLocalProfileAt] = useState(null);
 
   // hh.ru chat state
   const [messages, setMessages]     = useState([]);
@@ -433,6 +436,19 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
     } catch (e) {
       toast(e.response?.data?.detail || e.message, 'error');
     } finally { setDecliningAction(null); }
+  }
+
+  async function handleGenerateProfile() {
+    setGeneratingProfile(true);
+    try {
+      const res = await api.post(`/recruitment/candidates/${candidate.id}/generate-profile`);
+      setLocalProfile(res.data.profile || null);
+      setLocalProfileAt(res.data.profile_generated_at || null);
+      onProfileGenerated?.(candidate.id, res.data);
+      toast('Профиль сформирован', 'success');
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message, 'error');
+    } finally { setGeneratingProfile(false); }
   }
 
   async function handleResetHistory() {
@@ -863,12 +879,19 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
 
         {tab === 'profile' && (
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            {!candidate.profile ? (
-              <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8">
-                Профиль появится здесь после того, как кандидат закончит интервью с ИИ-ассистентом.
+            {!(localProfile ?? candidate.profile) ? (
+              <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8 space-y-3">
+                <p>Профиль появится здесь после того, как кандидат закончит интервью с ИИ-ассистентом.</p>
+                <button onClick={handleGenerateProfile} disabled={generatingProfile}
+                  className="btn btn-secondary text-sm inline-flex items-center gap-1.5 disabled:opacity-60">
+                  <Sparkles size={14} /> {generatingProfile ? 'Формируем…' : 'Сформировать профиль сейчас'}
+                </button>
+                <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                  Используйте, если интервью завершилось, но профиль не появился сам — например, если переписка застряла на финальном сообщении.
+                </p>
               </div>
             ) : (() => {
-              const p = candidate.profile;
+              const p = localProfile ?? candidate.profile;
               const recBadge = {
                 invite:  { label: '✅ Пригласить', color: 'bg-emerald-100 text-emerald-700' },
                 reserve: { label: '🔶 В резерв',    color: 'bg-amber-100 text-amber-700' },
@@ -954,11 +977,17 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                     </p>
                   )}
 
-                  {candidate.profile_generated_at && (
-                    <p className="text-xs text-[color:var(--color-muted-foreground)] flex items-center gap-1.5">
-                      <Clock size={12} /> Сформирован {fmtMsgTime(candidate.profile_generated_at)}
-                    </p>
-                  )}
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    {(localProfileAt ?? candidate.profile_generated_at) && (
+                      <p className="text-xs text-[color:var(--color-muted-foreground)] flex items-center gap-1.5">
+                        <Clock size={12} /> Сформирован {fmtMsgTime(localProfileAt ?? candidate.profile_generated_at)}
+                      </p>
+                    )}
+                    <button onClick={handleGenerateProfile} disabled={generatingProfile}
+                      className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] inline-flex items-center gap-1 disabled:opacity-60">
+                      <Sparkles size={12} /> {generatingProfile ? 'Формируем…' : 'Сформировать заново'}
+                    </button>
+                  </div>
                 </>
               );
             })()}
@@ -1563,6 +1592,10 @@ export default function Recruitment() {
     setCandidates(prev => prev.map(c => c.id === id ? { ...c, ...updatedCandidate } : c));
   }
 
+  function handleProfileGenerated(id, updatedCandidate) {
+    setCandidates(prev => prev.map(c => c.id === id ? { ...c, ...updatedCandidate } : c));
+  }
+
   async function stageChange(candidateId, newStage, extraFields = {}) {
     try {
       const res = await api.patch(`/recruitment/candidates/${candidateId}`, { stage: newStage, ...extraFields });
@@ -1904,6 +1937,7 @@ export default function Recruitment() {
           onResetHistory={resetCandidateHistory}
           onPauseToggle={handlePauseToggle}
           onDeclineSuggestion={handleDeclineSuggestion}
+          onProfileGenerated={handleProfileGenerated}
         />
       )}
 
