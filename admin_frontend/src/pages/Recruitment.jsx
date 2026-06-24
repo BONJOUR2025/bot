@@ -631,7 +631,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
               <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 mb-2">
                 <FileText size={12} /> Заметки
               </div>
-              <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">{candidate.notes}</p>
+              <p className="text-sm text-amber-900 whitespace-pre-wrap break-words leading-relaxed">{candidate.notes}</p>
             </div>
           )}
 
