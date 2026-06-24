@@ -16,6 +16,7 @@ async def run_follow_up_check():
     follow_up_enabled/delay/messages — resolved per-candidate, not once
     globally, since different vacancies can run different strategies.
     """
+    from sqlalchemy import or_
     from app.db.session import SessionLocal
     from app.models.recruitment import Candidate, Vacancy
     from app.services.config_service import ConfigService
@@ -36,6 +37,8 @@ async def run_follow_up_check():
             Candidate.telegram_chat_id != "",
             Candidate.is_paused != True,
             Candidate.pending_interview_date.is_(None),  # уже назначено — не трогаем
+            # интервью завершено — нечего напоминать (NULL = старые записи без фазы, не трогаем их)
+            or_(Candidate.interview_phase.is_(None), Candidate.interview_phase != "done"),
         ).all()
 
         for c in candidates:
