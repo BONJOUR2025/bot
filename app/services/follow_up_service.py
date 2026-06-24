@@ -66,6 +66,14 @@ async def _process(c, db, delay: timedelta, now_utc: datetime, msg_1: str, msg_2
 
     count = c.follow_up_count or 0
 
+    # The candidate already has a real, specific question sitting unanswered
+    # (the AI deferred it to the admin) — nudging them with a generic "still
+    # interested?" message instead of an actual answer is exactly the
+    # confusing non-response that caused this in the first place. Wait for
+    # the admin to reply rather than competing with that promise.
+    if c.pending_question:
+        return
+
     if count >= 3:
         # Follow-ups exhausted. If the strategy allows decline-suggestion and
         # enough time has passed since the last follow-up with no reply,

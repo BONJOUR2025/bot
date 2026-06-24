@@ -289,6 +289,14 @@ class Candidate(Base):
     # view it in the UI, not just as a one-shot Telegram notification.
     profile_json = Column(Text, nullable=True)
     profile_generated_at = Column(DateTime, nullable=True)
+    # Set when the AI defers a candidate question it couldn't answer from the
+    # knowledge base (see unanswered_question in ai_conversation.py). While
+    # set, follow_up_service skips its generic "still interested?" nudge —
+    # sending that while a real question sits unanswered contradicts the
+    # AI's own promise that the recruiter will reply in-chat. Cleared when
+    # the admin sends a manual reply to the candidate.
+    pending_question = Column(Text, nullable=True)
+    pending_question_asked_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -321,6 +329,8 @@ class Candidate(Base):
             "pending_decline_suggested_at": self.pending_decline_suggested_at.isoformat() if self.pending_decline_suggested_at else None,
             "profile": profile,
             "profile_generated_at": self.profile_generated_at.isoformat() if self.profile_generated_at else None,
+            "pending_question": self.pending_question or None,
+            "pending_question_asked_at": self.pending_question_asked_at.isoformat() if self.pending_question_asked_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

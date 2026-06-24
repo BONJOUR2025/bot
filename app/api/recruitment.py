@@ -823,6 +823,9 @@ async def send_telegram_message(candidate_id: int, data: SendMessageRequest, db:
 
     msg = TelegramMessage(candidate_id=candidate_id, direction="out", text=data.text)
     db.add(msg)
+    if c.pending_question:
+        c.pending_question = None
+        c.pending_question_asked_at = None
     db.commit()
     db.refresh(msg)
     return msg.to_dict()

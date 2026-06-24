@@ -243,6 +243,13 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         # чате" when it can't answer from the knowledge base — that promise is
         # only true if the admin actually finds out. Without this, the question
         # silently vanishes and the candidate just gets generic follow-ups later.
+        # Track it on the candidate too — follow_up_service checks this to avoid
+        # sending a generic "still interested?" nudge while a real question is
+        # sitting unanswered. Cleared once the admin replies manually in-chat.
+        c.pending_question = unanswered_question
+        c.pending_question_asked_at = datetime.utcnow() if unanswered_question else None
+        db.commit()
+
         if unanswered_question:
             await send_notification(
                 f"❓ <b>Кандидат задал вопрос без ответа в базе знаний</b>\n"
