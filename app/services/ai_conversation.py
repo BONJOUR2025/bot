@@ -56,8 +56,11 @@ SYSTEM_PROMPT = """Ты HR-ассистент компании. Ведёшь с�
 {phases_block}
 
 ━━━ ПРАВИЛА ━━━
-- Отвечай ТОЛЬКО в JSON: {{"msg": "текст для кандидата", "next_phase": "фаза или null"}}
+- Отвечай ТОЛЬКО в JSON: {{"msg": "текст для кандидата", "next_phase": "фаза или null", "unanswered_question": "вопрос кандидата или null"}}
 - next_phase = null если текущая фаза продолжается
+- Если кандидат спросил что-то, чего нет в базе знаний выше — поставь его вопрос (как он был задан) в unanswered_question,
+  и в msg скажи, что передашь вопрос рекрутеру, который ответит здесь же в чате. Если ответ есть в базе знаний —
+  unanswered_question = null, отвечай по существу.
 - Максимум 3 коротких предложения в msg
 - Нейтрально-деловой тон, без клише и корпоративного новояза
 - Только русский язык, обращение на «вы»
@@ -184,12 +187,14 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
         # Parse JSON response
         reply_text = None
         next_phase = None
+        unanswered_question = None
         m_json = re.search(r'\{.*\}', raw, re.DOTALL)
         if m_json:
             try:
                 data = json.loads(m_json.group())
                 reply_text = (data.get("msg") or "").strip()
                 next_phase = data.get("next_phase") or None
+                unanswered_question = (data.get("unanswered_question") or "").strip() or None
             except Exception as e:
                 log.warning(
                     "AI interview: failed to parse JSON response for candidate %s: %s | raw=%r",
@@ -233,6 +238,19 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             )
             db.add(out_msg)
             db.commit()
+
+        # The AI promises the candidate "рекрутер ответит отдельно прямо в этом
+        # чате" when it can't answer from the knowledge base — that promise is
+        # only true if the admin actually finds out. Without this, the question
+        # silently vanishes and the candidate just gets generic follow-ups later.
+        if unanswered_question:
+            await send_notification(
+                f"❓ <b>Кандидат задал вопрос без ответа в базе знаний</b>\n"
+                f"Кандидат: <b>{c.name}</b>\n"
+                f"Вопрос: «{unanswered_question}»\n\n"
+                f"Ассистент сказал, что вы ответите прямо в этом чате — зайдите в карточку кандидата, "
+                f"вкладка Telegram, и ответьте."
+            )
 
         # Generate profile when interview ends
         if next_phase == "done":
