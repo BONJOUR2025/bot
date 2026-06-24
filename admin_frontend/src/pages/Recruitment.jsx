@@ -517,10 +517,10 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex border-b border-[color:var(--color-border)] px-6">
+        <div className="flex overflow-x-auto border-b border-[color:var(--color-border)] px-3 sm:px-6">
           <button
             onClick={() => setTab('info')}
-            className={`text-sm font-medium py-2.5 pr-4 border-b-2 transition-colors ${
+            className={`flex-shrink-0 whitespace-nowrap text-xs sm:text-sm font-medium py-2.5 px-2 sm:px-4 border-b-2 transition-colors ${
               tab === 'info'
                 ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                 : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
@@ -531,7 +531,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           {isHh && (
             <button
               onClick={() => setTab('chat')}
-              className={`text-sm font-medium py-2.5 px-4 border-b-2 transition-colors flex items-center gap-1.5 ${
+              className={`flex-shrink-0 whitespace-nowrap text-xs sm:text-sm font-medium py-2.5 px-2 sm:px-4 border-b-2 transition-colors flex items-center gap-1 sm:gap-1.5 ${
                 tab === 'chat'
                   ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                   : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
@@ -542,23 +542,23 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           )}
           <button
             onClick={() => setTab('tg')}
-            className={`text-sm font-medium py-2.5 px-4 border-b-2 transition-colors flex items-center gap-1.5 ${
+            className={`flex-shrink-0 whitespace-nowrap text-xs sm:text-sm font-medium py-2.5 px-2 sm:px-4 border-b-2 transition-colors flex items-center gap-1 sm:gap-1.5 ${
               tab === 'tg'
                 ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                 : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
             }`}
           >
-            <MessageCircle size={13} /> Telegram
+            <MessageCircle size={13} /> <span className="sm:hidden">TG</span><span className="hidden sm:inline">Telegram</span>
           </button>
           <button
             onClick={() => setTab('profile')}
-            className={`text-sm font-medium py-2.5 px-4 border-b-2 transition-colors flex items-center gap-1.5 ${
+            className={`flex-shrink-0 whitespace-nowrap text-xs sm:text-sm font-medium py-2.5 px-2 sm:px-4 border-b-2 transition-colors flex items-center gap-1 sm:gap-1.5 ${
               tab === 'profile'
                 ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                 : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
             }`}
           >
-            <Sparkles size={13} /> Профиль ИИ
+            <Sparkles size={13} /> <span className="sm:hidden">Профиль</span><span className="hidden sm:inline">Профиль ИИ</span>
           </button>
         </div>
 
@@ -654,13 +654,13 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           {/* Stage pipeline */}
           <div>
             <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-2.5 uppercase tracking-wide">Перевести в этап</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-wrap gap-2">
               {STAGES.map(s => (
                 <button
                   key={s.key}
                   onClick={() => { onStageChange(candidate.id, s.key); onClose(); }}
                   disabled={s.key === candidate.stage}
-                  className={`flex items-center justify-center gap-1.5 text-xs px-2 py-2 rounded-xl font-medium transition-all border ${s.color} ${
+                  className={`flex items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.5 py-2 rounded-xl font-medium transition-all border ${s.color} ${
                     s.key === candidate.stage
                       ? 'opacity-40 cursor-default ring-1 ring-offset-1 ring-current'
                       : 'hover:scale-[1.03] hover:shadow-sm border-transparent'
