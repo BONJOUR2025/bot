@@ -366,10 +366,17 @@ def save_vacancy_as_template(vacancy_id: int, data: VacancyTemplateCreate, db: S
     entries = db.query(KnowledgeBaseEntry).filter(
         KnowledgeBaseEntry.scope == "vacancy", KnowledgeBaseEntry.vacancy_id == vacancy_id
     ).all()
-    kb_snapshot = [
-        {"category": e.category or "", "question": e.question, "answer": e.answer}
-        for e in entries
-    ]
+    # Dedup by question (case-insensitive) so any duplicate rows that already
+    # accumulated on the source vacancy don't get baked into the template and
+    # replayed on every future vacancy created from it.
+    seen_questions = set()
+    kb_snapshot = []
+    for e in entries:
+        key = (e.question or "").strip().lower()
+        if key in seen_questions:
+            continue
+        seen_questions.add(key)
+        kb_snapshot.append({"category": e.category or "", "question": e.question, "answer": e.answer})
 
     t = VacancyTemplate(
         name=data.name,
@@ -528,9 +535,29 @@ def create_kb_entry(data: KBEntryCreate, db: Session = Depends(get_db)):
             "Сначала вызовите POST /recruitment/ai/check-text, покажите результат админу, "
             "затем повторите запрос с confirmed=true.",
         )
+    vacancy_id = data.vacancy_id if data.scope == "vacancy" else None
+    question = data.question.strip()
+
+    # Same question already saved for this scope (e.g. an AI-suggested
+    # question replayed from a vacancy template, then answered again in the
+    # editor) — update it in place instead of inserting a duplicate row.
+    # Compared in Python, not SQL LOWER(), since SQLite's LOWER() is
+    # ASCII-only and would miss case differences in Cyrillic questions.
+    same_scope = db.query(KnowledgeBaseEntry).filter(
+        KnowledgeBaseEntry.scope == data.scope,
+        KnowledgeBaseEntry.vacancy_id == vacancy_id,
+    ).all()
+    existing = next((e for e in same_scope if (e.question or "").strip().lower() == question.lower()), None)
+    if existing:
+        existing.category = data.category or existing.category
+        existing.answer = data.answer
+        existing.ai_checked = True
+        db.commit(); db.refresh(existing)
+        return existing.to_dict()
+
     e = KnowledgeBaseEntry(
-        scope=data.scope, vacancy_id=data.vacancy_id if data.scope == "vacancy" else None,
-        category=data.category or "", question=data.question, answer=data.answer,
+        scope=data.scope, vacancy_id=vacancy_id,
+        category=data.category or "", question=question, answer=data.answer,
         ai_checked=True,
     )
     db.add(e); db.commit(); db.refresh(e)

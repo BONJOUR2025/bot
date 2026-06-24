@@ -338,9 +338,9 @@ function StepStrategy({ strategyId, onSelect, onManage }) {
 }
 
 // Step 3 — AI-suggested candidate questions, scoped FAQ for this vacancy
-function QuestionRow({ q, vacancyId }) {
-  const [answer, setAnswer] = useState('');
-  const [saved, setSaved]   = useState(false);
+function QuestionRow({ q, vacancyId, existing }) {
+  const [answer, setAnswer] = useState(existing?.answer || '');
+  const [saved, setSaved]   = useState(!!existing);
   const [saving, setSaving] = useState(false);
   const gate = useAiCheckGate();
   const { toast } = useToast();
@@ -355,6 +355,9 @@ function QuestionRow({ q, vacancyId }) {
     if (!answer.trim() || !gate.isConfirmable(answer)) return;
     setSaving(true);
     try {
+      // Backend upserts by (scope, vacancy_id, question) — re-saving an
+      // already-answered question (e.g. copied in from a vacancy template)
+      // updates that row instead of creating a duplicate.
       await api.post('/recruitment/knowledge-base', {
         scope: 'vacancy', vacancy_id: vacancyId, category: q.category || null,
         question: q.question, answer: answer.trim(), confirmed: true,
@@ -369,7 +372,11 @@ function QuestionRow({ q, vacancyId }) {
     <div className="rounded-xl border border-[color:var(--color-border)] p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium">{q.question}</p>
-        {saved && <span className="flex items-center gap-1 text-xs text-emerald-600 flex-shrink-0"><Check size={13} /> сохранено</span>}
+        {saved && (
+          <span className="flex items-center gap-1 text-xs text-emerald-600 flex-shrink-0">
+            <Check size={13} /> {existing ? 'уже в базе знаний' : 'сохранено'}
+          </span>
+        )}
       </div>
       <textarea className="input w-full min-h-[60px] resize-y text-sm" value={answer} onChange={handleChange}
         placeholder="Ответ для кандидата..." disabled={saved} />
@@ -446,6 +453,7 @@ function StepQuestions({ vacancyId, title, description, vacancyTitle, onOpenKb }
   const [loading, setLoading] = useState(false);
   const [extraRows, setExtraRows] = useState([]);
   const [error, setError] = useState('');
+  const [existingByQuestion, setExistingByQuestion] = useState({});
 
   useEffect(() => {
     if (!title.trim() || suggestions !== null) return;
@@ -456,6 +464,20 @@ function StepQuestions({ vacancyId, title, description, vacancyTitle, onOpenKb }
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title]);
+
+  // The vacancy's KB may already have answers for some of these questions
+  // (e.g. replayed from a vacancy template) — load them so we don't show an
+  // empty editable form that would create a duplicate entry on save.
+  useEffect(() => {
+    if (!vacancyId) return;
+    api.get('/recruitment/knowledge-base', { params: { scope: 'vacancy', vacancy_id: vacancyId } })
+      .then(r => {
+        const map = {};
+        for (const e of r.data || []) map[(e.question || '').trim().toLowerCase()] = e;
+        setExistingByQuestion(map);
+      })
+      .catch(() => {});
+  }, [vacancyId]);
 
   const grouped = {};
   for (const q of (suggestions || [])) {
@@ -490,7 +512,8 @@ function StepQuestions({ vacancyId, title, description, vacancyTitle, onOpenKb }
               <p className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wide mb-2">{cat}</p>
               <div className="space-y-2">
                 {qs.map((q, i) => (
-                  <QuestionRow key={cat + i} q={q} vacancyId={vacancyId} />
+                  <QuestionRow key={cat + i} q={q} vacancyId={vacancyId}
+                    existing={existingByQuestion[(q.question || '').trim().toLowerCase()]} />
                 ))}
               </div>
             </div>
