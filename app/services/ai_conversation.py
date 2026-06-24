@@ -218,6 +218,23 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
             allowed = {t.get("next") for t in (current_stage.get("transitions") or [])} if current_stage else set()
             if next_phase in allowed:
                 c.interview_phase = next_phase
+                # A stage whose ONLY transition is unconditional (e.g. the default
+                # "closing" stage, condition="") has nothing left for the candidate
+                # to do — the message just sent already used that stage's
+                # instructions (the AI sees every stage's text up front, not just
+                # the current one). Waiting for another incoming message to reach
+                # "done" would hang forever since the candidate has no reason to
+                # write again, so cascade straight through.
+                while True:
+                    s = next((st for st in stages if st["id"] == c.interview_phase), None)
+                    trs = (s.get("transitions") or []) if s else []
+                    if len(trs) != 1 or (trs[0].get("condition") or "").strip():
+                        break
+                    nxt = trs[0].get("next") or "done"
+                    if nxt == c.interview_phase:
+                        break
+                    c.interview_phase = nxt
+                    next_phase = nxt
                 db.commit()
                 log.info("Interview phase: candidate_id=%s %s → %s", candidate_id, phase, next_phase)
             else:
