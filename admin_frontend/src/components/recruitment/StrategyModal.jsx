@@ -3,7 +3,19 @@ import { X, Pencil, Trash2, Plus, Loader2, Star, Briefcase } from 'lucide-react'
 import api from '../../api';
 import { useToast } from '../../providers/ToastProvider.jsx';
 import StageBuilder from './StageBuilder.jsx';
+import StageCanvas from './StageCanvas.jsx';
 import VacancyModal from './VacancyModal.jsx';
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = e => setIsDesktop(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isDesktop;
+}
 
 const EMPTY_FORM = {
   name: '', description: '', age_min: '', age_max: '', sources_str: '',
@@ -14,6 +26,7 @@ const EMPTY_FORM = {
 
 function StrategyForm({ strategy, onClose, onSaved, zIndex }) {
   const { toast } = useToast();
+  const isDesktop = useIsDesktop();
   const [vacancies, setVacancies] = useState([]);
   const [vacancyModal, setVacancyModal] = useState(null);
   const [form, setForm] = useState(() => strategy
@@ -83,7 +96,7 @@ function StrategyForm({ strategy, onClose, onSaved, zIndex }) {
 
   return (
     <div className="modal-backdrop" style={{ zIndex: zIndex || 90 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-card max-w-4xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '92vh' }}>
+      <div className={`modal-card w-full flex flex-col overflow-hidden ${isDesktop ? 'max-w-6xl' : 'max-w-4xl'}`} style={{ maxHeight: '92vh' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold">{strategy ? 'Редактировать стратегию' : 'Новая стратегия'}</h3>
           <button onClick={onClose} className="text-xl text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] leading-none">&times;</button>
@@ -192,11 +205,19 @@ function StrategyForm({ strategy, onClose, onSaved, zIndex }) {
           <div className="rounded-xl border border-[color:var(--color-border)] p-3 md:p-4">
             <label className="text-sm font-medium mb-1 block">Этапы интервью (конструктор сценария)</label>
             {form.stages ? (
-              <StageBuilder
-                stages={form.stages}
-                onChange={stages => setForm(f => ({ ...f, stages }))}
-                onResetDefault={resetStagesToDefault}
-              />
+              isDesktop ? (
+                <StageCanvas
+                  stages={form.stages}
+                  onChange={stages => setForm(f => ({ ...f, stages }))}
+                  onResetDefault={resetStagesToDefault}
+                />
+              ) : (
+                <StageBuilder
+                  stages={form.stages}
+                  onChange={stages => setForm(f => ({ ...f, stages }))}
+                  onResetDefault={resetStagesToDefault}
+                />
+              )
             ) : (
               <div className="text-center py-4 text-sm text-[color:var(--color-muted-foreground)]">Загрузка...</div>
             )}
