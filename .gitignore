@@ -1,5 +1,7 @@
 # Runtime database (generated locally — do not commit)
 hr.db
+hr.db-shm
+hr.db-wal
 
 # Claude Code internal state
 .claude/
