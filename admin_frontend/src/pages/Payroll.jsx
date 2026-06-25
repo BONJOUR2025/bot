@@ -752,9 +752,21 @@ export default function Payroll() {
 
               {/* Card summary */}
               <div className="px-4 py-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm border-b border-[color:var(--color-border)]">
-                <div className="flex justify-between col-span-2"><span className="text-[color:var(--color-muted-foreground)]">Общая зп</span><span className="font-medium">{fmtMoney(row.total_gross ?? (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus))}</span></div>
+                <div className="flex justify-between col-span-2">
+                  <span className="text-[color:var(--color-muted-foreground)]">Общая зп</span>
+                  <span className="font-medium flex items-center gap-1.5">
+                    <TrendBadge current={row.total_gross} prev={prevRowsMap[row.employee_code]?.total_gross} />
+                    {fmtMoney(row.total_gross ?? (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus))}
+                  </span>
+                </div>
                 <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Оклад</span><span>{fmtMoney(row.base_salary)}</span></div>
-                <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Комиссия</span><span>{row.ignore_kpi ? '—' : fmtMoney(row.total_commission)}</span></div>
+                <div className="flex justify-between">
+                  <span className="text-[color:var(--color-muted-foreground)]">Комиссия</span>
+                  <span className="flex items-center gap-1.5">
+                    {!row.ignore_kpi && <TrendBadge current={row.total_commission} prev={prevRowsMap[row.employee_code]?.total_commission} />}
+                    {row.ignore_kpi ? '—' : fmtMoney(row.total_commission)}
+                  </span>
+                </div>
                 {(row.bonuses + row.excel_bonus) > 0 && (
                   <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Премии</span><span className="text-green-600">+{fmtMoney(row.bonuses + row.excel_bonus)}</span></div>
                 )}
@@ -872,7 +884,12 @@ export default function Payroll() {
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       {row.ignore_kpi
                         ? <span className="text-[color:var(--color-muted-foreground)]" title="KPI не учитывается">—</span>
-                        : fmtMoney(row.total_commission)}
+                        : (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <TrendBadge current={row.total_commission} prev={prevRowsMap[row.employee_code]?.total_commission} />
+                            {fmtMoney(row.total_commission)}
+                          </div>
+                        )}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap text-green-600">
                       {(row.bonuses + row.excel_bonus) > 0 ? `+${fmtMoney(row.bonuses + row.excel_bonus)}` : '—'}
@@ -888,13 +905,13 @@ export default function Payroll() {
                       {row.penalties > 0 ? `-${fmtMoney(row.penalties)}` : '—'}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      {fmtMoney(row.total_gross ?? (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus))}
+                      <div className="flex items-center justify-end gap-1.5">
+                        <TrendBadge current={row.total_gross} prev={prevRowsMap[row.employee_code]?.total_gross} />
+                        {fmtMoney(row.total_gross ?? (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus))}
+                      </div>
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap font-semibold text-[color:var(--color-primary)]">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <TrendBadge current={row.total_net} prev={prevRowsMap[row.employee_code]?.total_net} />
-                        {fmtMoney(row.total_net)}
-                      </div>
+                      {fmtMoney(row.total_net)}
                     </td>
 
                     {/* ── Зарплата ✓ ── */}
