@@ -88,6 +88,7 @@ function CommentModal({ employee, currentComment, onSave, onClose }) {
 // ── Summary bar ───────────────────────────────────────────────────
 function SummaryBar({ rows }) {
   const totalNet        = rows.reduce((s, r) => s + (r.total_net || 0), 0);
+  const totalGross       = rows.reduce((s, r) => s + (r.total_gross ?? (r.base_salary + r.total_commission + r.bonuses + r.excel_bonus)), 0);
   const totalSalary     = rows.reduce((s, r) => s + (r.base_salary || 0), 0);
   const totalCommission = rows.reduce((s, r) => s + (r.total_commission || 0), 0);
   const totalBonuses    = rows.reduce((s, r) => s + (r.bonuses || 0) + (r.excel_bonus || 0), 0);
@@ -97,6 +98,7 @@ function SummaryBar({ rows }) {
 
   const stats = [
     { label: 'Сотрудников', value: rows.length },
+    { label: 'ФОТ',         value: fmtMoney(totalGross) },
     { label: 'Оклады',      value: fmtMoney(totalSalary) },
     { label: 'Комиссии',    value: fmtMoney(totalCommission) },
     { label: 'Премии',      value: fmtMoney(totalBonuses) },
@@ -107,7 +109,7 @@ function SummaryBar({ rows }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-9">
       {stats.map((s) => (
         <div key={s.label} className="app-card p-4 text-center">
           <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{s.label}</div>
@@ -750,6 +752,7 @@ export default function Payroll() {
 
               {/* Card summary */}
               <div className="px-4 py-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm border-b border-[color:var(--color-border)]">
+                <div className="flex justify-between col-span-2"><span className="text-[color:var(--color-muted-foreground)]">Общая зп</span><span className="font-medium">{fmtMoney(row.total_gross ?? (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus))}</span></div>
                 <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Оклад</span><span>{fmtMoney(row.base_salary)}</span></div>
                 <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Комиссия</span><span>{row.ignore_kpi ? '—' : fmtMoney(row.total_commission)}</span></div>
                 {(row.bonuses + row.excel_bonus) > 0 && (
@@ -824,6 +827,7 @@ export default function Payroll() {
                 <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Премии</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-danger)]">Авансы</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-danger)]">Штрафы</th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Общая зп</th>
                 <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-primary)]">К выплате</th>
                 <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-green-600">Зарплата ✓</th>
                 <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide">План</th>
@@ -882,6 +886,9 @@ export default function Payroll() {
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap text-[color:var(--color-danger)]">
                       {row.penalties > 0 ? `-${fmtMoney(row.penalties)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {fmtMoney(row.total_gross ?? (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus))}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap font-semibold text-[color:var(--color-primary)]">
                       <div className="flex items-center justify-end gap-1.5">
@@ -946,6 +953,9 @@ export default function Payroll() {
                 </td>
                 <td className="px-3 py-2.5 text-right text-[color:var(--color-danger)]">
                   -{fmtMoney(filtered.reduce((s, r) => s + r.penalties, 0))}
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  {fmtMoney(filtered.reduce((s, r) => s + (r.total_gross ?? (r.base_salary + r.total_commission + r.bonuses + r.excel_bonus)), 0))}
                 </td>
                 <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">
                   {fmtMoney(filtered.reduce((s, r) => s + r.total_net, 0))}
