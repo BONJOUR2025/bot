@@ -258,7 +258,7 @@ export default function Schedule() {
                     <tr key={emp}
                       className={ri % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
                       <td className="sticky left-0 z-10 border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] px-3 py-1.5 font-medium whitespace-nowrap"
-                        style={{ background: ri % 2 === 1 ? 'var(--color-modal-bg)' : 'var(--color-modal-bg)' }}>
+                        style={{ background: ri % 2 === 1 ? 'var(--color-table-header-bg)' : 'var(--color-modal-bg)' }}>
                         {emp}
                       </td>
                       {data.days.map(d => {

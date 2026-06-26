@@ -32,7 +32,7 @@ export default function MobileTable({
 
   if (!rows || rows.length === 0) {
     return (
-      <p className="py-4 text-sm text-gray-500 italic">{emptyText}</p>
+      <p className="py-4 text-sm text-[color:var(--color-muted-foreground)] italic">{emptyText}</p>
     );
   }
 
@@ -53,10 +53,10 @@ export default function MobileTable({
           return (
             <div
               key={rowKey}
-              className="border rounded-xl bg-white shadow-sm overflow-hidden"
+              className="border border-[color:var(--color-border)] rounded-xl bg-[color:var(--color-table-bg)] shadow-sm overflow-hidden"
             >
               {titleVal != null && (
-                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium text-gray-800">
+                <div className="px-4 py-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-table-header)] text-sm font-medium text-[color:var(--color-text-primary)]">
                   {titleVal}
                 </div>
               )}
@@ -66,14 +66,14 @@ export default function MobileTable({
                   if (val == null || val === '') return null;
                   return (
                     <div key={col.key} className="flex justify-between items-start gap-3">
-                      <span className="text-gray-500 shrink-0">{col.label}</span>
-                      <span className="text-right text-gray-800">{val}</span>
+                      <span className="text-[color:var(--color-muted-foreground)] shrink-0">{col.label}</span>
+                      <span className="text-right text-[color:var(--color-text-primary)]">{val}</span>
                     </div>
                   );
                 })}
               </div>
               {actionCol && (
-                <div className="px-4 py-2 border-t flex justify-end gap-3">
+                <div className="px-4 py-2 border-t border-[color:var(--color-border)] flex justify-end gap-3">
                   {actionCol.render ? actionCol.render(row[actionCol.key], row) : null}
                 </div>
               )}
@@ -93,18 +93,18 @@ export default function MobileTable({
             {columns.map(col => (
               <th
                 key={col.key}
-                className={`px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide border-b ${col.headerClassName ?? ''}`}
+                className={`px-4 py-2 text-left text-xs font-medium text-[color:var(--color-muted-foreground)] uppercase tracking-wide border-b border-[color:var(--color-border)] ${col.headerClassName ?? ''}`}
               >
                 {col.label}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100 bg-white">
+        <tbody className="divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
           {rows.map((row, i) => (
             <tr
               key={row[keyField] ?? i}
-              className={`hover:bg-gray-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+              className={`hover:bg-[color:var(--color-table-row-hover)] transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
             >
               {columns.map(col => (
