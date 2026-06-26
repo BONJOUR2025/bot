@@ -6,6 +6,11 @@ from datetime import date, datetime
 
 log = logging.getLogger(__name__)
 
+# Cap on how many of the most recent dialogue messages are replayed to the LLM
+# on each turn. The current interview phase is persisted separately, so older
+# turns add little context while inflating input-token cost on every message.
+MAX_HISTORY_MESSAGES = 20
+
 DEFAULT_AWAY_MESSAGE = (
     "Здравствуйте! Мы получили ваше сообщение. Наш ассистент отвечает в рабочее время "
     "({hours}) — обязательно продолжим общение, как только начнётся рабочий день. Спасибо за терпение!"
@@ -157,14 +162,29 @@ async def handle_candidate_message(candidate_id: int, message_text: str) -> None
                 c.interview_phase = phase
                 db.commit()
 
-        history = db.query(TelegramMessage).filter(
-            TelegramMessage.candidate_id == candidate_id
-        ).order_by(TelegramMessage.created_at).all()
+        # Only the tail of the dialogue is sent to the LLM. The interview phase
+        # is tracked separately on the candidate, so older turns carry little
+        # signal — yet re-sending the full transcript on every incoming message
+        # made input-token cost grow quadratically with conversation length
+        # (the #1 source of runaway token spend). Cap to the most recent turns.
+        history = (
+            db.query(TelegramMessage)
+            .filter(TelegramMessage.candidate_id == candidate_id)
+            .order_by(TelegramMessage.created_at.desc())
+            .limit(MAX_HISTORY_MESSAGES)
+            .all()
+        )
+        history.reverse()  # back to chronological order
 
         messages = []
         for m in history:
             role = "user" if m.direction == "in" else "assistant"
             messages.append({"role": role, "content": m.text})
+
+        # The Anthropic API requires the first message to be from the user, so
+        # drop any leading assistant turns left at the head after the cap.
+        while messages and messages[0]["role"] != "user":
+            messages.pop(0)
 
         if not messages or messages[-1]["content"] != message_text:
             messages.append({"role": "user", "content": message_text})

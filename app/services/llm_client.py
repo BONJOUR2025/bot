@@ -36,6 +36,7 @@ def chat(
     system: Optional[str] = None,
     model: Optional[str] = None,
     max_tokens: int = 256,
+    cache_system: bool = True,
 ) -> Optional[str]:
     """
     Send a chat request and return the text response, or None if unavailable.
@@ -46,6 +47,11 @@ def chat(
         system:     optional system prompt
         model:      model override; defaults to DEFAULT_MODEL
         max_tokens: max tokens in the response
+        cache_system: if True, mark the system prompt with cache_control so the
+                    knowledge-base block (large and unchanged within a dialogue)
+                    is billed at the discounted cached-input rate on repeat
+                    turns within the cache window, instead of full price each
+                    time. No effect on the response itself.
     """
     client = get_client(cfg)
     if not client:
@@ -58,7 +64,14 @@ def chat(
         messages=messages,
     )
     if system:
-        kwargs["system"] = system
+        # Pass the system prompt as a cacheable text block. A single ephemeral
+        # cache breakpoint covers the whole prompt prefix, so the bulky,
+        # turn-invariant knowledge base is reused from cache instead of being
+        # re-tokenised at full price on every incoming candidate message.
+        kwargs["system"] = (
+            [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+            if cache_system else system
+        )
 
     response = client.messages.create(**kwargs)
     return response.content[0].text.strip()
