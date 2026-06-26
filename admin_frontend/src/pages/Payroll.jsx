@@ -281,34 +281,69 @@ function PlanProgressRows({ sales, plan }) {
   return (
     <>
       {until80 > 0 ? (
-        <div className="flex justify-between">
-          <span>До 80%:</span>
+        <div className="flex justify-between gap-3">
+          <span className="text-[color:var(--color-muted-foreground)]">До 80%</span>
           <span className="font-medium text-red-500">−{fmtMoney(until80)}</span>
         </div>
       ) : (
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <span className="text-green-600 font-medium">✓ 80% выполнен</span>
           <span className="text-green-600 text-xs">{fmtMoney(sales - t80)} сверх</span>
         </div>
       )}
       {until100 > 0 ? (
-        <div className="flex justify-between">
-          <span>До 100%:</span>
+        <div className="flex justify-between gap-3">
+          <span className="text-[color:var(--color-muted-foreground)]">До 100%</span>
           <span className="font-medium text-amber-500">−{fmtMoney(until100)}</span>
         </div>
       ) : (
         <>
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-3">
             <span className="text-green-600 font-medium">✓ 100% выполнен</span>
             <span></span>
           </div>
-          <div className="flex justify-between">
-            <span>Перевыполнение:</span>
+          <div className="flex justify-between gap-3">
+            <span className="text-[color:var(--color-muted-foreground)]">Перевыполнение</span>
             <span className="font-medium text-green-600">+{fmtMoney(over)}</span>
           </div>
         </>
       )}
     </>
+  );
+}
+
+// ── Compact detail panel + row (used across the expanded breakdown) ───
+// Purpose-built instead of <div className="app-card">, whose grid `gap:1rem`
+// pushed a loose gap between every panel title and its body.
+function DetailCard({ title, titleClass, children }) {
+  return (
+    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-table-bg)] p-3 shadow-sm">
+      <div className={`text-[11px] font-semibold uppercase tracking-wide mb-2 pb-1.5 border-b border-[color:var(--color-border)] ${titleClass || 'text-[color:var(--color-text-primary)]'}`}>
+        {title}
+      </div>
+      <div className="space-y-1.5 text-sm">{children}</div>
+    </div>
+  );
+}
+
+// Label muted, value dark — keeps figures scannable. `value` may be a node
+// (badge, button); pass `valueClass` to recolour the value text.
+function DetailRow({ label, value, valueClass }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-[color:var(--color-muted-foreground)]">{label}</span>
+      <span className={valueClass || 'font-medium text-[color:var(--color-text-primary)]'}>{value}</span>
+    </div>
+  );
+}
+
+// The panel's bottom-line total — divider above, accent value.
+function CommissionRow({ value }) {
+  return (
+    <div className="flex justify-between gap-3 border-t border-[color:var(--color-border)] pt-1.5 mt-0.5">
+      <span className="text-[color:var(--color-muted-foreground)]">Комиссия</span>
+      <span className="font-semibold text-[color:var(--color-primary)]">{value}</span>
+    </div>
   );
 }
 
@@ -323,112 +358,84 @@ function ExpandedContent({ row }) {
     <div className="space-y-4 text-sm">
       {/* Salary breakdown */}
       {(row.main_rate > 0 || row.extra_rate > 0 || shiftEntries.length > 0) && (
-        <div className="app-card p-3">
-          <div className="font-medium mb-2">Оклад — расчёт по сменам</div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[color:var(--color-muted-foreground)]">
-            {row.main_rate > 0 && (
-              <div className="flex justify-between col-span-2 text-xs">
-                <span>Осн. ставка (1–15 смен):</span>
-                <span>{fmtMoney(row.main_rate)}/смену × {row.main_shifts || 0} = <strong>{fmtMoney((row.main_rate || 0) * (row.main_shifts || 0))}</strong></span>
+        <DetailCard title="Оклад — расчёт по сменам">
+          {row.main_rate > 0 && (
+            <DetailRow
+              label="Осн. ставка (1–15 смен)"
+              value={<><span className="text-[color:var(--color-muted-foreground)] font-normal">{fmtMoney(row.main_rate)}/смену × {row.main_shifts || 0} = </span>{fmtMoney((row.main_rate || 0) * (row.main_shifts || 0))}</>}
+            />
+          )}
+          {row.extra_rate > 0 && row.extra_shifts > 0 && (
+            <DetailRow
+              label="Доп. ставка (от 16-й смены)"
+              value={<><span className="text-[color:var(--color-muted-foreground)] font-normal">{fmtMoney(row.extra_rate)}/смену × {row.extra_shifts} = </span>{fmtMoney((row.extra_rate || 0) * (row.extra_shifts || 0))}</>}
+            />
+          )}
+          {shiftEntries.length > 0 && (
+            <div className="pt-1.5 mt-0.5 border-t border-[color:var(--color-border)]">
+              <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Смены по точкам ({totalShifts} всего)</div>
+              <div className="flex flex-wrap gap-1.5">
+                {shiftEntries.map(([code, cnt]) => (
+                  <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-medium">
+                    {code} <span className="font-bold">{cnt}</span>
+                  </span>
+                ))}
               </div>
-            )}
-            {row.extra_rate > 0 && row.extra_shifts > 0 && (
-              <div className="flex justify-between col-span-2 text-xs">
-                <span>Доп. ставка (от 16-й смены):</span>
-                <span>{fmtMoney(row.extra_rate)}/смену × {row.extra_shifts} = <strong>{fmtMoney((row.extra_rate || 0) * (row.extra_shifts || 0))}</strong></span>
-              </div>
-            )}
-            {shiftEntries.length > 0 && (
-              <div className="col-span-2 mt-1 pt-1 border-t border-[color:var(--color-border)]">
-                <div className="text-xs font-medium mb-1">Смены по точкам ({totalShifts} всего):</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {shiftEntries.map(([code, cnt]) => (
-                    <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-medium">
-                      {code} <span className="font-bold">{cnt}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </DetailCard>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
       {/* Ремонт */}
-      <div className="app-card p-3">
-        <div className="font-medium mb-2">Ремонт / Химчистка</div>
-        <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
-          <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.repair_sales)}</span></div>
-          <div className="flex justify-between"><span>План:</span><span>{fmtMoney(row.repair_plan)}</span></div>
-          <div className="flex justify-between"><span>Выполнение:</span><FulfillmentBadge value={row.repair_fulfillment} /></div>
-          <PlanProgressRows sales={row.repair_sales} plan={row.repair_plan} />
-          <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.repair_rate)}</span></div>
-          <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
-            <span>Комиссия:</span>
-            <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.repair_commission)}</span>
-          </div>
-        </div>
-      </div>
+      <DetailCard title="Ремонт / Химчистка">
+        <DetailRow label="Продажи" value={fmtMoney(row.repair_sales)} />
+        <DetailRow label="План" value={fmtMoney(row.repair_plan)} valueClass="text-[color:var(--color-muted-foreground)]" />
+        <DetailRow label="Выполнение" value={<FulfillmentBadge value={row.repair_fulfillment} />} valueClass="" />
+        <PlanProgressRows sales={row.repair_sales} plan={row.repair_plan} />
+        <DetailRow label="Ставка" value={fmtRate(row.repair_rate)} valueClass="text-[color:var(--color-muted-foreground)]" />
+        <CommissionRow value={fmtMoney(row.repair_commission)} />
+      </DetailCard>
 
       {/* Косметика */}
-      <div className="app-card p-3">
-        <div className="font-medium mb-2">Косметика</div>
-        <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
-          <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.cosmetics_sales)}</span></div>
-          <div className="flex justify-between"><span>План:</span><span>{fmtMoney(row.cosmetics_plan)}</span></div>
-          <div className="flex justify-between"><span>Выполнение:</span><FulfillmentBadge value={row.cosmetics_fulfillment} /></div>
-          <PlanProgressRows sales={row.cosmetics_sales} plan={row.cosmetics_plan} />
-          <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.cosmetics_rate)}</span></div>
-          <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
-            <span>Комиссия:</span>
-            <span className="font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.cosmetics_commission)}</span>
-          </div>
-        </div>
-      </div>
+      <DetailCard title="Косметика">
+        <DetailRow label="Продажи" value={fmtMoney(row.cosmetics_sales)} />
+        <DetailRow label="План" value={fmtMoney(row.cosmetics_plan)} valueClass="text-[color:var(--color-muted-foreground)]" />
+        <DetailRow label="Выполнение" value={<FulfillmentBadge value={row.cosmetics_fulfillment} />} valueClass="" />
+        <PlanProgressRows sales={row.cosmetics_sales} plan={row.cosmetics_plan} />
+        <DetailRow label="Ставка" value={fmtRate(row.cosmetics_rate)} valueClass="text-[color:var(--color-muted-foreground)]" />
+        <CommissionRow value={fmtMoney(row.cosmetics_commission)} />
+      </DetailCard>
 
       {/* Обувь + авансы */}
-      <div className="space-y-3">
-        <div className="app-card p-3">
-          <div className="font-medium mb-2">Обувь</div>
-          <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
-            <div className="flex justify-between"><span>Продажи:</span><span className="font-medium">{fmtMoney(row.shoes_sales)}</span></div>
-            <div className="flex justify-between"><span>Ставка:</span><span>{fmtRate(row.shoes_rate)}</span></div>
-            <div className="flex justify-between border-t border-[color:var(--color-border)] pt-1 mt-1">
-              <span>Комиссия:</span>
-              <button
-                className="font-semibold text-[color:var(--color-primary)] flex items-center gap-1 hover:underline"
-                onClick={(e) => { e.stopPropagation(); setShowOrders((v) => !v); }}>
-                {fmtMoney(row.shoes_commission)}
-                {orders.length > 0 && (showOrders ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
-              </button>
-            </div>
-            {showOrders && orders.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-[color:var(--color-border)]">
-                <div className="text-xs font-medium mb-1">Заказы ({orders.length}):</div>
-                <div className="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
-                  {orders.map((num) => (
-                    <span key={num} className="text-xs font-mono">{num}</span>
-                  ))}
-                </div>
+      <div className="space-y-4">
+        <DetailCard title="Обувь">
+          <DetailRow label="Продажи" value={fmtMoney(row.shoes_sales)} />
+          <DetailRow label="Ставка" value={fmtRate(row.shoes_rate)} valueClass="text-[color:var(--color-muted-foreground)]" />
+          <CommissionRow value={
+            <button
+              className="font-semibold text-[color:var(--color-primary)] flex items-center gap-1 hover:underline"
+              onClick={(e) => { e.stopPropagation(); setShowOrders((v) => !v); }}>
+              {fmtMoney(row.shoes_commission)}
+              {orders.length > 0 && (showOrders ? <ChevronUp size={13} /> : <ChevronDown size={13} />)}
+            </button>
+          } />
+          {showOrders && orders.length > 0 && (
+            <div className="pt-1.5 mt-0.5 border-t border-[color:var(--color-border)]">
+              <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">Заказы ({orders.length})</div>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 max-h-32 overflow-y-auto">
+                {orders.map((num) => (
+                  <span key={num} className="text-xs font-mono text-[color:var(--color-text-primary)]">{num}</span>
+                ))}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </DetailCard>
 
         {(row.advances_this_month > 0 || row.advances > 0) && (
-          <div className="app-card p-3">
-            <div className="font-medium mb-2 text-[color:var(--color-danger)]">Авансы</div>
-            <div className="space-y-1 text-[color:var(--color-muted-foreground)]">
-              <div className="flex justify-between">
-                <span>За этот месяц:</span>
-                <span className="font-medium text-[color:var(--color-danger)]">{fmtMoney(row.advances_this_month)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>К вычету (с посл. ЗП):</span>
-                <span className="font-medium text-[color:var(--color-danger)]">{fmtMoney(row.advances)}</span>
-              </div>
-            </div>
-          </div>
+          <DetailCard title="Авансы" titleClass="text-[color:var(--color-danger)]">
+            <DetailRow label="За этот месяц" value={fmtMoney(row.advances_this_month)} valueClass="font-medium text-[color:var(--color-danger)]" />
+            <DetailRow label="К вычету (с посл. ЗП)" value={fmtMoney(row.advances)} valueClass="font-medium text-[color:var(--color-danger)]" />
+          </DetailCard>
         )}
       </div>
     </div>
