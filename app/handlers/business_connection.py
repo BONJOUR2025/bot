@@ -1,12 +1,37 @@
 """Handle Telegram Secretary Mode (Chat Automation) business_connection updates."""
 import asyncio
 import logging
+import re
 from datetime import datetime
 
 log = logging.getLogger(__name__)
 
 # In-memory dedup: candidate_ids currently being processed for interview confirmation
 _confirmation_in_progress: set = set()
+
+# Cheap keyword pre-gates for the two per-message LLM checkers. Both checkers
+# otherwise fire an LLM call on EVERY incoming candidate message (even plain
+# "спасибо"/"здравствуйте"), tripling token spend per message. These regexes
+# let the common, irrelevant message skip the LLM call entirely; they're
+# intentionally broad, so a genuine scheduling/refusal message always passes
+# through to the model — only clearly-unrelated chatter is filtered out.
+
+# Any digit catches times/dates ("в 15:00", "5 июня"); the words cover
+# scheduling phrased without numerals ("давайте завтра", "подъеду в офис").
+_SCHEDULING_SIGNAL = re.compile(
+    r"\d|завтра|сегодня|послезавтра|понедельник|вторник|сред|четверг|пятниц|суббот|"
+    r"воскрес|выходн|час|врем|утра|вечер|встрет|встреч|собес|подъед|подъеду|приед|"
+    r"приду|приход|подход|адрес|офис|метро|увид|договор|назнач|удобн",
+    re.IGNORECASE,
+)
+
+_REFUSAL_SIGNAL = re.compile(
+    r"отказ|откаж|не\s*интерес|неинтерес|передум|нашёл|нашел|нашла|друг(ую|ое|ой)|"
+    r"не\s*буд|не\s*подход|не\s*хоч|неактуал|не\s*актуал|уже\s*работа|уже\s*устро|"
+    r"не\s*нужн|не\s*надо|не\s*готов|не\s*рассматрив|отозв|в\s*другом\s*месте|"
+    r"занят|не\s*ищу|больше\s*не",
+    re.IGNORECASE,
+)
 
 
 async def handle_business_connection(update, context):
@@ -343,6 +368,13 @@ async def _check_interview_confirmation(candidate_id: int):
                 lines.append(f"{who}: {m.text}")
             transcript = "\n".join(lines)
 
+            # An interview can only be confirmed if a date/time/place was
+            # discussed somewhere in the recent window. If the whole transcript
+            # holds no scheduling signal at all, there is nothing to confirm —
+            # skip the LLM call instead of running it on every chit-chat message.
+            if not _SCHEDULING_SIGNAL.search(transcript):
+                return
+
             cfg = ConfigService().load()
             from app.services.llm_client import chat, get_client
             if not get_client(cfg):
@@ -440,6 +472,12 @@ async def _check_interview_confirmation(candidate_id: int):
 async def _check_candidate_refusal(candidate_id: int, last_msg: str):
     """Detect if candidate refused. If so, disable follow-up by exhausting the counter."""
     if not last_msg or len(last_msg) < 3:
+        return
+    # A refusal is expressed in the candidate's own message — if it carries no
+    # refusal-like wording at all, skip the LLM call rather than paying for it
+    # on every ordinary reply. Missing an oddly-phrased refusal only costs one
+    # extra automated follow-up, so a broad keyword gate is a safe trade.
+    if not _REFUSAL_SIGNAL.search(last_msg):
         return
     try:
         from app.db.session import SessionLocal
