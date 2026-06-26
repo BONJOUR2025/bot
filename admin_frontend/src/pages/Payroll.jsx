@@ -14,6 +14,9 @@ import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 const fmt = (v) => (v === null || v === undefined || v === 0 ? '—' : Number(v).toLocaleString('ru-RU'));
 const fmtMoney = (v) => (v === null || v === undefined || v === 0 ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
 const fmtRate = (v) => (v === null || v === undefined ? '—' : `${(v * 100).toFixed(0)}%`);
+// Gross pay (начислено до удержаний): prefer the server-computed value, fall
+// back to summing the parts for older rows that predate the field.
+const grossOf = (r) => r.total_gross ?? (r.base_salary + r.total_commission + r.bonuses + r.excel_bonus);
 
 // ── Helpers ───────────────────────────────────────────────────────
 function parseSelectedMonth(selectedMonth) {
@@ -96,30 +99,38 @@ function SummaryBar({ rows }) {
   const totalPenalties  = rows.reduce((s, r) => s + (r.penalties || 0), 0);
   const paidCount       = rows.filter((r) => r.settlement_paid).length;
 
-  const stats = [
+  // Two deliberate rows: the headline figures (счёт, фонды, итог к выплате)
+  // on top, the component breakdown below — instead of one long cramped strip.
+  const rowTop = [
     { label: 'Сотрудников', value: rows.length },
-    { label: 'ФОТ',         value: fmtMoney(totalGross) },
-    { label: 'Оклады',      value: fmtMoney(totalSalary) },
-    { label: 'Комиссии',    value: fmtMoney(totalCommission) },
-    { label: 'Премии',      value: fmtMoney(totalBonuses) },
-    { label: 'Авансы',      value: fmtMoney(totalAdvances), accent: true },
-    { label: 'Штрафы',      value: fmtMoney(totalPenalties), accent: true },
-    { label: 'К выплате',   value: fmtMoney(totalNet) },
+    { label: 'ФОТ',         value: fmtMoney(totalGross), strong: true },
+    { label: 'К выплате',   value: fmtMoney(totalNet), primary: true },
     { label: 'Расчёт выдан', value: `${paidCount} / ${rows.length}`, green: true },
   ];
+  const rowBottom = [
+    { label: 'Оклады',    value: fmtMoney(totalSalary) },
+    { label: 'Комиссии',  value: fmtMoney(totalCommission) },
+    { label: 'Премии',    value: fmtMoney(totalBonuses), green: true },
+    { label: 'Авансы',    value: fmtMoney(totalAdvances), accent: true },
+    { label: 'Штрафы',    value: fmtMoney(totalPenalties), accent: true },
+  ];
+
+  const Card = (s) => (
+    <div key={s.label} className="app-card px-4 py-3 flex flex-col gap-1">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{s.label}</div>
+      <div className={`font-semibold ${s.strong || s.primary ? 'text-xl' : 'text-lg'} ${
+        s.accent   ? 'text-[color:var(--color-danger)]' :
+        s.green    ? 'text-[color:var(--color-success)]' :
+        s.primary  ? 'text-[color:var(--color-primary)]' :
+        'text-[color:var(--color-text-primary)]'
+      }`}>{s.value}</div>
+    </div>
+  );
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-9">
-      {stats.map((s) => (
-        <div key={s.label} className="app-card p-4 text-center">
-          <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{s.label}</div>
-          <div className={`text-base font-semibold ${
-            s.accent ? 'text-[color:var(--color-danger)]' :
-            s.green  ? 'text-[color:var(--color-success)]' :
-            'text-[color:var(--color-text-primary)]'
-          }`}>{s.value}</div>
-        </div>
-      ))}
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{rowTop.map(Card)}</div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{rowBottom.map(Card)}</div>
     </div>
   );
 }
@@ -727,40 +738,55 @@ export default function Payroll() {
               key={row.employee_code}
               className={`border rounded-xl overflow-hidden shadow-sm bg-[color:var(--color-table-bg)] ${row.settlement_paid ? 'border-green-300' : 'border-[color:var(--color-border)]'}`}
             >
-              {/* Card header */}
+              {/* Card header — identity only */}
               <div
-                className="px-4 py-3 flex items-center justify-between cursor-pointer bg-[color:var(--color-table-header)]"
+                className="px-4 py-3 flex items-center justify-between gap-2 cursor-pointer bg-[color:var(--color-table-header)]"
                 onClick={() => toggleRow(row.employee_code)}
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  {row.settlement_paid && <BadgeCheck size={16} className="text-green-500 shrink-0" />}
-                  {getAnomalyFlags(row).length > 0 && (
-                    <span title={getAnomalyFlags(row).join('\n')}>
-                      <AlertTriangle size={15} className="text-amber-500 shrink-0" />
-                    </span>
-                  )}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="grid place-items-center w-9 h-9 shrink-0 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-sm font-semibold">
+                    {(row.employee_name || '?').trim().charAt(0).toUpperCase()}
+                  </div>
                   <div className="min-w-0">
-                    <div className="font-medium text-sm truncate">{row.employee_name}</div>
-                    <div className="text-xs text-[color:var(--color-muted-foreground)]">{row.employee_code}</div>
+                    <div className="flex items-center gap-1.5">
+                      {row.settlement_paid && <BadgeCheck size={15} className="text-green-500 shrink-0" />}
+                      {getAnomalyFlags(row).length > 0 && (
+                        <span title={getAnomalyFlags(row).join('\n')}>
+                          <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                        </span>
+                      )}
+                      <span className="font-medium text-sm truncate">{row.employee_name}</span>
+                    </div>
+                    <div className="text-xs text-[color:var(--color-muted-foreground)] truncate">{row.employee_code}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-base font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.total_net)}</span>
-                  {expandedRows.has(row.employee_code) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                <div className="shrink-0 text-[color:var(--color-muted-foreground)]">
+                  {expandedRows.has(row.employee_code) ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                 </div>
               </div>
 
-              {/* Card summary */}
-              <div className="px-4 py-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm border-b border-[color:var(--color-border)]">
-                <div className="flex justify-between col-span-2">
-                  <span className="text-[color:var(--color-muted-foreground)]">Общая зп</span>
-                  <span className="font-medium flex items-center gap-1.5">
+              {/* Headline figures — gross vs. net, side by side */}
+              <div className="grid grid-cols-2 divide-x divide-[color:var(--color-border)] border-b border-[color:var(--color-border)]">
+                <div className="px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-0.5">Общая ЗП</div>
+                  <div className="flex items-center gap-1.5 text-lg font-semibold">
                     <TrendBadge current={row.total_gross} prev={prevRowsMap[row.employee_code]?.total_gross} />
-                    {fmtMoney(row.total_gross ?? (row.base_salary + row.total_commission + row.bonuses + row.excel_bonus))}
-                  </span>
+                    {fmtMoney(grossOf(row))}
+                  </div>
                 </div>
-                <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Оклад</span><span>{fmtMoney(row.base_salary)}</span></div>
-                <div className="flex justify-between">
+                <div className="px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-0.5">К выплате</div>
+                  <div className="text-lg font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.total_net)}</div>
+                </div>
+              </div>
+
+              {/* Breakdown — one figure per row, easy to read top-to-bottom */}
+              <div className="px-4 text-sm divide-y divide-[color:var(--color-border)] border-b border-[color:var(--color-border)]">
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-[color:var(--color-muted-foreground)]">Оклад</span>
+                  <span>{fmtMoney(row.base_salary)}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
                   <span className="text-[color:var(--color-muted-foreground)]">Комиссия</span>
                   <span className="flex items-center gap-1.5">
                     {!row.ignore_kpi && <TrendBadge current={row.total_commission} prev={prevRowsMap[row.employee_code]?.total_commission} />}
@@ -768,13 +794,22 @@ export default function Payroll() {
                   </span>
                 </div>
                 {(row.bonuses + row.excel_bonus) > 0 && (
-                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Премии</span><span className="text-green-600">+{fmtMoney(row.bonuses + row.excel_bonus)}</span></div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[color:var(--color-muted-foreground)]">Премии</span>
+                    <span className="text-green-600">+{fmtMoney(row.bonuses + row.excel_bonus)}</span>
+                  </div>
                 )}
                 {row.advances > 0 && (
-                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Авансы</span><span className="text-[color:var(--color-danger)]">-{fmtMoney(row.advances)}</span></div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[color:var(--color-muted-foreground)]">Авансы</span>
+                    <span className="text-[color:var(--color-danger)]">-{fmtMoney(row.advances)}</span>
+                  </div>
                 )}
                 {row.penalties > 0 && (
-                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Штрафы</span><span className="text-[color:var(--color-danger)]">-{fmtMoney(row.penalties)}</span></div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-[color:var(--color-muted-foreground)]">Штрафы</span>
+                    <span className="text-[color:var(--color-danger)]">-{fmtMoney(row.penalties)}</span>
+                  </div>
                 )}
               </div>
 
