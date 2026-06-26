@@ -214,13 +214,13 @@ export default function ShiftCheckins() {
       <div className="flex flex-wrap gap-2 items-end">
         <input
           type="date"
-          className="border p-2"
+          className="input"
           value={filters.from}
           onChange={(e) => setFilters({ ...filters, from: e.target.value })}
         />
         <input
           type="date"
-          className="border p-2"
+          className="input"
           value={filters.to}
           onChange={(e) => setFilters({ ...filters, to: e.target.value })}
         />

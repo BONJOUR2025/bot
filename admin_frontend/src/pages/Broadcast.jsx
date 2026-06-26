@@ -133,7 +133,7 @@ export default function Broadcast() {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Текст сообщения</label>
         <textarea
-          className="w-full min-h-[100px] p-3 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+          className="input w-full min-h-[100px] resize-y"
           placeholder="Введите сообщение для рассылки..."
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -146,7 +146,7 @@ export default function Broadcast() {
             <FileText size={16} /> Шаблоны
           </button>
           <select
-            className="border p-2"
+            className="input"
             value={selectedTpl}
             onChange={(e) => {
               const id = e.target.value;
@@ -163,7 +163,7 @@ export default function Broadcast() {
             ))}
           </select>
           <select
-            className="border p-2"
+            className="input"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
@@ -182,12 +182,12 @@ export default function Broadcast() {
           <button
             type="button"
             onClick={() => setOpenRecipients((o) => !o)}
-            className="w-full border border-gray-300 rounded px-3 py-2 shadow-sm text-left"
+            className="input w-full text-left"
           >
             {selected.length ? `Выбрано: ${selected.length}` : 'Получатели'}
           </button>
           {openRecipients && (
-            <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white border border-gray-300 rounded shadow">
+            <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-[color:var(--color-modal-bg)] border border-[color:var(--color-border)] rounded-lg shadow-lg">
               {employees.filter(e => e.bot_user || (!String(e.id).startsWith('nb_') && !!e.id)).map((e) => (
                 <label
                   key={e.id}

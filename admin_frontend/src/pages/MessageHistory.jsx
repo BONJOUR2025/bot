@@ -294,7 +294,7 @@ export default function MessageHistory() {
         </h1>
         <div className="flex items-center gap-2">
           <select
-            className="rounded border border-gray-300 px-3 py-2 shadow-sm"
+            className="input"
             value={typeFilter}
             onChange={(event) => setTypeFilter(event.target.value)}
           >

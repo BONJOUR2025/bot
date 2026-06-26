@@ -313,7 +313,9 @@ export default function SaleTransfers() {
               },
               {
                 label: 'Сумма',
-                render: (t) => <span className="text-right">{fmt(t.amount)} ₽</span>,
+                headerClass: 'text-right',
+                cellClass: 'text-right whitespace-nowrap',
+                render: (t) => <span className="tabular-nums font-medium">{fmt(t.amount)} ₽</span>,
               },
               {
                 label: 'От кого',

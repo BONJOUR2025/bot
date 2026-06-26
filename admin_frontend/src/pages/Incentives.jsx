@@ -106,7 +106,7 @@ export default function Incentives() {
       <h2 className="text-2xl font-semibold tracking-tight text-gray-800">Штрафы и премии</h2>
       <div className="flex flex-wrap gap-2 items-end">
         <select
-          className="border p-2"
+          className="input"
           value={filters.employee}
           onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
         >
@@ -118,7 +118,7 @@ export default function Incentives() {
           ))}
         </select>
         <select
-          className="border p-2"
+          className="input"
           value={filters.type}
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
         >
@@ -129,13 +129,13 @@ export default function Incentives() {
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
           <input
             type="date"
-            className="border p-2 w-full sm:w-auto"
+            className="input w-full sm:w-auto"
             value={filters.from}
             onChange={(e) => setFilters({ ...filters, from: e.target.value })}
           />
           <input
             type="date"
-            className="border p-2 w-full sm:w-auto"
+            className="input w-full sm:w-auto"
             value={filters.to}
             onChange={(e) => setFilters({ ...filters, to: e.target.value })}
           />
@@ -156,7 +156,16 @@ export default function Incentives() {
           { label: 'Сотрудник', key: 'name', primary: true },
           { label: 'Дата', key: 'date' },
           { label: 'Тип', render: (item) => <span className="font-medium">{typeLabel(item.type)}</span> },
-          { label: 'Сумма', render: (item) => `${item.amount} ₽` },
+          {
+            label: 'Сумма',
+            headerClass: 'text-right',
+            cellClass: 'text-right whitespace-nowrap',
+            render: (item) => (
+              <span className={`font-medium tabular-nums ${item.type === 'bonus' ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}>
+                {item.type === 'bonus' ? '+' : '−'}{Number(item.amount || 0).toLocaleString('ru-RU')} ₽
+              </span>
+            ),
+          },
           { label: 'Причина', key: 'reason' },
           { label: 'Добавил', key: 'added_by' },
           {

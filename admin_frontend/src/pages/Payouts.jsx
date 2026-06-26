@@ -67,7 +67,7 @@ function Summary({ list }) {
     <div className="space-y-3">
       <div>
         Всего: <strong>{list.length}</strong> заявок на сумму{' '}
-        <strong>{total} ₽</strong>
+        <strong className="tabular-nums">{total.toLocaleString('ru-RU')} ₽</strong>
       </div>
       <div className="flex flex-wrap gap-3 text-sm">
         {Object.entries(statusStats).map(([k, v]) => (
@@ -86,7 +86,7 @@ function Summary({ list }) {
                 style={{ width: `${(v / sumAll) * 100}%` }}
               />
             </div>
-            <div className="w-16 text-right">{v}</div>
+            <div className="w-24 text-right tabular-nums">{Number(v).toLocaleString('ru-RU')} ₽</div>
           </div>
         ))}
       </div>
@@ -890,7 +890,9 @@ export default function Payouts() {
               { label: 'Способ', key: 'method' },
               {
                 label: 'Сумма',
-                render: (p) => <span className="text-blue-800 font-medium">{p.amount} ₽</span>,
+                headerClass: 'text-right',
+                cellClass: 'text-right whitespace-nowrap',
+                render: (p) => <span className="text-[color:var(--color-primary)] font-medium tabular-nums">{Number(p.amount || 0).toLocaleString('ru-RU')} ₽</span>,
               },
               {
                 label: 'Статус',

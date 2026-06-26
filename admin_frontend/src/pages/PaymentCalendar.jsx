@@ -153,7 +153,7 @@ function CategoriesPanel({ categories, onChanged }) {
           <div key={cat.id} className="flex items-center gap-2">
             {editingId === cat.id ? (
               <>
-                <input autoFocus className="flex-1 border rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <input autoFocus className="input flex-1 text-sm py-1"
                   value={editingName} onChange={e => setEditingName(e.target.value)}
                   onKeyDown={e => { if (e.key==='Enter') handleSaveEdit(cat.id); if (e.key==='Escape') setEditingId(null); }} />
                 <button onClick={() => handleSaveEdit(cat.id)} className="px-2 py-1 text-xs rounded-lg bg-blue-600 text-white">✓</button>
@@ -172,7 +172,7 @@ function CategoriesPanel({ categories, onChanged }) {
         ))}
       </div>
       <div className="flex gap-2 pt-1 border-t">
-        <input className="flex-1 border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <input className="input flex-1 text-sm py-1.5"
           placeholder="Новая категория..." value={newName} onChange={e => setNewName(e.target.value)}
           onKeyDown={e => { if (e.key==='Enter') handleAdd(); }} />
         <button onClick={handleAdd} className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white">+ Добавить</button>
@@ -207,24 +207,24 @@ function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
         <div className="p-4 space-y-3">
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Название *</label>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <input className="input text-sm"
               value={form.name} onChange={e => set('name', e.target.value)} placeholder="Интернет Ростелеком" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Сумма (₽) *</label>
-              <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <input type="number" className="input text-sm"
                 value={form.planned_amount} onChange={e => set('planned_amount', e.target.value)} placeholder="5000" />
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">День месяца *</label>
-              <input type="number" min={1} max={31} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <input type="number" min={1} max={31} className="input text-sm"
                 value={form.day_of_month} onChange={e => set('day_of_month', e.target.value)} placeholder="10" />
             </div>
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Категория</label>
-            <select className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <select className="input text-sm"
               value={form.category} onChange={e => set('category', e.target.value)}>
               <option value="">— не указана —</option>
               {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -238,23 +238,23 @@ function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Ответственный</label>
-              <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <input className="input text-sm"
                 value={form.responsible_name} onChange={e => set('responsible_name', e.target.value)} placeholder="Иванов И." />
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Telegram ID</label>
-              <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <input className="input text-sm"
                 value={form.responsible_tg_id} onChange={e => set('responsible_tg_id', e.target.value)} placeholder="123456789" />
             </div>
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Уведомить за (дней)</label>
-            <input type="number" min={0} max={14} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <input type="number" min={0} max={14} className="input text-sm"
               value={form.notify_days_before} onChange={e => set('notify_days_before', +e.target.value)} />
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Примечание</label>
-            <textarea rows={2} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <textarea rows={2} className="input text-sm"
               value={form.note} onChange={e => set('note', e.target.value)} />
           </div>
 
@@ -263,12 +263,12 @@ function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Продавец</label>
-                <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <input className="input text-sm"
                   value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="ООО «Ромашка»" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Платим от</label>
-                <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <input className="input text-sm"
                   value={form.pay_from} onChange={e => set('pay_from', e.target.value)} placeholder="ИП Иванов / Салон на Ленина" />
               </div>
             </div>
@@ -318,12 +318,12 @@ function PayModal({ record, onPay, onClose }) {
           <p className="text-sm text-gray-600">{record.schedule?.name}</p>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Фактическая сумма (₽)</label>
-            <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <input type="number" className="input text-sm"
               value={amount} onChange={e => setAmount(e.target.value)} />
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Комментарий</label>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <input className="input text-sm"
               value={comment} onChange={e => setComment(e.target.value)} placeholder="Необязательно" />
           </div>
         </div>

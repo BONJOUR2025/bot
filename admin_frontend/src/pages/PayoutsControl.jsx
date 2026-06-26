@@ -75,7 +75,7 @@ export default function PayoutsControl() {
       </h2>
       <div className="flex flex-wrap gap-2 items-end">
         <select
-          className="border border-gray-300 p-2 rounded text-sm"
+          className="input text-sm"
           value={filters.type}
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
         >
@@ -85,7 +85,7 @@ export default function PayoutsControl() {
           <option value="compensation">Компенсация</option>
         </select>
         <select
-          className="border border-gray-300 p-2 rounded text-sm"
+          className="input text-sm"
           value={filters.status}
           onChange={(e) => setFilters({ ...filters, status: e.target.value })}
         >
@@ -97,7 +97,7 @@ export default function PayoutsControl() {
           ))}
         </select>
         <select
-          className="border border-gray-300 p-2 rounded text-sm"
+          className="input text-sm"
           value={filters.method}
           onChange={(e) => setFilters({ ...filters, method: e.target.value })}
         >
@@ -109,13 +109,13 @@ export default function PayoutsControl() {
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
           <input
             type="date"
-            className="border border-gray-300 p-2 rounded text-sm w-full sm:w-auto"
+            className="input text-sm w-full sm:w-auto"
             value={filters.from}
             onChange={(e) => setFilters({ ...filters, from: e.target.value })}
           />
           <input
             type="date"
-            className="border border-gray-300 p-2 rounded text-sm w-full sm:w-auto"
+            className="input text-sm w-full sm:w-auto"
             value={filters.to}
             onChange={(e) => setFilters({ ...filters, to: e.target.value })}
           />
@@ -147,8 +147,12 @@ export default function PayoutsControl() {
           { label: 'Способ', key: 'method' },
           {
             label: 'Сумма',
+            headerClass: 'text-right',
+            cellClass: 'text-right whitespace-nowrap',
             render: (p) => (
-              <span className="text-blue-800 font-medium">{p.amount} ₽</span>
+              <span className="text-[color:var(--color-primary)] font-medium tabular-nums">
+                {Number(p.amount || 0).toLocaleString('ru-RU')} ₽
+              </span>
             ),
           },
           { label: 'Статус', key: 'status' },
