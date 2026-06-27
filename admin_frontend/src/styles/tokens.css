@@ -43,14 +43,14 @@
   --color-border-strong:  rgba(99, 102, 241, 0.30);
   --color-border-hover:   rgba(148, 163, 184, 0.16);
 
-  /* ── Tables ─────────────────────────────────────────────────── */
-  --color-table-bg:         rgba(248, 250, 252, 0.97);
-  --color-table-header-bg:  rgba(241, 245, 249, 0.98);
-  --color-table-border:     rgba(15, 23, 42, 0.10);
-  --color-table-text:       #1e293b;
-  --color-table-header-text:#0f172a;
-  --color-table-stripe:     rgba(15, 23, 42, 0.03);
-  --color-table-hover:      rgba(99, 102, 241, 0.08);
+  /* ── Tables (dark) — follow the theme instead of staying white ── */
+  --color-table-bg:         rgba(21, 29, 49, 0.55);
+  --color-table-header-bg:  rgba(30, 40, 64, 0.75);
+  --color-table-border:     rgba(148, 163, 184, 0.10);
+  --color-table-text:       #e8edf5;
+  --color-table-header-text:#cbd5e1;
+  --color-table-stripe:     rgba(255, 255, 255, 0.025);
+  --color-table-hover:      rgba(99, 102, 241, 0.12);
 
   /* ── Controls (inputs, selects, textareas) ──────────────────── */
   --color-control-bg:             rgba(255, 255, 255, 0.04);
