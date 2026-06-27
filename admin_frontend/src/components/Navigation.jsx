@@ -7,11 +7,12 @@ import {
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
   Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig,
-  Clock, Replace, CalendarOff, MessageCircle, Users2,
+  Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import { useTheme } from '../providers/ThemeProvider.jsx';
 
 const navStructure = [
   {
@@ -84,6 +85,8 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
   const location = useLocation();
   const { user } = useAuth();
   const { isMobile } = useViewport();
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === 'dark';
   const allowed = useMemo(() => new Set(user?.permissions || []), [user?.permissions]);
 
   const handleNavigate = () => {
@@ -180,6 +183,26 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Theme toggle */}
+      <div className={`pb-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
+        <button
+          type="button"
+          onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          title={isDark ? 'Светлая тема' : 'Тёмная тема'}
+          aria-label={isDark ? 'Включить светлую тему' : 'Включить тёмную тему'}
+          className={`flex items-center rounded-xl border border-transparent text-[color:var(--color-sidebar-foreground)] opacity-70 transition-all duration-150 hover:bg-[color:var(--color-sidebar-accent)] hover:opacity-100 ${
+            isCollapsed ? 'mx-auto h-10 w-10 justify-center' : 'w-full gap-3 px-4 py-2'
+          }`}
+        >
+          {isDark
+            ? <Sun size={isCollapsed ? 18 : 16} className="flex-shrink-0" />
+            : <Moon size={isCollapsed ? 18 : 16} className="flex-shrink-0" />}
+          {!isCollapsed && (
+            <span className="text-sm font-medium">{isDark ? 'Светлая тема' : 'Тёмная тема'}</span>
+          )}
+        </button>
       </div>
 
       {/* Collapse toggle (desktop only) */}

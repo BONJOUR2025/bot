@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const VISUAL_FLAG = import.meta.env.VITE_VISUAL_REFRESH === "1";
+
+const ThemeContext = createContext({ theme: "light", setTheme: () => {} });
+
+// Lets any component read/toggle the theme without prop-drilling.
+export const useTheme = () => useContext(ThemeContext);
 
 export default function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
@@ -19,7 +24,12 @@ export default function ThemeProvider({ children }) {
   }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme }), [theme]);
-  return children(value);
+  // Provide via context; still support the existing render-prop usage in App.
+  return (
+    <ThemeContext.Provider value={value}>
+      {typeof children === "function" ? children(value) : children}
+    </ThemeContext.Provider>
+  );
 }
 
 
