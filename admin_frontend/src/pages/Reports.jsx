@@ -21,9 +21,17 @@ export default function Reports() {
       <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
         <Download size={24} /> Отчёты
       </h2>
-      <button onClick={downloadReport} className="btn">
-        📄 Скачать отчёт
-      </button>
+      <div className="app-card p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="font-medium">Зарплатный отчёт</div>
+          <div className="text-sm text-[color:var(--color-text-muted)]">
+            Сводный PDF по расчёту заработной платы.
+          </div>
+        </div>
+        <button onClick={downloadReport} className="btn btn--primary flex items-center gap-2 shrink-0">
+          <Download size={16} /> Скачать отчёт
+        </button>
+      </div>
     </div>
   );
 }

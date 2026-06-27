@@ -616,14 +616,20 @@ export default function SalesAnalytics() {
                     { label: 'Сотрудник', primary: true, render: (e) => empName(e.code) },
                     ...CATEGORIES.map(({ key, label }) => ({
                       label,
+                      headerClass: 'text-right',
+                      cellClass: 'text-right whitespace-nowrap tabular-nums',
                       render: (e) => Math.round(e[key] || 0).toLocaleString('ru-RU'),
                     })),
                     {
                       label: 'Итого',
+                      headerClass: 'text-right',
+                      cellClass: 'text-right whitespace-nowrap tabular-nums',
                       render: (e) => <span className="font-medium">{Math.round(e.total).toLocaleString('ru-RU')}</span>,
                     },
                     ...(showPlan ? [{
                       label: 'План',
+                      headerClass: 'text-right',
+                      cellClass: 'text-right whitespace-nowrap tabular-nums',
                       render: (e) => {
                         const plan = planTotals[e.code] || 0;
                         return plan > 0 ? Math.round(plan).toLocaleString('ru-RU') : '—';
@@ -631,6 +637,8 @@ export default function SalesAnalytics() {
                     }] : []),
                     ...(showPlan ? [{
                       label: '%',
+                      headerClass: 'text-right',
+                      cellClass: 'text-right whitespace-nowrap tabular-nums',
                       render: (e) => {
                         const plan = planTotals[e.code] || 0;
                         const pct  = plan > 0 ? e.total / plan * 100 : null;
@@ -641,9 +649,11 @@ export default function SalesAnalytics() {
                         );
                       },
                     }] : []),
-                    { label: 'Дней', key: 'activeDays' },
+                    { label: 'Дней', key: 'activeDays', headerClass: 'text-right', cellClass: 'text-right tabular-nums' },
                     {
                       label: 'Ср/день',
+                      headerClass: 'text-right',
+                      cellClass: 'text-right whitespace-nowrap tabular-nums',
                       render: (e) => {
                         const avgDay = e.activeDays > 0 ? e.total / e.activeDays : 0;
                         return Math.round(avgDay).toLocaleString('ru-RU');
@@ -692,6 +702,8 @@ export default function SalesAnalytics() {
                     },
                     ...employees.map((e) => ({
                       label: empName(e.code),
+                      headerClass: 'text-right',
+                      cellClass: 'text-right whitespace-nowrap tabular-nums',
                       render: (row) => {
                         if (row.isTotal) {
                           return (
@@ -710,6 +722,8 @@ export default function SalesAnalytics() {
                     })),
                     {
                       label: 'Итого',
+                      headerClass: 'text-right',
+                      cellClass: 'text-right whitespace-nowrap tabular-nums',
                       render: (row) => (
                         <span className={row.isTotal ? 'text-[color:var(--color-primary)]' : 'font-medium'}>
                           {Math.round(row.rowTotal || 0).toLocaleString('ru-RU')}

@@ -315,7 +315,7 @@ export default function AccessControl() {
                 </div>
                 <div className="px-4 py-2 border-t flex justify-end gap-3">
                   <button className="btn" onClick={() => startRoleEdit(role)}>Изменить</button>
-                  <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteRole(role)}>Удалить</button>
+                  <button className="btn btn--danger" onClick={() => deleteRole(role)}>Удалить</button>
                 </div>
               </div>
             ))}
@@ -337,7 +337,7 @@ export default function AccessControl() {
                   </div>
                   <div className="flex gap-2">
                     <button className="btn" onClick={() => startRoleEdit(role)}>Изменить</button>
-                    <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteRole(role)}>
+                    <button className="btn btn--danger" onClick={() => deleteRole(role)}>
                       Удалить
                     </button>
                   </div>
@@ -471,7 +471,7 @@ export default function AccessControl() {
                 <div className="px-4 py-2 border-t flex justify-end gap-3">
                   <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
                   {user.has_login && (
-                    <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>Удалить</button>
+                    <button className="btn btn--danger" onClick={() => deleteUser(user)}>Удалить</button>
                   )}
                 </div>
               </div>
@@ -523,7 +523,7 @@ export default function AccessControl() {
                   <div className="flex gap-2">
                     <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
                     {user.has_login && (
-                      <button className="btn bg-red-500 hover:bg-red-600" onClick={() => deleteUser(user)}>
+                      <button className="btn btn--danger" onClick={() => deleteUser(user)}>
                         Удалить
                       </button>
                     )}

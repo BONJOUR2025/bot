@@ -80,7 +80,7 @@ function CommentModal({ employee, currentComment, onSave, onClose }) {
           onChange={(e) => setText(e.target.value)}
         />
         <div className="flex justify-end gap-2 mt-3">
-          <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={onClose}>Отмена</button>
+          <button className="btn btn--secondary" onClick={onClose}>Отмена</button>
           <button className="btn btn--primary" onClick={() => onSave(text)}>Сохранить</button>
         </div>
       </div>
@@ -253,7 +253,7 @@ function PlanModal({ employee, plans, onSave, onClose, monthKey }) {
         </div>
 
         <div className="flex justify-end gap-2 mt-6">
-          <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={onClose}>Отмена</button>
+          <button className="btn btn--secondary" onClick={onClose}>Отмена</button>
           <button className="btn btn--primary" onClick={handleSave}>Сохранить</button>
         </div>
       </div>

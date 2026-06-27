@@ -1137,7 +1137,7 @@ export default function Payouts() {
 
             <div className="flex justify-end space-x-2 pt-2">
               <button
-                className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"
+                className="btn btn--secondary"
                 onClick={() => {
                   setShowEditor(false);
                   setForm(emptyForm);

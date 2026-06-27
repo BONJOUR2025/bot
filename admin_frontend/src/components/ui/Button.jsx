@@ -1,6 +1,6 @@
 const variantClasses = {
   primary:
-    'border-transparent bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-[0_8px_32px_rgba(99,102,241,0.25)] hover:shadow-[0_12px_40px_rgba(99,102,241,0.35)] hover:brightness-110',
+    'border-transparent bg-gradient-to-br from-[color:var(--color-primary)] to-[color:var(--color-primary-strong)] text-white shadow-[0_8px_32px_rgba(99,102,241,0.25)] hover:shadow-[0_12px_40px_rgba(99,102,241,0.35)] hover:brightness-110',
   secondary:
     'border-[color:var(--color-border)] bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:border-[color:var(--color-border-hover)]',
   outline:
@@ -8,11 +8,11 @@ const variantClasses = {
   ghost:
     'border-transparent bg-transparent text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg)] hover:text-[color:var(--color-text)]',
   destructive:
-    'border-transparent bg-gradient-to-br from-red-500 to-red-600 text-white shadow-[0_8px_32px_rgba(239,68,68,0.2)] hover:shadow-[0_12px_40px_rgba(239,68,68,0.3)] hover:brightness-110',
+    'border-transparent bg-[color:var(--color-danger)] text-white shadow-[0_8px_32px_rgba(239,68,68,0.2)] hover:shadow-[0_12px_40px_rgba(239,68,68,0.3)] hover:brightness-110',
   subtle:
     'border-transparent bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] hover:brightness-125',
   success:
-    'border-transparent bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-[0_8px_32px_rgba(16,185,129,0.2)] hover:brightness-110',
+    'border-transparent bg-[color:var(--color-success)] text-white shadow-[0_8px_32px_rgba(16,185,129,0.2)] hover:brightness-110',
 };
 
 const sizeClasses = {

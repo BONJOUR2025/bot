@@ -205,7 +205,7 @@ function CategoryManager({ categories, onClose, onChanged }) {
                     <input className="input flex-1 font-medium" value={editingCat.newName}
                       onChange={(e) => setEditingCat((x) => ({ ...x, newName: e.target.value }))} />
                     <button onClick={saveEdit} className="btn btn--primary flex items-center gap-1"><Check size={14} /> Сохранить</button>
-                    <button onClick={() => setEditingCat(null)} className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]">Отмена</button>
+                    <button onClick={() => setEditingCat(null)} className="btn btn--secondary">Отмена</button>
                   </div>
                   <div>
                     <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Префиксы (начало Основания):</div>
@@ -307,7 +307,7 @@ function AssignModal({ record, categories, onSave, onClose }) {
         </div>
 
         <div className="flex justify-end gap-2 mt-5">
-          <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={onClose}>Отмена</button>
+          <button className="btn btn--secondary" onClick={onClose}>Отмена</button>
           <button className="btn btn--primary" disabled={!selCat} onClick={handleSave}>Сохранить</button>
         </div>
       </div>
@@ -842,7 +842,7 @@ export default function CashMovements() {
             <button onClick={handleApply} disabled={loading} className="btn btn--primary flex-1 sm:flex-initial">Применить</button>
             {(dateFrom || dateTo) && (
               <button onClick={() => { setDateFrom(''); setDateTo(''); loadData('',''); }}
-                className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"><X size={14} /></button>
+                className="btn btn--secondary"><X size={14} /></button>
             )}
           </div>
         </div>

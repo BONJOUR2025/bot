@@ -312,7 +312,7 @@ export default function ShiftCheckins() {
           <div className="modal-card max-w-2xl">
             <img src={photoUrl} alt="Чек об открытии" className="w-full h-auto rounded" />
             <div className="flex justify-end pt-2">
-              <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={closePhoto}>
+              <button className="btn btn--secondary" onClick={closePhoto}>
                 Закрыть
               </button>
             </div>
@@ -355,7 +355,7 @@ export default function ShiftCheckins() {
             />
             <div className="flex justify-end gap-2 pt-2">
               <button
-                className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"
+                className="btn btn--secondary"
                 onClick={() => {
                   setShowForm(false);
                   setEditingId(null);

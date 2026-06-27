@@ -76,7 +76,8 @@ export default function SettingsGeneral() {
   if (!loaded) return <p className="text-center p-10 text-[color:var(--color-muted-foreground)]">Загрузка…</p>;
 
   return (
-    <form onSubmit={handleSubmit(save)} className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl">
+    <form onSubmit={handleSubmit(save)} className="space-y-6">
       <Section title="Состояние системы">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -169,6 +170,7 @@ export default function SettingsGeneral() {
       <div>
         <button type="submit" className="btn btn--primary">Сохранить настройки</button>
       </div>
+    </form>
 
       <Section title="Резервное копирование">
         <p className="text-sm text-[color:var(--color-muted-foreground)]">
@@ -176,7 +178,7 @@ export default function SettingsGeneral() {
           Рекомендуется делать перед масштабными изменениями и в начале каждого месяца.
         </p>
         <button type="button" onClick={downloadBackup} disabled={downloading}
-          className="btn flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">
+          className="btn btn--success flex items-center gap-2 disabled:opacity-50">
           <Download size={16} className={downloading ? 'animate-bounce' : ''} />
           {downloading ? 'Подготовка…' : 'Скачать резервную копию'}
         </button>
@@ -214,6 +216,6 @@ export default function SettingsGeneral() {
           </div>
         )}
       </Section>
-    </form>
+    </div>
   );
 }

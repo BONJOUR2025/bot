@@ -75,8 +75,8 @@ export default function SettingsTelegram() {
       <Section title="Telegram Secretary Mode">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Ваш username" hint="Ваш личный username в Telegram (без @). Используется для формирования ссылок-маяков для кандидатов.">
-            <div className="flex items-center gap-0">
-              <span className="input px-3 py-2 rounded-r-none border-r-0 text-[color:var(--color-muted-foreground)] bg-[color:var(--color-muted)] select-none">@</span>
+            <div className="flex">
+              <span className="inline-flex items-center px-3 rounded-l-[var(--radius-md)] border border-r-0 border-[color:var(--color-control-border)] bg-[color:var(--color-bg-subtle)] text-[color:var(--color-muted-foreground)] select-none">@</span>
               <input className="input w-full rounded-l-none" placeholder="username" {...register('tg_personal_username')} />
             </div>
           </Field>

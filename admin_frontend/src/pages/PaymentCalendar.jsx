@@ -289,7 +289,7 @@ function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
           </div>
         </div>
         <div className="p-4 border-t flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[color:var(--color-border)] hover:bg-[color:var(--color-control-bg-hover)]">Отмена</button>
+          <button onClick={onClose} className="btn btn--secondary">Отмена</button>
           <button onClick={() => onSave(form, { invoiceFile, notifyCashier })}
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
             Сохранить
@@ -328,7 +328,7 @@ function PayModal({ record, onPay, onClose }) {
           </div>
         </div>
         <div className="p-4 border-t flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[color:var(--color-border)] hover:bg-[color:var(--color-control-bg-hover)]">Отмена</button>
+          <button onClick={onClose} className="btn btn--secondary">Отмена</button>
           <button onClick={() => onPay(record.id, parseFloat(amount) || null, comment || null)}
             className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700">
             ✓ Оплачено
@@ -383,7 +383,7 @@ function DetailModal({ schedule, record, onClose, onEdit }) {
           </div>
         </div>
         <div className="p-4 border-t flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[color:var(--color-border)] hover:bg-[color:var(--color-control-bg-hover)]">Закрыть</button>
+          <button onClick={onClose} className="btn btn--secondary">Закрыть</button>
           <button onClick={onEdit} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">Редактировать</button>
         </div>
       </div>

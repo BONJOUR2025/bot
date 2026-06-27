@@ -320,8 +320,9 @@ export default function Passwords() {
           <div className="text-sm text-[color:var(--color-text-faint)]">Избранное</div>
         </div>
         <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
-          <div className="text-2xl font-bold text-green-400">
-            <Key size={24} />
+          <div className="flex items-center gap-1.5 text-2xl font-bold text-green-400">
+            <Key size={20} />
+            {stats.total_entries ? '100%' : '0%'}
           </div>
           <div className="text-sm text-[color:var(--color-text-faint)]">Защищено</div>
         </div>

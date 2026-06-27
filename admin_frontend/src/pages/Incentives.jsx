@@ -235,7 +235,7 @@ export default function Incentives() {
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={() => setShowForm(false)}>
+              <button className="btn btn--secondary" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
               <button className="btn" onClick={saveForm}>
