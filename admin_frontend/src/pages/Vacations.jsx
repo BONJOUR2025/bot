@@ -156,7 +156,7 @@ export default function Vacations() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <h2 className="text-2xl font-semibold">Отпуска и больничные</h2>
-      <div className="text-sm text-gray-600">Сегодня в отпуске — {todayCount} сотрудника</div>
+      <div className="text-sm text-[color:var(--color-text-muted)]">Сегодня в отпуске — {todayCount} сотрудника</div>
       <div className="flex flex-wrap gap-2 items-end">
         <select
           className="input"
@@ -205,7 +205,7 @@ export default function Vacations() {
       </div>
 
       {loading ? (
-        <div className="border rounded shadow bg-white p-4">
+        <div className="border rounded shadow bg-[color:var(--color-surface)] p-4">
           <SkeletonTable rows={6} cols={6} />
         </div>
       ) : (
@@ -228,7 +228,7 @@ export default function Vacations() {
                   <button className="text-blue-600 hover:text-blue-800" onClick={() => startEdit(v)} title="Редактировать">
                     <Pencil size={16} />
                   </button>
-                  <button className="text-gray-600 hover:text-gray-800 ml-2" onClick={() => remove(v.id)} title="Удалить">
+                  <button className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] ml-2" onClick={() => remove(v.id)} title="Удалить">
                     <Trash2 size={16} />
                   </button>
                 </>
@@ -267,7 +267,7 @@ export default function Vacations() {
         {isMobile ? (
           <div className="space-y-3">
             {empIds.length === 0 && (
-              <div className="py-6 text-center text-gray-500 text-sm">Нет данных</div>
+              <div className="py-6 text-center text-[color:var(--color-text-muted)] text-sm">Нет данных</div>
             )}
             {empIds.map((eid) => {
               const emp = employees.find((e) => String(e.id) === String(eid));
@@ -280,26 +280,26 @@ export default function Vacations() {
                   return v.start_date <= monthEnd && v.end_date >= monthStart;
                 });
               return (
-                <div key={eid} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">
+                <div key={eid} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] font-medium text-sm">
                     {name}
                   </div>
                   <div className="px-4 py-2 space-y-2">
                     {empVacations.map((v) => {
                       let dotCls = 'bg-green-200';
-                      if (v.end_date < todayStr) dotCls = 'bg-gray-300';
+                      if (v.end_date < todayStr) dotCls = 'bg-[color:var(--color-border)]';
                       else if (v.start_date <= todayStr && v.end_date >= todayStr)
                         dotCls = 'bg-yellow-200';
                       return (
                         <div key={v.id} className="flex items-center gap-2 text-sm">
                           <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${dotCls}`} />
                           <span className="flex-1">{formatDateRange(v.start_date, v.end_date)}</span>
-                          <span className="text-gray-500 text-xs">{v.type}</span>
+                          <span className="text-[color:var(--color-text-muted)] text-xs">{v.type}</span>
                         </div>
                       );
                     })}
                     {empVacations.length === 0 && (
-                      <div className="text-sm text-gray-400">Нет записей в этом месяце</div>
+                      <div className="text-sm text-[color:var(--color-text-faint)]">Нет записей в этом месяце</div>
                     )}
                   </div>
                 </div>
@@ -307,11 +307,11 @@ export default function Vacations() {
             })}
           </div>
         ) : (
-          <div className="overflow-x-auto border rounded shadow bg-white">
+          <div className="overflow-x-auto border rounded shadow bg-[color:var(--color-surface)]">
             <table className="min-w-[900px] text-xs">
-              <thead className="bg-gray-50">
+              <thead className="bg-[color:var(--color-bg-subtle)]">
                 <tr>
-                  <th className="p-1 text-left sticky left-0 bg-gray-50 z-10">Сотрудник</th>
+                  <th className="p-1 text-left sticky left-0 bg-[color:var(--color-bg-subtle)] z-10">Сотрудник</th>
                   {days.map((d) => (
                     <th key={d} className="p-1 w-6 text-center">
                       {d}
@@ -324,8 +324,8 @@ export default function Vacations() {
                   const emp = employees.find((e) => String(e.id) === String(eid));
                   const name = emp ? emp.full_name || emp.name : '';
                   return (
-                    <tr key={eid} className="hover:bg-gray-50">
-                      <th className="p-2 text-left sticky left-0 bg-white z-10">
+                    <tr key={eid} className="hover:bg-[color:var(--color-control-bg-hover)]">
+                      <th className="p-2 text-left sticky left-0 bg-[color:var(--color-surface)] z-10">
                         {name}
                       </th>
                       {days.map((d) => {
@@ -344,7 +344,7 @@ export default function Vacations() {
                           title = `${formatDateRange(vac.start_date, vac.end_date)}${
                             vac.comment ? ' ' + vac.comment : ''
                           }`;
-                          if (vac.end_date < todayStr) cls = 'bg-gray-300';
+                          if (vac.end_date < todayStr) cls = 'bg-[color:var(--color-border)]';
                           else if (
                             vac.start_date <= todayStr &&
                             vac.end_date >= todayStr
@@ -353,7 +353,7 @@ export default function Vacations() {
                           else cls = 'bg-green-200';
                         } else {
                           const dow = new Date(year, month, d).getDay();
-                          if (dow === 0 || dow === 6) cls = 'bg-gray-50';
+                          if (dow === 0 || dow === 6) cls = 'bg-[color:var(--color-bg-subtle)]';
                         }
                         return (
                           <td key={d} className={`border p-1 ${cls}`} title={title} />
@@ -364,7 +364,7 @@ export default function Vacations() {
                 })}
                 {empIds.length === 0 && (
                   <tr>
-                    <td colSpan={days.length + 1} className="p-4 text-center text-gray-500">
+                    <td colSpan={days.length + 1} className="p-4 text-center text-[color:var(--color-text-muted)]">
                       Нет данных
                     </td>
                   </tr>
@@ -420,7 +420,7 @@ export default function Vacations() {
               onChange={(e) => setForm({ ...form, comment: e.target.value })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
+              <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
               <button className="btn" onClick={saveForm}>

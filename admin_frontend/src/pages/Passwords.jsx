@@ -309,28 +309,28 @@ export default function Passwords() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
           <div className="text-2xl font-bold">{stats.total_entries || 0}</div>
-          <div className="text-sm text-gray-400">Всего записей</div>
+          <div className="text-sm text-[color:var(--color-text-faint)]">Всего записей</div>
         </div>
         <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
           <div className="text-2xl font-bold text-purple-400">{stats.total_categories || 0}</div>
-          <div className="text-sm text-gray-400">Категорий</div>
+          <div className="text-sm text-[color:var(--color-text-faint)]">Категорий</div>
         </div>
         <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
           <div className="text-2xl font-bold text-yellow-400">{stats.favorites_count || 0}</div>
-          <div className="text-sm text-gray-400">Избранное</div>
+          <div className="text-sm text-[color:var(--color-text-faint)]">Избранное</div>
         </div>
         <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
           <div className="text-2xl font-bold text-green-400">
             <Key size={24} />
           </div>
-          <div className="text-sm text-gray-400">Защищено</div>
+          <div className="text-sm text-[color:var(--color-text-faint)]">Защищено</div>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-text-faint)]" size={18} />
           <input
             type="text"
             className="input-field w-full" style={{ paddingLeft: '2.5rem' }}
@@ -377,7 +377,7 @@ export default function Passwords() {
               >
                 <span className="text-lg">{catInfo?.icon || '📁'}</span>
                 <h3 className="font-medium">{catName}</h3>
-                <span className="ml-auto text-sm text-gray-400">{catEntries.length}</span>
+                <span className="ml-auto text-sm text-[color:var(--color-text-faint)]">{catEntries.length}</span>
               </div>
 
               <ResponsiveTable
@@ -393,14 +393,14 @@ export default function Passwords() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => toggleFavorite(entry.id)}
-                          className={`p-1 rounded ${entry.is_favorite ? 'text-yellow-400' : 'text-gray-500 hover:text-yellow-400'}`}
+                          className={`p-1 rounded ${entry.is_favorite ? 'text-yellow-400' : 'text-[color:var(--color-text-muted)] hover:text-yellow-400'}`}
                         >
                           <Star size={15} fill={entry.is_favorite ? 'currentColor' : 'none'} />
                         </button>
                         <div>
                           <div className="font-medium">{entry.title}</div>
                           {entry.notes && (
-                            <div className="text-xs text-gray-400 truncate max-w-[200px]">{entry.notes}</div>
+                            <div className="text-xs text-[color:var(--color-text-faint)] truncate max-w-[200px]">{entry.notes}</div>
                           )}
                         </div>
                       </div>
@@ -421,7 +421,7 @@ export default function Passwords() {
                           {copiedId === `user-${entry.id}` ? (
                             <Check size={13} className="text-green-400" />
                           ) : (
-                            <Copy size={13} className="text-gray-400" />
+                            <Copy size={13} className="text-[color:var(--color-text-faint)]" />
                           )}
                         </button>
                       </div>
@@ -440,9 +440,9 @@ export default function Passwords() {
                           title={visiblePasswords.has(entry.id) ? 'Скрыть' : 'Показать'}
                         >
                           {visiblePasswords.has(entry.id) ? (
-                            <EyeOff size={13} className="text-gray-400" />
+                            <EyeOff size={13} className="text-[color:var(--color-text-faint)]" />
                           ) : (
-                            <Eye size={13} className="text-gray-400" />
+                            <Eye size={13} className="text-[color:var(--color-text-faint)]" />
                           )}
                         </button>
                         <button
@@ -453,7 +453,7 @@ export default function Passwords() {
                           {copiedId === `pass-${entry.id}` ? (
                             <Check size={13} className="text-green-400" />
                           ) : (
-                            <Copy size={13} className="text-gray-400" />
+                            <Copy size={13} className="text-[color:var(--color-text-faint)]" />
                           )}
                         </button>
                       </div>
@@ -507,7 +507,7 @@ export default function Passwords() {
         })}
 
         {entries.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
+          <div className="text-center py-12 text-[color:var(--color-text-muted)]">
             <Key size={48} className="mx-auto mb-4 opacity-50" />
             <p>Нет сохранённых паролей</p>
             <button className="btn btn--primary mt-4" onClick={startCreateEntry}>
@@ -526,7 +526,7 @@ export default function Passwords() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Название *</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Название *</label>
                 <input
                   type="text"
                   className="input-field w-full"
@@ -537,7 +537,7 @@ export default function Passwords() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Логин / Email</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Логин / Email</label>
                 <input
                   type="text"
                   className="input-field w-full"
@@ -548,7 +548,7 @@ export default function Passwords() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Пароль *</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Пароль *</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -569,7 +569,7 @@ export default function Passwords() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">URL</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">URL</label>
                 <input
                   type="text"
                   className="input-field w-full"
@@ -580,7 +580,7 @@ export default function Passwords() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Категория</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Категория</label>
                 <div className="flex gap-2">
                   <select
                     className="input-field flex-1"
@@ -601,7 +601,7 @@ export default function Passwords() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Заметки</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Заметки</label>
                 <textarea
                   className="input-field w-full"
                   rows={3}
@@ -646,7 +646,7 @@ export default function Passwords() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Длина: {genLength}</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Длина: {genLength}</label>
                 <input
                   type="range"
                   min="8"
@@ -756,7 +756,7 @@ export default function Passwords() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Название *</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Название *</label>
                 <input
                   type="text"
                   className="input-field w-full"
@@ -767,7 +767,7 @@ export default function Passwords() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Иконка</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-2">Иконка</label>
                 <div className="flex flex-wrap gap-2">
                   {DEFAULT_CATEGORY_ICONS.map((icon) => (
                     <button
@@ -787,7 +787,7 @@ export default function Passwords() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Цвет</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-2">Цвет</label>
                 <div className="flex flex-wrap gap-2">
                   {DEFAULT_CATEGORY_COLORS.map((color) => (
                     <button
@@ -847,7 +847,7 @@ export default function Passwords() {
                     {cat.icon}
                   </div>
                   <span className="flex-1 font-medium">{cat.name}</span>
-                  <span className="text-sm text-gray-400">
+                  <span className="text-sm text-[color:var(--color-text-faint)]">
                     {stats.entries_by_category?.[cat.name] || 0}
                   </span>
                   <button
@@ -869,7 +869,7 @@ export default function Passwords() {
               ))}
 
               {categories.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-[color:var(--color-text-muted)]">
                   Нет категорий
                 </div>
               )}

@@ -126,12 +126,12 @@ export default function Broadcast() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-gray-800 flex items-center gap-2">
+      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
         <MessageSquare size={24} /> Рассылка сообщений
       </h2>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Текст сообщения</label>
+        <label className="block text-sm font-medium text-[color:var(--color-text)] mb-1">Текст сообщения</label>
         <textarea
           className="input w-full min-h-[100px] resize-y"
           placeholder="Введите сообщение для рассылки..."
@@ -242,7 +242,7 @@ export default function Broadcast() {
                   ) : (
                     <>
                       <div className="font-medium whitespace-pre-wrap">{m.message}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-[color:var(--color-text-muted)]">
                         {new Date(m.timestamp).toLocaleString()} — {m.status}
                       </div>
                     </>
@@ -315,7 +315,7 @@ export default function Broadcast() {
             </form>
             <button
               onClick={() => setShowTemplates(false)}
-              className="btn w-full mt-1 bg-gray-200 text-gray-700 hover:bg-gray-300"
+              className="btn w-full mt-1 bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"
             >
               Закрыть
             </button>

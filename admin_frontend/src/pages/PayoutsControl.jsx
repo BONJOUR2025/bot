@@ -70,7 +70,7 @@ export default function PayoutsControl() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-gray-800">
+      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
         Контроль выплат
       </h2>
       <div className="flex flex-wrap gap-2 items-end">
@@ -123,7 +123,7 @@ export default function PayoutsControl() {
         <button className="btn" onClick={load}>
           Применить
         </button>
-        <div className="flex flex-wrap gap-2 border border-gray-300 rounded p-2 bg-gray-50 text-xs w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2 border border-[color:var(--color-border)] rounded p-2 bg-[color:var(--color-bg-subtle)] text-xs w-full sm:w-auto">
           {Object.keys(warningDescriptions).map((w) => (
             <label key={w} className="flex items-center gap-1">
               <input
@@ -168,7 +168,7 @@ export default function PayoutsControl() {
                   <span
                     key={w}
                     title={warningDescriptions[w]}
-                    className="inline-block bg-gray-200 px-1 rounded text-xs"
+                    className="inline-block bg-[color:var(--color-control-bg)] px-1 rounded text-xs"
                   >
                     {w}
                   </span>

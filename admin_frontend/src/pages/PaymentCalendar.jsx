@@ -14,13 +14,13 @@ function fmt(n) {
 
 function statusColor(status, dom, today, year, month) {
   if (status === 'paid') return 'bg-green-100 text-green-800 border-green-200';
-  if (status === 'skipped') return 'bg-gray-100 text-gray-500 border-gray-200';
+  if (status === 'skipped') return 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]';
   const due = new Date(year, month, dom);
   const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   if (due < t) return 'bg-red-100 text-red-800 border-red-200';
   const diff = (due - t) / 86400000;
   if (diff <= 3) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-  return 'bg-white text-gray-700 border-gray-200';
+  return 'bg-[color:var(--color-surface)] text-[color:var(--color-text)] border-[color:var(--color-border)]';
 }
 
 function dotColor(records, day) {
@@ -87,7 +87,7 @@ function ObjectsSelect({ value, onChange, salons }) {
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="min-h-[38px] w-full border rounded-lg px-2 py-1.5 text-sm flex flex-wrap gap-1 cursor-text focus-within:ring-2 focus-within:ring-blue-500 bg-white"
+      <div className="min-h-[38px] w-full border rounded-lg px-2 py-1.5 text-sm flex flex-wrap gap-1 cursor-text focus-within:ring-2 focus-within:ring-blue-500 bg-[color:var(--color-surface)]"
         onClick={() => setOpen(true)}>
         {selected.map(v => (
           <span key={v} className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
@@ -102,7 +102,7 @@ function ObjectsSelect({ value, onChange, salons }) {
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } }} />
       </div>
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[color:var(--color-surface)] border rounded-lg shadow-lg max-h-52 overflow-y-auto">
           {filtered.map(s => (
             <button key={s.id} type="button" onMouseDown={e => { e.preventDefault(); toggle(s.name); }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50">{s.name}</button>
@@ -113,7 +113,7 @@ function ObjectsSelect({ value, onChange, salons }) {
               + Добавить «{input.trim()}»</button>
           )}
           {filtered.length === 0 && !input.trim() && (
-            <div className="px-3 py-2 text-xs text-gray-400">Нет доступных салонов</div>
+            <div className="px-3 py-2 text-xs text-[color:var(--color-text-faint)]">Нет доступных салонов</div>
           )}
         </div>
       )}
@@ -146,8 +146,8 @@ function CategoriesPanel({ categories, onChanged }) {
   }
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
-      <h3 className="text-sm font-semibold text-gray-700">Категории платежей</h3>
+    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl p-4 space-y-3">
+      <h3 className="text-sm font-semibold text-[color:var(--color-text)]">Категории платежей</h3>
       <div className="space-y-1.5">
         {categories.map(cat => (
           <div key={cat.id} className="flex items-center gap-2">
@@ -157,13 +157,13 @@ function CategoriesPanel({ categories, onChanged }) {
                   value={editingName} onChange={e => setEditingName(e.target.value)}
                   onKeyDown={e => { if (e.key==='Enter') handleSaveEdit(cat.id); if (e.key==='Escape') setEditingId(null); }} />
                 <button onClick={() => handleSaveEdit(cat.id)} className="px-2 py-1 text-xs rounded-lg bg-blue-600 text-white">✓</button>
-                <button onClick={() => setEditingId(null)} className="px-2 py-1 text-xs rounded-lg border border-gray-200">✕</button>
+                <button onClick={() => setEditingId(null)} className="px-2 py-1 text-xs rounded-lg border border-[color:var(--color-border)]">✕</button>
               </>
             ) : (
               <>
-                <span className="flex-1 text-sm text-gray-700 px-2 py-1">{cat.name}</span>
+                <span className="flex-1 text-sm text-[color:var(--color-text)] px-2 py-1">{cat.name}</span>
                 <button onClick={() => { setEditingId(cat.id); setEditingName(cat.name); }}
-                  className="px-2 py-1 text-xs rounded-lg border border-gray-200 text-gray-500">✎</button>
+                  className="px-2 py-1 text-xs rounded-lg border border-[color:var(--color-border)] text-[color:var(--color-text-muted)]">✎</button>
                 <button onClick={() => handleDelete(cat.id)}
                   className="px-2 py-1 text-xs rounded-lg border border-red-200 text-red-500">✕</button>
               </>
@@ -197,33 +197,33 @@ function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-[color:var(--color-surface)] rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="font-semibold text-gray-800">
+          <h2 className="font-semibold text-[color:var(--color-text)]">
             {initial ? 'Редактировать платёж' : 'Новый платёж'}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <button onClick={onClose} className="text-[color:var(--color-text-faint)] hover:text-[color:var(--color-text-muted)] text-xl">✕</button>
         </div>
         <div className="p-4 space-y-3">
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Название *</label>
+            <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Название *</label>
             <input className="input text-sm"
               value={form.name} onChange={e => set('name', e.target.value)} placeholder="Интернет Ростелеком" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Сумма (₽) *</label>
+              <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Сумма (₽) *</label>
               <input type="number" className="input text-sm"
                 value={form.planned_amount} onChange={e => set('planned_amount', e.target.value)} placeholder="5000" />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">День месяца *</label>
+              <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">День месяца *</label>
               <input type="number" min={1} max={31} className="input text-sm"
                 value={form.day_of_month} onChange={e => set('day_of_month', e.target.value)} placeholder="10" />
             </div>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Категория</label>
+            <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Категория</label>
             <select className="input text-sm"
               value={form.category} onChange={e => set('category', e.target.value)}>
               <option value="">— не указана —</option>
@@ -231,65 +231,65 @@ function ScheduleModal({ initial, onSave, onClose, categories, salons }) {
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Объект расхода</label>
+            <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Объект расхода</label>
             <ObjectsSelect value={form.objects} onChange={v => set('objects', v)} salons={salons} />
-            <p className="text-[11px] text-gray-400 mt-1">Выберите салоны или введите произвольный текст</p>
+            <p className="text-[11px] text-[color:var(--color-text-faint)] mt-1">Выберите салоны или введите произвольный текст</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Ответственный</label>
+              <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Ответственный</label>
               <input className="input text-sm"
                 value={form.responsible_name} onChange={e => set('responsible_name', e.target.value)} placeholder="Иванов И." />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Telegram ID</label>
+              <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Telegram ID</label>
               <input className="input text-sm"
                 value={form.responsible_tg_id} onChange={e => set('responsible_tg_id', e.target.value)} placeholder="123456789" />
             </div>
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Уведомить за (дней)</label>
+            <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Уведомить за (дней)</label>
             <input type="number" min={0} max={14} className="input text-sm"
               value={form.notify_days_before} onChange={e => set('notify_days_before', +e.target.value)} />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Примечание</label>
+            <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Примечание</label>
             <textarea rows={2} className="input text-sm"
               value={form.note} onChange={e => set('note', e.target.value)} />
           </div>
 
           <div className="border-t pt-3 mt-1 space-y-3">
-            <p className="text-xs font-medium text-gray-600">Отправка счёта кассиру</p>
+            <p className="text-xs font-medium text-[color:var(--color-text-muted)]">Отправка счёта кассиру</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Продавец</label>
+                <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Продавец</label>
                 <input className="input text-sm"
                   value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="ООО «Ромашка»" />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Платим от</label>
+                <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Платим от</label>
                 <input className="input text-sm"
                   value={form.pay_from} onChange={e => set('pay_from', e.target.value)} placeholder="ИП Иванов / Салон на Ленина" />
               </div>
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Файл счёта</label>
+              <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Файл счёта</label>
               <input type="file" accept="image/*,application/pdf"
-                className="w-full text-sm border rounded-lg px-3 py-2 file:mr-2 file:text-xs file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1"
+                className="w-full text-sm border rounded-lg px-3 py-2 file:mr-2 file:text-xs file:rounded file:border-0 file:bg-[color:var(--color-bg-subtle)] file:px-2 file:py-1"
                 onChange={e => setInvoiceFile(e.target.files?.[0] || null)} />
               {!invoiceFile && form.invoice_file_url && (
                 <a href={form.invoice_file_url} target="_blank" rel="noreferrer"
                   className="text-[11px] text-blue-600 hover:underline mt-1 inline-block">Текущий файл счёта</a>
               )}
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-[color:var(--color-text)] cursor-pointer">
               <input type="checkbox" checked={notifyCashier} onChange={e => setNotifyCashier(e.target.checked)} />
               Отправить кассиру в Telegram
             </label>
           </div>
         </div>
         <div className="p-4 border-t flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Отмена</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[color:var(--color-border)] hover:bg-[color:var(--color-control-bg-hover)]">Отмена</button>
           <button onClick={() => onSave(form, { invoiceFile, notifyCashier })}
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
             Сохранить
@@ -309,26 +309,26 @@ function PayModal({ record, onPay, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+      <div className="bg-[color:var(--color-surface)] rounded-xl shadow-xl w-full max-w-sm">
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="font-semibold text-gray-800">Отметить как оплачено</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <h2 className="font-semibold text-[color:var(--color-text)]">Отметить как оплачено</h2>
+          <button onClick={onClose} className="text-[color:var(--color-text-faint)] hover:text-[color:var(--color-text-muted)] text-xl">✕</button>
         </div>
         <div className="p-4 space-y-3">
-          <p className="text-sm text-gray-600">{record.schedule?.name}</p>
+          <p className="text-sm text-[color:var(--color-text-muted)]">{record.schedule?.name}</p>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Фактическая сумма (₽)</label>
+            <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Фактическая сумма (₽)</label>
             <input type="number" className="input text-sm"
               value={amount} onChange={e => setAmount(e.target.value)} />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">Комментарий</label>
+            <label className="text-xs text-[color:var(--color-text-muted)] mb-1 block">Комментарий</label>
             <input className="input text-sm"
               value={comment} onChange={e => setComment(e.target.value)} placeholder="Необязательно" />
           </div>
         </div>
         <div className="p-4 border-t flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Отмена</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[color:var(--color-border)] hover:bg-[color:var(--color-control-bg-hover)]">Отмена</button>
           <button onClick={() => onPay(record.id, parseFloat(amount) || null, comment || null)}
             className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700">
             ✓ Оплачено
@@ -347,26 +347,26 @@ function DetailModal({ schedule, record, onClose, onEdit }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-[color:var(--color-surface)] rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="font-semibold text-gray-800">{schedule.name}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <h2 className="font-semibold text-[color:var(--color-text)]">{schedule.name}</h2>
+          <button onClick={onClose} className="text-[color:var(--color-text-faint)] hover:text-[color:var(--color-text-muted)] text-xl">✕</button>
         </div>
         <div className="p-4 space-y-4 text-sm">
-          <div className="grid grid-cols-2 gap-2 text-gray-700">
-            <div><span className="text-gray-400">Сумма:</span> {fmt(schedule.planned_amount)} ₽</div>
-            <div><span className="text-gray-400">День месяца:</span> {schedule.day_of_month}</div>
-            {schedule.category && <div><span className="text-gray-400">Категория:</span> {schedule.category}</div>}
-            {record && <div><span className="text-gray-400">Статус:</span> {record.status === 'paid' ? 'Оплачено' : record.status === 'skipped' ? 'Пропущено' : 'Ожидает'}</div>}
-            {schedule.seller && <div><span className="text-gray-400">Продавец:</span> {schedule.seller}</div>}
-            {schedule.pay_from && <div><span className="text-gray-400">Платим от:</span> {schedule.pay_from}</div>}
-            {schedule.responsible_name && <div><span className="text-gray-400">Ответственный:</span> {schedule.responsible_name}</div>}
-            {(schedule.objects || []).length > 0 && <div className="col-span-2"><span className="text-gray-400">Объекты:</span> {schedule.objects.join(', ')}</div>}
+          <div className="grid grid-cols-2 gap-2 text-[color:var(--color-text)]">
+            <div><span className="text-[color:var(--color-text-faint)]">Сумма:</span> {fmt(schedule.planned_amount)} ₽</div>
+            <div><span className="text-[color:var(--color-text-faint)]">День месяца:</span> {schedule.day_of_month}</div>
+            {schedule.category && <div><span className="text-[color:var(--color-text-faint)]">Категория:</span> {schedule.category}</div>}
+            {record && <div><span className="text-[color:var(--color-text-faint)]">Статус:</span> {record.status === 'paid' ? 'Оплачено' : record.status === 'skipped' ? 'Пропущено' : 'Ожидает'}</div>}
+            {schedule.seller && <div><span className="text-[color:var(--color-text-faint)]">Продавец:</span> {schedule.seller}</div>}
+            {schedule.pay_from && <div><span className="text-[color:var(--color-text-faint)]">Платим от:</span> {schedule.pay_from}</div>}
+            {schedule.responsible_name && <div><span className="text-[color:var(--color-text-faint)]">Ответственный:</span> {schedule.responsible_name}</div>}
+            {(schedule.objects || []).length > 0 && <div className="col-span-2"><span className="text-[color:var(--color-text-faint)]">Объекты:</span> {schedule.objects.join(', ')}</div>}
           </div>
-          {schedule.note && <p className="text-gray-500 text-xs border-t pt-2">{schedule.note}</p>}
+          {schedule.note && <p className="text-[color:var(--color-text-muted)] text-xs border-t pt-2">{schedule.note}</p>}
 
           <div className="border-t pt-3">
-            <p className="text-xs font-medium text-gray-600 mb-2">Счёт</p>
+            <p className="text-xs font-medium text-[color:var(--color-text-muted)] mb-2">Счёт</p>
             {url ? (
               <>
                 {isPdf ? (
@@ -378,12 +378,12 @@ function DetailModal({ schedule, record, onClose, onEdit }) {
                   className="text-xs text-blue-600 hover:underline mt-2 inline-block">Открыть в новой вкладке</a>
               </>
             ) : (
-              <p className="text-xs text-gray-400 italic">Файл счёта не приложен</p>
+              <p className="text-xs text-[color:var(--color-text-faint)] italic">Файл счёта не приложен</p>
             )}
           </div>
         </div>
         <div className="p-4 border-t flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Закрыть</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-[color:var(--color-border)] hover:bg-[color:var(--color-control-bg-hover)]">Закрыть</button>
           <button onClick={onEdit} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">Редактировать</button>
         </div>
       </div>
@@ -573,7 +573,7 @@ export default function PaymentCalendar() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-bold text-gray-800">Платежный календарь</h1>
+        <h1 className="text-xl font-bold text-[color:var(--color-text)]">Платежный календарь</h1>
         <button onClick={() => setScheduleModal('new')}
           className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
           + Добавить платёж
@@ -581,10 +581,10 @@ export default function PaymentCalendar() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-[color:var(--color-bg-subtle)] p-1 rounded-lg w-fit">
         {[['calendar','Календарь'],['schedules','Платежи'],['settings','Настройки']].map(([k,l]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === k ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === k ? 'bg-[color:var(--color-surface)] shadow text-[color:var(--color-text)]' : 'text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]'}`}>
             {l}
           </button>
         ))}
@@ -594,24 +594,24 @@ export default function PaymentCalendar() {
         <>
           {/* Month navigation */}
           <div className="flex items-center gap-4">
-            <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600">‹</button>
-            <h2 className="text-base font-semibold text-gray-800 min-w-[140px] text-center">
+            <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-[color:var(--color-control-bg-hover)] text-[color:var(--color-text-muted)]">‹</button>
+            <h2 className="text-base font-semibold text-[color:var(--color-text)] min-w-[140px] text-center">
               {MONTH_NAMES[month]} {year}
             </h2>
-            <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600">›</button>
+            <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-[color:var(--color-control-bg-hover)] text-[color:var(--color-text-muted)]">›</button>
           </div>
 
           {/* Stats bar */}
           {!loading && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: 'Всего платежей', value: records.length, color: 'text-gray-800' },
+                { label: 'Всего платежей', value: records.length, color: 'text-[color:var(--color-text)]' },
                 { label: 'Оплачено', value: paidCount, color: 'text-green-700' },
-                { label: 'Просрочено', value: overdueCount, color: overdueCount > 0 ? 'text-red-700' : 'text-gray-400' },
-                { label: 'Итого план', value: `${fmt(total)} ₽`, color: 'text-gray-800' },
+                { label: 'Просрочено', value: overdueCount, color: overdueCount > 0 ? 'text-red-700' : 'text-[color:var(--color-text-faint)]' },
+                { label: 'Итого план', value: `${fmt(total)} ₽`, color: 'text-[color:var(--color-text)]' },
               ].map(s => (
-                <div key={s.label} className="bg-white border border-gray-100 rounded-xl p-3">
-                  <p className="text-xs text-gray-500">{s.label}</p>
+                <div key={s.label} className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl p-3">
+                  <p className="text-xs text-[color:var(--color-text-muted)]">{s.label}</p>
                   <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
                 </div>
               ))}
@@ -619,14 +619,14 @@ export default function PaymentCalendar() {
           )}
 
           {/* Calendar grid */}
-          <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-            <div className="grid grid-cols-7 bg-gray-50 border-b">
+          <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl overflow-hidden">
+            <div className="grid grid-cols-7 bg-[color:var(--color-bg-subtle)] border-b">
               {DAY_NAMES.map(d => (
-                <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
+                <div key={d} className="text-center text-xs font-medium text-[color:var(--color-text-muted)] py-2">{d}</div>
               ))}
             </div>
             {loading ? (
-              <div className="h-40 flex items-center justify-center text-gray-400 text-sm">Загрузка...</div>
+              <div className="h-40 flex items-center justify-center text-[color:var(--color-text-faint)] text-sm">Загрузка...</div>
             ) : (
               weeks.map((week, wi) => (
                 <div key={wi} className="grid grid-cols-7 border-b last:border-b-0">
@@ -644,7 +644,7 @@ export default function PaymentCalendar() {
                         {day && (
                           <>
                             <span className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full
-                              ${isToday ? 'bg-yellow-400 text-white' : 'text-gray-700'}`}>
+                              ${isToday ? 'bg-yellow-400 text-white' : 'text-[color:var(--color-text)]'}`}>
                               {day}
                             </span>
                             {dot && <span className={`w-2 h-2 rounded-full ${dot}`} />}
@@ -659,7 +659,7 @@ export default function PaymentCalendar() {
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+          <div className="flex flex-wrap gap-3 text-xs text-[color:var(--color-text-muted)]">
             {[['bg-green-500','Оплачено'],['bg-red-500','Просрочено'],['bg-yellow-400','Скоро (≤ 3 дней)'],['bg-blue-400','Предстоит'],['bg-gray-400','Пропущено']].map(([c,l]) => (
               <span key={l} className="flex items-center gap-1.5">
                 <span className={`w-2.5 h-2.5 rounded-full ${c}`} />
@@ -675,7 +675,7 @@ export default function PaymentCalendar() {
                 .filter(day => highlightDay === null || day === highlightDay)
                 .map(day => (
                   <div key={day}>
-                    <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                    <h3 className="text-sm font-semibold text-[color:var(--color-text-muted)] mb-2">
                       {day} {MONTH_NAMES[month].toLowerCase()}
                     </h3>
                     <div className="space-y-2">
@@ -741,7 +741,7 @@ export default function PaymentCalendar() {
                   </div>
                 ))}
               {records.length === 0 && (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-[color:var(--color-text-faint)]">
                   <p className="text-4xl mb-2">📅</p>
                   <p>Нет платежей за этот месяц</p>
                   <p className="text-sm mt-1">Добавьте регулярные платежи через кнопку выше</p>
@@ -754,11 +754,11 @@ export default function PaymentCalendar() {
 
       {tab === 'schedules' && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-[color:var(--color-text-muted)]">
             Список регулярных платежей. Каждый месяц для них автоматически создаются записи.
           </p>
           {schedules.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-[color:var(--color-text-faint)]">
               <p className="text-4xl mb-2">📋</p>
               <p>Нет платежей. Добавьте первый.</p>
             </div>
@@ -766,39 +766,39 @@ export default function PaymentCalendar() {
             <div className="space-y-2">
               {schedules.map(s => (
                 <div key={s.id} onClick={() => setDetailItem({ schedule: s })}
-                  className={`bg-white border rounded-xl p-4 flex items-center justify-between gap-3 cursor-pointer hover:border-blue-200 hover:bg-blue-50/30 transition-colors
+                  className={`bg-[color:var(--color-surface)] border rounded-xl p-4 flex items-center justify-between gap-3 cursor-pointer hover:border-blue-200 hover:bg-blue-50/30 transition-colors
                   ${!s.is_active ? 'opacity-50' : ''}`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm">{s.name}</span>
                       {s.category && (
-                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{s.category}</span>
+                        <span className="text-xs px-2 py-0.5 bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] rounded-full">{s.category}</span>
                       )}
                       {!s.is_active && (
-                        <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">Неактивен</span>
+                        <span className="text-xs px-2 py-0.5 bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] rounded-full">Неактивен</span>
                       )}
                       {s.invoice_file_url && (
-                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">📎</span>
+                        <span className="text-xs px-2 py-0.5 bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] rounded-full">📎</span>
                       )}
                       {(s.objects || []).map(obj => (
                         <span key={obj} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100">🏢 {obj}</span>
                       ))}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
+                    <div className="text-xs text-[color:var(--color-text-muted)] mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
                       <span>{fmt(s.planned_amount)} ₽</span>
                       <span>День: {s.day_of_month}</span>
                       {s.responsible_name && <span>👤 {s.responsible_name}</span>}
                       <span>Уведомить за {s.notify_days_before} д.</span>
                     </div>
-                    {s.note && <p className="text-xs text-gray-400 mt-1 truncate">{s.note}</p>}
+                    {s.note && <p className="text-xs text-[color:var(--color-text-faint)] mt-1 truncate">{s.note}</p>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
                     <button onClick={() => handleToggleActive(s)}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
+                      className="px-2.5 py-1 text-xs rounded-lg border border-[color:var(--color-border)] hover:bg-[color:var(--color-control-bg-hover)] text-[color:var(--color-text-muted)]">
                       {s.is_active ? 'Откл' : 'Вкл'}
                     </button>
                     <button onClick={() => setScheduleModal(s)}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600">
+                      className="px-2.5 py-1 text-xs rounded-lg border border-[color:var(--color-border)] hover:bg-[color:var(--color-control-bg-hover)] text-[color:var(--color-text-muted)]">
                       ✎
                     </button>
                     <button onClick={() => handleDeleteSchedule(s.id)}

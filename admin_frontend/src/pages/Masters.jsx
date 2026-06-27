@@ -27,7 +27,7 @@ const fmtDt = (v) => {
 const STATUS_COLORS = {
   'Выполнено': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   'В работе':  'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  'Прочее':    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+  'Прочее':    'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] dark:text-[color:var(--color-text-faint)]',
 };
 
 const DURATION_OPTIONS = [
@@ -124,19 +124,19 @@ function MastersSummaryTable({ rows, onMasterClick }) {
         isMobile ? (
           <div className="space-y-3 p-3">
             {byMaster.map((m) => (
-              <div key={m.name} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">
+              <div key={m.name} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium">
                   <button onClick={() => onMasterClick(m.name)}
                     className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
                     {m.name}
                   </button>
                 </div>
                 <div className="px-4 py-2 space-y-1.5 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">Всего</span><span>{m.total}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Выполнено</span><span className="text-green-600">{m.done}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">В работе</span><span className="text-yellow-600">{m.inWork}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Медиана</span><span>{fmtMin(median(m.durations))}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Нарушений</span><span>{m.warnings > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Всего</span><span>{m.total}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Выполнено</span><span className="text-green-600">{m.done}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">В работе</span><span className="text-yellow-600">{m.inWork}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Медиана</span><span>{fmtMin(median(m.durations))}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Нарушений</span><span>{m.warnings > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
                 </div>
               </div>
             ))}
@@ -182,29 +182,29 @@ function MastersSummaryTable({ rows, onMasterClick }) {
         isMobile ? (
           <div className="space-y-3 p-3">
             {bySalaryMaster.map((m) => (
-              <div key={m.master} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">
+              <div key={m.master} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium">
                   <button onClick={() => onMasterClick(m.master)}
                     className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
                     {m.master}
                   </button>
                 </div>
                 <div className="px-4 py-2 space-y-1.5 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">Учтено в ЗП</span><span>{m.services_done}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Сумма услуг</span><span className="text-[color:var(--color-muted-foreground)]">{fmtRub(m.total_kredit)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Зарплата</span><span className="font-semibold text-[color:var(--color-primary)]">{fmtRub(m.total_salary)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Нарушений</span><span>{m.warnings_count > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings_count}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Учтено в ЗП</span><span>{m.services_done}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Сумма услуг</span><span className="text-[color:var(--color-muted-foreground)]">{fmtRub(m.total_kredit)}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Зарплата</span><span className="font-semibold text-[color:var(--color-primary)]">{fmtRub(m.total_salary)}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Нарушений</span><span>{m.warnings_count > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings_count}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
                 </div>
               </div>
             ))}
             {bySalaryMaster.length > 0 && (
               <div className="border rounded-xl bg-[color:var(--color-muted)]/20 shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-semibold">Итого</div>
+                <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-semibold">Итого</div>
                 <div className="px-4 py-2 space-y-1.5 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">Учтено в ЗП</span><span className="font-semibold">{bySalaryMaster.reduce((s, r) => s + r.services_done, 0)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Сумма услуг</span><span className="font-semibold">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_kredit || 0), 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Зарплата</span><span className="font-semibold text-[color:var(--color-primary)]">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_salary || 0), 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Нарушений</span><span className="font-semibold">{bySalaryMaster.reduce((s, r) => s + (r.warnings_count || 0), 0)}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Учтено в ЗП</span><span className="font-semibold">{bySalaryMaster.reduce((s, r) => s + r.services_done, 0)}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Сумма услуг</span><span className="font-semibold">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_kredit || 0), 0))}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Зарплата</span><span className="font-semibold text-[color:var(--color-primary)]">{fmtRub(bySalaryMaster.reduce((s, r) => s + (r.total_salary || 0), 0))}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Нарушений</span><span className="font-semibold">{bySalaryMaster.reduce((s, r) => s + (r.warnings_count || 0), 0)}</span></div>
                 </div>
               </div>
             )}

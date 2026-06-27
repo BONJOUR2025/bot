@@ -135,7 +135,7 @@ export default function Schedule() {
               const emp = todayByPoint[code];
               return (
                 <div key={code}
-                  className={`app-card border-l-4 p-3 ${s.border || 'border-gray-300'}`}>
+                  className={`app-card border-l-4 p-3 ${s.border || 'border-[color:var(--color-border)]'}`}>
                   <div className="mb-1 flex items-center gap-1.5">
                     <span className={`h-2 w-2 rounded-full ${s.dot || 'bg-gray-400'}`} />
                     <span className="text-xs font-semibold text-[color:var(--color-muted-foreground)]">
@@ -199,20 +199,20 @@ export default function Schedule() {
                   .map(d => ({ day: d.day, weekday_short: d.weekday_short, code: d.assignments[emp], isToday: isCurrentMonth && d.day === todayDay, isWeekend: d.is_weekend }));
                 const todayAssignment = assignments.find(a => a.isToday);
                 return (
-                  <div key={emp} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{emp}</div>
+                  <div key={emp} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium">{emp}</div>
                     <div className="px-4 py-2 space-y-1.5 text-sm">
                       {todayAssignment && (
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-500">Сегодня</span>
+                          <span className="text-[color:var(--color-text-muted)]">Сегодня</span>
                           <PointChip code={todayAssignment.code} />
                         </div>
                       )}
-                      <div className="flex justify-between"><span className="text-gray-500">Смен в месяце</span><span>{assignments.length}</span></div>
+                      <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Смен в месяце</span><span>{assignments.length}</span></div>
                       {assignments.length > 0 && (
                         <div className="flex flex-wrap gap-1 pt-1">
                           {assignments.map(a => (
-                            <span key={a.day} className={`text-xs px-1.5 py-0.5 rounded border ${a.isToday ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 font-semibold' : a.isWeekend ? 'border-red-200 bg-red-50' : 'border-gray-200'}`}>
+                            <span key={a.day} className={`text-xs px-1.5 py-0.5 rounded border ${a.isToday ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 font-semibold' : a.isWeekend ? 'border-red-200 bg-red-50' : 'border-[color:var(--color-border)]'}`}>
                               {a.day} <PointChip code={a.code} />
                             </span>
                           ))}

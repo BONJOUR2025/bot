@@ -55,7 +55,7 @@ export default function LeaveRequests() {
       <h2 className="text-2xl font-semibold">Заявки на отгул/отсутствие</h2>
 
       {loading ? (
-        <div className="border rounded shadow bg-white p-4">
+        <div className="border rounded shadow bg-[color:var(--color-surface)] p-4">
           <SkeletonTable rows={6} cols={5} />
         </div>
       ) : (
@@ -71,7 +71,7 @@ export default function LeaveRequests() {
             {
               label: 'Статус',
               render: (r) => (
-                <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${STATUS_LABELS[r.status] || 'bg-gray-100 text-gray-700'}`}>
+                <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${STATUS_LABELS[r.status] || 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text)]'}`}>
                   {r.status}
                 </span>
               ),

@@ -18,7 +18,7 @@ export default function Reports() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-gray-800 flex items-center gap-2">
+      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
         <Download size={24} /> Отчёты
       </h2>
       <button onClick={downloadReport} className="btn">

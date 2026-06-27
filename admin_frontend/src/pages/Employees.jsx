@@ -58,18 +58,18 @@ function ExternalUserSelect({ value, onChange }) {
         onFocus={() => setOpen(true)}
       />
       {matched && (
-        <div className="text-xs text-gray-500">{matched.description}</div>
+        <div className="text-xs text-[color:var(--color-text-muted)]">{matched.description}</div>
       )}
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[color:var(--color-surface)] border rounded-lg shadow-lg max-h-52 overflow-y-auto">
           {options.map((o) => (
             <button key={o.user_id} type="button" onClick={() => pick(o)}
               className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50">
-              {o.description} <span className="text-xs text-gray-400">№{o.user_id}</span>
+              {o.description} <span className="text-xs text-[color:var(--color-text-faint)]">№{o.user_id}</span>
             </button>
           ))}
           {options.length === 0 && (
-            <div className="px-3 py-2 text-xs text-gray-400">Совпадений не найдено — можно вписать ID вручную</div>
+            <div className="px-3 py-2 text-xs text-[color:var(--color-text-faint)]">Совпадений не найдено — можно вписать ID вручную</div>
           )}
         </div>
       )}
@@ -400,19 +400,19 @@ export default function Employees() {
           <Trash2 size={16} /> Удалить выбранных
         </button>
         <Link
-          className="btn w-full sm:w-auto bg-gray-100 text-gray-800 hover:bg-gray-200"
+          className="btn w-full sm:w-auto bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"
           to="/admin/archive"
         >
           <Archive size={16} /> Архив
         </Link>
       </div>
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-[color:var(--color-text-muted)]">
         Чтобы отправить сотрудника в архив, сначала переведите его в статус{' '}
         <span className="font-medium">inactive</span>.
       </p>
 
       {loading ? (
-        <div className="border rounded shadow bg-white p-4">
+        <div className="border rounded shadow bg-[color:var(--color-surface)] p-4">
           <SkeletonTable rows={8} cols={6} />
         </div>
       ) : (
@@ -448,8 +448,8 @@ export default function Employees() {
                       onClick={() => window.open(e.photo_url, '_blank')}
                     />
                   ) : (
-                    <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                      <span className="text-gray-500 text-xs">—</span>
+                    <div className="w-8 h-8 bg-[color:var(--color-control-bg)] rounded-full flex items-center justify-center">
+                      <span className="text-[color:var(--color-text-muted)] text-xs">—</span>
                     </div>
                   )}
                 </span>
@@ -480,7 +480,7 @@ export default function Employees() {
             {
               label: 'Создан',
               mobileHide: true,
-              cellClass: 'text-gray-400 text-xs',
+              cellClass: 'text-[color:var(--color-text-faint)] text-xs',
               render: (e) => new Date(e.created_at).toLocaleDateString(),
             },
             {
@@ -499,7 +499,7 @@ export default function Employees() {
                     </button>
                     <a
                       href={`/api/employees/${e.id}/profile.pdf`}
-                      className="text-gray-600"
+                      className="text-[color:var(--color-text-muted)]"
                       title="Скачать PDF"
                     >
                       <FileDown size={16} />
@@ -508,7 +508,7 @@ export default function Employees() {
                       className={
                         canArchive
                           ? 'text-amber-600 hover:text-amber-800'
-                          : 'cursor-not-allowed text-gray-400'
+                          : 'cursor-not-allowed text-[color:var(--color-text-faint)]'
                       }
                       onClick={() => { if (canArchive) moveToArchive(e.id); }}
                       disabled={!canArchive}

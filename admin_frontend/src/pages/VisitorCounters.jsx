@@ -172,7 +172,7 @@ export default function VisitorCounters() {
 
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
         <div className="w-full sm:w-auto">
-          <label className="block text-xs text-gray-500 mb-1">С даты</label>
+          <label className="block text-xs text-[color:var(--color-text-muted)] mb-1">С даты</label>
           <input
             type="date"
             className="input w-full sm:w-auto"
@@ -181,7 +181,7 @@ export default function VisitorCounters() {
           />
         </div>
         <div className="w-full sm:w-auto">
-          <label className="block text-xs text-gray-500 mb-1">По дату</label>
+          <label className="block text-xs text-[color:var(--color-text-muted)] mb-1">По дату</label>
           <input
             type="date"
             className="input w-full sm:w-auto"
@@ -190,7 +190,7 @@ export default function VisitorCounters() {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Салон</label>
+          <label className="block text-xs text-[color:var(--color-text-muted)] mb-1">Салон</label>
           <select
             className="input"
             value={filters.salon_id}
@@ -210,11 +210,11 @@ export default function VisitorCounters() {
         {cumulative.map((row) => (
           <div key={row.salon_id} className="app-card flex flex-wrap items-center justify-between gap-3 p-4">
             <div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-[color:var(--color-text-muted)]">
                 {row.salon_name || row.salon_id}{row.reset_at ? ` · с ${fmtDateTime(row.reset_at)}` : ''}
               </div>
-              <div className="text-2xl font-semibold text-gray-900">{row.in_count}</div>
-              <div className="text-xs text-gray-500 mt-1">Вышло: {row.out_count} · Сейчас в зале: {row.net}</div>
+              <div className="text-2xl font-semibold text-[color:var(--color-text)]">{row.in_count}</div>
+              <div className="text-xs text-[color:var(--color-text-muted)] mt-1">Вышло: {row.out_count} · Сейчас в зале: {row.net}</div>
             </div>
             <button
               type="button"
@@ -227,18 +227,18 @@ export default function VisitorCounters() {
           </div>
         ))}
         {cumulative.length === 0 && (
-          <p className="text-sm text-gray-500">Нет салонов с данными счётчика.</p>
+          <p className="text-sm text-[color:var(--color-text-muted)]">Нет салонов с данными счётчика.</p>
         )}
       </div>
 
-      <div className="flex gap-4 text-sm text-gray-600">
-        <span>Вошло за период: <strong className="text-gray-900">{totals.in}</strong></span>
-        <span>Вышло за период: <strong className="text-gray-900">{totals.out}</strong></span>
+      <div className="flex gap-4 text-sm text-[color:var(--color-text-muted)]">
+        <span>Вошло за период: <strong className="text-[color:var(--color-text)]">{totals.in}</strong></span>
+        <span>Вышло за период: <strong className="text-[color:var(--color-text)]">{totals.out}</strong></span>
       </div>
 
       {tab === 'table' && (
         loading ? (
-          <p className="text-gray-500">Загрузка…</p>
+          <p className="text-[color:var(--color-text-muted)]">Загрузка…</p>
         ) : (
           <ResponsiveTable
             columns={columns}
@@ -280,10 +280,10 @@ function VisitorAnalytics({ summary, loading }) {
     return Array.from(map.values()).sort((a, b) => b.visits - a.visits);
   }, [summary]);
 
-  if (loading) return <p className="text-gray-500">Загрузка…</p>;
+  if (loading) return <p className="text-[color:var(--color-text-muted)]">Загрузка…</p>;
   if (chartData.length === 0) {
     return (
-      <div className="rounded border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
+      <div className="rounded border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 text-center text-[color:var(--color-text-muted)]">
         Нет данных за выбранный период
       </div>
     );
@@ -369,7 +369,7 @@ function DeviceConnection({ salons }) {
 
   const endpointUrl = `${window.location.origin}/api/visitor-events/ingest`;
 
-  if (!loaded) return <p className="text-gray-500">Загрузка…</p>;
+  if (!loaded) return <p className="text-[color:var(--color-text-muted)]">Загрузка…</p>;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -381,7 +381,7 @@ function DeviceConnection({ salons }) {
             <Copy size={14} />
           </button>
         </div>
-        <p className="text-xs text-gray-500">Метод POST, тело JSON, заголовок X-API-Key с ключом ниже.</p>
+        <p className="text-xs text-[color:var(--color-text-muted)]">Метод POST, тело JSON, заголовок X-API-Key с ключом ниже.</p>
       </div>
 
       <div className="app-card p-4 space-y-3">
@@ -414,14 +414,14 @@ function DeviceConnection({ salons }) {
 
       <div className="app-card p-4 space-y-3">
         <h3 className="font-semibold">Коды салонов</h3>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-[color:var(--color-text-muted)]">
           Устройство указывает код салона (как в разделе «Салоны»), а не внутренний id.
         </p>
         <div className="space-y-1 text-sm">
           {salons.map((s) => (
-            <div key={s.id} className="flex items-center justify-between gap-2 border-b border-gray-100 py-1 last:border-0">
+            <div key={s.id} className="flex items-center justify-between gap-2 border-b border-[color:var(--color-border)] py-1 last:border-0">
               <span>{s.name}</span>
-              <code className="text-xs bg-gray-100 px-2 py-0.5 rounded">{s.code || '—'}</code>
+              <code className="text-xs bg-[color:var(--color-bg-subtle)] px-2 py-0.5 rounded">{s.code || '—'}</code>
             </div>
           ))}
         </div>

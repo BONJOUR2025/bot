@@ -58,29 +58,29 @@ export default function EmployeeMessages() {
         <MessageCircle size={24} /> Сообщения от сотрудников
       </h2>
 
-      {loading && <p className="text-gray-500">Загрузка…</p>}
+      {loading && <p className="text-[color:var(--color-text-muted)]">Загрузка…</p>}
 
       {!loading && messages.length === 0 && (
-        <div className="rounded border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
+        <div className="rounded border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 text-center text-[color:var(--color-text-muted)]">
           Сообщений нет
         </div>
       )}
 
       <div className="grid gap-4">
         {messages.map((m) => {
-          const st = STATUS_LABELS[m.status] || { label: m.status, cls: 'bg-gray-100 text-gray-700' };
+          const st = STATUS_LABELS[m.status] || { label: m.status, cls: 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text)]' };
           return (
-            <article key={m.id} className="rounded border border-gray-200 bg-white p-4 shadow-sm space-y-2">
+            <article key={m.id} className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 shadow-sm space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium text-gray-800">{m.name}</span>
+                <span className="font-medium text-[color:var(--color-text)]">{m.name}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">{fmtDateTime(m.created_at)}</span>
+                  <span className="text-xs text-[color:var(--color-text-faint)]">{fmtDateTime(m.created_at)}</span>
                   <span className={`rounded px-2 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
                 </div>
               </div>
-              <p className="whitespace-pre-wrap text-gray-900">{m.message}</p>
+              <p className="whitespace-pre-wrap text-[color:var(--color-text)]">{m.message}</p>
               {m.reply && (
-                <div className="rounded bg-gray-50 p-2 text-sm text-gray-700">
+                <div className="rounded bg-[color:var(--color-bg-subtle)] p-2 text-sm text-[color:var(--color-text)]">
                   <span className="font-medium">Ответ:</span> {m.reply}
                 </div>
               )}

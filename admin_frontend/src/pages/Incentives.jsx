@@ -103,7 +103,7 @@ export default function Incentives() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-gray-800">Штрафы и премии</h2>
+      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Штрафы и премии</h2>
       <div className="flex flex-wrap gap-2 items-end">
         <select
           className="input"
@@ -235,7 +235,7 @@ export default function Incentives() {
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowForm(false)}>
+              <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={() => setShowForm(false)}>
                 Отмена
               </button>
               <button className="btn" onClick={saveForm}>

@@ -306,12 +306,12 @@ export default function AccessControl() {
         {isMobile ? (
           <div className="space-y-3">
             {data.roles.map((role) => (
-              <div key={role.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium">{role.name}</div>
+              <div key={role.id} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium">{role.name}</div>
                 <div className="px-4 py-2 space-y-1.5 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">ID</span><span>{role.id}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Права</span><span className="text-right max-w-[60%]">{role.permissions.length ? role.permissions.join(', ') : 'Нет'}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Кнопки бота</span><span className="text-right max-w-[60%]">{role.bot_buttons.length ? role.bot_buttons.join(', ') : 'По умолчанию'}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">ID</span><span>{role.id}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Права</span><span className="text-right max-w-[60%]">{role.permissions.length ? role.permissions.join(', ') : 'Нет'}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Кнопки бота</span><span className="text-right max-w-[60%]">{role.bot_buttons.length ? role.bot_buttons.join(', ') : 'По умолчанию'}</span></div>
                 </div>
                 <div className="px-4 py-2 border-t flex justify-end gap-3">
                   <button className="btn" onClick={() => startRoleEdit(role)}>Изменить</button>
@@ -323,11 +323,11 @@ export default function AccessControl() {
         ) : (
           <div className="grid gap-3">
             {data.roles.map((role) => (
-              <div key={role.id} className="border rounded p-4 bg-white shadow-sm">
+              <div key={role.id} className="border rounded p-4 bg-[color:var(--color-surface)] shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="font-semibold text-lg">{role.name}</h3>
-                    <p className="text-sm text-gray-500">ID: {role.id}</p>
+                    <p className="text-sm text-[color:var(--color-text-muted)]">ID: {role.id}</p>
                     <p className="text-sm mt-2">
                       Права: {role.permissions.length ? role.permissions.join(', ') : 'Нет'}
                     </p>
@@ -347,13 +347,13 @@ export default function AccessControl() {
           </div>
         )}
         {roleForm && (
-          <form className="border rounded p-4 bg-white space-y-4" onSubmit={submitRole}>
+          <form className="border rounded p-4 bg-[color:var(--color-surface)] space-y-4" onSubmit={submitRole}>
             <h3 className="text-lg font-semibold">
               {isRoleNew ? 'Новая роль' : `Редактирование роли «${roleForm.name}»`}
             </h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700" htmlFor="role-id">
+                <label className="block text-sm font-medium text-[color:var(--color-text)]" htmlFor="role-id">
                   Идентификатор
                 </label>
                 <input
@@ -366,7 +366,7 @@ export default function AccessControl() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700" htmlFor="role-name">
+                <label className="block text-sm font-medium text-[color:var(--color-text)]" htmlFor="role-name">
                   Название
                 </label>
                 <input
@@ -398,7 +398,7 @@ export default function AccessControl() {
               <div className="space-y-3">
                 {Object.entries(buttonGroups).map(([scope, buttons]) => (
                   <div key={scope}>
-                    <p className="text-sm font-semibold text-gray-600 mb-1">
+                    <p className="text-sm font-semibold text-[color:var(--color-text-muted)] mb-1">
                       {scope === 'user' ? 'Пользовательское меню' : scope === 'common' ? 'Обязательные' : scope}
                     </p>
                     <div className="grid md:grid-cols-2 gap-2">
@@ -422,7 +422,7 @@ export default function AccessControl() {
               <button className="btn" type="submit">
                 Сохранить
               </button>
-              <button className="btn bg-gray-200 text-gray-700" type="button" onClick={cancelRoleForm}>
+              <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)]" type="button" onClick={cancelRoleForm}>
                 Отмена
               </button>
             </div>
@@ -438,23 +438,23 @@ export default function AccessControl() {
         {isMobile ? (
           <div className="space-y-3">
             {data.users.map((user) => (
-              <div key={user.id} className="border rounded-xl bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex items-center justify-between">
+              <div key={user.id} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium flex items-center justify-between">
                   <span>{user.login || user.display_name || `#${user.id}`}</span>
                   {!user.has_login && (
-                    <span className="text-xs font-normal text-gray-500 bg-gray-200 rounded px-2 py-0.5">Бот, без входа в админку</span>
+                    <span className="text-xs font-normal text-[color:var(--color-text-muted)] bg-[color:var(--color-control-bg)] rounded px-2 py-0.5">Бот, без входа в админку</span>
                   )}
                 </div>
                 <div className="px-4 py-2 space-y-1.5 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">ID</span><span>{user.id}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">ID</span><span>{user.id}</span></div>
                   {user.display_name && (
-                    <div className="flex justify-between"><span className="text-gray-500">Имя</span><span>{user.display_name}</span></div>
+                    <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Имя</span><span>{user.display_name}</span></div>
                   )}
-                  <div className="flex justify-between"><span className="text-gray-500">Роль</span><span>{user.role_name || '—'}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Права</span><span className="text-right max-w-[60%]">{user.resolved_permissions.length ? user.resolved_permissions.join(', ') : 'нет'}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Кнопки</span><span className="text-right max-w-[60%]">{user.resolved_bot_button_labels.length ? user.resolved_bot_button_labels.join(', ') : 'по умолчанию'}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Роль</span><span>{user.role_name || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Права</span><span className="text-right max-w-[60%]">{user.resolved_permissions.length ? user.resolved_permissions.join(', ') : 'нет'}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Кнопки</span><span className="text-right max-w-[60%]">{user.resolved_bot_button_labels.length ? user.resolved_bot_button_labels.join(', ') : 'по умолчанию'}</span></div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Сотрудники</span>
+                    <span className="text-[color:var(--color-text-muted)]">Сотрудники</span>
                     <span className="text-right max-w-[60%]">
                       {user.resolved_employee_names.length > 0
                         ? user.resolved_employee_names.join(', ')
@@ -462,10 +462,10 @@ export default function AccessControl() {
                     </span>
                   </div>
                   {user.resolved_departments.length > 0 && (
-                    <div className="flex justify-between"><span className="text-gray-500">Отделы</span><span className="text-right max-w-[60%]">{user.resolved_departments.join(', ')}</span></div>
+                    <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Отделы</span><span className="text-right max-w-[60%]">{user.resolved_departments.join(', ')}</span></div>
                   )}
                   {user.employee_id && (
-                    <div className="flex justify-between"><span className="text-gray-500">Личный кабинет</span><span>сотрудник #{user.employee_id}</span></div>
+                    <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Личный кабинет</span><span>сотрудник #{user.employee_id}</span></div>
                   )}
                 </div>
                 <div className="px-4 py-2 border-t flex justify-end gap-3">
@@ -480,18 +480,18 @@ export default function AccessControl() {
         ) : (
           <div className="grid gap-3">
             {data.users.map((user) => (
-              <div key={user.id} className="border rounded p-4 bg-white shadow-sm">
+              <div key={user.id} className="border rounded p-4 bg-[color:var(--color-surface)] shadow-sm">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                   <div className="space-y-1">
                     <h3 className="text-lg font-semibold flex items-center gap-2">
                       {user.login || user.display_name || `#${user.id}`}
                       {!user.has_login && (
-                        <span className="text-xs font-normal text-gray-500 bg-gray-200 rounded px-2 py-0.5">Бот, без входа в админку</span>
+                        <span className="text-xs font-normal text-[color:var(--color-text-muted)] bg-[color:var(--color-control-bg)] rounded px-2 py-0.5">Бот, без входа в админку</span>
                       )}
                     </h3>
-                    <p className="text-sm text-gray-500">ID: {user.id}</p>
+                    <p className="text-sm text-[color:var(--color-text-muted)]">ID: {user.id}</p>
                     {user.display_name && user.login && (
-                      <p className="text-sm text-gray-500">{user.display_name}</p>
+                      <p className="text-sm text-[color:var(--color-text-muted)]">{user.display_name}</p>
                     )}
                     <p className="text-sm">Роль: {user.role_name || '—'}</p>
                     <p className="text-sm">
@@ -543,7 +543,7 @@ export default function AccessControl() {
             </h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700" htmlFor="user-id">
+                <label className="block text-sm font-medium text-[color:var(--color-text)]" htmlFor="user-id">
                   Идентификатор
                 </label>
                 <input
@@ -554,10 +554,10 @@ export default function AccessControl() {
                   required={isUserNew}
                   disabled={!isUserNew}
                 />
-                <p className="text-xs text-gray-500">Используйте ID из Telegram для связи с ботом.</p>
+                <p className="text-xs text-[color:var(--color-text-muted)]">Используйте ID из Telegram для связи с ботом.</p>
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700" htmlFor="user-login">
+                <label className="block text-sm font-medium text-[color:var(--color-text)]" htmlFor="user-login">
                   Логин
                 </label>
                 <input
@@ -569,13 +569,13 @@ export default function AccessControl() {
                   required={isUserNew}
                 />
                 {!isUserNew && !userForm.login && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[color:var(--color-text-muted)]">
                     Заполните логин и пароль, чтобы выдать доступ в админку.
                   </p>
                 )}
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700" htmlFor="user-password">
+                <label className="block text-sm font-medium text-[color:var(--color-text)]" htmlFor="user-password">
                   Пароль
                 </label>
                 <input
@@ -589,7 +589,7 @@ export default function AccessControl() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700" htmlFor="user-role">
+                <label className="block text-sm font-medium text-[color:var(--color-text)]" htmlFor="user-role">
                   Роль
                 </label>
                 <select
@@ -608,7 +608,7 @@ export default function AccessControl() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700" htmlFor="user-employee">
+              <label className="block text-sm font-medium text-[color:var(--color-text)]" htmlFor="user-employee">
                 Привязка к сотруднику (Личный кабинет)
               </label>
               <select
@@ -624,7 +624,7 @@ export default function AccessControl() {
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-[color:var(--color-text-muted)]">
                 При входе в Личный кабинет (/employee) этот пользователь увидит данные указанного сотрудника.
               </p>
             </div>
@@ -676,7 +676,7 @@ export default function AccessControl() {
                 <div className="space-y-3">
                   {Object.entries(buttonGroups).map(([scope, buttons]) => (
                     <div key={scope}>
-                      <p className="text-sm font-semibold text-gray-600 mb-1">
+                      <p className="text-sm font-semibold text-[color:var(--color-text-muted)] mb-1">
                         {scope === 'user' ? 'Пользовательское меню' : scope === 'common' ? 'Обязательные' : scope}
                       </p>
                       <div className="grid md:grid-cols-2 gap-2">
@@ -734,7 +734,7 @@ export default function AccessControl() {
                       </optgroup>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[color:var(--color-text-muted)]">
                     Выбранные сотрудники будут доступны во всех разделах интерфейса.
                   </p>
                 </div>
@@ -778,7 +778,7 @@ export default function AccessControl() {
               <button className="btn" type="submit">
                 Сохранить
               </button>
-              <button className="btn bg-gray-200 text-gray-700" type="button" onClick={cancelUserForm}>
+              <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)]" type="button" onClick={cancelUserForm}>
                 Отмена
               </button>
             </div>
@@ -789,7 +789,7 @@ export default function AccessControl() {
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Пользователи бота</h2>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-[color:var(--color-text-muted)]">
           Все, кто хотя бы раз запускал бота (/start), с указанием Telegram ID и юзернейма. Можно привязать
           запись к существующему сотруднику — бот начнёт узнавать его по этому Telegram ID.
         </p>
@@ -809,7 +809,7 @@ export default function AccessControl() {
                 u.employee_id ? (
                   u.employee_name || `#${u.employee_id}`
                 ) : (
-                  <span className="text-gray-400">Не привязан</span>
+                  <span className="text-[color:var(--color-text-faint)]">Не привязан</span>
                 ),
             },
             {

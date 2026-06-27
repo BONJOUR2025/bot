@@ -697,16 +697,16 @@ export default function Salons() {
       ) : isMobile ? (
         <div className="space-y-3">
           {filtered.map(s => (
-            <div key={s.id} className="border rounded-xl bg-white shadow-sm overflow-hidden" onClick={() => setDrawer(s)}>
-              <div className="px-4 py-3 border-b bg-gray-50 text-sm font-medium flex items-center justify-between">
+            <div key={s.id} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden" onClick={() => setDrawer(s)}>
+              <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium flex items-center justify-between">
                 <span>{s.name}{s.code ? ` (${s.code})` : ''}</span>
                 <Badge status={s.status} />
               </div>
               <div className="px-4 py-2 space-y-1.5 text-sm">
-                {s.address && <div className="flex justify-between"><span className="text-gray-500">Адрес</span><span className="text-right max-w-[60%]">{s.address}</span></div>}
-                {s.phone && <div className="flex justify-between"><span className="text-gray-500">Телефон</span><span>{s.phone}</span></div>}
+                {s.address && <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Адрес</span><span className="text-right max-w-[60%]">{s.address}</span></div>}
+                {s.phone && <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Телефон</span><span>{s.phone}</span></div>}
                 {(s.work_hours_weekday || s.work_hours_weekend) && (
-                  <div className="flex justify-between"><span className="text-gray-500">Часы</span><span>{[s.work_hours_weekday, s.work_hours_weekend].filter(Boolean).join(' / ')}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Часы</span><span>{[s.work_hours_weekday, s.work_hours_weekend].filter(Boolean).join(' / ')}</span></div>
                 )}
               </div>
               <div className="px-4 py-2 border-t flex justify-end gap-3">

@@ -281,7 +281,7 @@ export default function StrategyModal({ onClose, onChanged, zIndex }) {
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium truncate">{s.name}</p>
                   {s.is_builtin && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]">
                       <Star size={10} /> встроенная
                     </span>
                   )}

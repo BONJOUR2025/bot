@@ -43,8 +43,8 @@ const tgLink    = (phone) => { const d = (phone || '').replace(/\D/g, ''); retur
 const SRC_BADGE = {
   hh:     'bg-red-100 text-red-600',
   avito:  'bg-green-100 text-green-600',
-  manual: 'bg-gray-100 text-gray-500',
-  other:  'bg-gray-100 text-gray-500',
+  manual: 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]',
+  other:  'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]',
 };
 const srcBadgeLabel = (s) => s === 'manual' ? 'руч.' : s;
 
@@ -688,7 +688,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
               className={`w-full flex items-center justify-center gap-2 text-xs font-medium px-3 py-2.5 rounded-xl border transition-colors disabled:opacity-50 ${
                 paused
                   ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  : 'border-[color:var(--color-border)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)]'
               }`}
             >
               {toggling ? <Loader2 size={13} className="animate-spin" /> : paused ? <Play size={13} /> : <Pause size={13} />}
@@ -902,7 +902,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 invite:  { label: '✅ Пригласить', color: 'bg-emerald-100 text-emerald-700' },
                 reserve: { label: '🔶 В резерв',    color: 'bg-amber-100 text-amber-700' },
                 reject:  { label: '❌ Отказать',    color: 'bg-red-100 text-red-700' },
-              }[p.recommendation] || { label: '❓ Не определено', color: 'bg-gray-100 text-gray-600' };
+              }[p.recommendation] || { label: '❓ Не определено', color: 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]' };
               return (
                 <>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -1053,7 +1053,7 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
         ${selectionMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing hover:shadow-md'}
         ${selected
           ? 'bg-[color:var(--color-primary)]/8 border-[color:var(--color-primary)]/50'
-          : 'bg-white border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]/40'
+          : 'bg-[color:var(--color-surface)] border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]/40'
         }`}
     >
       <div className="flex items-start justify-between gap-1">
@@ -1280,12 +1280,12 @@ function BulkActionsBar({ count, total, onSelectAll, onClear, onMoveStage, onDel
           Перенести <ChevronDown size={13} />
         </button>
         {stageOpen && (
-          <div className="absolute bottom-full mb-2 left-0 bg-white text-gray-800 rounded-xl shadow-xl border border-gray-100 overflow-hidden min-w-[160px]">
+          <div className="absolute bottom-full mb-2 left-0 bg-[color:var(--color-surface)] text-[color:var(--color-text)] rounded-xl shadow-xl border border-[color:var(--color-border)] overflow-hidden min-w-[160px]">
             {STAGES.map(s => (
               <button
                 key={s.key}
                 onClick={() => { setStageOpen(false); onMoveStage(s.key); }}
-                className={`w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 transition-colors`}
+                className={`w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-[color:var(--color-control-bg-hover)] transition-colors`}
               >
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
                 {s.label}
@@ -1369,7 +1369,7 @@ function InterviewSchedule({ onCandidateClick }) {
                 <div
                   key={c.id}
                   onClick={() => onCandidateClick?.(c)}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-[color:var(--color-border)] bg-white hover:bg-[color:var(--color-muted)]/20 cursor-pointer transition-colors"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] hover:bg-[color:var(--color-muted)]/20 cursor-pointer transition-colors"
                 >
                   <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center flex-shrink-0 text-sm font-bold">
                     {(c.name || '?')[0].toUpperCase()}
@@ -1767,7 +1767,7 @@ export default function Recruitment() {
                       className={`flex-shrink-0 text-left rounded-xl border px-3 py-2 text-sm transition-all ${
                         v.id === selectedId
                           ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/8 font-semibold'
-                          : 'border-[color:var(--color-border)] bg-white'
+                          : 'border-[color:var(--color-border)] bg-[color:var(--color-surface)]'
                       }`}
                     >
                       <div className="whitespace-nowrap font-medium">{v.title}</div>
@@ -1789,7 +1789,7 @@ export default function Recruitment() {
                         <div className="min-w-0">
                           <p className={`text-sm font-medium truncate ${!v.is_open ? 'text-[color:var(--color-muted-foreground)]' : ''}`}>{v.title}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${v.is_open ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${v.is_open ? 'bg-emerald-100 text-emerald-700' : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]'}`}>
                               {v.is_open ? 'Открыта' : 'Закрыта'}
                             </span>
                             <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{v.candidate_count} чел.</span>
@@ -1840,7 +1840,7 @@ export default function Recruitment() {
                   className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
                     selected.is_open
                       ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)]'
                   }`}
                 >
                   {selected.is_open ? '● Открыта' : '○ Закрыта'}
@@ -1848,14 +1848,14 @@ export default function Recruitment() {
                 <button
                   onClick={() => duplicateVacancy(selected.id)}
                   title="Создать новую вакансию с теми же данными — для повторной публикации"
-                  className="text-xs font-medium px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                  className="text-xs font-medium px-3 py-1.5 rounded-full bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)] transition-colors flex items-center gap-1"
                 >
                   <Copy size={12} /> Дублировать
                 </button>
                 <button
                   onClick={() => saveVacancyAsTemplate(selected)}
                   title="Сохранить в постоянное хранилище шаблонов — переживёт закрытие или удаление вакансии"
-                  className="text-xs font-medium px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                  className="text-xs font-medium px-3 py-1.5 rounded-full bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)] transition-colors flex items-center gap-1"
                 >
                   <FileStack size={12} /> Сохранить как шаблон
                 </button>
@@ -1864,7 +1864,7 @@ export default function Recruitment() {
                   className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors flex items-center gap-1 ${
                     selectionMode
                       ? 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)]'
                   }`}
                 >
                   <CheckSquare size={13} />

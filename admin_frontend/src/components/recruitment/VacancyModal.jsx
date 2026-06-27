@@ -314,7 +314,7 @@ function StepStrategy({ strategyId, onSelect, onManage }) {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{s.name}</span>
                   {s.is_builtin && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">встроенная</span>
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]">встроенная</span>
                   )}
                 </div>
                 {s.description && <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">{s.description}</p>}

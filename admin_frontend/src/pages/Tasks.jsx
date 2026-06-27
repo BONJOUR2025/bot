@@ -19,7 +19,7 @@ const PRIORITIES = [
 ];
 
 const STATUSES = [
-  { value: 'todo',        label: 'К выполнению', icon: Circle,       color: 'text-gray-400' },
+  { value: 'todo',        label: 'К выполнению', icon: Circle,       color: 'text-[color:var(--color-text-faint)]' },
   { value: 'in_progress', label: 'В работе',     icon: PlayCircle,   color: 'text-blue-400' },
   { value: 'done',        label: 'Выполнено',    icon: CheckCircle2, color: 'text-green-400' },
 ];
@@ -259,13 +259,13 @@ export default function Tasks() {
           {/* Title row */}
           <div className="flex items-start gap-2 mb-1">
             <div className="w-2 h-2 rounded-full shrink-0 mt-1.5" style={{ backgroundColor: pri.dot }} title={pri.label} />
-            <span className={`flex-1 font-medium text-sm leading-snug ${task.status === 'done' ? 'line-through text-gray-500' : ''}`}>
+            <span className={`flex-1 font-medium text-sm leading-snug ${task.status === 'done' ? 'line-through text-[color:var(--color-text-muted)]' : ''}`}>
               {task.title}
             </span>
           </div>
           {/* Description */}
           {!compact && task.description && (
-            <p className="text-xs text-gray-400 mb-2 line-clamp-2 pl-4">{task.description}</p>
+            <p className="text-xs text-[color:var(--color-text-faint)] mb-2 line-clamp-2 pl-4">{task.description}</p>
           )}
           {/* Tags + category */}
           {!compact && (task.tags?.length > 0 || cat) && (
@@ -279,7 +279,7 @@ export default function Tasks() {
             </div>
           )}
           {/* Footer */}
-          <div className="flex items-center justify-between text-xs text-gray-400 pl-4">
+          <div className="flex items-center justify-between text-xs text-[color:var(--color-text-faint)] pl-4">
             <div className="flex items-center gap-1">
               {task.due_date && !compact && (
                 <span className={`flex items-center gap-0.5 ${over ? 'text-red-400' : tod ? 'text-yellow-400' : ''}`}>
@@ -340,7 +340,7 @@ export default function Tasks() {
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {[
           { l: 'Всего',      v: stats.total         || 0, c: '' },
-          { l: 'К выполн.',  v: stats.todo          || 0, c: 'text-gray-400' },
+          { l: 'К выполн.',  v: stats.todo          || 0, c: 'text-[color:var(--color-text-faint)]' },
           { l: 'В работе',   v: stats.in_progress   || 0, c: 'text-blue-400' },
           { l: 'Выполнено',  v: stats.done          || 0, c: 'text-green-400' },
           { l: 'Просрочено', v: stats.overdue       || 0, c: 'text-red-400' },
@@ -349,14 +349,14 @@ export default function Tasks() {
         ].map(s => (
           <div key={s.l} className="bg-[var(--color-bg-secondary)] rounded-lg p-3 border border-[var(--color-border)]">
             <div className={`text-2xl font-bold ${s.c}`}>{s.v}</div>
-            <div className="text-xs text-gray-400">{s.l}</div>
+            <div className="text-xs text-[color:var(--color-text-faint)]">{s.l}</div>
           </div>
         ))}
       </div>
 
       {/* Filters + view toggle */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5 text-sm text-gray-400"><Filter size={15} />Фильтры:</div>
+        <div className="flex items-center gap-1.5 text-sm text-[color:var(--color-text-faint)]"><Filter size={15} />Фильтры:</div>
         <select className="input-field text-sm" value={filters.status}
           onChange={e => setFilters({ ...filters, status: e.target.value })}>
           <option value="">Все статусы</option>
@@ -395,7 +395,7 @@ export default function Tasks() {
 
       {/* ── Loading ───────────────────────────────────────────── */}
       {loading && (
-        <div className="flex items-center justify-center py-20 text-gray-400">
+        <div className="flex items-center justify-center py-20 text-[color:var(--color-text-faint)]">
           <Loader2 className="animate-spin mr-2" size={20} /> Загрузка задач...
         </div>
       )}
@@ -424,7 +424,7 @@ export default function Tasks() {
                 </div>
                 <div className="space-y-3">
                   {col.map(t => <TaskCard key={t.id} task={t} draggable />)}
-                  {col.length === 0 && <div className="text-center text-gray-500 py-8">Нет задач</div>}
+                  {col.length === 0 && <div className="text-center text-[color:var(--color-text-muted)] py-8">Нет задач</div>}
                 </div>
               </div>
             );
@@ -444,7 +444,7 @@ export default function Tasks() {
             </div>
           )}
         {tasks.length > 0 && (
-          <label className="flex items-center gap-2 text-sm text-gray-400 mb-2">
+          <label className="flex items-center gap-2 text-sm text-[color:var(--color-text-faint)] mb-2">
             <input type="checkbox" checked={selected.size === tasks.length && tasks.length > 0} onChange={toggleSelectAll} />
             Выбрать все
           </label>
@@ -472,8 +472,8 @@ export default function Tasks() {
                     <div className="flex items-center gap-2">
                       {cat && <span className="w-1 h-7 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />}
                       <div>
-                        <div className={task.status === 'done' ? 'line-through text-gray-500' : ''}>{task.title}</div>
-                        {task.description && <div className="text-xs text-gray-400 truncate max-w-xs">{task.description}</div>}
+                        <div className={task.status === 'done' ? 'line-through text-[color:var(--color-text-muted)]' : ''}>{task.title}</div>
+                        {task.description && <div className="text-xs text-[color:var(--color-text-faint)] truncate max-w-xs">{task.description}</div>}
                       </div>
                     </div>
                   );
@@ -500,7 +500,7 @@ export default function Tasks() {
                   return task.due_date ? (
                     <span className={over ? 'text-red-400' : tod ? 'text-yellow-400' : ''}>
                       {task.due_date}
-                      {task.due_time && <span className="ml-1 text-gray-400">{task.due_time.slice(0, 5)}</span>}
+                      {task.due_time && <span className="ml-1 text-[color:var(--color-text-faint)]">{task.due_time.slice(0, 5)}</span>}
                     </span>
                   ) : '—';
                 },
@@ -589,16 +589,16 @@ export default function Tasks() {
                   {/* Day header */}
                   <div className={`px-1.5 py-2 text-center border-b
                     ${isTodayDay ? 'border-[var(--color-primary)]' : 'border-[var(--color-border)]'}`}>
-                    <div className="text-xs text-gray-400 uppercase tracking-wider leading-none">{DAY_NAMES[i]}</div>
+                    <div className="text-xs text-[color:var(--color-text-faint)] uppercase tracking-wider leading-none">{DAY_NAMES[i]}</div>
                     <div className={`text-xl font-bold leading-tight mt-0.5
                       ${isTodayDay ? 'text-[var(--color-primary)]' : ''}`}>
                       {day.getDate()}
                     </div>
-                    <div className="text-xs text-gray-500">{MONTH_NAMES[day.getMonth()]}</div>
+                    <div className="text-xs text-[color:var(--color-text-muted)]">{MONTH_NAMES[day.getMonth()]}</div>
                     {dayTasks.length > 0 && (
                       <div className="mt-1">
                         <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium
-                          ${isTodayDay ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-bg)] text-gray-400'}`}>
+                          ${isTodayDay ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-bg)] text-[color:var(--color-text-faint)]'}`}>
                           {dayTasks.length}
                         </span>
                       </div>
@@ -613,7 +613,7 @@ export default function Tasks() {
                   {/* Add button */}
                   <div className="p-1 border-t border-[var(--color-border)]">
                     <button
-                      className="w-full text-xs text-gray-500 hover:text-[var(--color-primary)]
+                      className="w-full text-xs text-[color:var(--color-text-muted)] hover:text-[var(--color-primary)]
                         hover:bg-[var(--color-primary-muted)] rounded py-1 flex items-center justify-center gap-0.5 transition-colors"
                       onClick={() => startCreate(iso)}>
                       <Plus size={11} />
@@ -628,7 +628,7 @@ export default function Tasks() {
           {/* Undated tasks */}
           {undated.length > 0 && (
             <div className="bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-[var(--color-border)] text-sm text-gray-400 flex items-center gap-2">
+              <div className="px-4 py-2.5 border-b border-[var(--color-border)] text-sm text-[color:var(--color-text-faint)] flex items-center gap-2">
                 <AlertCircle size={14} />
                 Без даты <span className="ml-1 bg-[var(--color-bg)] px-2 py-0.5 rounded-full text-xs">{undated.length}</span>
               </div>
@@ -648,37 +648,37 @@ export default function Tasks() {
           </h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Название *</label>
+              <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Название *</label>
               <input type="text" className="input-field w-full" placeholder="Что нужно сделать?"
                 value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Описание</label>
+              <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Описание</label>
               <textarea className="input-field w-full" rows={3} placeholder="Подробности..."
                 value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Дата</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Дата</label>
                 <input type="date" className="input-field w-full"
                   value={form.due_date || ''} onChange={e => setForm({ ...form, due_date: e.target.value })} />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Время</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Время</label>
                 <input type="time" className="input-field w-full"
                   value={form.due_time || ''} onChange={e => setForm({ ...form, due_time: e.target.value })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Приоритет</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Приоритет</label>
                 <select className="input-field w-full" value={form.priority}
                   onChange={e => setForm({ ...form, priority: e.target.value })}>
                   {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Статус</label>
+                <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Статус</label>
                 <select className="input-field w-full" value={form.status}
                   onChange={e => setForm({ ...form, status: e.target.value })}>
                   {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -686,7 +686,7 @@ export default function Tasks() {
               </div>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Категория</label>
+              <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Категория</label>
               <div className="flex gap-2">
                 <select className="input-field flex-1" value={form.category || ''}
                   onChange={e => setForm({ ...form, category: e.target.value })}>
@@ -700,12 +700,12 @@ export default function Tasks() {
               </div>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Теги</label>
+              <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Теги</label>
               <div className="flex gap-1 flex-wrap mb-2">
                 {form.tags?.map(tag => (
                   <span key={tag} className="bg-[var(--color-bg)] px-2 py-0.5 rounded text-sm flex items-center gap-1">
                     {tag}
-                    <button type="button" onClick={() => removeTag(tag)} className="text-gray-400 hover:text-red-400">&times;</button>
+                    <button type="button" onClick={() => removeTag(tag)} className="text-[color:var(--color-text-faint)] hover:text-red-400">&times;</button>
                   </span>
                 ))}
               </div>
@@ -717,7 +717,7 @@ export default function Tasks() {
               </div>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Напоминание</label>
+              <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Напоминание</label>
               <select className="input-field w-full" value={form.reminder_minutes ?? ''}
                 onChange={e => setForm({ ...form, reminder_minutes: e.target.value ? parseInt(e.target.value) : null })}>
                 <option value="">Без напоминания</option>
@@ -758,7 +758,7 @@ export default function Tasks() {
                   <Trash2 size={14} className="text-red-400" /></button>
               </div>
             ))}
-            {categories.length === 0 && <div className="text-center py-8 text-gray-500">Нет категорий</div>}
+            {categories.length === 0 && <div className="text-center py-8 text-[color:var(--color-text-muted)]">Нет категорий</div>}
           </div>
           <button className="btn w-full flex items-center justify-center gap-2"
             onClick={() => { setShowCatManager(false); startCreateCat(); }}>
@@ -775,12 +775,12 @@ export default function Tasks() {
           </h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Название *</label>
+              <label className="block text-sm text-[color:var(--color-text-faint)] mb-1">Название *</label>
               <input type="text" className="input-field w-full" placeholder="Работа, Личное, Проект..."
                 value={catForm.name} onChange={e => setCatForm({ ...catForm, name: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-2">Иконка</label>
+              <label className="block text-sm text-[color:var(--color-text-faint)] mb-2">Иконка</label>
               <div className="flex flex-wrap gap-2">
                 {DEFAULT_CAT_ICONS.map(icon => (
                   <button key={icon} type="button"
@@ -793,7 +793,7 @@ export default function Tasks() {
               </div>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-2">Цвет</label>
+              <label className="block text-sm text-[color:var(--color-text-faint)] mb-2">Цвет</label>
               <div className="flex flex-wrap gap-2">
                 {DEFAULT_CAT_COLORS.map(color => (
                   <button key={color} type="button"

@@ -205,7 +205,7 @@ function CategoryManager({ categories, onClose, onChanged }) {
                     <input className="input flex-1 font-medium" value={editingCat.newName}
                       onChange={(e) => setEditingCat((x) => ({ ...x, newName: e.target.value }))} />
                     <button onClick={saveEdit} className="btn btn--primary flex items-center gap-1"><Check size={14} /> Сохранить</button>
-                    <button onClick={() => setEditingCat(null)} className="btn bg-gray-200 text-gray-700 hover:bg-gray-300">Отмена</button>
+                    <button onClick={() => setEditingCat(null)} className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]">Отмена</button>
                   </div>
                   <div>
                     <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Префиксы (начало Основания):</div>
@@ -307,7 +307,7 @@ function AssignModal({ record, categories, onSave, onClose }) {
         </div>
 
         <div className="flex justify-end gap-2 mt-5">
-          <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={onClose}>Отмена</button>
+          <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={onClose}>Отмена</button>
           <button className="btn btn--primary" disabled={!selCat} onClick={handleSave}>Сохранить</button>
         </div>
       </div>
@@ -842,7 +842,7 @@ export default function CashMovements() {
             <button onClick={handleApply} disabled={loading} className="btn btn--primary flex-1 sm:flex-initial">Применить</button>
             {(dateFrom || dateTo) && (
               <button onClick={() => { setDateFrom(''); setDateTo(''); loadData('',''); }}
-                className="btn bg-gray-200 text-gray-700 hover:bg-gray-300"><X size={14} /></button>
+                className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"><X size={14} /></button>
             )}
           </div>
         </div>
@@ -1055,7 +1055,7 @@ export default function CashMovements() {
                   render: ([dep]) => {
                     const unknown = dep === '— без филиала';
                     return (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${unknown ? 'bg-gray-100 text-gray-500' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${unknown ? 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'}`}>
                         {dep}
                       </span>
                     );
@@ -1101,7 +1101,7 @@ export default function CashMovements() {
       ) : isMobile ? (
         <div className="space-y-3">
           {filtered.map((row) => (
-            <div key={row.ID_KASSES_MOVE} className={`border rounded-xl bg-white shadow-sm overflow-hidden ${!row.prefix_ok ? 'border-l-4 border-l-red-400' : row.manually_assigned ? 'border-l-4 border-l-amber-400' : 'border-[color:var(--color-border)]'}`}>
+            <div key={row.ID_KASSES_MOVE} className={`border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden ${!row.prefix_ok ? 'border-l-4 border-l-red-400' : row.manually_assigned ? 'border-l-4 border-l-amber-400' : 'border-[color:var(--color-border)]'}`}>
               {/* Card header */}
               <div className="px-4 py-2.5 border-b bg-[color:var(--color-bg-secondary)] flex justify-between items-center gap-2">
                 <span className="text-sm font-medium text-[color:var(--color-muted-foreground)]">{fmtDate(row.DK_DATE)}</span>

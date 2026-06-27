@@ -46,7 +46,7 @@ export default function ArchivedEmployees() {
       <div className="flex items-center gap-3">
         <h2 className="text-2xl font-semibold">Архив сотрудников</h2>
         <button
-          className="btn bg-gray-100 text-gray-800 hover:bg-gray-200 flex items-center gap-2"
+          className="btn bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)] flex items-center gap-2"
           onClick={load}
           disabled={loading}
         >
@@ -63,14 +63,14 @@ export default function ArchivedEmployees() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-[color:var(--color-text-muted)]">
           Всего: {filtered.length}
         </div>
       </div>
       <ResponsiveTable
         data={filtered}
         keyFn={(e) => e.id}
-        rowClass={() => 'bg-neutral-50'}
+        rowClass={() => 'bg-[color:var(--color-bg-subtle)]'}
         emptyText="Нет архивных сотрудников"
         columns={[
           { label: 'ФИО', key: 'full_name', primary: true },

@@ -12,7 +12,7 @@ const CHANNEL_COLORS = {
   'СМС':  'bg-blue-100 text-blue-700',
   'Push': 'bg-purple-100 text-purple-700',
   'MAX':  'bg-green-100 text-green-700',
-  '—':    'bg-gray-100 text-gray-500',
+  '—':    'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]',
 };
 
 const STATUS_COLORS = {
@@ -256,7 +256,7 @@ export default function Smses() {
               const share = filtered.length > 0 ? (cnt / filtered.length * 100).toFixed(1) : 0;
               return (
                 <div key={st} className="flex items-center gap-2 text-sm">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[st] || 'bg-gray-100 text-gray-600'}`}>{st}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[st] || 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]'}`}>{st}</span>
                   <span className="font-semibold">{cnt}</span>
                   <span className="text-xs text-[color:var(--color-muted-foreground)]">{share}%</span>
                 </div>
@@ -291,7 +291,7 @@ export default function Smses() {
             {
               label: 'Статус',
               render: (row) => (
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.OPER_STATUS] || 'bg-gray-100 text-gray-600'}`}>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[row.OPER_STATUS] || 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]'}`}>
                   {row.OPER_STATUS || '—'}
                 </span>
               ),

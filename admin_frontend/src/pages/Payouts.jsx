@@ -71,7 +71,7 @@ function Summary({ list }) {
       </div>
       <div className="flex flex-wrap gap-3 text-sm">
         {Object.entries(statusStats).map(([k, v]) => (
-          <div key={k} className="bg-gray-100 px-2 py-1 rounded">
+          <div key={k} className="bg-[color:var(--color-bg-subtle)] px-2 py-1 rounded">
             {k}: {v}
           </div>
         ))}
@@ -80,7 +80,7 @@ function Summary({ list }) {
         {Object.entries(typeStats).map(([k, v]) => (
           <div key={k} className="flex items-center gap-2 text-sm">
             <div className="w-20">{k}</div>
-            <div className="flex-1 h-2 bg-gray-200 rounded">
+            <div className="flex-1 h-2 bg-[color:var(--color-control-bg)] rounded">
               <div
                 className="h-2 bg-blue-500 rounded"
                 style={{ width: `${(v / sumAll) * 100}%` }}
@@ -145,39 +145,39 @@ function MovementQuickViewModal({ payout, onUnlink, onChangeMove, onClose }) {
           <h3 className="text-base font-semibold flex items-center gap-2">
             <LinkIcon size={16} className="text-green-500" /> Кассовое движение
           </h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-control-bg-hover)]"><X size={18} /></button>
         </div>
         {loadingDetails ? (
-          <div className="flex items-center justify-center gap-2 py-4 text-gray-400 text-sm">
+          <div className="flex items-center justify-center gap-2 py-4 text-[color:var(--color-text-faint)] text-sm">
             <RefreshCw size={14} className="animate-spin" /> Загрузка…
           </div>
         ) : moveDetails ? (
           <div className="text-sm space-y-2">
             <div className="flex justify-between">
-              <span className="text-gray-500">Дата</span>
+              <span className="text-[color:var(--color-text-muted)]">Дата</span>
               <span>{moveDetails.DK_DATE || '—'}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Сумма</span>
+              <span className="text-[color:var(--color-text-muted)]">Сумма</span>
               <span className="font-semibold text-blue-700">
                 {Number(moveDetails.SUMM).toLocaleString('ru-RU')} ₽
               </span>
             </div>
             {moveDetails.dep_name && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Филиал</span>
+                <span className="text-[color:var(--color-text-muted)]">Филиал</span>
                 <span>{moveDetails.dep_name}</span>
               </div>
             )}
             {moveDetails.BASIS && (
               <div className="flex justify-between gap-4">
-                <span className="text-gray-500 shrink-0">Основание</span>
+                <span className="text-[color:var(--color-text-muted)] shrink-0">Основание</span>
                 <span className="font-mono text-xs text-right truncate min-w-0">{moveDetails.BASIS}</span>
               </div>
             )}
           </div>
         ) : (
-          <div className="text-sm text-gray-400">ID: {payout.cash_move_id}</div>
+          <div className="text-sm text-[color:var(--color-text-faint)]">ID: {payout.cash_move_id}</div>
         )}
         <div className="flex justify-between mt-5">
           <button
@@ -253,7 +253,7 @@ function MovementPickerModal({ payout, onLink, onClose }) {
           <h3 className="text-base font-semibold flex items-center gap-2">
             <LinkIcon size={16} /> Выбрать кассовое движение
           </h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-control-bg-hover)]"><X size={18} /></button>
         </div>
 
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 mb-3">
@@ -265,9 +265,9 @@ function MovementPickerModal({ payout, onLink, onClose }) {
         </div>
 
         {loading ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Загрузка…</div>
+          <div className="flex-1 flex items-center justify-center text-[color:var(--color-text-faint)] text-sm">Загрузка…</div>
         ) : moves.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Нет движений за период</div>
+          <div className="flex-1 flex items-center justify-center text-[color:var(--color-text-faint)] text-sm">Нет движений за период</div>
         ) : (
           <div className="overflow-auto flex-1">
             <ResponsiveTable
@@ -719,7 +719,7 @@ export default function Payouts() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-gray-800 flex items-center gap-2">
+      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
         Выплаты
         <button
           onClick={checkTelegram}
@@ -797,7 +797,7 @@ export default function Payouts() {
           </span>
           <div className="flex items-center gap-2">
             <select
-              className="border border-blue-300 rounded px-2 py-1 text-sm bg-white"
+              className="border border-blue-300 rounded px-2 py-1 text-sm bg-[color:var(--color-surface)]"
               defaultValue=""
               onChange={(e) => { if (e.target.value) { bulkSetStatus(e.target.value); e.target.value = ''; } }}
             >
@@ -826,7 +826,7 @@ export default function Payouts() {
             Удалить
           </button>
           <button
-            className="text-sm text-gray-500 hover:text-gray-800 underline"
+            className="text-sm text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] underline"
             onClick={() => setSelected(new Set())}
           >
             Снять выделение
@@ -835,13 +835,13 @@ export default function Payouts() {
       )}
 
       {loading ? (
-        <div className="border rounded shadow bg-white p-4">
+        <div className="border rounded shadow bg-[color:var(--color-surface)] p-4">
           <SkeletonTable rows={8} cols={7} />
         </div>
       ) : (
         <>
           {payouts.length > 0 && (
-            <label className="flex items-center gap-2 text-sm text-gray-600">
+            <label className="flex items-center gap-2 text-sm text-[color:var(--color-text-muted)]">
               <input
                 type="checkbox"
                 checked={selected.size === payouts.length}
@@ -866,7 +866,7 @@ export default function Payouts() {
                 label: 'Движение',
                 render: (p) =>
                   findingMoves.has(p.id) || (moveMatchesLoading && moveMatches[p.id] == null) ? (
-                    <RefreshCw size={13} className="animate-spin text-gray-400" />
+                    <RefreshCw size={13} className="animate-spin text-[color:var(--color-text-faint)]" />
                   ) : moveMatches[p.id]?.matched ? (
                     <button
                       onClick={() => setQuickViewPayout(p)}
@@ -881,7 +881,7 @@ export default function Payouts() {
                     </button>
                   ) : (
                     <button onClick={() => findMoveForPayout(p.id)} title="Найти кассовое движение">
-                      <Search size={13} className="text-gray-300 hover:text-gray-500" />
+                      <Search size={13} className="text-[color:var(--color-text-faint)] hover:text-[color:var(--color-text-muted)]" />
                     </button>
                   ),
               },
@@ -919,7 +919,7 @@ export default function Payouts() {
                     {p.status === 'Одобрено' && (
                       <button onClick={() => updateStatus(p.id, 'Выплачено')} className="text-indigo-600 hover:text-indigo-800" title="Отметить выплаченным"><Download size={16} /></button>
                     )}
-                    <button onClick={() => remove(p.id)} className="text-gray-500 hover:text-gray-800" title="Удалить"><Trash2 size={16} /></button>
+                    <button onClick={() => remove(p.id)} className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]" title="Удалить"><Trash2 size={16} /></button>
                   </div>
                 ),
               },
@@ -966,10 +966,10 @@ export default function Payouts() {
                 </optgroup>
               ))}
             </select>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-[color:var(--color-text-muted)]">
               Карта: <span className="font-medium">{form.card_number || '—'}</span>
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-[color:var(--color-text-muted)]">
               Банк: <span className="font-medium">{form.bank || '—'}</span>
             </div>
             <input
@@ -998,7 +998,7 @@ export default function Payouts() {
             </select>
             {canManageDates && (
               <div className="w-full">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-[color:var(--color-text)] mb-1">
                   Дата выплаты
                 </label>
                 <input
@@ -1070,10 +1070,10 @@ export default function Payouts() {
             </label>
             {/* Linked movement block (edit mode only) */}
             {form.id && (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+              <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-subtle)] p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium flex items-center gap-1.5">
-                    <LinkIcon size={13} className={form.cash_move_id ? 'text-green-500' : 'text-gray-400'} />
+                    <LinkIcon size={13} className={form.cash_move_id ? 'text-green-500' : 'text-[color:var(--color-text-faint)]'} />
                     Кассовое движение
                   </span>
                   <div className="flex items-center gap-2">
@@ -1098,46 +1098,46 @@ export default function Payouts() {
                 </div>
                 {form.cash_move_id ? (
                   loadingMoveDetails ? (
-                    <div className="text-xs text-gray-400 flex items-center gap-1">
+                    <div className="text-xs text-[color:var(--color-text-faint)] flex items-center gap-1">
                       <RefreshCw size={11} className="animate-spin" /> Загрузка…
                     </div>
                   ) : editingMoveDetails ? (
                     <div className="text-sm space-y-1">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Дата</span>
+                        <span className="text-[color:var(--color-text-muted)]">Дата</span>
                         <span>{editingMoveDetails.DK_DATE || '—'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Сумма</span>
+                        <span className="text-[color:var(--color-text-muted)]">Сумма</span>
                         <span className="font-semibold text-blue-700">
                           {Number(editingMoveDetails.SUMM).toLocaleString('ru-RU')} ₽
                         </span>
                       </div>
                       {editingMoveDetails.dep_name && (
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Филиал</span>
+                          <span className="text-[color:var(--color-text-muted)]">Филиал</span>
                           <span>{editingMoveDetails.dep_name}</span>
                         </div>
                       )}
                       {editingMoveDetails.BASIS && (
                         <div className="flex justify-between gap-4">
-                          <span className="text-gray-500 shrink-0">Основание</span>
+                          <span className="text-[color:var(--color-text-muted)] shrink-0">Основание</span>
                           <span className="font-mono text-xs text-right truncate">{editingMoveDetails.BASIS}</span>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="text-xs text-gray-400">ID: {form.cash_move_id}</div>
+                    <div className="text-xs text-[color:var(--color-text-faint)]">ID: {form.cash_move_id}</div>
                   )
                 ) : (
-                  <div className="text-xs text-gray-400 italic">Движение не привязано</div>
+                  <div className="text-xs text-[color:var(--color-text-faint)] italic">Движение не привязано</div>
                 )}
               </div>
             )}
 
             <div className="flex justify-end space-x-2 pt-2">
               <button
-                className="btn bg-gray-200 text-gray-700 hover:bg-gray-300"
+                className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"
                 onClick={() => {
                   setShowEditor(false);
                   setForm(emptyForm);

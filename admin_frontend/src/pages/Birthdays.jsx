@@ -34,12 +34,12 @@ export default function Birthdays() {
         {list.map((b) => (
           <div
             key={b.user_id}
-            className="bg-white rounded border shadow p-3 flex items-center justify-between"
+            className="bg-[color:var(--color-surface)] rounded border shadow p-3 flex items-center justify-between"
           >
             <div className="flex flex-col">
               <span className="font-medium">{b.full_name}</span>
               {b.phone && (
-                <span className="text-gray-500 text-sm">{b.phone}</span>
+                <span className="text-[color:var(--color-text-muted)] text-sm">{b.phone}</span>
               )}
             </div>
             <div className="flex items-center gap-1 text-sm">

@@ -145,13 +145,13 @@ function combineBatchMessages(entries) {
 function getStatusVariant(status) {
   const normalized = (status || '').trim();
   if (!normalized) {
-    return { className: 'bg-gray-200 text-gray-700', label: 'Неизвестно' };
+    return { className: 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text)]', label: 'Неизвестно' };
   }
   const entry = Object.values(STATUS_MAP).find((item) => item.match(normalized));
   if (entry) {
     return entry;
   }
-  return { className: 'bg-gray-200 text-gray-700', label: normalized };
+  return { className: 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text)]', label: normalized };
 }
 
 function StatusBadge({ status }) {
@@ -199,7 +199,7 @@ function StatusSummary({ recipients }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">
+      <span className="rounded bg-[color:var(--color-bg-subtle)] px-2 py-0.5 text-[color:var(--color-text-muted)]">
         Всего получателей: {total}
       </span>
       {items
@@ -210,7 +210,7 @@ function StatusSummary({ recipients }) {
           </span>
         ))}
       {summary.success + summary.warning + summary.error < total && (
-        <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">
+        <span className="rounded bg-[color:var(--color-bg-subtle)] px-2 py-0.5 text-[color:var(--color-text-muted)]">
           Без статуса: {total - (summary.success + summary.warning + summary.error)}
         </span>
       )}
@@ -289,7 +289,7 @@ export default function MessageHistory() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-800">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-[color:var(--color-text)]">
           <MessageCircle size={24} /> История сообщений
         </h1>
         <div className="flex items-center gap-2">
@@ -324,7 +324,7 @@ export default function MessageHistory() {
 
       <div className="grid gap-4">
         {filteredEntries.length === 0 && !loading && (
-          <div className="rounded border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
+          <div className="rounded border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 text-center text-[color:var(--color-text-muted)]">
             Нет сообщений для отображения.
           </div>
         )}
@@ -348,7 +348,7 @@ export default function MessageHistory() {
           };
 
           return (
-            <article key={entry.id} className="rounded border border-gray-200 bg-white p-4 shadow-sm">
+            <article key={entry.id} className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 shadow-sm">
               <header className="flex flex-wrap items-start justify-between gap-3">
                 <div
                   className={`flex-1 space-y-1 ${isBroadcast ? 'cursor-pointer' : ''}`}
@@ -358,7 +358,7 @@ export default function MessageHistory() {
                   tabIndex={isBroadcast ? 0 : undefined}
                   aria-expanded={isBroadcast ? isExpanded : undefined}
                 >
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-[color:var(--color-text-muted)]">
                     <span className="flex items-center gap-1">
                       <Clock size={16} />
                       <span>Отправлено: {formatDateTime(entry.timestamp)}</span>
@@ -370,8 +370,8 @@ export default function MessageHistory() {
                       </span>
                     )}
                   </div>
-                  <p className="whitespace-pre-wrap text-gray-900">{entry.message}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                  <p className="whitespace-pre-wrap text-[color:var(--color-text)]">{entry.message}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-[color:var(--color-text-muted)]">
                     <StatusBadge status={entry.status} />
                     {entry.requires_ack && (
                       <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
@@ -392,7 +392,7 @@ export default function MessageHistory() {
                     )}
                     {!isBroadcast && (entry.user_name || entry.user_id) && (
                       <span
-                        className="text-xs text-gray-500"
+                        className="text-xs text-[color:var(--color-text-muted)]"
                         title={entry.user_id ? `ID: ${entry.user_id}` : undefined}
                       >
                         Получатель: {entry.user_name || '—'}
@@ -413,7 +413,7 @@ export default function MessageHistory() {
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <span className="text-xs uppercase tracking-wide text-gray-400">
+                  <span className="text-xs uppercase tracking-wide text-[color:var(--color-text-faint)]">
                     {isBroadcast ? 'Рассылка' : 'Персональное'}
                   </span>
                   <button
@@ -452,7 +452,7 @@ export default function MessageHistory() {
                           <div className="flex flex-col">
                             <span>{recipient.name || '—'}</span>
                             {recipient.user_id && (
-                              <span className="text-xs text-gray-400">ID: {recipient.user_id}</span>
+                              <span className="text-xs text-[color:var(--color-text-faint)]">ID: {recipient.user_id}</span>
                             )}
                           </div>
                         ),

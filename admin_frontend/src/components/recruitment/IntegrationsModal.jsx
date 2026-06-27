@@ -46,7 +46,7 @@ function VacancyLinkRow({ internalVacancy, source, externalVacancies, existingLi
   const hasLink = !!existingLink;
 
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${hasLink ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--color-border)] bg-white'}`}>
+    <div className={`rounded-xl border p-3 space-y-2 ${hasLink ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--color-border)] bg-[color:var(--color-surface)]'}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{internalVacancy.title}</p>
@@ -88,7 +88,7 @@ function VacancyLinkRow({ internalVacancy, source, externalVacancies, existingLi
       </div>
       {hasLink && (
         <div className="flex items-center gap-3 text-xs text-[color:var(--color-muted-foreground)]">
-          <span className={`flex items-center gap-1 ${existingLink.sync_enabled ? 'text-emerald-600' : 'text-gray-400'}`}>
+          <span className={`flex items-center gap-1 ${existingLink.sync_enabled ? 'text-emerald-600' : 'text-[color:var(--color-text-faint)]'}`}>
             <Zap size={11} /> {existingLink.sync_enabled ? 'Авто-синхронизация вкл.' : 'Синхронизация откл.'}
           </span>
           {existingLink.last_synced_at && (
@@ -297,7 +297,7 @@ function AvitoVacancyLinkRow({ internalVacancy, existingLink, onLink, onUnlink }
   const hasLink = !!existingLink;
 
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${hasLink ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--color-border)] bg-white'}`}>
+    <div className={`rounded-xl border p-3 space-y-2 ${hasLink ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--color-border)] bg-[color:var(--color-surface)]'}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{internalVacancy.title}</p>
@@ -335,7 +335,7 @@ function AvitoVacancyLinkRow({ internalVacancy, existingLink, onLink, onUnlink }
       </div>
       {hasLink && (
         <div className="flex items-center gap-3 text-xs text-[color:var(--color-muted-foreground)]">
-          <span className={`flex items-center gap-1 ${existingLink.sync_enabled ? 'text-emerald-600' : 'text-gray-400'}`}>
+          <span className={`flex items-center gap-1 ${existingLink.sync_enabled ? 'text-emerald-600' : 'text-[color:var(--color-text-faint)]'}`}>
             <Zap size={11} /> {existingLink.sync_enabled ? 'Авто-синхронизация вкл.' : 'Синхронизация откл.'}
           </span>
           {existingLink.last_synced_at && (

@@ -185,7 +185,7 @@ export default function AdminEmployeeProfile() {
                 <ShieldCheck size={11} /> Администратор
               </span>
             )}
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${employee.status === 'active' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${employee.status === 'active' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]'}`}>
               {employee.status === 'active' ? 'Активен' : 'Неактивен'}
             </span>
           </div>

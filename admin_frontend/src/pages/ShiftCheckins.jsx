@@ -200,7 +200,7 @@ export default function ShiftCheckins() {
         📷 Открыть
       </button>
     ) : (
-      <span className="text-gray-400">{item.manual ? 'Вручную' : '—'}</span>
+      <span className="text-[color:var(--color-text-faint)]">{item.manual ? 'Вручную' : '—'}</span>
     );
   }
 
@@ -210,7 +210,7 @@ export default function ShiftCheckins() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-gray-800">Рабочее время</h2>
+      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Рабочее время</h2>
       <div className="flex flex-wrap gap-2 items-end">
         <input
           type="date"
@@ -244,8 +244,8 @@ export default function ShiftCheckins() {
             return checkins.map((item) => ({ id: item.id, salon, item }));
           });
           return (
-            <div key={date} className="border rounded shadow bg-white overflow-hidden">
-              <div className="px-3 py-2 bg-gray-100 font-semibold text-sm">{fmtDate(date)}</div>
+            <div key={date} className="border rounded shadow bg-[color:var(--color-surface)] overflow-hidden">
+              <div className="px-3 py-2 bg-[color:var(--color-bg-subtle)] font-semibold text-sm">{fmtDate(date)}</div>
               <ResponsiveTable
                 data={rows}
                 keyFn={(row) => row.id}
@@ -257,7 +257,7 @@ export default function ShiftCheckins() {
                     label: 'Сотрудник',
                     render: (row) =>
                       row.noCheckin ? (
-                        <span className="text-gray-400">Нет отметки об открытии</span>
+                        <span className="text-[color:var(--color-text-faint)]">Нет отметки об открытии</span>
                       ) : (
                         row.item.employee_name
                       ),
@@ -281,13 +281,13 @@ export default function ShiftCheckins() {
           );
         })}
         {dates.length === 0 && (
-          <div className="py-6 text-center text-gray-500 text-sm">Выберите период</div>
+          <div className="py-6 text-center text-[color:var(--color-text-muted)] text-sm">Выберите период</div>
         )}
       </div>
 
       {otherItems.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-lg font-semibold tracking-tight text-gray-800">Прочие отметки</h3>
+          <h3 className="text-lg font-semibold tracking-tight text-[color:var(--color-text)]">Прочие отметки</h3>
           <ResponsiveTable
             data={otherItems}
             keyFn={(item) => item.id}
@@ -312,7 +312,7 @@ export default function ShiftCheckins() {
           <div className="modal-card max-w-2xl">
             <img src={photoUrl} alt="Чек об открытии" className="w-full h-auto rounded" />
             <div className="flex justify-end pt-2">
-              <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={closePhoto}>
+              <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={closePhoto}>
                 Закрыть
               </button>
             </div>
@@ -355,7 +355,7 @@ export default function ShiftCheckins() {
             />
             <div className="flex justify-end gap-2 pt-2">
               <button
-                className="btn bg-gray-200 text-gray-700 hover:bg-gray-300"
+                className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"
                 onClick={() => {
                   setShowForm(false);
                   setEditingId(null);

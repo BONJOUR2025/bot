@@ -51,7 +51,7 @@ function getAnomalyFlags(row) {
 function TrendBadge({ current, prev }) {
   if (prev == null || prev === 0) return null;
   const delta = ((current - prev) / prev) * 100;
-  if (Math.abs(delta) < 2) return <Minus size={13} className="text-gray-400" title={`Пред. месяц: ${Math.round(prev).toLocaleString('ru-RU')} ₽`} />;
+  if (Math.abs(delta) < 2) return <Minus size={13} className="text-[color:var(--color-text-faint)]" title={`Пред. месяц: ${Math.round(prev).toLocaleString('ru-RU')} ₽`} />;
   if (delta > 0) return (
     <span title={`Пред. месяц: ${Math.round(prev).toLocaleString('ru-RU')} ₽ (+${delta.toFixed(1)}%)`}>
       <TrendingUp size={13} className="text-green-500" />
@@ -80,7 +80,7 @@ function CommentModal({ employee, currentComment, onSave, onClose }) {
           onChange={(e) => setText(e.target.value)}
         />
         <div className="flex justify-end gap-2 mt-3">
-          <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={onClose}>Отмена</button>
+          <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={onClose}>Отмена</button>
           <button className="btn btn--primary" onClick={() => onSave(text)}>Сохранить</button>
         </div>
       </div>
@@ -253,7 +253,7 @@ function PlanModal({ employee, plans, onSave, onClose, monthKey }) {
         </div>
 
         <div className="flex justify-end gap-2 mt-6">
-          <button className="btn bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={onClose}>Отмена</button>
+          <button className="btn bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]" onClick={onClose}>Отмена</button>
           <button className="btn btn--primary" onClick={handleSave}>Сохранить</button>
         </div>
       </div>
