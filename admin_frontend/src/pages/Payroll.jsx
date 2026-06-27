@@ -431,10 +431,27 @@ function ExpandedContent({ row }) {
           )}
         </DetailCard>
 
+        {(row.bonuses > 0 || row.excel_bonus > 0) && (
+          <DetailCard title="Премии" titleClass="text-[color:var(--color-success)]">
+            {row.bonuses > 0 && (
+              <DetailRow label="Премия" value={`+${fmtMoney(row.bonuses)}`} valueClass="font-medium text-[color:var(--color-success)]" />
+            )}
+            {row.excel_bonus > 0 && (
+              <DetailRow label="Премия (Excel)" value={`+${fmtMoney(row.excel_bonus)}`} valueClass="font-medium text-[color:var(--color-success)]" />
+            )}
+          </DetailCard>
+        )}
+
         {(row.advances_this_month > 0 || row.advances > 0) && (
           <DetailCard title="Авансы" titleClass="text-[color:var(--color-danger)]">
             <DetailRow label="За этот месяц" value={fmtMoney(row.advances_this_month)} valueClass="font-medium text-[color:var(--color-danger)]" />
             <DetailRow label="К вычету (с посл. ЗП)" value={fmtMoney(row.advances)} valueClass="font-medium text-[color:var(--color-danger)]" />
+          </DetailCard>
+        )}
+
+        {row.penalties > 0 && (
+          <DetailCard title="Штрафы" titleClass="text-[color:var(--color-danger)]">
+            <DetailRow label="Сумма" value={`-${fmtMoney(row.penalties)}`} valueClass="font-medium text-[color:var(--color-danger)]" />
           </DetailCard>
         )}
       </div>
