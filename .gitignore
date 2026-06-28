@@ -6,6 +6,8 @@ cash_categories.json
 cash_config.json
 push_vapid_keys.json
 salons.json
+payout_notifications.json
+payroll_audit.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

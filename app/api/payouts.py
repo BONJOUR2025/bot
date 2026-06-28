@@ -49,6 +49,18 @@ def create_payout_router(
         if not access_service.is_employee_visible(current, owner):
             raise HTTPException(status_code=403, detail="forbidden")
 
+    @router.get("/activity")
+    async def list_activity(
+        limit: int = 100,
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
+    ):
+        """Notification journal: who was notified about each status change,
+        with the message text and the real delivery result."""
+        from app.data.payout_notification_repository import (
+            get_payout_notification_repository,
+        )
+        return get_payout_notification_repository().get_entries(limit=limit)
+
     @router.get("/", response_model=list[Payout])
     async def list_payouts(
         employee_id: Optional[str] = None,

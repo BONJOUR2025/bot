@@ -11,6 +11,11 @@ import {
   Search,
   X,
   ExternalLink,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  Send,
+  Smartphone,
 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -313,6 +318,90 @@ function MovementPickerModal({ payout, onLink, onClose }) {
   );
 }
 
+// ── Notification journal ──────────────────────────────────────────
+// Records every notification sent to an employee on a payout status change:
+// recipient, channel, message text and the real delivery result.
+const DELIVERY_META = {
+  sent:    { label: 'Отправлено', cls: 'text-[color:var(--color-success)]', dot: 'bg-[color:var(--color-success)]' },
+  failed:  { label: 'Ошибка',     cls: 'text-[color:var(--color-danger)]',  dot: 'bg-[color:var(--color-danger)]' },
+  skipped: { label: 'Пропущено',  cls: 'text-[color:var(--color-muted-foreground)]', dot: 'bg-[color:var(--color-text-faint)]' },
+};
+
+function NotificationJournal({ entries, open, onToggle, onRefresh }) {
+  const fmtTime = (iso) => {
+    try { return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    catch { return iso; }
+  };
+  const failedCount = entries.filter((e) => e.delivery === 'failed').length;
+
+  return (
+    <div className="app-card overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <span className="flex items-center gap-2 font-medium">
+          <Bell size={16} className="text-[color:var(--color-primary)]" />
+          Журнал уведомлений
+          <span className="text-xs text-[color:var(--color-muted-foreground)]">({entries.length})</span>
+          {failedCount > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded-full bg-[color:var(--color-danger-muted)] text-[color:var(--color-danger)]">
+              {failedCount} с ошибкой
+            </span>
+          )}
+        </span>
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+
+      {open && (
+        <div className="border-t border-[color:var(--color-border)]">
+          <div className="flex justify-end px-4 py-2">
+            <button onClick={onRefresh} className="text-xs flex items-center gap-1 text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]">
+              <RefreshCw size={12} /> Обновить
+            </button>
+          </div>
+          {entries.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-[color:var(--color-muted-foreground)]">
+              Пока нет уведомлений. Они появятся здесь при одобрении/отклонении/выплате заявок.
+            </div>
+          ) : (
+            <ul className="divide-y divide-[color:var(--color-border)] max-h-96 overflow-y-auto">
+              {entries.map((e) => {
+                const meta = DELIVERY_META[e.delivery] || DELIVERY_META.skipped;
+                return (
+                  <li key={e.id} className="px-4 py-2.5 text-sm flex items-start gap-3">
+                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${meta.dot}`} title={meta.label} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="font-medium">{e.recipient_name || e.user_id}</span>
+                        <span className="text-xs text-[color:var(--color-muted-foreground)]">·</span>
+                        <span className="text-xs">{e.status}</span>
+                        <span className="inline-flex items-center gap-1 text-xs text-[color:var(--color-muted-foreground)]">
+                          {e.channel === 'telegram' ? <Send size={11} /> : <Smartphone size={11} />}
+                          {e.channel === 'telegram' ? 'Telegram' : 'Push'}
+                        </span>
+                        <span className={`text-xs font-medium ${meta.cls}`}>{meta.label}</span>
+                      </div>
+                      <div className="text-[color:var(--color-muted-foreground)] whitespace-pre-line break-words mt-0.5">
+                        {e.message}
+                      </div>
+                      {e.error && (
+                        <div className="text-xs text-[color:var(--color-danger)] mt-0.5">Причина: {e.error}</div>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-xs text-[color:var(--color-muted-foreground)] whitespace-nowrap">{fmtTime(e.timestamp)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Payouts() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -361,9 +450,12 @@ export default function Payouts() {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
+  const [activity, setActivity] = useState([]);
+  const [showActivity, setShowActivity] = useState(false);
 
   useEffect(() => {
     loadEmployees();
+    loadActivity();
     window.refreshPage = load;
   }, []);
   useEffect(() => {
@@ -389,6 +481,15 @@ export default function Payouts() {
     try {
       const res = await api.get('employees/', { params: { archived: false } });
       setEmployees(res.data.filter((e) => e.status !== 'inactive'));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadActivity() {
+    try {
+      const res = await api.get('payouts/activity', { params: { limit: 100 } });
+      setActivity(res.data || []);
     } catch (err) {
       console.error(err);
     }
@@ -510,6 +611,7 @@ export default function Payouts() {
       await api.post(endpoint);
       toast('Статус обновлён', 'success');
       load();
+      loadActivity();
     } catch (err) {
       console.error(err);
       toast('Ошибка обновления статуса', 'error');
@@ -729,6 +831,13 @@ export default function Payouts() {
           <RefreshCw size={18} />
         </button>
       </h2>
+
+      <NotificationJournal
+        entries={activity}
+        open={showActivity}
+        onToggle={() => setShowActivity((v) => !v)}
+        onRefresh={loadActivity}
+      />
 
       <div className="flex flex-wrap gap-2 items-end">
         <input

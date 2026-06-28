@@ -184,21 +184,26 @@ class PayoutService:
             return None
         if "status" in updates:
             # notify user if status has changed
-            if self._telegram and notify:
-                try:
-                    status_messages = {
-                        PAYOUT_STATUSES[1]: "✅ Ваша заявка одобрена",
-                        PAYOUT_STATUSES[2]: "❌ Ваша заявка отклонена",
-                        PAYOUT_STATUSES[3]: "📤 Выплата отправлена",
-                    }
-                    message = status_messages.get(updates["status"])
-                    if message:
+            new_status = updates["status"]
+            status_messages = {
+                PAYOUT_STATUSES[1]: "✅ Ваша заявка одобрена",
+                PAYOUT_STATUSES[2]: "❌ Ваша заявка отклонена",
+                PAYOUT_STATUSES[3]: "📤 Выплата отправлена",
+            }
+            message = status_messages.get(new_status) if notify else None
+            if message:
+                tg_text = f"{message}\nСумма: {updated['amount']} ₽"
+                if self._telegram:
+                    try:
                         await self._telegram.send_message_to_user(
-                            updated["user_id"],
-                            f"{message}\nСумма: {updated['amount']} ₽",
-                        )
-                except Exception as exc:
-                    logger.warning(f"Не удалось уведомить пользователя: {exc}")
+                            updated["user_id"], tg_text)
+                        delivery, error = "sent", None
+                    except Exception as exc:
+                        delivery, error = "failed", str(exc)
+                        logger.warning(f"Не удалось уведомить пользователя: {exc}")
+                else:
+                    delivery, error = "skipped", "Telegram не настроен"
+                self._log_notification(updated, new_status, "telegram", tg_text, delivery, error)
             logger.info(
                 f"✏️ Выплата {payout_id} обновлена — статус: {updates['status']}")
         else:
@@ -223,28 +228,67 @@ class PayoutService:
         if push_title:
             amount = updated.get("amount", "")
             push_body = f"Сумма: {amount} ₽"
+            push_text = f"{push_title} — {push_body}"
             if self._push:
                 try:
-                    await self._push.send(
+                    res = await self._push.send(
                         updated["user_id"], push_title, push_body
-                    )
+                    ) or {}
+                    total, sent = res.get("total", 0), res.get("sent", 0)
+                    if total == 0:
+                        delivery, error = "skipped", "нет активных подписок"
+                    elif sent > 0:
+                        delivery, error = "sent", None
+                    else:
+                        delivery, error = "failed", "push не доставлен"
                 except Exception as exc:
+                    delivery, error = "failed", str(exc)
                     logger.warning(f"Не удалось отправить push: {exc}")
-        if self._telegram and notify:
-            try:
-                tg_messages = {
-                    PAYOUT_STATUSES[1]: "✅ Ваша заявка одобрена",
-                    PAYOUT_STATUSES[2]: "❌ Ваша заявка отклонена",
-                    PAYOUT_STATUSES[3]: "📤 Выплата отправлена",
-                }
-                message = tg_messages.get(status)
-                if message:
-                    await self._telegram.send_message_to_user(
-                        updated["user_id"],
-                        f"{message}\nСумма: {updated['amount']} ₽")
-            except Exception as exc:
-                logger.warning(f"Не удалось уведомить пользователя: {exc}")
+            else:
+                delivery, error = "skipped", "push не настроен"
+            self._log_notification(updated, status, "push", push_text, delivery, error)
+        if notify:
+            tg_messages = {
+                PAYOUT_STATUSES[1]: "✅ Ваша заявка одобрена",
+                PAYOUT_STATUSES[2]: "❌ Ваша заявка отклонена",
+                PAYOUT_STATUSES[3]: "📤 Выплата отправлена",
+            }
+            message = tg_messages.get(status)
+            if message:
+                tg_text = f"{message}\nСумма: {updated['amount']} ₽"
+                if self._telegram:
+                    try:
+                        await self._telegram.send_message_to_user(
+                            updated["user_id"], tg_text)
+                        delivery, error = "sent", None
+                    except Exception as exc:
+                        delivery, error = "failed", str(exc)
+                        logger.warning(f"Не удалось уведомить пользователя: {exc}")
+                else:
+                    delivery, error = "skipped", "Telegram не настроен"
+                self._log_notification(updated, status, "telegram", tg_text, delivery, error)
         return Payout(**updated)
+
+    @staticmethod
+    def _log_notification(payout, status, channel, message, delivery, error):
+        """Record a notification attempt in the payout journal (best-effort)."""
+        try:
+            from app.data.payout_notification_repository import (
+                get_payout_notification_repository,
+            )
+            get_payout_notification_repository().add_entry(
+                payout_id=payout.get("id"),
+                user_id=str(payout.get("user_id", "")),
+                recipient_name=payout.get("name", ""),
+                status=status,
+                channel=channel,
+                message=message,
+                delivery=delivery,
+                error=error,
+                amount=payout.get("amount"),
+            )
+        except Exception as exc:
+            logger.warning(f"Не удалось записать журнал уведомления: {exc}")
 
     async def bulk_update_status(self, ids: List[int], status: str) -> int:
         """Update status for multiple payouts. Never sends notifications."""

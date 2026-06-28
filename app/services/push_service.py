@@ -109,14 +109,20 @@ class PushService:
         body: str,
         *,
         url: str = "/employee/payouts",
-    ) -> None:
-        """Send a push notification to all subscriptions of an employee."""
+    ) -> dict[str, int]:
+        """Send a push notification to all subscriptions of an employee.
+
+        Returns {"total": <subscriptions>, "sent": <successful deliveries>} so
+        callers can record the real delivery result.
+        """
         subs = self._subs.get(employee_id)
         if not subs:
-            return
+            return {"total": 0, "sent": 0}
 
         payload = json.dumps({"title": title, "body": body, "url": url})
         stale: list[str] = []
+        total = len(subs)
+        sent = 0
 
         for sub in list(subs):
             endpoint = sub.get("endpoint", "")
@@ -130,6 +136,7 @@ class PushService:
                     },
                     ttl=3600,
                 )
+                sent += 1
             except WebPushException as exc:
                 status = getattr(exc.response, "status_code", None)
                 logger.warning(
@@ -144,6 +151,8 @@ class PushService:
 
         for endpoint in stale:
             self.unsubscribe(employee_id, endpoint)
+
+        return {"total": total, "sent": sent}
 
 
 # ------------------------------------------------------------------
