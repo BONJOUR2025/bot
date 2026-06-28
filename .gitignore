@@ -8,6 +8,7 @@ push_vapid_keys.json
 salons.json
 payout_notifications.json
 payroll_audit.json
+manager_salary_accruals.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

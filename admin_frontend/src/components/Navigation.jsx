@@ -53,6 +53,7 @@ const navStructure = [
     name: 'Деньги',
     items: [
       { to: '/admin/payroll',          label: 'Расчёт зарплаты',      permission: 'payroll',         icon: Calculator },
+      { to: '/admin/manager-salary',   label: 'ЗП менеджеров',         permission: 'manager-salary',  icon: Calculator },
       { to: '/admin/payouts',          label: 'Выплаты',              permission: 'payouts',         icon: Banknote },
       { to: '/admin/payouts-control',  label: 'Контроль выплат',      permission: 'payouts-control', icon: ShieldCheck },
       { to: '/admin/incentives',       label: 'Штрафы и премии',      permission: 'incentives',      icon: Award },

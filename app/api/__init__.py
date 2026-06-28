@@ -42,6 +42,7 @@ from .leave_requests import create_leave_request_router
 from .incentives import create_incentive_router
 from .messages import create_message_router
 from .payouts import create_payout_router
+from .manager_salary import create_manager_salary_router
 from .salary import create_salary_router
 from .schedule import create_schedule_router
 from .telegram import create_telegram_router
@@ -191,6 +192,11 @@ def create_app() -> FastAPI:
     payout_service = PayoutService(telegram_service=telegram_service, push_service=push_service)
     app.include_router(
         create_payout_router(payout_service, access_service),
+        prefix="/api",
+        dependencies=protected,
+    )
+    app.include_router(
+        create_manager_salary_router(payout_service, access_service),
         prefix="/api",
         dependencies=protected,
     )

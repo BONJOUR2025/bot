@@ -25,6 +25,7 @@ AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
         "label": "Выплаты: изменять дату и создавать задним числом",
     },
     {"id": "payouts-control", "label": "Контроль выплат"},
+    {"id": "manager-salary", "label": "Расчёт ЗП менеджеров"},
     {"id": "incentives", "label": "Штрафы и премии"},
     {"id": "reports", "label": "Отчёты"},
     {"id": "broadcast", "label": "Рассылка"},
