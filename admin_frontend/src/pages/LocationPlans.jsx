@@ -122,6 +122,94 @@ function PlansTable({ codes, plans, onChange }) {
   );
 }
 
+const MANAGER_POSITION = 'менеджер по работе с клиентами';
+
+// ── Manager plans (оклад/KPI/выручка/конверсии) per manager+month ──
+function ManagerPlansSection({ period }) {
+  const [managers, setManagers] = useState([]);
+  const [plans, setPlans] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api.get('employees/', { params: { archived: false } })
+      .then((r) => setManagers((r.data || []).filter(
+        (e) => (e.position || '').trim().toLowerCase() === MANAGER_POSITION && e.status !== 'inactive')))
+      .catch(() => setManagers([]));
+  }, []);
+
+  useEffect(() => {
+    api.get('manager-salary/plans', { params: { period } })
+      .then((r) => setPlans(r.data || {}))
+      .catch(() => setPlans({}));
+    setSaved(false);
+  }, [period]);
+
+  const upd = (code, field, raw) => {
+    const val = parseFloat(String(raw).replace(/\s/g, '')) || 0;
+    setPlans((p) => ({ ...p, [code]: { ...(p[code] || {}), [field]: val } }));
+    setSaved(false);
+  };
+  const cell = (code, field, pct) => {
+    const p = plans[code] || {};
+    const v = pct ? (p[field] != null ? Math.round(p[field] * 100) : '') : (p[field] ?? '');
+    return (
+      <input type="text" inputMode="numeric" className="input text-right w-full text-sm min-w-[90px]"
+        value={v === 0 ? '0' : (v || '')} placeholder="0"
+        onChange={(e) => upd(code, field, pct ? (parseFloat(e.target.value || 0) / 100) : e.target.value)} />
+    );
+  };
+
+  async function save() {
+    setSaving(true);
+    try {
+      await Promise.all(managers.map((m) => {
+        const p = plans[m.id] || {};
+        return api.put('manager-salary/plan', {
+          employee_code: String(m.id), period,
+          oklad: p.oklad || 0, kpi_max: p.kpi_max || 0,
+          revenue_plan: p.revenue_plan || 0,
+          repair_plan_conv: p.repair_plan_conv ?? 0.5,
+          sew_plan_conv: p.sew_plan_conv ?? 0.25,
+        });
+      }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } finally { setSaving(false); }
+  }
+
+  const columns = [
+    { label: 'Менеджер', primary: true, render: (m) => m.full_name || m.name },
+    { label: 'Оклад, ₽', render: (m) => cell(m.id, 'oklad') },
+    { label: 'KPI макс, ₽', render: (m) => cell(m.id, 'kpi_max') },
+    { label: 'План выручки, ₽', render: (m) => cell(m.id, 'revenue_plan') },
+    { label: 'Конв. ремонта, %', render: (m) => cell(m.id, 'repair_plan_conv', true) },
+    { label: 'Конв. пошива, %', render: (m) => cell(m.id, 'sew_plan_conv', true) },
+  ];
+
+  return (
+    <div className="app-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-[color:var(--color-border)] font-semibold">
+        Планы менеджеров · {period}
+      </div>
+      <ResponsiveTable
+        data={managers}
+        keyFn={(m) => m.id}
+        columns={columns}
+        emptyText="Нет сотрудников с должностью «менеджер по работе с клиентами»"
+      />
+      {managers.length > 0 && (
+        <div className="px-4 py-2.5 flex items-center justify-end gap-3 border-t border-[color:var(--color-border)]">
+          {saved && <span className="text-sm text-[color:var(--color-success)] font-medium">✓ Сохранено</span>}
+          <button onClick={save} disabled={saving} className="btn btn--primary min-w-[130px]">
+            {saving ? 'Сохранение…' : 'Сохранить планы'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────
 export default function LocationPlans() {
   const now = new Date();
@@ -137,6 +225,7 @@ export default function LocationPlans() {
   const [showInfo, setShowInfo] = useState(false);
 
   const monthKey = `${month}_${year}`;
+  const managerPeriod = `${year}-${String(MONTHS.indexOf(month) + 1).padStart(2, '0')}`;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -209,10 +298,10 @@ export default function LocationPlans() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold">Планы по точкам</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Планы продаж</h1>
           {!isMobile && (
             <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
-              Месячные планы продаж — используются для авторасчёта индивидуальных планов сотрудников
+              Месячные планы по точкам и планы менеджеров (оклад, KPI, выручка, конверсии)
             </p>
           )}
         </div>
@@ -276,6 +365,8 @@ export default function LocationPlans() {
           </div>
         </div>
       )}
+
+      {!loading && <ManagerPlansSection period={managerPeriod} />}
     </div>
   );
 }

@@ -36,6 +36,16 @@ class SalaryInput(BaseModel):
     advances: float = 0
 
 
+class PlanInput(BaseModel):
+    employee_code: str
+    period: str
+    oklad: float = 0
+    kpi_max: float = 0
+    revenue_plan: float = 0
+    repair_plan_conv: float = 0.50
+    sew_plan_conv: float = 0.25
+
+
 class AccrualInput(SalaryInput):
     employee_code: str = ""
     employee_name: str = ""
@@ -99,20 +109,61 @@ def create_manager_salary_router(
     @router.get("/advances")
     async def advances(
         employee_id: str = Query(...),
-        date_from: str = Query(...),
-        date_to: str = Query(...),
         current: ResolvedUser = Depends(require_permission(MANAGER_SALARY_PERMISSION)),
     ):
-        """Sum of advances (выплаты типа «Аванс») issued to the employee in the
-        period — used as the deduction from the accrued salary."""
-        rows = await payout_service.list_payouts(
-            employee_id=employee_id, payout_type=ADVANCE_TYPE,
-            from_date=date_from, to_date=date_to,
-        )
-        total = round(sum(float(p.amount or 0) for p in rows), 2)
-        return {"total": total, "count": len(rows),
+        """Advances issued SINCE the last salary payout (как в расчёте ЗП):
+        sum of «Аванс» payouts (Одобрено/Выплачено) after the manager's last
+        «Зарплата» payout; if there is none — all such advances."""
+        rows = await payout_service.list_payouts(employee_id=employee_id)
+        valid = {"Одобрено", "Выплачено"}
+
+        def _ts(p):
+            return str(p.timestamp) if p.timestamp else ""
+
+        rows = sorted(rows, key=_ts)
+        last_salary_ts = ""
+        for p in rows:
+            if p.payout_type == "Зарплата" and p.status in valid:
+                last_salary_ts = _ts(p)
+
+        adv = [p for p in rows
+               if p.payout_type == ADVANCE_TYPE and p.status in valid
+               and (not last_salary_ts or _ts(p) > last_salary_ts)]
+        total = round(sum(float(p.amount or 0) for p in adv), 2)
+        return {"total": total, "count": len(adv), "since": last_salary_ts or None,
                 "items": [{"id": p.id, "amount": p.amount, "status": p.status,
-                           "timestamp": str(p.timestamp) if p.timestamp else None} for p in rows]}
+                           "timestamp": _ts(p)} for p in adv]}
+
+    @router.get("/plan")
+    async def get_plan(
+        employee_code: str = Query(...),
+        period: str = Query(...),
+        current: ResolvedUser = Depends(require_permission(MANAGER_SALARY_PERMISSION)),
+    ):
+        from app.data.manager_plan_repository import get_manager_plan_repository
+        return get_manager_plan_repository().get(employee_code, period)
+
+    @router.get("/plans")
+    async def list_plans(
+        period: str = Query(...),
+        current: ResolvedUser = Depends(require_permission(MANAGER_SALARY_PERMISSION)),
+    ):
+        from app.data.manager_plan_repository import get_manager_plan_repository
+        return get_manager_plan_repository().list(period)
+
+    @router.put("/plan")
+    async def put_plan(
+        data: PlanInput,
+        current: ResolvedUser = Depends(require_permission(MANAGER_SALARY_PERMISSION)),
+    ):
+        from app.data.manager_plan_repository import get_manager_plan_repository
+        return get_manager_plan_repository().upsert(
+            data.employee_code, data.period,
+            oklad=data.oklad, kpi_max=data.kpi_max,
+            revenue_plan=data.revenue_plan,
+            repair_plan_conv=data.repair_plan_conv,
+            sew_plan_conv=data.sew_plan_conv,
+        )
 
     @router.post("/accrue")
     async def accrue(

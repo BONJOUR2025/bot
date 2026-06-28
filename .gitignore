@@ -9,6 +9,7 @@ salons.json
 payout_notifications.json
 payroll_audit.json
 manager_salary_accruals.json
+manager_plans.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

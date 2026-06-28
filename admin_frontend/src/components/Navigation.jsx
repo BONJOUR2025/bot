@@ -45,7 +45,7 @@ const navStructure = [
       { to: '/admin/visitor-counters', label: 'Счётчик посетителей',  permission: 'visitor-counters', icon: Users2 },
       { to: '/admin/sales',            label: 'Продажи',              permission: 'payroll',          icon: TrendingUp },
       { to: '/admin/masters',          label: 'Работы мастеров',      permission: 'payroll',          icon: Hammer },
-      { to: '/admin/location-plans',   label: 'Планы по точкам',      permission: 'payroll',          icon: MapPin },
+      { to: '/admin/location-plans',   label: 'Планы продаж',         permission: 'payroll',          icon: MapPin },
       { to: '/admin/sale-transfers',   label: 'Перемещение продажи',  permission: 'payroll',          icon: Replace },
     ],
   },
