@@ -62,6 +62,7 @@ export default function ManagerSalary() {
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
   const [result, setResult] = useState(null);
+  const [amoStatus, setAmoStatus] = useState(null);
   const [accruals, setAccruals] = useState([]);
   const [accruing, setAccruing] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
@@ -70,8 +71,13 @@ export default function ManagerSalary() {
   const dateFrom = `${period}-01`;
   const dateTo = `${period}-${String(lastDayOfMonth(period)).padStart(2, '0')}`;
 
-  useEffect(() => { loadEmployees(); }, []);
+  useEffect(() => { loadEmployees(); loadAmoStatus(); }, []);
   useEffect(() => { if (managerId) loadAccruals(); }, [managerId]);
+
+  async function loadAmoStatus() {
+    try { const res = await api.get('amo/status'); setAmoStatus(res.data); }
+    catch { setAmoStatus(null); }
+  }
 
   async function loadEmployees() {
     try {
@@ -168,9 +174,23 @@ export default function ManagerSalary() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
-        <Calculator size={24} /> Расчёт ЗП менеджеров
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
+          <Calculator size={24} /> Расчёт ЗП менеджеров
+        </h2>
+        {amoStatus && (
+          amoStatus.authorized ? (
+            <span className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-[color:var(--color-success-muted)] text-[color:var(--color-success)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-success)]" /> amoCRM подключён
+            </span>
+          ) : (
+            <a href="/admin/settings/integrations"
+              className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-[color:var(--color-danger-muted)] text-[color:var(--color-danger)] hover:underline">
+              <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-danger)]" /> amoCRM не подключён — настроить
+            </a>
+          )
+        )}
+      </div>
 
       {/* Manager + period */}
       <div className="app-card p-4 flex flex-wrap items-end gap-3">
