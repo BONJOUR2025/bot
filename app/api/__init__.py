@@ -43,6 +43,7 @@ from .incentives import create_incentive_router
 from .messages import create_message_router
 from .payouts import create_payout_router
 from .manager_salary import create_manager_salary_router
+from .amo import create_amo_router
 from .salary import create_salary_router
 from .schedule import create_schedule_router
 from .telegram import create_telegram_router
@@ -200,6 +201,7 @@ def create_app() -> FastAPI:
         prefix="/api",
         dependencies=protected,
     )
+    app.include_router(create_amo_router(), prefix="/api")
 
     from ..services import cash_move_auto_linker
 

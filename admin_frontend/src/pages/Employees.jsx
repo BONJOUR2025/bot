@@ -97,6 +97,7 @@ export default function Employees() {
     external_code: '',
     status: 'active',
     position: '',
+    amo_user_id: '',
     is_admin: false,
     bot_user: false,
     sync_to_bot: false,
@@ -108,6 +109,7 @@ export default function Employees() {
 
   const [employees, setEmployees] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [amoUsers, setAmoUsers] = useState(null);   // null = not loaded / unavailable
   const [workPlaces, setWorkPlaces] = useState([]);
   const [cashierChats, setCashierChats] = useState([]);
   const [filterName, setFilterName] = useState('');
@@ -123,7 +125,17 @@ export default function Employees() {
     load();
     loadPositions();
     loadCashierChats();
+    loadAmoUsers();
   }, []);
+
+  async function loadAmoUsers() {
+    try {
+      const res = await api.get('amo/users');
+      setAmoUsers(res.data || []);
+    } catch {
+      setAmoUsers(null);   // amoCRM не настроен/недоступен — селект покажет подсказку
+    }
+  }
 
   useEffect(() => {
     const editId = location.state?.editId;
@@ -276,6 +288,7 @@ export default function Employees() {
       external_code: form.external_code || '',
       status: form.status || 'active',
       position: form.position || '',
+      amo_user_id: form.amo_user_id || '',
       is_admin: form.is_admin,
       bot_user: form.bot_user,
       payout_chat_key: form.payout_chat_key || null,
@@ -580,6 +593,21 @@ export default function Employees() {
                   {positions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
                 </select>
               </div>
+              {(form.position || '').trim().toLowerCase() === 'менеджер по работе с клиентами' && (
+                <div>
+                  <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Пользователь amoCRM</label>
+                  {amoUsers ? (
+                    <select className="modal-control" value={form.amo_user_id || ''} onChange={(e) => setForm({ ...form, amo_user_id: e.target.value })}>
+                      <option value="">— не привязан —</option>
+                      {amoUsers.map((u) => <option key={u.id} value={String(u.id)}>{u.name} (#{u.id})</option>)}
+                    </select>
+                  ) : (
+                    <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                      amoCRM не подключён — привязка станет доступна после авторизации amoCRM.
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Место работы</label>
                 <select className="modal-control" value={form.work_place} onChange={(e) => setForm({ ...form, work_place: e.target.value })}>

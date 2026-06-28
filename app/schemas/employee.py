@@ -24,6 +24,7 @@ class EmployeeBase(BaseModel):
     archived_at: Optional[datetime] = None
     passport_url: str = ""
     external_code: str = ""
+    amo_user_id: Optional[str] = ""   # amoCRM responsible_user_id (для ЗП менеджеров)
 
 
 class EmployeeCreate(EmployeeBase):

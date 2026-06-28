@@ -62,6 +62,7 @@ class EmployeeRepository:
             "archived_at": self._parse_datetime(data.get("archived_at")),
             "passport_url": data.get("passport_url", ""),
             "external_code": data.get("external_code", ""),
+            "amo_user_id": data.get("amo_user_id", ""),
         }
         return Employee(**record)
 

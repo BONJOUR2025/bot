@@ -65,6 +65,15 @@ class Settings(BaseSettings):
     # Proxy для Telegram API (например: "socks5://127.0.0.1:1080" или "http://127.0.0.1:8080")
     telegram_proxy: str | None = Field(None, validation_alias="TELEGRAM_PROXY")
 
+    # amoCRM (расчёт ЗП менеджеров). Токены обновляются автоматически и
+    # дописываются обратно в .env.
+    amo_domain: str = Field("", validation_alias="AMO_DOMAIN")
+    amo_client_id: str = Field("", validation_alias="AMO_CLIENT_ID")
+    amo_client_secret: str = Field("", validation_alias="AMO_CLIENT_SECRET")
+    amo_redirect_uri: str = Field("", validation_alias="AMO_REDIRECT_URI")
+    amo_access_token: str = Field("", validation_alias="AMO_ACCESS_TOKEN")
+    amo_refresh_token: str = Field("", validation_alias="AMO_REFRESH_TOKEN")
+
     # Firebird database для расчёта зарплаты (продажи)
     firebird_host: str = Field("localhost", validation_alias="FIREBIRD_HOST")
     firebird_port: int = Field(3050, validation_alias="FIREBIRD_PORT")

@@ -34,3 +34,4 @@ class Employee:
     archived_at: Optional[datetime] = None
     passport_url: str = ""
     external_code: str = ""
+    amo_user_id: str = ""   # amoCRM responsible_user_id (для ЗП менеджеров)

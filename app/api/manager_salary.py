@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.services.payout_service import PayoutService
@@ -73,6 +73,28 @@ def create_manager_salary_router(
     ):
         """Authoritative salary calculation (no persistence)."""
         return _calc(data)
+
+    @router.get("/metrics")
+    async def metrics(
+        date_from: str = Query(..., description="YYYY-MM-DD"),
+        date_to: str = Query(..., description="YYYY-MM-DD"),
+        amo_user_id: Optional[int] = Query(None),
+        current: ResolvedUser = Depends(require_permission(MANAGER_SALARY_PERMISSION)),
+    ):
+        """Pull the fact metrics (revenue, deal counts, leads) from amoCRM for
+        the period. 502 with a message if amoCRM is unavailable — the page then
+        keeps manual entry."""
+        from datetime import datetime
+        from app.services.amo_metrics import compute_metrics
+        try:
+            dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+            dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Формат даты: YYYY-MM-DD")
+        try:
+            return await compute_metrics(dt_from, dt_to, amo_user_id)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
 
     @router.get("/advances")
     async def advances(

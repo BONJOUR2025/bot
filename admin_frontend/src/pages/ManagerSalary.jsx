@@ -108,6 +108,32 @@ export default function ManagerSalary() {
     return () => clearTimeout(t);
   }, [payload]);
 
+  async function loadMetrics() {
+    if (!manager?.amo_user_id) {
+      toast('У менеджера не привязан пользователь amoCRM (карточка сотрудника)', 'warning');
+      return;
+    }
+    try {
+      const res = await api.get('manager-salary/metrics', {
+        params: { date_from: dateFrom, date_to: dateTo, amo_user_id: manager.amo_user_id },
+      });
+      const m = res.data;
+      setForm((f) => ({
+        ...f,
+        revenue_actual: String(m.revenue_actual ?? ''),
+        repair_target_deals: String(m.repair_target_deals ?? ''),
+        repair_total_deals: String(m.repair_total_deals ?? ''),
+        sew_target_deals: String(m.sew_target_deals ?? ''),
+        sew_total_deals: String(m.sew_total_deals ?? ''),
+        sew_new_leads: String(m.sew_new_leads ?? ''),
+      }));
+      toast('Метрики подтянуты из amoCRM', 'success');
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'amoCRM недоступен';
+      toast(`Не удалось получить метрики: ${msg}`, 'error');
+    }
+  }
+
   async function loadAdvances() {
     if (!managerId) { toast('Выберите менеджера', 'warning'); return; }
     try {
@@ -184,9 +210,11 @@ export default function ManagerSalary() {
           </div>
 
           <div className="app-card p-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div className="font-semibold">Факт (метрики)</div>
-              <span className="text-xs text-[color:var(--color-muted-foreground)]">amoCRM-автоподстановка — следующий шаг</span>
+              <button className="btn btn--secondary text-xs flex items-center gap-1.5 whitespace-nowrap" onClick={loadMetrics}>
+                <RefreshCw size={13} /> Из amoCRM
+              </button>
             </div>
             <NumField label="Фактическая выручка (ремонт+пошив)" suffix="₽" value={form.revenue_actual} onChange={set('revenue_actual')} />
             <div className="grid grid-cols-2 gap-3">
