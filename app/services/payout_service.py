@@ -67,6 +67,28 @@ class PayoutService:
         return [Payout(**r) for r in rows]
 
     @staticmethod
+    def _to_amount(value) -> Optional[float]:
+        """Parse a money value tolerantly: handles Decimal/float/int and strings
+        like '5000', '5 000,00', '5000.00'. Returns the absolute value so an
+        outgoing cash move stored as a negative still matches a positive payout.
+        Returns None if it cannot be parsed."""
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return abs(float(value))
+        try:
+            from decimal import Decimal
+            if isinstance(value, Decimal):
+                return abs(float(value))
+        except Exception:
+            pass
+        s = str(value).strip().replace(" ", "").replace(" ", "").replace(",", ".")
+        try:
+            return abs(float(s))
+        except ValueError:
+            return None
+
+    @staticmethod
     def _fuzzy_find_cash_move(payout_dict: Dict) -> Optional[str]:
         """Find a Firebird cash movement matching payout by amount and exact date."""
         from datetime import date as date_cls
@@ -76,7 +98,9 @@ class PayoutService:
             if not ts:
                 return None
             payout_date = date_cls.fromisoformat(ts)
-            payout_amount = float(payout_dict.get("amount") or 0)
+            payout_amount = PayoutService._to_amount(payout_dict.get("amount"))
+            if payout_amount is None:
+                return None
             moves = get_firebird_service().get_cash_moves(
                 date_from=payout_date,
                 date_to=payout_date,
@@ -87,8 +111,10 @@ class PayoutService:
                     move_date = date_cls.fromisoformat(move_date_str)
                 except ValueError:
                     continue
-                if (move_date == payout_date
-                        and abs(payout_amount - float(m.get("SUMM") or 0)) < 0.01):
+                move_amount = PayoutService._to_amount(m.get("SUMM"))
+                if move_amount is None:
+                    continue
+                if move_date == payout_date and abs(payout_amount - move_amount) < 0.01:
                     return str(m.get("ID_KASSES_MOVE") or "")
         except Exception as exc:
             logger.warning(f"Cash move fuzzy match failed: {exc}")

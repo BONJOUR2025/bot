@@ -44,16 +44,21 @@ const navStructure = [
       { to: '/admin/salons',           label: 'Салоны',               permission: 'salons',           icon: Store },
       { to: '/admin/visitor-counters', label: 'Счётчик посетителей',  permission: 'visitor-counters', icon: Users2 },
       { to: '/admin/sales',            label: 'Продажи',              permission: 'payroll',          icon: TrendingUp },
-      { to: '/admin/masters',          label: 'Работы мастеров',      permission: 'payroll',          icon: Hammer },
       { to: '/admin/location-plans',   label: 'Планы продаж',         permission: 'payroll',          icon: MapPin },
       { to: '/admin/sale-transfers',   label: 'Перемещение продажи',  permission: 'payroll',          icon: Replace },
     ],
   },
   {
+    name: 'Зарплата',
+    items: [
+      { to: '/admin/payroll',          label: 'Администраторы',        permission: 'payroll',         icon: Calculator },
+      { to: '/admin/masters',          label: 'Мастера',              permission: 'payroll',         icon: Hammer },
+      { to: '/admin/manager-salary',   label: 'Менеджеры',            permission: 'manager-salary',  icon: Users },
+    ],
+  },
+  {
     name: 'Деньги',
     items: [
-      { to: '/admin/payroll',          label: 'Расчёт зарплаты',      permission: 'payroll',         icon: Calculator },
-      { to: '/admin/manager-salary',   label: 'ЗП менеджеров',         permission: 'manager-salary',  icon: Calculator },
       { to: '/admin/payouts',          label: 'Выплаты',              permission: 'payouts',         icon: Banknote },
       { to: '/admin/payouts-control',  label: 'Контроль выплат',      permission: 'payouts-control', icon: ShieldCheck },
       { to: '/admin/incentives',       label: 'Штрафы и премии',      permission: 'incentives',      icon: Award },
