@@ -22,6 +22,40 @@ function recentMonths(n = 12) {
   return out;
 }
 
+function prevMonth(period) {
+  const [y, m] = period.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Relative change vs the previous period (up = green, down = red).
+function TrendBadge({ cur, prev }) {
+  if (cur == null || prev == null || !prev) return null;
+  const pct = ((cur - prev) / prev) * 100;
+  if (Math.abs(pct) < 0.05) {
+    return <span className="text-[11px] text-[color:var(--color-muted-foreground)]">≈ пред. мес.</span>;
+  }
+  const up = pct > 0;
+  return (
+    <span
+      className={`text-[11px] font-medium ${up ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}
+      title={`Пред. период: ${Math.round(prev).toLocaleString('ru-RU')}`}
+    >
+      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
+function Widget({ label, value, cur, prev, accent }) {
+  return (
+    <div className="app-card px-4 py-3 flex flex-col gap-1">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
+      <div className={`text-lg font-semibold ${accent || 'text-[color:var(--color-text-primary)]'}`}>{value}</div>
+      <TrendBadge cur={cur} prev={prev} />
+    </div>
+  );
+}
+
 function KpiRow({ title, weight, max, ratio, amount, zeroed, extra }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
@@ -49,6 +83,7 @@ export default function ManagerSalary() {
   const [metrics, setMetrics] = useState(null);
   const [advances, setAdvances] = useState(null);   // {total, since}
   const [result, setResult] = useState(null);
+  const [prev, setPrev] = useState(null);            // {result, metrics} of previous month
   const [loading, setLoading] = useState(false);
   const [metricsError, setMetricsError] = useState(null);
   const [amoStatus, setAmoStatus] = useState(null);
@@ -72,7 +107,7 @@ export default function ManagerSalary() {
   }, []);
 
   const loadAll = useCallback(async () => {
-    if (!managerId) { setResult(null); setPlan(null); setMetrics(null); setAdvances(null); return; }
+    if (!managerId) { setResult(null); setPlan(null); setMetrics(null); setAdvances(null); setPrev(null); return; }
     setLoading(true);
     setMetricsError(null);
     try {
@@ -97,6 +132,28 @@ export default function ManagerSalary() {
       };
       const res = await api.post('manager-salary/calc', payload);
       setResult(res.data);
+
+      // Previous month — for the widget comparison (advances excluded: they
+      // are a running «since last salary» total, not period-comparable).
+      const pp = prevMonth(period);
+      (async () => {
+        try {
+          const ppPlan = await api.get('manager-salary/plan', { params: { employee_code: managerId, period: pp } }).then((r) => r.data);
+          let ppMet = null;
+          if (manager?.amo_user_id) {
+            const pF = `${pp}-01`, pT = `${pp}-${String(lastDay(pp)).padStart(2, '0')}`;
+            ppMet = await api.get('manager-salary/metrics', { params: { date_from: pF, date_to: pT, amo_user_id: manager.amo_user_id } }).then((r) => r.data);
+          }
+          const ppRes = await api.post('manager-salary/calc', {
+            oklad: ppPlan.oklad, kpi_max: ppPlan.kpi_max,
+            revenue_plan: ppPlan.revenue_plan, revenue_actual: ppMet?.revenue_actual || 0,
+            repair_plan_conv: ppPlan.repair_plan_conv, repair_target_deals: ppMet?.repair_target_deals || 0, repair_total_deals: ppMet?.repair_total_deals || 0,
+            sew_plan_conv: ppPlan.sew_plan_conv, sew_target_deals: ppMet?.sew_target_deals || 0, sew_total_deals: ppMet?.sew_total_deals || 0, sew_new_leads: ppMet?.sew_new_leads || 0,
+            advances: 0,
+          }).then((r) => r.data);
+          setPrev({ result: ppRes, metrics: ppMet });
+        } catch { setPrev(null); }
+      })();
     } catch (e) {
       console.error(e);
     } finally { setLoading(false); }
@@ -184,22 +241,20 @@ export default function ManagerSalary() {
             </div>
           )}
 
-          {result && (
+          {result && (<>
+            {/* Metric widgets with previous-month comparison */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <Widget label="Начислено" value={fmtMoney(result.gross)} cur={result.gross} prev={prev?.result?.gross} />
+              <Widget label="К выплате" value={fmtMoney(result.to_pay)} accent="text-[color:var(--color-primary)]" />
+              <Widget label="KPI" value={fmtMoney(result.kpi)} cur={result.kpi} prev={prev?.result?.kpi} />
+              <Widget label="Выручка" value={fmtMoney(metrics?.revenue_actual)} cur={metrics?.revenue_actual} prev={prev?.metrics?.revenue_actual} />
+              <Widget label="Конв. ремонта" value={fmtPct(result.repair.conv)} cur={result.repair.conv} prev={prev?.result?.repair?.conv} />
+              <Widget label="Конв. пошива" value={fmtPct(result.sew.conv)} cur={result.sew.conv} prev={prev?.result?.sew?.conv} />
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Totals + breakdown */}
+              {/* Breakdown */}
               <div className="app-card p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-[color:var(--color-border)] p-3">
-                    <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Начислено</div>
-                    <div className="text-xl font-semibold">{fmtMoney(result.gross)}</div>
-                    <div className="text-xs text-[color:var(--color-muted-foreground)]">оклад {fmtMoney(result.oklad)} + KPI {fmtMoney(result.kpi)}</div>
-                  </div>
-                  <div className="rounded-lg border border-[color:var(--color-border)] p-3">
-                    <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">К выплате</div>
-                    <div className="text-xl font-semibold text-[color:var(--color-primary)]">{fmtMoney(result.to_pay)}</div>
-                    <div className="text-xs text-[color:var(--color-muted-foreground)]">− авансы {fmtMoney(result.advances)}{advances?.since ? ' (с посл. ЗП)' : ''}</div>
-                  </div>
-                </div>
                 <div className="rounded-lg border border-[color:var(--color-border)] p-3">
                   <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">KPI · максимум {fmtMoney(result.kpi_max)}</div>
                   <KpiRow title="Выручка" weight={result.weights.revenue} max={result.revenue.max} ratio={result.revenue.ratio} amount={result.revenue.amount} zeroed={result.revenue.zeroed} extra={`факт/план ${fmtPct(result.revenue.ratio)}`} />
@@ -235,7 +290,7 @@ export default function ManagerSalary() {
                 </div>
               </div>
             </div>
-          )}
+          </>)}
         </>
       )}
 
