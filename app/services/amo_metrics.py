@@ -214,6 +214,49 @@ async def _first_outgoing_notes(ts_from: int, ts_to: int,
     return out
 
 
+# Outgoing manager actions exposed as amoCRM events (chat is the «Chats API»
+# signal available via the public events feed; outgoing_call duplicates the
+# notes signal as a safety net).
+OUTGOING_EVENT_TYPES = ("outgoing_chat_message", "outgoing_call")
+
+
+async def _first_outgoing_events(ts_from: int, ts_to: int,
+                                 amo_user_id: int | None) -> dict[int, int]:
+    """lead_id -> ts of the manager's first outgoing chat message / call, read
+    from the events feed. Best-effort: any failure degrades to «no signal»."""
+    out: dict[int, int] = {}
+    try:
+        page = 1
+        while page <= 200:
+            data = await amo_get("/events", params={
+                "filter[type][]": list(OUTGOING_EVENT_TYPES),
+                "filter[created_at][from]": ts_from,
+                "filter[created_at][to]": ts_to,
+                "limit": 100,
+                "page": page,
+            })
+            batch = data.get("_embedded", {}).get("events", [])
+            if not batch:
+                break
+            for ev in batch:
+                if ev.get("entity_type") not in (None, "lead", "leads"):
+                    continue
+                if amo_user_id and ev.get("created_by") != amo_user_id:
+                    continue
+                lid, ts = ev.get("entity_id"), ev.get("created_at")
+                if lid is None or ts is None:
+                    continue
+                cur = out.get(lid)
+                if cur is None or ts < cur:
+                    out[lid] = ts
+            if len(batch) < 100:
+                break
+            page += 1
+    except Exception:
+        return {}
+    return out
+
+
 async def _fetch_leads_by_ids(ids: list[int]) -> dict[int, dict]:
     out: dict[int, dict] = {}
     CHUNK = 50
@@ -234,6 +277,7 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
 
     reached, moves, first_change = await _scan_status_events(ts_from, ts_to, amo_user_id)
     note_action = await _first_outgoing_notes(ts_from, ts_to, amo_user_id)
+    chat_action = await _first_outgoing_events(ts_from, ts_to, amo_user_id)
 
     # Suspicious = cross-pipeline moves touching a KPI pipeline (in/out/between),
     # excluding the normal intake move out of «Неразобранное».
@@ -345,7 +389,8 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
         lid = lead.get("id")
         if not created or lid is None:
             continue
-        cands = [t for t in (first_change.get(lid), note_action.get(lid)) if t is not None]
+        cands = [t for t in (first_change.get(lid), note_action.get(lid), chat_action.get(lid))
+                 if t is not None]
         if not cands:
             continue
         d = min(cands) - int(created)

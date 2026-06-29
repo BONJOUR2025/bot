@@ -446,7 +446,7 @@ export default function ManagerSalary() {
                     <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Ремонт: целевых / всего</span><span>{metrics.repair_target_deals} / {metrics.repair_total_deals}</span></div>
                     <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Пошив: целевых / всего</span><span>{metrics.sew_target_deals} / {metrics.sew_total_deals}</span></div>
                     <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Новых лидов (пошив)</span><span>{metrics.sew_new_leads}</span></div>
-                    <div className="flex justify-between" title="От создания сделки до первого действия менеджера (смена этапа / исходящий звонок). Медиана; в скобках среднее.">
+                    <div className="flex justify-between" title="От создания сделки до первого действия менеджера (смена этапа / исходящий звонок / сообщение в чате). Медиана; в скобках среднее.">
                       <span className="text-[color:var(--color-muted-foreground)]">Время первого ответа</span>
                       <span>{fmtDuration(metrics.median_response_seconds)}{metrics.response_sample ? <span className="text-[color:var(--color-muted-foreground)]"> · ср. {fmtDuration(metrics.avg_response_seconds)} · по {metrics.response_sample}</span> : null}</span>
                     </div>

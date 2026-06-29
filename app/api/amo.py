@@ -33,11 +33,13 @@ def create_amo_router() -> APIRouter:
     async def raw_events(
         date_from: str = Query(..., description="YYYY-MM-DD"),
         date_to: str = Query(..., description="YYYY-MM-DD"),
+        type: str = Query("lead_status_changed", description="тип события amoCRM, напр. outgoing_chat_message"),
         limit: int = 50,
         current: ResolvedUser = Depends(get_current_user),
     ):
-        """Raw lead_status_changed events for the range (first page) — to check
-        the value_after / entity_id / created_at shapes against the code."""
+        """Raw events of the given type for the range (first page) — to check the
+        value_after / entity_id / entity_type / created_by shapes against the
+        code (e.g. type=outgoing_chat_message to verify chat attribution)."""
         from datetime import datetime
         try:
             ts_from = int(datetime.strptime(date_from, "%Y-%m-%d").timestamp())
@@ -46,7 +48,7 @@ def create_amo_router() -> APIRouter:
             raise HTTPException(status_code=400, detail="Формат даты: YYYY-MM-DD")
         try:
             data = await amo_client.amo_get("/events", params={
-                "filter[type]": "lead_status_changed",
+                "filter[type]": type,
                 "filter[created_at][from]": ts_from,
                 "filter[created_at][to]": ts_to,
                 "limit": limit,
