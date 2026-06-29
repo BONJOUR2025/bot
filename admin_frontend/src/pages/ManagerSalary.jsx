@@ -62,7 +62,7 @@ function KpiRow({ title, weight, max, ratio, amount, zeroed, extra }) {
       <div className="min-w-0">
         <div className="text-sm font-medium">{title} <span className="text-xs text-[color:var(--color-muted-foreground)]">· вес {(weight * 100).toFixed(0)}%</span></div>
         <div className="text-xs text-[color:var(--color-muted-foreground)]">
-          макс {fmtMoney(max)} · коэф {ratio == null ? '—' : `${(Math.min(ratio, 1) * 100).toFixed(1)}%`}{extra ? ` · ${extra}` : ''}
+          цель {fmtMoney(max)} · коэф {ratio == null ? '—' : `${(ratio * 100).toFixed(1)}%`}{extra ? ` · ${extra}` : ''}
         </div>
       </div>
       <div className={`text-right whitespace-nowrap font-semibold tabular-nums ${zeroed ? 'text-[color:var(--color-muted-foreground)]' : 'text-[color:var(--color-text-primary)]'}`}>
@@ -256,7 +256,7 @@ export default function ManagerSalary() {
               {/* Breakdown */}
               <div className="app-card p-4 space-y-3">
                 <div className="rounded-lg border border-[color:var(--color-border)] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">KPI · максимум {fmtMoney(result.kpi_max)}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">KPI · цель {fmtMoney(result.kpi_max)}</div>
                   <KpiRow title="Выручка" weight={result.weights.revenue} max={result.revenue.max} ratio={result.revenue.ratio} amount={result.revenue.amount} zeroed={result.revenue.zeroed} extra={`факт/план ${fmtPct(result.revenue.ratio)}`} />
                   <KpiRow title="Конверсия ремонта" weight={result.weights.repair} max={result.repair.max} ratio={result.repair.ratio} amount={result.repair.amount} zeroed={result.repair.zeroed} extra={`конв ${fmtPct(result.repair.conv)}`} />
                   <KpiRow title="Конверсия пошива" weight={result.weights.sew} max={result.sew.max} ratio={result.sew.ratio} amount={result.sew.amount} zeroed={result.sew.zeroed} extra={result.sew.leads_gate_failed ? `лидов ${result.sew.new_leads} < ${result.sew.min_leads}` : `конв ${fmtPct(result.sew.conv)}`} />

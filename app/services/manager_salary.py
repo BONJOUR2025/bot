@@ -1,7 +1,7 @@
 """Manager salary = оклад + KPI.
 
-KPI is capped at ``kpi_max`` and is made of three weighted components
-(per the BONJOUR scheme):
+``kpi_max`` is the TARGET (100%) of KPI, not a hard ceiling — over-performance is
+paid. KPI is three weighted components (per the BONJOUR scheme):
 
   1) Выполнение плана по выручке      — вес 35%
   2) Конверсия сделок ремонта         — вес 20%   (воронка 5257981)
@@ -9,7 +9,7 @@ KPI is capped at ``kpi_max`` and is made of three weighted components
 
 For every component:  ratio = факт / план.
   * if ratio < 0.79          → component = 0   (порог 79%)
-  * else                     → component = min(ratio, 1.0) * max_component
+  * else                     → component = ratio * max_component   (no upper cap)
 Пошив additionally zeroes out if new leads in the period < 50.
 
 The amoCRM aggregation lives elsewhere; this module is pure math so it can be
@@ -18,7 +18,6 @@ unit-tested and reused regardless of where the metrics come from.
 from __future__ import annotations
 
 THRESHOLD = 0.79   # ratio below this → component pays 0
-CAP = 1.0          # KPI is a maximum: never pay above 100% of a component
 
 # Default component weights (share of kpi_max). Configurable per call.
 W_REVENUE = 0.35
@@ -41,7 +40,7 @@ def _component(actual: float, plan: float, max_amount: float, *, gate_ok: bool =
     ratio = actual / plan
     if ratio < THRESHOLD:
         return {"ratio": round(ratio, 4), "amount": 0.0, "zeroed": True}
-    amount = round(min(ratio, CAP) * max_amount, 2)
+    amount = round(ratio * max_amount, 2)   # no upper cap — over-performance pays
     return {"ratio": round(ratio, 4), "amount": amount, "zeroed": False}
 
 
