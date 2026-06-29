@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Calculator, Wallet, RefreshCw, Trash2, ChevronDown, ChevronUp, AlertTriangle, Banknote, CheckCircle2 } from 'lucide-react';
+import {
+  Wallet, RefreshCw, Trash2, ChevronDown, ChevronUp, AlertTriangle, Banknote,
+  CheckCircle2, Gauge, ShieldAlert, ListChecks, Receipt, Clock, Users, Coins,
+} from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 
 const MANAGER_POSITION = 'менеджер по работе с клиентами';
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
-const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
+const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
 const fmtPct = (v) => (v === null || v === undefined ? '—' : `${(Number(v) * 100).toFixed(1)}%`);
-// Human-readable duration from seconds: «45 сек» / «12 мин» / «2 ч 5 мин».
 const fmtDuration = (s) => {
   if (s === null || s === undefined) return '—';
   s = Math.round(Number(s));
@@ -20,7 +22,6 @@ const fmtDuration = (s) => {
 };
 const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
 
-// last 12 months as {value:'YYYY-MM', label:'Июнь 2026'}
 function recentMonths(n = 12) {
   const out = [];
   const d = new Date();
@@ -32,56 +33,89 @@ function recentMonths(n = 12) {
   return out;
 }
 
-function prevMonth(period) {
-  const [y, m] = period.split('-').map(Number);
-  const d = new Date(y, m - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+// ratio → semantic tone (порог 79%, цель 100%)
+const toneOf = (ratio) => {
+  if (ratio == null) return 'muted';
+  const p = ratio * 100;
+  return p >= 100 ? 'success' : p >= 79 ? 'primary' : 'danger';
+};
+const TONE_VAR = {
+  success: 'var(--color-success)', primary: 'var(--color-primary)',
+  danger: 'var(--color-danger)', muted: 'var(--color-muted-foreground)',
+};
+const TONE_TEXT = {
+  success: 'text-[color:var(--color-success)]', primary: 'text-[color:var(--color-primary)]',
+  danger: 'text-[color:var(--color-danger)]', muted: 'text-[color:var(--color-muted-foreground)]',
+};
 
-// Relative change vs the previous period (up = green, down = red).
-function TrendBadge({ cur, prev }) {
-  if (cur == null || prev == null || !prev) return null;
-  const pct = ((cur - prev) / prev) * 100;
-  if (Math.abs(pct) < 0.05) {
-    return <span className="text-[11px] text-[color:var(--color-muted-foreground)]">≈ пред. мес.</span>;
-  }
-  const up = pct > 0;
-  return (
-    <span
-      className={`text-[11px] font-medium ${up ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}
-      title={`Пред. период: ${Math.round(prev).toLocaleString('ru-RU')}`}
-    >
-      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
-    </span>
-  );
-}
+// ── Small presentational pieces ──────────────────────────────────────────────
 
-// Большая денежная плитка — крупно сумма + подпись/тренд.
-function MoneyTile({ label, value, cur, prev, accent, hint, highlight }) {
+// One term of the payout formula (operator + labelled amount), kept on one line.
+function Term({ op, label, value, tone, strong }) {
   return (
-    <div className={`app-card px-4 py-3 flex flex-col gap-1 ${highlight ? 'ring-1 ring-[color:var(--color-primary)]' : ''}`}>
-      <div className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
-      <div className={`text-2xl font-bold tabular-nums leading-tight whitespace-nowrap ${accent || 'text-[color:var(--color-text-primary)]'}`}>{value}</div>
-      {hint ? <div className="text-[11px] text-[color:var(--color-muted-foreground)]">{hint}</div> : <TrendBadge cur={cur} prev={prev} />}
+    <div className="inline-flex items-center gap-2 whitespace-nowrap">
+      {op && <span className="text-[color:var(--color-muted-foreground)] text-base font-medium select-none">{op}</span>}
+      <div>
+        <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
+        <div className={`tabular-nums font-semibold ${strong ? 'text-lg' : 'text-base'} ${tone || ''}`}>{fmtMoney(value)}</div>
+      </div>
     </div>
   );
 }
 
-// Строка сравнения План / Факт / % с порогом 79%.
-function PlanFactRow({ title, note, plan, fact, ratio, fmt = fmtMoney }) {
-  const pct = ratio == null ? null : ratio * 100;
-  const tone = pct == null ? 'text-[color:var(--color-muted-foreground)]'
-    : pct >= 100 ? 'text-[color:var(--color-success)]'
-    : pct >= 79 ? 'text-[color:var(--color-text-primary)]'
-    : 'text-[color:var(--color-danger)]';
+// A compact stat card (quality metrics).
+function StatCard({ icon, label, value, sub, tone }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_2.5rem] items-baseline gap-x-2 sm:gap-x-3 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
-      <div className="text-sm font-medium min-w-0">
-        {title}{note ? <span className="block text-[11px] text-[color:var(--color-muted-foreground)]">{note}</span> : null}
+    <div className="app-card p-4 flex items-start gap-3">
+      <div className="mt-0.5 shrink-0 text-[color:var(--color-muted-foreground)]">{icon}</div>
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
+        <div className={`text-lg font-semibold leading-tight ${tone || ''}`}>{value}</div>
+        {sub && <div className="text-[11px] text-[color:var(--color-muted-foreground)] mt-0.5">{sub}</div>}
       </div>
-      <div className="text-right tabular-nums text-xs sm:text-sm whitespace-nowrap">{fmt(plan)}</div>
-      <div className="text-right tabular-nums text-xs sm:text-sm font-semibold whitespace-nowrap">{fmt(fact)}</div>
-      <div className={`text-right tabular-nums text-xs sm:text-sm font-semibold ${tone}`}>{pct == null ? '—' : `${pct.toFixed(0)}%`}</div>
+    </div>
+  );
+}
+
+// KPI metric: plan vs fact with a progress bar and a 79% threshold marker.
+function MetricBar({ label, note, plan, fact, ratio, contribution, fmt = fmtMoney }) {
+  const pctNum = ratio == null ? null : ratio * 100;
+  const tone = toneOf(ratio);
+  const fill = Math.min(Math.max(ratio || 0, 0), 1) * 100;
+  return (
+    <div className="py-3 border-t border-[color:var(--color-border)] first:border-t-0 first:pt-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-sm font-semibold tabular-nums">{fmtMoney(contribution)}</span>
+      </div>
+      <div className="mt-2 relative h-2 rounded-full bg-[color:var(--color-bg-secondary)] overflow-visible">
+        <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${fill}%`, background: TONE_VAR[tone] }} />
+        <div className="absolute -top-1 -bottom-1 w-0.5 rounded bg-[color:var(--color-muted-foreground)] opacity-50" style={{ left: '79%' }} title="Порог 79%" />
+      </div>
+      <div className="mt-1.5 flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
+        <span>план {fmt(plan)} · факт <span className="text-[color:var(--color-text)] font-medium">{fmt(fact)}</span></span>
+        <span className={`font-semibold ${TONE_TEXT[tone]}`}>{pctNum == null ? '—' : `${pctNum.toFixed(0)}%`}</span>
+      </div>
+      {note && <div className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1">{note}</div>}
+    </div>
+  );
+}
+
+function Tabs({ tabs, active, onChange }) {
+  return (
+    <div className="flex gap-1 p-1 rounded-xl bg-[color:var(--color-bg-secondary)] overflow-x-auto">
+      {tabs.map((t) => (
+        <button key={t.key} type="button" onClick={() => onChange(t.key)}
+          className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5
+            ${active === t.key
+              ? 'bg-[color:var(--color-surface)] text-[color:var(--color-text)] shadow-sm'
+              : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}>
+          {t.icon}{t.label}
+          {t.badge != null && t.badge !== 0 && (
+            <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold bg-[color:var(--color-bg)] text-[color:var(--color-muted-foreground)]">{t.badge}</span>
+          )}
+        </button>
+      ))}
     </div>
   );
 }
@@ -104,7 +138,6 @@ function DealRow({ d, domain }) {
   );
 }
 
-// Collapsible list of the concrete deals counted in one calculation group.
 function DealList({ title, deals, domain, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   const list = deals || [];
@@ -112,7 +145,7 @@ function DealList({ title, deals, domain, defaultOpen = false }) {
   return (
     <div className="border border-[color:var(--color-border)] rounded-lg overflow-hidden">
       <button type="button" onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm">
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-[color:var(--color-bg-secondary)]">
         <span className="font-medium text-left">{title} <span className="text-xs text-[color:var(--color-muted-foreground)]">· {list.length} шт · Σ {sum.toLocaleString('ru-RU')} ₽</span></span>
         {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
       </button>
@@ -129,9 +162,8 @@ function DealList({ title, deals, domain, defaultOpen = false }) {
   );
 }
 
-// Like DealList, but deals are split into subgroups (subheader + rows).
-function GroupedDealList({ title, deals, groupLabel, domain, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen);
+function GroupedDealList({ title, deals, groupLabel, domain }) {
+  const [open, setOpen] = useState(false);
   const list = deals || [];
   const sum = list.reduce((s, d) => s + (Number(d.price) || 0), 0);
   const groups = [];
@@ -144,7 +176,7 @@ function GroupedDealList({ title, deals, groupLabel, domain, defaultOpen = false
   return (
     <div className="border border-[color:var(--color-border)] rounded-lg overflow-hidden">
       <button type="button" onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm">
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-[color:var(--color-bg-secondary)]">
         <span className="font-medium text-left">{title} <span className="text-xs text-[color:var(--color-muted-foreground)]">· {list.length} шт · Σ {sum.toLocaleString('ru-RU')} ₽</span></span>
         {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
       </button>
@@ -174,21 +206,7 @@ function GroupedDealList({ title, deals, groupLabel, domain, defaultOpen = false
   );
 }
 
-function KpiRow({ title, weight, max, ratio, amount, zeroed, extra }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
-      <div className="min-w-0">
-        <div className="text-sm font-medium">{title} <span className="text-xs text-[color:var(--color-muted-foreground)]">· вес {(weight * 100).toFixed(0)}%</span></div>
-        <div className="text-xs text-[color:var(--color-muted-foreground)]">
-          цель {fmtMoney(max)} · коэф {ratio == null ? '—' : `${(ratio * 100).toFixed(1)}%`}{extra ? ` · ${extra}` : ''}
-        </div>
-      </div>
-      <div className={`text-right whitespace-nowrap font-semibold tabular-nums ${zeroed ? 'text-[color:var(--color-muted-foreground)]' : 'text-[color:var(--color-text-primary)]'}`}>
-        {fmtMoney(amount)}
-      </div>
-    </div>
-  );
-}
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ManagerSalary() {
   const { toast } = useToast();
@@ -199,10 +217,9 @@ export default function ManagerSalary() {
 
   const [plan, setPlan] = useState(null);
   const [metrics, setMetrics] = useState(null);
-  const [advances, setAdvances] = useState(null);   // {total, since}
+  const [advances, setAdvances] = useState(null);
   const [incentives, setIncentives] = useState({ bonuses: 0, penalties: 0 });
   const [result, setResult] = useState(null);
-  const [prev, setPrev] = useState(null);            // {result, metrics} of previous month
   const [loading, setLoading] = useState(false);
   const [metricsError, setMetricsError] = useState(null);
   const [amoStatus, setAmoStatus] = useState(null);
@@ -210,7 +227,7 @@ export default function ManagerSalary() {
   const [accruing, setAccruing] = useState(false);
   const [payingId, setPayingId] = useState(null);
   const [accrualsTick, setAccrualsTick] = useState(0);
-  const [showHistory, setShowHistory] = useState(true);
+  const [tab, setTab] = useState('overview');
 
   const managers = useMemo(
     () => employees.filter((e) => (e.position || '').trim().toLowerCase() === MANAGER_POSITION),
@@ -218,6 +235,7 @@ export default function ManagerSalary() {
   const manager = useMemo(() => managers.find((e) => String(e.id) === String(managerId)), [managers, managerId]);
   const dateFrom = `${period}-01`;
   const dateTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
+  const periodLabel = months.find((m) => m.value === period)?.label || period;
 
   useEffect(() => {
     api.get('employees/', { params: { archived: false } })
@@ -227,7 +245,7 @@ export default function ManagerSalary() {
   }, []);
 
   const loadAll = useCallback(async () => {
-    if (!managerId) { setResult(null); setPlan(null); setMetrics(null); setAdvances(null); setPrev(null); return; }
+    if (!managerId) { setResult(null); setPlan(null); setMetrics(null); setAdvances(null); return; }
     setLoading(true);
     setMetricsError(null);
     try {
@@ -246,44 +264,21 @@ export default function ManagerSalary() {
       try { met = await metP; setMetrics(met); }
       catch (e) { setMetrics(null); setMetricsError(e?.response?.data?.detail || e.message || 'amoCRM недоступен'); }
 
-      const payload = {
+      const res = await api.post('manager-salary/calc', {
         oklad: pl.oklad, kpi_max: pl.kpi_max,
         revenue_plan: pl.revenue_plan, revenue_actual: met?.revenue_actual || 0,
         repair_plan_conv: pl.repair_plan_conv, repair_target_deals: met?.repair_target_deals || 0, repair_total_deals: met?.repair_total_deals || 0,
         sew_plan_conv: pl.sew_plan_conv, sew_target_deals: met?.sew_target_deals || 0, sew_total_deals: met?.sew_total_deals || 0, sew_new_leads: met?.sew_new_leads || 0,
         advances: adv?.total || 0, bonuses, penalties,
-      };
-      const res = await api.post('manager-salary/calc', payload);
+      });
       setResult(res.data);
-
-      // Previous month — for the widget comparison (advances excluded: they
-      // are a running «since last salary» total, not period-comparable).
-      const pp = prevMonth(period);
-      (async () => {
-        try {
-          const ppPlan = await api.get('manager-salary/plan', { params: { employee_code: managerId, period: pp } }).then((r) => r.data);
-          let ppMet = null;
-          if (manager?.amo_user_id) {
-            const pF = `${pp}-01`, pT = `${pp}-${String(lastDay(pp)).padStart(2, '0')}`;
-            ppMet = await api.get('manager-salary/metrics', { params: { date_from: pF, date_to: pT, amo_user_id: manager.amo_user_id } }).then((r) => r.data);
-          }
-          const ppRes = await api.post('manager-salary/calc', {
-            oklad: ppPlan.oklad, kpi_max: ppPlan.kpi_max,
-            revenue_plan: ppPlan.revenue_plan, revenue_actual: ppMet?.revenue_actual || 0,
-            repair_plan_conv: ppPlan.repair_plan_conv, repair_target_deals: ppMet?.repair_target_deals || 0, repair_total_deals: ppMet?.repair_total_deals || 0,
-            sew_plan_conv: ppPlan.sew_plan_conv, sew_target_deals: ppMet?.sew_target_deals || 0, sew_total_deals: ppMet?.sew_total_deals || 0, sew_new_leads: ppMet?.sew_new_leads || 0,
-            advances: 0,
-          }).then((r) => r.data);
-          setPrev({ result: ppRes, metrics: ppMet });
-        } catch { setPrev(null); }
-      })();
     } catch (e) {
       console.error(e);
     } finally { setLoading(false); }
   }, [managerId, period, manager, dateFrom, dateTo]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
-  useEffect(() => { if (managerId) api.get('manager-salary/accruals', { params: { employee_code: managerId, limit: 50 } }).then((r) => setAccruals(r.data || [])).catch(() => {}); }, [managerId, accrualsTick]);
+  useEffect(() => { if (managerId) api.get('manager-salary/accruals', { params: { employee_code: managerId, limit: 50 } }).then((r) => setAccruals(r.data || [])).catch(() => {}); else setAccruals([]); }, [managerId, accrualsTick]);
 
   async function accrue() {
     if (!managerId || !plan) return;
@@ -300,6 +295,7 @@ export default function ManagerSalary() {
       });
       toast('Начисление сохранено', 'success');
       setAccrualsTick((t) => t + 1);
+      setTab('history');
     } catch (e) { console.error(e); toast('Ошибка начисления', 'error'); }
     finally { setAccruing(false); }
   }
@@ -324,173 +320,196 @@ export default function ManagerSalary() {
   }
 
   const planEmpty = plan && !plan.oklad && !plan.kpi_max && !plan.revenue_plan;
+  const susp = metrics?.items?.suspicious || [];
+  const kept = result?.advances || result?.penalties ? (result.advances + result.penalties) : 0;
+
+  const tabs = [
+    { key: 'overview', label: 'Обзор', icon: <Gauge size={15} /> },
+    { key: 'control', label: 'Контроль', icon: <ShieldAlert size={15} />, badge: susp.length },
+    { key: 'deals', label: 'Сделки', icon: <ListChecks size={15} /> },
+    { key: 'history', label: 'История', icon: <Receipt size={15} />, badge: accruals.length },
+  ];
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
-          <Calculator size={24} /> Расчёт ЗП менеджеров
-        </h2>
+    <div className="space-y-5 max-w-5xl mx-auto pb-12">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Зарплата менеджеров</h2>
+          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Оклад и KPI, контроль качества, начисление и выплаты</p>
+        </div>
         {amoStatus && (amoStatus.authorized
-          ? <span className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-[color:var(--color-success-muted)] text-[color:var(--color-success)]"><span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-success)]" /> amoCRM подключён</span>
-          : <a href="/admin/settings/integrations" className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-[color:var(--color-danger-muted)] text-[color:var(--color-danger)] hover:underline"><span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-danger)]" /> amoCRM не подключён — настроить</a>)}
+          ? <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[color:var(--color-success-muted)] text-[color:var(--color-success)]"><span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-success)]" /> amoCRM подключён</span>
+          : <a href="/admin/settings/integrations" className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[color:var(--color-danger-muted)] text-[color:var(--color-danger)] hover:underline"><span className="h-1.5 w-1.5 rounded-full bg-[color:var(--color-danger)]" /> amoCRM не подключён</a>)}
       </div>
 
-      {/* Selectors */}
-      <div className="app-card p-4 flex flex-wrap items-end gap-3">
-        <label className="block">
-          <span className="block text-sm font-medium mb-1">Менеджер</span>
-          <select className="input min-w-[240px]" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+      {/* Toolbar */}
+      <div className="app-card p-3 flex flex-col sm:flex-row sm:items-end gap-3">
+        <label className="block sm:flex-1">
+          <span className="block text-xs font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Менеджер</span>
+          <select className="input w-full" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
             <option value="">— выберите —</option>
             {managers.map((e) => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
           </select>
         </label>
-        <label className="block">
-          <span className="block text-sm font-medium mb-1">Период</span>
-          <select className="input min-w-[160px]" value={period} onChange={(e) => setPeriod(e.target.value)}>
+        <label className="block sm:w-48">
+          <span className="block text-xs font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Период</span>
+          <select className="input w-full" value={period} onChange={(e) => setPeriod(e.target.value)}>
             {months.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </label>
-        <button className="btn btn--secondary flex items-center gap-1.5" onClick={loadAll} disabled={!managerId || loading}>
+        <button className="btn btn--secondary flex items-center justify-center gap-1.5" onClick={loadAll} disabled={!managerId || loading}>
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Обновить
         </button>
-        {managers.length === 0 && (
-          <span className="text-sm text-[color:var(--color-muted-foreground)]">Нет сотрудников с должностью «менеджер по работе с клиентами»</span>
-        )}
       </div>
 
+      {managers.length === 0 && (
+        <div className="app-card p-4 text-sm text-[color:var(--color-muted-foreground)]">
+          Нет сотрудников с должностью «менеджер по работе с клиентами». Назначьте должность в карточке сотрудника.
+        </div>
+      )}
+
       {!managerId ? (
-        <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">Выберите менеджера и период.</div>
-      ) : (
+        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+          <Users size={28} className="mx-auto mb-2 opacity-60" />
+          Выберите менеджера и период, чтобы увидеть расчёт.
+        </div>
+      ) : loading && !result ? (
+        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">Загрузка…</div>
+      ) : result ? (
         <>
           {/* Warnings */}
-          {planEmpty && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-              План на этот месяц не задан. Заполните оклад/KPI/план на странице «Планы продаж».
+          {(planEmpty || metricsError) && (
+            <div className="space-y-2">
+              {planEmpty && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                  План на этот месяц не задан — заполните оклад/KPI/план на странице «Планы продаж».
+                </div>
+              )}
+              {metricsError && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                  Факт из amoCRM недоступен ({metricsError}). KPI посчитан по нулям — показан только оклад.
+                </div>
+              )}
             </div>
           )}
-          {metricsError && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-              Метрики из amoCRM недоступны ({metricsError}). KPI рассчитан по нулевым фактам — показан только оклад.
+
+          {/* Hero: payout summary + action */}
+          <section className="app-card overflow-hidden">
+            <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                  К выплате · {manager?.full_name || manager?.name} · {periodLabel}
+                </div>
+                <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
+                  {fmtMoney(result.to_pay)}
+                </div>
+                <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
+                  Начислено {fmtMoney(result.gross)}{kept ? <> · удержано <span className="text-[color:var(--color-danger)]">{fmtMoney(kept)}</span></> : null}
+                </div>
+              </div>
+              <div className="shrink-0 sm:text-right">
+                <button className="btn btn--primary flex items-center gap-2 w-full sm:w-auto justify-center" onClick={accrue} disabled={accruing}>
+                  <Wallet size={16} /> {accruing ? 'Начисляю…' : 'Начислить ЗП'}
+                </button>
+                <div className="mt-1.5 text-[11px] text-[color:var(--color-muted-foreground)] max-w-[220px] sm:ml-auto">
+                  Зафиксирует расчёт в журнале. Выплату создадите там же.
+                </div>
+              </div>
+            </div>
+            {/* Payout formula */}
+            <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
+              <Term label="Оклад" value={result.oklad} />
+              <Term op="+" label="Комиссия KPI" value={result.kpi} tone={TONE_TEXT.success} />
+              <Term op="+" label="Премии" value={result.bonuses} tone={result.bonuses ? TONE_TEXT.success : ''} />
+              <Term op="−" label="Авансы" value={result.advances} tone={result.advances ? TONE_TEXT.danger : ''} />
+              <Term op="−" label="Штрафы" value={result.penalties} tone={result.penalties ? TONE_TEXT.danger : ''} />
+              <Term op="=" label="К выплате" value={result.to_pay} tone={TONE_TEXT.primary} strong />
+            </div>
+          </section>
+
+          {/* Tabs */}
+          <Tabs tabs={tabs} active={tab} onChange={setTab} />
+
+          {tab === 'overview' && (
+            <div className="grid lg:grid-cols-3 gap-4">
+              {/* KPI breakdown with progress bars */}
+              <div className="lg:col-span-2 app-card p-5">
+                <div className="flex items-baseline justify-between gap-2 mb-3">
+                  <h3 className="font-semibold flex items-center gap-2"><Coins size={16} /> Комиссия (KPI)</h3>
+                  <div className="text-sm text-[color:var(--color-muted-foreground)]">
+                    <span className="font-semibold text-[color:var(--color-text)]">{fmtMoney(result.kpi)}</span> из цели {fmtMoney(result.kpi_max)}
+                  </div>
+                </div>
+                <MetricBar
+                  label={`Выручка · вес ${(result.weights.revenue * 100).toFixed(0)}%`}
+                  plan={plan?.revenue_plan} fact={metrics?.revenue_actual}
+                  ratio={result.revenue.ratio} contribution={result.revenue.amount} />
+                <MetricBar
+                  label={`Конверсия ремонта · вес ${(result.weights.repair * 100).toFixed(0)}%`}
+                  plan={plan?.repair_plan_conv} fact={result.repair.conv} fmt={fmtPct}
+                  ratio={result.repair.ratio} contribution={result.repair.amount}
+                  note={`целевых ${result.repair.target} / всего ${result.repair.total}`} />
+                <MetricBar
+                  label={`Конверсия пошива · вес ${(result.weights.sew * 100).toFixed(0)}%`}
+                  plan={plan?.sew_plan_conv} fact={result.sew.conv} fmt={fmtPct}
+                  ratio={result.sew.ratio} contribution={result.sew.amount}
+                  note={result.sew.leads_gate_failed
+                    ? `не зачтена: лидов ${result.sew.new_leads} < ${result.sew.min_leads}`
+                    : `целевых ${result.sew.target} / всего ${result.sew.total}`} />
+                <div className="mt-3 text-[11px] text-[color:var(--color-muted-foreground)]">
+                  Полоской отмечен порог 79%: компонент ниже порога не оплачивается. Цель 100% = план; перевыполнение оплачивается сверх цели.
+                </div>
+              </div>
+
+              {/* Quality stats */}
+              <div className="space-y-4">
+                <StatCard
+                  icon={<Clock size={18} />}
+                  label="Время первого ответа"
+                  value={fmtDuration(metrics?.median_response_seconds)}
+                  tone={TONE_TEXT[toneOf(metrics?.median_response_seconds == null ? null : (metrics.median_response_seconds <= 1800 ? 1 : metrics.median_response_seconds <= 3600 ? 0.85 : 0.5))]}
+                  sub={metrics?.response_sample
+                    ? `медиана · ср. ${fmtDuration(metrics.avg_response_seconds)} · по ${metrics.response_sample}${metrics.response_excluded ? `, ${metrics.response_excluded} без касания` : ''}`
+                    : 'нет данных (нет звонка/сообщения после заявки)'} />
+                <StatCard
+                  icon={<Users size={18} />}
+                  label="Новых лидов (пошив)"
+                  value={metrics?.sew_new_leads ?? '—'}
+                  sub="созданы в периоде в воронке пошива" />
+                <StatCard
+                  icon={<ShieldAlert size={18} />}
+                  label="Подозрительные сделки"
+                  value={susp.length}
+                  tone={susp.length ? TONE_TEXT.danger : TONE_TEXT.success}
+                  sub={susp.length ? 'перемещения между воронками — см. «Контроль»' : 'перемещений между воронками нет'} />
+              </div>
             </div>
           )}
 
-          {result && (<>
-            {/* Крупные денежные плитки (3 в ряд — чтобы суммы с копейками не обрезались) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <MoneyTile label="Оклад" value={fmtMoney(result.oklad)} hint="фикс. часть" />
-              <MoneyTile label="Комиссия (KPI)" value={fmtMoney(result.kpi)} cur={result.kpi} prev={prev?.result?.kpi} accent="text-[color:var(--color-success)]" />
-              <MoneyTile label="Премии" value={fmtMoney(result.bonuses)} hint="+ к начислению" accent={result.bonuses ? 'text-[color:var(--color-success)]' : undefined} />
-              <MoneyTile label="Авансы" value={fmtMoney(result.advances)} hint="с посл. зарплаты" accent={result.advances ? 'text-[color:var(--color-danger)]' : undefined} />
-              <MoneyTile label="Штрафы" value={fmtMoney(result.penalties)} hint="− из выплаты" accent={result.penalties ? 'text-[color:var(--color-danger)]' : undefined} />
-              <MoneyTile label="К выплате" value={fmtMoney(result.to_pay)} accent="text-[color:var(--color-primary)]" highlight hint={`начислено ${fmtMoney(result.gross)}`} />
-            </div>
-
-            {/* План / Факт / % — выручка и конверсии + лиды */}
-            <div className="app-card p-4 space-y-2">
-              <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-x-2 sm:gap-x-3 text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
-                <div>Показатель</div>
-                <div className="text-right">План</div>
-                <div className="text-right">Факт</div>
-                <div className="text-right">%</div>
-              </div>
-              <PlanFactRow title="Выручка" plan={plan?.revenue_plan} fact={metrics?.revenue_actual} ratio={result.revenue.ratio} />
-              <PlanFactRow title="Конверсия ремонта" note={`целевых ${result.repair.target} / всего ${result.repair.total}`} plan={plan?.repair_plan_conv} fact={result.repair.conv} ratio={result.repair.ratio} fmt={fmtPct} />
-              <PlanFactRow title="Конверсия пошива" note={result.sew.leads_gate_failed ? `лидов ${result.sew.new_leads} < ${result.sew.min_leads} — не зачтена` : `целевых ${result.sew.target} / всего ${result.sew.total}`} plan={plan?.sew_plan_conv} fact={result.sew.conv} ratio={result.sew.ratio} fmt={fmtPct} />
-              <div className="flex items-center justify-between pt-2 border-t border-[color:var(--color-border)] text-sm">
-                <span className="text-[color:var(--color-muted-foreground)]">Новых лидов за период (пошив)</span>
-                <span className="font-semibold tabular-nums">{metrics?.sew_new_leads ?? '—'}</span>
-              </div>
-              <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Порог KPI — 79%: компонент с факт/план ниже порога не оплачивается.</div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Breakdown */}
-              <div className="app-card p-4 space-y-3">
-                <div className="rounded-lg border border-[color:var(--color-border)] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">KPI · цель {fmtMoney(result.kpi_max)}</div>
-                  <KpiRow title="Выручка" weight={result.weights.revenue} max={result.revenue.max} ratio={result.revenue.ratio} amount={result.revenue.amount} zeroed={result.revenue.zeroed} extra={`факт/план ${fmtPct(result.revenue.ratio)}`} />
-                  <KpiRow title="Конверсия ремонта" weight={result.weights.repair} max={result.repair.max} ratio={result.repair.ratio} amount={result.repair.amount} zeroed={result.repair.zeroed} extra={`конв ${fmtPct(result.repair.conv)}`} />
-                  <KpiRow title="Конверсия пошива" weight={result.weights.sew} max={result.sew.max} ratio={result.sew.ratio} amount={result.sew.amount} zeroed={result.sew.zeroed} extra={result.sew.leads_gate_failed ? `лидов ${result.sew.new_leads} < ${result.sew.min_leads}` : `конв ${fmtPct(result.sew.conv)}`} />
+          {tab === 'control' && (
+            <div className="app-card p-5 space-y-3">
+              <h3 className="font-semibold flex items-center gap-2"><ShieldAlert size={16} className="text-amber-500" /> Подозрительные сделки <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· перемещения между воронками ({susp.length})</span></h3>
+              {susp.length === 0 ? (
+                <div className="text-sm text-[color:var(--color-muted-foreground)]">За период перемещений между воронками не обнаружено.</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <GroupedDealList title="Пришли из другой воронки" deals={susp.filter((d) => d.direction === 'in' || d.direction === 'between')} domain={amoStatus?.domain} groupLabel={(d) => `из «${d.from_name || '—'}»`} />
+                  <GroupedDealList title="Перенесены в другую воронку" deals={susp.filter((d) => d.direction === 'out' || d.direction === 'between')} domain={amoStatus?.domain} groupLabel={(d) => `в «${d.to_name || '—'}»`} />
                 </div>
-
-                {/* Начисление */}
-                <div className="rounded-lg border border-[color:var(--color-border)] p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium">Начислить ЗП за {months.find((m) => m.value === period)?.label}</div>
-                      <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Фиксирует расчёт в журнале начислений (оклад + KPI + премии − авансы − штрафы). Сумму выплаты заводите в «Выплатах».</div>
-                    </div>
-                    <button className="btn btn--primary flex items-center gap-1.5 shrink-0" onClick={accrue} disabled={accruing}>
-                      <Wallet size={15} /> {accruing ? 'Начисляю…' : 'Начислить'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Source data (read-only) */}
-              <div className="app-card p-4 space-y-3 text-sm">
-                <div className="font-semibold">Исходные данные · {months.find((m) => m.value === period)?.label}</div>
-                <div className="rounded-lg border border-[color:var(--color-border)] p-3 space-y-1.5">
-                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">План (из «Планы продаж»)</div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Оклад / KPI</span><span>{fmtMoney(plan?.oklad)} / {fmtMoney(plan?.kpi_max)}</span></div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">План выручки</span><span>{fmtMoney(plan?.revenue_plan)}</span></div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">План конв. ремонт / пошив</span><span>{fmtPct(plan?.repair_plan_conv)} / {fmtPct(plan?.sew_plan_conv)}</span></div>
-                </div>
-                <div className="rounded-lg border border-[color:var(--color-border)] p-3 space-y-1.5">
-                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Факт из amoCRM</div>
-                  {metrics ? (<>
-                    <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Выручка</span><span>{fmtMoney(metrics.revenue_actual)}</span></div>
-                    <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Ремонт: целевых / всего</span><span>{metrics.repair_target_deals} / {metrics.repair_total_deals}</span></div>
-                    <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Пошив: целевых / всего</span><span>{metrics.sew_target_deals} / {metrics.sew_total_deals}</span></div>
-                    <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Новых лидов (пошив)</span><span>{metrics.sew_new_leads}</span></div>
-                    <div className="flex justify-between" title="Рабочее время (10:00–19:00 МСК) от попадания сделки на «Получена заявка» (или создания) до первого звонка или сообщения в чате менеджера. Медиана; в скобках среднее. Сделки без звонка/сообщения после заявки не учитываются.">
-                      <span className="text-[color:var(--color-muted-foreground)]">Время первого ответа</span>
-                      <span>{fmtDuration(metrics.median_response_seconds)}{metrics.response_sample ? <span className="text-[color:var(--color-muted-foreground)]"> · ср. {fmtDuration(metrics.avg_response_seconds)} · по {metrics.response_sample}{metrics.response_excluded ? `, ${metrics.response_excluded} без касания` : ''}</span> : <span className="text-[color:var(--color-muted-foreground)]"> · нет данных</span>}</span>
-                    </div>
-                  </>) : (<div className="text-[color:var(--color-muted-foreground)]">недоступно</div>)}
-                </div>
-                <div className="rounded-lg border border-[color:var(--color-border)] p-3 space-y-1.5">
-                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Авансы</div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">С последней зарплаты</span><span className="text-[color:var(--color-danger)]">{fmtMoney(advances?.total)}</span></div>
-                </div>
+              )}
+              <div className="text-[11px] text-[color:var(--color-muted-foreground)]">
+                Сделки, у которых в периоде менялась воронка (пришли из другой воронки или были перенесены). Могут искусственно влиять на выручку и конверсию — стоит проверить обоснованность.
               </div>
             </div>
+          )}
 
-            {/* Контроль: подозрительные сделки — перемещения между воронками */}
-            {metrics?.items && (() => {
-              const susp = metrics.items.suspicious || [];
-              const incoming = susp.filter((d) => d.direction === 'in' || d.direction === 'between');
-              const outgoing = susp.filter((d) => d.direction === 'out' || d.direction === 'between');
-              return (
-                <div className="app-card p-4 space-y-2">
-                  <div className="flex items-center gap-2 font-semibold">
-                    <AlertTriangle size={16} className="text-amber-500 shrink-0" />
-                    Подозрительные сделки <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· перемещения между воронками ({susp.length})</span>
-                  </div>
-                  {susp.length === 0 ? (
-                    <div className="text-sm text-[color:var(--color-muted-foreground)]">За период перемещений между воронками не обнаружено.</div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <GroupedDealList title="Пришли из другой воронки" deals={incoming} domain={amoStatus?.domain}
-                        groupLabel={(d) => `из «${d.from_name || '—'}»`} />
-                      <GroupedDealList title="Перенесены в другую воронку" deals={outgoing} domain={amoStatus?.domain}
-                        groupLabel={(d) => `в «${d.to_name || '—'}»`} />
-                    </div>
-                  )}
-                  <div className="text-[11px] text-[color:var(--color-muted-foreground)]">
-                    Сделки, у которых в течение периода менялась воронка (например, пришли из «Текущая работа» в «Мастерскую» или были перенесены из «Мастерской» в другую воронку). Могут искусственно влиять на выручку и конверсию — стоит проверить обоснованность.
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Drill-down: which deals landed in each calculation group, and why */}
-            {metrics?.items && (
-              <div className="app-card p-4 space-y-2">
-                <div className="font-semibold">Сделки в расчёте <span className="text-xs text-[color:var(--color-muted-foreground)]">(проверка)</span></div>
+          {tab === 'deals' && (
+            metrics?.items ? (
+              <div className="app-card p-5 space-y-2">
+                <h3 className="font-semibold flex items-center gap-2"><ListChecks size={16} /> Сделки в расчёте <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">(проверка цифр)</span></h3>
                 <DealList title="Выручка — сделки на целевых этапах в периоде" deals={metrics.items.revenue} domain={amoStatus?.domain} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <DealList title="Конверсия ремонта · числитель" deals={metrics.items.repair_num} domain={amoStatus?.domain} />
@@ -502,58 +521,55 @@ export default function ManagerSalary() {
                   <DealList title="Исключены (достигли этапа, но не зачтены)" deals={metrics.items.excluded} domain={amoStatus?.domain} />
                 )}
               </div>
-            )}
-          </>)}
-        </>
-      )}
-
-      {/* History */}
-      <div className="app-card overflow-hidden">
-        <button type="button" onClick={() => setShowHistory((v) => !v)} className="w-full flex items-center justify-between gap-3 px-4 py-3">
-          <span className="font-medium">Журнал начислений {manager ? `· ${manager.full_name || manager.name}` : ''} <span className="text-xs text-[color:var(--color-muted-foreground)]">({accruals.length})</span></span>
-          {showHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-        {showHistory && (
-          <div className="border-t border-[color:var(--color-border)]">
-            {!managerId ? (
-              <div className="px-4 py-6 text-center text-sm text-[color:var(--color-muted-foreground)]">Выберите менеджера.</div>
-            ) : accruals.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-[color:var(--color-muted-foreground)]">Начислений пока нет.</div>
             ) : (
-              <ul className="divide-y divide-[color:var(--color-border)]">
-                {accruals.map((a) => (
-                  <li key={a.id} className="px-4 py-3 text-sm flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                    <div className="min-w-0">
-                      <div className="font-medium">{a.period} <span className="text-xs text-[color:var(--color-muted-foreground)]">· {a.created_at?.slice(0, 16).replace('T', ' ')}</span></div>
-                      <div className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
-                        <span className="text-[color:var(--color-success)]">+ начислено</span> оклад {fmtMoney(a.result?.oklad)} · KPI {fmtMoney(a.result?.kpi)}{a.result?.bonuses ? ` · премии ${fmtMoney(a.result?.bonuses)}` : ''}
+              <div className="app-card p-8 text-center text-sm text-[color:var(--color-muted-foreground)]">Детализация недоступна — нет данных из amoCRM.</div>
+            )
+          )}
+
+          {tab === 'history' && (
+            <div className="app-card overflow-hidden">
+              <div className="px-5 py-3 border-b border-[color:var(--color-border)] font-semibold flex items-center gap-2">
+                <Receipt size={16} /> Журнал начислений
+                <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">{manager ? manager.full_name || manager.name : ''} · {accruals.length}</span>
+              </div>
+              {accruals.length === 0 ? (
+                <div className="px-5 py-10 text-center text-sm text-[color:var(--color-muted-foreground)]">Начислений пока нет. Нажмите «Начислить ЗП», чтобы зафиксировать расчёт.</div>
+              ) : (
+                <ul className="divide-y divide-[color:var(--color-border)]">
+                  {accruals.map((a) => (
+                    <li key={a.id} className="px-5 py-3 text-sm flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium">{a.period} <span className="text-xs text-[color:var(--color-muted-foreground)]">· {a.created_at?.slice(0, 16).replace('T', ' ')}</span></div>
+                        <div className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+                          <span className="text-[color:var(--color-success)]">+ начислено</span> оклад {fmtMoney(a.result?.oklad)} · KPI {fmtMoney(a.result?.kpi)}{a.result?.bonuses ? ` · премии ${fmtMoney(a.result?.bonuses)}` : ''}
+                        </div>
+                        <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                          <span className="text-[color:var(--color-danger)]">− списано</span> авансы {fmtMoney(a.result?.advances)}{a.result?.penalties ? ` · штрафы ${fmtMoney(a.result?.penalties)}` : ''}
+                        </div>
                       </div>
-                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
-                        <span className="text-[color:var(--color-danger)]">− списано</span> авансы {fmtMoney(a.result?.advances)}{a.result?.penalties ? ` · штрафы ${fmtMoney(a.result?.penalties)}` : ''}
+                      <div className="flex items-center justify-between gap-3 shrink-0 border-t border-[color:var(--color-border)] pt-2 sm:border-0 sm:pt-0 sm:justify-end">
+                        <div className="sm:text-right">
+                          <div className="font-semibold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">{fmtMoney(a.result?.to_pay)}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">к выплате</div>
+                        </div>
+                        {a.payout_id ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-[color:var(--color-success)] shrink-0" title={`Выплата #${a.payout_id}`}><CheckCircle2 size={14} /> выплата</span>
+                        ) : (
+                          <button onClick={() => createPayout(a)} disabled={payingId === a.id || !(a.result?.to_pay > 0)}
+                            className="btn btn--secondary btn--sm flex items-center gap-1.5 shrink-0" title="Создать выплату «Зарплата» на сумму к выплате">
+                            <Banknote size={14} /> {payingId === a.id ? '…' : 'Выплата'}
+                          </button>
+                        )}
+                        <button onClick={() => deleteAccrual(a.id)} className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-danger)] shrink-0" title="Удалить"><Trash2 size={15} /></button>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 shrink-0 border-t border-[color:var(--color-border)] pt-2 sm:border-0 sm:pt-0 sm:justify-end">
-                      <div className="sm:text-right">
-                        <div className="font-semibold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">{fmtMoney(a.result?.to_pay)}</div>
-                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">к выплате</div>
-                      </div>
-                      {a.payout_id ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-[color:var(--color-success)] shrink-0" title={`Выплата #${a.payout_id}`}><CheckCircle2 size={14} /> выплата</span>
-                      ) : (
-                        <button onClick={() => createPayout(a)} disabled={payingId === a.id || !(a.result?.to_pay > 0)}
-                          className="btn btn--secondary btn--sm flex items-center gap-1.5 shrink-0" title="Создать выплату «Зарплата» на сумму к выплате">
-                          <Banknote size={14} /> {payingId === a.id ? '…' : 'Выплата'}
-                        </button>
-                      )}
-                      <button onClick={() => deleteAccrual(a.id)} className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-danger)] shrink-0" title="Удалить"><Trash2 size={15} /></button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
+      ) : null}
     </div>
   );
 }
