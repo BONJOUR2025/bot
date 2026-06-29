@@ -209,7 +209,7 @@ def create_manager_salary_router(
     @router.post("/accruals/{accrual_id}/payout")
     async def create_accrual_payout(
         accrual_id: int,
-        method: str = Query("🏦 Из кассы", description="способ выплаты"),
+        method: str = Query("🤝 Наличными", description="способ выплаты"),
         current: ResolvedUser = Depends(require_permission(MANAGER_SALARY_PERMISSION)),
     ):
         """Create a «Зарплата» payout for an accrual with the «К выплате» amount

@@ -252,7 +252,7 @@ export default function ManagerSalary() {
 
   async function createPayout(a) {
     const sum = a.result?.to_pay || 0;
-    if (!window.confirm(`Создать выплату «Зарплата» на ${fmtMoney(sum)} (из кассы)?`)) return;
+    if (!window.confirm(`Создать выплату «Зарплата» на ${fmtMoney(sum)} (наличными)?`)) return;
     setPayingId(a.id);
     try {
       await api.post(`manager-salary/accruals/${a.id}/payout`);
