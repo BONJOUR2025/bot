@@ -32,6 +32,10 @@ SEW_TARGET_STAGES = {STAGE_ORDER_CREATED_SEW}
 # The two KPI pipelines; a move across this boundary is a control signal.
 KPI_PIPELINES = {PIPELINE_REPAIR, PIPELINE_SEW}
 
+# «Неразобранное» — входящая воронка. Перемещение ИЗ неё в рабочую воронку —
+# это нормальный разбор лида, а не подозрительная реклассификация.
+PIPELINE_UNSORTED = 1611361
+
 PIPELINE_NAMES = {PIPELINE_REPAIR: "Мастерская (ремонт)", PIPELINE_SEW: "Обувь (пошив)"}
 STAGE_NAMES = {
     STAGE_ORDER_CREATED_REPAIR: "Заказ создан",
@@ -176,8 +180,11 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
 
     reached, moves = await _scan_status_events(ts_from, ts_to)
 
-    # Suspicious = cross-pipeline moves touching a KPI pipeline (in/out/between).
-    kpi_moves = [m for m in moves if m["from"] in KPI_PIPELINES or m["to"] in KPI_PIPELINES]
+    # Suspicious = cross-pipeline moves touching a KPI pipeline (in/out/between),
+    # excluding the normal intake move out of «Неразобранное».
+    kpi_moves = [m for m in moves
+                 if (m["from"] in KPI_PIPELINES or m["to"] in KPI_PIPELINES)
+                 and m["from"] != PIPELINE_UNSORTED]
 
     need_ids = set(reached.keys())
     if detail:
