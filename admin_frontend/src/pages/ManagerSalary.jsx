@@ -340,6 +340,9 @@ export default function ManagerSalary() {
                   <DealList title="Конверсия пошива · числитель" deals={metrics.items.sew_num} domain={amoStatus?.domain} />
                   <DealList title="Конверсия пошива · знаменатель" deals={metrics.items.sew_denom} domain={amoStatus?.domain} />
                 </div>
+                {metrics.items.excluded?.length > 0 && (
+                  <DealList title="Исключены (достигли этапа, но не зачтены)" deals={metrics.items.excluded} domain={amoStatus?.domain} />
+                )}
               </div>
             )}
           </>)}

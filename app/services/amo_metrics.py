@@ -151,7 +151,7 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
     info = await _fetch_leads_by_ids(list(reached.keys())) if reached else {}
 
     items = {"revenue": [], "repair_num": [], "repair_denom": [],
-             "sew_num": [], "sew_denom": []} if detail else None
+             "sew_num": [], "sew_denom": [], "excluded": []} if detail else None
 
     repair_target = sew_target = 0
     revenue = 0.0
@@ -159,10 +159,27 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
         lead = info.get(lead_id)
         if not lead:
             continue
-        if amo_user_id and lead.get("responsible_user_id") != amo_user_id:
-            continue
-        price = float(lead.get("price") or 0)
         pid, sid = meta["pipeline"], meta["stage"]
+        price = float(lead.get("price") or 0)
+        cur_pipe = lead.get("pipeline_id")
+        resp = lead.get("responsible_user_id")
+
+        # Reasons a deal that reached a target stage is NOT counted:
+        drop = None
+        if amo_user_id and resp != amo_user_id:
+            drop = f"ответственный {resp} ≠ менеджер {amo_user_id}"
+        elif cur_pipe != pid:
+            drop = (f"сейчас в воронке {cur_pipe} (ушла из «{PIPELINE_NAMES.get(pid, pid)}») "
+                    f"— реклассификация/дубль, не зачитывается")
+        if drop:
+            if detail:
+                items["excluded"].append({
+                    "id": lead_id, "name": lead.get("name", ""), "price": price,
+                    "date": _fmt_ts(meta["ts"]),
+                    "reason": f"достигла «{STAGE_NAMES.get(sid, sid)}» {_fmt_ts(meta['ts'])}, но НЕ зачтена: {drop}",
+                })
+            continue
+
         revenue += price
         if pid == PIPELINE_REPAIR:
             repair_target += 1
@@ -172,9 +189,8 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
             row = {
                 "id": lead_id, "name": lead.get("name", ""), "price": price,
                 "date": _fmt_ts(meta["ts"]),
-                "reason": f"дошёл до «{STAGE_NAMES.get(sid, sid)}» ({PIPELINE_NAMES.get(pid, pid)}) "
-                          f"{_fmt_ts(meta['ts'])} — событием смены статуса; идёт в выручку"
-                          + (" и в числитель конверсии" if pid in (PIPELINE_REPAIR, PIPELINE_SEW) else ""),
+                "reason": f"дошла до «{STAGE_NAMES.get(sid, sid)}» ({PIPELINE_NAMES.get(pid, pid)}) "
+                          f"{_fmt_ts(meta['ts'])}; в выручке и в числителе конверсии",
             }
             items["revenue"].append(row)
             (items["repair_num"] if pid == PIPELINE_REPAIR else items["sew_num"]).append(row)
