@@ -214,22 +214,21 @@ async def _first_outgoing_notes(ts_from: int, ts_to: int,
     return out
 
 
-# Outgoing manager actions exposed as amoCRM events (chat is the «Chats API»
-# signal available via the public events feed; outgoing_call duplicates the
-# notes signal as a safety net).
-OUTGOING_EVENT_TYPES = ("outgoing_chat_message", "outgoing_call")
-
-
-async def _first_outgoing_events(ts_from: int, ts_to: int,
-                                 amo_user_id: int | None) -> dict[int, int]:
-    """lead_id -> ts of the manager's first outgoing chat message / call, read
-    from the events feed. Best-effort: any failure degrades to «no signal»."""
+# Outgoing chat messages from the events feed = the «Chats API» signal available
+# publicly. NB: chat events come in with created_by == 0 (the channel widget
+# posts them, not the operator), so they CANNOT be attributed by created_by —
+# attribution is by lead ownership (the lead set is already filtered to the
+# manager). outgoing_call is NOT used here: those events are entity_type=contact
+# and don't map to a lead (calls come from the call_out notes instead).
+async def _first_outgoing_chat(ts_from: int, ts_to: int) -> dict[int, int]:
+    """lead_id -> ts of the FIRST outgoing chat message on the lead in the period.
+    Best-effort: any failure degrades to «no signal»."""
     out: dict[int, int] = {}
     try:
         page = 1
         while page <= 200:
             data = await amo_get("/events", params={
-                "filter[type][]": list(OUTGOING_EVENT_TYPES),
+                "filter[type]": "outgoing_chat_message",
                 "filter[created_at][from]": ts_from,
                 "filter[created_at][to]": ts_to,
                 "limit": 100,
@@ -240,8 +239,6 @@ async def _first_outgoing_events(ts_from: int, ts_to: int,
                 break
             for ev in batch:
                 if ev.get("entity_type") not in (None, "lead", "leads"):
-                    continue
-                if amo_user_id and ev.get("created_by") != amo_user_id:
                     continue
                 lid, ts = ev.get("entity_id"), ev.get("created_at")
                 if lid is None or ts is None:
@@ -277,7 +274,7 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
 
     reached, moves, first_change = await _scan_status_events(ts_from, ts_to, amo_user_id)
     note_action = await _first_outgoing_notes(ts_from, ts_to, amo_user_id)
-    chat_action = await _first_outgoing_events(ts_from, ts_to, amo_user_id)
+    chat_action = await _first_outgoing_chat(ts_from, ts_to)
 
     # Suspicious = cross-pipeline moves touching a KPI pipeline (in/out/between),
     # excluding the normal intake move out of «Неразобранное».
