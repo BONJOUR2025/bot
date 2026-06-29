@@ -76,9 +76,27 @@ function PlanFactRow({ title, note, plan, fact, ratio, fmt = fmtMoney }) {
   );
 }
 
+// One deal row (shared by the flat and grouped lists).
+function DealRow({ d, domain }) {
+  return (
+    <li className="px-3 py-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium truncate">
+          {domain
+            ? <a href={`https://${domain}/leads/detail/${d.id}`} target="_blank" rel="noreferrer" className="text-[color:var(--color-primary)] hover:underline">{d.name || `#${d.id}`}</a>
+            : (d.name || `#${d.id}`)}
+          <span className="text-[color:var(--color-muted-foreground)]"> · #{d.id}</span>
+        </span>
+        <span className="tabular-nums shrink-0">{Number(d.price || 0).toLocaleString('ru-RU')} ₽</span>
+      </div>
+      <div className="text-[color:var(--color-muted-foreground)] mt-0.5">{d.reason}</div>
+    </li>
+  );
+}
+
 // Collapsible list of the concrete deals counted in one calculation group.
-function DealList({ title, deals, domain }) {
-  const [open, setOpen] = useState(false);
+function DealList({ title, deals, domain, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   const list = deals || [];
   const sum = list.reduce((s, d) => s + (Number(d.price) || 0), 0);
   return (
@@ -93,21 +111,53 @@ function DealList({ title, deals, domain }) {
           <div className="px-3 py-3 text-xs text-[color:var(--color-muted-foreground)] border-t border-[color:var(--color-border)]">Пусто.</div>
         ) : (
           <ul className="border-t border-[color:var(--color-border)] divide-y divide-[color:var(--color-border)] max-h-72 overflow-y-auto">
-            {list.map((d) => (
-              <li key={d.id} className="px-3 py-2 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium truncate">
-                    {domain
-                      ? <a href={`https://${domain}/leads/detail/${d.id}`} target="_blank" rel="noreferrer" className="text-[color:var(--color-primary)] hover:underline">{d.name || `#${d.id}`}</a>
-                      : (d.name || `#${d.id}`)}
-                    <span className="text-[color:var(--color-muted-foreground)]"> · #{d.id}</span>
-                  </span>
-                  <span className="tabular-nums shrink-0">{Number(d.price || 0).toLocaleString('ru-RU')} ₽</span>
-                </div>
-                <div className="text-[color:var(--color-muted-foreground)] mt-0.5">{d.reason}</div>
-              </li>
-            ))}
+            {list.map((d) => <DealRow key={d.id} d={d} domain={domain} />)}
           </ul>
+        )
+      )}
+    </div>
+  );
+}
+
+// Like DealList, but deals are split into subgroups (subheader + rows).
+function GroupedDealList({ title, deals, groupLabel, domain, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const list = deals || [];
+  const sum = list.reduce((s, d) => s + (Number(d.price) || 0), 0);
+  const groups = [];
+  const idx = new Map();
+  for (const d of list) {
+    const g = groupLabel(d);
+    if (!idx.has(g)) { idx.set(g, groups.length); groups.push({ label: g, items: [] }); }
+    groups[idx.get(g)].items.push(d);
+  }
+  return (
+    <div className="border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm">
+        <span className="font-medium text-left">{title} <span className="text-xs text-[color:var(--color-muted-foreground)]">· {list.length} шт · Σ {sum.toLocaleString('ru-RU')} ₽</span></span>
+        {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+      </button>
+      {open && (
+        list.length === 0 ? (
+          <div className="px-3 py-3 text-xs text-[color:var(--color-muted-foreground)] border-t border-[color:var(--color-border)]">Пусто.</div>
+        ) : (
+          <div className="border-t border-[color:var(--color-border)] max-h-80 overflow-y-auto divide-y divide-[color:var(--color-border)]">
+            {groups.map((g) => {
+              const gsum = g.items.reduce((s, d) => s + (Number(d.price) || 0), 0);
+              return (
+                <div key={g.label}>
+                  <div className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] bg-[color:var(--color-bg-secondary)] flex items-center justify-between gap-2">
+                    <span className="truncate">{g.label}</span>
+                    <span className="shrink-0 tabular-nums">{g.items.length} · Σ {gsum.toLocaleString('ru-RU')} ₽</span>
+                  </div>
+                  <ul className="divide-y divide-[color:var(--color-border)]">
+                    {g.items.map((d) => <DealRow key={d.id} d={d} domain={domain} />)}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
         )
       )}
     </div>
@@ -410,8 +460,10 @@ export default function ManagerSalary() {
                     <div className="text-sm text-[color:var(--color-muted-foreground)]">За период перемещений между воронками не обнаружено.</div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <DealList title="Пришли из другой воронки" deals={incoming} domain={amoStatus?.domain} />
-                      <DealList title="Перенесены в другую воронку" deals={outgoing} domain={amoStatus?.domain} />
+                      <GroupedDealList title="Пришли из другой воронки" deals={incoming} domain={amoStatus?.domain}
+                        groupLabel={(d) => `из «${d.from_name || '—'}»`} />
+                      <GroupedDealList title="Перенесены в другую воронку" deals={outgoing} domain={amoStatus?.domain}
+                        groupLabel={(d) => `в «${d.to_name || '—'}»`} />
                     </div>
                   )}
                   <div className="text-[11px] text-[color:var(--color-muted-foreground)]">

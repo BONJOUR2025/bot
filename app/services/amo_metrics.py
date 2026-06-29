@@ -277,6 +277,7 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
                 "id": m["lead_id"], "name": lead.get("name", ""),
                 "price": float(lead.get("price") or 0), "date": _fmt_ts(m["ts"]),
                 "direction": direction,
+                "from_name": _pname(frm), "to_name": _pname(to),
                 "reason": f"{tag}: «{_pname(frm)}» → «{_pname(to)}» ({_fmt_ts(m['ts'])})",
             })
 
