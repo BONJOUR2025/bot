@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Calculator, Wallet, RefreshCw, Trash2, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Calculator, Wallet, RefreshCw, Trash2, ChevronDown, ChevronUp, AlertTriangle, Banknote, CheckCircle2 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 
@@ -148,6 +148,7 @@ export default function ManagerSalary() {
   const [amoStatus, setAmoStatus] = useState(null);
   const [accruals, setAccruals] = useState([]);
   const [accruing, setAccruing] = useState(false);
+  const [payingId, setPayingId] = useState(null);
   const [accrualsTick, setAccrualsTick] = useState(0);
   const [showHistory, setShowHistory] = useState(true);
 
@@ -247,6 +248,19 @@ export default function ManagerSalary() {
     if (!window.confirm('Удалить начисление?')) return;
     try { await api.delete(`manager-salary/accruals/${id}`); setAccrualsTick((t) => t + 1); }
     catch { toast('Ошибка удаления', 'error'); }
+  }
+
+  async function createPayout(a) {
+    const sum = a.result?.to_pay || 0;
+    if (!window.confirm(`Создать выплату «Зарплата» на ${fmtMoney(sum)} (из кассы)?`)) return;
+    setPayingId(a.id);
+    try {
+      await api.post(`manager-salary/accruals/${a.id}/payout`);
+      toast('Выплата создана', 'success');
+      setAccrualsTick((t) => t + 1);
+    } catch (e) {
+      toast(e?.response?.data?.detail || 'Ошибка создания выплаты', 'error');
+    } finally { setPayingId(null); }
   }
 
   const planEmpty = plan && !plan.oklad && !plan.kpi_max && !plan.revenue_plan;
@@ -419,10 +433,26 @@ export default function ManagerSalary() {
                   <li key={a.id} className="px-4 py-2.5 text-sm flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-medium">{a.period} <span className="text-xs text-[color:var(--color-muted-foreground)]">· {a.created_at?.slice(0, 16).replace('T', ' ')}</span></div>
-                      <div className="text-xs text-[color:var(--color-muted-foreground)]">оклад {fmtMoney(a.result?.oklad)} · KPI {fmtMoney(a.result?.kpi)} · авансы {fmtMoney(a.result?.advances)}</div>
+                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                        <span className="text-[color:var(--color-success)]">+ начислено</span> оклад {fmtMoney(a.result?.oklad)} · KPI {fmtMoney(a.result?.kpi)}{a.result?.bonuses ? ` · премии ${fmtMoney(a.result?.bonuses)}` : ''}
+                      </div>
+                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                        <span className="text-[color:var(--color-danger)]">− списано</span> авансы {fmtMoney(a.result?.advances)}{a.result?.penalties ? ` · штрафы ${fmtMoney(a.result?.penalties)}` : ''}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="font-semibold tabular-nums text-[color:var(--color-primary)]">{fmtMoney(a.result?.to_pay)}</span>
+                      <div className="text-right">
+                        <div className="font-semibold tabular-nums text-[color:var(--color-primary)]">{fmtMoney(a.result?.to_pay)}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">к выплате</div>
+                      </div>
+                      {a.payout_id ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-[color:var(--color-success)]" title={`Выплата #${a.payout_id}`}><CheckCircle2 size={14} /> выплата</span>
+                      ) : (
+                        <button onClick={() => createPayout(a)} disabled={payingId === a.id || !(a.result?.to_pay > 0)}
+                          className="btn btn--secondary btn--sm flex items-center gap-1.5" title="Создать выплату «Зарплата» на сумму к выплате">
+                          <Banknote size={14} /> {payingId === a.id ? '…' : 'Выплата'}
+                        </button>
+                      )}
                       <button onClick={() => deleteAccrual(a.id)} className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-danger)]" title="Удалить"><Trash2 size={15} /></button>
                     </div>
                   </li>

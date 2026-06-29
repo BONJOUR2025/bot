@@ -64,6 +64,17 @@ class ManagerSalaryRepository:
             rows = [e for e in rows if e.get("period") == period]
         return list(reversed(rows))[:limit]
 
+    def get(self, accrual_id: int) -> dict[str, Any] | None:
+        return next((e for e in self._data if e.get("id") == accrual_id), None)
+
+    def set_fields(self, accrual_id: int, **fields: Any) -> dict[str, Any] | None:
+        for e in self._data:
+            if e.get("id") == accrual_id:
+                e.update(fields)
+                self._save()
+                return e
+        return None
+
     def delete(self, accrual_id: int) -> bool:
         before = len(self._data)
         self._data = [e for e in self._data if e.get("id") != accrual_id]
