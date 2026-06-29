@@ -89,11 +89,12 @@ def create_manager_salary_router(
         date_from: str = Query(..., description="YYYY-MM-DD"),
         date_to: str = Query(..., description="YYYY-MM-DD"),
         amo_user_id: Optional[int] = Query(None),
+        detail: bool = Query(False, description="include per-deal drill-down"),
         current: ResolvedUser = Depends(require_permission(MANAGER_SALARY_PERMISSION)),
     ):
         """Pull the fact metrics (revenue, deal counts, leads) from amoCRM for
-        the period. 502 with a message if amoCRM is unavailable — the page then
-        keeps manual entry."""
+        the period. With detail=1 also returns the concrete deals counted in each
+        group. 502 if amoCRM is unavailable."""
         from datetime import datetime
         from app.services.amo_metrics import compute_metrics
         try:
@@ -102,7 +103,7 @@ def create_manager_salary_router(
         except ValueError:
             raise HTTPException(status_code=400, detail="Формат даты: YYYY-MM-DD")
         try:
-            return await compute_metrics(dt_from, dt_to, amo_user_id)
+            return await compute_metrics(dt_from, dt_to, amo_user_id, detail=detail)
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 

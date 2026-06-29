@@ -56,6 +56,44 @@ function Widget({ label, value, cur, prev, accent }) {
   );
 }
 
+// Collapsible list of the concrete deals counted in one calculation group.
+function DealList({ title, deals, domain }) {
+  const [open, setOpen] = useState(false);
+  const list = deals || [];
+  const sum = list.reduce((s, d) => s + (Number(d.price) || 0), 0);
+  return (
+    <div className="border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm">
+        <span className="font-medium text-left">{title} <span className="text-xs text-[color:var(--color-muted-foreground)]">· {list.length} шт · Σ {sum.toLocaleString('ru-RU')} ₽</span></span>
+        {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+      </button>
+      {open && (
+        list.length === 0 ? (
+          <div className="px-3 py-3 text-xs text-[color:var(--color-muted-foreground)] border-t border-[color:var(--color-border)]">Пусто.</div>
+        ) : (
+          <ul className="border-t border-[color:var(--color-border)] divide-y divide-[color:var(--color-border)] max-h-72 overflow-y-auto">
+            {list.map((d) => (
+              <li key={d.id} className="px-3 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium truncate">
+                    {domain
+                      ? <a href={`https://${domain}/leads/detail/${d.id}`} target="_blank" rel="noreferrer" className="text-[color:var(--color-primary)] hover:underline">{d.name || `#${d.id}`}</a>
+                      : (d.name || `#${d.id}`)}
+                    <span className="text-[color:var(--color-muted-foreground)]"> · #{d.id}</span>
+                  </span>
+                  <span className="tabular-nums shrink-0">{Number(d.price || 0).toLocaleString('ru-RU')} ₽</span>
+                </div>
+                <div className="text-[color:var(--color-muted-foreground)] mt-0.5">{d.reason}</div>
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+    </div>
+  );
+}
+
 function KpiRow({ title, weight, max, ratio, amount, zeroed, extra }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
@@ -114,7 +152,7 @@ export default function ManagerSalary() {
       const planP = api.get('manager-salary/plan', { params: { employee_code: managerId, period } }).then((r) => r.data);
       const advP = api.get('manager-salary/advances', { params: { employee_id: managerId } }).then((r) => r.data).catch(() => ({ total: 0 }));
       const metP = manager?.amo_user_id
-        ? api.get('manager-salary/metrics', { params: { date_from: dateFrom, date_to: dateTo, amo_user_id: manager.amo_user_id } }).then((r) => r.data)
+        ? api.get('manager-salary/metrics', { params: { date_from: dateFrom, date_to: dateTo, amo_user_id: manager.amo_user_id, detail: 1 } }).then((r) => r.data)
         : Promise.reject(new Error(manager ? 'у менеджера не привязан amoCRM' : 'нет менеджера'));
 
       const [pl, adv] = await Promise.all([planP, advP]);
@@ -290,6 +328,20 @@ export default function ManagerSalary() {
                 </div>
               </div>
             </div>
+
+            {/* Drill-down: which deals landed in each calculation group, and why */}
+            {metrics?.items && (
+              <div className="app-card p-4 space-y-2">
+                <div className="font-semibold">Сделки в расчёте <span className="text-xs text-[color:var(--color-muted-foreground)]">(проверка)</span></div>
+                <DealList title="Выручка — сделки на целевых этапах в периоде" deals={metrics.items.revenue} domain={amoStatus?.domain} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <DealList title="Конверсия ремонта · числитель" deals={metrics.items.repair_num} domain={amoStatus?.domain} />
+                  <DealList title="Конверсия ремонта · знаменатель" deals={metrics.items.repair_denom} domain={amoStatus?.domain} />
+                  <DealList title="Конверсия пошива · числитель" deals={metrics.items.sew_num} domain={amoStatus?.domain} />
+                  <DealList title="Конверсия пошива · знаменатель" deals={metrics.items.sew_denom} domain={amoStatus?.domain} />
+                </div>
+              </div>
+            )}
           </>)}
         </>
       )}
