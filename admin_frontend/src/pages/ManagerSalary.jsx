@@ -8,6 +8,16 @@ const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель',
 
 const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
 const fmtPct = (v) => (v === null || v === undefined ? '—' : `${(Number(v) * 100).toFixed(1)}%`);
+// Human-readable duration from seconds: «45 сек» / «12 мин» / «2 ч 5 мин».
+const fmtDuration = (s) => {
+  if (s === null || s === undefined) return '—';
+  s = Math.round(Number(s));
+  if (s < 60) return `${s} сек`;
+  if (s < 3600) return `${Math.round(s / 60)} мин`;
+  const h = Math.floor(s / 3600);
+  const m = Math.round((s % 3600) / 60);
+  return m ? `${h} ч ${m} мин` : `${h} ч`;
+};
 const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
 
 // last 12 months as {value:'YYYY-MM', label:'Июнь 2026'}
@@ -436,6 +446,10 @@ export default function ManagerSalary() {
                     <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Ремонт: целевых / всего</span><span>{metrics.repair_target_deals} / {metrics.repair_total_deals}</span></div>
                     <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Пошив: целевых / всего</span><span>{metrics.sew_target_deals} / {metrics.sew_total_deals}</span></div>
                     <div className="flex justify-between"><span className="text-[color:var(--color-muted-foreground)]">Новых лидов (пошив)</span><span>{metrics.sew_new_leads}</span></div>
+                    <div className="flex justify-between" title="От создания сделки до первого действия менеджера (смена этапа / исходящий звонок). Медиана; в скобках среднее.">
+                      <span className="text-[color:var(--color-muted-foreground)]">Время первого ответа</span>
+                      <span>{fmtDuration(metrics.median_response_seconds)}{metrics.response_sample ? <span className="text-[color:var(--color-muted-foreground)]"> · ср. {fmtDuration(metrics.avg_response_seconds)} · по {metrics.response_sample}</span> : null}</span>
+                    </div>
                   </>) : (<div className="text-[color:var(--color-muted-foreground)]">недоступно</div>)}
                 </div>
                 <div className="rounded-lg border border-[color:var(--color-border)] p-3 space-y-1.5">

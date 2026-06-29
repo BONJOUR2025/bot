@@ -107,14 +107,20 @@ async def _fetch_pipeline_names() -> dict[int, str]:
         return {}
 
 
-async def _scan_status_events(ts_from: int, ts_to: int) -> tuple[dict[int, dict], list[dict]]:
+async def _scan_status_events(
+    ts_from: int, ts_to: int, amo_user_id: int | None,
+) -> tuple[dict[int, dict], list[dict], dict[int, int]]:
     """Single sweep over lead_status_changed events in the period, returning:
       * reached: lead_id -> {pipeline, stage, ts} for leads that reached a KPI
         «Заказ создан» stage (FIRST such transition kept);
       * moves:   list of {lead_id, from, to, ts} for events where the pipeline
-        changed (value_before.pipeline_id != value_after.pipeline_id)."""
+        changed (value_before.pipeline_id != value_after.pipeline_id);
+      * first_change: lead_id -> ts of the FIRST stage change made by the manager
+        (created_by == amo_user_id) — used as a «first action» signal for the
+        response-time metric (robot/widget auto-moves are excluded)."""
     reached: dict[int, dict] = {}
     moves: list[dict] = []
+    first_change: dict[int, int] = {}
     seen_events: set = set()
     page = 1
     while page <= 500:
@@ -154,10 +160,58 @@ async def _scan_status_events(ts_from: int, ts_to: int) -> tuple[dict[int, dict]
             # 2) cross-pipeline move
             if before_pid is not None and after_pid is not None and before_pid != after_pid:
                 moves.append({"lead_id": lead_id, "from": before_pid, "to": after_pid, "ts": ts})
+
+            # 3) manager's first stage change (for response time)
+            if amo_user_id is None or ev.get("created_by") == amo_user_id:
+                cur_fc = first_change.get(lead_id)
+                if cur_fc is None or ts < cur_fc:
+                    first_change[lead_id] = ts
         if len(batch) < 100 or new == 0:   # no progress → stop (avoids dup inflation)
             break
         page += 1
-    return reached, moves
+    return reached, moves, first_change
+
+
+# Outgoing manager actions in lead notes (used for response time).
+OUTGOING_NOTE_TYPES = ("call_out", "sms_out")
+
+
+async def _first_outgoing_notes(ts_from: int, ts_to: int,
+                                amo_user_id: int | None) -> dict[int, int]:
+    """lead_id -> ts of the manager's first outgoing call/SMS in the period.
+
+    Best-effort: amoCRM note shapes / endpoint availability vary, so any failure
+    degrades gracefully to «no note signal» (response time then relies on the
+    first stage change)."""
+    out: dict[int, int] = {}
+    try:
+        page = 1
+        while page <= 200:
+            data = await amo_get("/leads/notes", params={
+                "filter[created_at][from]": ts_from,
+                "filter[created_at][to]": ts_to,
+                "filter[note_type][]": list(OUTGOING_NOTE_TYPES),
+                "limit": 250,
+                "page": page,
+            })
+            batch = data.get("_embedded", {}).get("notes", [])
+            if not batch:
+                break
+            for n in batch:
+                if amo_user_id and n.get("created_by") != amo_user_id:
+                    continue
+                lid, ts = n.get("entity_id"), n.get("created_at")
+                if lid is None or ts is None:
+                    continue
+                cur = out.get(lid)
+                if cur is None or ts < cur:
+                    out[lid] = ts
+            if len(batch) < 250:
+                break
+            page += 1
+    except Exception:
+        return {}
+    return out
 
 
 async def _fetch_leads_by_ids(ids: list[int]) -> dict[int, dict]:
@@ -178,7 +232,8 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
     repair_all = await _fetch_pipeline_leads(PIPELINE_REPAIR, ts_from, ts_to, amo_user_id)
     sew_all = await _fetch_pipeline_leads(PIPELINE_SEW, ts_from, ts_to, amo_user_id)
 
-    reached, moves = await _scan_status_events(ts_from, ts_to)
+    reached, moves, first_change = await _scan_status_events(ts_from, ts_to, amo_user_id)
+    note_action = await _first_outgoing_notes(ts_from, ts_to, amo_user_id)
 
     # Suspicious = cross-pipeline moves touching a KPI pipeline (in/out/between),
     # excluding the normal intake move out of «Неразобранное».
@@ -281,6 +336,28 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
                 "reason": f"{tag}: «{_pname(frm)}» → «{_pname(to)}» ({_fmt_ts(m['ts'])})",
             })
 
+    # Response time: from lead creation to the manager's first action (earliest
+    # of first stage change / first outgoing call|SMS), over leads created in the
+    # period. Median + average in seconds; None if there is no sample.
+    deltas: list[int] = []
+    for lead in (repair_all + sew_all):
+        created = lead.get("created_at")
+        lid = lead.get("id")
+        if not created or lid is None:
+            continue
+        cands = [t for t in (first_change.get(lid), note_action.get(lid)) if t is not None]
+        if not cands:
+            continue
+        d = min(cands) - int(created)
+        if d >= 0:
+            deltas.append(d)
+    deltas.sort()
+    if deltas:
+        avg_response = round(sum(deltas) / len(deltas))
+        median_response = deltas[len(deltas) // 2]
+    else:
+        avg_response = median_response = None
+
     result = {
         "revenue_actual": round(revenue, 2),
         "repair_target_deals": repair_target,
@@ -288,6 +365,9 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
         "sew_target_deals": sew_target,
         "sew_total_deals": len(sew_all),
         "sew_new_leads": len(sew_all),
+        "avg_response_seconds": avg_response,
+        "median_response_seconds": median_response,
+        "response_sample": len(deltas),
     }
     if detail:
         result["items"] = items
