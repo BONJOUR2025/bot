@@ -51,6 +51,34 @@ def _fmt_ts(ts) -> str:
         return str(ts)
 
 
+# ── Working hours for response time (10:00–19:00 МСК, every day) ──────────────
+MSK_OFFSET = 3 * 3600          # Москва = UTC+3, без перехода на летнее время
+WORK_START_H = 10
+WORK_END_H = 19
+
+
+def _business_seconds(a: int, b: int) -> int:
+    """Seconds between epochs a..b that fall inside the 10:00–19:00 МСК window
+    (summed per day). Time outside working hours is not counted."""
+    if b <= a:
+        return 0
+    a += MSK_OFFSET
+    b += MSK_OFFSET            # shift so day boundaries are local (МСК) midnights
+    total = 0
+    day = (a // 86400) * 86400
+    last = (b // 86400) * 86400
+    guard = 0
+    while day <= last and guard < 1000:
+        guard += 1
+        ws = day + WORK_START_H * 3600
+        we = day + WORK_END_H * 3600
+        s, e = max(a, ws), min(b, we)
+        if e > s:
+            total += e - s
+        day += 86400
+    return total
+
+
 async def _fetch_pipeline_leads(pipeline_id: int, ts_from: int, ts_to: int,
                                 amo_user_id: int | None) -> list[dict]:
     """All leads created in the period in a pipeline (conversion denominator).
@@ -65,6 +93,7 @@ async def _fetch_pipeline_leads(pipeline_id: int, ts_from: int, ts_to: int,
             "filter[pipeline_id]": pipeline_id,
             "filter[created_at][from]": ts_from,
             "filter[created_at][to]": ts_to,
+            "with": "contacts",   # to map calls (logged on the contact) → lead
             "limit": 250,
             "page": page,
         }
@@ -107,20 +136,39 @@ async def _fetch_pipeline_names() -> dict[int, str]:
         return {}
 
 
+# Names of the «заявка получена» stage — t0 for the response-time clock.
+RECEIVED_STATUS_NAMES = ("получена заявка", "заявка получена")
+
+
+async def _received_status_ids() -> set:
+    """Status ids whose name marks «получена заявка» (the robot puts the lead
+    there — the response-time clock starts then)."""
+    ids: set = set()
+    try:
+        data = await amo_get("/leads/pipelines")
+        for p in data.get("_embedded", {}).get("pipelines", []):
+            for st in p.get("_embedded", {}).get("statuses", []):
+                name = (st.get("name") or "").strip().lower()
+                if any(n in name for n in RECEIVED_STATUS_NAMES):
+                    ids.add(st.get("id"))
+    except Exception:
+        pass
+    return ids
+
+
 async def _scan_status_events(
-    ts_from: int, ts_to: int, amo_user_id: int | None,
+    ts_from: int, ts_to: int, received_ids: set,
 ) -> tuple[dict[int, dict], list[dict], dict[int, int]]:
     """Single sweep over lead_status_changed events in the period, returning:
       * reached: lead_id -> {pipeline, stage, ts} for leads that reached a KPI
         «Заказ создан» stage (FIRST such transition kept);
       * moves:   list of {lead_id, from, to, ts} for events where the pipeline
         changed (value_before.pipeline_id != value_after.pipeline_id);
-      * first_change: lead_id -> ts of the FIRST stage change made by the manager
-        (created_by == amo_user_id) — used as a «first action» signal for the
-        response-time metric (robot/widget auto-moves are excluded)."""
+      * received_at: lead_id -> ts the lead entered «Получена заявка» (FIRST such
+        transition; any actor, incl. the robot) — the response-time clock start."""
     reached: dict[int, dict] = {}
     moves: list[dict] = []
-    first_change: dict[int, int] = {}
+    received_at: dict[int, int] = {}
     seen_events: set = set()
     page = 1
     while page <= 500:
@@ -161,69 +209,31 @@ async def _scan_status_events(
             if before_pid is not None and after_pid is not None and before_pid != after_pid:
                 moves.append({"lead_id": lead_id, "from": before_pid, "to": after_pid, "ts": ts})
 
-            # 3) manager's first stage change (for response time)
-            if amo_user_id is None or ev.get("created_by") == amo_user_id:
-                cur_fc = first_change.get(lead_id)
-                if cur_fc is None or ts < cur_fc:
-                    first_change[lead_id] = ts
+            # 3) entered «Получена заявка» → response clock start (t0)
+            if after_sid in received_ids:
+                cur_r = received_at.get(lead_id)
+                if cur_r is None or ts < cur_r:
+                    received_at[lead_id] = ts
         if len(batch) < 100 or new == 0:   # no progress → stop (avoids dup inflation)
             break
         page += 1
-    return reached, moves, first_change
+    return reached, moves, received_at
 
 
 # Outgoing manager actions in lead notes (used for response time).
-OUTGOING_NOTE_TYPES = ("call_out", "sms_out")
-
-
-async def _first_outgoing_notes(ts_from: int, ts_to: int,
-                                amo_user_id: int | None) -> dict[int, int]:
-    """lead_id -> ts of the manager's first outgoing call/SMS in the period.
-
-    Best-effort: amoCRM note shapes / endpoint availability vary, so any failure
-    degrades gracefully to «no note signal» (response time then relies on the
-    first stage change)."""
-    out: dict[int, int] = {}
-    try:
-        page = 1
-        while page <= 200:
-            data = await amo_get("/leads/notes", params={
-                "filter[created_at][from]": ts_from,
-                "filter[created_at][to]": ts_to,
-                "filter[note_type][]": list(OUTGOING_NOTE_TYPES),
-                "limit": 250,
-                "page": page,
-            })
-            batch = data.get("_embedded", {}).get("notes", [])
-            if not batch:
-                break
-            for n in batch:
-                if amo_user_id and n.get("created_by") != amo_user_id:
-                    continue
-                lid, ts = n.get("entity_id"), n.get("created_at")
-                if lid is None or ts is None:
-                    continue
-                cur = out.get(lid)
-                if cur is None or ts < cur:
-                    out[lid] = ts
-            if len(batch) < 250:
-                break
-            page += 1
-    except Exception:
-        return {}
-    return out
+def _append(d: dict, key, ts) -> None:
+    if key is None or ts is None:
+        return
+    d.setdefault(key, []).append(ts)
 
 
 # Outgoing chat messages from the events feed = the «Chats API» signal available
 # publicly. NB: chat events come in with created_by == 0 (the channel widget
 # posts them, not the operator), so they CANNOT be attributed by created_by —
 # attribution is by lead ownership (the lead set is already filtered to the
-# manager). outgoing_call is NOT used here: those events are entity_type=contact
-# and don't map to a lead (calls come from the call_out notes instead).
-async def _first_outgoing_chat(ts_from: int, ts_to: int) -> dict[int, int]:
-    """lead_id -> ts of the FIRST outgoing chat message on the lead in the period.
-    Best-effort: any failure degrades to «no signal»."""
-    out: dict[int, int] = {}
+# manager). Returns lead_id -> [ts, ...] (all outgoing chat messages on the lead).
+async def _outgoing_chat_times(ts_from: int, ts_to: int) -> dict[int, list[int]]:
+    out: dict[int, list[int]] = {}
     try:
         page = 1
         while page <= 200:
@@ -240,18 +250,54 @@ async def _first_outgoing_chat(ts_from: int, ts_to: int) -> dict[int, int]:
             for ev in batch:
                 if ev.get("entity_type") not in (None, "lead", "leads"):
                     continue
-                lid, ts = ev.get("entity_id"), ev.get("created_at")
-                if lid is None or ts is None:
-                    continue
-                cur = out.get(lid)
-                if cur is None or ts < cur:
-                    out[lid] = ts
+                _append(out, ev.get("entity_id"), ev.get("created_at"))
             if len(batch) < 100:
                 break
             page += 1
     except Exception:
         return {}
     return out
+
+
+# Outgoing calls are logged as events on the CONTACT (entity_type=contact),
+# created_by = the real manager. Returns contact_id -> [ts, ...]; the caller maps
+# contacts to leads. Calls made by the manager only (created_by == amo_user_id).
+async def _outgoing_call_times(ts_from: int, ts_to: int,
+                               amo_user_id: int | None) -> dict[int, list[int]]:
+    out: dict[int, list[int]] = {}
+    try:
+        page = 1
+        while page <= 200:
+            data = await amo_get("/events", params={
+                "filter[type]": "outgoing_call",
+                "filter[created_at][from]": ts_from,
+                "filter[created_at][to]": ts_to,
+                "limit": 100,
+                "page": page,
+            })
+            batch = data.get("_embedded", {}).get("events", [])
+            if not batch:
+                break
+            for ev in batch:
+                if ev.get("entity_type") not in (None, "contact", "contacts"):
+                    continue
+                if amo_user_id and ev.get("created_by") != amo_user_id:
+                    continue
+                _append(out, ev.get("entity_id"), ev.get("created_at"))
+            if len(batch) < 100:
+                break
+            page += 1
+    except Exception:
+        return {}
+    return out
+
+
+def _first_after(times: list[int] | None, t0: int) -> int | None:
+    """Earliest timestamp in ``times`` that is >= t0, or None."""
+    if not times:
+        return None
+    cands = [t for t in times if t >= t0]
+    return min(cands) if cands else None
 
 
 async def _fetch_leads_by_ids(ids: list[int]) -> dict[int, dict]:
@@ -272,9 +318,10 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
     repair_all = await _fetch_pipeline_leads(PIPELINE_REPAIR, ts_from, ts_to, amo_user_id)
     sew_all = await _fetch_pipeline_leads(PIPELINE_SEW, ts_from, ts_to, amo_user_id)
 
-    reached, moves, first_change = await _scan_status_events(ts_from, ts_to, amo_user_id)
-    note_action = await _first_outgoing_notes(ts_from, ts_to, amo_user_id)
-    chat_action = await _first_outgoing_chat(ts_from, ts_to)
+    received_ids = await _received_status_ids()
+    reached, moves, received_at = await _scan_status_events(ts_from, ts_to, received_ids)
+    chat_times = await _outgoing_chat_times(ts_from, ts_to)
+    call_times_by_contact = await _outgoing_call_times(ts_from, ts_to, amo_user_id)
 
     # Suspicious = cross-pipeline moves touching a KPI pipeline (in/out/between),
     # excluding the normal intake move out of «Неразобранное».
@@ -377,22 +424,42 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
                 "reason": f"{tag}: «{_pname(frm)}» → «{_pname(to)}» ({_fmt_ts(m['ts'])})",
             })
 
-    # Response time: from lead creation to the manager's first action (earliest
-    # of first stage change / first outgoing call|SMS), over leads created in the
-    # period. Median + average in seconds; None if there is no sample.
+    # Response time: from when the robot put the lead on «Получена заявка» (or
+    # lead creation if it was created straight there) to the manager's FIRST real
+    # touch — outgoing call or chat message AFTER that moment. Duration counts
+    # only working hours (10:00–19:00 МСК). A stage change is NOT a touch: leads
+    # with no call/chat after t0 are EXCLUDED (touch not recognised / outside CRM).
+    manager_leads = repair_all + sew_all
+    contact_to_lead: dict[int, int] = {}
+    for lead in manager_leads:
+        lid = lead.get("id")
+        for c in lead.get("_embedded", {}).get("contacts", []) or []:
+            cid = c.get("id")
+            if cid is not None and lid is not None:
+                contact_to_lead.setdefault(cid, lid)
+
+    # Calls (logged on the contact) regrouped onto the manager's leads.
+    call_times_by_lead: dict[int, list[int]] = {}
+    for cid, times in call_times_by_contact.items():
+        lid = contact_to_lead.get(cid)
+        if lid is not None:
+            call_times_by_lead.setdefault(lid, []).extend(times)
+
     deltas: list[int] = []
-    for lead in (repair_all + sew_all):
+    excluded_no_touch = 0
+    for lead in manager_leads:
         created = lead.get("created_at")
         lid = lead.get("id")
         if not created or lid is None:
             continue
-        cands = [t for t in (first_change.get(lid), note_action.get(lid), chat_action.get(lid))
-                 if t is not None]
-        if not cands:
+        t0 = received_at.get(lid) or int(created)   # «Получена заявка» / создание
+        first_call = _first_after(call_times_by_lead.get(lid), t0)
+        first_chat = _first_after(chat_times.get(lid), t0)
+        touches = [t for t in (first_call, first_chat) if t is not None]
+        if not touches:
+            excluded_no_touch += 1            # нет звонка/сообщения — не учитываем
             continue
-        d = min(cands) - int(created)
-        if d >= 0:
-            deltas.append(d)
+        deltas.append(_business_seconds(t0, min(touches)))
     deltas.sort()
     if deltas:
         avg_response = round(sum(deltas) / len(deltas))
@@ -410,6 +477,7 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
         "avg_response_seconds": avg_response,
         "median_response_seconds": median_response,
         "response_sample": len(deltas),
+        "response_excluded": excluded_no_touch,
     }
     if detail:
         result["items"] = items
