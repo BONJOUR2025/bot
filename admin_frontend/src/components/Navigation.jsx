@@ -51,6 +51,7 @@ const navStructure = [
   {
     name: 'Зарплата',
     items: [
+      { to: '/admin/payroll-summary',  label: 'Сводный отчёт',        permission: 'payroll',         icon: BarChart2 },
       { to: '/admin/payroll',          label: 'Администраторы',        permission: 'payroll',         icon: Calculator },
       { to: '/admin/masters',          label: 'Мастера',              permission: 'payroll',         icon: Hammer },
       { to: '/admin/manager-salary',   label: 'Менеджеры',            permission: 'manager-salary',  icon: Users },

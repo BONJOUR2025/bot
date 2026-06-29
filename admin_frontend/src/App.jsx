@@ -40,6 +40,7 @@ import Birthdays from "./pages/Birthdays";
 import Settings from "./pages/Settings";
 import Assets from "./pages/Assets";
 import Payroll from "./pages/Payroll";
+import PayrollSummary from "./pages/PayrollSummary";
 import ManagerSalary from "./pages/ManagerSalary";
 import Schedule from "./pages/Schedule";
 import Tasks from "./pages/Tasks";
@@ -102,6 +103,7 @@ export default function App() {
                 <Route path="access" element={<Navigate to="/admin/settings/access" replace />} />
                 <Route path="settings/*" element={<Settings />} />
                 <Route path="payroll" element={<Payroll />} />
+                <Route path="payroll-summary" element={<PayrollSummary />} />
                 <Route path="manager-salary" element={<ManagerSalary />} />
                 <Route path="schedule" element={<Schedule />} />
                 <Route path="tasks" element={<Tasks />} />
