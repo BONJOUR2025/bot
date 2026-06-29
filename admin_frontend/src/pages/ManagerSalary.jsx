@@ -6,7 +6,7 @@ import { useToast } from '../providers/ToastProvider.jsx';
 const MANAGER_POSITION = 'менеджер по работе с клиентами';
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
-const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
+const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
 const fmtPct = (v) => (v === null || v === undefined ? '—' : `${(Number(v) * 100).toFixed(1)}%`);
 const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
 
@@ -65,13 +65,13 @@ function PlanFactRow({ title, note, plan, fact, ratio, fmt = fmtMoney }) {
     : pct >= 79 ? 'text-[color:var(--color-text-primary)]'
     : 'text-[color:var(--color-danger)]';
   return (
-    <div className="grid grid-cols-[1.4fr_1fr_1fr_auto] items-baseline gap-x-3 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
+    <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_2.5rem] items-baseline gap-x-2 sm:gap-x-3 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
       <div className="text-sm font-medium min-w-0">
         {title}{note ? <span className="block text-[11px] text-[color:var(--color-muted-foreground)]">{note}</span> : null}
       </div>
-      <div className="text-right tabular-nums text-sm">{fmt(plan)}</div>
-      <div className="text-right tabular-nums text-sm font-semibold">{fmt(fact)}</div>
-      <div className={`text-right tabular-nums text-sm font-semibold w-14 ${tone}`}>{pct == null ? '—' : `${pct.toFixed(0)}%`}</div>
+      <div className="text-right tabular-nums text-xs sm:text-sm whitespace-nowrap">{fmt(plan)}</div>
+      <div className="text-right tabular-nums text-xs sm:text-sm font-semibold whitespace-nowrap">{fmt(fact)}</div>
+      <div className={`text-right tabular-nums text-xs sm:text-sm font-semibold ${tone}`}>{pct == null ? '—' : `${pct.toFixed(0)}%`}</div>
     </div>
   );
 }
@@ -330,11 +330,11 @@ export default function ManagerSalary() {
 
             {/* План / Факт / % — выручка и конверсии + лиды */}
             <div className="app-card p-4 space-y-2">
-              <div className="grid grid-cols-[1.4fr_1fr_1fr_auto] gap-x-3 text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+              <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_2.5rem] gap-x-2 sm:gap-x-3 text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
                 <div>Показатель</div>
                 <div className="text-right">План</div>
                 <div className="text-right">Факт</div>
-                <div className="text-right w-14">%</div>
+                <div className="text-right">%</div>
               </div>
               <PlanFactRow title="Выручка" plan={plan?.revenue_plan} fact={metrics?.revenue_actual} ratio={result.revenue.ratio} />
               <PlanFactRow title="Конверсия ремонта" note={`целевых ${result.repair.target} / всего ${result.repair.total}`} plan={plan?.repair_plan_conv} fact={result.repair.conv} ratio={result.repair.ratio} fmt={fmtPct} />
@@ -430,30 +430,30 @@ export default function ManagerSalary() {
             ) : (
               <ul className="divide-y divide-[color:var(--color-border)]">
                 {accruals.map((a) => (
-                  <li key={a.id} className="px-4 py-2.5 text-sm flex items-center justify-between gap-3">
+                  <li key={a.id} className="px-4 py-3 text-sm flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <div className="min-w-0">
                       <div className="font-medium">{a.period} <span className="text-xs text-[color:var(--color-muted-foreground)]">· {a.created_at?.slice(0, 16).replace('T', ' ')}</span></div>
-                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                      <div className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
                         <span className="text-[color:var(--color-success)]">+ начислено</span> оклад {fmtMoney(a.result?.oklad)} · KPI {fmtMoney(a.result?.kpi)}{a.result?.bonuses ? ` · премии ${fmtMoney(a.result?.bonuses)}` : ''}
                       </div>
                       <div className="text-xs text-[color:var(--color-muted-foreground)]">
                         <span className="text-[color:var(--color-danger)]">− списано</span> авансы {fmtMoney(a.result?.advances)}{a.result?.penalties ? ` · штрафы ${fmtMoney(a.result?.penalties)}` : ''}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right">
-                        <div className="font-semibold tabular-nums text-[color:var(--color-primary)]">{fmtMoney(a.result?.to_pay)}</div>
+                    <div className="flex items-center justify-between gap-3 shrink-0 border-t border-[color:var(--color-border)] pt-2 sm:border-0 sm:pt-0 sm:justify-end">
+                      <div className="sm:text-right">
+                        <div className="font-semibold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">{fmtMoney(a.result?.to_pay)}</div>
                         <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">к выплате</div>
                       </div>
                       {a.payout_id ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-[color:var(--color-success)]" title={`Выплата #${a.payout_id}`}><CheckCircle2 size={14} /> выплата</span>
+                        <span className="inline-flex items-center gap-1 text-xs text-[color:var(--color-success)] shrink-0" title={`Выплата #${a.payout_id}`}><CheckCircle2 size={14} /> выплата</span>
                       ) : (
                         <button onClick={() => createPayout(a)} disabled={payingId === a.id || !(a.result?.to_pay > 0)}
-                          className="btn btn--secondary btn--sm flex items-center gap-1.5" title="Создать выплату «Зарплата» на сумму к выплате">
+                          className="btn btn--secondary btn--sm flex items-center gap-1.5 shrink-0" title="Создать выплату «Зарплата» на сумму к выплате">
                           <Banknote size={14} /> {payingId === a.id ? '…' : 'Выплата'}
                         </button>
                       )}
-                      <button onClick={() => deleteAccrual(a.id)} className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-danger)]" title="Удалить"><Trash2 size={15} /></button>
+                      <button onClick={() => deleteAccrual(a.id)} className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-danger)] shrink-0" title="Удалить"><Trash2 size={15} /></button>
                     </div>
                   </li>
                 ))}
