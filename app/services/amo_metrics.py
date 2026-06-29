@@ -1,12 +1,18 @@
 """Compute manager KPI metrics from amoCRM for a period.
 
-Produces the six numbers the salary engine needs (revenue, repair/sew target &
-total deal counts, sew new-lead count) following the BONJOUR spec:
+Attribution (per discussion with the РОП):
+  * Denominator of conversion — deals CREATED in the period (created_at), per
+    pipeline, by the manager.
+  * Numerator of conversion AND revenue — deals that REACHED a target stage
+    («Заказ создан» / «Успешно реализовано») DURING the period, by the date of
+    the stage transition. This is read from /api/v4/events (lead_status_changed):
+    a status-change event inherently means the deal was MOVED onto the stage
+    (a deal created directly in a stage produces no such event), so the
+    "moved, not created in it" rule is satisfied exactly — no heuristic.
+  * sew new leads — deals created in the period in the sew pipeline.
 
-  * deals are counted in the расчётный период by created_at
-  * target deals (числитель конверсии) must be MOVED onto the target stage,
-    not created in it — approximated by updated_at > created_at, since /leads
-    does not expose stage history
+amoCRM is unreachable from this sandbox, so the exact filter-param spellings
+must be confirmed against the live account; the logic is unit-tested with stubs.
 """
 from __future__ import annotations
 
@@ -24,6 +30,7 @@ SEW_TARGET_STAGES = {STAGE_ORDER_CREATED_SEW, STAGE_WON}
 
 async def _fetch_pipeline_leads(pipeline_id: int, ts_from: int, ts_to: int,
                                 amo_user_id: int | None) -> list[dict]:
+    """All leads created in the period in a pipeline (conversion denominator)."""
     leads: list[dict] = []
     page = 1
     while True:
@@ -47,36 +54,95 @@ async def _fetch_pipeline_leads(pipeline_id: int, ts_from: int, ts_to: int,
     return leads
 
 
-def _is_moved(lead: dict) -> bool:
-    # Heuristic: a lead that was moved onto a stage has updated_at > created_at.
-    return int(lead.get("updated_at", 0)) > int(lead.get("created_at", 0))
+def _event_stage(ev: dict) -> tuple[int | None, int | None]:
+    """Extract (status_id, pipeline_id) of value_after from a status-change event."""
+    after = ev.get("value_after")
+    if isinstance(after, list) and after:
+        after = after[0]
+    if isinstance(after, dict):
+        ls = after.get("lead_status") or after
+        return ls.get("id"), ls.get("pipeline_id")
+    return None, None
+
+
+async def _leads_reached_target(ts_from: int, ts_to: int) -> dict[int, int]:
+    """lead_id -> pipeline_id for leads that reached a target stage in the period
+    (read from status-change events)."""
+    reached: dict[int, int] = {}
+    page = 1
+    while True:
+        params = {
+            "filter[type]": "lead_status_changed",
+            "filter[created_at][from]": ts_from,
+            "filter[created_at][to]": ts_to,
+            "limit": 100,
+            "page": page,
+        }
+        data = await amo_get("/events", params=params)
+        batch = data.get("_embedded", {}).get("events", [])
+        if not batch:
+            break
+        for ev in batch:
+            sid, pid = _event_stage(ev)
+            lead_id = ev.get("entity_id")
+            if lead_id is None or sid is None:
+                continue
+            if pid == PIPELINE_REPAIR and sid in REPAIR_TARGET_STAGES:
+                reached[lead_id] = PIPELINE_REPAIR
+            elif pid == PIPELINE_SEW and sid in SEW_TARGET_STAGES:
+                reached[lead_id] = PIPELINE_SEW
+        if len(batch) < 100:
+            break
+        page += 1
+    return reached
+
+
+async def _fetch_leads_by_ids(ids: list[int]) -> dict[int, dict]:
+    """Fetch leads (id -> lead) in chunks, to read responsible_user_id and price."""
+    out: dict[int, dict] = {}
+    CHUNK = 50
+    for i in range(0, len(ids), CHUNK):
+        chunk = ids[i:i + CHUNK]
+        data = await amo_get("/leads", params={"filter[id][]": chunk, "limit": CHUNK})
+        for lead in data.get("_embedded", {}).get("leads", []):
+            out[lead.get("id")] = lead
+    return out
 
 
 async def compute_metrics(date_from: datetime, date_to: datetime,
                           amo_user_id: int | None) -> dict:
     ts_from, ts_to = int(date_from.timestamp()), int(date_to.timestamp())
 
-    repair = await _fetch_pipeline_leads(PIPELINE_REPAIR, ts_from, ts_to, amo_user_id)
-    sew = await _fetch_pipeline_leads(PIPELINE_SEW, ts_from, ts_to, amo_user_id)
+    # Denominators — leads created in the period.
+    repair_all = await _fetch_pipeline_leads(PIPELINE_REPAIR, ts_from, ts_to, amo_user_id)
+    sew_all = await _fetch_pipeline_leads(PIPELINE_SEW, ts_from, ts_to, amo_user_id)
 
-    def _targets(leads, stages):
-        return [l for l in leads if l.get("status_id") in stages and _is_moved(l)]
+    # Numerator + revenue — leads that reached a target stage during the period.
+    reached = await _leads_reached_target(ts_from, ts_to)
+    info = await _fetch_leads_by_ids(list(reached.keys())) if reached else {}
 
-    repair_targets = _targets(repair, REPAIR_TARGET_STAGES)
-    sew_targets = _targets(sew, SEW_TARGET_STAGES)
-
-    # Revenue: sum price of deals on the target stages (created in period),
-    # across both pipelines — no "moved" requirement per spec.
-    revenue = sum(float(l.get("price") or 0)
-                  for l in repair if l.get("status_id") in REPAIR_TARGET_STAGES)
-    revenue += sum(float(l.get("price") or 0)
-                   for l in sew if l.get("status_id") in SEW_TARGET_STAGES)
+    repair_target = 0
+    sew_target = 0
+    revenue = 0.0
+    for lead_id, pipeline_id in reached.items():
+        lead = info.get(lead_id)
+        if not lead:
+            continue
+        if amo_user_id and lead.get("responsible_user_id") != amo_user_id:
+            continue
+        price = float(lead.get("price") or 0)
+        if pipeline_id == PIPELINE_REPAIR:
+            repair_target += 1
+            revenue += price
+        elif pipeline_id == PIPELINE_SEW:
+            sew_target += 1
+            revenue += price
 
     return {
         "revenue_actual": round(revenue, 2),
-        "repair_target_deals": len(repair_targets),
-        "repair_total_deals": len(repair),
-        "sew_target_deals": len(sew_targets),
-        "sew_total_deals": len(sew),
-        "sew_new_leads": len(sew),  # новые лиды пошива за период
+        "repair_target_deals": repair_target,
+        "repair_total_deals": len(repair_all),
+        "sew_target_deals": sew_target,
+        "sew_total_deals": len(sew_all),
+        "sew_new_leads": len(sew_all),
     }
