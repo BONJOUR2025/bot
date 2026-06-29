@@ -46,12 +46,32 @@ function TrendBadge({ cur, prev }) {
   );
 }
 
-function Widget({ label, value, cur, prev, accent }) {
+// Большая денежная плитка — крупно сумма + подпись/тренд.
+function MoneyTile({ label, value, cur, prev, accent, hint, highlight }) {
   return (
-    <div className="app-card px-4 py-3 flex flex-col gap-1">
+    <div className={`app-card px-4 py-3 flex flex-col gap-1 ${highlight ? 'ring-1 ring-[color:var(--color-primary)]' : ''}`}>
       <div className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
-      <div className={`text-lg font-semibold ${accent || 'text-[color:var(--color-text-primary)]'}`}>{value}</div>
-      <TrendBadge cur={cur} prev={prev} />
+      <div className={`text-2xl font-bold tabular-nums leading-tight ${accent || 'text-[color:var(--color-text-primary)]'}`}>{value}</div>
+      {hint ? <div className="text-[11px] text-[color:var(--color-muted-foreground)]">{hint}</div> : <TrendBadge cur={cur} prev={prev} />}
+    </div>
+  );
+}
+
+// Строка сравнения План / Факт / % с порогом 79%.
+function PlanFactRow({ title, note, plan, fact, ratio, fmt = fmtMoney }) {
+  const pct = ratio == null ? null : ratio * 100;
+  const tone = pct == null ? 'text-[color:var(--color-muted-foreground)]'
+    : pct >= 100 ? 'text-[color:var(--color-success)]'
+    : pct >= 79 ? 'text-[color:var(--color-text-primary)]'
+    : 'text-[color:var(--color-danger)]';
+  return (
+    <div className="grid grid-cols-[1.4fr_1fr_1fr_auto] items-baseline gap-x-3 py-2 border-t border-[color:var(--color-border)] first:border-t-0">
+      <div className="text-sm font-medium min-w-0">
+        {title}{note ? <span className="block text-[11px] text-[color:var(--color-muted-foreground)]">{note}</span> : null}
+      </div>
+      <div className="text-right tabular-nums text-sm">{fmt(plan)}</div>
+      <div className="text-right tabular-nums text-sm font-semibold">{fmt(fact)}</div>
+      <div className={`text-right tabular-nums text-sm font-semibold w-14 ${tone}`}>{pct == null ? '—' : `${pct.toFixed(0)}%`}</div>
     </div>
   );
 }
@@ -120,6 +140,7 @@ export default function ManagerSalary() {
   const [plan, setPlan] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [advances, setAdvances] = useState(null);   // {total, since}
+  const [incentives, setIncentives] = useState({ bonuses: 0, penalties: 0 });
   const [result, setResult] = useState(null);
   const [prev, setPrev] = useState(null);            // {result, metrics} of previous month
   const [loading, setLoading] = useState(false);
@@ -151,12 +172,15 @@ export default function ManagerSalary() {
     try {
       const planP = api.get('manager-salary/plan', { params: { employee_code: managerId, period } }).then((r) => r.data);
       const advP = api.get('manager-salary/advances', { params: { employee_id: managerId } }).then((r) => r.data).catch(() => ({ total: 0 }));
+      const incP = api.get('incentives/', { params: { employee_id: managerId, date_from: dateFrom, date_to: dateTo } }).then((r) => r.data).catch(() => []);
       const metP = manager?.amo_user_id
         ? api.get('manager-salary/metrics', { params: { date_from: dateFrom, date_to: dateTo, amo_user_id: manager.amo_user_id, detail: 1 } }).then((r) => r.data)
         : Promise.reject(new Error(manager ? 'у менеджера не привязан amoCRM' : 'нет менеджера'));
 
-      const [pl, adv] = await Promise.all([planP, advP]);
-      setPlan(pl); setAdvances(adv);
+      const [pl, adv, inc] = await Promise.all([planP, advP, incP]);
+      const bonuses = (inc || []).filter((i) => i.type === 'bonus').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+      const penalties = (inc || []).filter((i) => i.type === 'penalty').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+      setPlan(pl); setAdvances(adv); setIncentives({ bonuses, penalties });
       let met = null;
       try { met = await metP; setMetrics(met); }
       catch (e) { setMetrics(null); setMetricsError(e?.response?.data?.detail || e.message || 'amoCRM недоступен'); }
@@ -166,7 +190,7 @@ export default function ManagerSalary() {
         revenue_plan: pl.revenue_plan, revenue_actual: met?.revenue_actual || 0,
         repair_plan_conv: pl.repair_plan_conv, repair_target_deals: met?.repair_target_deals || 0, repair_total_deals: met?.repair_total_deals || 0,
         sew_plan_conv: pl.sew_plan_conv, sew_target_deals: met?.sew_target_deals || 0, sew_total_deals: met?.sew_total_deals || 0, sew_new_leads: met?.sew_new_leads || 0,
-        advances: adv?.total || 0,
+        advances: adv?.total || 0, bonuses, penalties,
       };
       const res = await api.post('manager-salary/calc', payload);
       setResult(res.data);
@@ -209,7 +233,7 @@ export default function ManagerSalary() {
         revenue_plan: plan.revenue_plan, revenue_actual: metrics?.revenue_actual || 0,
         repair_plan_conv: plan.repair_plan_conv, repair_target_deals: metrics?.repair_target_deals || 0, repair_total_deals: metrics?.repair_total_deals || 0,
         sew_plan_conv: plan.sew_plan_conv, sew_target_deals: metrics?.sew_target_deals || 0, sew_total_deals: metrics?.sew_total_deals || 0, sew_new_leads: metrics?.sew_new_leads || 0,
-        advances: advances?.total || 0,
+        advances: advances?.total || 0, bonuses: incentives.bonuses, penalties: incentives.penalties,
         employee_code: String(managerId), employee_name: manager?.full_name || manager?.name || '',
         user_id: String(managerId), period, date_from: dateFrom, date_to: dateTo,
       });
@@ -280,14 +304,32 @@ export default function ManagerSalary() {
           )}
 
           {result && (<>
-            {/* Metric widgets with previous-month comparison */}
+            {/* Крупные денежные плитки */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <Widget label="Начислено" value={fmtMoney(result.gross)} cur={result.gross} prev={prev?.result?.gross} />
-              <Widget label="К выплате" value={fmtMoney(result.to_pay)} accent="text-[color:var(--color-primary)]" />
-              <Widget label="KPI" value={fmtMoney(result.kpi)} cur={result.kpi} prev={prev?.result?.kpi} />
-              <Widget label="Выручка" value={fmtMoney(metrics?.revenue_actual)} cur={metrics?.revenue_actual} prev={prev?.metrics?.revenue_actual} />
-              <Widget label="Конв. ремонта" value={fmtPct(result.repair.conv)} cur={result.repair.conv} prev={prev?.result?.repair?.conv} />
-              <Widget label="Конв. пошива" value={fmtPct(result.sew.conv)} cur={result.sew.conv} prev={prev?.result?.sew?.conv} />
+              <MoneyTile label="Оклад" value={fmtMoney(result.oklad)} hint="фикс. часть" />
+              <MoneyTile label="Комиссия (KPI)" value={fmtMoney(result.kpi)} cur={result.kpi} prev={prev?.result?.kpi} accent="text-[color:var(--color-success)]" />
+              <MoneyTile label="Премии" value={fmtMoney(result.bonuses)} hint="+ к начислению" accent={result.bonuses ? 'text-[color:var(--color-success)]' : undefined} />
+              <MoneyTile label="Авансы" value={fmtMoney(result.advances)} hint="с посл. зарплаты" accent={result.advances ? 'text-[color:var(--color-danger)]' : undefined} />
+              <MoneyTile label="Штрафы" value={fmtMoney(result.penalties)} hint="− из выплаты" accent={result.penalties ? 'text-[color:var(--color-danger)]' : undefined} />
+              <MoneyTile label="К выплате" value={fmtMoney(result.to_pay)} accent="text-[color:var(--color-primary)]" highlight hint={`начислено ${fmtMoney(result.gross)}`} />
+            </div>
+
+            {/* План / Факт / % — выручка и конверсии + лиды */}
+            <div className="app-card p-4 space-y-2">
+              <div className="grid grid-cols-[1.4fr_1fr_1fr_auto] gap-x-3 text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                <div>Показатель</div>
+                <div className="text-right">План</div>
+                <div className="text-right">Факт</div>
+                <div className="text-right w-14">%</div>
+              </div>
+              <PlanFactRow title="Выручка" plan={plan?.revenue_plan} fact={metrics?.revenue_actual} ratio={result.revenue.ratio} />
+              <PlanFactRow title="Конверсия ремонта" note={`целевых ${result.repair.target} / всего ${result.repair.total}`} plan={plan?.repair_plan_conv} fact={result.repair.conv} ratio={result.repair.ratio} fmt={fmtPct} />
+              <PlanFactRow title="Конверсия пошива" note={result.sew.leads_gate_failed ? `лидов ${result.sew.new_leads} < ${result.sew.min_leads} — не зачтена` : `целевых ${result.sew.target} / всего ${result.sew.total}`} plan={plan?.sew_plan_conv} fact={result.sew.conv} ratio={result.sew.ratio} fmt={fmtPct} />
+              <div className="flex items-center justify-between pt-2 border-t border-[color:var(--color-border)] text-sm">
+                <span className="text-[color:var(--color-muted-foreground)]">Новых лидов за период (пошив)</span>
+                <span className="font-semibold tabular-nums">{metrics?.sew_new_leads ?? '—'}</span>
+              </div>
+              <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Порог KPI — 79%: компонент с факт/план ниже порога не оплачивается.</div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -299,9 +341,19 @@ export default function ManagerSalary() {
                   <KpiRow title="Конверсия ремонта" weight={result.weights.repair} max={result.repair.max} ratio={result.repair.ratio} amount={result.repair.amount} zeroed={result.repair.zeroed} extra={`конв ${fmtPct(result.repair.conv)}`} />
                   <KpiRow title="Конверсия пошива" weight={result.weights.sew} max={result.sew.max} ratio={result.sew.ratio} amount={result.sew.amount} zeroed={result.sew.zeroed} extra={result.sew.leads_gate_failed ? `лидов ${result.sew.new_leads} < ${result.sew.min_leads}` : `конв ${fmtPct(result.sew.conv)}`} />
                 </div>
-                <button className="btn btn--primary w-full flex items-center justify-center gap-2" onClick={accrue} disabled={accruing}>
-                  <Wallet size={16} /> {accruing ? 'Начисляю…' : 'Начислить'}
-                </button>
+
+                {/* Начисление */}
+                <div className="rounded-lg border border-[color:var(--color-border)] p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">Начислить ЗП за {months.find((m) => m.value === period)?.label}</div>
+                      <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Фиксирует расчёт в журнале начислений (оклад + KPI + премии − авансы − штрафы). Сумму выплаты заводите в «Выплатах».</div>
+                    </div>
+                    <button className="btn btn--primary flex items-center gap-1.5 shrink-0" onClick={accrue} disabled={accruing}>
+                      <Wallet size={15} /> {accruing ? 'Начисляю…' : 'Начислить'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Source data (read-only) */}

@@ -66,10 +66,14 @@ def calc_manager_salary(
     sew_new_leads: int,
     sew_min_leads: int = SEW_MIN_LEADS,
     advances: float = 0.0,
+    bonuses: float = 0.0,    # премии (из «Штрафы и премии»)
+    penalties: float = 0.0,  # штрафы
 ) -> dict:
     oklad = float(oklad or 0)
     kpi_max = float(kpi_max or 0)
     advances = float(advances or 0)
+    bonuses = float(bonuses or 0)
+    penalties = float(penalties or 0)
 
     max_rev = round(kpi_max * w_revenue, 2)
     max_rep = round(kpi_max * w_repair, 2)
@@ -90,11 +94,13 @@ def calc_manager_salary(
     c_sew["leads_gate_failed"] = int(sew_new_leads or 0) < sew_min_leads
 
     kpi = round(c_rev["amount"] + c_rep["amount"] + c_sew["amount"], 2)
-    gross = round(oklad + kpi, 2)
-    to_pay = round(gross - advances, 2)
+    gross = round(oklad + kpi + bonuses, 2)        # начислено
+    to_pay = round(gross - advances - penalties, 2)
     return {
         "oklad": oklad,
         "kpi_max": kpi_max,
+        "bonuses": bonuses,
+        "penalties": penalties,
         "weights": {"revenue": w_revenue, "repair": w_repair, "sew": w_sew},
         "revenue": {**c_rev, "max": max_rev, "plan": float(revenue_plan or 0), "actual": float(revenue_actual or 0)},
         "repair": {**c_rep, "max": max_rep, "plan_conv": float(repair_plan_conv or 0),

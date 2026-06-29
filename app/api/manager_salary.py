@@ -34,6 +34,8 @@ class SalaryInput(BaseModel):
     sew_new_leads: int = 0
     sew_min_leads: int = 50
     advances: float = 0
+    bonuses: float = 0
+    penalties: float = 0
 
 
 class PlanInput(BaseModel):
@@ -67,7 +69,7 @@ def _calc(data: SalaryInput) -> dict:
         sew_target_deals=data.sew_target_deals,
         sew_total_deals=data.sew_total_deals,
         sew_new_leads=data.sew_new_leads, sew_min_leads=data.sew_min_leads,
-        advances=data.advances,
+        advances=data.advances, bonuses=data.bonuses, penalties=data.penalties,
     )
 
 
