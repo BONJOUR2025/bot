@@ -161,8 +161,9 @@ async def _scan_status_events(
         «Заказ создан» stage (FIRST such transition kept);
       * moves:   list of {lead_id, from, to, ts} for events where the pipeline
         changed (value_before.pipeline_id != value_after.pipeline_id);
-      * received_at: lead_id -> ts the lead entered «Получена заявка» (FIRST such
-        transition; any actor, incl. the robot) — the response-time clock start."""
+      * received_at: lead_id -> ts the ROBOT (created_by == 0) put the lead on
+        «Получена заявка» (FIRST such transition) — the response-time clock start.
+        Manual moves by a manager are excluded."""
     reached: dict[int, dict] = {}
     moves: list[dict] = []
     received_at: dict[int, int] = {}
@@ -206,8 +207,10 @@ async def _scan_status_events(
             if before_pid is not None and after_pid is not None and before_pid != after_pid:
                 moves.append({"lead_id": lead_id, "from": before_pid, "to": after_pid, "ts": ts})
 
-            # 3) entered «Получена заявка» → response clock start (t0)
-            if after_sid in received_ids:
+            # 3) ROBOT put the lead on «Получена заявка» → response clock start.
+            # Only robot moves (created_by == 0) count; a manual move by a manager
+            # is not a «робот создал/перенёс заявку» trigger.
+            if after_sid in received_ids and ev.get("created_by") == 0:
                 cur_r = received_at.get(lead_id)
                 if cur_r is None or ts < cur_r:
                     received_at[lead_id] = ts
@@ -449,7 +452,15 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
         lid = lead.get("id")
         if not created or lid is None:
             continue
-        t0 = received_at.get(lid) or int(created)   # «Получена заявка» / создание
+        # Only robot-triggered leads count: robot moved it onto «Получена заявка»,
+        # or the robot (created_by == 0) created the lead itself.
+        robot_received = received_at.get(lid)
+        if robot_received is not None:
+            t0 = robot_received
+        elif lead.get("created_by") == 0:
+            t0 = int(created)
+        else:
+            continue                              # создана/перенесена не роботом
         first_call = _first_after(call_times_by_lead.get(lid), t0)
         first_chat = _first_after(chat_times.get(lid), t0)
         t1 = min([t for t in (first_call, first_chat) if t is not None], default=None)

@@ -228,6 +228,10 @@ function ResponseList({ deals, domain }) {
         list.length === 0 ? (
           <div className="px-5 py-6 text-center text-sm text-[color:var(--color-muted-foreground)] border-t border-[color:var(--color-border)]">Нет сделок за период.</div>
         ) : (
+          <>
+          <div className="px-5 py-2 border-t border-[color:var(--color-border)] text-[11px] text-[color:var(--color-muted-foreground)]">
+            Только заявки, которые робот создал или перенёс на «Получена заявка». Время — до первого звонка или сообщения в чате, в рабочие часы 10:00–19:00 МСК.
+          </div>
           <ul className="border-t border-[color:var(--color-border)] divide-y divide-[color:var(--color-border)] max-h-[28rem] overflow-y-auto">
             {list.map((d) => {
               const tone = respTone(d.seconds);
@@ -251,6 +255,7 @@ function ResponseList({ deals, domain }) {
               );
             })}
           </ul>
+          </>
         )
       )}
     </div>
