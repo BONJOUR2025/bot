@@ -51,7 +51,7 @@ function MoneyTile({ label, value, cur, prev, accent, hint, highlight }) {
   return (
     <div className={`app-card px-4 py-3 flex flex-col gap-1 ${highlight ? 'ring-1 ring-[color:var(--color-primary)]' : ''}`}>
       <div className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
-      <div className={`text-2xl font-bold tabular-nums leading-tight ${accent || 'text-[color:var(--color-text-primary)]'}`}>{value}</div>
+      <div className={`text-2xl font-bold tabular-nums leading-tight whitespace-nowrap ${accent || 'text-[color:var(--color-text-primary)]'}`}>{value}</div>
       {hint ? <div className="text-[11px] text-[color:var(--color-muted-foreground)]">{hint}</div> : <TrendBadge cur={cur} prev={prev} />}
     </div>
   );
@@ -318,8 +318,8 @@ export default function ManagerSalary() {
           )}
 
           {result && (<>
-            {/* Крупные денежные плитки */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* Крупные денежные плитки (3 в ряд — чтобы суммы с копейками не обрезались) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <MoneyTile label="Оклад" value={fmtMoney(result.oklad)} hint="фикс. часть" />
               <MoneyTile label="Комиссия (KPI)" value={fmtMoney(result.kpi)} cur={result.kpi} prev={prev?.result?.kpi} accent="text-[color:var(--color-success)]" />
               <MoneyTile label="Премии" value={fmtMoney(result.bonuses)} hint="+ к начислению" accent={result.bonuses ? 'text-[color:var(--color-success)]' : undefined} />
