@@ -3,10 +3,12 @@
 Attribution:
   * Denominator of conversion — deals CREATED in the period (created_at), per
     pipeline, by the manager (responsible_user_id).
-  * Numerator of conversion AND revenue — deals that REACHED a target stage
-    («Заказ создан» / «Успешно реализовано») DURING the period, by the date of
-    the stage transition (read from /api/v4/events, lead_status_changed). A
-    status-change event implies the deal was moved onto the stage.
+  * Numerator of conversion AND revenue — deals that REACHED the «Заказ создан»
+    stage DURING the period, by the date of THAT transition (read from
+    /api/v4/events, lead_status_changed). Reaching «Заказ создан» = the order was
+    created = success; later stages («Успешно реализовано» etc.) don't matter.
+    The first move onto «Заказ создан» is the fixed date. A deal is counted only
+    if it is still in the same KPI pipeline at calculation time.
   * sew new leads — deals created in the period in the sew pipeline.
 
 When ``detail=True`` the result also carries ``items`` — the concrete deals
@@ -23,8 +25,9 @@ from app.services.manager_salary import (
     STAGE_ORDER_CREATED_REPAIR, STAGE_ORDER_CREATED_SEW, STAGE_WON,
 )
 
-REPAIR_TARGET_STAGES = {STAGE_ORDER_CREATED_REPAIR, STAGE_WON}
-SEW_TARGET_STAGES = {STAGE_ORDER_CREATED_SEW, STAGE_WON}
+# Conversion success is triggered ONLY by reaching «Заказ создан».
+REPAIR_TARGET_STAGES = {STAGE_ORDER_CREATED_REPAIR}
+SEW_TARGET_STAGES = {STAGE_ORDER_CREATED_SEW}
 
 PIPELINE_NAMES = {PIPELINE_REPAIR: "Мастерская (ремонт)", PIPELINE_SEW: "Обувь (пошив)"}
 STAGE_NAMES = {
@@ -119,9 +122,9 @@ async def _leads_reached_target(ts_from: int, ts_to: int) -> dict[int, dict]:
                         (pid == PIPELINE_SEW and sid in SEW_TARGET_STAGES)
             if not is_target:
                 continue
-            # Keep ONLY the last target transition per lead → a deal is counted once.
+            # Keep the FIRST move onto «Заказ создан» per lead (дошёл → стоп).
             cur = reached.get(lead_id)
-            if cur is None or ts >= cur["ts"]:
+            if cur is None or ts < cur["ts"]:
                 reached[lead_id] = {"pipeline": pid, "stage": sid, "ts": ts}
         if len(batch) < 100 or new == 0:   # no progress → stop (avoids dup inflation)
             break
