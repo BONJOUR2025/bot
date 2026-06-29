@@ -29,6 +29,8 @@ PIPELINE_REPAIR = 5257981   # NEW Мастерская Бонжур
 PIPELINE_SEW = 5260939      # NEW Обувь на заказ
 STAGE_ORDER_CREATED_REPAIR = 47703040
 STAGE_ORDER_CREATED_SEW = 46942927
+STAGE_RECEIVED_REPAIR = 46921300   # «Получена заявка» (ремонт) — старт времени ответа
+STAGE_RECEIVED_SEW = 46942378      # «Получена заявка» (пошив)
 STAGE_WON = 142             # «Успешно реализовано» (built-in won status)
 SEW_MIN_LEADS = 50
 

@@ -23,11 +23,15 @@ from app.services.amo_client import amo_get
 from app.services.manager_salary import (
     PIPELINE_REPAIR, PIPELINE_SEW,
     STAGE_ORDER_CREATED_REPAIR, STAGE_ORDER_CREATED_SEW, STAGE_WON,
+    STAGE_RECEIVED_REPAIR, STAGE_RECEIVED_SEW,
 )
 
 # Conversion success is triggered ONLY by reaching «Заказ создан».
 REPAIR_TARGET_STAGES = {STAGE_ORDER_CREATED_REPAIR}
 SEW_TARGET_STAGES = {STAGE_ORDER_CREATED_SEW}
+
+# «Получена заявка» — start of the response-time clock (t0).
+RECEIVED_STATUS_IDS = {STAGE_RECEIVED_REPAIR, STAGE_RECEIVED_SEW}
 
 # The two KPI pipelines; a move across this boundary is a control signal.
 KPI_PIPELINES = {PIPELINE_REPAIR, PIPELINE_SEW}
@@ -134,26 +138,6 @@ async def _fetch_pipeline_names() -> dict[int, str]:
                 for p in data.get("_embedded", {}).get("pipelines", [])}
     except Exception:
         return {}
-
-
-# Names of the «заявка получена» stage — t0 for the response-time clock.
-RECEIVED_STATUS_NAMES = ("получена заявка", "заявка получена")
-
-
-async def _received_status_ids() -> set:
-    """Status ids whose name marks «получена заявка» (the robot puts the lead
-    there — the response-time clock starts then)."""
-    ids: set = set()
-    try:
-        data = await amo_get("/leads/pipelines")
-        for p in data.get("_embedded", {}).get("pipelines", []):
-            for st in p.get("_embedded", {}).get("statuses", []):
-                name = (st.get("name") or "").strip().lower()
-                if any(n in name for n in RECEIVED_STATUS_NAMES):
-                    ids.add(st.get("id"))
-    except Exception:
-        pass
-    return ids
 
 
 async def _scan_status_events(
@@ -318,8 +302,7 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
     repair_all = await _fetch_pipeline_leads(PIPELINE_REPAIR, ts_from, ts_to, amo_user_id)
     sew_all = await _fetch_pipeline_leads(PIPELINE_SEW, ts_from, ts_to, amo_user_id)
 
-    received_ids = await _received_status_ids()
-    reached, moves, received_at = await _scan_status_events(ts_from, ts_to, received_ids)
+    reached, moves, received_at = await _scan_status_events(ts_from, ts_to, RECEIVED_STATUS_IDS)
     chat_times = await _outgoing_chat_times(ts_from, ts_to)
     call_times_by_contact = await _outgoing_call_times(ts_from, ts_to, amo_user_id)
 
