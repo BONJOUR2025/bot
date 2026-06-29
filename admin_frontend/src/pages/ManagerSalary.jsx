@@ -47,6 +47,8 @@ const TONE_TEXT = {
   success: 'text-[color:var(--color-success)]', primary: 'text-[color:var(--color-primary)]',
   danger: 'text-[color:var(--color-danger)]', muted: 'text-[color:var(--color-muted-foreground)]',
 };
+// Response-time tone: ≤30 мин хорошо, ≤1 ч приемлемо, дольше — плохо.
+const respTone = (s) => (s == null ? 'muted' : s <= 1800 ? 'success' : s <= 3600 ? 'primary' : 'danger');
 
 // ── Small presentational pieces ──────────────────────────────────────────────
 
@@ -200,6 +202,55 @@ function GroupedDealList({ title, deals, groupLabel, domain }) {
               );
             })}
           </div>
+        )
+      )}
+    </div>
+  );
+}
+
+// Per-deal response time list (slowest first; «без касания» at the end).
+function ResponseList({ deals, domain }) {
+  const [open, setOpen] = useState(false);
+  const list = deals || [];
+  const counted = list.filter((d) => d.seconds != null).length;
+  const excluded = list.length - counted;
+  return (
+    <div className="app-card overflow-hidden">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-5 py-3 hover:bg-[color:var(--color-bg-secondary)]">
+        <span className="font-semibold flex items-center gap-2">
+          <Clock size={16} /> Время ответа по сделкам
+          <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· {counted} с касанием{excluded ? `, ${excluded} без` : ''}</span>
+        </span>
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      {open && (
+        list.length === 0 ? (
+          <div className="px-5 py-6 text-center text-sm text-[color:var(--color-muted-foreground)] border-t border-[color:var(--color-border)]">Нет сделок за период.</div>
+        ) : (
+          <ul className="border-t border-[color:var(--color-border)] divide-y divide-[color:var(--color-border)] max-h-[28rem] overflow-y-auto">
+            {list.map((d) => {
+              const tone = respTone(d.seconds);
+              return (
+                <li key={d.id} className="px-5 py-2.5 flex items-center justify-between gap-3 text-sm">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      {domain
+                        ? <a href={`https://${domain}/leads/detail/${d.id}`} target="_blank" rel="noreferrer" className="text-[color:var(--color-primary)] hover:underline">{d.name || `#${d.id}`}</a>
+                        : (d.name || `#${d.id}`)}
+                      <span className="text-[color:var(--color-muted-foreground)]"> · #{d.id}</span>
+                    </div>
+                    <div className="text-xs text-[color:var(--color-muted-foreground)]">заявка {d.received}{d.channel ? ` · ${d.channel}` : ''}</div>
+                  </div>
+                  <div className={`shrink-0 font-semibold tabular-nums whitespace-nowrap ${TONE_TEXT[tone]}`}>
+                    {d.seconds == null
+                      ? <span className="text-[color:var(--color-muted-foreground)] font-normal">без касания</span>
+                      : fmtDuration(d.seconds)}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )
       )}
     </div>
@@ -434,6 +485,7 @@ export default function ManagerSalary() {
           <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
           {tab === 'overview' && (
+            <div className="space-y-4">
             <div className="grid lg:grid-cols-3 gap-4">
               {/* KPI breakdown with progress bars */}
               <div className="lg:col-span-2 app-card p-5">
@@ -470,7 +522,7 @@ export default function ManagerSalary() {
                   icon={<Clock size={18} />}
                   label="Время первого ответа"
                   value={fmtDuration(metrics?.median_response_seconds)}
-                  tone={TONE_TEXT[toneOf(metrics?.median_response_seconds == null ? null : (metrics.median_response_seconds <= 1800 ? 1 : metrics.median_response_seconds <= 3600 ? 0.85 : 0.5))]}
+                  tone={TONE_TEXT[respTone(metrics?.median_response_seconds)]}
                   sub={metrics?.response_sample
                     ? `медиана · ср. ${fmtDuration(metrics.avg_response_seconds)} · по ${metrics.response_sample}${metrics.response_excluded ? `, ${metrics.response_excluded} без касания` : ''}`
                     : 'нет данных (нет звонка/сообщения после заявки)'} />
@@ -486,6 +538,10 @@ export default function ManagerSalary() {
                   tone={susp.length ? TONE_TEXT.danger : TONE_TEXT.success}
                   sub={susp.length ? 'перемещения между воронками — см. «Контроль»' : 'перемещений между воронками нет'} />
               </div>
+            </div>
+            {metrics?.items?.response && (
+              <ResponseList deals={metrics.items.response} domain={amoStatus?.domain} />
+            )}
             </div>
           )}
 

@@ -55,6 +55,19 @@ def _fmt_ts(ts) -> str:
         return str(ts)
 
 
+def _fmt_dur(s) -> str:
+    """Seconds → «45 сек» / «12 мин» / «2 ч 5 мин»."""
+    if s is None:
+        return "—"
+    s = int(round(s))
+    if s < 60:
+        return f"{s} сек"
+    if s < 3600:
+        return f"{round(s / 60)} мин"
+    h, m = s // 3600, round((s % 3600) / 60)
+    return f"{h} ч {m} мин" if m else f"{h} ч"
+
+
 # ── Working hours for response time (10:00–19:00 МСК, every day) ──────────────
 MSK_OFFSET = 3 * 3600          # Москва = UTC+3, без перехода на летнее время
 WORK_START_H = 10
@@ -318,7 +331,8 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
     info = await _fetch_leads_by_ids(list(need_ids)) if need_ids else {}
 
     items = {"revenue": [], "repair_num": [], "repair_denom": [],
-             "sew_num": [], "sew_denom": [], "excluded": [], "suspicious": []} if detail else None
+             "sew_num": [], "sew_denom": [], "excluded": [], "suspicious": [],
+             "response": []} if detail else None
 
     repair_target = sew_target = 0
     revenue = 0.0
@@ -438,11 +452,32 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
         t0 = received_at.get(lid) or int(created)   # «Получена заявка» / создание
         first_call = _first_after(call_times_by_lead.get(lid), t0)
         first_chat = _first_after(chat_times.get(lid), t0)
-        touches = [t for t in (first_call, first_chat) if t is not None]
-        if not touches:
+        t1 = min([t for t in (first_call, first_chat) if t is not None], default=None)
+        if t1 is None:
             excluded_no_touch += 1            # нет звонка/сообщения — не учитываем
-            continue
-        deltas.append(_business_seconds(t0, min(touches)))
+            secs, channel = None, None
+        else:
+            secs = _business_seconds(t0, t1)
+            deltas.append(secs)
+            # which channel landed first
+            if first_call is not None and first_call == t1:
+                channel = "звонок"
+            elif first_chat is not None and first_chat == t1:
+                channel = "сообщение в чате"
+            else:
+                channel = None
+        if items is not None:
+            items["response"].append({
+                "id": lid, "name": lead.get("name", ""),
+                "price": float(lead.get("price") or 0),
+                "received": _fmt_ts(t0),
+                "seconds": secs, "channel": channel,
+                "reason": (f"заявка {_fmt_ts(t0)} → {channel} через {_fmt_dur(secs)} (раб. время)"
+                           if t1 is not None
+                           else f"заявка {_fmt_ts(t0)} — нет звонка/сообщения после заявки, не учитывается"),
+            })
+    if items is not None:   # slowest first, deals without a touch at the end
+        items["response"].sort(key=lambda r: (r["seconds"] is None, -(r["seconds"] or 0)))
     deltas.sort()
     if deltas:
         avg_response = round(sum(deltas) / len(deltas))
