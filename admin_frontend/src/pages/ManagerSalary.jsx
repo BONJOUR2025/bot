@@ -395,6 +395,32 @@ export default function ManagerSalary() {
               </div>
             </div>
 
+            {/* Контроль: подозрительные сделки — перемещения между воронками */}
+            {metrics?.items && (() => {
+              const susp = metrics.items.suspicious || [];
+              const incoming = susp.filter((d) => d.direction === 'in' || d.direction === 'between');
+              const outgoing = susp.filter((d) => d.direction === 'out' || d.direction === 'between');
+              return (
+                <div className="app-card p-4 space-y-2">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertTriangle size={16} className="text-amber-500 shrink-0" />
+                    Подозрительные сделки <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· перемещения между воронками ({susp.length})</span>
+                  </div>
+                  {susp.length === 0 ? (
+                    <div className="text-sm text-[color:var(--color-muted-foreground)]">За период перемещений между воронками не обнаружено.</div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <DealList title="Пришли из другой воронки" deals={incoming} domain={amoStatus?.domain} />
+                      <DealList title="Перенесены в другую воронку" deals={outgoing} domain={amoStatus?.domain} />
+                    </div>
+                  )}
+                  <div className="text-[11px] text-[color:var(--color-muted-foreground)]">
+                    Сделки, у которых в течение периода менялась воронка (например, пришли из «Текущая работа» в «Мастерскую» или были перенесены из «Мастерской» в другую воронку). Могут искусственно влиять на выручку и конверсию — стоит проверить обоснованность.
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Drill-down: which deals landed in each calculation group, and why */}
             {metrics?.items && (
               <div className="app-card p-4 space-y-2">

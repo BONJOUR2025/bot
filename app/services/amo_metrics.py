@@ -29,6 +29,9 @@ from app.services.manager_salary import (
 REPAIR_TARGET_STAGES = {STAGE_ORDER_CREATED_REPAIR}
 SEW_TARGET_STAGES = {STAGE_ORDER_CREATED_SEW}
 
+# The two KPI pipelines; a move across this boundary is a control signal.
+KPI_PIPELINES = {PIPELINE_REPAIR, PIPELINE_SEW}
+
 PIPELINE_NAMES = {PIPELINE_REPAIR: "Мастерская (ремонт)", PIPELINE_SEW: "Обувь (пошив)"}
 STAGE_NAMES = {
     STAGE_ORDER_CREATED_REPAIR: "Заказ создан",
@@ -79,20 +82,35 @@ async def _fetch_pipeline_leads(pipeline_id: int, ts_from: int, ts_to: int,
     return list(by_id.values())
 
 
-def _event_stage(ev: dict) -> tuple[int | None, int | None]:
-    after = ev.get("value_after")
-    if isinstance(after, list) and after:
-        after = after[0]
-    if isinstance(after, dict):
-        ls = after.get("lead_status") or after
+def _event_value(node) -> tuple[int | None, int | None]:
+    """Parse one side (value_before / value_after) of a lead_status_changed
+    event into (status_id, pipeline_id)."""
+    if isinstance(node, list) and node:
+        node = node[0]
+    if isinstance(node, dict):
+        ls = node.get("lead_status") or node
         return ls.get("id"), ls.get("pipeline_id")
     return None, None
 
 
-async def _leads_reached_target(ts_from: int, ts_to: int) -> dict[int, dict]:
-    """lead_id -> {pipeline, stage, ts} for leads that reached a target stage in
-    the period (latest target transition kept)."""
+async def _fetch_pipeline_names() -> dict[int, str]:
+    """id -> name for every pipeline (so cross-pipeline moves читаются по-русски)."""
+    try:
+        data = await amo_get("/leads/pipelines")
+        return {p.get("id"): p.get("name", str(p.get("id")))
+                for p in data.get("_embedded", {}).get("pipelines", [])}
+    except Exception:
+        return {}
+
+
+async def _scan_status_events(ts_from: int, ts_to: int) -> tuple[dict[int, dict], list[dict]]:
+    """Single sweep over lead_status_changed events in the period, returning:
+      * reached: lead_id -> {pipeline, stage, ts} for leads that reached a KPI
+        «Заказ создан» stage (FIRST such transition kept);
+      * moves:   list of {lead_id, from, to, ts} for events where the pipeline
+        changed (value_before.pipeline_id != value_after.pipeline_id)."""
     reached: dict[int, dict] = {}
+    moves: list[dict] = []
     seen_events: set = set()
     page = 1
     while page <= 500:
@@ -113,23 +131,29 @@ async def _leads_reached_target(ts_from: int, ts_to: int) -> dict[int, dict]:
                 continue
             seen_events.add(eid)
             new += 1
-            sid, pid = _event_stage(ev)
             lead_id = ev.get("entity_id")
             ts = ev.get("created_at", 0)
-            if lead_id is None or sid is None:
+            if lead_id is None:
                 continue
-            is_target = (pid == PIPELINE_REPAIR and sid in REPAIR_TARGET_STAGES) or \
-                        (pid == PIPELINE_SEW and sid in SEW_TARGET_STAGES)
-            if not is_target:
-                continue
-            # Keep the FIRST move onto «Заказ создан» per lead (дошёл → стоп).
-            cur = reached.get(lead_id)
-            if cur is None or ts < cur["ts"]:
-                reached[lead_id] = {"pipeline": pid, "stage": sid, "ts": ts}
+            _, before_pid = _event_value(ev.get("value_before"))
+            after_sid, after_pid = _event_value(ev.get("value_after"))
+
+            # 1) reached a KPI target stage
+            if after_sid is not None and (
+                (after_pid == PIPELINE_REPAIR and after_sid in REPAIR_TARGET_STAGES)
+                or (after_pid == PIPELINE_SEW and after_sid in SEW_TARGET_STAGES)
+            ):
+                cur = reached.get(lead_id)
+                if cur is None or ts < cur["ts"]:   # keep FIRST «Заказ создан»
+                    reached[lead_id] = {"pipeline": after_pid, "stage": after_sid, "ts": ts}
+
+            # 2) cross-pipeline move
+            if before_pid is not None and after_pid is not None and before_pid != after_pid:
+                moves.append({"lead_id": lead_id, "from": before_pid, "to": after_pid, "ts": ts})
         if len(batch) < 100 or new == 0:   # no progress → stop (avoids dup inflation)
             break
         page += 1
-    return reached
+    return reached, moves
 
 
 async def _fetch_leads_by_ids(ids: list[int]) -> dict[int, dict]:
@@ -150,11 +174,18 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
     repair_all = await _fetch_pipeline_leads(PIPELINE_REPAIR, ts_from, ts_to, amo_user_id)
     sew_all = await _fetch_pipeline_leads(PIPELINE_SEW, ts_from, ts_to, amo_user_id)
 
-    reached = await _leads_reached_target(ts_from, ts_to)
-    info = await _fetch_leads_by_ids(list(reached.keys())) if reached else {}
+    reached, moves = await _scan_status_events(ts_from, ts_to)
+
+    # Suspicious = cross-pipeline moves touching a KPI pipeline (in/out/between).
+    kpi_moves = [m for m in moves if m["from"] in KPI_PIPELINES or m["to"] in KPI_PIPELINES]
+
+    need_ids = set(reached.keys())
+    if detail:
+        need_ids |= {m["lead_id"] for m in kpi_moves}
+    info = await _fetch_leads_by_ids(list(need_ids)) if need_ids else {}
 
     items = {"revenue": [], "repair_num": [], "repair_denom": [],
-             "sew_num": [], "sew_denom": [], "excluded": []} if detail else None
+             "sew_num": [], "sew_denom": [], "excluded": [], "suspicious": []} if detail else None
 
     repair_target = sew_target = 0
     revenue = 0.0
@@ -208,6 +239,39 @@ async def compute_metrics(date_from: datetime, date_to: datetime,
                     "date": _fmt_ts(l.get("created_at")),
                     "reason": f"создан {_fmt_ts(l.get('created_at'))} в воронке {pname} — в знаменателе конверсии",
                 })
+
+        # Suspicious cross-pipeline movements (control): a deal that arrived from
+        # another pipeline into a KPI pipeline, left a KPI pipeline, or hopped
+        # between the two KPI pipelines — attributed to this manager.
+        pipe_names = await _fetch_pipeline_names()
+
+        def _pname(pid):
+            return pipe_names.get(pid) or PIPELINE_NAMES.get(pid) or f"воронка {pid}"
+
+        seen = set()
+        for m in sorted(kpi_moves, key=lambda x: x["ts"]):
+            lead = info.get(m["lead_id"])
+            if not lead:
+                continue
+            if amo_user_id and lead.get("responsible_user_id") != amo_user_id:
+                continue
+            frm, to = m["from"], m["to"]
+            key = (m["lead_id"], frm, to, m["ts"])
+            if key in seen:
+                continue
+            seen.add(key)
+            if frm in KPI_PIPELINES and to in KPI_PIPELINES:
+                direction, tag = "between", "переход между KPI-воронками"
+            elif to in KPI_PIPELINES:
+                direction, tag = "in", "пришла из другой воронки"
+            else:
+                direction, tag = "out", "перенесена в другую воронку"
+            items["suspicious"].append({
+                "id": m["lead_id"], "name": lead.get("name", ""),
+                "price": float(lead.get("price") or 0), "date": _fmt_ts(m["ts"]),
+                "direction": direction,
+                "reason": f"{tag}: «{_pname(frm)}» → «{_pname(to)}» ({_fmt_ts(m['ts'])})",
+            })
 
     result = {
         "revenue_actual": round(revenue, 2),
