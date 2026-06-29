@@ -43,10 +43,14 @@ def _fmt_ts(ts) -> str:
 
 async def _fetch_pipeline_leads(pipeline_id: int, ts_from: int, ts_to: int,
                                 amo_user_id: int | None) -> list[dict]:
-    """All leads created in the period in a pipeline (conversion denominator)."""
-    leads: list[dict] = []
+    """All leads created in the period in a pipeline (conversion denominator).
+
+    Deduplicated by lead id; pagination stops as soon as a page brings no new
+    ids (guards against amoCRM returning the same page / not advancing, which
+    would otherwise inflate the counts)."""
+    by_id: dict[int, dict] = {}
     page = 1
-    while True:
+    while page <= 200:
         params = {
             "filter[pipeline_id]": pipeline_id,
             "filter[created_at][from]": ts_from,
@@ -60,11 +64,16 @@ async def _fetch_pipeline_leads(pipeline_id: int, ts_from: int, ts_to: int,
         batch = data.get("_embedded", {}).get("leads", [])
         if not batch:
             break
-        leads.extend(batch)
-        if len(batch) < 250:
+        new = 0
+        for l in batch:
+            lid = l.get("id")
+            if lid is not None and lid not in by_id:
+                by_id[lid] = l
+                new += 1
+        if len(batch) < 250 or new == 0:
             break
         page += 1
-    return leads
+    return list(by_id.values())
 
 
 def _event_stage(ev: dict) -> tuple[int | None, int | None]:
@@ -81,8 +90,9 @@ async def _leads_reached_target(ts_from: int, ts_to: int) -> dict[int, dict]:
     """lead_id -> {pipeline, stage, ts} for leads that reached a target stage in
     the period (latest target transition kept)."""
     reached: dict[int, dict] = {}
+    seen_events: set = set()
     page = 1
-    while True:
+    while page <= 500:
         data = await amo_get("/events", params={
             "filter[type]": "lead_status_changed",
             "filter[created_at][from]": ts_from,
@@ -93,7 +103,13 @@ async def _leads_reached_target(ts_from: int, ts_to: int) -> dict[int, dict]:
         batch = data.get("_embedded", {}).get("events", [])
         if not batch:
             break
+        new = 0
         for ev in batch:
+            eid = ev.get("id")
+            if eid in seen_events:        # skip duplicate events across pages
+                continue
+            seen_events.add(eid)
+            new += 1
             sid, pid = _event_stage(ev)
             lead_id = ev.get("entity_id")
             ts = ev.get("created_at", 0)
@@ -103,10 +119,11 @@ async def _leads_reached_target(ts_from: int, ts_to: int) -> dict[int, dict]:
                         (pid == PIPELINE_SEW and sid in SEW_TARGET_STAGES)
             if not is_target:
                 continue
+            # Keep ONLY the last target transition per lead → a deal is counted once.
             cur = reached.get(lead_id)
             if cur is None or ts >= cur["ts"]:
                 reached[lead_id] = {"pipeline": pid, "stage": sid, "ts": ts}
-        if len(batch) < 100:
+        if len(batch) < 100 or new == 0:   # no progress → stop (avoids dup inflation)
             break
         page += 1
     return reached
