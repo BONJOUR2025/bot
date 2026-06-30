@@ -174,10 +174,55 @@ def _extract_mileage(node: Any) -> Optional[float]:
 
 
 async def get_mileage(device_id: str) -> Optional[float]:
-    """Current odometer (km) for a device from user/data, or None if not exposed."""
+    """Current odometer (km) for a device from user/data, or None if not exposed
+    (a «Маяк» beacon has no OBD odometer → None; use the GPS track instead)."""
     try:
         dev = _find_device(await get_user_data(), device_id)
         return _extract_mileage(dev) if dev else None
     except Exception as exc:
         log.warning("StarLine get_mileage failed: %s", exc)
+        return None
+
+
+# ── GPS-track mileage (for beacons without an odometer) ──────────────────────
+import math
+
+
+def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
+    """Distance between two (lon, lat) points in km."""
+    R = 6371.0088
+    lat1, lat2 = math.radians(p1[1]), math.radians(p2[1])
+    dlat = lat2 - lat1
+    dlon = math.radians(p2[0] - p1[0])
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 2 * R * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _track_points(data: Any) -> list[tuple[float, float]]:
+    """Pull (lon, lat) points out of a StarLine track payload (shape varies)."""
+    seq = data
+    if isinstance(data, dict):
+        seq = data.get("data") or data.get("track") or data.get("points") or data.get("gps") or []
+    pts: list[tuple[float, float]] = []
+    for p in seq if isinstance(seq, list) else []:
+        if isinstance(p, dict):
+            x, y = p.get("x") or p.get("lon") or p.get("lng"), p.get("y") or p.get("lat")
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                pts.append((float(x), float(y)))
+    return pts
+
+
+async def get_track_raw(device_id: str, ts_from: int, ts_to: int) -> dict:
+    return await _authed_get(f"/v2/device/{device_id}/track?ts_start={ts_from}&ts_end={ts_to}")
+
+
+async def get_track_mileage(device_id: str, ts_from: int, ts_to: int) -> Optional[float]:
+    """Sum of the GPS track length (km) over the period, or None if unavailable."""
+    try:
+        pts = _track_points(await get_track_raw(device_id, ts_from, ts_to))
+        if len(pts) < 2:
+            return None
+        return round(sum(_haversine_km(pts[i - 1], pts[i]) for i in range(1, len(pts))), 1)
+    except Exception as exc:
+        log.warning("StarLine get_track_mileage failed: %s", exc)
         return None

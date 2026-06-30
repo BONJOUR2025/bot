@@ -14,7 +14,10 @@ from typing import Any
 from app.settings import settings
 
 DEFAULT_FILE = "courier_mileage.json"
-DEFAULTS = {"odometer_start": None, "odometer_end": None, "source": "manual", "updated_at": None}
+# km_explicit holds a directly-known distance (e.g. GPS-track length for a beacon
+# without an odometer); otherwise km is computed as odometer_end − odometer_start.
+DEFAULTS = {"odometer_start": None, "odometer_end": None, "km_explicit": None,
+            "source": "manual", "updated_at": None}
 
 
 class CourierMileageRepository:
@@ -44,8 +47,10 @@ class CourierMileageRepository:
 
     @staticmethod
     def _with_km(entry: dict[str, Any]) -> dict[str, Any]:
-        s, e = entry.get("odometer_start"), entry.get("odometer_end")
-        km = round(e - s, 1) if isinstance(s, (int, float)) and isinstance(e, (int, float)) and e >= s else None
+        km = entry.get("km_explicit")
+        if km is None:
+            s, e = entry.get("odometer_start"), entry.get("odometer_end")
+            km = round(e - s, 1) if isinstance(s, (int, float)) and isinstance(e, (int, float)) and e >= s else None
         return {**entry, "km": km}
 
     def get(self, employee_code: str, period: str) -> dict[str, Any]:
@@ -54,8 +59,9 @@ class CourierMileageRepository:
     def upsert(self, employee_code: str, period: str, **fields) -> dict[str, Any]:
         key = self._key(employee_code, period)
         cur = self._data.get(key, {})
-        for k in ("odometer_start", "odometer_end", "source"):
-            if k in fields and fields[k] is not None:
+        # explicit None is meaningful for these (clear the value)
+        for k in ("odometer_start", "odometer_end", "km_explicit", "source"):
+            if k in fields:
                 cur[k] = fields[k]
         cur["updated_at"] = datetime.now().isoformat(timespec="seconds")
         self._data[key] = cur

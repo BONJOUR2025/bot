@@ -44,6 +44,16 @@ def _prev_period(period: str) -> str:
     return f"{y}-{m:02d}"
 
 
+def _period_ts(period: str) -> tuple[int, int]:
+    """(start, end) epoch seconds for a "YYYY-MM" period."""
+    from datetime import datetime
+    from calendar import monthrange
+    y, m = map(int, period.split("-"))
+    last = monthrange(y, m)[1]
+    return (int(datetime(y, m, 1).timestamp()),
+            int(datetime(y, m, last, 23, 59, 59).timestamp()))
+
+
 class SalaryInput(BaseModel):
     oklad: float = 0
     advances: float = 0
@@ -110,31 +120,39 @@ def create_courier_salary_router(
 
     @router.put("/mileage")
     async def put_mileage(data: MileageInput, current: ResolvedUser = Depends(perm)):
+        # manual entry: clear any track override so km = end − start
         return get_courier_mileage_repository().upsert(
             data.employee_code, data.period,
-            odometer_start=data.odometer_start, odometer_end=data.odometer_end, source="manual")
+            odometer_start=data.odometer_start, odometer_end=data.odometer_end,
+            km_explicit=None, source="manual")
 
     @router.post("/mileage/sync")
     async def sync_mileage(employee_code: str = Query(...), period: str = Query(...),
                            device_id: Optional[str] = Query(None),
                            current: ResolvedUser = Depends(perm)):
-        """Fill the period's end odometer from StarLine; carry the start from the
-        previous period's end if it isn't set yet."""
+        """Fill the period's mileage from StarLine. If the device exposes an OBD
+        odometer, store it as the period's end (carrying the start from the
+        previous period). Otherwise (a «Маяк» beacon) use the GPS-track length
+        for the period as the distance."""
         plan = get_courier_plan_repository().get(employee_code, period)
-        dev = device_id or plan.get("starline_device_id")
+        dev = str(device_id or plan.get("starline_device_id") or "")
         if not dev:
             raise HTTPException(status_code=400, detail="Не указано устройство StarLine (device_id)")
-        km = await starline_client.get_mileage(str(dev))
-        if km is None:
-            raise HTTPException(status_code=502, detail="StarLine не вернул пробег (проверьте настройки/устройство)")
         repo = get_courier_mileage_repository()
-        cur = repo.get(employee_code, period)
-        start = cur.get("odometer_start")
-        if start is None:
-            prev = repo.get(employee_code, _prev_period(period))
-            start = prev.get("odometer_end")
-        return repo.upsert(employee_code, period,
-                           odometer_start=start, odometer_end=km, source="starline")
+        odo = await starline_client.get_mileage(dev)
+        if odo is not None:
+            cur = repo.get(employee_code, period)
+            start = cur.get("odometer_start")
+            if start is None:
+                start = repo.get(employee_code, _prev_period(period)).get("odometer_end")
+            return repo.upsert(employee_code, period, odometer_start=start,
+                               odometer_end=odo, km_explicit=None, source="starline")
+        # No odometer → GPS track length for the period
+        ts_from, ts_to = _period_ts(period)
+        km = await starline_client.get_track_mileage(dev, ts_from, ts_to)
+        if km is None:
+            raise HTTPException(status_code=502, detail="StarLine не отдаёт ни одометр, ни GPS-трек за период — введите пробег вручную")
+        return repo.upsert(employee_code, period, km_explicit=km, source="starline-track")
 
     # ── StarLine diagnostics (verify shapes against a real account) ────
     @router.get("/starline/status")
@@ -159,6 +177,17 @@ def create_courier_salary_router(
     async def starline_raw_user(current: ResolvedUser = Depends(perm)):
         try:
             return await starline_client.get_user_data()
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
+    @router.get("/starline/track/{device_id}")
+    async def starline_track(device_id: str, period: str = Query(..., description="YYYY-MM"),
+                             current: ResolvedUser = Depends(perm)):
+        """Raw GPS track for the period + computed length (km) — for beacons."""
+        ts_from, ts_to = _period_ts(period)
+        try:
+            raw = await starline_client.get_track_raw(device_id, ts_from, ts_to)
+            return {"km": await starline_client.get_track_mileage(device_id, ts_from, ts_to), "raw": raw}
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 

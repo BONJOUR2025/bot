@@ -262,7 +262,7 @@ export default function CourierSalary() {
                   <RotateCw size={14} className={syncing ? 'animate-spin' : ''} /> Из StarLine
                 </button>
                 {mileage?.updated_at && (
-                  <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{mileage.source === 'starline' ? 'StarLine' : 'вручную'} · {mileage.updated_at.slice(0, 16).replace('T', ' ')}</span>
+                  <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{mileage.source === 'starline-track' ? 'StarLine (GPS-трек)' : mileage.source === 'starline' ? 'StarLine (одометр)' : 'вручную'} · {mileage.updated_at.slice(0, 16).replace('T', ' ')}</span>
                 )}
               </div>
             </div>
