@@ -1,0 +1,82 @@
+import { useEffect, useRef, useState } from 'react';
+
+export function TopProgressBar({ active }) {
+  const [pct, setPct] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
+  const timers = useRef([]);
+
+  const clear = () => { timers.current.forEach(clearTimeout); timers.current = []; };
+  const later = (fn, ms) => { const t = setTimeout(fn, ms); timers.current.push(t); return t; };
+
+  useEffect(() => {
+    clear();
+    if (active) {
+      setMounted(true);
+      setFadingOut(false);
+      setPct(8);
+      later(() => setPct(32), 380);
+      later(() => setPct(56), 950);
+      later(() => setPct(74), 2600);
+      later(() => setPct(88), 6500);
+    } else if (mounted) {
+      setPct(100);
+      later(() => setFadingOut(true), 240);
+      later(() => { setMounted(false); setFadingOut(false); setPct(0); }, 600);
+    }
+    return clear;
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!mounted) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0,
+        zIndex: 9999,
+        height: 3,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+        opacity: fadingOut ? 0 : 1,
+        transition: fadingOut ? 'opacity 0.36s ease-out' : 'none',
+      }}
+    >
+      {/* Main bar */}
+      <div
+        style={{
+          height: '100%',
+          width: `${pct}%`,
+          background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)',
+          boxShadow: '0 0 14px rgba(99,102,241,0.75), 0 0 4px rgba(99,102,241,0.95)',
+          borderRadius: '0 2px 2px 0',
+          transition: active
+            ? 'width 1.5s cubic-bezier(0.08, 0.65, 0.12, 1)'
+            : 'width 0.28s ease-out',
+          position: 'relative',
+        }}
+      >
+        {/* Travelling shine */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: -24,
+            width: 48,
+            height: '100%',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.65) 50%, transparent 100%)',
+            animation: active ? 'pb-shine 1.8s ease-in-out infinite' : 'none',
+          }}
+        />
+      </div>
+      <style>{`
+        @keyframes pb-shine {
+          0%   { opacity: 0; transform: translateX(-60px); }
+          30%  { opacity: 1; }
+          70%  { opacity: 1; }
+          100% { opacity: 0; transform: translateX(60px); }
+        }
+      `}</style>
+    </div>
+  );
+}

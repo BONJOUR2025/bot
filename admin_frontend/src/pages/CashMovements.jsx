@@ -12,6 +12,7 @@ import {
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs, StatCard } from '../components/ui/SalaryUI.jsx';
@@ -1014,6 +1015,7 @@ export default function CashMovements() {
 
   return (
     <div className="space-y-6 max-w-full pb-20">
+      <TopProgressBar active={loading} />
       {/* Header */}
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-2xl font-semibold tracking-tight flex-1 min-w-0">Кассовые перемещения</h2>

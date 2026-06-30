@@ -3,6 +3,7 @@ import { RefreshCw, Search, Download, MessageSquare } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const CHANNELS = ['СМС', 'Push', 'MAX'];
@@ -127,6 +128,7 @@ export default function Smses() {
 
   return (
     <div className="space-y-5 max-w-full pb-20">
+      <TopProgressBar active={loading} />
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-2xl font-semibold tracking-tight flex-1 flex items-center gap-2">

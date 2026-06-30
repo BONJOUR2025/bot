@@ -7,6 +7,7 @@ import {
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
@@ -675,6 +676,7 @@ export default function Payroll() {
 
   return (
     <div className="space-y-6 max-w-full">
+      <TopProgressBar active={loading || loadingMonths} />
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-2xl font-semibold tracking-tight flex-1">Расчёт зарплаты</h2>

@@ -11,6 +11,7 @@ import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import Skeleton, { SkeletonCard } from '../components/ui/Skeleton.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -202,6 +203,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <TopProgressBar active={loading} />
 
       {/* header */}
       <div className="flex items-center justify-between">

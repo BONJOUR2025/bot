@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart2, RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { toPng } from 'html-to-image';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 
 const MANAGER_POSITION = 'менеджер по работе с клиентами';
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -137,46 +138,137 @@ const CATS = [
   { key: 'couriers', title: 'Курьеры', icon: Truck, color: '#ec4899', load: loadCouriers },
 ];
 
-// Fixed «agency» palette so the PNG looks identical regardless of app theme.
-const INK = '#0f172a', MUTED = '#64748b', LINE = '#e2e8f0', BRAND = '#6366f1', DANGER = '#ef4444';
+// Accent colors — fixed, look good in both themes
+const BRAND = '#6366f1', DANGER = '#ef4444';
 
-// ── Report pieces (fixed light palette) ──────────────────────────────────────
+// Light theme for PNG export
+const LIGHT = {
+  bg: '#ffffff', bg2: '#f8fafc', bg3: '#f1f5f9',
+  ink: '#0f172a', muted: '#64748b', line: '#e2e8f0',
+};
 
-function KpiCard({ icon, label, value, sub, color = INK }) {
+// Dark theme for app screen
+const DARK = {
+  bg: 'var(--color-surface)',
+  bg2: 'var(--color-table-header-bg)',
+  bg3: 'var(--color-control-bg)',
+  ink: 'var(--color-text)',
+  muted: 'var(--color-text-muted)',
+  line: 'var(--color-border)',
+};
+
+const RTC = createContext(DARK);
+
+// ── Report sub-components (theme via RTC context) ────────────────────────────
+
+function KpiCard({ icon, label, value, sub, color }) {
+  const T = useContext(RTC);
   return (
-    <div className="rounded-xl border p-4" style={{ borderColor: LINE, background: '#fff' }}>
-      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: MUTED }}>
+    <div className="rounded-xl border p-4" style={{ borderColor: T.line, background: T.bg2 }}>
+      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: T.muted }}>
         {icon}{label}
       </div>
-      <div className="mt-1.5 text-[26px] font-bold leading-none tabular-nums" style={{ color }}>{value}</div>
-      {sub && <div className="mt-1.5 text-xs" style={{ color: MUTED }}>{sub}</div>}
+      <div className="mt-1.5 text-[26px] font-bold leading-none tabular-nums" style={{ color: color || T.ink }}>{value}</div>
+      {sub && <div className="mt-1.5 text-xs" style={{ color: T.muted }}>{sub}</div>}
     </div>
   );
 }
 
-function Bar({ label, value, max, color, right }) {
+function BarRow({ label, value, max, color, right }) {
+  const T = useContext(RTC);
   const w = max > 0 ? Math.max((value / max) * 100, value > 0 ? 4 : 0) : 0;
   return (
     <div className="flex items-center gap-3">
-      <div className="w-40 shrink-0 text-sm truncate" style={{ color: INK }}>{label}</div>
-      <div className="flex-1 h-6 rounded-md" style={{ background: '#f1f5f9' }}>
-        <div className="h-6 rounded-md flex items-center justify-end pr-2" style={{ width: `${w}%`, background: color, minWidth: value > 0 ? 40 : 0 }}>
-        </div>
+      <div className="w-40 shrink-0 text-sm truncate" style={{ color: T.ink }}>{label}</div>
+      <div className="flex-1 h-6 rounded-md overflow-hidden" style={{ background: T.bg3 }}>
+        <div className="h-6 rounded-md flex items-center justify-end pr-2"
+          style={{ width: `${w}%`, background: color, minWidth: value > 0 ? 40 : 0 }} />
       </div>
-      <div className="w-28 shrink-0 text-right text-sm font-semibold tabular-nums" style={{ color: INK }}>{right}</div>
+      <div className="w-28 shrink-0 text-right text-sm font-semibold tabular-nums" style={{ color: T.ink }}>{right}</div>
     </div>
   );
 }
 
 function Section({ title, hint, children }) {
+  const T = useContext(RTC);
   return (
     <div>
       <div className="flex items-baseline gap-2 mb-3">
         <div className="h-4 w-1 rounded" style={{ background: BRAND }} />
-        <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: INK }}>{title}</h3>
-        {hint && <span className="text-xs" style={{ color: MUTED }}>{hint}</span>}
+        <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: T.ink }}>{title}</h3>
+        {hint && <span className="text-xs" style={{ color: T.muted }}>{hint}</span>}
       </div>
       {children}
+    </div>
+  );
+}
+
+// ── Detailed loading progress panel ─────────────────────────────────────────
+
+function PayrollProgress({ status }) {
+  const done = CATS.filter((c) => status[c.key] === 'done' || status[c.key] === 'error').length;
+  const total = CATS.length;
+  const barPct = total > 0 ? (done / total) * 100 : 0;
+
+  return (
+    <div className="app-card p-8 space-y-6">
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: 'var(--color-primary-muted)' }}>
+          <RefreshCw size={20} className="animate-spin" style={{ color: 'var(--color-primary)' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-base font-semibold text-[color:var(--color-text)]">Рассчитываю фонд оплаты труда…</div>
+          <div className="text-sm text-[color:var(--color-text-muted)] mt-0.5">{done} из {total} категорий готово</div>
+        </div>
+        <div className="text-3xl font-extrabold tabular-nums shrink-0" style={{ color: 'var(--color-primary)' }}>
+          {Math.round(barPct)}%
+        </div>
+      </div>
+
+      {/* Animated bar */}
+      <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--color-control-bg)' }}>
+        <div style={{
+          height: '100%',
+          width: `${barPct}%`,
+          borderRadius: '9999px',
+          background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)',
+          boxShadow: '0 0 12px rgba(99,102,241,0.5)',
+          transition: 'width 0.45s cubic-bezier(0.4, 0, 0.2, 1)',
+        }} />
+      </div>
+
+      {/* Per-category step cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {CATS.map((cat) => {
+          const st = status[cat.key] || 'idle';
+          const Icon = cat.icon;
+          const isLoading = st === 'loading';
+          const isDone = st === 'done';
+          const isError = st === 'error';
+          return (
+            <div key={cat.key}
+              className="rounded-xl p-3.5 flex items-center gap-2.5 transition-all duration-300"
+              style={{
+                background: isLoading ? 'var(--color-primary-muted)' : isDone ? 'rgba(16,185,129,0.08)' : 'var(--color-surface)',
+                border: `1px solid ${isLoading ? 'rgba(99,102,241,0.5)' : isDone ? 'rgba(16,185,129,0.3)' : isError ? 'rgba(239,68,68,0.3)' : 'var(--color-border)'}`,
+              }}>
+              {isLoading
+                ? <RefreshCw size={15} className="animate-spin shrink-0" style={{ color: 'var(--color-primary)' }} />
+                : <Icon size={15} style={{ color: isDone ? '#10b981' : isError ? '#ef4444' : cat.color, flexShrink: 0 }} />
+              }
+              <div className="min-w-0">
+                <div className="text-xs font-semibold truncate text-[color:var(--color-text)]">{cat.title}</div>
+                <div className="text-[10px] mt-0.5" style={{
+                  color: isDone ? '#10b981' : isError ? '#ef4444' : isLoading ? 'var(--color-primary)' : 'var(--color-text-faint)',
+                }}>
+                  {isDone ? '✓ Готово' : isError ? '✗ Ошибка' : isLoading ? 'Загружаю…' : 'Ожидание'}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -190,15 +282,27 @@ export default function PayrollSummary() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pnging, setPnging] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [catStatus, setCatStatus] = useState({});
   const [generatedAt, setGeneratedAt] = useState('');
   const reportRef = useRef(null);
   const periodLabel = months.find((m) => m.value === period)?.label || period;
 
+  // T drives the on-screen theme: dark normally, light during PNG export
+  const T = exporting ? LIGHT : DARK;
+
   const load = useCallback(async () => {
     setLoading(true);
+    setCatStatus({});
     try {
-      const results = await Promise.all(CATS.map((c) =>
-        c.load(period).then((rows) => ({ rows })).catch((e) => ({ rows: [], error: e?.response?.data?.detail || e.message || 'ошибка' }))));
+      const results = await Promise.all(CATS.map(async (c) => {
+        setCatStatus((prev) => ({ ...prev, [c.key]: 'loading' }));
+        const result = await c.load(period)
+          .then((rows) => ({ rows }))
+          .catch((e) => ({ rows: [], error: e?.response?.data?.detail || e.message || 'ошибка' }));
+        setCatStatus((prev) => ({ ...prev, [c.key]: result.error ? 'error' : 'done' }));
+        return result;
+      }));
       const next = {};
       CATS.forEach((c, i) => { next[c.key] = results[i]; });
       setData(next);
@@ -228,6 +332,9 @@ export default function PayrollSummary() {
   async function downloadPng() {
     if (!reportRef.current) return;
     setPnging(true);
+    setExporting(true);
+    // Two animation frames so React re-renders with the light LIGHT theme before capture
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     try {
       const url = await toPng(reportRef.current, { backgroundColor: '#ffffff', pixelRatio: 2, cacheBust: true, skipFonts: true });
       const a = document.createElement('a');
@@ -238,12 +345,18 @@ export default function PayrollSummary() {
     } catch (e) {
       console.error(e);
       toast('Ошибка генерации PNG', 'error');
-    } finally { setPnging(false); }
+    } finally {
+      setExporting(false);
+      setPnging(false);
+    }
   }
 
   return (
     <div className="space-y-5 max-w-[1140px] mx-auto pb-12">
-      {/* Controls (app chrome) */}
+      {/* Top progress bar: shown while refreshing or generating PNG */}
+      <TopProgressBar active={pnging || (loading && !!data)} />
+
+      {/* Controls */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
@@ -267,187 +380,196 @@ export default function PayrollSummary() {
         </div>
       </div>
 
-      {loading && !data ? (
-        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">Считаю ФОТ по всем категориям…</div>
-      ) : (
+      {/* Initial load: detailed progress panel */}
+      {loading && !data && <PayrollProgress status={catStatus} />}
+
+      {/* Report (shown once data is available, even while refreshing) */}
+      {data && (
         <div className="overflow-x-auto rounded-2xl">
-          {/* ════ Captured report (fixed 1080px, agency style) ════ */}
-          <div ref={reportRef} style={{ width: 1080, background: '#fff', color: INK }} className="fot-report overflow-hidden">
-            {/* Neutralise the app's global dark table styling inside the light report */}
-            <style>{`.fot-report table,.fot-report thead,.fot-report tbody,.fot-report tfoot,.fot-report tr,.fot-report td,.fot-report th{background:transparent;border:0;color:inherit;box-shadow:none;}`}</style>
-            {/* Header */}
-            <div className="px-10 pt-9 pb-8 text-white flex items-end justify-between"
-              style={{ background: 'linear-gradient(110deg,#4f46e5 0%,#7c3aed 55%,#9333ea 100%)' }}>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">Сводный отчёт</div>
-                <div className="mt-1 text-[30px] font-extrabold leading-tight">Фонд оплаты труда</div>
-                <div className="mt-1 text-sm opacity-90">{periodLabel} · администраторы · мастера · менеджеры</div>
-              </div>
-              <div className="text-right">
-                <div className="text-[11px] font-semibold uppercase tracking-wide opacity-80">Итого начислено</div>
-                <div className="text-[40px] font-extrabold leading-none tabular-nums">{fmtMoney(grand.gross)}</div>
-                <div className="mt-1 text-sm opacity-90">к выплате {fmtMoney(grand.to_pay)}</div>
-              </div>
-            </div>
+          <RTC.Provider value={T}>
+            {/* ════ Captured report (fixed 1080px) ════ */}
+            <div ref={reportRef} style={{ width: 1080, background: T.bg, color: T.ink }} className="fot-report overflow-hidden">
+              {/* Reset the app's global dark table styling inside the report */}
+              <style>{`.fot-report table,.fot-report thead,.fot-report tbody,.fot-report tfoot,.fot-report tr,.fot-report td,.fot-report th{background:transparent;border:0;color:inherit;box-shadow:none;}`}</style>
 
-            <div className="px-10 py-8 space-y-8">
-              {/* KPI cards */}
-              <div className="grid grid-cols-4 gap-4">
-                <KpiCard icon={<Wallet size={13} />} label="ФОТ за период" value={fmtMoney(grand.gross)} sub={`средняя ${fmtShort(headcount ? grand.gross / headcount : 0)} / чел.`} color={BRAND} />
-                <KpiCard icon={<Wallet size={13} />} label="К выплате" value={fmtMoney(grand.to_pay)} sub={`${pct(grand.to_pay, grand.gross)}% от начисленного`} color="#10b981" />
-                <KpiCard icon={<UserRound size={13} />} label="Сотрудников" value={String(headcount)} sub={cats.map((c) => `${c.title.slice(0, 4).toLowerCase()}. ${c.rows.length}`).join(' · ')} />
-                <KpiCard icon={<TrendingDown size={13} />} label="Удержания" value={fmtMoney(withholdings)} sub={`авансы ${fmtShort(grand.advances)} · штрафы ${fmtShort(grand.penalties)}`} color={DANGER} />
+              {/* Header — always purple gradient */}
+              <div className="px-10 pt-9 pb-8 text-white flex items-end justify-between"
+                style={{ background: 'linear-gradient(110deg,#4f46e5 0%,#7c3aed 55%,#9333ea 100%)' }}>
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">Сводный отчёт</div>
+                  <div className="mt-1 text-[30px] font-extrabold leading-tight">Фонд оплаты труда</div>
+                  <div className="mt-1 text-sm opacity-90">{periodLabel} · администраторы · мастера · менеджеры</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide opacity-80">Итого начислено</div>
+                  <div className="text-[40px] font-extrabold leading-none tabular-nums">{fmtMoney(grand.gross)}</div>
+                  <div className="mt-1 text-sm opacity-90">к выплате {fmtMoney(grand.to_pay)}</div>
+                </div>
               </div>
 
-              {/* Charts row */}
-              <div className="grid grid-cols-2 gap-6">
-                <Section title="Доля категорий в ФОТ">
-                  <div className="flex items-center gap-5">
-                    <div className="relative" style={{ width: 200, height: 200 }}>
-                      {donut.length > 0 ? (
-                        <PieChart width={200} height={200}>
-                          <Pie data={donut} dataKey="value" innerRadius={66} outerRadius={96} paddingAngle={donut.length > 1 ? 2 : 0} stroke="none" startAngle={90} endAngle={-270} isAnimationActive={false}>
-                            {donut.map((d) => <Cell key={d.name} fill={d.color} />)}
-                          </Pie>
-                        </PieChart>
-                      ) : <div className="w-full h-full rounded-full" style={{ background: '#f1f5f9' }} />}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <div className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>ФОТ</div>
-                        <div className="text-base font-bold tabular-nums" style={{ color: INK }}>{fmtShort(grand.gross)}</div>
+              <div className="px-10 py-8 space-y-8">
+                {/* KPI cards */}
+                <div className="grid grid-cols-4 gap-4">
+                  <KpiCard icon={<Wallet size={13} />} label="ФОТ за период" value={fmtMoney(grand.gross)} sub={`средняя ${fmtShort(headcount ? grand.gross / headcount : 0)} / чел.`} color={BRAND} />
+                  <KpiCard icon={<Wallet size={13} />} label="К выплате" value={fmtMoney(grand.to_pay)} sub={`${pct(grand.to_pay, grand.gross)}% от начисленного`} color="#10b981" />
+                  <KpiCard icon={<UserRound size={13} />} label="Сотрудников" value={String(headcount)} sub={cats.map((c) => `${c.title.slice(0, 4).toLowerCase()}. ${c.rows.length}`).join(' · ')} />
+                  <KpiCard icon={<TrendingDown size={13} />} label="Удержания" value={fmtMoney(withholdings)} sub={`авансы ${fmtShort(grand.advances)} · штрафы ${fmtShort(grand.penalties)}`} color={DANGER} />
+                </div>
+
+                {/* Charts row */}
+                <div className="grid grid-cols-2 gap-6">
+                  <Section title="Доля категорий в ФОТ">
+                    <div className="flex items-center gap-5">
+                      <div className="relative" style={{ width: 200, height: 200 }}>
+                        {donut.length > 0 ? (
+                          <PieChart width={200} height={200}>
+                            <Pie data={donut} dataKey="value" innerRadius={66} outerRadius={96} paddingAngle={donut.length > 1 ? 2 : 0} stroke="none" startAngle={90} endAngle={-270} isAnimationActive={false}>
+                              {donut.map((d) => <Cell key={d.name} fill={d.color} />)}
+                            </Pie>
+                          </PieChart>
+                        ) : <div className="w-full h-full rounded-full" style={{ background: T.bg3 }} />}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <div className="text-[10px] uppercase tracking-wide" style={{ color: T.muted }}>ФОТ</div>
+                          <div className="text-base font-bold tabular-nums" style={{ color: T.ink }}>{fmtShort(grand.gross)}</div>
+                        </div>
+                      </div>
+                      <div className="flex-1 space-y-2.5">
+                        {cats.map((c) => (
+                          <div key={c.key} className="flex items-center gap-2.5">
+                            <span className="h-3 w-3 rounded-sm shrink-0" style={{ background: c.color }} />
+                            <span className="text-sm flex-1" style={{ color: T.ink }}>{c.title}</span>
+                            <span className="text-sm font-semibold tabular-nums" style={{ color: T.ink }}>{fmtMoney(c.totals.gross)}</span>
+                            <span className="w-10 text-right text-xs tabular-nums" style={{ color: T.muted }}>{pct(c.totals.gross, grand.gross)}%</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <div className="flex-1 space-y-2.5">
+                  </Section>
+
+                  <Section title="ФОТ по категориям">
+                    <div className="space-y-3 pt-1">
                       {cats.map((c) => (
-                        <div key={c.key} className="flex items-center gap-2.5">
-                          <span className="h-3 w-3 rounded-sm shrink-0" style={{ background: c.color }} />
-                          <span className="text-sm flex-1" style={{ color: INK }}>{c.title}</span>
-                          <span className="text-sm font-semibold tabular-nums" style={{ color: INK }}>{fmtMoney(c.totals.gross)}</span>
-                          <span className="w-10 text-right text-xs tabular-nums" style={{ color: MUTED }}>{pct(c.totals.gross, grand.gross)}%</span>
-                        </div>
+                        <BarRow key={c.key} label={c.title} value={c.totals.gross} max={maxCat} color={c.color} right={fmtMoney(c.totals.gross)} />
                       ))}
+                    </div>
+                  </Section>
+                </div>
+
+                {/* Composition */}
+                <Section title="Структура начислений" hint={`всего ${fmtMoney(grand.gross)}`}>
+                  <div className="h-7 w-full rounded-lg overflow-hidden flex" style={{ background: T.bg3 }}>
+                    {comp.map((s) => (
+                      <div key={s.label} className="h-7 flex items-center justify-center text-[11px] font-semibold text-white"
+                        style={{ width: `${pct(s.value, grand.gross)}%`, background: s.color }}>
+                        {pct(s.value, grand.gross) >= 8 ? `${pct(s.value, grand.gross)}%` : ''}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-1">
+                    {comp.map((s) => (
+                      <div key={s.label} className="flex items-center gap-2 text-sm">
+                        <span className="h-3 w-3 rounded-sm" style={{ background: s.color }} />
+                        <span style={{ color: T.muted }}>{s.label}</span>
+                        <span className="font-semibold tabular-nums" style={{ color: T.ink }}>{fmtMoney(s.value)}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2 text-sm ml-auto">
+                      <span style={{ color: T.muted }}>− удержания</span>
+                      <span className="font-semibold tabular-nums" style={{ color: DANGER }}>{fmtMoney(withholdings)}</span>
+                      <span style={{ color: T.muted }}>= к выплате</span>
+                      <span className="font-bold tabular-nums" style={{ color: '#10b981' }}>{fmtMoney(grand.to_pay)}</span>
                     </div>
                   </div>
                 </Section>
 
-                <Section title="ФОТ по категориям">
-                  <div className="space-y-3 pt-1">
-                    {cats.map((c) => (
-                      <Bar key={c.key} label={c.title} value={c.totals.gross} max={maxCat} color={c.color} right={fmtMoney(c.totals.gross)} />
-                    ))}
+                {/* Top earners */}
+                {topEarners.length > 0 && (
+                  <Section title="Топ по выплате" hint="самые крупные выплаты за период">
+                    <div className="space-y-2.5 pt-1">
+                      {topEarners.map((r, i) => (
+                        <BarRow key={i} label={r.name} value={r.to_pay} max={maxTop} color={r.catColor} right={fmtMoney(r.to_pay)} />
+                      ))}
+                    </div>
+                  </Section>
+                )}
+
+                {/* Breakdown table */}
+                <Section title="Детализация по сотрудникам">
+                  <div className="rounded-xl border overflow-hidden" style={{ borderColor: T.line }}>
+                    <table className="w-full text-[13px] table-fixed">
+                      <colgroup>
+                        <col style={{ width: '20%' }} />
+                        {COLS.map((c) => <col key={c.key} style={{ width: `${80 / COLS.length}%` }} />)}
+                      </colgroup>
+                      <thead>
+                        <tr style={{ background: T.bg2, color: T.muted }} className="text-[10px] uppercase tracking-wide">
+                          <th className="text-left font-semibold px-3 py-2">Сотрудник</th>
+                          {COLS.map((c) => <th key={c.key} className="text-right font-semibold px-3 py-2">{c.label}</th>)}
+                        </tr>
+                      </thead>
+                      {cats.map((c) => {
+                        const Icon = c.icon;
+                        return (
+                          <tbody key={c.key}>
+                            <tr style={{ background: T.bg, borderTop: `2px solid ${T.line}` }}>
+                              <td colSpan={COLS.length + 1} className="px-3 py-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold flex items-center gap-1.5" style={{ color: c.color }}>
+                                    <Icon size={13} /> {c.title}
+                                    <span className="text-[11px] font-normal" style={{ color: T.muted }}>· {c.rows.length}</span>
+                                  </span>
+                                  <span className="text-[12px]" style={{ color: T.muted }}>
+                                    ФОТ <span className="font-bold" style={{ color: T.ink }}>{fmtMoney(c.totals.gross)}</span>
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                            {c.error ? (
+                              <tr><td colSpan={COLS.length + 1} className="px-3 py-2 text-[12px]" style={{ color: DANGER }}>Не удалось загрузить: {c.error}</td></tr>
+                            ) : c.rows.length === 0 ? (
+                              <tr><td colSpan={COLS.length + 1} className="px-3 py-2 text-[12px]" style={{ color: T.muted }}>Нет данных за период.</td></tr>
+                            ) : (<>
+                              {c.rows.map((r, i) => (
+                                <tr key={i} style={{ borderTop: `1px solid ${T.line}` }}>
+                                  <td className="px-3 py-1.5 font-medium break-words" style={{ color: T.ink }}>{r.name}</td>
+                                  {COLS.map((col) => (
+                                    <td key={col.key} className="px-3 py-1.5 text-right tabular-nums"
+                                      style={{ color: col.key === 'to_pay' ? BRAND : (col.key === 'penalties' || col.key === 'advances') && r[col.key] ? DANGER : T.ink, fontWeight: col.key === 'to_pay' ? 600 : 400 }}>
+                                      {col.key === 'gross' || col.key === 'to_pay' ? fmtMoney(r[col.key]) : (r[col.key] ? fmtMoney(r[col.key]) : '—')}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                              <tr style={{ borderTop: `1px solid ${T.line}`, background: T.bg2 }}>
+                                <td className="px-3 py-1.5 font-semibold" style={{ color: T.ink }}>Итого · {c.title.toLowerCase()}</td>
+                                {COLS.map((col) => (
+                                  <td key={col.key} className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: col.key === 'to_pay' ? BRAND : T.ink }}>{fmtMoney(c.totals[col.key])}</td>
+                                ))}
+                              </tr>
+                            </>)}
+                          </tbody>
+                        );
+                      })}
+                      <tfoot>
+                        <tr style={{ borderTop: `2px solid ${T.ink}` }}>
+                          <td className="px-3 py-2 font-extrabold" style={{ color: T.ink }}>ВСЕГО · {headcount} чел.</td>
+                          {COLS.map((c) => (
+                            <td key={c.key} className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: c.key === 'gross' || c.key === 'to_pay' ? BRAND : T.ink }}>{fmtMoney(grand[c.key])}</td>
+                          ))}
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 </Section>
               </div>
 
-              {/* Composition */}
-              <Section title="Структура начислений" hint={`всего ${fmtMoney(grand.gross)}`}>
-                <div className="h-7 w-full rounded-lg overflow-hidden flex" style={{ background: '#f1f5f9' }}>
-                  {comp.map((s) => (
-                    <div key={s.label} className="h-7 flex items-center justify-center text-[11px] font-semibold text-white"
-                      style={{ width: `${pct(s.value, grand.gross)}%`, background: s.color }}>
-                      {pct(s.value, grand.gross) >= 8 ? `${pct(s.value, grand.gross)}%` : ''}
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-1">
-                  {comp.map((s) => (
-                    <div key={s.label} className="flex items-center gap-2 text-sm">
-                      <span className="h-3 w-3 rounded-sm" style={{ background: s.color }} />
-                      <span style={{ color: MUTED }}>{s.label}</span>
-                      <span className="font-semibold tabular-nums" style={{ color: INK }}>{fmtMoney(s.value)}</span>
-                    </div>
-                  ))}
-                  <div className="flex items-center gap-2 text-sm ml-auto">
-                    <span style={{ color: MUTED }}>− удержания</span>
-                    <span className="font-semibold tabular-nums" style={{ color: DANGER }}>{fmtMoney(withholdings)}</span>
-                    <span style={{ color: MUTED }}>= к выплате</span>
-                    <span className="font-bold tabular-nums" style={{ color: '#10b981' }}>{fmtMoney(grand.to_pay)}</span>
-                  </div>
-                </div>
-              </Section>
-
-              {/* Top earners */}
-              {topEarners.length > 0 && (
-                <Section title="Топ по выплате" hint="самые крупные выплаты за период">
-                  <div className="space-y-2.5 pt-1">
-                    {topEarners.map((r, i) => (
-                      <Bar key={i} label={r.name} value={r.to_pay} max={maxTop} color={r.catColor} right={fmtMoney(r.to_pay)} />
-                    ))}
-                  </div>
-                </Section>
-              )}
-
-              {/* Breakdown table */}
-              <Section title="Детализация по сотрудникам">
-                <div className="rounded-xl border overflow-hidden" style={{ borderColor: LINE }}>
-                  <table className="w-full text-[13px] table-fixed">
-                    <colgroup>
-                      <col style={{ width: '20%' }} />
-                      {COLS.map((c) => <col key={c.key} style={{ width: `${80 / COLS.length}%` }} />)}
-                    </colgroup>
-                    <thead>
-                      <tr style={{ background: '#f8fafc', color: MUTED }} className="text-[10px] uppercase tracking-wide">
-                        <th className="text-left font-semibold px-3 py-2">Сотрудник</th>
-                        {COLS.map((c) => <th key={c.key} className="text-right font-semibold px-3 py-2">{c.label}</th>)}
-                      </tr>
-                    </thead>
-                    {cats.map((c) => {
-                      const Icon = c.icon;
-                      return (
-                        <tbody key={c.key}>
-                          <tr style={{ background: '#fff', borderTop: `2px solid ${LINE}` }}>
-                            <td colSpan={COLS.length + 1} className="px-3 py-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold flex items-center gap-1.5" style={{ color: c.color }}><Icon size={13} /> {c.title}
-                                  <span className="text-[11px] font-normal" style={{ color: MUTED }}>· {c.rows.length}</span></span>
-                                <span className="text-[12px]" style={{ color: MUTED }}>ФОТ <span className="font-bold" style={{ color: INK }}>{fmtMoney(c.totals.gross)}</span></span>
-                              </div>
-                            </td>
-                          </tr>
-                          {c.error ? (
-                            <tr><td colSpan={COLS.length + 1} className="px-3 py-2 text-[12px]" style={{ color: DANGER }}>Не удалось загрузить: {c.error}</td></tr>
-                          ) : c.rows.length === 0 ? (
-                            <tr><td colSpan={COLS.length + 1} className="px-3 py-2 text-[12px]" style={{ color: MUTED }}>Нет данных за период.</td></tr>
-                          ) : (<>
-                            {c.rows.map((r, i) => (
-                              <tr key={i} style={{ borderTop: `1px solid ${LINE}` }}>
-                                <td className="px-3 py-1.5 font-medium break-words" style={{ color: INK }}>{r.name}</td>
-                                {COLS.map((col) => (
-                                  <td key={col.key} className="px-3 py-1.5 text-right tabular-nums"
-                                    style={{ color: col.key === 'to_pay' ? BRAND : (col.key === 'penalties' || col.key === 'advances') && r[col.key] ? DANGER : INK, fontWeight: col.key === 'to_pay' ? 600 : 400 }}>
-                                    {col.key === 'gross' || col.key === 'to_pay' ? fmtMoney(r[col.key]) : (r[col.key] ? fmtMoney(r[col.key]) : '—')}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                            <tr style={{ borderTop: `1px solid ${LINE}`, background: '#f8fafc' }}>
-                              <td className="px-3 py-1.5 font-semibold" style={{ color: INK }}>Итого · {c.title.toLowerCase()}</td>
-                              {COLS.map((col) => (
-                                <td key={col.key} className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: col.key === 'to_pay' ? BRAND : INK }}>{fmtMoney(c.totals[col.key])}</td>
-                              ))}
-                            </tr>
-                          </>)}
-                        </tbody>
-                      );
-                    })}
-                    <tfoot>
-                      <tr style={{ borderTop: `2px solid ${INK}` }}>
-                        <td className="px-3 py-2 font-extrabold" style={{ color: INK }}>ВСЕГО · {headcount} чел.</td>
-                        {COLS.map((c) => (
-                          <td key={c.key} className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: c.key === 'gross' || c.key === 'to_pay' ? BRAND : INK }}>{fmtMoney(grand[c.key])}</td>
-                        ))}
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </Section>
+              {/* Footer */}
+              <div className="px-10 py-4 flex items-center justify-between text-[11px]" style={{ borderTop: `1px solid ${T.line}`, color: T.muted }}>
+                <span>Сводный отчёт по фонду оплаты труда · {periodLabel}</span>
+                <span>Сформировано {generatedAt}</span>
+              </div>
             </div>
-
-            {/* Footer */}
-            <div className="px-10 py-4 flex items-center justify-between text-[11px]" style={{ borderTop: `1px solid ${LINE}`, color: MUTED }}>
-              <span>Сводный отчёт по фонду оплаты труда · {periodLabel}</span>
-              <span>Сформировано {generatedAt}</span>
-            </div>
-          </div>
+          </RTC.Provider>
         </div>
       )}
     </div>

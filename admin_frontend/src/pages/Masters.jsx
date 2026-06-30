@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { fmtMoney, Term, StatCard, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
@@ -651,6 +652,7 @@ export default function Masters() {
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-12">
+      <TopProgressBar active={loading} />
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>

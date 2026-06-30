@@ -6,6 +6,7 @@ import {
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { fmtMoney, fmtPct, Term, StatCard, MetricBar, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 
 const MANAGER_POSITION = 'менеджер по работе с клиентами';
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -303,6 +304,7 @@ export default function ManagerSalary() {
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-12">
+      <TopProgressBar active={loading} />
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>

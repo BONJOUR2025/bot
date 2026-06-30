@@ -32,6 +32,7 @@ import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 
@@ -1066,6 +1067,7 @@ export default function Payouts() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
+      <TopProgressBar active={loading} />
       <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
         Выплаты
         <button

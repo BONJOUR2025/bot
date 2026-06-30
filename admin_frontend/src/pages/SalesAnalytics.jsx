@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 
@@ -549,6 +550,7 @@ export default function SalesAnalytics() {
 
   return (
     <div className="space-y-5">
+      <TopProgressBar active={loading} />
 
       {/* ── Header ────────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-3">

@@ -3,6 +3,7 @@ import { Truck, RefreshCw, Wallet, Banknote, Trash2, CheckCircle2, Gauge, Save, 
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { fmtMoney, Term, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 
 const COURIER_MATCH = 'курьер';
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -157,6 +158,7 @@ export default function CourierSalary() {
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto pb-12">
+      <TopProgressBar active={loading} />
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2"><Truck size={24} /> Зарплата курьера</h2>
