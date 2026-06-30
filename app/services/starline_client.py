@@ -98,18 +98,18 @@ def _reset_session() -> None:
     _session.update({"slnet": "", "user_id": None})
 
 
-async def _authed_get(path: str) -> dict:
+async def _authed_get(path: str, params: Optional[dict] = None) -> dict:
     """GET a developer.starline.ru/json path with the SLNET cookie; one re-auth on 401."""
     if not is_configured():
         raise RuntimeError("StarLine не настроен (нет STARLINE_* в .env)")
     async with httpx.AsyncClient(timeout=40) as client:
         slnet, _ = await _auth(client)
         url = f"{DEV_BASE}{path}"
-        resp = await client.get(url, cookies={"slnet": slnet})
+        resp = await client.get(url, params=params, cookies={"slnet": slnet})
         if resp.status_code in (401, 403):
             _reset_session()
             slnet, _ = await _auth(client)
-            resp = await client.get(url, cookies={"slnet": slnet})
+            resp = await client.get(url, params=params, cookies={"slnet": slnet})
         resp.raise_for_status()
         return resp.json()
 
@@ -213,7 +213,14 @@ def _track_points(data: Any) -> list[tuple[float, float]]:
 
 
 async def get_track_raw(device_id: str, ts_from: int, ts_to: int) -> dict:
-    return await _authed_get(f"/v2/device/{device_id}/track?ts_start={ts_from}&ts_end={ts_to}")
+    return await _authed_get(f"/v2/device/{device_id}/track",
+                             params={"ts_start": ts_from, "ts_end": ts_to})
+
+
+async def probe(version: str, device_id: str, action: str, ts_from: int, ts_to: int) -> dict:
+    """Diagnostic: try an arbitrary device action so we can find the right one."""
+    return await _authed_get(f"/v{version}/device/{device_id}/{action}",
+                             params={"ts_start": ts_from, "ts_end": ts_to})
 
 
 async def get_track_mileage(device_id: str, ts_from: int, ts_to: int) -> Optional[float]:
