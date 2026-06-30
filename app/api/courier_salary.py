@@ -151,7 +151,7 @@ def create_courier_salary_router(
         ts_from, ts_to = _period_ts(period)
         km = await starline_client.get_track_mileage(dev, ts_from, ts_to)
         if km is None:
-            raise HTTPException(status_code=502, detail="StarLine не отдаёт ни одометр, ни GPS-трек за период — введите пробег вручную")
+            raise HTTPException(status_code=502, detail="StarLine (Маяк) отдаёт только текущую точку без истории трека — авто-пробег недоступен, введите пробег вручную")
         return repo.upsert(employee_code, period, km_explicit=km, source="starline-track")
 
     # ── StarLine diagnostics (verify shapes against a real account) ────

@@ -198,14 +198,28 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     return 2 * R * math.asin(min(1.0, math.sqrt(a)))
 
 
+def _num(v: Any) -> Optional[float]:
+    """Coerce int/float/str-number to float (StarLine sends coords as strings)."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        try:
+            return float(v)
+        except ValueError:
+            return None
+    return None
+
+
 def _collect_points(node: Any, acc: list[tuple[float, float, float]]) -> None:
     """Recursively gather (ts, lon, lat) from any coordinate-bearing dicts."""
     if isinstance(node, dict):
-        x = node.get("x") if node.get("x") is not None else node.get("lon", node.get("lng"))
-        y = node.get("y") if node.get("y") is not None else node.get("lat")
-        if isinstance(x, (int, float)) and isinstance(y, (int, float)):
-            ts = node.get("ts") or node.get("t") or node.get("time") or 0
-            acc.append((float(ts) if isinstance(ts, (int, float)) else 0.0, float(x), float(y)))
+        x = _num(node.get("x")) if node.get("x") is not None else _num(node.get("lon", node.get("lng")))
+        y = _num(node.get("y")) if node.get("y") is not None else _num(node.get("lat"))
+        if x is not None and y is not None:
+            ts = _num(node.get("ts") or node.get("t") or node.get("time")) or 0.0
+            acc.append((ts, x, y))
         for v in node.values():
             _collect_points(v, acc)
     elif isinstance(node, list):
