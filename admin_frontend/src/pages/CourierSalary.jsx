@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Truck, RefreshCw, Wallet, Banknote, Trash2, CheckCircle2, Gauge, Save, RotateCw } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
+import { fmtMoney, Term, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
 
 const COURIER_MATCH = 'курьер';
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
 const fmtKm = (v) => (v === null || v === undefined ? '—' : `${Number(v).toLocaleString('ru-RU')} км`);
 const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
 
@@ -18,23 +18,6 @@ function recentMonths(n = 12) {
     d.setMonth(m - 1);
   }
   return out;
-}
-
-const TONE = {
-  success: 'text-[color:var(--color-success)]', primary: 'text-[color:var(--color-primary)]',
-  danger: 'text-[color:var(--color-danger)]', muted: 'text-[color:var(--color-muted-foreground)]',
-};
-
-function Term({ op, label, value, tone, strong }) {
-  return (
-    <div className="inline-flex items-center gap-2 whitespace-nowrap">
-      {op && <span className="text-[color:var(--color-muted-foreground)] text-base font-medium select-none">{op}</span>}
-      <div>
-        <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
-        <div className={`tabular-nums font-semibold ${strong ? 'text-lg' : 'text-base'} ${tone || ''}`}>{fmtMoney(value)}</div>
-      </div>
-    </div>
-  );
 }
 
 export default function CourierSalary() {
@@ -229,10 +212,10 @@ export default function CourierSalary() {
             </div>
             <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
               <Term label="Оклад" value={result.oklad} />
-              <Term op="+" label="Премии" value={result.bonuses} tone={result.bonuses ? TONE.success : ''} />
-              <Term op="−" label="Авансы" value={result.advances} tone={result.advances ? TONE.danger : ''} />
-              <Term op="−" label="Штрафы" value={result.penalties} tone={result.penalties ? TONE.danger : ''} />
-              <Term op="=" label="К выплате" value={result.to_pay} tone={TONE.primary} strong />
+              <Term op="+" label="Премии" value={result.bonuses} tone={result.bonuses ? TONE_TEXT.success : ''} />
+              <Term op="−" label="Авансы" value={result.advances} tone={result.advances ? TONE_TEXT.danger : ''} />
+              <Term op="−" label="Штрафы" value={result.penalties} tone={result.penalties ? TONE_TEXT.danger : ''} />
+              <Term op="=" label="К выплате" value={result.to_pay} tone={TONE_TEXT.primary} strong />
             </div>
           </section>
 

@@ -1,9 +1,13 @@
 import { useState, useMemo } from 'react';
-import { Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from 'lucide-react';
+import {
+  Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle,
+  Hammer, ListChecks, CheckCircle2, Clock, Users, Receipt, ClipboardList,
+} from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { fmtMoney, Term, StatCard, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
 
 const fmt    = (v) => (v == null ? '—' : v);
 const fmtRub = (v) => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽');
@@ -53,17 +57,6 @@ function SortIcon({ col, sortCol, sortDir }) {
     : <ChevronDown size={13} className="inline ml-1 text-[color:var(--color-primary)]" />;
 }
 
-function KpiCard({ label, value, accent }) {
-  return (
-    <div className="app-card p-4 text-center">
-      <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
-      <div className={`text-xl font-semibold ${accent ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-text-primary)]'}`}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
 function MastersSummaryTable({ rows, onMasterClick }) {
   const { isMobile } = useViewport();
   const [tab, setTab] = useState('works');
@@ -107,16 +100,14 @@ function MastersSummaryTable({ rows, onMasterClick }) {
   };
 
   return (
-    <div className="app-card overflow-x-auto">
-      <div className="p-4 border-b border-[color:var(--color-border)] flex items-center gap-4">
+    <div className="app-card overflow-hidden">
+      <div className="p-4 border-b border-[color:var(--color-border)] flex flex-wrap items-center gap-3">
         <h3 className="font-semibold">Сводка по мастерам</h3>
-        <div className="flex gap-1 ml-auto">
-          {['works', 'salary'].map((t) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1 rounded text-sm transition-colors ${tab === t ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-muted)]'}`}>
-              {t === 'works' ? 'Работы' : 'Зарплата'}
-            </button>
-          ))}
+        <div className="sm:ml-auto">
+          <Tabs
+            tabs={[{ key: 'works', label: 'Работы' }, { key: 'salary', label: 'Зарплата' }]}
+            active={tab} onChange={setTab}
+          />
         </div>
       </div>
 
@@ -285,6 +276,7 @@ export default function Masters() {
   const [error, setError]                 = useState(null);
   const [loaded, setLoaded]               = useState(false);
   const [warningsOnly, setWarningsOnly]   = useState(false);
+  const [tab, setTab] = useState('overview');
 
   const masterNames = useMemo(
     () => [...new Set(rows.map((r) => r.description).filter(Boolean))].sort(),
@@ -390,6 +382,12 @@ export default function Masters() {
       orderMap[r.doc_num].push(r.status);
     });
     const orders = Object.values(orderMap);
+    let totalKredit = 0, totalSalary = 0;
+    filtered.forEach((r) => {
+      if (r.master_salary == null) return;
+      totalKredit += Number(r.kredit) || 0;
+      totalSalary += Number(r.master_salary) || 0;
+    });
     return {
       total:        filtered.length,
       done:         filtered.filter((x) => x.status === 'Выполнено').length,
@@ -399,6 +397,8 @@ export default function Masters() {
       ordersTotal:  orders.length,
       ordersDone:   orders.filter((s) => s.every((v) => v === 'Выполнено')).length,
       ordersInWork: orders.filter((s) => s.some((v) => v === 'В работе')).length,
+      totalKredit,
+      totalSalary,
     };
   }, [filtered]);
 
@@ -407,7 +407,7 @@ export default function Masters() {
     const cols = ['status', 'description', 'doc_num', 'code', 'name', 'service_group', 'in_time', 'out_time', 'duration_min', 'master_salary', 'warnings'];
     const header = cols.join(';');
     const body = filtered.map((r) => cols.map((c) => (r[c] ?? '')).join(';')).join('\n');
-    const blob = new Blob(['\uFEFF' + header + '\n' + body], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob(['﻿' + header + '\n' + body], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'masters_works.csv'; a.click();
     URL.revokeObjectURL(url);
@@ -424,137 +424,37 @@ export default function Masters() {
     </button>
   );
 
+  const tabs = [
+    { key: 'overview', label: 'Обзор', icon: <ListChecks size={15} /> },
+    { key: 'services', label: 'Список услуг', icon: <Receipt size={15} />, badge: filtered.length },
+  ];
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-5xl mx-auto pb-12">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-semibold">Работы мастеров</h2>
-        <div className="flex gap-2">
-          <button onClick={downloadCsv} disabled={!filtered.length}
-            className="btn btn-outline flex items-center gap-1.5 disabled:opacity-40">
-            <Download size={15} /> CSV
-          </button>
-          <button onClick={load} disabled={loading}
-            className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50">
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            {loaded ? 'Обновить' : 'Загрузить'}
-          </button>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2"><Hammer size={24} /> Зарплата мастеров</h2>
+          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Работы по чек-ин/чек-аут, длительность, нарушения и расчёт зарплаты</p>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="app-card p-4 space-y-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="col-span-2 sm:col-span-1">
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата от</label>
-            <input type="date" className="input w-full" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          </div>
-          <div className="col-span-2 sm:col-span-1">
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата до</label>
-            <input type="date" className="input w-full" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Статус</label>
-            <select className="input w-full" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option>Все</option>
-              <option>Выполнено</option>
-              <option>В работе</option>
-              <option>Прочее</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Мастер</label>
-            {loaded && masterNames.length > 0 ? (
-              <select className="input w-full" value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)}>
-                <option value="">Все мастера</option>
-                {masterNames.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="relative">
-                <Search size={14} style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} className="text-[color:var(--color-muted-foreground)]" />
-                <input className="input w-full" style={{ paddingLeft:'2rem' }} placeholder="Поиск..." value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div>
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Услуга</label>
-            <input className="input w-full" placeholder="Название..." value={nameSearch} onChange={(e) => setNameSearch(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Заказ</label>
-            <input className="input w-full" placeholder="Номер заказа..." value={docSearch} onChange={(e) => setDocSearch(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Код (через запятую, или с точкой)</label>
-            <input className="input w-full" placeholder="2.17, 3." value={codeSearch} onChange={(e) => setCodeSearch(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Длительность</label>
-            <select className="input w-full" value={durationFilter} onChange={(e) => setDurationFilter(e.target.value)}>
-              {DURATION_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        {loaded && categoryOptions.length > 0 && (
-          <div>
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
-              Категория услуги
-              {categoryFilter.size > 0 && (
-                <button onClick={() => setCategoryFilter(new Set())} className="ml-2 text-[color:var(--color-primary)] hover:underline">
-                  сбросить
-                </button>
-              )}
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {categoryOptions.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => toggleCategory(cat)}
-                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                    categoryFilter.has(cat)
-                      ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
-                      : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {loaded && (
-          <div>
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
-              Тип нарушения
-              {warningTypeFilter.size > 0 && (
-                <button onClick={() => setWarningTypeFilter(new Set())} className="ml-2 text-[color:var(--color-primary)] hover:underline">
-                  сбросить
-                </button>
-              )}
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {WARNING_TYPES.map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => toggleWarningType(key)}
-                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                    warningTypeFilter.has(key)
-                      ? 'bg-amber-500 text-white border-amber-500'
-                      : 'border-[color:var(--color-border)] hover:border-amber-400 hover:text-amber-600'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      {/* Toolbar */}
+      <div className="app-card p-3 flex flex-col sm:flex-row sm:items-end gap-3">
+        <label className="block sm:flex-1">
+          <span className="block text-xs font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Дата от</span>
+          <input type="date" className="input w-full" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </label>
+        <label className="block sm:flex-1">
+          <span className="block text-xs font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Дата до</span>
+          <input type="date" className="input w-full" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </label>
+        <button className="btn btn--secondary flex items-center justify-center gap-1.5" onClick={downloadCsv} disabled={!filtered.length}>
+          <Download size={14} /> CSV
+        </button>
+        <button className="btn btn--primary flex items-center justify-center gap-1.5" onClick={load} disabled={loading}>
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {loaded ? 'Обновить' : 'Загрузить'}
+        </button>
       </div>
 
       {error && (
@@ -564,7 +464,8 @@ export default function Masters() {
       )}
 
       {!loaded && !loading && (
-        <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">
+        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+          <Hammer size={28} className="mx-auto mb-2 opacity-60" />
           Выберите период и нажмите <strong>Загрузить</strong>
         </div>
       )}
@@ -573,139 +474,267 @@ export default function Masters() {
 
       {loaded && !loading && (
         <>
-          {/* KPI — услуги */}
-          <div>
-            <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Услуги</p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <KpiCard label="Всего услуг" value={kpi.total} />
-              <KpiCard label="Выполнено" value={kpi.done} accent />
-              <KpiCard label="В работе" value={kpi.inWork} />
-              <KpiCard label="Мастеров" value={kpi.masters} />
-              <div className="app-card p-4 text-center cursor-pointer hover:ring-2 ring-amber-400 transition-all"
-                onClick={() => setWarningsOnly((v) => !v)}
-                title="Кликните для фильтра по нарушениям"
-                style={warningsOnly ? {outline: '2px solid #f59e0b'} : {}}>
-                <div className="text-xs text-amber-600 mb-1 flex items-center justify-center gap-1">
-                  <AlertTriangle size={11} /> Нарушений
-                </div>
-                <div className={`text-xl font-semibold ${kpi.warnings > 0 ? 'text-amber-600' : 'text-[color:var(--color-text-primary)]'}`}>
-                  {kpi.warnings}
-                </div>
-                {warningsOnly && <div className="text-xs text-amber-500 mt-0.5">фильтр вкл.</div>}
+          {/* Hero: payout summary */}
+          <section className="app-card overflow-hidden">
+            <div className="p-5 sm:p-6">
+              <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                Зарплата мастеров · {kpi.masters} {kpi.masters === 1 ? 'мастер' : 'мастеров'}
+              </div>
+              <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
+                {fmtMoney(kpi.totalSalary)}
+              </div>
+              <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
+                {kpi.done} услуг учтено в ЗП за период
               </div>
             </div>
-          </div>
-
-          {/* KPI — заказы */}
-          <div>
-            <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Заказы</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <KpiCard label="Всего заказов" value={kpi.ordersTotal} />
-              <KpiCard label="Выполнено" value={kpi.ordersDone} accent />
-              <KpiCard label="В работе" value={kpi.ordersInWork} />
+            <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
+              <Term label="Услуг всего" value={kpi.total} fmt={(v) => String(v)} />
+              <Term op="·" label="Учтено в ЗП" value={kpi.done} fmt={(v) => String(v)} />
+              <Term op="·" label="Сумма услуг" value={kpi.totalKredit} />
+              <Term op="=" label="Зарплата" value={kpi.totalSalary} tone={TONE_TEXT.primary} strong />
             </div>
-          </div>
+          </section>
 
-          {/* Summary by masters */}
-          <MastersSummaryTable rows={filtered} onMasterClick={(name) => setMasterSearch(name)} />
+          {/* Tabs */}
+          <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
-          {/* Full table */}
-          <div className="app-card">
-            <div className="p-4 border-b border-[color:var(--color-border)] flex items-center justify-between">
-              <h3 className="font-semibold">Список услуг</h3>
-              <span className="text-sm text-[color:var(--color-muted-foreground)]">{filtered.length} строк</span>
-            </div>
-
-            <ResponsiveTable
-              data={sorted.slice(0, 500)}
-              keyFn={(r) => r.service_id ?? `${r.doc_num}-${r.code}-${r.in_time}`}
-              rowClass={(r) => r.warnings?.length > 0 ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}
-              emptyText="Нет данных"
-              columns={[
-                {
-                  key: 'status',
-                  label: sortLabel('status', 'Статус'),
-                  render: (r) => (
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
-                      {r.status}
-                    </span>
-                  ),
-                },
-                {
-                  key: 'warning',
-                  label: '',
-                  render: (r) => (
-                    r.warnings?.length > 0 && (
-                      <span title={r.warnings.join('\n')} className="cursor-help">
-                        <AlertTriangle size={14} className="text-amber-500" />
-                      </span>
-                    )
-                  ),
-                },
-                {
-                  key: 'description',
-                  label: sortLabel('description', 'Мастер'),
-                  primary: true,
-                  render: (r) => fmt(r.description),
-                },
-                {
-                  key: 'doc_num',
-                  label: sortLabel('doc_num', 'Заказ'),
-                  mobileHide: true,
-                  cellClass: 'text-[color:var(--color-muted-foreground)]',
-                  render: (r) => fmt(r.doc_num),
-                },
-                {
-                  key: 'code',
-                  label: sortLabel('code', 'Код'),
-                  mobileHide: true,
-                  cellClass: 'font-mono text-xs',
-                  render: (r) => fmt(r.code),
-                },
-                {
-                  key: 'name',
-                  label: sortLabel('name', 'Услуга'),
-                  render: (r) => fmt(r.name),
-                },
-                {
-                  key: 'service_group',
-                  label: sortLabel('service_group', 'Группа'),
-                  mobileHide: true,
-                  cellClass: 'text-[color:var(--color-muted-foreground)]',
-                  render: (r) => fmt(r.service_group),
-                },
-                {
-                  key: 'in_time',
-                  label: sortLabel('in_time', 'Приём'),
-                  cellClass: 'text-right text-[color:var(--color-muted-foreground)]',
-                  render: (r) => fmtDt(r.in_time),
-                },
-                {
-                  key: 'out_time',
-                  label: sortLabel('out_time', 'Выдача'),
-                  cellClass: 'text-right text-[color:var(--color-muted-foreground)]',
-                  render: (r) => fmtDt(r.out_time),
-                },
-                {
-                  key: 'duration_min',
-                  label: sortLabel('duration_min', 'Длит.'),
-                  cellClass: 'text-right',
-                  render: (r) => fmtMin(r.duration_min),
-                },
-                {
-                  key: 'master_salary',
-                  label: sortLabel('master_salary', 'ЗП'),
-                  cellClass: 'text-right font-medium text-[color:var(--color-primary)]',
-                  render: (r) => fmtRub(r.master_salary),
-                },
-              ]}
-            />
-            {filtered.length > 500 && (
-              <div className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)] border-t border-[color:var(--color-border)]">
-                Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
+          {tab === 'overview' && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Услуги</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <StatCard icon={<ListChecks size={18} />} label="Всего услуг" value={kpi.total} />
+                  <StatCard icon={<CheckCircle2 size={18} />} label="Выполнено" value={kpi.done} tone={TONE_TEXT.success} />
+                  <StatCard icon={<Clock size={18} />} label="В работе" value={kpi.inWork} />
+                  <StatCard icon={<Users size={18} />} label="Мастеров" value={kpi.masters} />
+                  <StatCard
+                    icon={<AlertTriangle size={18} />} label="Нарушений" value={kpi.warnings}
+                    tone={kpi.warnings ? TONE_TEXT.danger : ''}
+                    sub={warningsOnly ? 'фильтр вкл.' : undefined}
+                    onClick={() => setWarningsOnly((v) => !v)} active={warningsOnly}
+                  />
+                </div>
               </div>
-            )}
-          </div>
+
+              <div>
+                <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Заказы</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <StatCard icon={<ClipboardList size={18} />} label="Всего заказов" value={kpi.ordersTotal} />
+                  <StatCard icon={<CheckCircle2 size={18} />} label="Выполнено" value={kpi.ordersDone} tone={TONE_TEXT.success} />
+                  <StatCard icon={<Clock size={18} />} label="В работе" value={kpi.ordersInWork} />
+                </div>
+              </div>
+
+              <MastersSummaryTable rows={filtered} onMasterClick={(name) => { setMasterSearch(name); setTab('services'); }} />
+            </div>
+          )}
+
+          {tab === 'services' && (
+            <div className="space-y-4">
+              {/* Filters */}
+              <div className="app-card p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Статус</label>
+                    <select className="input w-full" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                      <option>Все</option>
+                      <option>Выполнено</option>
+                      <option>В работе</option>
+                      <option>Прочее</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Мастер</label>
+                    {masterNames.length > 0 ? (
+                      <select className="input w-full" value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)}>
+                        <option value="">Все мастера</option>
+                        {masterNames.map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="relative">
+                        <Search size={14} style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} className="text-[color:var(--color-muted-foreground)]" />
+                        <input className="input w-full" style={{ paddingLeft:'2rem' }} placeholder="Поиск..." value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Услуга</label>
+                    <input className="input w-full" placeholder="Название..." value={nameSearch} onChange={(e) => setNameSearch(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Заказ</label>
+                    <input className="input w-full" placeholder="Номер заказа..." value={docSearch} onChange={(e) => setDocSearch(e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Код (через запятую, или с точкой)</label>
+                    <input className="input w-full" placeholder="2.17, 3." value={codeSearch} onChange={(e) => setCodeSearch(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Длительность</label>
+                    <select className="input w-full" value={durationFilter} onChange={(e) => setDurationFilter(e.target.value)}>
+                      {DURATION_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {categoryOptions.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
+                      Категория услуги
+                      {categoryFilter.size > 0 && (
+                        <button onClick={() => setCategoryFilter(new Set())} className="ml-2 text-[color:var(--color-primary)] hover:underline">
+                          сбросить
+                        </button>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {categoryOptions.map((cat) => (
+                        <button
+                          key={cat}
+                          onClick={() => toggleCategory(cat)}
+                          className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                            categoryFilter.has(cat)
+                              ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                              : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
+                    Тип нарушения
+                    {warningTypeFilter.size > 0 && (
+                      <button onClick={() => setWarningTypeFilter(new Set())} className="ml-2 text-[color:var(--color-primary)] hover:underline">
+                        сбросить
+                      </button>
+                    )}
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {WARNING_TYPES.map(({ key, label }) => (
+                      <button
+                        key={key}
+                        onClick={() => toggleWarningType(key)}
+                        className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                          warningTypeFilter.has(key)
+                            ? 'bg-amber-500 text-white border-amber-500'
+                            : 'border-[color:var(--color-border)] hover:border-amber-400 hover:text-amber-600'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Full table */}
+              <div className="app-card">
+                <div className="p-4 border-b border-[color:var(--color-border)] flex items-center justify-between">
+                  <h3 className="font-semibold">Список услуг</h3>
+                  <span className="text-sm text-[color:var(--color-muted-foreground)]">{filtered.length} строк</span>
+                </div>
+
+                <ResponsiveTable
+                  data={sorted.slice(0, 500)}
+                  keyFn={(r) => r.service_id ?? `${r.doc_num}-${r.code}-${r.in_time}`}
+                  rowClass={(r) => r.warnings?.length > 0 ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}
+                  emptyText="Нет данных"
+                  columns={[
+                    {
+                      key: 'status',
+                      label: sortLabel('status', 'Статус'),
+                      render: (r) => (
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] || STATUS_COLORS['Прочее']}`}>
+                          {r.status}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'warning',
+                      label: '',
+                      render: (r) => (
+                        r.warnings?.length > 0 && (
+                          <span title={r.warnings.join('\n')} className="cursor-help">
+                            <AlertTriangle size={14} className="text-amber-500" />
+                          </span>
+                        )
+                      ),
+                    },
+                    {
+                      key: 'description',
+                      label: sortLabel('description', 'Мастер'),
+                      primary: true,
+                      render: (r) => fmt(r.description),
+                    },
+                    {
+                      key: 'doc_num',
+                      label: sortLabel('doc_num', 'Заказ'),
+                      mobileHide: true,
+                      cellClass: 'text-[color:var(--color-muted-foreground)]',
+                      render: (r) => fmt(r.doc_num),
+                    },
+                    {
+                      key: 'code',
+                      label: sortLabel('code', 'Код'),
+                      mobileHide: true,
+                      cellClass: 'font-mono text-xs',
+                      render: (r) => fmt(r.code),
+                    },
+                    {
+                      key: 'name',
+                      label: sortLabel('name', 'Услуга'),
+                      render: (r) => fmt(r.name),
+                    },
+                    {
+                      key: 'service_group',
+                      label: sortLabel('service_group', 'Группа'),
+                      mobileHide: true,
+                      cellClass: 'text-[color:var(--color-muted-foreground)]',
+                      render: (r) => fmt(r.service_group),
+                    },
+                    {
+                      key: 'in_time',
+                      label: sortLabel('in_time', 'Приём'),
+                      cellClass: 'text-right text-[color:var(--color-muted-foreground)]',
+                      render: (r) => fmtDt(r.in_time),
+                    },
+                    {
+                      key: 'out_time',
+                      label: sortLabel('out_time', 'Выдача'),
+                      cellClass: 'text-right text-[color:var(--color-muted-foreground)]',
+                      render: (r) => fmtDt(r.out_time),
+                    },
+                    {
+                      key: 'duration_min',
+                      label: sortLabel('duration_min', 'Длит.'),
+                      cellClass: 'text-right',
+                      render: (r) => fmtMin(r.duration_min),
+                    },
+                    {
+                      key: 'master_salary',
+                      label: sortLabel('master_salary', 'ЗП'),
+                      cellClass: 'text-right font-medium text-[color:var(--color-primary)]',
+                      render: (r) => fmtRub(r.master_salary),
+                    },
+                  ]}
+                />
+                {filtered.length > 500 && (
+                  <div className="px-4 py-3 text-center text-sm text-[color:var(--color-muted-foreground)] border-t border-[color:var(--color-border)]">
+                    Показано первые 500 из {filtered.length}. Используйте фильтры или скачайте CSV.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
