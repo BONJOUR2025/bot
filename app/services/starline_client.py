@@ -198,23 +198,35 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     return 2 * R * math.asin(min(1.0, math.sqrt(a)))
 
 
+def _collect_points(node: Any, acc: list[tuple[float, float, float]]) -> None:
+    """Recursively gather (ts, lon, lat) from any coordinate-bearing dicts."""
+    if isinstance(node, dict):
+        x = node.get("x") if node.get("x") is not None else node.get("lon", node.get("lng"))
+        y = node.get("y") if node.get("y") is not None else node.get("lat")
+        if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+            ts = node.get("ts") or node.get("t") or node.get("time") or 0
+            acc.append((float(ts) if isinstance(ts, (int, float)) else 0.0, float(x), float(y)))
+        for v in node.values():
+            _collect_points(v, acc)
+    elif isinstance(node, list):
+        for v in node:
+            _collect_points(v, acc)
+
+
 def _track_points(data: Any) -> list[tuple[float, float]]:
-    """Pull (lon, lat) points out of a StarLine track payload (shape varies)."""
-    seq = data
-    if isinstance(data, dict):
-        seq = data.get("data") or data.get("track") or data.get("points") or data.get("gps") or []
-    pts: list[tuple[float, float]] = []
-    for p in seq if isinstance(seq, list) else []:
-        if isinstance(p, dict):
-            x, y = p.get("x") or p.get("lon") or p.get("lng"), p.get("y") or p.get("lat")
-            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
-                pts.append((float(x), float(y)))
-    return pts
+    """All (lon, lat) points from a StarLine positions/track payload, time-ordered."""
+    acc: list[tuple[float, float, float]] = []
+    _collect_points(data, acc)
+    if any(t for t, _, _ in acc):
+        acc.sort(key=lambda p: p[0])
+    return [(x, y) for _, x, y in acc]
 
 
 async def get_track_raw(device_id: str, ts_from: int, ts_to: int) -> dict:
-    return await _authed_get(f"/v2/device/{device_id}/track",
-                             params={"ts_start": ts_from, "ts_end": ts_to})
+    # This account exposes historical GPS via v1/device/{id}/positions.
+    return await _authed_get(f"/v1/device/{device_id}/positions",
+                             params={"ts_start": ts_from, "ts_end": ts_to,
+                                     "begin": ts_from, "end": ts_to})
 
 
 async def probe(version: str, device_id: str, action: str, ts_from: int, ts_to: int) -> dict:
