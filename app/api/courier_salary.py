@@ -228,13 +228,26 @@ def create_courier_salary_router(
         return {"stored": await starline_poller.poll_once()}
 
     @router.get("/starline/ways/{device_id}")
-    async def starline_ways(device_id: str, period: str = Query(..., description="YYYY-MM"),
+    async def starline_ways(device_id: str,
+                            period: str = Query("2026-06", description="YYYY-MM"),
+                            date_from: Optional[str] = Query(None, description="YYYY-MM-DD (один день/диапазон)"),
+                            date_to: Optional[str] = Query(None, description="YYYY-MM-DD"),
                             current: ResolvedUser = Depends(perm)):
-        """POST /ways for the period — computed mileage + raw response (diagnostic)."""
-        ts_from, ts_to = _period_ts(period)
+        """POST /ways — computed mileage + raw response (diagnostic). Use
+        date_from/date_to (YYYY-MM-DD) to limit the range to a day."""
+        from datetime import datetime
+        if date_from:
+            try:
+                d2 = date_to or date_from
+                ts_from = int(datetime.strptime(date_from, "%Y-%m-%d").timestamp())
+                ts_to = int(datetime.strptime(d2, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp())
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Формат даты: YYYY-MM-DD")
+        else:
+            ts_from, ts_to = _period_ts(period)
         try:
             raw = await starline_client.get_ways(device_id, ts_from, ts_to)
-            return {"km": starline_client._ways_mileage(raw), "raw": raw}
+            return {"km": starline_client._ways_mileage(raw), "ts_from": ts_from, "ts_to": ts_to, "raw": raw}
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
