@@ -3,13 +3,18 @@ import {
   Search, X, AlertTriangle, CheckCircle, Download, RefreshCw,
   ChevronUp, ChevronDown, ChevronsUpDown,
   Tag, Settings, Plus, Trash2, Edit2, Check, Building2,
-  LinkIcon, Unlink,
+  LinkIcon, Unlink, BarChart3, TrendingUp, Wallet, ArrowUpDown,
 } from 'lucide-react';
+import {
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { Tabs, StatCard } from '../components/ui/SalaryUI.jsx';
 
 // ── Formatters ────────────────────────────────────────────────────
 const fmtDate = (v) => {
@@ -21,6 +26,12 @@ const fmtMoney = (v) =>
   v == null ? '—' : Number(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
 const fmtMoneyShort = (v) =>
   !v ? '—' : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+const fmtK = (v) => {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' млн ₽';
+  if (Math.abs(n) >= 1_000) return Math.round(n / 1_000) + 'k ₽';
+  return Math.round(n) + ' ₽';
+};
 
 // ── Date helpers ──────────────────────────────────────────────────
 const isoToday    = ()          => new Date().toISOString().slice(0, 10);
@@ -34,6 +45,9 @@ const DATE_PRESETS = [
   { label: 'Этот год',      from: () => isoYStart(),   to: () => isoToday() },
   { label: 'Всё время',     from: () => '',             to: () => '' },
 ];
+
+const CHART_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899'];
+const DAY_NAMES    = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 
 // ── Sort icon ─────────────────────────────────────────────────────
 function SortIcon({ field, sort }) {
@@ -135,7 +149,7 @@ function CategoryManager({ categories, onClose, onChanged }) {
   const { toast } = useToast();
   const [cats, setCats] = useState(categories);
   const [newCatName, setNewCatName] = useState('');
-  const [editingCat, setEditingCat] = useState(null); // {name, newName, prefixes}
+  const [editingCat, setEditingCat] = useState(null);
   const [newPrefix, setNewPrefix] = useState('');
 
   async function addCategory() {
@@ -195,7 +209,6 @@ function CategoryManager({ categories, onClose, onChanged }) {
           <h3 className="text-lg font-semibold flex items-center gap-2"><Settings size={18} /> Управление категориями</h3>
           <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-bg-secondary)]"><X size={18} /></button>
         </div>
-
         <div className="overflow-y-auto flex-1 space-y-3 pr-1">
           {cats.map((cat) => (
             <div key={cat.name} className="app-card p-3">
@@ -247,7 +260,6 @@ function CategoryManager({ categories, onClose, onChanged }) {
             </div>
           ))}
         </div>
-
         <div className="pt-4 border-t border-[color:var(--color-border)] flex gap-2">
           <input className="input flex-1" placeholder="Название новой категории…" value={newCatName}
             onChange={(e) => setNewCatName(e.target.value)}
@@ -279,7 +291,6 @@ function AssignModal({ record, categories, onSave, onClose }) {
       <div className="modal-card max-w-md">
         <h3 className="text-base font-semibold mb-1 flex items-center gap-2"><Tag size={16} /> Назначить категорию</h3>
         <p className="text-xs text-[color:var(--color-muted-foreground)] mb-4 font-mono break-all">{record.BASIS || '—'}</p>
-
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Категория</label>
@@ -288,13 +299,11 @@ function AssignModal({ record, categories, onSave, onClose }) {
               {categories.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
             </select>
           </div>
-
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="w-4 h-4 rounded" checked={createRule}
               onChange={(e) => setCreateRule(e.target.checked)} />
             <span className="text-sm font-medium">Создать правило (добавить префикс)</span>
           </label>
-
           {createRule && (
             <div>
               <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">
@@ -305,7 +314,6 @@ function AssignModal({ record, categories, onSave, onClose }) {
             </div>
           )}
         </div>
-
         <div className="flex justify-end gap-2 mt-5">
           <button className="btn btn--secondary" onClick={onClose}>Отмена</button>
           <button className="btn btn--primary" disabled={!selCat} onClick={handleSave}>Сохранить</button>
@@ -392,12 +400,11 @@ function LinkedPayoutModal({ payout, onUnlink, onClose }) {
 // ── Create Payout from cash movement modal ────────────────────────
 function CreatePayoutModal({ move, onClose, onCreated }) {
   const { toast } = useToast();
-  const [tab, setTab]           = useState('create'); // 'create' | 'link'
+  const [tab, setTab]           = useState('create');
   const [employees, setEmployees] = useState([]);
   const [userId, setUserId]     = useState('');
   const [payoutType, setPayoutType] = useState('Зарплата');
   const [saving, setSaving]     = useState(false);
-  // "link existing" tab state
   const defaultFrom = move.DK_DATE ? (() => {
     const d = new Date(move.DK_DATE); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10);
   })() : '';
@@ -478,8 +485,6 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
           </h3>
           <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-bg-secondary)]"><X size={18} /></button>
         </div>
-
-        {/* Movement info */}
         <div className="rounded-lg bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] p-3 mb-3 text-sm space-y-1 shrink-0">
           <div className="flex justify-between">
             <span className="text-[color:var(--color-muted-foreground)]">Дата</span>
@@ -500,8 +505,6 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
             </div>
           )}
         </div>
-
-        {/* Tabs */}
         <div className="flex rounded-lg border border-[color:var(--color-border)] overflow-hidden mb-3 shrink-0 text-sm font-medium">
           <button
             className={`flex-1 px-3 py-2 transition-colors ${tab === 'create' ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
@@ -516,7 +519,6 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
             Привязать существующую
           </button>
         </div>
-
         {tab === 'create' ? (
           <div className="space-y-3">
             <div>
@@ -581,9 +583,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
                             disabled={linking === p.id}
                             onClick={() => handleLinkExisting(p.id)}
                           >
-                            {linking === p.id
-                              ? <RefreshCw size={12} className="animate-spin" />
-                              : 'Привязать'}
+                            {linking === p.id ? <RefreshCw size={12} className="animate-spin" /> : 'Привязать'}
                           </button>
                         </td>
                       </tr>
@@ -598,6 +598,186 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Visualization components ──────────────────────────────────────
+
+function KpiCard({ label, value, sub, accent, icon: Icon }) {
+  return (
+    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#6366f1'}` }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
+          <div className="text-xl font-bold truncate" style={{ color: accent || '#6366f1' }}>{value}</div>
+          {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
+        </div>
+        {Icon && (
+          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#6366f118' }}>
+            <Icon size={20} style={{ color: accent || '#6366f1' }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CashDayHeatmap({ data }) {
+  const max = Math.max(...data.map((d) => d.sum), 1);
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <ArrowUpDown size={15} className="text-[color:var(--color-primary)]" />
+        Активность по дням недели
+      </div>
+      <div className="space-y-2.5">
+        {data.map((d) => {
+          const pct = max > 0 ? (d.sum / max) * 100 : 0;
+          const isWeekend = d.day === 'Вс' || d.day === 'Сб';
+          return (
+            <div key={d.day} className="flex items-center gap-3">
+              <div className="w-6 text-xs text-right text-[color:var(--color-muted-foreground)] shrink-0 font-medium">{d.day}</div>
+              <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
+                <div
+                  className="h-full rounded-lg transition-all duration-500"
+                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: 0.75 }}
+                />
+              </div>
+              <div className="text-xs font-medium w-20 text-right shrink-0">{fmtK(d.sum)}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-4 mt-4 text-xs text-[color:var(--color-muted-foreground)]">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#6366f1' }} />
+          Будни
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#f59e0b' }} />
+          Выходные
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function BranchLeaderboard({ data, total }) {
+  const medals = ['🥇', '🥈', '🥉'];
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Building2 size={15} className="text-[color:var(--color-primary)]" />
+        Рейтинг филиалов
+      </div>
+      <div className="space-y-4">
+        {data.slice(0, 6).map(([name, { sum, count }], i) => {
+          const pct = total > 0 ? (sum / total) * 100 : 0;
+          return (
+            <div key={name}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  {i < 3
+                    ? <span className="text-base shrink-0">{medals[i]}</span>
+                    : <span className="w-5 text-center text-xs font-bold text-[color:var(--color-muted-foreground)] shrink-0">{i + 1}</span>
+                  }
+                  <span className="text-sm font-medium truncate">{name}</span>
+                </div>
+                <div className="text-right shrink-0 ml-3">
+                  <div className="text-sm font-bold text-[color:var(--color-primary)]">{fmtK(sum)}</div>
+                  <div className="text-xs text-[color:var(--color-muted-foreground)]">{count} зап.</div>
+                </div>
+              </div>
+              <div className="h-1.5 rounded-full bg-[color:var(--color-bg-secondary)] overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }}
+                />
+              </div>
+            </div>
+          );
+        })}
+        {data.length === 0 && (
+          <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-4">Нет данных</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CatDonut({ data, total }) {
+  const [active, setActive] = useState(null);
+  if (!data.length) return null;
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+        Категории
+      </div>
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <div style={{ width: 160, height: 160, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="sum"
+                nameKey="name"
+                innerRadius="50%"
+                outerRadius="80%"
+                paddingAngle={2}
+                onMouseEnter={(_, i) => setActive(i)}
+                onMouseLeave={() => setActive(null)}
+              >
+                {data.map((entry, i) => (
+                  <Cell
+                    key={entry.name}
+                    fill={CHART_COLORS[i % CHART_COLORS.length]}
+                    opacity={active === null || active === i ? 1 : 0.4}
+                    stroke="none"
+                  />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => [fmtMoneyShort(v), 'Сумма']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-2 min-w-0">
+          {data.map((d, i) => {
+            const pct = total > 0 ? (d.sum / total) * 100 : 0;
+            return (
+              <div key={d.name} className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs truncate">{d.name}</span>
+                    <span className="text-xs font-semibold shrink-0">{pct.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-xl p-3 text-sm">
+      <div className="font-semibold mb-1 text-[color:var(--color-muted-foreground)]">{label}</div>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ background: p.color }} />
+          <span>{fmtMoneyShort(p.value)}</span>
+          <span className="text-[color:var(--color-muted-foreground)] text-xs">({p.payload.count} зап.)</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -618,15 +798,14 @@ export default function CashMovements() {
   const [selCatFilters, setSelCatFilters] = useState([]);
   const [invalidOnly, setInvalidOnly]    = useState(false);
   const [sort, setSort]           = useState({ field: 'DK_DATE', dir: 'desc' });
-  const [showBreakdown, setShowBreakdown] = useState(true);
-  const [showSalonBreakdown, setShowSalonBreakdown] = useState(true);
   const [showCatManager, setShowCatManager] = useState(false);
   const [showBranchesManager, setShowBranchesManager] = useState(false);
   const [assignRecord, setAssignRecord]   = useState(null);
   const [createPayoutMove, setCreatePayoutMove] = useState(null);
-  const [linkedPayoutRecord, setLinkedPayoutRecord] = useState(null); // {move, payout}
+  const [linkedPayoutRecord, setLinkedPayoutRecord] = useState(null);
   const [noPayoutOnly, setNoPayoutOnly]   = useState(false);
-  const [selected, setSelected]   = useState(new Set()); // ID_KASSES_MOVE
+  const [selected, setSelected]   = useState(new Set());
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     api.get('cash-moves/meta').then((r) => setCategories(r.data.categories || [])).catch(() => {});
@@ -662,7 +841,6 @@ export default function CashMovements() {
     setter((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   }
 
-  // row selection
   function toggleSelect(id) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -700,7 +878,6 @@ export default function CashMovements() {
         const res = await api.get('cash-moves/meta');
         setCategories(res.data.categories || []);
       }
-      // update local rows
       setRows((prev) => prev.map((r) =>
         String(r.ID_KASSES_MOVE) === String(record_id)
           ? { ...r, category, prefix_ok: true, manually_assigned: true }
@@ -710,8 +887,21 @@ export default function CashMovements() {
     setAssignRecord(null);
   }
 
-  const catNames = useMemo(() => (Array.isArray(categories) ? categories : []).map((c) => c.name), [categories]);
+  function exportCsv() {
+    const header = ['Дата','Филиал','Создатель','Категория','Основание','Сумма','Ручное назначение'];
+    const csvRows = filtered.map((r) => [
+      fmtDate(r.DK_DATE), r.dep_name, r.user_name,
+      r.category || '', r.BASIS || '', r.SUMM || 0, r.manually_assigned ? 'Да' : 'Нет',
+    ]);
+    const csv = [header, ...csvRows].map((row) => row.map((v) => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), { href: url, download: 'cash_moves.csv' }).click();
+    URL.revokeObjectURL(url);
+  }
 
+  // ── Memos ──────────────────────────────────────────────────────
+  const catNames = useMemo(() => (Array.isArray(categories) ? categories : []).map((c) => c.name), [categories]);
   const safeRows = useMemo(() => (Array.isArray(rows) ? rows : []), [rows]);
 
   const depOptions = useMemo(() => {
@@ -774,24 +964,51 @@ export default function CashMovements() {
     return Object.entries(Object.assign({}, map)).sort((a, b) => b[1].sum - a[1].sum);
   }, [filtered]);
 
-  const invalidCount    = useMemo(() => safeRows.filter((r) => !r.prefix_ok).length, [safeRows]);
-  const noPayoutCount   = useMemo(() => safeRows.filter((r) => !r.has_payout).length, [safeRows]);
+  const timeData = useMemo(() => {
+    const map = Object.create(null);
+    filtered.forEach((r) => {
+      const d = (r.DK_DATE || '').slice(0, 10);
+      if (!d) return;
+      if (!map[d]) map[d] = { date: d, sum: 0, count: 0 };
+      map[d].sum += Number(r.SUMM) || 0;
+      map[d].count++;
+    });
+    return Object.values(map)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((d) => ({ ...d, label: d.date.slice(5).replace('-', '.') }));
+  }, [filtered]);
+
+  const dayData = useMemo(() => {
+    const map = Array.from({ length: 7 }, (_, i) => ({ day: DAY_NAMES[i], sum: 0, count: 0 }));
+    filtered.forEach((r) => {
+      if (!r.DK_DATE) return;
+      const d = new Date(r.DK_DATE);
+      if (!isNaN(d)) { map[d.getDay()].sum += Number(r.SUMM) || 0; map[d.getDay()].count++; }
+    });
+    return map;
+  }, [filtered]);
+
+  const donutData = useMemo(() => {
+    const top  = breakdown.slice(0, 7);
+    const rest = breakdown.slice(7);
+    const data = top.map(([name, { sum }]) => ({ name, sum }));
+    const restSum = rest.reduce((s, [, { sum }]) => s + sum, 0);
+    if (restSum > 0) data.push({ name: 'Прочие', sum: restSum });
+    return data;
+  }, [breakdown]);
+
+  const invalidCount  = useMemo(() => safeRows.filter((r) => !r.prefix_ok).length, [safeRows]);
+  const noPayoutCount = useMemo(() => safeRows.filter((r) => !r.has_payout).length, [safeRows]);
   const totalSum      = useMemo(() => filtered.reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered]);
+  const withPayoutCnt = useMemo(() => filtered.filter((r) => r.has_payout).length, [filtered]);
   const selectedSum   = useMemo(() => filtered.filter((r) => selected.has(r.ID_KASSES_MOVE)).reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered, selected]);
   const selectedCount = selected.size;
 
-  function exportCsv() {
-    const header = ['Дата','Филиал','Создатель','Категория','Основание','Сумма','Ручное назначение'];
-    const csvRows = filtered.map((r) => [
-      fmtDate(r.DK_DATE), r.dep_name, r.user_name,
-      r.category || '', r.BASIS || '', r.SUMM || 0, r.manually_assigned ? 'Да' : 'Нет',
-    ]);
-    const csv = [header, ...csvRows].map((row) => row.map((v) => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    Object.assign(document.createElement('a'), { href: url, download: 'cash_moves.csv' }).click();
-    URL.revokeObjectURL(url);
-  }
+  const mainTabs = [
+    { key: 'overview',   label: 'Обзор',    icon: <BarChart3 size={14} /> },
+    { key: 'movements',  label: 'Движения', icon: <TrendingUp size={14} />, badge: filtered.length || undefined },
+    { key: 'analytics',  label: 'Аналитика', icon: <Wallet size={14} /> },
+  ];
 
   const thCls = 'px-3 py-3 text-xs font-semibold uppercase tracking-wide select-none cursor-pointer hover:text-[color:var(--color-primary)]';
 
@@ -816,465 +1033,565 @@ export default function CashMovements() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="app-card p-4 space-y-4">
-        {/* Date presets */}
-        <div className="flex flex-wrap gap-2">
-          {DATE_PRESETS.map((p) => (
-            <button key={p.label} onClick={() => applyPreset(p)}
-              className="px-3 py-1 rounded-full text-xs font-medium border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
-              {p.label}
-            </button>
-          ))}
-        </div>
+      {/* Tabs */}
+      <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
 
-        {/* Date range */}
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end">
-          <div className="w-full sm:w-auto">
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата с</label>
-            <input type="date" className="input w-full sm:w-auto" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          </div>
-          <div className="w-full sm:w-auto">
-            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата по</label>
-            <input type="date" className="input w-full sm:w-auto" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleApply} disabled={loading} className="btn btn--primary flex-1 sm:flex-initial">Применить</button>
-            {(dateFrom || dateTo) && (
-              <button onClick={() => { setDateFrom(''); setDateTo(''); loadData('',''); }}
-                className="btn btn--secondary"><X size={14} /></button>
-            )}
-          </div>
-        </div>
-
-        {/* Основание search */}
-        <div className="flex items-center gap-2">
-          <div className="relative" style={{ maxWidth: 360, flex: 1 }}>
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
-            <input className="input w-full" style={{ paddingLeft: '2.25rem' }} placeholder="Поиск по Основанию (несколько слов через пробел)…"
-              value={query} onChange={(e) => setQuery(e.target.value)} />
-            {query && <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} /></button>}
-          </div>
-          <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-hidden text-xs font-medium shrink-0">
-              <button onClick={() => setSearchOr(false)}
-                className={`px-2.5 py-1.5 transition-colors ${!searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
-                title="Все слова должны встречаться">
-                И
-              </button>
-              <button onClick={() => setSearchOr(true)}
-                className={`px-2.5 py-1.5 transition-colors ${searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
-                title="Хотя бы одно слово">
-                ИЛИ
-              </button>
+      {/* ── Обзор ─────────────────────────────────────────────── */}
+      {activeTab === 'overview' && (
+        <div className="space-y-5">
+          {loading ? (
+            <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+              <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
+              Загрузка…
             </div>
-        </div>
+          ) : (
+            <>
+              {/* Date presets row */}
+              <div className="flex flex-wrap gap-2 items-center">
+                {DATE_PRESETS.map((p) => (
+                  <button key={p.label} onClick={() => applyPreset(p)}
+                    className="px-3 py-1 rounded-full text-xs font-medium border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
+                    {p.label}
+                  </button>
+                ))}
+                <div className="flex items-center gap-2 ml-auto">
+                  <input type="date" className="input text-xs py-1 h-8" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                  <span className="text-[color:var(--color-muted-foreground)] text-xs">—</span>
+                  <input type="date" className="input text-xs py-1 h-8" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                  <button onClick={handleApply} disabled={loading} className="btn btn--primary h-8 px-3 text-xs">Применить</button>
+                </div>
+              </div>
 
-        {/* Category filter */}
-        {catNames.length > 0 && (
-          <div>
-            <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Категория</div>
-            <div className="flex flex-wrap gap-1.5">
-              {catNames.map((name) => (
-                <button key={name} onClick={() => toggleArr(setSelCatFilters, name)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                    selCatFilters.includes(name)
-                      ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
-                      : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
-                  }`}>{name}</button>
-              ))}
-              <button onClick={() => toggleArr(setSelCatFilters, '__invalid__')}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  selCatFilters.includes('__invalid__')
-                    ? 'bg-red-500 text-white border-red-500'
-                    : 'border-[color:var(--color-border)] text-red-600 hover:border-red-400'
-                }`}>Без категории</button>
-              {selCatFilters.length > 0 && (
-                <button onClick={() => setSelCatFilters([])}
-                  className="px-3 py-1 rounded-full text-xs border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:border-[color:var(--color-danger)]">
-                  <X size={11} className="inline" /> Сбросить
-                </button>
+              {/* KPI hero */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <KpiCard
+                  label="Общая сумма"
+                  value={fmtK(totalSum)}
+                  sub={`${filtered.length} записей`}
+                  accent="#6366f1"
+                  icon={Wallet}
+                />
+                <KpiCard
+                  label="С выплатой"
+                  value={withPayoutCnt}
+                  sub={filtered.length ? `${((withPayoutCnt/filtered.length)*100).toFixed(0)}% от всех` : '—'}
+                  accent="#10b981"
+                  icon={CheckCircle}
+                />
+                <KpiCard
+                  label="Без выплаты"
+                  value={filtered.filter((r) => !r.has_payout).length}
+                  sub="требуют привязки"
+                  accent="#f59e0b"
+                  icon={Unlink}
+                />
+                <KpiCard
+                  label="Без категории"
+                  value={filtered.filter((r) => !r.prefix_ok).length}
+                  sub={invalidCount > 0 ? `всего в базе: ${invalidCount}` : 'всё размечено'}
+                  accent="#ef4444"
+                  icon={AlertTriangle}
+                />
+              </div>
+
+              {/* Area chart + Donut */}
+              {timeData.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="app-card p-5 lg:col-span-2">
+                    <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                      <TrendingUp size={15} className="text-[color:var(--color-primary)]" />
+                      Динамика перемещений
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <AreaChart data={timeData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+                        <defs>
+                          <linearGradient id="cashGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.35} />
+                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} />
+                        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={55} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Area
+                          type="monotone"
+                          dataKey="sum"
+                          stroke="#6366f1"
+                          strokeWidth={2}
+                          fill="url(#cashGrad)"
+                          dot={false}
+                          activeDot={{ r: 4, strokeWidth: 0 }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <CatDonut data={donutData} total={totalSum} />
+                </div>
               )}
-            </div>
-          </div>
-        )}
 
-        {/* Branch + user filters */}
-        <div className="flex flex-wrap gap-6">
-          {depOptions.length > 0 && (
-            <div>
-              <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Филиал</div>
-              <div className="flex flex-wrap gap-1.5">
-                {depOptions.map(({ id, name }) => (
-                  <button key={id} onClick={() => toggleArr(setSelDeps, id)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                      selDeps.includes(id)
-                        ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
-                        : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
-                    }`}>{name}</button>
-                ))}
+              {/* Branch leaderboard + Day heatmap */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <BranchLeaderboard data={salonBreakdown} total={totalSum} />
+                <CashDayHeatmap data={dayData} />
               </div>
-            </div>
-          )}
-          {userOptions.length > 0 && (
-            <div>
-              <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Создатель</div>
-              <div className="flex flex-wrap gap-1.5">
-                {userOptions.map(({ id, name }) => (
-                  <button key={id} onClick={() => toggleArr(setSelUsers, id)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                      selUsers.includes(id)
-                        ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
-                        : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
-                    }`}>{name}</button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* Invalid only + no-payout only */}
-        <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 cursor-pointer w-fit">
-            <input type="checkbox" className="w-4 h-4 rounded" checked={invalidOnly}
-              onChange={(e) => setInvalidOnly(e.target.checked)} />
-            <span className="text-sm">Только записи без категории</span>
-            {invalidCount > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                <AlertTriangle size={11} /> {invalidCount}
-              </span>
-            )}
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer w-fit">
-            <input type="checkbox" className="w-4 h-4 rounded" checked={noPayoutOnly}
-              onChange={(e) => setNoPayoutOnly(e.target.checked)} />
-            <span className="text-sm">Только без привязанной выплаты</span>
-            {noPayoutCount > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                <Unlink size={11} /> {noPayoutCount}
-              </span>
-            )}
-          </label>
-        </div>
-      </div>
-
-      {/* Summary cards */}
-      {!loading && safeRows.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Записей',         value: filtered.length },
-            { label: 'Итого сумма',     value: fmtMoneyShort(totalSum), primary: true },
-            { label: 'С выплатой',      value: filtered.filter((r) => r.has_payout).length, green: true },
-            { label: 'Без выплаты',     value: filtered.filter((r) => !r.has_payout).length, amber: true },
-          ].map((s) => (
-            <div key={s.label} className="app-card p-4 text-center">
-              <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{s.label}</div>
-              <div className={`text-lg font-semibold ${s.primary ? 'text-[color:var(--color-primary)]' : s.green ? 'text-green-600' : s.amber ? 'text-amber-600' : s.red ? 'text-red-600' : ''}`}>{s.value}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Category breakdown */}
-      {!loading && breakdown.length > 0 && (
-        <div className="app-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-medium text-sm">Разбивка по категориям</span>
-            <button onClick={() => setShowBreakdown((v) => !v)}
-              className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]">
-              {showBreakdown ? 'Скрыть' : 'Показать'}
-            </button>
-          </div>
-          {showBreakdown && (
-            <ResponsiveTable
-              data={breakdown}
-              keyFn={([cat]) => cat}
-              emptyText="Нет данных"
-              columns={[
-                {
-                  label: 'Категория',
-                  primary: true,
-                  render: ([cat]) => {
-                    const invalid = cat === '— без категории';
-                    return (
-                      <span className={`font-mono text-xs px-2 py-0.5 rounded-full ${invalid ? 'bg-red-100 text-red-700' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'}`}>
-                        {cat}
-                      </span>
-                    );
-                  },
-                },
-                {
-                  label: 'Кол-во',
-                  render: ([, { count }]) => (
-                    <span className="text-[color:var(--color-muted-foreground)]">{count}</span>
-                  ),
-                },
-                {
-                  label: 'Сумма',
-                  render: ([, { sum }]) => <span className="font-medium">{fmtMoneyShort(sum)}</span>,
-                },
-                {
-                  label: 'Доля',
-                  render: ([cat, { sum }]) => {
-                    const share = totalSum > 0 ? (sum / totalSum) * 100 : 0;
-                    const invalid = cat === '— без категории';
-                    return (
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="w-16 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
-                          <div className={`h-full rounded-full ${invalid ? 'bg-red-400' : 'bg-[color:var(--color-primary)]'}`} style={{ width: `${share}%` }} />
-                        </div>
-                        <span className="text-xs text-[color:var(--color-muted-foreground)] w-9 text-right">{share.toFixed(1)}%</span>
-                      </div>
-                    );
-                  },
-                },
-              ]}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Salon breakdown */}
-      {!loading && salonBreakdown.length > 0 && (
-        <div className="app-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-medium text-sm">Разбивка по салонам</span>
-            <button onClick={() => setShowSalonBreakdown((v) => !v)}
-              className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]">
-              {showSalonBreakdown ? 'Скрыть' : 'Показать'}
-            </button>
-          </div>
-          {showSalonBreakdown && (
-            <ResponsiveTable
-              data={salonBreakdown}
-              keyFn={([dep]) => dep}
-              emptyText="Нет данных"
-              columns={[
-                {
-                  label: 'Салон',
-                  primary: true,
-                  render: ([dep]) => {
-                    const unknown = dep === '— без филиала';
-                    return (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${unknown ? 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'}`}>
-                        {dep}
-                      </span>
-                    );
-                  },
-                },
-                {
-                  label: 'Кол-во',
-                  render: ([, { count }]) => (
-                    <span className="text-[color:var(--color-muted-foreground)]">{count}</span>
-                  ),
-                },
-                {
-                  label: 'Сумма',
-                  render: ([, { sum }]) => <span className="font-medium">{fmtMoneyShort(sum)}</span>,
-                },
-                {
-                  label: 'Доля',
-                  render: ([, { sum }]) => {
-                    const share = totalSum > 0 ? (sum / totalSum) * 100 : 0;
-                    return (
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="w-16 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
-                          <div className="h-full rounded-full bg-[color:var(--color-primary)]" style={{ width: `${share}%` }} />
-                        </div>
-                        <span className="text-xs text-[color:var(--color-muted-foreground)] w-9 text-right">{share.toFixed(1)}%</span>
-                      </div>
-                    );
-                  },
-                },
-              ]}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Table */}
-      {loading ? (
-        <div className="app-card p-4"><SkeletonTable rows={10} cols={8} /></div>
-      ) : filtered.length === 0 ? (
-        <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
-          {safeRows.length === 0 ? 'Нет данных' : 'Нет записей по заданным фильтрам'}
-        </div>
-      ) : isMobile ? (
-        <div className="space-y-3">
-          {filtered.map((row) => (
-            <div key={row.ID_KASSES_MOVE} className={`border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden ${!row.prefix_ok ? 'border-l-4 border-l-red-400' : row.manually_assigned ? 'border-l-4 border-l-amber-400' : 'border-[color:var(--color-border)]'}`}>
-              {/* Card header */}
-              <div className="px-4 py-2.5 border-b bg-[color:var(--color-bg-secondary)] flex justify-between items-center gap-2">
-                <span className="text-sm font-medium text-[color:var(--color-muted-foreground)]">{fmtDate(row.DK_DATE)}</span>
-                <span className="text-base font-bold text-[color:var(--color-primary)]">{fmtMoney(row.SUMM)}</span>
-              </div>
-              {/* Card body */}
-              <div className="px-4 py-3 space-y-2 text-sm">
-                <div className="flex justify-between gap-2">
-                  <span className="text-[color:var(--color-muted-foreground)] shrink-0">Филиал</span>
-                  <span className="text-right font-medium">{row.dep_name || '—'}</span>
+              {/* Category bar chart */}
+              {breakdown.length > 0 && (
+                <div className="app-card p-5">
+                  <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                    <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+                    Суммы по категориям
+                  </div>
+                  <ResponsiveContainer width="100%" height={Math.max(150, breakdown.length * 36)}>
+                    <BarChart
+                      data={breakdown.map(([name, { sum, count }]) => ({ name, sum, count }))}
+                      layout="vertical"
+                      margin={{ top: 0, right: 12, bottom: 0, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
+                      <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={130} />
+                      <Tooltip formatter={(v, n, p) => [fmtMoneyShort(v), 'Сумма']} labelFormatter={(l) => l} />
+                      <Bar dataKey="sum" radius={[0, 4, 4, 0]}>
+                        {breakdown.map(([name], i) => (
+                          <Cell key={name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-[color:var(--color-muted-foreground)] shrink-0">Создатель</span>
-                  <span className="text-right">{row.user_name || '—'}</span>
-                </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-[color:var(--color-muted-foreground)] shrink-0">Категория</span>
-                  {row.category ? (
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                      row.manually_assigned ? 'bg-amber-100 text-amber-700' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
-                    }`}>{row.category}</span>
-                  ) : (
-                    <button onClick={() => setAssignRecord(row)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600 active:bg-red-200">
-                      <Tag size={10} /> Назначить
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Движения ──────────────────────────────────────────── */}
+      {activeTab === 'movements' && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="app-card p-4 space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {DATE_PRESETS.map((p) => (
+                <button key={p.label} onClick={() => applyPreset(p)}
+                  className="px-3 py-1 rounded-full text-xs font-medium border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end">
+              <div className="w-full sm:w-auto">
+                <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата с</label>
+                <input type="date" className="input w-full sm:w-auto" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              </div>
+              <div className="w-full sm:w-auto">
+                <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата по</label>
+                <input type="date" className="input w-full sm:w-auto" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleApply} disabled={loading} className="btn btn--primary flex-1 sm:flex-initial">Применить</button>
+                {(dateFrom || dateTo) && (
+                  <button onClick={() => { setDateFrom(''); setDateTo(''); loadData('',''); }}
+                    className="btn btn--secondary"><X size={14} /></button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative" style={{ maxWidth: 360, flex: 1 }}>
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
+                <input className="input w-full" style={{ paddingLeft: '2.25rem' }} placeholder="Поиск по Основанию…"
+                  value={query} onChange={(e) => setQuery(e.target.value)} />
+                {query && <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} /></button>}
+              </div>
+              <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-hidden text-xs font-medium shrink-0">
+                <button onClick={() => setSearchOr(false)}
+                  className={`px-2.5 py-1.5 transition-colors ${!searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
+                  title="Все слова должны встречаться">И</button>
+                <button onClick={() => setSearchOr(true)}
+                  className={`px-2.5 py-1.5 transition-colors ${searchOr ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-bg-secondary)]'}`}
+                  title="Хотя бы одно слово">ИЛИ</button>
+              </div>
+            </div>
+            {catNames.length > 0 && (
+              <div>
+                <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Категория</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {catNames.map((name) => (
+                    <button key={name} onClick={() => toggleArr(setSelCatFilters, name)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        selCatFilters.includes(name)
+                          ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                          : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                      }`}>{name}</button>
+                  ))}
+                  <button onClick={() => toggleArr(setSelCatFilters, '__invalid__')}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      selCatFilters.includes('__invalid__')
+                        ? 'bg-red-500 text-white border-red-500'
+                        : 'border-[color:var(--color-border)] text-red-600 hover:border-red-400'
+                    }`}>Без категории</button>
+                  {selCatFilters.length > 0 && (
+                    <button onClick={() => setSelCatFilters([])}
+                      className="px-3 py-1 rounded-full text-xs border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:border-[color:var(--color-danger)]">
+                      <X size={11} className="inline" /> Сбросить
                     </button>
                   )}
                 </div>
-                {row.BASIS && (
-                  <div className="pt-1 border-t border-[color:var(--color-border)]">
-                    <span className="text-xs text-[color:var(--color-muted-foreground)] block mb-0.5">Основание</span>
-                    <span className="font-mono text-xs break-all leading-relaxed">{row.BASIS}</span>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-6">
+              {depOptions.length > 0 && (
+                <div>
+                  <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Филиал</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {depOptions.map(({ id, name }) => (
+                      <button key={id} onClick={() => toggleArr(setSelDeps, id)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          selDeps.includes(id)
+                            ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                            : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                        }`}>{name}</button>
+                    ))}
                   </div>
-                )}
-              </div>
-              {/* Card footer */}
-              <div className="px-4 py-2 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] flex items-center justify-between gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 rounded cursor-pointer"
-                    checked={selected.has(row.ID_KASSES_MOVE)} onChange={() => toggleSelect(row.ID_KASSES_MOVE)} />
-                </label>
-                <div className="flex items-center gap-1">
-                  {row.prefix_ok
-                    ? <CheckCircle size={16} className={row.manually_assigned ? 'text-amber-500' : 'text-green-500'}
-                        title={row.manually_assigned ? 'Назначено вручную' : 'Категория по правилу'} />
-                    : <button onClick={() => setAssignRecord(row)}
-                        className="p-1.5 rounded-lg active:bg-red-100">
-                        <AlertTriangle size={16} className="text-red-500" />
-                      </button>
-                  }
-                  {row.has_payout
-                    ? <button
-                        onClick={() => row.linked_payout && setLinkedPayoutRecord({ move: row, payout: row.linked_payout })}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700 active:bg-green-200">
-                        <LinkIcon size={12} /> Выплата
-                      </button>
-                    : <button onClick={() => setCreatePayoutMove(row)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-100 text-amber-700 active:bg-amber-200">
-                        <Unlink size={12} /> Привязать
-                      </button>
-                  }
                 </div>
-              </div>
+              )}
+              {userOptions.length > 0 && (
+                <div>
+                  <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Создатель</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {userOptions.map(({ id, name }) => (
+                      <button key={id} onClick={() => toggleArr(setSelUsers, id)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          selUsers.includes(id)
+                            ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                            : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                        }`}>{name}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
-          <div className="px-4 py-2.5 rounded-xl bg-[color:var(--color-table-header)] border border-[color:var(--color-border)] text-sm font-semibold flex justify-between">
-            <span>Итого: {filtered.length} записей</span>
-            <span className="text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</span>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 cursor-pointer w-fit">
+                <input type="checkbox" className="w-4 h-4 rounded" checked={invalidOnly}
+                  onChange={(e) => setInvalidOnly(e.target.checked)} />
+                <span className="text-sm">Только без категории</span>
+                {invalidCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                    <AlertTriangle size={11} /> {invalidCount}
+                  </span>
+                )}
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer w-fit">
+                <input type="checkbox" className="w-4 h-4 rounded" checked={noPayoutOnly}
+                  onChange={(e) => setNoPayoutOnly(e.target.checked)} />
+                <span className="text-sm">Только без выплаты</span>
+                {noPayoutCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                    <Unlink size={11} /> {noPayoutCount}
+                  </span>
+                )}
+              </label>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
-          <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
-            <thead>
-              <tr className="bg-[color:var(--color-table-header)]">
-                <th className="px-3 py-3 w-8">
-                  <input type="checkbox" className="w-4 h-4 rounded cursor-pointer"
-                    checked={allChecked} onChange={() => toggleSelectAll(filteredIds)} />
-                </th>
-                <th className="px-3 py-3 w-8" title="Статус категории"></th>
-                <th className="px-3 py-3 w-8" title="Привязанная выплата"></th>
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('DK_DATE')}>
-                  <span className="inline-flex items-center gap-1">Дата <SortIcon field="DK_DATE" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('dep_name')}>
-                  <span className="inline-flex items-center gap-1">Филиал <SortIcon field="dep_name" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('user_name')}>
-                  <span className="inline-flex items-center gap-1">Создатель <SortIcon field="user_name" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('category')}>
-                  <span className="inline-flex items-center gap-1">Категория <SortIcon field="category" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-left`} onClick={() => toggleSort('BASIS')}>
-                  <span className="inline-flex items-center gap-1">Основание <SortIcon field="BASIS" sort={sort} /></span>
-                </th>
-                <th className={`${thCls} text-right`} onClick={() => toggleSort('SUMM')}>
-                  <span className="inline-flex items-center gap-1 justify-end">Сумма <SortIcon field="SUMM" sort={sort} /></span>
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">ID</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[color:var(--color-border)]">
-              {filtered.map((row, i) => {
-                const isSelected = selected.has(row.ID_KASSES_MOVE);
-                return (
-                  <tr key={row.ID_KASSES_MOVE ?? i}
-                    className={`transition-colors hover:bg-[color:var(--color-table-row-hover)] ${
-                      isSelected ? 'bg-[color:var(--color-primary)]/5' :
-                      i % 2 !== 0 ? 'bg-[color:var(--color-table-row-alt)]' : ''
-                    } ${!row.prefix_ok ? 'border-l-2 border-l-red-400' : row.manually_assigned ? 'border-l-2 border-l-amber-400' : ''}`}>
-                    <td className="px-3 py-2.5">
-                      <input type="checkbox" className="w-4 h-4 rounded cursor-pointer"
-                        checked={isSelected} onChange={() => toggleSelect(row.ID_KASSES_MOVE)} />
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {row.prefix_ok
-                        ? <CheckCircle size={14} className={`mx-auto ${row.manually_assigned ? 'text-amber-500' : 'text-green-500'}`}
-                            title={row.manually_assigned ? 'Назначено вручную' : 'Категория по правилу'} />
-                        : <button onClick={() => setAssignRecord(row)} title="Назначить категорию"
-                            className="p-0.5 rounded hover:bg-red-100 transition-colors">
-                            <AlertTriangle size={14} className="text-red-500 mx-auto" />
-                          </button>
-                      }
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {row.has_payout
-                        ? <button
-                            onClick={() => row.linked_payout && setLinkedPayoutRecord({ move: row, payout: row.linked_payout })}
-                            title="Выплата привязана — нажмите для просмотра"
-                            className="p-0.5 rounded hover:bg-green-100 transition-colors"
-                          >
-                            <LinkIcon size={14} className="mx-auto text-green-500" />
-                          </button>
-                        : <button onClick={() => setCreatePayoutMove(row)}
-                            title="Привязать выплату к этому движению"
-                            className="p-0.5 rounded hover:bg-amber-100 transition-colors">
-                            <Unlink size={14} className="text-amber-500 mx-auto" />
-                          </button>
-                      }
-                    </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">{fmtDate(row.DK_DATE)}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">{row.dep_name}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">{row.user_name}</td>
-                    <td className="px-3 py-2.5">
+
+          {/* Table */}
+          {loading ? (
+            <div className="app-card p-4"><SkeletonTable rows={10} cols={8} /></div>
+          ) : filtered.length === 0 ? (
+            <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
+              {safeRows.length === 0 ? 'Нет данных' : 'Нет записей по заданным фильтрам'}
+            </div>
+          ) : isMobile ? (
+            <div className="space-y-3">
+              {filtered.map((row) => (
+                <div key={row.ID_KASSES_MOVE} className={`border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden ${!row.prefix_ok ? 'border-l-4 border-l-red-400' : row.manually_assigned ? 'border-l-4 border-l-amber-400' : 'border-[color:var(--color-border)]'}`}>
+                  <div className="px-4 py-2.5 border-b bg-[color:var(--color-bg-secondary)] flex justify-between items-center gap-2">
+                    <span className="text-sm font-medium text-[color:var(--color-muted-foreground)]">{fmtDate(row.DK_DATE)}</span>
+                    <span className="text-base font-bold text-[color:var(--color-primary)]">{fmtMoney(row.SUMM)}</span>
+                  </div>
+                  <div className="px-4 py-3 space-y-2 text-sm">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-[color:var(--color-muted-foreground)] shrink-0">Филиал</span>
+                      <span className="text-right font-medium">{row.dep_name || '—'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-[color:var(--color-muted-foreground)] shrink-0">Создатель</span>
+                      <span className="text-right">{row.user_name || '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-[color:var(--color-muted-foreground)] shrink-0">Категория</span>
                       {row.category ? (
                         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                          row.manually_assigned
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                          row.manually_assigned ? 'bg-amber-100 text-amber-700' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
                         }`}>{row.category}</span>
                       ) : (
                         <button onClick={() => setAssignRecord(row)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200 transition-colors">
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600 active:bg-red-200">
                           <Tag size={10} /> Назначить
                         </button>
                       )}
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-xs max-w-xs truncate" title={row.BASIS}>{row.BASIS || '—'}</td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap font-medium">{fmtMoney(row.SUMM)}</td>
-                    <td className="px-3 py-2.5 text-xs text-[color:var(--color-muted-foreground)] font-mono">{row.ID_KASSES_MOVE}</td>
+                    </div>
+                    {row.BASIS && (
+                      <div className="pt-1 border-t border-[color:var(--color-border)]">
+                        <span className="text-xs text-[color:var(--color-muted-foreground)] block mb-0.5">Основание</span>
+                        <span className="font-mono text-xs break-all leading-relaxed">{row.BASIS}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-4 py-2 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" className="w-4 h-4 rounded cursor-pointer"
+                        checked={selected.has(row.ID_KASSES_MOVE)} onChange={() => toggleSelect(row.ID_KASSES_MOVE)} />
+                    </label>
+                    <div className="flex items-center gap-1">
+                      {row.prefix_ok
+                        ? <CheckCircle size={16} className={row.manually_assigned ? 'text-amber-500' : 'text-green-500'}
+                            title={row.manually_assigned ? 'Назначено вручную' : 'Категория по правилу'} />
+                        : <button onClick={() => setAssignRecord(row)} className="p-1.5 rounded-lg active:bg-red-100">
+                            <AlertTriangle size={16} className="text-red-500" />
+                          </button>
+                      }
+                      {row.has_payout
+                        ? <button
+                            onClick={() => row.linked_payout && setLinkedPayoutRecord({ move: row, payout: row.linked_payout })}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700 active:bg-green-200">
+                            <LinkIcon size={12} /> Выплата
+                          </button>
+                        : <button onClick={() => setCreatePayoutMove(row)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-100 text-amber-700 active:bg-amber-200">
+                            <Unlink size={12} /> Привязать
+                          </button>
+                      }
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div className="px-4 py-2.5 rounded-xl bg-[color:var(--color-table-header)] border border-[color:var(--color-border)] text-sm font-semibold flex justify-between">
+                <span>Итого: {filtered.length} записей</span>
+                <span className="text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
+              <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
+                <thead>
+                  <tr className="bg-[color:var(--color-table-header)]">
+                    <th className="px-3 py-3 w-8">
+                      <input type="checkbox" className="w-4 h-4 rounded cursor-pointer"
+                        checked={allChecked} onChange={() => toggleSelectAll(filteredIds)} />
+                    </th>
+                    <th className="px-3 py-3 w-8" title="Статус категории"></th>
+                    <th className="px-3 py-3 w-8" title="Привязанная выплата"></th>
+                    <th className={`${thCls} text-left`} onClick={() => toggleSort('DK_DATE')}>
+                      <span className="inline-flex items-center gap-1">Дата <SortIcon field="DK_DATE" sort={sort} /></span>
+                    </th>
+                    <th className={`${thCls} text-left`} onClick={() => toggleSort('dep_name')}>
+                      <span className="inline-flex items-center gap-1">Филиал <SortIcon field="dep_name" sort={sort} /></span>
+                    </th>
+                    <th className={`${thCls} text-left`} onClick={() => toggleSort('user_name')}>
+                      <span className="inline-flex items-center gap-1">Создатель <SortIcon field="user_name" sort={sort} /></span>
+                    </th>
+                    <th className={`${thCls} text-left`} onClick={() => toggleSort('category')}>
+                      <span className="inline-flex items-center gap-1">Категория <SortIcon field="category" sort={sort} /></span>
+                    </th>
+                    <th className={`${thCls} text-left`} onClick={() => toggleSort('BASIS')}>
+                      <span className="inline-flex items-center gap-1">Основание <SortIcon field="BASIS" sort={sort} /></span>
+                    </th>
+                    <th className={`${thCls} text-right`} onClick={() => toggleSort('SUMM')}>
+                      <span className="inline-flex items-center gap-1 justify-end">Сумма <SortIcon field="SUMM" sort={sort} /></span>
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">ID</th>
                   </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-[color:var(--color-table-header)] font-semibold">
-                <td className="px-3 py-2.5" colSpan={8}>Итого: {filtered.length} записей</td>
-                <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</td>
-                <td className="px-3 py-2.5"></td>
-              </tr>
-            </tfoot>
-          </table>
+                </thead>
+                <tbody className="divide-y divide-[color:var(--color-border)]">
+                  {filtered.map((row, i) => {
+                    const isSelected = selected.has(row.ID_KASSES_MOVE);
+                    return (
+                      <tr key={row.ID_KASSES_MOVE ?? i}
+                        className={`transition-colors hover:bg-[color:var(--color-table-row-hover)] ${
+                          isSelected ? 'bg-[color:var(--color-primary)]/5' :
+                          i % 2 !== 0 ? 'bg-[color:var(--color-table-row-alt)]' : ''
+                        } ${!row.prefix_ok ? 'border-l-2 border-l-red-400' : row.manually_assigned ? 'border-l-2 border-l-amber-400' : ''}`}>
+                        <td className="px-3 py-2.5">
+                          <input type="checkbox" className="w-4 h-4 rounded cursor-pointer"
+                            checked={isSelected} onChange={() => toggleSelect(row.ID_KASSES_MOVE)} />
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {row.prefix_ok
+                            ? <CheckCircle size={14} className={`mx-auto ${row.manually_assigned ? 'text-amber-500' : 'text-green-500'}`}
+                                title={row.manually_assigned ? 'Назначено вручную' : 'Категория по правилу'} />
+                            : <button onClick={() => setAssignRecord(row)} title="Назначить категорию"
+                                className="p-0.5 rounded hover:bg-red-100 transition-colors">
+                                <AlertTriangle size={14} className="text-red-500 mx-auto" />
+                              </button>
+                          }
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {row.has_payout
+                            ? <button
+                                onClick={() => row.linked_payout && setLinkedPayoutRecord({ move: row, payout: row.linked_payout })}
+                                title="Выплата привязана"
+                                className="p-0.5 rounded hover:bg-green-100 transition-colors">
+                                <LinkIcon size={14} className="mx-auto text-green-500" />
+                              </button>
+                            : <button onClick={() => setCreatePayoutMove(row)}
+                                title="Привязать выплату"
+                                className="p-0.5 rounded hover:bg-amber-100 transition-colors">
+                                <Unlink size={14} className="text-amber-500 mx-auto" />
+                              </button>
+                          }
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">{fmtDate(row.DK_DATE)}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">{row.dep_name}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">{row.user_name}</td>
+                        <td className="px-3 py-2.5">
+                          {row.category ? (
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                              row.manually_assigned
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                            }`}>{row.category}</span>
+                          ) : (
+                            <button onClick={() => setAssignRecord(row)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200 transition-colors">
+                              <Tag size={10} /> Назначить
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-xs max-w-xs truncate" title={row.BASIS}>{row.BASIS || '—'}</td>
+                        <td className="px-3 py-2.5 text-right whitespace-nowrap font-medium">{fmtMoney(row.SUMM)}</td>
+                        <td className="px-3 py-2.5 text-xs text-[color:var(--color-muted-foreground)] font-mono">{row.ID_KASSES_MOVE}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-[color:var(--color-table-header)] font-semibold">
+                    <td className="px-3 py-2.5" colSpan={8}>Итого: {filtered.length} записей</td>
+                    <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</td>
+                    <td className="px-3 py-2.5"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Аналитика ─────────────────────────────────────────── */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-4">
+          {/* Category breakdown */}
+          {!loading && breakdown.length > 0 && (
+            <div className="app-card p-5">
+              <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+                Разбивка по категориям
+              </div>
+              <ResponsiveTable
+                data={breakdown}
+                keyFn={([cat]) => cat}
+                emptyText="Нет данных"
+                columns={[
+                  {
+                    label: 'Категория',
+                    primary: true,
+                    render: ([cat]) => {
+                      const invalid = cat === '— без категории';
+                      return (
+                        <span className={`font-mono text-xs px-2 py-0.5 rounded-full ${invalid ? 'bg-red-100 text-red-700' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'}`}>
+                          {cat}
+                        </span>
+                      );
+                    },
+                  },
+                  {
+                    label: 'Кол-во',
+                    render: ([, { count }]) => <span className="text-[color:var(--color-muted-foreground)]">{count}</span>,
+                  },
+                  {
+                    label: 'Сумма',
+                    render: ([, { sum }]) => <span className="font-medium">{fmtMoneyShort(sum)}</span>,
+                  },
+                  {
+                    label: 'Доля',
+                    render: ([cat, { sum }]) => {
+                      const share = totalSum > 0 ? (sum / totalSum) * 100 : 0;
+                      const invalid = cat === '— без категории';
+                      return (
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
+                            <div className={`h-full rounded-full ${invalid ? 'bg-red-400' : 'bg-[color:var(--color-primary)]'}`} style={{ width: `${share}%` }} />
+                          </div>
+                          <span className="text-xs text-[color:var(--color-muted-foreground)] w-9 text-right">{share.toFixed(1)}%</span>
+                        </div>
+                      );
+                    },
+                  },
+                ]}
+              />
+            </div>
+          )}
+
+          {/* Salon breakdown */}
+          {!loading && salonBreakdown.length > 0 && (
+            <div className="app-card p-5">
+              <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <Building2 size={15} className="text-[color:var(--color-primary)]" />
+                Разбивка по филиалам
+              </div>
+              <ResponsiveTable
+                data={salonBreakdown}
+                keyFn={([dep]) => dep}
+                emptyText="Нет данных"
+                columns={[
+                  {
+                    label: 'Филиал',
+                    primary: true,
+                    render: ([dep]) => {
+                      const unknown = dep === '— без филиала';
+                      return (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${unknown ? 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'}`}>
+                          {dep}
+                        </span>
+                      );
+                    },
+                  },
+                  {
+                    label: 'Кол-во',
+                    render: ([, { count }]) => <span className="text-[color:var(--color-muted-foreground)]">{count}</span>,
+                  },
+                  {
+                    label: 'Сумма',
+                    render: ([, { sum }]) => <span className="font-medium">{fmtMoneyShort(sum)}</span>,
+                  },
+                  {
+                    label: 'Доля',
+                    render: ([, { sum }]) => {
+                      const share = totalSum > 0 ? (sum / totalSum) * 100 : 0;
+                      return (
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
+                            <div className="h-full rounded-full bg-[color:var(--color-primary)]" style={{ width: `${share}%` }} />
+                          </div>
+                          <span className="text-xs text-[color:var(--color-muted-foreground)] w-9 text-right">{share.toFixed(1)}%</span>
+                        </div>
+                      );
+                    },
+                  },
+                ]}
+              />
+            </div>
+          )}
+
+          {loading && (
+            <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+              <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
+              Загрузка…
+            </div>
+          )}
         </div>
       )}
 
@@ -1288,7 +1605,7 @@ export default function CashMovements() {
         </div>
       )}
 
-      {/* Branches Manager */}
+      {/* Modals */}
       {showBranchesManager && (
         <MappingManager
           title="Филиалы (ID → название)"
@@ -1298,8 +1615,6 @@ export default function CashMovements() {
           onChanged={() => loadData(dateFrom, dateTo)}
         />
       )}
-
-      {/* Category Manager */}
       {showCatManager && (
         <CategoryManager
           categories={categories}
@@ -1307,8 +1622,6 @@ export default function CashMovements() {
           onChanged={(updated) => setCategories(updated)}
         />
       )}
-
-      {/* Assign Modal */}
       {assignRecord && (
         <AssignModal
           record={assignRecord}
@@ -1317,8 +1630,6 @@ export default function CashMovements() {
           onClose={() => setAssignRecord(null)}
         />
       )}
-
-      {/* Create / Link Payout Modal */}
       {createPayoutMove && (
         <CreatePayoutModal
           move={createPayoutMove}
@@ -1326,8 +1637,6 @@ export default function CashMovements() {
           onCreated={handlePayoutCreated}
         />
       )}
-
-      {/* Linked Payout Details Modal */}
       {linkedPayoutRecord && (
         <LinkedPayoutModal
           payout={linkedPayoutRecord.payout}

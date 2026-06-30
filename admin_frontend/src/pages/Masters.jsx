@@ -2,12 +2,19 @@ import { useState, useMemo } from 'react';
 import {
   Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle,
   Hammer, ListChecks, CheckCircle2, Clock, Users, Receipt, ClipboardList,
+  BarChart3, Trophy, Layers,
 } from 'lucide-react';
+import {
+  BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { fmtMoney, Term, StatCard, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
+
+const CHART_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899'];
+const DAY_NAMES    = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 
 const fmt    = (v) => (v == null ? '—' : v);
 const fmtRub = (v) => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽');
@@ -247,6 +254,172 @@ function MastersSummaryTable({ rows, onMasterClick }) {
   );
 }
 
+// ── Visualization components ──────────────────────────────────────
+
+function fmtRubShort(v) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' млн ₽';
+  if (Math.abs(n) >= 1_000) return Math.round(n / 1_000) + 'k ₽';
+  return Math.round(n) + ' ₽';
+}
+
+function TopMastersChart({ data }) {
+  if (!data.length) return null;
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Trophy size={15} className="text-[color:var(--color-primary)]" />
+        Топ мастеров по зарплате
+      </div>
+      <ResponsiveContainer width="100%" height={Math.max(150, data.length * 38)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
+          <XAxis type="number" tickFormatter={fmtRubShort} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+          <YAxis type="category" dataKey="master" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={120} />
+          <Tooltip formatter={(v) => [fmtRubShort(v), 'Зарплата']} />
+          <Bar dataKey="total_salary" radius={[0, 4, 4, 0]}>
+            {data.map((d, i) => <Cell key={d.master} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function StatusDonut({ data, total }) {
+  const [active, setActive] = useState(null);
+  if (!data.length) return null;
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+        Статусы услуг
+      </div>
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <div style={{ width: 150, height: 150, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data} dataKey="value" nameKey="name"
+                innerRadius="50%" outerRadius="80%" paddingAngle={2}
+                onMouseEnter={(_, i) => setActive(i)} onMouseLeave={() => setActive(null)}
+              >
+                {data.map((entry, i) => (
+                  <Cell key={entry.name} fill={entry.color} opacity={active === null || active === i ? 1 : 0.4} stroke="none" />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => [v, 'Услуг']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-2 min-w-0 w-full">
+          {data.map((d) => {
+            const pct = total > 0 ? (d.value / total) * 100 : 0;
+            return (
+              <div key={d.name} className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs truncate">{d.name}</span>
+                    <span className="text-xs font-semibold shrink-0">{d.value} ({pct.toFixed(0)}%)</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CategoryDonut({ data, total }) {
+  const [active, setActive] = useState(null);
+  if (!data.length) return null;
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Layers size={15} className="text-[color:var(--color-primary)]" />
+        Категории услуг
+      </div>
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <div style={{ width: 150, height: 150, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data} dataKey="value" nameKey="name"
+                innerRadius="50%" outerRadius="80%" paddingAngle={2}
+                onMouseEnter={(_, i) => setActive(i)} onMouseLeave={() => setActive(null)}
+              >
+                {data.map((entry, i) => (
+                  <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={active === null || active === i ? 1 : 0.4} stroke="none" />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => [fmtRubShort(v), 'Сумма']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-2 min-w-0 w-full">
+          {data.map((d, i) => {
+            const pct = total > 0 ? (d.value / total) * 100 : 0;
+            return (
+              <div key={d.name} className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs truncate">{d.name}</span>
+                    <span className="text-xs font-semibold shrink-0">{pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ServiceDayHeatmap({ data }) {
+  const max = Math.max(...data.map((d) => d.count), 1);
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Clock size={15} className="text-[color:var(--color-primary)]" />
+        Активность по дням недели
+      </div>
+      <div className="space-y-2.5">
+        {data.map((d) => {
+          const pct = max > 0 ? (d.count / max) * 100 : 0;
+          const isWeekend = d.day === 'Вс' || d.day === 'Сб';
+          return (
+            <div key={d.day} className="flex items-center gap-3">
+              <div className="w-6 text-xs text-right text-[color:var(--color-muted-foreground)] shrink-0 font-medium">{d.day}</div>
+              <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
+                <div
+                  className="h-full rounded-lg transition-all duration-500"
+                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: 0.75 }}
+                />
+              </div>
+              <div className="text-xs font-medium w-16 text-right shrink-0">{d.count} усл.</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-4 mt-4 text-xs text-[color:var(--color-muted-foreground)]">
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#6366f1' }} />Будни</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#f59e0b' }} />Выходные</span>
+      </div>
+    </div>
+  );
+}
+
 function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -402,6 +575,53 @@ export default function Masters() {
     };
   }, [filtered]);
 
+  const topMastersChart = useMemo(() => {
+    const map = {};
+    filtered.forEach((r) => {
+      if (r.master_salary == null) return;
+      const name = r.out_description || r.description || '—';
+      if (!map[name]) map[name] = { master: name, total_salary: 0 };
+      map[name].total_salary += Number(r.master_salary) || 0;
+    });
+    return Object.values(map).sort((a, b) => b.total_salary - a.total_salary).slice(0, 8);
+  }, [filtered]);
+
+  const statusDonutData = useMemo(() => {
+    const colors = { 'Выполнено': '#10b981', 'В работе': '#f59e0b', 'Прочее': '#94a3b8' };
+    const counts = {};
+    filtered.forEach((r) => {
+      const s = r.status || 'Прочее';
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value, color: colors[name] || '#94a3b8' }));
+  }, [filtered]);
+
+  const categoryDonutData = useMemo(() => {
+    const map = {};
+    filtered.forEach((r) => {
+      if (r.master_salary == null) return;
+      const cat = r.top_parent_name || 'Прочее';
+      map[cat] = (map[cat] || 0) + (Number(r.kredit) || 0);
+    });
+    const entries = Object.entries(map).sort((a, b) => b[1] - a[1]);
+    const top = entries.slice(0, 7);
+    const rest = entries.slice(7).reduce((s, [, v]) => s + v, 0);
+    const data = top.map(([name, value]) => ({ name, value }));
+    if (rest > 0) data.push({ name: 'Прочие', value: rest });
+    return data;
+  }, [filtered]);
+
+  const dayHeatmapData = useMemo(() => {
+    const map = Array.from({ length: 7 }, (_, i) => ({ day: DAY_NAMES[i], count: 0 }));
+    filtered.forEach((r) => {
+      const t = r.out_time || r.in_time;
+      if (!t) return;
+      const d = new Date(t);
+      if (!isNaN(d)) map[d.getDay()].count++;
+    });
+    return map;
+  }, [filtered]);
+
   function downloadCsv() {
     if (!filtered.length) return;
     const cols = ['status', 'description', 'doc_num', 'code', 'name', 'service_group', 'in_time', 'out_time', 'duration_min', 'master_salary', 'warnings'];
@@ -524,6 +744,20 @@ export default function Masters() {
                   <StatCard icon={<Clock size={18} />} label="В работе" value={kpi.ordersInWork} />
                 </div>
               </div>
+
+              {(topMastersChart.length > 0 || statusDonutData.length > 0) && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="lg:col-span-2"><TopMastersChart data={topMastersChart} /></div>
+                  <StatusDonut data={statusDonutData} total={kpi.total} />
+                </div>
+              )}
+
+              {(categoryDonutData.length > 0 || dayHeatmapData.some((d) => d.count > 0)) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <CategoryDonut data={categoryDonutData} total={kpi.totalKredit} />
+                  <ServiceDayHeatmap data={dayHeatmapData} />
+                </div>
+              )}
 
               <MastersSummaryTable rows={filtered} onMasterClick={(name) => { setMasterSearch(name); setTab('services'); }} />
             </div>
