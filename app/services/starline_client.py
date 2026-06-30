@@ -37,6 +37,10 @@ def _md5(s: str) -> str:
     return hashlib.md5(s.encode("utf-8")).hexdigest()
 
 
+def _sha1(s: str) -> str:
+    return hashlib.sha1(s.encode("utf-8")).hexdigest()
+
+
 def is_configured() -> bool:
     return bool(settings.starline_app_id and settings.starline_app_secret
                 and settings.starline_login and settings.starline_password)
@@ -47,8 +51,9 @@ async def _get_app_token(client: httpx.AsyncClient) -> str:
     if _session["app_token"] and time.time() - _session["app_token_ts"] < 3 * 3600:
         return _session["app_token"]
     app_id, secret = settings.starline_app_id, settings.starline_app_secret
+    # getCode: secret = md5(app_secret) (НЕ md5(appId+secret))
     r1 = await client.get(f"{ID_BASE}/application/getCode/",
-                          params={"appId": app_id, "secret": _md5(app_id + secret)})
+                          params={"appId": app_id, "secret": _md5(secret)})
     r1.raise_for_status()
     j1 = r1.json()
     code = (j1.get("desc") or {}).get("code")
@@ -70,8 +75,9 @@ async def _auth(client: httpx.AsyncClient) -> tuple[str, Any]:
     if _session["slnet"] and _session["user_id"] is not None:
         return _session["slnet"], _session["user_id"]
     app_token = await _get_app_token(client)
+    # user login: пароль хешируется sha1
     r3 = await client.post(f"{ID_BASE}/user/login/", params={"token": app_token},
-                           data={"login": settings.starline_login, "pass": _md5(settings.starline_password)})
+                           data={"login": settings.starline_login, "pass": _sha1(settings.starline_password)})
     r3.raise_for_status()
     j3 = r3.json()
     slid = (j3.get("desc") or {}).get("user_token")
