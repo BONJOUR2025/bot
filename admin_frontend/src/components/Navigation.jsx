@@ -6,7 +6,7 @@ import {
   Umbrella, Cake, Package, Calculator, MapPin, Banknote,
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
-  Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig,
+  Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig, Truck,
   Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon,
 } from 'lucide-react';
 
@@ -55,6 +55,7 @@ const navStructure = [
       { to: '/admin/payroll',          label: 'Администраторы',        permission: 'payroll',         icon: Calculator },
       { to: '/admin/masters',          label: 'Мастера',              permission: 'payroll',         icon: Hammer },
       { to: '/admin/manager-salary',   label: 'Менеджеры',            permission: 'manager-salary',  icon: Users },
+      { to: '/admin/courier-salary',   label: 'Курьер',               permission: 'payroll',         icon: Truck },
     ],
   },
   {

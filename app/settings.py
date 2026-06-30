@@ -137,6 +137,17 @@ class Settings(BaseSettings):
     hh_client_id: str = Field("", validation_alias="HH_CLIENT_ID")
     hh_client_secret: str = Field("", validation_alias="HH_CLIENT_SECRET")
 
+    # StarLine (телематика: пробег авто курьера)
+    starline_app_id: str = Field("", validation_alias="STARLINE_APP_ID")
+    starline_app_secret: str = Field("", validation_alias="STARLINE_APP_SECRET")
+    starline_login: str = Field("", validation_alias="STARLINE_LOGIN")
+    starline_password: str = Field("", validation_alias="STARLINE_PASSWORD")
+
+    # Файлы для зарплаты курьера
+    courier_plans_file: str = Field("courier_plans.json", validation_alias="COURIER_PLANS_FILE")
+    courier_salary_file: str = Field("courier_salary_accruals.json", validation_alias="COURIER_SALARY_FILE")
+    courier_mileage_file: str = Field("courier_mileage.json", validation_alias="COURIER_MILEAGE_FILE")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

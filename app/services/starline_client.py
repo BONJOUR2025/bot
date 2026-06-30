@@ -1,0 +1,163 @@
+"""StarLine telematics client — used to read a courier car's odometer (пробег).
+
+StarLine's public API (developer.starline.ru) uses a multi-step auth:
+  1. app code   : GET id.starline.ru/apiV3/application/getCode  (md5(appId+secret))
+  2. app token  : GET id.starline.ru/apiV3/application/getToken (md5(secret+code))
+  3. SLID token : POST id.starline.ru/apiV3/user/login          (login + md5(pass))
+  4. SLNET token: POST developer.starline.ru/json/v2/auth.slid  → user_id + slnet
+Then device data: developer.starline.ru/json/v2/device/{id}/data (position, obd…).
+
+Credentials come from .env: STARLINE_APP_ID, STARLINE_APP_SECRET, STARLINE_LOGIN,
+STARLINE_PASSWORD. Everything is best-effort: on any failure the caller gets a
+clear error and the courier page falls back to manual odometer entry. Field
+shapes vary between accounts/devices, so /courier-salary/starline/* diagnostics
+return raw payloads to verify the mapping against a real account.
+"""
+from __future__ import annotations
+
+import hashlib
+import logging
+import time
+from typing import Any, Optional
+
+import httpx
+
+from app.settings import settings
+
+log = logging.getLogger(__name__)
+
+ID_BASE = "https://id.starline.ru/apiV3"
+DEV_BASE = "https://developer.starline.ru/json"
+
+# Cached session (app token ~4h, slnet token ~ until it 401s).
+_session: dict[str, Any] = {"app_token": "", "app_token_ts": 0.0, "slnet": "", "user_id": None}
+
+
+def _md5(s: str) -> str:
+    return hashlib.md5(s.encode("utf-8")).hexdigest()
+
+
+def is_configured() -> bool:
+    return bool(settings.starline_app_id and settings.starline_app_secret
+                and settings.starline_login and settings.starline_password)
+
+
+async def _get_app_token(client: httpx.AsyncClient) -> str:
+    """Steps 1-2: application code → application token (cached ~4h)."""
+    if _session["app_token"] and time.time() - _session["app_token_ts"] < 3 * 3600:
+        return _session["app_token"]
+    app_id, secret = settings.starline_app_id, settings.starline_app_secret
+    r1 = await client.get(f"{ID_BASE}/application/getCode/",
+                          params={"appId": app_id, "secret": _md5(app_id + secret)})
+    r1.raise_for_status()
+    j1 = r1.json()
+    code = (j1.get("desc") or {}).get("code")
+    if not code:
+        raise RuntimeError(f"StarLine getCode: {j1}")
+    r2 = await client.get(f"{ID_BASE}/application/getToken/",
+                          params={"appId": app_id, "secret": _md5(secret + code)})
+    r2.raise_for_status()
+    j2 = r2.json()
+    token = (j2.get("desc") or {}).get("token")
+    if not token:
+        raise RuntimeError(f"StarLine getToken: {j2}")
+    _session["app_token"], _session["app_token_ts"] = token, time.time()
+    return token
+
+
+async def _auth(client: httpx.AsyncClient) -> tuple[str, Any]:
+    """Steps 3-4: SLID user token → SLNET token + user_id. Returns (slnet, user_id)."""
+    if _session["slnet"] and _session["user_id"] is not None:
+        return _session["slnet"], _session["user_id"]
+    app_token = await _get_app_token(client)
+    r3 = await client.post(f"{ID_BASE}/user/login/", params={"token": app_token},
+                           data={"login": settings.starline_login, "pass": _md5(settings.starline_password)})
+    r3.raise_for_status()
+    j3 = r3.json()
+    slid = (j3.get("desc") or {}).get("user_token")
+    if not slid:
+        raise RuntimeError(f"StarLine login (возможно нужен 2FA/captcha): {j3}")
+    r4 = await client.post(f"{DEV_BASE}/v2/auth.slid", json={"slid_token": slid})
+    r4.raise_for_status()
+    j4 = r4.json()
+    slnet = r4.cookies.get("slnet") or j4.get("slnet")
+    user_id = j4.get("user_id") or (j4.get("desc") or {}).get("user_id")
+    if not slnet or user_id is None:
+        raise RuntimeError(f"StarLine auth.slid: {j4}")
+    _session["slnet"], _session["user_id"] = slnet, user_id
+    return slnet, user_id
+
+
+def _reset_session() -> None:
+    _session.update({"slnet": "", "user_id": None})
+
+
+async def _authed_get(path: str) -> dict:
+    """GET a developer.starline.ru/json path with the SLNET cookie; one re-auth on 401."""
+    if not is_configured():
+        raise RuntimeError("StarLine не настроен (нет STARLINE_* в .env)")
+    async with httpx.AsyncClient(timeout=40) as client:
+        slnet, _ = await _auth(client)
+        url = f"{DEV_BASE}{path}"
+        resp = await client.get(url, cookies={"slnet": slnet})
+        if resp.status_code in (401, 403):
+            _reset_session()
+            slnet, _ = await _auth(client)
+            resp = await client.get(url, cookies={"slnet": slnet})
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_status() -> dict:
+    return {"configured": is_configured()}
+
+
+async def list_devices() -> list[dict]:
+    """User's devices: [{device_id, alias, mileage?}]. Raw shape kept for diagnostics."""
+    data = await _authed_get(f"/v3/user/{(await _user_id())}/data")
+    devices = (data.get("user_data") or data.get("data") or {}).get("devices") \
+        or data.get("devices") or []
+    out = []
+    for d in devices:
+        out.append({
+            "device_id": d.get("device_id") or d.get("id"),
+            "alias": d.get("alias") or d.get("name") or "",
+            "mileage": _extract_mileage(d),
+        })
+    return out
+
+
+async def _user_id() -> Any:
+    async with httpx.AsyncClient(timeout=40) as client:
+        _, uid = await _auth(client)
+        return uid
+
+
+async def get_device_raw(device_id: str) -> dict:
+    return await _authed_get(f"/v2/device/{device_id}/data")
+
+
+def _extract_mileage(node: Any) -> Optional[float]:
+    """Pull an odometer/mileage value out of a (nested) StarLine payload, best-effort."""
+    if not isinstance(node, dict):
+        return None
+    for key in ("mileage", "odometer", "mileage_km", "obd_mileage"):
+        v = node.get(key)
+        if isinstance(v, (int, float)) and v > 0:
+            return float(v)
+    for sub in ("obd", "data", "position", "common", "state"):
+        v = _extract_mileage(node.get(sub))
+        if v is not None:
+            return v
+    return None
+
+
+async def get_mileage(device_id: str) -> Optional[float]:
+    """Current odometer (km) for a device, or None if not exposed."""
+    try:
+        data = await get_device_raw(device_id)
+        body = data.get("data") if isinstance(data.get("data"), dict) else data
+        return _extract_mileage(body)
+    except Exception as exc:
+        log.warning("StarLine get_mileage failed: %s", exc)
+        return None

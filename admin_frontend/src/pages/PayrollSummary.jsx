@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { BarChart2, RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Wallet, TrendingDown, UserRound } from 'lucide-react';
+import { BarChart2, RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { toPng } from 'html-to-image';
 import api from '../api';
@@ -112,10 +112,29 @@ async function loadManagers(period) {
   return rows.filter(Boolean).sort((a, b) => b.gross - a.gross);
 }
 
+async function loadCouriers(period) {
+  const dateFrom = `${period}-01`;
+  const dateTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
+  const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
+  const couriers = emp.filter((e) => e.status !== 'inactive' && (e.position || '').toLowerCase().includes('курьер'));
+  const rows = await Promise.all(couriers.map(async (c) => {
+    const plan = await api.get('courier-salary/plan', { params: { employee_code: c.id, period } }).then((r) => r.data).catch(() => ({}));
+    const adv = await api.get('courier-salary/advances', { params: { employee_id: c.id } }).then((r) => r.data).catch(() => ({ total: 0 }));
+    const inc = await api.get('incentives/', { params: { employee_id: c.id, date_from: dateFrom, date_to: dateTo } }).then((r) => r.data).catch(() => []);
+    const bonuses = (inc || []).filter((i) => i.type === 'bonus').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    const penalties = (inc || []).filter((i) => i.type === 'penalty').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    const calc = await api.post('courier-salary/calc', { oklad: plan.oklad, advances: adv?.total || 0, bonuses, penalties }).then((r) => r.data).catch(() => null);
+    if (!calc) return null;
+    return { name: c.full_name || c.name, oklad: calc.oklad, commission: 0, bonuses: calc.bonuses, penalties: calc.penalties, advances: calc.advances, gross: calc.gross, to_pay: calc.to_pay };
+  }));
+  return rows.filter(Boolean).filter((r) => r.gross || r.advances).sort((a, b) => b.gross - a.gross);
+}
+
 const CATS = [
   { key: 'admins', title: 'Администраторы', icon: Calculator, color: '#6366f1', load: loadAdmins },
   { key: 'masters', title: 'Мастера', icon: Hammer, color: '#f59e0b', load: loadMasters },
   { key: 'managers', title: 'Менеджеры', icon: Users, color: '#10b981', load: loadManagers },
+  { key: 'couriers', title: 'Курьеры', icon: Truck, color: '#ec4899', load: loadCouriers },
 ];
 
 // Fixed «agency» palette so the PNG looks identical regardless of app theme.

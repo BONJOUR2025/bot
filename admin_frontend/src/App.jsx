@@ -42,6 +42,7 @@ import Assets from "./pages/Assets";
 import Payroll from "./pages/Payroll";
 import PayrollSummary from "./pages/PayrollSummary";
 import ManagerSalary from "./pages/ManagerSalary";
+import CourierSalary from "./pages/CourierSalary";
 import Schedule from "./pages/Schedule";
 import Tasks from "./pages/Tasks";
 import Passwords from "./pages/Passwords";
@@ -105,6 +106,7 @@ export default function App() {
                 <Route path="payroll" element={<Payroll />} />
                 <Route path="payroll-summary" element={<PayrollSummary />} />
                 <Route path="manager-salary" element={<ManagerSalary />} />
+                <Route path="courier-salary" element={<CourierSalary />} />
                 <Route path="schedule" element={<Schedule />} />
                 <Route path="tasks" element={<Tasks />} />
                 <Route path="passwords" element={<Passwords />} />
