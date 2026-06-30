@@ -147,14 +147,17 @@ async def get_ways(device_id: str, ts_from: int, ts_to: int) -> dict:
 
 def _ways_mileage(data: Any) -> Optional[float]:
     """Total mileage (km) from a /ways response. Sums per-way mileage if present,
-    else falls back to the track-point length."""
+    else falls back to the track-point length.
+
+    StarLine reports mileage in METERS throughout this payload (top-level total
+    and each TRACK segment's own "mileage") — convert to km."""
     if not isinstance(data, dict):
         return None
     # explicit total
     for key in ("mileage", "total_mileage", "run", "pofar"):
         v = _num(data.get(key))
         if v is not None and v > 0:
-            return round(v, 1)
+            return round(v / 1000, 1)
     # list of ways/trips, each with its own distance
     ways = data.get("ways") or data.get("data") or data.get("way") or []
     if isinstance(ways, dict):
@@ -168,7 +171,7 @@ def _ways_mileage(data: Any) -> Optional[float]:
                 total += d
                 found = True
     if found and total > 0:
-        return round(total, 1)
+        return round(total / 1000, 1)
     # last resort: length of all coordinate points in the payload
     pts = _track_points(data)
     if len(pts) >= 2:
