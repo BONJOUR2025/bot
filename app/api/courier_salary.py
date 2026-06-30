@@ -155,6 +155,13 @@ def create_courier_salary_router(
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
+    @router.get("/starline/raw-user")
+    async def starline_raw_user(current: ResolvedUser = Depends(perm)):
+        try:
+            return await starline_client.get_user_data()
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
     # ── Accrue / journal / payout ─────────────────────────────────────
     @router.post("/accrue")
     async def accrue(data: AccrualInput, current: ResolvedUser = Depends(perm)):

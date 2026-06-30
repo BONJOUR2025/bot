@@ -118,40 +118,55 @@ async def get_status() -> dict:
     return {"configured": is_configured()}
 
 
-async def list_devices() -> list[dict]:
-    """User's devices: [{device_id, alias, mileage?}]. Raw shape kept for diagnostics."""
-    data = await _authed_get(f"/v3/user/{(await _user_id())}/data")
-    devices = (data.get("user_data") or data.get("data") or {}).get("devices") \
-        or data.get("devices") or []
-    out = []
-    for d in devices:
-        out.append({
-            "device_id": d.get("device_id") or d.get("id"),
-            "alias": d.get("alias") or d.get("name") or "",
-            "mileage": _extract_mileage(d),
-        })
-    return out
-
-
 async def _user_id() -> Any:
     async with httpx.AsyncClient(timeout=40) as client:
         _, uid = await _auth(client)
         return uid
 
 
+async def get_user_data() -> dict:
+    """Raw user payload — devices come with full telemetry here (the per-device
+    /device/{id}/data endpoint isn't available on this account)."""
+    return await _authed_get(f"/v3/user/{(await _user_id())}/data")
+
+
+def _devices_from(data: dict) -> list[dict]:
+    return (data.get("user_data") or data.get("data") or {}).get("devices") \
+        or data.get("devices") or []
+
+
+def _find_device(data: dict, device_id: str) -> Optional[dict]:
+    for d in _devices_from(data):
+        if str(d.get("device_id") or d.get("id")) == str(device_id):
+            return d
+    return None
+
+
+async def list_devices() -> list[dict]:
+    """User's devices: [{device_id, alias, mileage?}]."""
+    data = await get_user_data()
+    return [{
+        "device_id": d.get("device_id") or d.get("id"),
+        "alias": d.get("alias") or d.get("name") or "",
+        "mileage": _extract_mileage(d),
+    } for d in _devices_from(data)]
+
+
 async def get_device_raw(device_id: str) -> dict:
-    return await _authed_get(f"/v2/device/{device_id}/data")
+    """Full device object from user/data (for diagnostics / field mapping)."""
+    data = await get_user_data()
+    return _find_device(data, device_id) or {"error": "device not found in user/data", "devices_seen": [d.get("device_id") for d in _devices_from(data)]}
 
 
 def _extract_mileage(node: Any) -> Optional[float]:
     """Pull an odometer/mileage value out of a (nested) StarLine payload, best-effort."""
     if not isinstance(node, dict):
         return None
-    for key in ("mileage", "odometer", "mileage_km", "obd_mileage"):
+    for key in ("mileage", "odometer", "mileage_km", "obd_mileage", "run_km", "pofar"):
         v = node.get(key)
         if isinstance(v, (int, float)) and v > 0:
             return float(v)
-    for sub in ("obd", "data", "position", "common", "state"):
+    for sub in ("obd", "data", "position", "common", "state", "telemetry", "car_state"):
         v = _extract_mileage(node.get(sub))
         if v is not None:
             return v
@@ -159,11 +174,10 @@ def _extract_mileage(node: Any) -> Optional[float]:
 
 
 async def get_mileage(device_id: str) -> Optional[float]:
-    """Current odometer (km) for a device, or None if not exposed."""
+    """Current odometer (km) for a device from user/data, or None if not exposed."""
     try:
-        data = await get_device_raw(device_id)
-        body = data.get("data") if isinstance(data.get("data"), dict) else data
-        return _extract_mileage(body)
+        dev = _find_device(await get_user_data(), device_id)
+        return _extract_mileage(dev) if dev else None
     except Exception as exc:
         log.warning("StarLine get_mileage failed: %s", exc)
         return None
