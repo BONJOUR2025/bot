@@ -16,16 +16,40 @@ import {
   ChevronUp,
   Send,
   Smartphone,
+  BarChart3,
+  TrendingUp,
+  Wallet,
+  Clock,
+  ArrowUpDown,
+  Trophy,
+  Layers,
 } from 'lucide-react';
+import {
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { Tabs } from '../components/ui/SalaryUI.jsx';
 
 const MAX_AMOUNT = 100000;
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
 const MANAGE_DATES_PERMISSION = 'payouts-manage-dates';
+
+const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899'];
+const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const STATUS_COLORS = { 'Ожидает': '#f59e0b', 'Одобрено': '#10b981', 'Отклонено': '#ef4444', 'Выплачено': '#6366f1' };
+
+const fmtK = (v) => {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' млн ₽';
+  if (Math.abs(n) >= 1_000) return Math.round(n / 1_000) + 'k ₽';
+  return Math.round(n) + ' ₽';
+};
+const fmtMoneyShort = (v) => (!v ? '—' : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽');
 
 const pad = (value) => String(value).padStart(2, '0');
 
@@ -57,44 +81,181 @@ function toPayloadTimestamp(value) {
   return `${datePart} ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
-function Summary({ list }) {
-  const total = list.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-  const statusStats = list.reduce((acc, p) => {
-    acc[p.status] = (acc[p.status] || 0) + 1;
-    return acc;
-  }, {});
-  const typeStats = list.reduce((acc, p) => {
-    acc[p.payout_type] = (acc[p.payout_type] || 0) + Number(p.amount || 0);
-    return acc;
-  }, {});
-  const sumAll = Object.values(typeStats).reduce((s, v) => s + v, 0) || 1;
+function KpiCard({ label, value, sub, accent, icon: Icon }) {
   return (
-    <div className="space-y-3">
-      <div>
-        Всего: <strong>{list.length}</strong> заявок на сумму{' '}
-        <strong className="tabular-nums">{total.toLocaleString('ru-RU')} ₽</strong>
-      </div>
-      <div className="flex flex-wrap gap-3 text-sm">
-        {Object.entries(statusStats).map(([k, v]) => (
-          <div key={k} className="bg-[color:var(--color-bg-subtle)] px-2 py-1 rounded">
-            {k}: {v}
+    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#6366f1'}` }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
+          <div className="text-xl font-bold truncate" style={{ color: accent || '#6366f1' }}>{value}</div>
+          {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
+        </div>
+        {Icon && (
+          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#6366f118' }}>
+            <Icon size={20} style={{ color: accent || '#6366f1' }} />
           </div>
-        ))}
+        )}
       </div>
-      <div className="space-y-1">
-        {Object.entries(typeStats).map(([k, v]) => (
-          <div key={k} className="flex items-center gap-2 text-sm">
-            <div className="w-20">{k}</div>
-            <div className="flex-1 h-2 bg-[color:var(--color-control-bg)] rounded">
-              <div
-                className="h-2 bg-blue-500 rounded"
-                style={{ width: `${(v / sumAll) * 100}%` }}
-              />
+    </div>
+  );
+}
+
+function PayoutDayHeatmap({ data }) {
+  const max = Math.max(...data.map((d) => d.sum), 1);
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <ArrowUpDown size={15} className="text-[color:var(--color-primary)]" />
+        Активность по дням недели
+      </div>
+      <div className="space-y-2.5">
+        {data.map((d) => {
+          const pct = max > 0 ? (d.sum / max) * 100 : 0;
+          const isWeekend = d.day === 'Вс' || d.day === 'Сб';
+          return (
+            <div key={d.day} className="flex items-center gap-3">
+              <div className="w-6 text-xs text-right text-[color:var(--color-muted-foreground)] shrink-0 font-medium">{d.day}</div>
+              <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
+                <div
+                  className="h-full rounded-lg transition-all duration-500"
+                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: 0.75 }}
+                />
+              </div>
+              <div className="text-xs font-medium w-20 text-right shrink-0">{fmtK(d.sum)}</div>
             </div>
-            <div className="w-24 text-right tabular-nums">{Number(v).toLocaleString('ru-RU')} ₽</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+      <div className="flex gap-4 mt-4 text-xs text-[color:var(--color-muted-foreground)]">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#6366f1' }} />
+          Будни
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#f59e0b' }} />
+          Выходные
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeLeaderboard({ data, total }) {
+  const medals = ['🥇', '🥈', '🥉'];
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Trophy size={15} className="text-[color:var(--color-primary)]" />
+        Топ получателей
+      </div>
+      <div className="space-y-4">
+        {data.slice(0, 6).map(([name, { sum, count }], i) => {
+          const pct = total > 0 ? (sum / total) * 100 : 0;
+          return (
+            <div key={name}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  {i < 3
+                    ? <span className="text-base shrink-0">{medals[i]}</span>
+                    : <span className="w-5 text-center text-xs font-bold text-[color:var(--color-muted-foreground)] shrink-0">{i + 1}</span>
+                  }
+                  <span className="text-sm font-medium truncate">{name}</span>
+                </div>
+                <div className="text-right shrink-0 ml-3">
+                  <div className="text-sm font-bold text-[color:var(--color-primary)]">{fmtK(sum)}</div>
+                  <div className="text-xs text-[color:var(--color-muted-foreground)]">{count} зап.</div>
+                </div>
+              </div>
+              <div className="h-1.5 rounded-full bg-[color:var(--color-bg-secondary)] overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }}
+                />
+              </div>
+            </div>
+          );
+        })}
+        {data.length === 0 && (
+          <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-4">Нет данных</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusDonut({ data, total, title, icon: Icon, colorOf, formatValue, tooltipLabel = 'Кол-во' }) {
+  const fmtVal = formatValue || ((v) => v);
+  const [active, setActive] = useState(null);
+  if (!data.length) return null;
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Icon size={15} className="text-[color:var(--color-primary)]" />
+        {title}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <div style={{ width: 160, height: 160, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="value"
+                nameKey="name"
+                innerRadius="50%"
+                outerRadius="80%"
+                paddingAngle={2}
+                onMouseEnter={(_, i) => setActive(i)}
+                onMouseLeave={() => setActive(null)}
+              >
+                {data.map((entry, i) => (
+                  <Cell
+                    key={entry.name}
+                    fill={colorOf ? colorOf(entry.name, i) : CHART_COLORS[i % CHART_COLORS.length]}
+                    opacity={active === null || active === i ? 1 : 0.4}
+                    stroke="none"
+                  />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => [fmtVal(v), tooltipLabel]} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-2 min-w-0">
+          {data.map((d, i) => {
+            const pct = total > 0 ? (d.value / total) * 100 : 0;
+            const color = colorOf ? colorOf(d.name, i) : CHART_COLORS[i % CHART_COLORS.length];
+            return (
+              <div key={d.name} className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs truncate">{d.name}</span>
+                    <span className="text-xs font-semibold shrink-0">{fmtVal(d.value)} ({pct.toFixed(0)}%)</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-xl p-3 text-sm">
+      <div className="font-semibold mb-1 text-[color:var(--color-muted-foreground)]">{label}</div>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ background: p.color }} />
+          <span className="font-medium">{fmtMoneyShort(p.value)}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -452,6 +613,7 @@ export default function Payouts() {
   const [selected, setSelected] = useState(new Set());
   const [activity, setActivity] = useState([]);
   const [showActivity, setShowActivity] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     loadEmployees();
@@ -476,6 +638,89 @@ export default function Payouts() {
         [...list].sort((a, b) => displayName(a).localeCompare(displayName(b), 'ru')),
       ]);
   }, [employees, useFullName]);
+
+  const totalSum = useMemo(() => payouts.reduce((s, p) => s + Number(p.amount || 0), 0), [payouts]);
+
+  const statusSummary = useMemo(() => {
+    const map = {};
+    for (const p of payouts) {
+      const key = p.status || '—';
+      if (!map[key]) map[key] = { count: 0, sum: 0 };
+      map[key].count += 1;
+      map[key].sum += Number(p.amount || 0);
+    }
+    return map;
+  }, [payouts]);
+
+  const statusDonutData = useMemo(
+    () => STATUS_OPTIONS.map((s) => ({ name: s, value: statusSummary[s]?.count || 0 })).filter((d) => d.value > 0),
+    [statusSummary],
+  );
+
+  const typeDonutData = useMemo(() => {
+    const map = {};
+    for (const p of payouts) {
+      const key = p.payout_type || 'Прочее';
+      map[key] = (map[key] || 0) + Number(p.amount || 0);
+    }
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
+  }, [payouts]);
+
+  const methodData = useMemo(() => {
+    const map = {};
+    for (const p of payouts) {
+      const key = (p.method || 'Прочее').replace(/^[^\sа-яА-Я]+\s*/, '');
+      map[key] = (map[key] || 0) + Number(p.amount || 0);
+    }
+    return Object.entries(map)
+      .map(([name, sum]) => ({ name, sum }))
+      .sort((a, b) => b.sum - a.sum);
+  }, [payouts]);
+
+  const timeData = useMemo(() => {
+    const map = {};
+    for (const p of payouts) {
+      if (!p.timestamp) continue;
+      const d = new Date(p.timestamp.replace(' ', 'T'));
+      if (isNaN(d)) continue;
+      const key = d.toISOString().slice(0, 10);
+      map[key] = (map[key] || 0) + Number(p.amount || 0);
+    }
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, sum]) => ({
+        date,
+        label: `${date.slice(8, 10)}.${date.slice(5, 7)}`,
+        sum,
+      }));
+  }, [payouts]);
+
+  const dayData = useMemo(() => {
+    const sums = Array(7).fill(0);
+    for (const p of payouts) {
+      if (!p.timestamp) continue;
+      const d = new Date(p.timestamp.replace(' ', 'T'));
+      if (isNaN(d)) continue;
+      sums[d.getDay()] += Number(p.amount || 0);
+    }
+    return DAY_NAMES.map((day, i) => ({ day, sum: sums[i] }));
+  }, [payouts]);
+
+  const employeeLeaderboard = useMemo(() => {
+    const map = {};
+    for (const p of payouts) {
+      const key = p.name || 'Без имени';
+      if (!map[key]) map[key] = { sum: 0, count: 0 };
+      map[key].sum += Number(p.amount || 0);
+      map[key].count += 1;
+    }
+    return Object.entries(map).sort(([, a], [, b]) => b.sum - a.sum);
+  }, [payouts]);
+
+  const mainTabs = [
+    { key: 'overview', label: 'Обзор', icon: <BarChart3 size={14} /> },
+    { key: 'list', label: 'Заявки', icon: <TrendingUp size={14} />, badge: payouts.length },
+  ];
 
   async function loadEmployees() {
     try {
@@ -839,6 +1084,138 @@ export default function Payouts() {
         onRefresh={loadActivity}
       />
 
+      <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
+
+      {/* ── Обзор ─────────────────────────────────────────────── */}
+      {activeTab === 'overview' && (
+        <div className="space-y-5">
+          {loading ? (
+            <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+              <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
+              Загрузка…
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <KpiCard
+                  label="Общая сумма"
+                  value={fmtK(totalSum)}
+                  sub={`${payouts.length} заявок`}
+                  accent="#6366f1"
+                  icon={Wallet}
+                />
+                <KpiCard
+                  label="Ожидает"
+                  value={statusSummary['Ожидает']?.count || 0}
+                  sub={fmtK(statusSummary['Ожидает']?.sum || 0)}
+                  accent="#f59e0b"
+                  icon={Clock}
+                />
+                <KpiCard
+                  label="Одобрено"
+                  value={statusSummary['Одобрено']?.count || 0}
+                  sub={fmtK(statusSummary['Одобрено']?.sum || 0)}
+                  accent="#10b981"
+                  icon={CheckCircle}
+                />
+                <KpiCard
+                  label="Выплачено"
+                  value={statusSummary['Выплачено']?.count || 0}
+                  sub={fmtK(statusSummary['Выплачено']?.sum || 0)}
+                  accent="#3b82f6"
+                  icon={Download}
+                />
+              </div>
+
+              {timeData.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="app-card p-5 lg:col-span-2">
+                    <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                      <TrendingUp size={15} className="text-[color:var(--color-primary)]" />
+                      Динамика выплат
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <AreaChart data={timeData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+                        <defs>
+                          <linearGradient id="payoutGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
+                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} />
+                        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={55} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Area
+                          type="monotone"
+                          dataKey="sum"
+                          stroke="#6366f1"
+                          strokeWidth={2}
+                          fill="url(#payoutGrad)"
+                          dot={false}
+                          activeDot={{ r: 4, strokeWidth: 0 }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <StatusDonut
+                    data={statusDonutData}
+                    total={payouts.length}
+                    title="Статусы"
+                    icon={BarChart3}
+                    colorOf={(name) => STATUS_COLORS[name] || '#94a3b8'}
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <EmployeeLeaderboard data={employeeLeaderboard} total={totalSum} />
+                <PayoutDayHeatmap data={dayData} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <StatusDonut
+                  data={typeDonutData.map((d) => ({ name: d.name, value: d.value }))}
+                  total={totalSum}
+                  title="По типам"
+                  icon={Layers}
+                  formatValue={fmtK}
+                  tooltipLabel="Сумма"
+                />
+                {methodData.length > 0 && (
+                  <div className="app-card p-5">
+                    <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                      <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+                      По способам выплаты
+                    </div>
+                    <ResponsiveContainer width="100%" height={Math.max(120, methodData.length * 48)}>
+                      <BarChart
+                        data={methodData}
+                        layout="vertical"
+                        margin={{ top: 0, right: 12, bottom: 0, left: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
+                        <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={100} />
+                        <Tooltip formatter={(v) => [fmtMoneyShort(v), 'Сумма']} />
+                        <Bar dataKey="sum" radius={[0, 4, 4, 0]}>
+                          {methodData.map((d, i) => (
+                            <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Заявки ────────────────────────────────────────────── */}
+      {activeTab === 'list' && (
+        <>
       <div className="flex flex-wrap gap-2 items-end">
         <input
           className="input flex-grow"
@@ -1042,8 +1419,8 @@ export default function Payouts() {
           <Download size={16} /> PDF
         </button>
       </div>
-
-      <Summary list={payouts} />
+        </>
+      )}
 
       {showEditor && (
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowEditor(false)}>

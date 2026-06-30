@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   UserPlus,
@@ -6,12 +6,106 @@ import {
   Pencil,
   FileDown,
   Archive,
+  Users,
+  UserCheck,
+  ShieldCheck,
+  CreditCard,
+  BarChart3,
+  Layers,
+  TrendingUp,
 } from 'lucide-react';
+import {
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 import api from '../api';
 import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
+import { Tabs } from '../components/ui/SalaryUI.jsx';
+
+const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899'];
+
+function KpiCard({ label, value, sub, accent, icon: Icon }) {
+  return (
+    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#6366f1'}` }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
+          <div className="text-xl font-bold truncate" style={{ color: accent || '#6366f1' }}>{value}</div>
+          {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
+        </div>
+        {Icon && (
+          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#6366f118' }}>
+            <Icon size={20} style={{ color: accent || '#6366f1' }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ShareDonut({ data, total, title, icon: Icon, colorOf }) {
+  const [active, setActive] = useState(null);
+  if (!data.length) return null;
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Icon size={15} className="text-[color:var(--color-primary)]" />
+        {title}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <div style={{ width: 160, height: 160, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="value"
+                nameKey="name"
+                innerRadius="50%"
+                outerRadius="80%"
+                paddingAngle={2}
+                onMouseEnter={(_, i) => setActive(i)}
+                onMouseLeave={() => setActive(null)}
+              >
+                {data.map((entry, i) => (
+                  <Cell
+                    key={entry.name}
+                    fill={colorOf ? colorOf(entry.name, i) : CHART_COLORS[i % CHART_COLORS.length]}
+                    opacity={active === null || active === i ? 1 : 0.4}
+                    stroke="none"
+                  />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => [v, 'Кол-во']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-2 min-w-0">
+          {data.map((d, i) => {
+            const pct = total > 0 ? (d.value / total) * 100 : 0;
+            const color = colorOf ? colorOf(d.name, i) : CHART_COLORS[i % CHART_COLORS.length];
+            return (
+              <div key={d.name} className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs truncate">{d.name}</span>
+                    <span className="text-xs font-semibold shrink-0">{d.value} ({pct.toFixed(0)}%)</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ExternalUserSelect({ value, onChange }) {
   const [open, setOpen] = useState(false);
@@ -120,6 +214,7 @@ export default function Employees() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmWarnings, setConfirmWarnings] = useState([]);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     load();
@@ -373,10 +468,173 @@ export default function Employees() {
     sortedList.sort((a, b) => a.position.localeCompare(b.position));
   }
 
+  const activeCount = useMemo(() => employees.filter((e) => e.status === 'active').length, [employees]);
+  const adminCount = useMemo(() => employees.filter((e) => e.is_admin).length, [employees]);
+  const noCardCount = useMemo(() => employees.filter((e) => !e.card_number).length, [employees]);
+
+  const positionDonutData = useMemo(() => {
+    const map = {};
+    for (const e of employees) {
+      const key = e.position || 'Без должности';
+      map[key] = (map[key] || 0) + 1;
+    }
+    return Object.entries(map)
+      .sort(([, a], [, b]) => b - a)
+      .map(([name, value]) => ({ name, value }));
+  }, [employees]);
+
+  const statusDonutData = useMemo(() => {
+    const active = employees.filter((e) => e.status === 'active').length;
+    const inactive = employees.length - active;
+    return [
+      { name: 'Активные', value: active },
+      { name: 'Неактивные', value: inactive },
+    ].filter((d) => d.value > 0);
+  }, [employees]);
+
+  const workplaceData = useMemo(() => {
+    const map = {};
+    for (const e of employees) {
+      const key = e.work_place || 'Не указано';
+      map[key] = (map[key] || 0) + 1;
+    }
+    return Object.entries(map)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [employees]);
+
+  const hireTrendData = useMemo(() => {
+    const map = {};
+    for (const e of employees) {
+      if (!e.created_at) continue;
+      const d = new Date(e.created_at);
+      if (isNaN(d)) continue;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      map[key] = (map[key] || 0) + 1;
+    }
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12)
+      .map(([key, count]) => {
+        const [y, m] = key.split('-');
+        return { label: `${m}.${y.slice(2)}`, count };
+      });
+  }, [employees]);
+
+  const mainTabs = [
+    { key: 'overview', label: 'Обзор', icon: <BarChart3 size={14} /> },
+    { key: 'list', label: 'Список', icon: <Users size={14} />, badge: sortedList.length },
+  ];
+
   return (
     <div className="space-y-6 max-w-full mx-auto">
       <h2 className="text-2xl font-semibold">Сотрудники</h2>
       <UpcomingBirthdays />
+
+      <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === 'overview' && (
+        <div className="space-y-5">
+          {loading ? (
+            <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+              Загрузка…
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <KpiCard label="Всего сотрудников" value={employees.length} accent="#6366f1" icon={Users} />
+                <KpiCard
+                  label="Активных"
+                  value={activeCount}
+                  sub={employees.length ? `${((activeCount / employees.length) * 100).toFixed(0)}% от всех` : '—'}
+                  accent="#10b981"
+                  icon={UserCheck}
+                />
+                <KpiCard label="Администраторов" value={adminCount} accent="#f59e0b" icon={ShieldCheck} />
+                <KpiCard
+                  label="Без карты"
+                  value={noCardCount}
+                  sub="требуют заполнения"
+                  accent="#ef4444"
+                  icon={CreditCard}
+                />
+              </div>
+
+              {hireTrendData.length > 0 && (
+                <div className="app-card p-5">
+                  <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                    <TrendingUp size={15} className="text-[color:var(--color-primary)]" />
+                    Динамика найма
+                  </div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={hireTrendData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+                      <defs>
+                        <linearGradient id="hireGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={30} />
+                      <Tooltip formatter={(v) => [v, 'Принято']} />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        stroke="#6366f1"
+                        strokeWidth={2}
+                        fill="url(#hireGrad)"
+                        dot={false}
+                        activeDot={{ r: 4, strokeWidth: 0 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ShareDonut data={positionDonutData} total={employees.length} title="По должностям" icon={Layers} />
+                <ShareDonut
+                  data={statusDonutData}
+                  total={employees.length}
+                  title="По статусу"
+                  icon={UserCheck}
+                  colorOf={(name) => (name === 'Активные' ? '#10b981' : '#94a3b8')}
+                />
+              </div>
+
+              {workplaceData.length > 0 && (
+                <div className="app-card p-5">
+                  <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                    <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+                    По местам работы
+                  </div>
+                  <ResponsiveContainer width="100%" height={Math.max(120, workplaceData.length * 40)}>
+                    <BarChart
+                      data={workplaceData}
+                      layout="vertical"
+                      margin={{ top: 0, right: 12, bottom: 0, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
+                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={130} />
+                      <Tooltip formatter={(v) => [v, 'Сотрудников']} />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                        {workplaceData.map((d, i) => (
+                          <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'list' && (
+        <>
       <div className="flex flex-wrap gap-2 items-center">
         <input
           className="input flex-1 min-w-[140px]"
@@ -535,6 +793,8 @@ export default function Employees() {
             },
           ]}
         />
+      )}
+        </>
       )}
 
       {showForm && (
