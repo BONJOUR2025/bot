@@ -147,13 +147,18 @@ def create_courier_salary_router(
                 start = repo.get(employee_code, _prev_period(period)).get("odometer_end")
             return repo.upsert(employee_code, period, odometer_start=start,
                                odometer_end=odo, km_explicit=None, source="starline")
-        # No odometer (Маяк) → mileage from the track we accumulate by polling.
-        from app.data.courier_track_repository import get_courier_track_repository
+        # No odometer (Маяк) → StarLine /ways gives the historical track + mileage
+        # for the period; fall back to our accumulated poller track.
         ts_from, ts_to = _period_ts(period)
-        km = get_courier_track_repository().mileage(dev, ts_from, ts_to)
+        km = await starline_client.get_ways_mileage(dev, ts_from, ts_to)
+        source = "starline-ways"
         if not km:
-            raise HTTPException(status_code=502, detail="Авто-пробег ещё копится: трекер опрашивает Маяк раз в 15 мин, точек за период пока недостаточно. Введите пробег вручную.")
-        return repo.upsert(employee_code, period, km_explicit=km, source="starline-track")
+            from app.data.courier_track_repository import get_courier_track_repository
+            km = get_courier_track_repository().mileage(dev, ts_from, ts_to)
+            source = "starline-track"
+        if not km:
+            raise HTTPException(status_code=502, detail="StarLine не вернул пробег за период (нет трека) — введите пробег вручную")
+        return repo.upsert(employee_code, period, km_explicit=km, source=source)
 
     # ── StarLine diagnostics (verify shapes against a real account) ────
     @router.get("/starline/status")
@@ -221,6 +226,17 @@ def create_courier_salary_router(
         """Run one polling pass now (instead of waiting for the 15-min cycle)."""
         from app.services import starline_poller
         return {"stored": await starline_poller.poll_once()}
+
+    @router.get("/starline/ways/{device_id}")
+    async def starline_ways(device_id: str, period: str = Query(..., description="YYYY-MM"),
+                            current: ResolvedUser = Depends(perm)):
+        """POST /ways for the period — computed mileage + raw response (diagnostic)."""
+        ts_from, ts_to = _period_ts(period)
+        try:
+            raw = await starline_client.get_ways(device_id, ts_from, ts_to)
+            return {"km": starline_client._ways_mileage(raw), "raw": raw}
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
 
     @router.get("/starline/probe-all/{device_id}")
     async def starline_probe_all(device_id: str, period: str = Query("2026-06"),

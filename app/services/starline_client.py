@@ -114,8 +114,74 @@ async def _authed_get(path: str, params: Optional[dict] = None) -> dict:
         return resp.json()
 
 
+async def _authed_post(path: str, body: dict) -> dict:
+    """POST a developer.starline.ru/json path with the SLNET cookie; re-auth on 401."""
+    if not is_configured():
+        raise RuntimeError("StarLine не настроен (нет STARLINE_* в .env)")
+    async with httpx.AsyncClient(timeout=60) as client:
+        slnet, _ = await _auth(client)
+        url = f"{DEV_BASE}{path}"
+        resp = await client.post(url, json=body, cookies={"slnet": slnet})
+        if resp.status_code in (401, 403):
+            _reset_session()
+            slnet, _ = await _auth(client)
+            resp = await client.post(url, json=body, cookies={"slnet": slnet})
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_status() -> dict:
     return {"configured": is_configured()}
+
+
+def _ways_body(ts_from: int, ts_to: int) -> dict:
+    return {"begin": ts_from, "end": ts_to, "split_way": True, "short_parking": 5,
+            "long_parking": 30, "dt_max": 2, "div_days": True, "time_shift": 180,
+            "tz": True, "filtering": True}
+
+
+async def get_ways(device_id: str, ts_from: int, ts_to: int) -> dict:
+    """POST /v1/device/{id}/ways — track with mileage for the period."""
+    return await _authed_post(f"/v1/device/{device_id}/ways", _ways_body(ts_from, ts_to))
+
+
+def _ways_mileage(data: Any) -> Optional[float]:
+    """Total mileage (km) from a /ways response. Sums per-way mileage if present,
+    else falls back to the track-point length."""
+    if not isinstance(data, dict):
+        return None
+    # explicit total
+    for key in ("mileage", "total_mileage", "run", "pofar"):
+        v = _num(data.get(key))
+        if v is not None and v > 0:
+            return round(v, 1)
+    # list of ways/trips, each with its own distance
+    ways = data.get("ways") or data.get("data") or data.get("way") or []
+    if isinstance(ways, dict):
+        ways = ways.get("ways") or ways.get("data") or []
+    total = 0.0
+    found = False
+    for w in ways if isinstance(ways, list) else []:
+        if isinstance(w, dict):
+            d = _num(w.get("mileage") or w.get("length") or w.get("distance") or w.get("run"))
+            if d is not None:
+                total += d
+                found = True
+    if found and total > 0:
+        return round(total, 1)
+    # last resort: length of all coordinate points in the payload
+    pts = _track_points(data)
+    if len(pts) >= 2:
+        return round(sum(_haversine_km(pts[i - 1], pts[i]) for i in range(1, len(pts))), 1)
+    return None
+
+
+async def get_ways_mileage(device_id: str, ts_from: int, ts_to: int) -> Optional[float]:
+    try:
+        return _ways_mileage(await get_ways(device_id, ts_from, ts_to))
+    except Exception as exc:
+        log.warning("StarLine get_ways_mileage failed: %s", exc)
+        return None
 
 
 async def _user_id() -> Any:
