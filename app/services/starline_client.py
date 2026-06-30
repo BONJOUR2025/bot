@@ -173,6 +173,21 @@ def _extract_mileage(node: Any) -> Optional[float]:
     return None
 
 
+async def get_position(device_id: str) -> Optional[dict]:
+    """Current GPS point: {ts, lat, lon} from user/data (position.x=lon, y=lat),
+    or None. Used by the background poller to build a track for «Маяк» beacons."""
+    try:
+        dev = _find_device(await get_user_data(), device_id)
+        pos = (dev or {}).get("position") or {}
+        x, y = _num(pos.get("x")), _num(pos.get("y"))   # x=lon, y=lat
+        if x is None or y is None:
+            return None
+        return {"ts": _num(pos.get("ts")) or 0.0, "lat": y, "lon": x}
+    except Exception as exc:
+        log.warning("StarLine get_position failed: %s", exc)
+        return None
+
+
 async def get_mileage(device_id: str) -> Optional[float]:
     """Current odometer (km) for a device from user/data, or None if not exposed
     (a «Маяк» beacon has no OBD odometer → None; use the GPS track instead)."""

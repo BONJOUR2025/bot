@@ -147,6 +147,7 @@ class Settings(BaseSettings):
     courier_plans_file: str = Field("courier_plans.json", validation_alias="COURIER_PLANS_FILE")
     courier_salary_file: str = Field("courier_salary_accruals.json", validation_alias="COURIER_SALARY_FILE")
     courier_mileage_file: str = Field("courier_mileage.json", validation_alias="COURIER_MILEAGE_FILE")
+    courier_track_file: str = Field("courier_track.json", validation_alias="COURIER_TRACK_FILE")
 
     model_config = SettingsConfigDict(
         env_file=".env",

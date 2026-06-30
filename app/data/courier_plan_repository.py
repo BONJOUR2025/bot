@@ -51,6 +51,15 @@ class CourierPlanRepository:
                 out[key[: -len(suffix)]] = {**DEFAULTS, **val}
         return out
 
+    def all_device_ids(self) -> list[str]:
+        """Distinct StarLine device ids across all plans (for the background poller)."""
+        out = set()
+        for v in self._data.values():
+            d = v.get("starline_device_id")
+            if d:
+                out.add(str(d))
+        return sorted(out)
+
     def upsert(self, employee_code: str, period: str, **fields) -> dict[str, Any]:
         key = self._key(employee_code, period)
         cur = self._data.get(key, {})

@@ -147,11 +147,12 @@ def create_courier_salary_router(
                 start = repo.get(employee_code, _prev_period(period)).get("odometer_end")
             return repo.upsert(employee_code, period, odometer_start=start,
                                odometer_end=odo, km_explicit=None, source="starline")
-        # No odometer → GPS track length for the period
+        # No odometer (Маяк) → mileage from the track we accumulate by polling.
+        from app.data.courier_track_repository import get_courier_track_repository
         ts_from, ts_to = _period_ts(period)
-        km = await starline_client.get_track_mileage(dev, ts_from, ts_to)
-        if km is None:
-            raise HTTPException(status_code=502, detail="StarLine (Маяк) отдаёт только текущую точку без истории трека — авто-пробег недоступен, введите пробег вручную")
+        km = get_courier_track_repository().mileage(dev, ts_from, ts_to)
+        if not km:
+            raise HTTPException(status_code=502, detail="Авто-пробег ещё копится: трекер опрашивает Маяк раз в 15 мин, точек за период пока недостаточно. Введите пробег вручную.")
         return repo.upsert(employee_code, period, km_explicit=km, source="starline-track")
 
     # ── StarLine diagnostics (verify shapes against a real account) ────
@@ -202,6 +203,24 @@ def create_courier_salary_router(
             return await starline_client.probe(version, device_id, action, ts_from, ts_to)
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
+
+    @router.get("/track/status")
+    async def track_status(employee_code: str = Query(...), period: str = Query(...),
+                           current: ResolvedUser = Depends(perm)):
+        """Accumulated-track status for this courier's device + km for the period."""
+        from app.data.courier_track_repository import get_courier_track_repository
+        dev = str(get_courier_plan_repository().get(employee_code, period).get("starline_device_id") or "")
+        if not dev:
+            return {"device_id": None, "points": 0, "km": None}
+        ts_from, ts_to = _period_ts(period)
+        track = get_courier_track_repository()
+        return {"device_id": dev, **track.status(dev), "km": track.mileage(dev, ts_from, ts_to)}
+
+    @router.post("/track/poll")
+    async def track_poll(current: ResolvedUser = Depends(perm)):
+        """Run one polling pass now (instead of waiting for the 15-min cycle)."""
+        from app.services import starline_poller
+        return {"stored": await starline_poller.poll_once()}
 
     @router.get("/starline/probe-all/{device_id}")
     async def starline_probe_all(device_id: str, period: str = Query("2026-06"),

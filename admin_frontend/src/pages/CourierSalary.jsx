@@ -50,6 +50,8 @@ export default function CourierSalary() {
   const [incentives, setIncentives] = useState({ bonuses: 0, penalties: 0 });
   const [mileage, setMileage] = useState(null);
   const [mileageDraft, setMileageDraft] = useState({ odometer_start: '', odometer_end: '' });
+  const [track, setTrack] = useState(null);
+  const [polling, setPolling] = useState(false);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [accruing, setAccruing] = useState(false);
@@ -89,6 +91,7 @@ export default function CourierSalary() {
       setPlan(pl); setPlanDraft({ oklad: pl.oklad || 0, starline_device_id: pl.starline_device_id || '' });
       setAdvances(adv); setIncentives({ bonuses, penalties });
       setMileage(mil); setMileageDraft({ odometer_start: mil?.odometer_start ?? '', odometer_end: mil?.odometer_end ?? '' });
+      api.get('courier-salary/track/status', { params: { employee_code: courierId, period } }).then((r) => setTrack(r.data)).catch(() => setTrack(null));
       const res = await api.post('courier-salary/calc', {
         oklad: pl.oklad, advances: adv?.total || 0, bonuses, penalties,
       }).then((r) => r.data);
@@ -116,6 +119,17 @@ export default function CourierSalary() {
       });
       setMileage(r.data); toast('Пробег сохранён', 'success');
     } catch { toast('Ошибка сохранения', 'error'); }
+  }
+
+  async function pollNow() {
+    setPolling(true);
+    try {
+      await api.post('courier-salary/track/poll');
+      const r = await api.get('courier-salary/track/status', { params: { employee_code: courierId, period } });
+      setTrack(r.data);
+      toast('Точка снята', 'success');
+    } catch { toast('Не удалось опросить StarLine', 'error'); }
+    finally { setPolling(false); }
   }
 
   async function syncMileage() {
@@ -265,6 +279,14 @@ export default function CourierSalary() {
                   <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{mileage.source === 'starline-track' ? 'StarLine (GPS-трек)' : mileage.source === 'starline' ? 'StarLine (одометр)' : 'вручную'} · {mileage.updated_at.slice(0, 16).replace('T', ' ')}</span>
                 )}
               </div>
+              {starline?.configured && (
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[color:var(--color-border)] text-[11px] text-[color:var(--color-muted-foreground)]">
+                  <span>Авто-трек: <span className="font-medium text-[color:var(--color-text)]">{track?.points ?? 0}</span> точек{track?.km != null ? <> · по треку <span className="font-medium text-[color:var(--color-text)]">{fmtKm(track.km)}</span></> : ''}</span>
+                  <button className="ml-auto inline-flex items-center gap-1 hover:text-[color:var(--color-primary)]" onClick={pollNow} disabled={polling}>
+                    <RotateCw size={12} className={polling ? 'animate-spin' : ''} /> опросить сейчас
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

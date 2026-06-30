@@ -219,6 +219,16 @@ def create_app() -> FastAPI:
     async def _stop_auto_linker():
         cash_move_auto_linker.stop()
 
+    from ..services import starline_poller
+
+    @app.on_event("startup")
+    async def _start_starline_poller():
+        starline_poller.start()
+
+    @app.on_event("shutdown")
+    async def _stop_starline_poller():
+        starline_poller.stop()
+
     vacation_service = VacationService()
     app.include_router(
         create_vacation_router(vacation_service, access_service),
