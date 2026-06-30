@@ -203,6 +203,17 @@ def create_courier_salary_router(
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
+    @router.get("/starline/probe-all/{device_id}")
+    async def starline_probe_all(device_id: str, period: str = Query("2026-06"),
+                                 current: ResolvedUser = Depends(perm)):
+        """Diagnostic: try many device actions across versions and report which
+        ones return data (to find the mileage/track endpoint this account allows)."""
+        ts_from, ts_to = _period_ts(period)
+        try:
+            return await starline_client.probe_all(device_id, ts_from, ts_to)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
     # ── Accrue / journal / payout ─────────────────────────────────────
     @router.post("/accrue")
     async def accrue(data: AccrualInput, current: ResolvedUser = Depends(perm)):

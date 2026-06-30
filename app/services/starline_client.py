@@ -223,6 +223,45 @@ async def probe(version: str, device_id: str, action: str, ts_from: int, ts_to: 
                              params={"ts_start": ts_from, "ts_end": ts_to})
 
 
+import asyncio
+
+PROBE_ACTIONS = (
+    "track", "tracks", "gps", "data", "mileage", "run", "runs", "trip", "trips",
+    "ride", "rides", "route", "routes", "history", "way", "stat", "stats",
+    "info", "position", "positions", "events", "geofences", "obd", "fuel",
+    "motohours", "achievements", "common", "state",
+)
+PROBE_VERSIONS = ("1", "2", "3")
+
+
+async def probe_all(device_id: str, ts_from: int, ts_to: int) -> dict:
+    """Try a big set of device actions across API versions, concurrently, and
+    report which ones actually return data (vs «Not found action»)."""
+    try:
+        await _user_id()          # warm up auth once before fanning out
+    except Exception:
+        pass
+    sem = asyncio.Semaphore(6)
+
+    async def one(v: str, a: str) -> dict:
+        async with sem:
+            try:
+                r = await probe(v, device_id, a, ts_from, ts_to)
+            except Exception as exc:
+                return {"version": v, "action": a, "status": "http-error", "detail": str(exc)[:140]}
+        if isinstance(r, dict) and r.get("code") == 500 and "Not found action" in str(r.get("codestring")):
+            return {"version": v, "action": a, "status": "no-action"}
+        if isinstance(r, dict) and isinstance(r.get("code"), int) and r["code"] >= 400:
+            return {"version": v, "action": a, "status": "err", "code": r["code"], "codestring": str(r.get("codestring"))[:140]}
+        keys = list(r.keys())[:15] if isinstance(r, dict) else None
+        return {"version": v, "action": a, "status": "FOUND", "keys": keys}
+
+    results = await asyncio.gather(*[one(v, a) for v in PROBE_VERSIONS for a in PROBE_ACTIONS])
+    return {"found": [r for r in results if r["status"] == "FOUND"],
+            "errors": [r for r in results if r["status"] in ("err", "http-error")],
+            "checked": len(results)}
+
+
 async def get_track_mileage(device_id: str, ts_from: int, ts_to: int) -> Optional[float]:
     """Sum of the GPS track length (km) over the period, or None if unavailable."""
     try:
