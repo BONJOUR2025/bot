@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
-import { ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { ChevronDown, ChevronUp, Info, Target, Building2, Users } from 'lucide-react';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { StatCard, Tabs } from '../components/ui/SalaryUI.jsx';
 
 const MONTHS = [
   'ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ',
@@ -22,8 +23,10 @@ function fmtInput(v) {
 // ── CodeManager (read-only — codes come from «Салоны») ───────────
 function CodeManager({ codes }) {
   return (
-    <div className="card p-4 space-y-3">
-      <h3 className="font-semibold text-sm text-[color:var(--color-foreground)]">Точки продаж</h3>
+    <div className="app-card p-4 space-y-3">
+      <h3 className="font-semibold text-sm flex items-center gap-1.5">
+        <Building2 size={15} className="text-[color:var(--color-muted-foreground)]" /> Точки продаж
+      </h3>
 
       <p className="text-xs text-[color:var(--color-muted-foreground)]">
         Список формируется из активных салонов с заполненным кодом. Чтобы добавить
@@ -101,7 +104,10 @@ function PlansTable({ codes, plans, onChange }) {
   ];
 
   return (
-    <div className="card overflow-hidden">
+    <div className="app-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-[color:var(--color-border)] font-semibold text-sm">
+        Планы по точкам
+      </div>
       <ResponsiveTable
         data={codes}
         keyFn={(c) => c.code}
@@ -189,7 +195,7 @@ function ManagerPlansSection({ period }) {
 
   return (
     <div className="app-card overflow-hidden">
-      <div className="px-4 py-3 border-b border-[color:var(--color-border)] font-semibold">
+      <div className="px-4 py-3 border-b border-[color:var(--color-border)] font-semibold text-sm">
         Планы менеджеров · {period}
       </div>
       <ResponsiveTable
@@ -223,6 +229,7 @@ export default function LocationPlans() {
   const [saved, setSaved]     = useState(false);
   const [error, setError]     = useState(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [tab, setTab] = useState('locations');
 
   const monthKey = `${month}_${year}`;
   const managerPeriod = `${year}-${String(MONTHS.indexOf(month) + 1).padStart(2, '0')}`;
@@ -242,6 +249,13 @@ export default function LocationPlans() {
   }, [monthKey]);
 
   useEffect(() => { load(); }, [load]);
+
+  const totals = useMemo(() => ({
+    repair: codes.reduce((s, c) => s + (plans[c.code]?.repair_plan || 0), 0),
+    cosmetics: codes.reduce((s, c) => s + (plans[c.code]?.cosmetics_plan || 0), 0),
+    shoes: codes.reduce((s, c) => s + (plans[c.code]?.shoes_plan || 0), 0),
+  }), [codes, plans]);
+  const totalPlan = totals.repair + totals.cosmetics + totals.shoes;
 
   function handlePlanChange(locationCode, field, value) {
     setPlans(prev => ({
@@ -293,35 +307,47 @@ export default function LocationPlans() {
     else setMonth(MONTHS[idx + 1]);
   }
 
+  const tabs = [
+    { key: 'locations', label: 'Точки', icon: <Building2 size={15} /> },
+    { key: 'managers', label: 'Менеджеры', icon: <Users size={15} /> },
+  ];
+
   return (
     <div className="p-4 sm:p-6 space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold">Планы продаж</h1>
-          {!isMobile && (
-            <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
-              Месячные планы по точкам и планы менеджеров (оклад, KPI, выручка, конверсии)
-            </p>
-          )}
+        <div className="min-w-0 flex items-center gap-2.5">
+          <span className="hidden sm:flex h-10 w-10 rounded-xl bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] items-center justify-center shrink-0">
+            <Target size={20} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+              <Target size={20} className="sm:hidden text-[color:var(--color-primary)]" /> Планы продаж
+            </h1>
+            {!isMobile && (
+              <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
+                Месячные планы по точкам и планы менеджеров (оклад, KPI, выручка, конверсии)
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={prevMonth} className="btn btn-secondary w-9 h-9 flex items-center justify-center text-lg leading-none">‹</button>
+          <button onClick={prevMonth} className="btn btn--secondary w-9 h-9 flex items-center justify-center text-lg leading-none">‹</button>
           <span className="min-w-[140px] sm:min-w-[160px] text-center font-semibold text-sm sm:text-base px-1">
             {month} {year}
           </span>
-          <button onClick={nextMonth} className="btn btn-secondary w-9 h-9 flex items-center justify-center text-lg leading-none">›</button>
+          <button onClick={nextMonth} className="btn btn--secondary w-9 h-9 flex items-center justify-center text-lg leading-none">›</button>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
+        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">
           {error}
         </div>
       )}
 
       {/* How it works — collapsible on all screen sizes */}
-      <div className="rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800 overflow-hidden">
+      <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 overflow-hidden">
         <button
           className="w-full flex items-center gap-2 px-4 py-3 text-left"
           onClick={() => setShowInfo(v => !v)}
@@ -331,42 +357,59 @@ export default function LocationPlans() {
           {showInfo ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
         </button>
         {showInfo && (
-          <div className="px-4 pb-4 space-y-1.5 border-t border-blue-200 pt-3">
+          <div className="px-4 pb-4 space-y-1.5 border-t border-blue-200 dark:border-blue-800 pt-3">
             <p>Дневной план точки = Месячный план точки ÷ Количество дней в месяце</p>
             <p>Индивидуальный план = Σ (Дневной план точки × Смен сотрудника на этой точке)</p>
-            <p className="text-blue-600">Если для сотрудника задан ручной план в «Расчёте зарплаты» — он имеет приоритет.</p>
+            <p className="text-blue-600 dark:text-blue-400">Если для сотрудника задан ручной план в «Расчёте зарплаты» — он имеет приоритет.</p>
           </div>
         )}
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-[color:var(--color-muted-foreground)]">Загрузка...</div>
+        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">Загрузка…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5 items-start">
-          {/* Left: code list (read-only, derived from «Салоны») */}
-          <CodeManager codes={codes} />
-
-          {/* Right: plans table + save */}
-          <div className="space-y-4">
-            <PlansTable codes={codes} plans={plans} onChange={handlePlanChange} />
-
-            <div className="flex items-center justify-end gap-3">
-              {saved && (
-                <span className="text-sm text-emerald-600 font-medium">✓ Сохранено</span>
-              )}
-              <button
-                onClick={handleSave}
-                disabled={saving || codes.length === 0}
-                className={`btn btn-primary min-w-[130px] ${isMobile ? 'flex-1' : ''}`}
-              >
-                {saving ? 'Сохранение...' : 'Сохранить планы'}
-              </button>
-            </div>
+        <>
+          {/* Summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard icon={<Building2 size={18} />} label="Точек" value={codes.length} />
+            <StatCard icon={<Target size={18} />} label="Ремонт / Химчистка" value={`${fmt(totals.repair)} ₽`} />
+            <StatCard icon={<Target size={18} />} label="Косметика" value={`${fmt(totals.cosmetics)} ₽`} />
+            <StatCard icon={<Target size={18} />} label="Обувь" value={`${fmt(totals.shoes)} ₽`} />
           </div>
-        </div>
-      )}
+          <div className="text-sm text-[color:var(--color-muted-foreground)] -mt-2">
+            Суммарный план продаж за {month.toLowerCase()}: <span className="font-semibold text-[color:var(--color-text-primary)]">{fmt(totalPlan)} ₽</span>
+          </div>
 
-      {!loading && <ManagerPlansSection period={managerPeriod} />}
+          <Tabs tabs={tabs} active={tab} onChange={setTab} />
+
+          {tab === 'locations' && (
+            <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5 items-start">
+              {/* Left: code list (read-only, derived from «Салоны») */}
+              <CodeManager codes={codes} />
+
+              {/* Right: plans table + save */}
+              <div className="space-y-4">
+                <PlansTable codes={codes} plans={plans} onChange={handlePlanChange} />
+
+                <div className="flex items-center justify-end gap-3">
+                  {saved && (
+                    <span className="text-sm text-[color:var(--color-success)] font-medium">✓ Сохранено</span>
+                  )}
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || codes.length === 0}
+                    className={`btn btn--primary min-w-[130px] ${isMobile ? 'flex-1' : ''}`}
+                  >
+                    {saving ? 'Сохранение…' : 'Сохранить планы'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'managers' && <ManagerPlansSection period={managerPeriod} />}
+        </>
+      )}
     </div>
   );
 }
