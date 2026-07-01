@@ -27,7 +27,6 @@ AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
     {"id": "payouts-control", "label": "Контроль выплат"},
     {"id": "manager-salary", "label": "Расчёт ЗП менеджеров"},
     {"id": "incentives", "label": "Штрафы и премии"},
-    {"id": "reports", "label": "Отчёты"},
     {"id": "broadcast", "label": "Рассылка"},
     {"id": "messages", "label": "История сообщений"},
     {"id": "dictionary", "label": "Словарь"},

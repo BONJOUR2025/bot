@@ -66,7 +66,6 @@ const navStructure = [
       { to: '/admin/incentives',       label: 'Штрафы и премии',      permission: 'incentives',      icon: Award },
       { to: '/admin/cash-moves',       label: 'Кассовые перемещения', permission: 'cash-moves',      icon: ArrowLeftRight },
       { to: '/admin/payment-calendar', label: 'Платежный календарь',  permission: 'payment-calendar',icon: CalendarDays },
-      { to: '/admin/reports',          label: 'Отчёты',               permission: 'reports',         icon: BarChart2 },
     ],
   },
   {

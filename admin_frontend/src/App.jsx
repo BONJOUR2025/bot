@@ -29,7 +29,6 @@ import ArchivedEmployees from "./pages/ArchivedEmployees";
 import Payouts from "./pages/Payouts";
 import PayoutsControl from "./pages/PayoutsControl";
 import Incentives from "./pages/Incentives";
-import Reports from "./pages/Reports";
 import Broadcast from "./pages/Broadcast";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import MessageHistory from "./pages/MessageHistory";
@@ -92,7 +91,6 @@ export default function App() {
                 <Route path="payouts" element={<Payouts />} />
                 <Route path="payouts-control" element={<PayoutsControl />} />
                 <Route path="incentives" element={<Incentives />} />
-                <Route path="reports" element={<Reports />} />
                 <Route path="broadcast" element={<Broadcast />} />
                 <Route path="messages" element={<MessageHistory />} />
                 <Route path="vacations" element={<Vacations />} />

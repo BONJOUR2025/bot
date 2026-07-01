@@ -61,11 +61,11 @@ def test_user_permissions_override(tmp_path: Path) -> None:
     assert set(DEFAULT_USER_BUTTON_IDS).intersection(resolved.bot_buttons)
 
     service.update_user("123", {
-        "permissions": ["reports"],
+        "permissions": ["broadcast"],
         "bot_buttons": ["user.profile"],
     })
     resolved = service.resolve_user("123")
-    assert resolved.permissions == ["reports"]
+    assert resolved.permissions == ["broadcast"]
     assert "user.profile" in resolved.bot_buttons
     assert "common.home" in resolved.bot_buttons
 
