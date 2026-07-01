@@ -264,19 +264,10 @@ def create_courier_salary_router(
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
-    @router.get("/diagnostics/{employee_code}")
-    async def mileage_diagnostics(employee_code: str,
-                                  date_from: str = Query(..., description="YYYY-MM-DD"),
-                                  date_to: str = Query(..., description="YYYY-MM-DD"),
-                                  odometer_start: Optional[float] = Query(None, description="Реальные показания одометра на начало периода — для сверки"),
-                                  odometer_end: Optional[float] = Query(None, description="Реальные показания одометра на конец периода — для сверки"),
-                                  device_id: Optional[str] = Query(None),
-                                  current: ResolvedUser = Depends(perm)):
-        """Browser-friendly diagnostic: paste this URL (with a valid session
-        cookie) to see raw GPS-derived mileage for an arbitrary date range,
-        without hunting for the device_id or a bearer token by hand. Pass
-        odometer_start/odometer_end to see the delta against a real odometer
-        reading in the same response."""
+    async def _mileage_diagnostics(dev: str, date_from: str, date_to: str,
+                                    odometer_start: Optional[float], odometer_end: Optional[float],
+                                    extra: dict) -> dict:
+        """Shared by the employee_code and device_id diagnostic routes."""
         from datetime import datetime
         try:
             ts_from = int(datetime.strptime(date_from, "%Y-%m-%d").timestamp())
@@ -284,20 +275,10 @@ def create_courier_salary_router(
         except ValueError:
             raise HTTPException(status_code=400, detail="Формат даты: YYYY-MM-DD")
 
-        dev = str(device_id or "")
-        if not dev:
-            plan_repo = get_courier_plan_repository()
-            for period in {date_to[:7], date_from[:7]}:
-                dev = str(plan_repo.get(employee_code, period).get("starline_device_id") or "")
-                if dev:
-                    break
-        if not dev:
-            raise HTTPException(status_code=400, detail="У сотрудника не привязано устройство StarLine ни на один из месяцев периода — передайте device_id вручную")
-
         diag = await starline_client.get_ways_diagnostics(dev, ts_from, ts_to)
         km = diag["km"]
         result = {
-            "employee_code": employee_code,
+            **extra,
             "device_id": dev,
             "date_from": date_from,
             "date_to": date_to,
@@ -326,6 +307,42 @@ def create_courier_salary_router(
             result["odometer_vs_gps_diff_km"] = None if km is None else round(real_km - km, 1)
             result["odometer_vs_gps_diff_pct"] = None if not km else round((real_km - km) / km * 100, 1)
         return result
+
+    @router.get("/diagnostics/device/{device_id}")
+    async def mileage_diagnostics_by_device(device_id: str,
+                                            date_from: str = Query(..., description="YYYY-MM-DD"),
+                                            date_to: str = Query(..., description="YYYY-MM-DD"),
+                                            odometer_start: Optional[float] = Query(None, description="Реальные показания одометра на начало периода — для сверки"),
+                                            odometer_end: Optional[float] = Query(None, description="Реальные показания одометра на конец периода — для сверки"),
+                                            current: ResolvedUser = Depends(perm)):
+        """Browser-friendly diagnostic straight by StarLine device_id — no
+        employee_code/plan lookup involved. Paste the URL (with a valid
+        session cookie) to see raw GPS-derived mileage for an arbitrary date
+        range. Pass odometer_start/odometer_end to see the delta against a
+        real odometer reading in the same response."""
+        return await _mileage_diagnostics(device_id, date_from, date_to, odometer_start, odometer_end, {})
+
+    @router.get("/diagnostics/{employee_code}")
+    async def mileage_diagnostics(employee_code: str,
+                                  date_from: str = Query(..., description="YYYY-MM-DD"),
+                                  date_to: str = Query(..., description="YYYY-MM-DD"),
+                                  odometer_start: Optional[float] = Query(None, description="Реальные показания одометра на начало периода — для сверки"),
+                                  odometer_end: Optional[float] = Query(None, description="Реальные показания одометра на конец периода — для сверки"),
+                                  device_id: Optional[str] = Query(None),
+                                  current: ResolvedUser = Depends(perm)):
+        """Same as /diagnostics/device/{device_id}, but resolves the device
+        from the courier's plan (either month touched by the range) so you
+        don't have to look device_id up by hand."""
+        dev = str(device_id or "")
+        if not dev:
+            plan_repo = get_courier_plan_repository()
+            for period in {date_to[:7], date_from[:7]}:
+                dev = str(plan_repo.get(employee_code, period).get("starline_device_id") or "")
+                if dev:
+                    break
+        if not dev:
+            raise HTTPException(status_code=400, detail="У сотрудника не привязано устройство StarLine ни на один из месяцев периода — передайте device_id вручную")
+        return await _mileage_diagnostics(dev, date_from, date_to, odometer_start, odometer_end, {"employee_code": employee_code})
 
     @router.get("/starline/probe-all/{device_id}")
     async def starline_probe_all(device_id: str, period: str = Query("2026-06"),
