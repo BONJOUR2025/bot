@@ -349,7 +349,7 @@ function SalonCard({ salon, employees, onClick }) {
   return (
     <div
       onClick={onClick}
-      className="card p-5 cursor-pointer hover:shadow-md transition-shadow group"
+      className="app-card p-5 cursor-pointer hover:shadow-md transition-shadow group"
     >
       {/* Top row */}
       <div className="flex items-start justify-between gap-2 mb-3">
@@ -646,18 +646,19 @@ export default function Salons() {
         <button onClick={() => setModal('new')} className="btn btn-primary">+ Добавить салон</button>
       </div>
 
-      {/* Stats row */}
+      {/* Stats row — click a card to filter the list by status */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Всего',    value: stats.total,      cls: 'text-[color:var(--color-foreground)]' },
-          { label: 'Работает', value: stats.active,     cls: 'text-emerald-600' },
-          { label: 'Ремонт',   value: stats.renovation, cls: 'text-amber-600' },
-          { label: 'Закрыт',   value: stats.closed,     cls: 'text-red-500' },
-        ].map(({ label, value, cls }) => (
-          <div key={label} className="card p-4 text-center">
+          { label: 'Всего',    value: stats.total,      cls: 'text-[color:var(--color-foreground)]', status: '' },
+          { label: 'Работает', value: stats.active,     cls: 'text-emerald-600', status: 'active' },
+          { label: 'Ремонт',   value: stats.renovation, cls: 'text-amber-600', status: 'renovation' },
+          { label: 'Закрыт',   value: stats.closed,     cls: 'text-red-500', status: 'closed' },
+        ].map(({ label, value, cls, status }) => (
+          <button key={label} type="button" onClick={() => setStatusFilter((prev) => (prev === status ? '' : status))}
+            className={`app-card p-4 text-center transition-colors hover:border-[color:var(--color-primary)] ${statusFilter === status ? 'border-[color:var(--color-primary)]' : ''}`}>
             <div className={`text-3xl font-bold ${cls}`}>{value}</div>
             <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{label}</div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -688,7 +689,7 @@ export default function Salons() {
 
       {/* Grid */}
       {filtered.length === 0 ? (
-        <div className="card p-16 text-center text-[color:var(--color-muted-foreground)]">
+        <div className="app-card p-16 text-center text-[color:var(--color-muted-foreground)]">
           {salons.length === 0
             ? <div><p className="text-lg font-medium mb-2">Нет салонов</p><p className="text-sm">Нажмите «+ Добавить салон» чтобы начать</p></div>
             : <p>Ничего не найдено</p>

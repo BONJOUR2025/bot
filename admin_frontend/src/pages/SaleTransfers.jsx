@@ -190,7 +190,7 @@ export default function SaleTransfers() {
       </div>
 
       {/* Lookup */}
-      <div className="card p-4 space-y-3">
+      <div className="app-card p-4 space-y-3">
         <label className="text-sm font-medium">Номер заказа</label>
         <div className="flex gap-2">
           <input
@@ -275,7 +275,7 @@ export default function SaleTransfers() {
       </div>
 
       {/* Existing transfers */}
-      <div className="card overflow-hidden">
+      <div className="app-card overflow-hidden">
         <div className="px-4 py-3 border-b border-[color:var(--color-border)] font-semibold text-sm">
           Переносы за {month} {year}
         </div>

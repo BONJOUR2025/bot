@@ -319,7 +319,7 @@ export default function Assets() {
       </div>
 
       {/* Filters */}
-      <div className="card p-3 flex flex-wrap gap-2 items-center">
+      <div className="app-card p-3 flex flex-wrap gap-2 items-center">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)] pointer-events-none" />
           <input className="input pl-8 w-52" placeholder="ФИО / предмет"
@@ -369,7 +369,7 @@ export default function Assets() {
           onChange={toggleAll} />
         <span>Выбрать всех</span>
       </div>
-      <div className="card overflow-hidden">
+      <div className="app-card overflow-hidden">
         <ResponsiveTable
           data={grouped}
           keyFn={g => g.employee_id}
