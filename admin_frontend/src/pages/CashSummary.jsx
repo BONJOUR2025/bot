@@ -291,6 +291,11 @@ export default function CashSummary() {
     load(from, to);
   }
 
+  function applyCustomRange() {
+    setActivePreset('custom');
+    load(dateFrom, dateTo);
+  }
+
   function toggleCategory(name) {
     setHidden((prev) => {
       const next = new Set(prev);
@@ -409,6 +414,18 @@ export default function CashSummary() {
               {p.label}
             </button>
           ))}
+          <label className="block">
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">С</span>
+            <input type="date" className="input text-xs h-[30px] py-0" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">По</span>
+            <input type="date" className="input text-xs h-[30px] py-0" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </label>
+          <button className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activePreset === 'custom' ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}
+            onClick={applyCustomRange}>
+            Применить период
+          </button>
           <button className="btn btn--secondary flex items-center gap-1.5" onClick={() => setShowSettings((v) => !v)}>
             <SlidersHorizontal size={14} /> Категории{hidden.size > 0 ? ` (${hidden.size} скрыто)` : ''}
           </button>

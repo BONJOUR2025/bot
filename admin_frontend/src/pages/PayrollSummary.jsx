@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { BarChart2, RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound } from 'lucide-react';
+import {
+  BarChart2, RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound,
+  SlidersHorizontal, X, Check, Plus, Trash2, Layers,
+} from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { toPng } from 'html-to-image';
 import api from '../api';
@@ -54,17 +57,11 @@ const fmtShort = (v) => {
 };
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
 const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
-
-function recentMonths(n = 12) {
-  const out = [];
-  const d = new Date();
-  for (let i = 0; i < n; i++) {
-    const y = d.getFullYear(), m = d.getMonth();
-    out.push({ value: `${y}-${String(m + 1).padStart(2, '0')}`, label: `${MONTHS_RU[m]} ${y}` });
-    d.setMonth(m - 1);
-  }
-  return out;
-}
+const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const monthLabel = (period) => {
+  const [y, m] = period.split('-').map(Number);
+  return `${MONTHS_RU[m - 1]} ${y}`;
+};
 
 const COLS = [
   { key: 'oklad', label: 'Оклад' },
@@ -75,6 +72,7 @@ const COLS = [
   { key: 'gross', label: 'Начислено' },
   { key: 'to_pay', label: 'К выплате' },
 ];
+const SIMPLE_COLS = COLS.filter((c) => c.key === 'gross' || c.key === 'to_pay');
 
 const sumRows = (rows) => {
   const t = {};
@@ -195,6 +193,40 @@ const DARK = {
 
 const RTC = createContext(DARK);
 
+// ── Settings persistence (browser-local, applies to every period) ────────────
+const HIDDEN_CATS_KEY = 'payrollSummary.hiddenCategories';
+const HIDDEN_EMPLOYEES_KEY = 'payrollSummary.hiddenEmployees';
+const SHOW_BREAKDOWN_KEY = 'payrollSummary.showBreakdown';
+const MANUAL_ROWS_KEY = 'payrollSummary.manualRows'; // { [period]: [row, ...] }
+
+function loadSet(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+}
+function saveSet(key, set) {
+  try { localStorage.setItem(key, JSON.stringify([...set])); } catch { /* noop */ }
+}
+function loadManualRows() {
+  try {
+    const raw = localStorage.getItem(MANUAL_ROWS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function saveManualRows(byPeriod) {
+  try { localStorage.setItem(MANUAL_ROWS_KEY, JSON.stringify(byPeriod)); } catch { /* noop */ }
+}
+function loadBool(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : raw === '1';
+  } catch { return fallback; }
+}
+function saveBool(key, value) {
+  try { localStorage.setItem(key, value ? '1' : '0'); } catch { /* noop */ }
+}
+
 // ── Report sub-components (theme via RTC context) ────────────────────────────
 
 function KpiCard({ icon, label, value, sub, color }) {
@@ -309,20 +341,165 @@ function PayrollProgress({ status }) {
   );
 }
 
+// ── Settings panel (screen-only chrome, not part of the PNG) ────────────────
+
+function EmptyManualForm() {
+  return { category: CATS[0].key, name: '', oklad: '', commission: '', bonuses: '', penalties: '', advances: '' };
+}
+
+function SettingsPanel({
+  allEmployeeNames, hiddenCats, hiddenEmployees, showBreakdown,
+  onToggleCat, onToggleEmployee, onShowAllCats, onShowAllEmployees,
+  onSetShowBreakdown, manualRows, onAddManual, onRemoveManual, onClose,
+}) {
+  const [empQuery, setEmpQuery] = useState('');
+  const [form, setForm] = useState(EmptyManualForm);
+  const filteredNames = allEmployeeNames.filter((n) => n.toLowerCase().includes(empQuery.toLowerCase()));
+
+  function submitManual(e) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    onAddManual({
+      id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      category: form.category,
+      name: form.name.trim(),
+      oklad: Number(form.oklad) || 0,
+      commission: Number(form.commission) || 0,
+      bonuses: Number(form.bonuses) || 0,
+      penalties: Number(form.penalties) || 0,
+      advances: Number(form.advances) || 0,
+    });
+    setForm(EmptyManualForm());
+  }
+
+  return (
+    <div className="app-card p-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold flex items-center gap-2">
+          <SlidersHorizontal size={15} className="text-[color:var(--color-primary)]" />
+          Настройка отчёта
+        </div>
+        <button className="icon-button icon-button--ghost" onClick={onClose} aria-label="Закрыть"><X size={16} /></button>
+      </div>
+
+      {/* Categories */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-2">Должности / категории</div>
+        <div className="flex flex-wrap gap-2">
+          {CATS.map((c) => {
+            const isHidden = hiddenCats.has(c.key);
+            return (
+              <button key={c.key} type="button" onClick={() => onToggleCat(c.key)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  isHidden
+                    ? 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] bg-[color:var(--color-bg-secondary)]'
+                    : 'border-[color:var(--color-primary)] text-[color:var(--color-primary)] bg-[color:var(--color-primary-muted)]'
+                }`}>
+                {isHidden ? <X size={12} /> : <Check size={12} />}
+                {c.title}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Detail level */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-2">Детализация таблицы</div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => onSetShowBreakdown(true)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${showBreakdown ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'}`}>
+            Подробно (оклад, авансы, штрафы…)
+          </button>
+          <button type="button" onClick={() => onSetShowBreakdown(false)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${!showBreakdown ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'}`}>
+            Только итог (начислено / к выплате)
+          </button>
+        </div>
+        <div className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1.5">«Только итог» скрывает авансы, штрафы и прочие статьи в таблице по сотрудникам — удобно, если отчёт кому-то показываете.</div>
+      </div>
+
+      {/* Employees */}
+      {allEmployeeNames.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Сотрудники ({allEmployeeNames.length - hiddenEmployees.size} из {allEmployeeNames.length})</div>
+            <button className="text-xs text-[color:var(--color-primary)] hover:underline" onClick={onShowAllEmployees}>Показать всех</button>
+          </div>
+          <input className="input text-sm w-full mb-2" placeholder="Поиск по имени…" value={empQuery} onChange={(e) => setEmpQuery(e.target.value)} />
+          <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+            {filteredNames.map((name) => {
+              const isHidden = hiddenEmployees.has(name);
+              return (
+                <button key={name} type="button" onClick={() => onToggleEmployee(name)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    isHidden
+                      ? 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] bg-[color:var(--color-bg-secondary)] line-through'
+                      : 'border-[color:var(--color-border)] text-[color:var(--color-text)] bg-[color:var(--color-surface)]'
+                  }`}>
+                  {name}
+                </button>
+              );
+            })}
+            {filteredNames.length === 0 && <span className="text-xs text-[color:var(--color-muted-foreground)]">Никого не найдено</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Manual rows */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-2 flex items-center gap-1.5">
+          <Layers size={12} /> Добавлено вручную за этот период
+        </div>
+        {manualRows.length > 0 && (
+          <div className="space-y-1.5 mb-3">
+            {manualRows.map((r) => (
+              <div key={r.id} className="flex items-center gap-2 text-xs bg-[color:var(--color-bg-secondary)] rounded-lg px-2.5 py-1.5">
+                <span className="font-medium flex-1 truncate">{r.name}</span>
+                <span className="text-[color:var(--color-muted-foreground)]">{CATS.find((c) => c.key === r.category)?.title}</span>
+                <span className="font-semibold tabular-nums">{fmtMoney(r.gross)}</span>
+                <button className="text-[color:var(--color-danger)] hover:opacity-70" onClick={() => onRemoveManual(r.id)} aria-label="Удалить">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <form onSubmit={submitManual} className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <select className="input text-xs" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+            {CATS.map((c) => <option key={c.key} value={c.key}>{c.title}</option>)}
+          </select>
+          <input className="input text-xs" placeholder="Имя" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          <input className="input text-xs" type="number" placeholder="Оклад" value={form.oklad} onChange={(e) => setForm((f) => ({ ...f, oklad: e.target.value }))} />
+          <input className="input text-xs" type="number" placeholder="Комиссия" value={form.commission} onChange={(e) => setForm((f) => ({ ...f, commission: e.target.value }))} />
+          <input className="input text-xs" type="number" placeholder="Премии" value={form.bonuses} onChange={(e) => setForm((f) => ({ ...f, bonuses: e.target.value }))} />
+          <input className="input text-xs" type="number" placeholder="Штрафы" value={form.penalties} onChange={(e) => setForm((f) => ({ ...f, penalties: e.target.value }))} />
+          <input className="input text-xs" type="number" placeholder="Авансы" value={form.advances} onChange={(e) => setForm((f) => ({ ...f, advances: e.target.value }))} />
+          <button type="submit" className="btn btn--secondary text-xs flex items-center justify-center gap-1"><Plus size={13} /> Добавить</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PayrollSummary() {
   const { toast } = useToast();
-  const months = useMemo(() => recentMonths(12), []);
-  const [period, setPeriod] = useState(months[0].value);
+  const [period, setPeriod] = useState(thisMonth());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pnging, setPnging] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [catStatus, setCatStatus] = useState({});
   const [generatedAt, setGeneratedAt] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [hiddenCats, setHiddenCats] = useState(() => loadSet(HIDDEN_CATS_KEY));
+  const [hiddenEmployees, setHiddenEmployees] = useState(() => loadSet(HIDDEN_EMPLOYEES_KEY));
+  const [showBreakdown, setShowBreakdown] = useState(() => loadBool(SHOW_BREAKDOWN_KEY, true));
+  const [manualByPeriod, setManualByPeriod] = useState(loadManualRows);
   const reportRef = useRef(null);
-  const periodLabel = months.find((m) => m.value === period)?.label || period;
+  const periodLabel = monthLabel(period);
 
   // T drives the on-screen theme: dark normally, light during PNG export
   const T = exporting ? LIGHT : DARK;
@@ -347,10 +524,51 @@ export default function PayrollSummary() {
   }, [period]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { saveSet(HIDDEN_CATS_KEY, hiddenCats); }, [hiddenCats]);
+  useEffect(() => { saveSet(HIDDEN_EMPLOYEES_KEY, hiddenEmployees); }, [hiddenEmployees]);
+  useEffect(() => { saveBool(SHOW_BREAKDOWN_KEY, showBreakdown); }, [showBreakdown]);
+  useEffect(() => { saveManualRows(manualByPeriod); }, [manualByPeriod]);
 
-  // Derived
-  const cat = (k) => ({ rows: data?.[k]?.rows || [], error: data?.[k]?.error, totals: sumRows(data?.[k]?.rows) });
-  const cats = CATS.map((c) => ({ ...c, ...cat(c.key) }));
+  const manualRows = manualByPeriod[period] || [];
+
+  function addManualRow(row) {
+    setManualByPeriod((prev) => ({ ...prev, [period]: [...(prev[period] || []), row] }));
+  }
+  function removeManualRow(id) {
+    setManualByPeriod((prev) => ({ ...prev, [period]: (prev[period] || []).filter((r) => r.id !== id) }));
+  }
+  function toggleCat(key) {
+    setHiddenCats((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+  }
+  function toggleEmployee(name) {
+    setHiddenEmployees((prev) => { const next = new Set(prev); next.has(name) ? next.delete(name) : next.add(name); return next; });
+  }
+
+  // Derived: raw category rows + manual rows merged in, before visibility filtering
+  const catsWithManual = useMemo(() => CATS.map((c) => ({
+    ...c,
+    rows: [...(data?.[c.key]?.rows || []), ...manualRows.filter((r) => r.category === c.key).map((r) => ({
+      ...r,
+      gross: r.oklad + r.commission + r.bonuses,
+      to_pay: r.oklad + r.commission + r.bonuses - r.penalties - r.advances,
+    }))],
+    error: data?.[c.key]?.error,
+  })), [data, manualRows]);
+
+  const allEmployeeNames = useMemo(() => {
+    const names = new Set();
+    catsWithManual.forEach((c) => c.rows.forEach((r) => names.add(r.name)));
+    return [...names].sort((a, b) => a.localeCompare(b, 'ru'));
+  }, [catsWithManual]);
+
+  // Visible = not-hidden category, not-hidden employee
+  const cats = useMemo(() => catsWithManual
+    .filter((c) => !hiddenCats.has(c.key))
+    .map((c) => {
+      const rows = c.rows.filter((r) => !hiddenEmployees.has(r.name));
+      return { ...c, rows, totals: sumRows(rows) };
+    }), [catsWithManual, hiddenCats, hiddenEmployees]);
+
   const tagged = cats.flatMap((c) => c.rows.map((r) => ({ ...r, catColor: c.color, catTitle: c.title })));
   const grand = sumRows(tagged);
   const headcount = tagged.length;
@@ -364,6 +582,7 @@ export default function PayrollSummary() {
     { label: 'Комиссия / KPI', value: grand.commission, color: '#10b981' },
     { label: 'Премии', value: grand.bonuses, color: '#f59e0b' },
   ].filter((s) => s.value > 0);
+  const visibleCols = showBreakdown ? COLS : SIMPLE_COLS;
 
   async function downloadPng() {
     if (!reportRef.current) return;
@@ -398,15 +617,16 @@ export default function PayrollSummary() {
           <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
             <BarChart2 size={24} /> Сводный отчёт по ФОТ
           </h2>
-          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Администраторы, мастера и менеджеры за период · стильный PNG-отчёт</p>
+          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Администраторы, мастера, менеджеры и курьеры за период · настраиваемый PNG-отчёт</p>
         </div>
-        <div className="flex items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <label className="block">
             <span className="block text-xs font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Период</span>
-            <select className="input min-w-[160px]" value={period} onChange={(e) => setPeriod(e.target.value)}>
-              {months.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </select>
+            <input type="month" className="input min-w-[160px]" value={period} onChange={(e) => setPeriod(e.target.value || thisMonth())} />
           </label>
+          <button className="btn btn--secondary flex items-center gap-1.5" onClick={() => setShowSettings((v) => !v)}>
+            <SlidersHorizontal size={14} /> Настроить{(hiddenCats.size + hiddenEmployees.size) > 0 ? ` (${hiddenCats.size + hiddenEmployees.size})` : ''}
+          </button>
           <button className="btn btn--secondary flex items-center gap-1.5" onClick={load} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Обновить
           </button>
@@ -415,6 +635,24 @@ export default function PayrollSummary() {
           </button>
         </div>
       </div>
+
+      {showSettings && (
+        <SettingsPanel
+          allEmployeeNames={allEmployeeNames}
+          hiddenCats={hiddenCats}
+          hiddenEmployees={hiddenEmployees}
+          showBreakdown={showBreakdown}
+          onToggleCat={toggleCat}
+          onToggleEmployee={toggleEmployee}
+          onShowAllCats={() => setHiddenCats(new Set())}
+          onShowAllEmployees={() => setHiddenEmployees(new Set())}
+          onSetShowBreakdown={setShowBreakdown}
+          manualRows={manualRows}
+          onAddManual={addManualRow}
+          onRemoveManual={removeManualRow}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       {/* Initial load: detailed progress panel */}
       {loading && !data && <PayrollProgress status={catStatus} />}
@@ -435,7 +673,7 @@ export default function PayrollSummary() {
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">Сводный отчёт</div>
                   <div className="mt-1 text-[30px] font-extrabold leading-tight">Фонд оплаты труда</div>
-                  <div className="mt-1 text-sm opacity-90">{periodLabel} · администраторы · мастера · менеджеры</div>
+                  <div className="mt-1 text-sm opacity-90">{periodLabel} · {cats.map((c) => c.title.toLowerCase()).join(', ') || 'нет активных категорий'}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[11px] font-semibold uppercase tracking-wide opacity-80">Итого начислено</div>
@@ -449,7 +687,7 @@ export default function PayrollSummary() {
                 <div className="grid grid-cols-4 gap-4">
                   <KpiCard icon={<Wallet size={13} />} label="ФОТ за период" value={fmtMoney(grand.gross)} sub={`средняя ${fmtShort(headcount ? grand.gross / headcount : 0)} / чел.`} color={BRAND} />
                   <KpiCard icon={<Wallet size={13} />} label="К выплате" value={fmtMoney(grand.to_pay)} sub={`${pct(grand.to_pay, grand.gross)}% от начисленного`} color="#10b981" />
-                  <KpiCard icon={<UserRound size={13} />} label="Сотрудников" value={String(headcount)} sub={cats.map((c) => `${c.title.slice(0, 4).toLowerCase()}. ${c.rows.length}`).join(' · ')} />
+                  <KpiCard icon={<UserRound size={13} />} label="Сотрудников" value={String(headcount)} sub={cats.map((c) => `${c.title.slice(0, 4).toLowerCase()}. ${c.rows.length}`).join(' · ') || '—'} />
                   <KpiCard icon={<TrendingDown size={13} />} label="Удержания" value={fmtMoney(withholdings)} sub={`авансы ${fmtShort(grand.advances)} · штрафы ${fmtShort(grand.penalties)}`} color={DANGER} />
                 </div>
 
@@ -479,6 +717,7 @@ export default function PayrollSummary() {
                             <span className="w-10 text-right text-xs tabular-nums" style={{ color: T.muted }}>{pct(c.totals.gross, grand.gross)}%</span>
                           </div>
                         ))}
+                        {cats.length === 0 && <div className="text-sm" style={{ color: T.muted }}>Все категории скрыты настройкой</div>}
                       </div>
                     </div>
                   </Section>
@@ -536,12 +775,12 @@ export default function PayrollSummary() {
                     <table className="w-full text-[13px] table-fixed">
                       <colgroup>
                         <col style={{ width: '20%' }} />
-                        {COLS.map((c) => <col key={c.key} style={{ width: `${80 / COLS.length}%` }} />)}
+                        {visibleCols.map((c) => <col key={c.key} style={{ width: `${80 / visibleCols.length}%` }} />)}
                       </colgroup>
                       <thead>
                         <tr style={{ background: T.bg2, color: T.muted }} className="text-[10px] uppercase tracking-wide">
                           <th className="text-left font-semibold px-3 py-2">Сотрудник</th>
-                          {COLS.map((c) => <th key={c.key} className="text-right font-semibold px-3 py-2">{c.label}</th>)}
+                          {visibleCols.map((c) => <th key={c.key} className="text-right font-semibold px-3 py-2">{c.label}</th>)}
                         </tr>
                       </thead>
                       {cats.map((c) => {
@@ -549,7 +788,7 @@ export default function PayrollSummary() {
                         return (
                           <tbody key={c.key}>
                             <tr style={{ background: T.bg, borderTop: `2px solid ${T.line}` }}>
-                              <td colSpan={COLS.length + 1} className="px-3 py-1.5">
+                              <td colSpan={visibleCols.length + 1} className="px-3 py-1.5">
                                 <div className="flex items-center justify-between">
                                   <span className="font-bold flex items-center gap-1.5" style={{ color: c.color }}>
                                     <Icon size={13} /> {c.title}
@@ -562,14 +801,14 @@ export default function PayrollSummary() {
                               </td>
                             </tr>
                             {c.error ? (
-                              <tr><td colSpan={COLS.length + 1} className="px-3 py-2 text-[12px]" style={{ color: DANGER }}>Не удалось загрузить: {c.error}</td></tr>
+                              <tr><td colSpan={visibleCols.length + 1} className="px-3 py-2 text-[12px]" style={{ color: DANGER }}>Не удалось загрузить: {c.error}</td></tr>
                             ) : c.rows.length === 0 ? (
-                              <tr><td colSpan={COLS.length + 1} className="px-3 py-2 text-[12px]" style={{ color: T.muted }}>Нет данных за период.</td></tr>
+                              <tr><td colSpan={visibleCols.length + 1} className="px-3 py-2 text-[12px]" style={{ color: T.muted }}>Нет данных за период.</td></tr>
                             ) : (<>
                               {c.rows.map((r, i) => (
                                 <tr key={i} style={{ borderTop: `1px solid ${T.line}` }}>
-                                  <td className="px-3 py-1.5 font-medium break-words" style={{ color: T.ink }}>{r.name}</td>
-                                  {COLS.map((col) => (
+                                  <td className="px-3 py-1.5 font-medium break-words" style={{ color: T.ink }}>{r.name}{r.id?.startsWith('manual_') ? <span className="text-[10px] font-normal ml-1" style={{ color: T.muted }}>· вручную</span> : ''}</td>
+                                  {visibleCols.map((col) => (
                                     <td key={col.key} className="px-3 py-1.5 text-right tabular-nums"
                                       style={{ color: col.key === 'to_pay' ? BRAND : (col.key === 'penalties' || col.key === 'advances') && r[col.key] ? DANGER : T.ink, fontWeight: col.key === 'to_pay' ? 600 : 400 }}>
                                       {col.key === 'gross' || col.key === 'to_pay' ? fmtMoney(r[col.key]) : (r[col.key] ? fmtMoney(r[col.key]) : '—')}
@@ -579,7 +818,7 @@ export default function PayrollSummary() {
                               ))}
                               <tr style={{ borderTop: `1px solid ${T.line}`, background: T.bg2 }}>
                                 <td className="px-3 py-1.5 font-semibold" style={{ color: T.ink }}>Итого · {c.title.toLowerCase()}</td>
-                                {COLS.map((col) => (
+                                {visibleCols.map((col) => (
                                   <td key={col.key} className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: col.key === 'to_pay' ? BRAND : T.ink }}>{fmtMoney(c.totals[col.key])}</td>
                                 ))}
                               </tr>
@@ -590,7 +829,7 @@ export default function PayrollSummary() {
                       <tfoot>
                         <tr style={{ borderTop: `2px solid ${T.ink}` }}>
                           <td className="px-3 py-2 font-extrabold" style={{ color: T.ink }}>ВСЕГО · {headcount} чел.</td>
-                          {COLS.map((c) => (
+                          {visibleCols.map((c) => (
                             <td key={c.key} className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: c.key === 'gross' || c.key === 'to_pay' ? BRAND : T.ink }}>{fmtMoney(grand[c.key])}</td>
                           ))}
                         </tr>
