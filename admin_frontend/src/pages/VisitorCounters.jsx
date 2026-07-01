@@ -153,7 +153,7 @@ export default function VisitorCounters() {
         </button>
       </div>
 
-      <nav className="flex flex-wrap gap-1.5 border-b border-[color:var(--color-border)] pb-3">
+      <nav className="flex flex-wrap gap-1.5 bg-[color:var(--color-bg-secondary)] rounded-xl p-1.5">
         {TABS.map(({ id, label }) => (
           <button
             key={id}
@@ -162,7 +162,7 @@ export default function VisitorCounters() {
             className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
               tab === id
                 ? 'bg-[color:var(--color-primary)] text-white'
-                : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-bg-secondary)]'
+                : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-surface)]'
             }`}
           >
             {label}

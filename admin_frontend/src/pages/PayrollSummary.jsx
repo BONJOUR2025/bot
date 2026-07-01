@@ -1,10 +1,46 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BarChart2, RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { toPng } from 'html-to-image';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
+
+const REPORT_WIDTH = 1080;
+
+// Scales the fixed-1080px report to fit narrow viewports via CSS transform —
+// the report DOM itself stays at full size (unaffected, since html-to-image
+// captures reportRef's own box, not this wrapper's transform), so PNG export
+// fidelity is untouched while the on-screen view fits phones/tablets.
+function ScaledReport({ children }) {
+  const outerRef = useRef(null);
+  const innerRef = useRef(null);
+  const [scale, setScale] = useState(1);
+  const [height, setHeight] = useState(null);
+
+  useLayoutEffect(() => {
+    const recompute = () => {
+      const outerWidth = outerRef.current?.offsetWidth || REPORT_WIDTH;
+      const naturalHeight = innerRef.current?.offsetHeight || 0;
+      const next = Math.min(1, outerWidth / REPORT_WIDTH);
+      setScale(next);
+      setHeight(naturalHeight * next);
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    if (outerRef.current) ro.observe(outerRef.current);
+    if (innerRef.current) ro.observe(innerRef.current);
+    return () => ro.disconnect();
+  });
+
+  return (
+    <div ref={outerRef} style={{ width: '100%', height: height ?? undefined, overflow: 'hidden' }}>
+      <div ref={innerRef} style={{ width: REPORT_WIDTH, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 const MANAGER_POSITION = 'менеджер по работе с клиентами';
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -385,7 +421,8 @@ export default function PayrollSummary() {
 
       {/* Report (shown once data is available, even while refreshing) */}
       {data && (
-        <div className="overflow-x-auto rounded-2xl">
+        <div className="rounded-2xl">
+          <ScaledReport>
           <RTC.Provider value={T}>
             {/* ════ Captured report (fixed 1080px) ════ */}
             <div ref={reportRef} style={{ width: 1080, background: T.bg, color: T.ink }} className="fot-report overflow-hidden">
@@ -570,6 +607,7 @@ export default function PayrollSummary() {
               </div>
             </div>
           </RTC.Provider>
+          </ScaledReport>
         </div>
       )}
     </div>
