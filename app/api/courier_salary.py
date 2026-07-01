@@ -6,6 +6,7 @@ flow (advances since last salary, accrue, payout, journal) without KPI.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 
 from app.services.payout_service import PayoutService
 from app.services.access_control_service import AccessControlService, ResolvedUser
-from app.services import starline_client
+from app.services import starline_client, yandex_router_client
 from app.data.courier_plan_repository import get_courier_plan_repository
 from app.data.courier_mileage_repository import get_courier_mileage_repository
 from app.data.courier_salary_repository import get_courier_salary_repository
@@ -22,6 +23,14 @@ from .dependencies import require_permission
 from .manager_salary import _advances_since_last_salary, SALARY_TYPE
 
 COURIER_PERMISSION = "payroll"
+
+# Safety net independent of routing_min_km: however low the threshold, never
+# fire more than this many Router API calls for one diagnostics request —
+# Yandex Router API is a paid product past its trial quota, and a fat-fingered
+# routing_min_km=0 over a 2000-gap month shouldn't be able to burn the quota
+# in one request.
+MAX_ROUTED_GAPS = 200
+ROUTING_CONCURRENCY = 4
 
 
 def _calc(oklad, advances, bonuses, penalties) -> dict:
@@ -52,6 +61,45 @@ def _period_ts(period: str) -> tuple[int, int]:
     last = monthrange(y, m)[1]
     return (int(datetime(y, m, 1).timestamp()),
             int(datetime(y, m, last, 23, 59, 59).timestamp()))
+
+
+async def refine_gaps_with_routing(
+    gaps: list[dict], min_km: float,
+    route_fn=yandex_router_client.route_distance_km,
+    max_gaps: int = MAX_ROUTED_GAPS, concurrency: int = ROUTING_CONCURRENCY,
+) -> dict:
+    """Re-measure NO_SIGNAL gaps (>= min_km, capped at max_gaps) via a routing
+    function (Yandex Router API by default; injectable for tests) instead of
+    trusting the straight-line estimate. Each gap that gets a road distance
+    carries it as "road_km"; gaps below the threshold, over the cap, or where
+    routing failed keep only "km" (straight-line) and are summed as-is.
+    Mutates the "gaps" entries in place (adds "road_km" where resolved)."""
+    candidates = [g for g in gaps if not g.get("excluded") and g["km"] >= min_km]
+    capped = candidates[:max_gaps]
+    skipped_over_cap = max(len(candidates) - len(capped), 0)
+
+    sem = asyncio.Semaphore(concurrency)
+
+    async def route_one(g: dict) -> None:
+        async with sem:
+            road_km = await route_fn(g["start"]["y"], g["start"]["x"], g["finish"]["y"], g["finish"]["x"])
+        if road_km is not None:
+            g["road_km"] = road_km
+
+    await asyncio.gather(*[route_one(g) for g in capped])
+
+    total_km = sum(g.get("road_km", g["km"]) for g in gaps if not g.get("excluded"))
+    routed_count = sum(1 for g in capped if "road_km" in g)
+    return {
+        "km": round(total_km, 1),
+        "routed_count": routed_count,
+        "routed_requested": len(capped),
+        "skipped_over_cap": skipped_over_cap,
+        "top_gaps": sorted(
+            (g for g in gaps if not g.get("excluded")),
+            key=lambda g: g.get("road_km", g["km"]), reverse=True,
+        )[:15],
+    }
 
 
 class SalaryInput(BaseModel):
@@ -172,6 +220,26 @@ def create_courier_salary_router(
     async def starline_status(current: ResolvedUser = Depends(perm)):
         return await starline_client.get_status()
 
+    @router.get("/yandex/status")
+    async def yandex_router_status(current: ResolvedUser = Depends(perm)):
+        return {"configured": yandex_router_client.is_configured()}
+
+    @router.get("/yandex/route-raw")
+    async def yandex_route_raw(lat1: float = Query(...), lon1: float = Query(...),
+                               lat2: float = Query(...), lon2: float = Query(...),
+                               current: ResolvedUser = Depends(perm)):
+        """Diagnostic: raw Yandex Router API response for one pair of points —
+        use this once a real YANDEX_ROUTER_API_KEY is set to verify the
+        distance field is where yandex_router_client._find_distance_m expects
+        it (documented shape, not yet exercised against a live key in this
+        project); adjust that function if the real payload differs."""
+        try:
+            raw = await yandex_router_client.get_route_raw(lat1, lon1, lat2, lon2)
+            parsed_m = yandex_router_client._find_distance_m(raw)
+            return {"parsed_km": None if parsed_m is None else round(parsed_m / 1000, 2), "raw": raw}
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
     @router.get("/starline/devices")
     async def starline_devices(current: ResolvedUser = Depends(perm)):
         try:
@@ -266,6 +334,7 @@ def create_courier_salary_router(
 
     async def _mileage_diagnostics(dev: str, date_from: str, date_to: str,
                                     odometer_start: Optional[float], odometer_end: Optional[float],
+                                    use_routing: bool, routing_min_km: float,
                                     extra: dict) -> dict:
         """Shared by the employee_code and device_id diagnostic routes."""
         from datetime import datetime
@@ -277,28 +346,47 @@ def create_courier_salary_router(
 
         diag = await starline_client.get_ways_diagnostics(dev, ts_from, ts_to)
         km = diag["km"]
+        no_signal_km = diag["no_signal_km"]
+        no_signal_top_gaps = diag["no_signal_top_gaps"]
+        routing_info = None
+
+        if use_routing:
+            if not yandex_router_client.is_configured():
+                raise HTTPException(status_code=400, detail="YANDEX_ROUTER_API_KEY не настроен в .env — уточнение по дорогам недоступно")
+            refined = await refine_gaps_with_routing(diag["no_signal_all_gaps"], routing_min_km)
+            no_signal_km = refined["km"]
+            no_signal_top_gaps = refined["top_gaps"]
+            routing_info = {
+                "routed_count": refined["routed_count"],
+                "routing_min_km": routing_min_km,
+                "skipped_over_cap": refined["skipped_over_cap"],
+            }
+
         result = {
             **extra,
             "device_id": dev,
             "date_from": date_from,
             "date_to": date_to,
             "gps_km": km,
-            "no_signal_km": diag["no_signal_km"],
+            "no_signal_km": no_signal_km,
             "no_signal_gaps": diag["no_signal_gaps"],
             "no_signal_excluded_count": diag["no_signal_excluded_count"],
             "no_signal_excluded_km": diag["no_signal_excluded_km"],
-            "no_signal_top_gaps": diag["no_signal_top_gaps"],
-            "estimated_range_km": None if km is None else [km, round(km + diag["no_signal_km"], 1)],
+            "no_signal_top_gaps": no_signal_top_gaps,
+            "routing": routing_info,
+            "estimated_range_km": None if km is None else [km, round(km + no_signal_km, 1)],
             "rate_limited": diag.get("rate_limited", False),
             "retry_after": diag.get("retry_after"),
             "note": (
-                "estimated_range_km — нижняя граница (по треку) и оценка сверху (+ разрывы GPS по прямой, "
-                "без явно битых точек). Реальный одометр обычно попадает в этот диапазон или выше, если машина "
-                "ехала не по прямой во время потери сигнала. no_signal_excluded_km — сумма разрывов длиннее "
+                "estimated_range_km — нижняя граница (по треку) и оценка сверху (+ разрывы GPS, "
+                + ("по дорогам через Yandex Router API" if use_routing else "по прямой")
+                + ", без явно битых точек). Реальный одометр обычно попадает в этот диапазон или чуть выше. "
+                "no_signal_excluded_km — сумма разрывов длиннее "
                 f"{starline_client.NO_SIGNAL_GAP_SANITY_KM} км за один скачок: это почти всегда битые координаты "
-                "устройства (например «нулевой остров» 0°,0°), а не реальная езда, поэтому они не входят в km/"
-                "no_signal_km — но если no_signal_excluded_km велика, посмотрите no_signal_top_gaps, чтобы "
-                "убедиться сами."
+                "устройства (например «нулевой остров» 0°,0°), а не реальная езда — не входят в km/no_signal_km. "
+                + ("" if use_routing else "Добавьте &use_routing=true, чтобы уточнить разрывы по дорогам "
+                   "вместо прямой линии (нужен YANDEX_ROUTER_API_KEY в .env; ограничено "
+                   f"{MAX_ROUTED_GAPS} запросами и порогом routing_min_km, по умолчанию 1 км).")
             ),
         }
         if odometer_start is not None and odometer_end is not None:
@@ -314,13 +402,15 @@ def create_courier_salary_router(
                                             date_to: str = Query(..., description="YYYY-MM-DD"),
                                             odometer_start: Optional[float] = Query(None, description="Реальные показания одометра на начало периода — для сверки"),
                                             odometer_end: Optional[float] = Query(None, description="Реальные показания одометра на конец периода — для сверки"),
+                                            use_routing: bool = Query(False, description="Уточнить разрывы GPS по дорогам через Yandex Router API вместо прямой линии"),
+                                            routing_min_km: float = Query(1.0, description="Считать маршрут только для разрывов от этого числа км (экономия запросов)"),
                                             current: ResolvedUser = Depends(perm)):
         """Browser-friendly diagnostic straight by StarLine device_id — no
         employee_code/plan lookup involved. Paste the URL (with a valid
         session cookie) to see raw GPS-derived mileage for an arbitrary date
         range. Pass odometer_start/odometer_end to see the delta against a
         real odometer reading in the same response."""
-        return await _mileage_diagnostics(device_id, date_from, date_to, odometer_start, odometer_end, {})
+        return await _mileage_diagnostics(device_id, date_from, date_to, odometer_start, odometer_end, use_routing, routing_min_km, {})
 
     @router.get("/diagnostics/{employee_code}")
     async def mileage_diagnostics(employee_code: str,
@@ -328,6 +418,8 @@ def create_courier_salary_router(
                                   date_to: str = Query(..., description="YYYY-MM-DD"),
                                   odometer_start: Optional[float] = Query(None, description="Реальные показания одометра на начало периода — для сверки"),
                                   odometer_end: Optional[float] = Query(None, description="Реальные показания одометра на конец периода — для сверки"),
+                                  use_routing: bool = Query(False, description="Уточнить разрывы GPS по дорогам через Yandex Router API вместо прямой линии"),
+                                  routing_min_km: float = Query(1.0, description="Считать маршрут только для разрывов от этого числа км (экономия запросов)"),
                                   device_id: Optional[str] = Query(None),
                                   current: ResolvedUser = Depends(perm)):
         """Same as /diagnostics/device/{device_id}, but resolves the device
@@ -342,7 +434,7 @@ def create_courier_salary_router(
                     break
         if not dev:
             raise HTTPException(status_code=400, detail="У сотрудника не привязано устройство StarLine ни на один из месяцев периода — передайте device_id вручную")
-        return await _mileage_diagnostics(dev, date_from, date_to, odometer_start, odometer_end, {"employee_code": employee_code})
+        return await _mileage_diagnostics(dev, date_from, date_to, odometer_start, odometer_end, use_routing, routing_min_km, {"employee_code": employee_code})
 
     @router.get("/starline/probe-all/{device_id}")
     async def starline_probe_all(device_id: str, period: str = Query("2026-06"),

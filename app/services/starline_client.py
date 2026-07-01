@@ -268,6 +268,10 @@ def _ways_no_signal_km(data: Any) -> dict:
         "km": round(total_km, 1), "gaps": gaps,
         "excluded_count": excluded_count, "excluded_km": round(excluded_km, 1),
         "top_gaps": all_gaps[:15],
+        # Full list (sane gaps only — excluded/bogus ones are still present but
+        # flagged), for callers that want to refine every gap (e.g. road-routing
+        # instead of straight-line) rather than just eyeball the top 15.
+        "all_gaps": all_gaps,
     }
 
 
@@ -285,23 +289,24 @@ async def get_ways_diagnostics(device_id: str, ts_from: int, ts_to: int) -> dict
     rate_limited/retry_after distinguish StarLine's own 429 from "no data",
     so the caller can tell the user to retry shortly instead of suggesting
     a manual entry."""
-    empty_signal = {"km": 0.0, "gaps": 0, "excluded_count": 0, "excluded_km": 0.0, "top_gaps": []}
     try:
         raw = await get_ways(device_id, ts_from, ts_to)
     except StarLineRateLimited as exc:
         log.warning("StarLine get_ways_diagnostics rate-limited (retry_after=%s)", exc.retry_after)
         return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0, "no_signal_excluded_count": 0,
-                "no_signal_excluded_km": 0.0, "no_signal_top_gaps": [], "rate_limited": True, "retry_after": exc.retry_after}
+                "no_signal_excluded_km": 0.0, "no_signal_top_gaps": [], "no_signal_all_gaps": [],
+                "rate_limited": True, "retry_after": exc.retry_after}
     except Exception as exc:
         log.warning("StarLine get_ways_diagnostics failed: %s", exc)
         return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0, "no_signal_excluded_count": 0,
-                "no_signal_excluded_km": 0.0, "no_signal_top_gaps": [], "rate_limited": False, "retry_after": None}
+                "no_signal_excluded_km": 0.0, "no_signal_top_gaps": [], "no_signal_all_gaps": [],
+                "rate_limited": False, "retry_after": None}
     signal = _ways_no_signal_km(raw)
     return {
         "km": _ways_mileage(raw),
         "no_signal_km": signal["km"], "no_signal_gaps": signal["gaps"],
         "no_signal_excluded_count": signal["excluded_count"], "no_signal_excluded_km": signal["excluded_km"],
-        "no_signal_top_gaps": signal["top_gaps"],
+        "no_signal_top_gaps": signal["top_gaps"], "no_signal_all_gaps": signal["all_gaps"],
         "rate_limited": False, "retry_after": None,
     }
 

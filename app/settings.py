@@ -143,6 +143,9 @@ class Settings(BaseSettings):
     starline_login: str = Field("", validation_alias="STARLINE_LOGIN")
     starline_password: str = Field("", validation_alias="STARLINE_PASSWORD")
 
+    # Yandex Router API (уточнение длины GPS-разрывов по дорогам, а не по прямой)
+    yandex_router_api_key: str = Field("", validation_alias="YANDEX_ROUTER_API_KEY")
+
     # Файлы для зарплаты курьера
     courier_plans_file: str = Field("courier_plans.json", validation_alias="COURIER_PLANS_FILE")
     courier_salary_file: str = Field("courier_salary_accruals.json", validation_alias="COURIER_SALARY_FILE")
