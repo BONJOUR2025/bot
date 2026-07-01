@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   RefreshCw, Download, EyeOff, Eye, ChevronDown, Check,
   TrendingUp, TrendingDown, BarChart3, Trophy, Users, Target, Calendar,
@@ -104,26 +105,58 @@ function quickRange(key) {
 }
 
 /* ── MultiSelect ─────────────────────────────────────────── */
+// The dropdown is rendered via a portal into document.body rather than as a
+// normal absolutely-positioned child. Reason: every .app-card has
+// `backdrop-filter`, which per spec forces the card to establish its own
+// stacking context — that traps this dropdown's z-index to a scope local to
+// the card, so a *later* sibling card (e.g. the KPI row right below the
+// filters card) paints over it in DOM order regardless of z-index. A portal
+// sidesteps the whole stacking-context tree instead of trying to out-rank it.
 function MultiSelect({ options, selected, onChange, placeholder = 'Все' }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
   useEffect(() => {
     if (!open) return;
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const updatePosition = () => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (!r) return;
+      setMenuStyle({ position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 9999 });
+    };
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (btnRef.current?.contains(e.target)) return;
+      if (menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
+
   const allSelected = selected.size === 0;
   const label = allSelected ? placeholder : options.filter((o) => selected.has(o.value)).map((o) => o.label).join(', ');
   return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)}
+    <div className="relative">
+      <button ref={btnRef} type="button" onClick={() => setOpen((v) => !v)}
         className="input w-full text-left flex items-center justify-between gap-2 text-sm">
         <span className="truncate">{label}</span>
         <ChevronDown size={14} className={`flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
-        <div className="absolute z-50 top-full mt-1 w-full min-w-[180px] rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] shadow-xl overflow-hidden max-h-64 overflow-y-auto">
+      {open && menuStyle && createPortal(
+        <div ref={menuRef} style={menuStyle}
+          className="min-w-[180px] rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] shadow-xl overflow-hidden max-h-64 overflow-y-auto">
           <button type="button" onClick={() => onChange(new Set())}
             className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-[color:var(--color-muted)] transition-colors">
             <Check size={13} className={allSelected ? 'text-[color:var(--color-primary)]' : 'opacity-0'} />
@@ -141,7 +174,8 @@ function MultiSelect({ options, selected, onChange, placeholder = 'Все' }) {
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
