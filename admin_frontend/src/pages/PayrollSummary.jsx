@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart2, RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound,
-  SlidersHorizontal, X, Check, Plus, Trash2, Layers,
+  SlidersHorizontal, X, Check, Plus, Trash2,
 } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { toPng } from 'html-to-image';
@@ -57,11 +57,60 @@ const fmtShort = (v) => {
 };
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
 const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
-const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
-const monthLabel = (period) => {
-  const [y, m] = period.split('-').map(Number);
-  return `${MONTHS_RU[m - 1]} ${y}`;
+const fmtDateRu = (iso) => { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}`; };
+
+// ── Date range helpers ────────────────────────────────────────────────────────
+const isoDate = (d) => d.toISOString().slice(0, 10);
+const monthRange = (year, month0) => ({ from: isoDate(new Date(year, month0, 1)), to: isoDate(new Date(year, month0 + 1, 0)) });
+const thisMonthRange = () => { const d = new Date(); return monthRange(d.getFullYear(), d.getMonth()); };
+const quarterRange = (year, q) => ({ from: isoDate(new Date(year, q * 3, 1)), to: isoDate(new Date(year, q * 3 + 3, 0)) });
+const thisQuarterRange = () => { const d = new Date(); return quarterRange(d.getFullYear(), Math.floor(d.getMonth() / 3)); };
+const lastQuarterRange = () => {
+  const d = new Date();
+  let q = Math.floor(d.getMonth() / 3) - 1, y = d.getFullYear();
+  if (q < 0) { q = 3; y -= 1; }
+  return quarterRange(y, q);
 };
+const thisYearRange = () => { const d = new Date(); return { from: `${d.getFullYear()}-01-01`, to: isoDate(new Date(d.getFullYear(), 11, 31)) }; };
+
+const DATE_PRESETS = [
+  { key: 'this-month', label: 'Этот месяц', range: thisMonthRange },
+  { key: 'this-quarter', label: 'Этот квартал', range: thisQuarterRange },
+  { key: 'last-quarter', label: 'Прошлый квартал', range: lastQuarterRange },
+  { key: 'this-year', label: 'Этот год', range: thisYearRange },
+];
+
+// Every "monthly" data source (admin payroll calc, manager/courier plans)
+// is keyed by calendar month server-side — a custom range gets split into
+// the months it touches, each loaded in full and merged per employee. If
+// the range doesn't align to month boundaries, the oklad/plan for the
+// first and last month is still counted in full (there's no daily pro-rated
+// plan in the underlying data model).
+function monthsInRange(dateFrom, dateTo) {
+  const out = [];
+  let [y, m] = dateFrom.split('-').map(Number);
+  const [ty, tm] = dateTo.split('-').map(Number);
+  while (y < ty || (y === ty && m <= tm)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return out;
+}
+
+function mergeRowsAcrossMonths(rowArrays) {
+  const map = new Map();
+  for (const rows of rowArrays) {
+    for (const r of rows) {
+      if (!map.has(r.name)) { map.set(r.name, { ...r }); continue; }
+      const acc = map.get(r.name);
+      for (const k of ['oklad', 'commission', 'bonuses', 'penalties', 'advances', 'gross', 'to_pay']) {
+        acc[k] = (acc[k] || 0) + (r[k] || 0);
+      }
+    }
+  }
+  return [...map.values()].sort((a, b) => b.gross - a.gross);
+}
 
 const COLS = [
   { key: 'oklad', label: 'Оклад' },
@@ -72,7 +121,6 @@ const COLS = [
   { key: 'gross', label: 'Начислено' },
   { key: 'to_pay', label: 'К выплате' },
 ];
-const SIMPLE_COLS = COLS.filter((c) => c.key === 'gross' || c.key === 'to_pay');
 
 const sumRows = (rows) => {
   const t = {};
@@ -80,9 +128,9 @@ const sumRows = (rows) => {
   return t;
 };
 
-// ── Per-category loaders ─────────────────────────────────────────────────────
+// ── Per-category, per-month loaders (raw, one calendar month at a time) ──────
 
-async function loadAdmins(period) {
+async function loadAdminsMonth(period) {
   const [y, m] = period.split('-').map(Number);
   const monthName = MONTHS_RU[m - 1].toUpperCase();
   const res = await api.get('payroll/calculate', { params: { month: monthName, year: y } });
@@ -97,10 +145,14 @@ async function loadAdmins(period) {
     to_pay: r.total_net ?? 0,
   })).filter((r) => r.gross || r.oklad || r.commission || r.advances);
 }
+async function loadAdmins(dateFrom, dateTo) {
+  const perMonth = await Promise.all(monthsInRange(dateFrom, dateTo).map(loadAdminsMonth));
+  return mergeRowsAcrossMonths(perMonth);
+}
 
-async function loadMasters(period) {
-  const dateFrom = `${period}-01`;
-  const dateTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
+// masters/works already accepts an arbitrary date range server-side —
+// no month-splitting needed here.
+async function loadMasters(dateFrom, dateTo) {
   const res = await api.get('masters/works', { params: { date_from: dateFrom, date_to: dateTo } });
   const data = res.data;
   const services = Array.isArray(data) ? data : (data.services || []);
@@ -115,20 +167,22 @@ async function loadMasters(period) {
     .sort((a, b) => b.gross - a.gross);
 }
 
-async function loadManagers(period) {
-  const dateFrom = `${period}-01`;
-  const dateTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
+async function loadManagersMonth(period, rangeFrom, rangeTo) {
+  const monthFrom = `${period}-01`;
+  const monthTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
+  const incFrom = monthFrom > rangeFrom ? monthFrom : rangeFrom;
+  const incTo = monthTo < rangeTo ? monthTo : rangeTo;
   const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
   const managers = emp.filter((e) => e.status !== 'inactive' && (e.position || '').trim().toLowerCase() === MANAGER_POSITION);
   const rows = await Promise.all(managers.map(async (mgr) => {
     const plan = await api.get('manager-salary/plan', { params: { employee_code: mgr.id, period } }).then((r) => r.data).catch(() => ({}));
     const adv = await api.get('manager-salary/advances', { params: { employee_id: mgr.id } }).then((r) => r.data).catch(() => ({ total: 0 }));
-    const inc = await api.get('incentives/', { params: { employee_id: mgr.id, date_from: dateFrom, date_to: dateTo } }).then((r) => r.data).catch(() => []);
+    const inc = await api.get('incentives/', { params: { employee_id: mgr.id, date_from: incFrom, date_to: incTo } }).then((r) => r.data).catch(() => []);
     const bonuses = (inc || []).filter((i) => i.type === 'bonus').reduce((s, i) => s + (Number(i.amount) || 0), 0);
     const penalties = (inc || []).filter((i) => i.type === 'penalty').reduce((s, i) => s + (Number(i.amount) || 0), 0);
     let met = null;
     if (mgr.amo_user_id) {
-      met = await api.get('manager-salary/metrics', { params: { date_from: dateFrom, date_to: dateTo, amo_user_id: mgr.amo_user_id } }).then((r) => r.data).catch(() => null);
+      met = await api.get('manager-salary/metrics', { params: { date_from: incFrom, date_to: incTo, amo_user_id: mgr.amo_user_id } }).then((r) => r.data).catch(() => null);
     }
     const calc = await api.post('manager-salary/calc', {
       oklad: plan.oklad, kpi_max: plan.kpi_max,
@@ -144,25 +198,35 @@ async function loadManagers(period) {
       gross: calc.gross, to_pay: calc.to_pay,
     };
   }));
-  return rows.filter(Boolean).sort((a, b) => b.gross - a.gross);
+  return rows.filter(Boolean);
+}
+async function loadManagers(dateFrom, dateTo) {
+  const perMonth = await Promise.all(monthsInRange(dateFrom, dateTo).map((period) => loadManagersMonth(period, dateFrom, dateTo)));
+  return mergeRowsAcrossMonths(perMonth);
 }
 
-async function loadCouriers(period) {
-  const dateFrom = `${period}-01`;
-  const dateTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
+async function loadCouriersMonth(period, rangeFrom, rangeTo) {
+  const monthFrom = `${period}-01`;
+  const monthTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
+  const incFrom = monthFrom > rangeFrom ? monthFrom : rangeFrom;
+  const incTo = monthTo < rangeTo ? monthTo : rangeTo;
   const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
   const couriers = emp.filter((e) => e.status !== 'inactive' && (e.position || '').toLowerCase().includes('курьер'));
   const rows = await Promise.all(couriers.map(async (c) => {
     const plan = await api.get('courier-salary/plan', { params: { employee_code: c.id, period } }).then((r) => r.data).catch(() => ({}));
     const adv = await api.get('courier-salary/advances', { params: { employee_id: c.id } }).then((r) => r.data).catch(() => ({ total: 0 }));
-    const inc = await api.get('incentives/', { params: { employee_id: c.id, date_from: dateFrom, date_to: dateTo } }).then((r) => r.data).catch(() => []);
+    const inc = await api.get('incentives/', { params: { employee_id: c.id, date_from: incFrom, date_to: incTo } }).then((r) => r.data).catch(() => []);
     const bonuses = (inc || []).filter((i) => i.type === 'bonus').reduce((s, i) => s + (Number(i.amount) || 0), 0);
     const penalties = (inc || []).filter((i) => i.type === 'penalty').reduce((s, i) => s + (Number(i.amount) || 0), 0);
     const calc = await api.post('courier-salary/calc', { oklad: plan.oklad, advances: adv?.total || 0, bonuses, penalties }).then((r) => r.data).catch(() => null);
     if (!calc) return null;
     return { name: c.full_name || c.name, oklad: calc.oklad, commission: 0, bonuses: calc.bonuses, penalties: calc.penalties, advances: calc.advances, gross: calc.gross, to_pay: calc.to_pay };
   }));
-  return rows.filter(Boolean).filter((r) => r.gross || r.advances).sort((a, b) => b.gross - a.gross);
+  return rows.filter(Boolean).filter((r) => r.gross || r.advances);
+}
+async function loadCouriers(dateFrom, dateTo) {
+  const perMonth = await Promise.all(monthsInRange(dateFrom, dateTo).map((period) => loadCouriersMonth(period, dateFrom, dateTo)));
+  return mergeRowsAcrossMonths(perMonth);
 }
 
 const CATS = [
@@ -197,7 +261,7 @@ const RTC = createContext(DARK);
 const HIDDEN_CATS_KEY = 'payrollSummary.hiddenCategories';
 const HIDDEN_EMPLOYEES_KEY = 'payrollSummary.hiddenEmployees';
 const SHOW_BREAKDOWN_KEY = 'payrollSummary.showBreakdown';
-const MANUAL_ROWS_KEY = 'payrollSummary.manualRows'; // { [period]: [row, ...] }
+const MANUAL_ROWS_KEY = 'payrollSummary.manualRows'; // { [rangeKey]: [row, ...] }
 
 function loadSet(key) {
   try {
@@ -214,8 +278,8 @@ function loadManualRows() {
     return raw ? JSON.parse(raw) : {};
   } catch { return {}; }
 }
-function saveManualRows(byPeriod) {
-  try { localStorage.setItem(MANUAL_ROWS_KEY, JSON.stringify(byPeriod)); } catch { /* noop */ }
+function saveManualRows(byRange) {
+  try { localStorage.setItem(MANUAL_ROWS_KEY, JSON.stringify(byRange)); } catch { /* noop */ }
 }
 function loadBool(key, fallback) {
   try {
@@ -343,34 +407,12 @@ function PayrollProgress({ status }) {
 
 // ── Settings panel (screen-only chrome, not part of the PNG) ────────────────
 
-function EmptyManualForm() {
-  return { category: CATS[0].key, name: '', oklad: '', commission: '', bonuses: '', penalties: '', advances: '' };
-}
-
 function SettingsPanel({
   allEmployeeNames, hiddenCats, hiddenEmployees, showBreakdown,
-  onToggleCat, onToggleEmployee, onShowAllCats, onShowAllEmployees,
-  onSetShowBreakdown, manualRows, onAddManual, onRemoveManual, onClose,
+  onToggleCat, onToggleEmployee, onShowAllEmployees, onSetShowBreakdown, onClose,
 }) {
   const [empQuery, setEmpQuery] = useState('');
-  const [form, setForm] = useState(EmptyManualForm);
   const filteredNames = allEmployeeNames.filter((n) => n.toLowerCase().includes(empQuery.toLowerCase()));
-
-  function submitManual(e) {
-    e.preventDefault();
-    if (!form.name.trim()) return;
-    onAddManual({
-      id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      category: form.category,
-      name: form.name.trim(),
-      oklad: Number(form.oklad) || 0,
-      commission: Number(form.commission) || 0,
-      bonuses: Number(form.bonuses) || 0,
-      penalties: Number(form.penalties) || 0,
-      advances: Number(form.advances) || 0,
-    });
-    setForm(EmptyManualForm());
-  }
 
   return (
     <div className="app-card p-5 space-y-5">
@@ -409,14 +451,14 @@ function SettingsPanel({
         <div className="flex gap-2">
           <button type="button" onClick={() => onSetShowBreakdown(true)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${showBreakdown ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'}`}>
-            Подробно (оклад, авансы, штрафы…)
+            Подробно (+ авансы)
           </button>
           <button type="button" onClick={() => onSetShowBreakdown(false)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${!showBreakdown ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'}`}>
-            Только итог (начислено / к выплате)
+            Кратко (оклад, KPI, премии, штрафы)
           </button>
         </div>
-        <div className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1.5">«Только итог» скрывает авансы, штрафы и прочие статьи в таблице по сотрудникам — удобно, если отчёт кому-то показываете.</div>
+        <div className="text-[11px] text-[color:var(--color-muted-foreground)] mt-1.5">В обоих режимах видна структура зарплаты — «Кратко» просто скрывает авансы, если отчёт кому-то показываете.</div>
       </div>
 
       {/* Employees */}
@@ -445,40 +487,49 @@ function SettingsPanel({
           </div>
         </div>
       )}
-
-      {/* Manual rows */}
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-2 flex items-center gap-1.5">
-          <Layers size={12} /> Добавлено вручную за этот период
-        </div>
-        {manualRows.length > 0 && (
-          <div className="space-y-1.5 mb-3">
-            {manualRows.map((r) => (
-              <div key={r.id} className="flex items-center gap-2 text-xs bg-[color:var(--color-bg-secondary)] rounded-lg px-2.5 py-1.5">
-                <span className="font-medium flex-1 truncate">{r.name}</span>
-                <span className="text-[color:var(--color-muted-foreground)]">{CATS.find((c) => c.key === r.category)?.title}</span>
-                <span className="font-semibold tabular-nums">{fmtMoney(r.gross)}</span>
-                <button className="text-[color:var(--color-danger)] hover:opacity-70" onClick={() => onRemoveManual(r.id)} aria-label="Удалить">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        <form onSubmit={submitManual} className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <select className="input text-xs" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
-            {CATS.map((c) => <option key={c.key} value={c.key}>{c.title}</option>)}
-          </select>
-          <input className="input text-xs" placeholder="Имя" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          <input className="input text-xs" type="number" placeholder="Оклад" value={form.oklad} onChange={(e) => setForm((f) => ({ ...f, oklad: e.target.value }))} />
-          <input className="input text-xs" type="number" placeholder="Комиссия" value={form.commission} onChange={(e) => setForm((f) => ({ ...f, commission: e.target.value }))} />
-          <input className="input text-xs" type="number" placeholder="Премии" value={form.bonuses} onChange={(e) => setForm((f) => ({ ...f, bonuses: e.target.value }))} />
-          <input className="input text-xs" type="number" placeholder="Штрафы" value={form.penalties} onChange={(e) => setForm((f) => ({ ...f, penalties: e.target.value }))} />
-          <input className="input text-xs" type="number" placeholder="Авансы" value={form.advances} onChange={(e) => setForm((f) => ({ ...f, advances: e.target.value }))} />
-          <button type="submit" className="btn btn--secondary text-xs flex items-center justify-center gap-1"><Plus size={13} /> Добавить</button>
-        </form>
-      </div>
     </div>
+  );
+}
+
+// ── Inline "add employee" row, rendered directly inside a category's tbody ──
+
+function AddRowForm({ visibleCols, onSubmit, onCancel }) {
+  const [form, setForm] = useState({ name: '', oklad: '', commission: '', bonuses: '', penalties: '', advances: '' });
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  function submit() {
+    if (!form.name.trim()) return;
+    onSubmit({
+      name: form.name.trim(),
+      oklad: Number(form.oklad) || 0,
+      commission: Number(form.commission) || 0,
+      bonuses: Number(form.bonuses) || 0,
+      penalties: Number(form.penalties) || 0,
+      advances: Number(form.advances) || 0,
+    });
+  }
+
+  return (
+    <tr style={{ background: 'var(--color-primary-muted)' }}>
+      <td className="px-3 py-1.5">
+        <input autoFocus className="input text-xs w-full" placeholder="Имя сотрудника" value={form.name} onChange={set('name')}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onCancel(); }} />
+      </td>
+      {visibleCols.map((col) => (
+        col.key === 'gross' || col.key === 'to_pay' ? (
+          <td key={col.key} className="px-3 py-1.5" />
+        ) : (
+          <td key={col.key} className="px-3 py-1.5">
+            <input type="number" className="input text-xs w-full text-right" placeholder="0" value={form[col.key]} onChange={set(col.key)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onCancel(); }} />
+          </td>
+        )
+      ))}
+      <td className="px-2 py-1.5 text-right whitespace-nowrap">
+        <button className="icon-button icon-button--ghost" onClick={submit} title="Добавить"><Check size={14} style={{ color: 'var(--color-success)' }} /></button>
+        <button className="icon-button icon-button--ghost" onClick={onCancel} title="Отмена"><X size={14} /></button>
+      </td>
+    </tr>
   );
 }
 
@@ -486,7 +537,10 @@ function SettingsPanel({
 
 export default function PayrollSummary() {
   const { toast } = useToast();
-  const [period, setPeriod] = useState(thisMonth());
+  const initialRange = thisMonthRange();
+  const [dateFrom, setDateFrom] = useState(initialRange.from);
+  const [dateTo, setDateTo] = useState(initialRange.to);
+  const [activePreset, setActivePreset] = useState('this-month');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pnging, setPnging] = useState(false);
@@ -497,9 +551,12 @@ export default function PayrollSummary() {
   const [hiddenCats, setHiddenCats] = useState(() => loadSet(HIDDEN_CATS_KEY));
   const [hiddenEmployees, setHiddenEmployees] = useState(() => loadSet(HIDDEN_EMPLOYEES_KEY));
   const [showBreakdown, setShowBreakdown] = useState(() => loadBool(SHOW_BREAKDOWN_KEY, true));
-  const [manualByPeriod, setManualByPeriod] = useState(loadManualRows);
+  const [manualByRange, setManualByRange] = useState(loadManualRows);
+  const [addingToCategory, setAddingToCategory] = useState(null);
   const reportRef = useRef(null);
-  const periodLabel = monthLabel(period);
+
+  const rangeKey = `${dateFrom}_${dateTo}`;
+  const periodLabel = `${fmtDateRu(dateFrom)} – ${fmtDateRu(dateTo)}`;
 
   // T drives the on-screen theme: dark normally, light during PNG export
   const T = exporting ? LIGHT : DARK;
@@ -510,7 +567,7 @@ export default function PayrollSummary() {
     try {
       const results = await Promise.all(CATS.map(async (c) => {
         setCatStatus((prev) => ({ ...prev, [c.key]: 'loading' }));
-        const result = await c.load(period)
+        const result = await c.load(dateFrom, dateTo)
           .then((rows) => ({ rows }))
           .catch((e) => ({ rows: [], error: e?.response?.data?.detail || e.message || 'ошибка' }));
         setCatStatus((prev) => ({ ...prev, [c.key]: result.error ? 'error' : 'done' }));
@@ -521,21 +578,32 @@ export default function PayrollSummary() {
       setData(next);
       setGeneratedAt(new Date().toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
     } finally { setLoading(false); }
-  }, [period]);
+  }, [dateFrom, dateTo]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { saveSet(HIDDEN_CATS_KEY, hiddenCats); }, [hiddenCats]);
   useEffect(() => { saveSet(HIDDEN_EMPLOYEES_KEY, hiddenEmployees); }, [hiddenEmployees]);
   useEffect(() => { saveBool(SHOW_BREAKDOWN_KEY, showBreakdown); }, [showBreakdown]);
-  useEffect(() => { saveManualRows(manualByPeriod); }, [manualByPeriod]);
+  useEffect(() => { saveManualRows(manualByRange); }, [manualByRange]);
 
-  const manualRows = manualByPeriod[period] || [];
+  const manualRows = manualByRange[rangeKey] || [];
 
-  function addManualRow(row) {
-    setManualByPeriod((prev) => ({ ...prev, [period]: [...(prev[period] || []), row] }));
+  function applyPreset(p) {
+    setActivePreset(p.key);
+    const { from, to } = p.range();
+    setDateFrom(from); setDateTo(to);
+  }
+  function applyCustomRange() {
+    setActivePreset('custom');
+    load();
+  }
+  function addManualRow(category, row) {
+    const withId = { ...row, id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, category };
+    setManualByRange((prev) => ({ ...prev, [rangeKey]: [...(prev[rangeKey] || []), withId] }));
+    setAddingToCategory(null);
   }
   function removeManualRow(id) {
-    setManualByPeriod((prev) => ({ ...prev, [period]: (prev[period] || []).filter((r) => r.id !== id) }));
+    setManualByRange((prev) => ({ ...prev, [rangeKey]: (prev[rangeKey] || []).filter((r) => r.id !== id) }));
   }
   function toggleCat(key) {
     setHiddenCats((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
@@ -582,19 +650,26 @@ export default function PayrollSummary() {
     { label: 'Комиссия / KPI', value: grand.commission, color: '#10b981' },
     { label: 'Премии', value: grand.bonuses, color: '#f59e0b' },
   ].filter((s) => s.value > 0);
-  const visibleCols = showBreakdown ? COLS : SIMPLE_COLS;
+  // "Кратко" = salary breakdown (oklad/KPI/premии/штрафы-if-any) minus авансы,
+  // not just two totals — advances is the one column considered sensitive
+  // enough to gate behind "Подробно".
+  const visibleCols = showBreakdown
+    ? COLS
+    : COLS.filter((c) => c.key !== 'advances' && (c.key !== 'penalties' || grand.penalties > 0));
 
   async function downloadPng() {
     if (!reportRef.current) return;
     setPnging(true);
     setExporting(true);
-    // Two animation frames so React re-renders with the light LIGHT theme before capture
+    setAddingToCategory(null);
+    // Two animation frames so React re-renders with the light LIGHT theme (and
+    // without any open inline add-row form) before capture
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     try {
       const url = await toPng(reportRef.current, { backgroundColor: '#ffffff', pixelRatio: 2, cacheBust: true, skipFonts: true });
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ФОТ_${period}.png`;
+      a.download = `ФОТ_${dateFrom}_${dateTo}.png`;
       a.click();
       toast('PNG сохранён', 'success');
     } catch (e) {
@@ -620,10 +695,24 @@ export default function PayrollSummary() {
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Администраторы, мастера, менеджеры и курьеры за период · настраиваемый PNG-отчёт</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
+          {DATE_PRESETS.map((p) => (
+            <button key={p.key} onClick={() => applyPreset(p)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activePreset === p.key ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}>
+              {p.label}
+            </button>
+          ))}
           <label className="block">
-            <span className="block text-xs font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Период</span>
-            <input type="month" className="input min-w-[160px]" value={period} onChange={(e) => setPeriod(e.target.value || thisMonth())} />
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">С</span>
+            <input type="date" className="input text-xs h-[30px] py-0" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </label>
+          <label className="block">
+            <span className="block text-[10px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">По</span>
+            <input type="date" className="input text-xs h-[30px] py-0" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </label>
+          <button className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activePreset === 'custom' ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}
+            onClick={applyCustomRange}>
+            Применить период
+          </button>
           <button className="btn btn--secondary flex items-center gap-1.5" onClick={() => setShowSettings((v) => !v)}>
             <SlidersHorizontal size={14} /> Настроить{(hiddenCats.size + hiddenEmployees.size) > 0 ? ` (${hiddenCats.size + hiddenEmployees.size})` : ''}
           </button>
@@ -635,6 +724,9 @@ export default function PayrollSummary() {
           </button>
         </div>
       </div>
+      <div className="text-[11px] text-[color:var(--color-muted-foreground)] -mt-2">
+        Оклады и планы месячные — период разбивается по затронутым календарным месяцам; если границы периода приходятся на середину месяца, оклад за этот месяц всё равно учитывается целиком.
+      </div>
 
       {showSettings && (
         <SettingsPanel
@@ -644,12 +736,8 @@ export default function PayrollSummary() {
           showBreakdown={showBreakdown}
           onToggleCat={toggleCat}
           onToggleEmployee={toggleEmployee}
-          onShowAllCats={() => setHiddenCats(new Set())}
           onShowAllEmployees={() => setHiddenEmployees(new Set())}
           onSetShowBreakdown={setShowBreakdown}
-          manualRows={manualRows}
-          onAddManual={addManualRow}
-          onRemoveManual={removeManualRow}
           onClose={() => setShowSettings(false)}
         />
       )}
@@ -794,35 +882,58 @@ export default function PayrollSummary() {
                                     <Icon size={13} /> {c.title}
                                     <span className="text-[11px] font-normal" style={{ color: T.muted }}>· {c.rows.length}</span>
                                   </span>
-                                  <span className="text-[12px]" style={{ color: T.muted }}>
-                                    ФОТ <span className="font-bold" style={{ color: T.ink }}>{fmtMoney(c.totals.gross)}</span>
-                                  </span>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-[12px]" style={{ color: T.muted }}>
+                                      ФОТ <span className="font-bold" style={{ color: T.ink }}>{fmtMoney(c.totals.gross)}</span>
+                                    </span>
+                                    {!exporting && addingToCategory !== c.key && (
+                                      <button className="text-[11px] font-medium flex items-center gap-1 hover:opacity-70" style={{ color: BRAND }}
+                                        onClick={() => setAddingToCategory(c.key)}>
+                                        <Plus size={12} /> Добавить
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                             </tr>
-                            {c.error ? (
+                            {c.error && (
                               <tr><td colSpan={visibleCols.length + 1} className="px-3 py-2 text-[12px]" style={{ color: DANGER }}>Не удалось загрузить: {c.error}</td></tr>
-                            ) : c.rows.length === 0 ? (
+                            )}
+                            {c.rows.map((r, i) => (
+                              <tr key={i} style={{ borderTop: `1px solid ${T.line}` }}>
+                                <td className="px-3 py-1.5 font-medium break-words" style={{ color: T.ink }}>
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="truncate">{r.name}</span>
+                                    {r.id?.startsWith('manual_') && <span className="text-[10px] font-normal shrink-0" style={{ color: T.muted }}>· вручную</span>}
+                                    {!exporting && r.id?.startsWith('manual_') && (
+                                      <button className="shrink-0 hover:opacity-70" onClick={() => removeManualRow(r.id)} title="Удалить">
+                                        <Trash2 size={12} style={{ color: DANGER }} />
+                                      </button>
+                                    )}
+                                  </span>
+                                </td>
+                                {visibleCols.map((col) => (
+                                  <td key={col.key} className="px-3 py-1.5 text-right tabular-nums"
+                                    style={{ color: col.key === 'to_pay' ? BRAND : (col.key === 'penalties' || col.key === 'advances') && r[col.key] ? DANGER : T.ink, fontWeight: col.key === 'to_pay' ? 600 : 400 }}>
+                                    {col.key === 'gross' || col.key === 'to_pay' ? fmtMoney(r[col.key]) : (r[col.key] ? fmtMoney(r[col.key]) : '—')}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                            {!c.error && c.rows.length === 0 && addingToCategory !== c.key && (
                               <tr><td colSpan={visibleCols.length + 1} className="px-3 py-2 text-[12px]" style={{ color: T.muted }}>Нет данных за период.</td></tr>
-                            ) : (<>
-                              {c.rows.map((r, i) => (
-                                <tr key={i} style={{ borderTop: `1px solid ${T.line}` }}>
-                                  <td className="px-3 py-1.5 font-medium break-words" style={{ color: T.ink }}>{r.name}{r.id?.startsWith('manual_') ? <span className="text-[10px] font-normal ml-1" style={{ color: T.muted }}>· вручную</span> : ''}</td>
-                                  {visibleCols.map((col) => (
-                                    <td key={col.key} className="px-3 py-1.5 text-right tabular-nums"
-                                      style={{ color: col.key === 'to_pay' ? BRAND : (col.key === 'penalties' || col.key === 'advances') && r[col.key] ? DANGER : T.ink, fontWeight: col.key === 'to_pay' ? 600 : 400 }}>
-                                      {col.key === 'gross' || col.key === 'to_pay' ? fmtMoney(r[col.key]) : (r[col.key] ? fmtMoney(r[col.key]) : '—')}
-                                    </td>
-                                  ))}
-                                </tr>
-                              ))}
+                            )}
+                            {!exporting && addingToCategory === c.key && (
+                              <AddRowForm visibleCols={visibleCols} onCancel={() => setAddingToCategory(null)} onSubmit={(row) => addManualRow(c.key, row)} />
+                            )}
+                            {c.rows.length > 0 && (
                               <tr style={{ borderTop: `1px solid ${T.line}`, background: T.bg2 }}>
                                 <td className="px-3 py-1.5 font-semibold" style={{ color: T.ink }}>Итого · {c.title.toLowerCase()}</td>
                                 {visibleCols.map((col) => (
                                   <td key={col.key} className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: col.key === 'to_pay' ? BRAND : T.ink }}>{fmtMoney(c.totals[col.key])}</td>
                                 ))}
                               </tr>
-                            </>)}
+                            )}
                           </tbody>
                         );
                       })}
