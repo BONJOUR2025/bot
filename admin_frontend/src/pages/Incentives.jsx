@@ -1,7 +1,146 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import {
+  Coins, TrendingUp, TrendingDown, Users, BarChart3, Layers, Trophy,
+} from 'lucide-react';
+import {
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+} from 'recharts';
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { Tabs } from '../components/ui/SalaryUI.jsx';
+
+const CHART_COLORS = ['#10b981', '#ef4444', '#6366f1', '#f59e0b'];
+const MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+
+const fmtMoney = (v) => `${Math.round(Number(v) || 0).toLocaleString('ru-RU')} ₽`;
+
+function KpiCard({ label, value, sub, accent, icon: Icon }) {
+  return (
+    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#6366f1'}` }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
+          <div className="text-xl font-bold truncate" style={{ color: accent || '#6366f1' }}>{value}</div>
+          {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
+        </div>
+        {Icon && (
+          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#6366f118' }}>
+            <Icon size={20} style={{ color: accent || '#6366f1' }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TypeDonut({ data, total, activeName, onSelect }) {
+  const [hover, setHover] = useState(null);
+  if (!data.length) return null;
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Layers size={15} className="text-[color:var(--color-primary)]" />
+        Премии и штрафы
+        {activeName && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· фильтр: {activeName}</span>}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <div style={{ width: 160, height: 160, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data} dataKey="value" nameKey="name" innerRadius="50%" outerRadius="80%" paddingAngle={2}
+                onMouseEnter={(_, i) => setHover(i)} onMouseLeave={() => setHover(null)}
+                onClick={(entry) => onSelect?.(entry.name)} cursor="pointer"
+              >
+                {data.map((entry, i) => (
+                  <Cell key={entry.name} fill={entry.color}
+                    opacity={activeName && activeName !== entry.name ? 0.35 : (hover === null || hover === i ? 1 : 0.4)}
+                    stroke="none" />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => [fmtMoney(v), 'Сумма']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-2 min-w-0">
+          {data.map((d) => {
+            const pct = total > 0 ? (d.value / total) * 100 : 0;
+            const isActive = activeName === d.name;
+            return (
+              <button key={d.name} type="button" onClick={() => onSelect?.(d.name)}
+                className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs truncate">{d.name}</span>
+                    <span className="text-xs font-semibold shrink-0">{fmtMoney(d.value)} ({pct.toFixed(0)}%)</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color }} />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeLeaderboard({ data, activeName, onSelect }) {
+  const medals = ['🥇', '🥈', '🥉'];
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Trophy size={15} className="text-[color:var(--color-primary)]" />
+        По сотрудникам (чистый итог)
+        {activeName && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· фильтр: {activeName}</span>}
+      </div>
+      <div className="space-y-3">
+        {data.slice(0, 8).map((r, i) => {
+          const isActive = activeName === r.name;
+          return (
+            <button key={r.name} type="button" onClick={() => onSelect?.(r.name)}
+              className={`w-full text-left rounded-md -mx-1 px-1 py-1 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  {i < 3 ? <span className="text-base shrink-0">{medals[i]}</span> : <span className="w-5 text-center text-xs font-bold text-[color:var(--color-muted-foreground)] shrink-0">{i + 1}</span>}
+                  <span className="text-sm font-medium truncate">{r.name}</span>
+                </div>
+                <div className={`text-sm font-bold shrink-0 ml-3 ${r.net >= 0 ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}>
+                  {r.net >= 0 ? '+' : ''}{fmtMoney(r.net)}
+                </div>
+              </div>
+              <div className="flex gap-1 h-1.5 rounded-full overflow-hidden bg-[color:var(--color-bg-secondary)]">
+                {r.bonuses > 0 && <div style={{ width: `${(r.bonuses / (r.bonuses + r.penalties || 1)) * 100}%`, background: '#10b981' }} />}
+                {r.penalties > 0 && <div style={{ width: `${(r.penalties / (r.bonuses + r.penalties || 1)) * 100}%`, background: '#ef4444' }} />}
+              </div>
+            </button>
+          );
+        })}
+        {data.length === 0 && <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-4">Нет данных</div>}
+      </div>
+    </div>
+  );
+}
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-xl p-3 text-sm">
+      <div className="font-semibold mb-1 text-[color:var(--color-muted-foreground)]">{label}</div>
+      {payload.map((p) => (
+        <div key={p.dataKey} className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ background: p.fill || p.color }} />
+          <span>{p.name}: <b>{fmtMoney(p.value)}</b></span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Incentives() {
   const location = useLocation();
@@ -28,6 +167,9 @@ export default function Incentives() {
   });
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [typeFilter, setTypeFilter] = useState(null);
+  const [employeeFilter, setEmployeeFilter] = useState(null);
 
   useEffect(() => {
     loadEmployees();
@@ -101,88 +243,212 @@ export default function Incentives() {
   const rowColor = (type) => (type === 'bonus' ? 'bg-green-50' : 'bg-red-50');
   const typeLabel = (t) => (t === 'bonus' ? '💰 Премия' : '⚠️ Штраф');
 
+  // ── Derived analytics ──────────────────────────────────────────
+  const totals = useMemo(() => {
+    let bonuses = 0, bonusCount = 0, penalties = 0, penaltyCount = 0;
+    for (const r of list) {
+      const amt = Number(r.amount) || 0;
+      if (r.type === 'bonus') { bonuses += amt; bonusCount++; }
+      else { penalties += amt; penaltyCount++; }
+    }
+    return { bonuses, bonusCount, penalties, penaltyCount, net: bonuses - penalties, employees: new Set(list.map((r) => r.employee_id)).size };
+  }, [list]);
+
+  const typeDonutData = useMemo(() => ([
+    { name: 'Премии', value: totals.bonuses, color: CHART_COLORS[0] },
+    { name: 'Штрафы', value: totals.penalties, color: CHART_COLORS[1] },
+  ].filter((d) => d.value > 0)), [totals]);
+
+  const employeeLeaderboard = useMemo(() => {
+    const map = {};
+    for (const r of list) {
+      const name = r.name || '—';
+      if (!map[name]) map[name] = { name, bonuses: 0, penalties: 0 };
+      const amt = Number(r.amount) || 0;
+      if (r.type === 'bonus') map[name].bonuses += amt;
+      else map[name].penalties += amt;
+    }
+    return Object.values(map).map((r) => ({ ...r, net: r.bonuses - r.penalties })).sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  }, [list]);
+
+  const monthlyData = useMemo(() => {
+    const map = {};
+    for (const r of list) {
+      if (!r.date) continue;
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!map[key]) map[key] = { key, label: `${MONTHS_RU[d.getMonth()]}`, bonuses: 0, penalties: 0 };
+      const amt = Number(r.amount) || 0;
+      if (r.type === 'bonus') map[key].bonuses += amt;
+      else map[key].penalties += amt;
+    }
+    return Object.values(map).sort((a, b) => a.key.localeCompare(b.key)).slice(-12);
+  }, [list]);
+
+  const displayList = useMemo(() => {
+    let rows = list;
+    if (typeFilter) rows = rows.filter((r) => (typeFilter === 'Премии' ? r.type === 'bonus' : r.type === 'penalty'));
+    if (employeeFilter) rows = rows.filter((r) => (r.name || '—') === employeeFilter);
+    return rows;
+  }, [list, typeFilter, employeeFilter]);
+
+  function selectType(name) {
+    setTypeFilter((prev) => (prev === name ? null : name));
+    setActiveTab('list');
+  }
+  function selectEmployee(name) {
+    setEmployeeFilter((prev) => (prev === name ? null : name));
+    setActiveTab('list');
+  }
+
+  const mainTabs = [
+    { key: 'overview', label: 'Обзор', icon: <BarChart3 size={14} /> },
+    { key: 'list', label: 'Список', icon: <Coins size={14} />, badge: list.length },
+  ];
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Штрафы и премии</h2>
-      <div className="flex flex-wrap gap-2 items-end">
-        <select
-          className="input"
-          value={filters.employee}
-          onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
-        >
-          <option value="">Все сотрудники</option>
-          {employees.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.full_name || e.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="input"
-          value={filters.type}
-          onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-        >
-          <option value="">Все типы</option>
-          <option value="bonus">Премия</option>
-          <option value="penalty">Штраф</option>
-        </select>
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
-          <input
-            type="date"
-            className="input w-full sm:w-auto"
-            value={filters.from}
-            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-          />
-          <input
-            type="date"
-            className="input w-full sm:w-auto"
-            value={filters.to}
-            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
+        <Coins size={24} /> Штрафы и премии
+      </h2>
+
+      <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard label="Премии" value={fmtMoney(totals.bonuses)} sub={`${totals.bonusCount} записей`} accent="#10b981" icon={TrendingUp} />
+            <KpiCard label="Штрафы" value={fmtMoney(totals.penalties)} sub={`${totals.penaltyCount} записей`} accent="#ef4444" icon={TrendingDown} />
+            <KpiCard label="Чистый итог" value={`${totals.net >= 0 ? '+' : ''}${fmtMoney(totals.net)}`} sub="премии − штрафы" accent={totals.net >= 0 ? '#10b981' : '#ef4444'} icon={Coins} />
+            <KpiCard label="Сотрудников" value={String(totals.employees)} sub="затронуто записями" accent="#6366f1" icon={Users} />
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-4">
+            <TypeDonut data={typeDonutData} total={totals.bonuses + totals.penalties} activeName={typeFilter} onSelect={selectType} />
+            <EmployeeLeaderboard data={employeeLeaderboard} activeName={employeeFilter} onSelect={selectEmployee} />
+          </div>
+
+          {monthlyData.length > 0 && (
+            <div className="app-card p-5">
+              <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+                Динамика по месяцам
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-bg-secondary)' }} />
+                  <Bar dataKey="bonuses" name="Премии" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="penalties" name="Штрафы" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'list' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2 items-end">
+            <select
+              className="input"
+              value={filters.employee}
+              onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
+            >
+              <option value="">Все сотрудники</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.full_name || e.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input"
+              value={filters.type}
+              onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+            >
+              <option value="">Все типы</option>
+              <option value="bonus">Премия</option>
+              <option value="penalty">Штраф</option>
+            </select>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
+              <input
+                type="date"
+                className="input w-full sm:w-auto"
+                value={filters.from}
+                onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+              />
+              <input
+                type="date"
+                className="input w-full sm:w-auto"
+                value={filters.to}
+                onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+              />
+            </div>
+            <button className="btn" onClick={load}>
+              Применить
+            </button>
+            <button className="btn ml-auto" onClick={startCreate}>
+              ➕ Добавить
+            </button>
+          </div>
+
+          {(typeFilter || employeeFilter) && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-[color:var(--color-muted-foreground)]">Фильтр по графику:</span>
+              {typeFilter && (
+                <button className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium" onClick={() => setTypeFilter(null)}>
+                  {typeFilter} ✕
+                </button>
+              )}
+              {employeeFilter && (
+                <button className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium" onClick={() => setEmployeeFilter(null)}>
+                  {employeeFilter} ✕
+                </button>
+              )}
+            </div>
+          )}
+
+          <ResponsiveTable
+            data={displayList}
+            keyFn={(item) => item.id}
+            rowClass={(item) => rowColor(item.type)}
+            emptyText="Нет данных"
+            columns={[
+              { label: 'Сотрудник', key: 'name', primary: true },
+              { label: 'Дата', key: 'date' },
+              { label: 'Тип', render: (item) => <span className="font-medium">{typeLabel(item.type)}</span> },
+              {
+                label: 'Сумма',
+                headerClass: 'text-right',
+                cellClass: 'text-right whitespace-nowrap',
+                render: (item) => (
+                  <span className={`font-medium tabular-nums ${item.type === 'bonus' ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}>
+                    {item.type === 'bonus' ? '+' : '−'}{Number(item.amount || 0).toLocaleString('ru-RU')} ₽
+                  </span>
+                ),
+              },
+              { label: 'Причина', key: 'reason' },
+              { label: 'Добавил', key: 'added_by' },
+              {
+                label: '',
+                isAction: true,
+                cellClass: 'text-right',
+                render: (item) => (
+                  <>
+                    <button className="text-blue-600 mr-1" onClick={() => startEdit(item)}>✏️</button>
+                    {!item.locked && (
+                      <button className="text-red-600" onClick={() => remove(item.id)}>🗑️</button>
+                    )}
+                  </>
+                ),
+              },
+            ]}
           />
         </div>
-        <button className="btn" onClick={load}>
-          Применить
-        </button>
-        <button className="btn ml-auto" onClick={startCreate}>
-          ➕ Добавить
-        </button>
-      </div>
-      <ResponsiveTable
-        data={list}
-        keyFn={(item) => item.id}
-        rowClass={(item) => rowColor(item.type)}
-        emptyText="Нет данных"
-        columns={[
-          { label: 'Сотрудник', key: 'name', primary: true },
-          { label: 'Дата', key: 'date' },
-          { label: 'Тип', render: (item) => <span className="font-medium">{typeLabel(item.type)}</span> },
-          {
-            label: 'Сумма',
-            headerClass: 'text-right',
-            cellClass: 'text-right whitespace-nowrap',
-            render: (item) => (
-              <span className={`font-medium tabular-nums ${item.type === 'bonus' ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}>
-                {item.type === 'bonus' ? '+' : '−'}{Number(item.amount || 0).toLocaleString('ru-RU')} ₽
-              </span>
-            ),
-          },
-          { label: 'Причина', key: 'reason' },
-          { label: 'Добавил', key: 'added_by' },
-          {
-            label: '',
-            isAction: true,
-            cellClass: 'text-right',
-            render: (item) => (
-              <>
-                <button className="text-blue-600 mr-1" onClick={() => startEdit(item)}>✏️</button>
-                {!item.locked && (
-                  <button className="text-red-600" onClick={() => remove(item.id)}>🗑️</button>
-                )}
-              </>
-            ),
-          },
-        ]}
-      />
+      )}
 
       {showForm && (
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
@@ -248,8 +514,3 @@ export default function Incentives() {
     </div>
   );
 }
-
-
-
-
-
