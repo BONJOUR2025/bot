@@ -13,6 +13,7 @@ import {
   BarChart3,
   Layers,
   TrendingUp,
+  X,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -47,14 +48,15 @@ function KpiCard({ label, value, sub, accent, icon: Icon }) {
   );
 }
 
-function ShareDonut({ data, total, title, icon: Icon, colorOf }) {
-  const [active, setActive] = useState(null);
+function ShareDonut({ data, total, title, icon: Icon, colorOf, activeName, onSelect }) {
+  const [hover, setHover] = useState(null);
   if (!data.length) return null;
   return (
     <div className="app-card p-5">
       <div className="text-sm font-semibold mb-4 flex items-center gap-2">
         <Icon size={15} className="text-[color:var(--color-primary)]" />
         {title}
+        {activeName && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· фильтр: {activeName}</span>}
       </div>
       <div className="flex flex-col sm:flex-row gap-4 items-center">
         <div style={{ width: 160, height: 160, flexShrink: 0 }}>
@@ -67,14 +69,16 @@ function ShareDonut({ data, total, title, icon: Icon, colorOf }) {
                 innerRadius="50%"
                 outerRadius="80%"
                 paddingAngle={2}
-                onMouseEnter={(_, i) => setActive(i)}
-                onMouseLeave={() => setActive(null)}
+                onMouseEnter={(_, i) => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+                onClick={(entry) => onSelect?.(entry.name)}
+                cursor={onSelect ? 'pointer' : 'default'}
               >
                 {data.map((entry, i) => (
                   <Cell
                     key={entry.name}
                     fill={colorOf ? colorOf(entry.name, i) : CHART_COLORS[i % CHART_COLORS.length]}
-                    opacity={active === null || active === i ? 1 : 0.4}
+                    opacity={activeName && activeName !== entry.name ? 0.35 : (hover === null || hover === i ? 1 : 0.4)}
                     stroke="none"
                   />
                 ))}
@@ -87,8 +91,14 @@ function ShareDonut({ data, total, title, icon: Icon, colorOf }) {
           {data.map((d, i) => {
             const pct = total > 0 ? (d.value / total) * 100 : 0;
             const color = colorOf ? colorOf(d.name, i) : CHART_COLORS[i % CHART_COLORS.length];
+            const isActive = activeName === d.name;
             return (
-              <div key={d.name} className="flex items-center gap-2">
+              <button
+                key={d.name}
+                type="button"
+                onClick={() => onSelect?.(d.name)}
+                className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+              >
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
@@ -99,7 +109,7 @@ function ShareDonut({ data, total, title, icon: Icon, colorOf }) {
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -216,6 +226,9 @@ export default function Employees() {
   const [loading, setLoading] = useState(true);
   const [confirmWarnings, setConfirmWarnings] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [positionFilter, setPositionFilter] = useState(null);
+  const [statusFilterEmp, setStatusFilterEmp] = useState(null);
+  const [workplaceFilter, setWorkplaceFilter] = useState(null);
 
   useEffect(() => {
     load();
@@ -459,7 +472,10 @@ export default function Employees() {
   const filtered = employees.filter(
     (e) =>
       e.full_name.toLowerCase().includes(filterName.toLowerCase()) &&
-      e.phone.toLowerCase().includes(filterPhone.toLowerCase())
+      e.phone.toLowerCase().includes(filterPhone.toLowerCase()) &&
+      (!positionFilter || (e.position || 'Без должности') === positionFilter) &&
+      (!statusFilterEmp || e.status === statusFilterEmp) &&
+      (!workplaceFilter || (e.work_place || 'Не указано') === workplaceFilter)
   );
 
   const sortedList = [...filtered];
@@ -595,13 +611,26 @@ export default function Employees() {
               )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <ShareDonut data={positionDonutData} total={employees.length} title="По должностям" icon={Layers} />
+                <ShareDonut
+                  data={positionDonutData}
+                  total={employees.length}
+                  title="По должностям"
+                  icon={Layers}
+                  activeName={positionFilter}
+                  onSelect={(name) => { setPositionFilter((prev) => (prev === name ? null : name)); setActiveTab('list'); }}
+                />
                 <ShareDonut
                   data={statusDonutData}
                   total={employees.length}
                   title="По статусу"
                   icon={UserCheck}
                   colorOf={(name) => (name === 'Активные' ? '#10b981' : '#94a3b8')}
+                  activeName={statusFilterEmp ? (statusFilterEmp === 'active' ? 'Активные' : 'Неактивные') : null}
+                  onSelect={(name) => {
+                    const status = name === 'Активные' ? 'active' : 'inactive';
+                    setStatusFilterEmp((prev) => (prev === status ? null : status));
+                    setActiveTab('list');
+                  }}
                 />
               </div>
 
@@ -610,6 +639,7 @@ export default function Employees() {
                   <div className="text-sm font-semibold mb-4 flex items-center gap-2">
                     <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
                     По местам работы
+                    {workplaceFilter && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· фильтр: {workplaceFilter}</span>}
                   </div>
                   <ResponsiveContainer width="100%" height={Math.max(120, workplaceData.length * 40)}>
                     <BarChart
@@ -621,9 +651,14 @@ export default function Employees() {
                       <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
                       <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={130} />
                       <Tooltip formatter={(v) => [v, 'Сотрудников']} />
-                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                      <Bar
+                        dataKey="count"
+                        radius={[0, 4, 4, 0]}
+                        onClick={(entry) => { setWorkplaceFilter((prev) => (prev === entry.name ? null : entry.name)); setActiveTab('list'); }}
+                        cursor="pointer"
+                      >
                         {workplaceData.map((d, i) => (
-                          <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={workplaceFilter && workplaceFilter !== d.name ? 0.35 : 1} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -637,6 +672,29 @@ export default function Employees() {
 
       {activeTab === 'list' && (
         <>
+      {(positionFilter || statusFilterEmp || workplaceFilter) && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-[color:var(--color-muted-foreground)]">Фильтр из графика:</span>
+          {positionFilter && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+              {positionFilter}
+              <button onClick={() => setPositionFilter(null)} className="hover:opacity-70"><X size={12} /></button>
+            </span>
+          )}
+          {statusFilterEmp && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+              {statusFilterEmp === 'active' ? 'Активные' : 'Неактивные'}
+              <button onClick={() => setStatusFilterEmp(null)} className="hover:opacity-70"><X size={12} /></button>
+            </span>
+          )}
+          {workplaceFilter && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+              {workplaceFilter}
+              <button onClick={() => setWorkplaceFilter(null)} className="hover:opacity-70"><X size={12} /></button>
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 items-center">
         <input
           className="input flex-1 min-w-[140px]"

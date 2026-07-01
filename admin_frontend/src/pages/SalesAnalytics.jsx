@@ -35,6 +35,16 @@ const CATEGORIES = [
   { key:'cosmetics', label:'Косметика',           color:'#22c55e' },
   { key:'shoes',     label:'Обувь',               color:'#f59e0b' },
 ];
+const LABEL_TO_KEY = Object.fromEntries(CATEGORIES.map((c) => [c.label, c.key]));
+
+function toggleSet(setter, key) {
+  setter((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+}
 
 /* ── helpers ─────────────────────────────────────────────── */
 const fmtRub = (v) => v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽';
@@ -223,7 +233,7 @@ function CatBar({ repair, cosmetics, shoes }) {
 }
 
 /* ── Employee leaderboard ────────────────────────────────── */
-function Leaderboard({ empSummary, planTotals }) {
+function Leaderboard({ empSummary, planTotals, activeCodes, onSelect }) {
   const maxTotal = empSummary.length > 0 ? empSummary[0].total : 1;
   const medals   = ['🥇', '🥈', '🥉'];
   return (
@@ -239,8 +249,14 @@ function Leaderboard({ empSummary, planTotals }) {
           const pct   = plan > 0 ? e.total / plan * 100 : null;
           const share = maxTotal > 0 ? e.total / maxTotal : 0;
           const color = CHART_COLORS[i % CHART_COLORS.length];
+          const isActive = activeCodes?.has(e.code);
           return (
-            <div key={e.code} className="px-5 py-3 flex items-center gap-3 hover:bg-[color:var(--color-muted)]/30 transition-colors">
+            <button
+              key={e.code}
+              type="button"
+              onClick={() => onSelect?.(e.code)}
+              className={`w-full text-left px-5 py-3 flex items-center gap-3 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-muted)]/30 cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+            >
               <span className="w-7 text-center text-lg leading-none shrink-0">
                 {medals[i] ?? <span className="text-sm font-semibold text-[color:var(--color-muted-foreground)]">{i+1}</span>}
               </span>
@@ -266,7 +282,7 @@ function Leaderboard({ empSummary, planTotals }) {
                 <div>{e.activeDays} дн.</div>
                 <div className="text-[10px]">{fmtK(e.activeDays > 0 ? e.total / e.activeDays : 0)}/дн</div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -714,8 +730,12 @@ export default function SalesAnalytics() {
                     <ResponsiveContainer width="100%" height={170}>
                       <PieChart>
                         <Pie data={donutData} cx="50%" cy="50%" innerRadius="45%" outerRadius="80%"
-                          dataKey="value" labelLine={false} label={DonutLabel} isAnimationActive={false}>
-                          {donutData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                          dataKey="value" labelLine={false} label={DonutLabel} isAnimationActive={false}
+                          onClick={(entry) => toggleSet(setSelectedCategories, LABEL_TO_KEY[entry.name])}
+                          cursor="pointer">
+                          {donutData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} opacity={selectedCategories.size && !selectedCategories.has(LABEL_TO_KEY[entry.name]) ? 0.35 : 1} />
+                          ))}
                         </Pie>
                         <Tooltip formatter={(v, n) => [fmtRub(v), n]} />
                       </PieChart>
@@ -723,13 +743,19 @@ export default function SalesAnalytics() {
                     <div className="space-y-2 mt-1">
                       {donutData.map((d) => {
                         const pct = kpi.total > 0 ? d.value / kpi.total * 100 : 0;
+                        const isActive = selectedCategories.has(LABEL_TO_KEY[d.name]);
                         return (
-                          <div key={d.name} className="flex items-center gap-2 text-xs">
+                          <button
+                            key={d.name}
+                            type="button"
+                            onClick={() => toggleSet(setSelectedCategories, LABEL_TO_KEY[d.name])}
+                            className={`flex items-center gap-2 text-xs w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+                          >
                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                             <span className="flex-1 text-[color:var(--color-muted-foreground)] truncate">{d.name}</span>
                             <span className="font-semibold tabular-nums">{pct.toFixed(0)}%</span>
                             <span className="text-[color:var(--color-muted-foreground)] tabular-nums">{fmtK(d.value)}</span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -786,7 +812,7 @@ export default function SalesAnalytics() {
                 <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>
               ) : (
                 <>
-                  <Leaderboard empSummary={empSummary} planTotals={planTotals} />
+                  <Leaderboard empSummary={empSummary} planTotals={planTotals} activeCodes={selectedEmployees} onSelect={(code) => toggleSet(setSelectedEmployees, code)} />
 
                   {showPlan && <PlanGauges empSummary={empSummary} planTotals={planTotals} />}
 
@@ -803,7 +829,11 @@ export default function SalesAnalytics() {
                         <Legend wrapperStyle={{ fontSize: 11 }} />
                         {CATEGORIES.map(({ key, label, color }) =>
                           activeCats.includes(key) && (
-                            <Bar key={key} dataKey={key} name={label} stackId="a" fill={color} isAnimationActive={false} />
+                            <Bar
+                              key={key} dataKey={key} name={label} stackId="a" fill={color} isAnimationActive={false}
+                              onClick={(entry) => toggleSet(setSelectedEmployees, entry.code)}
+                              cursor="pointer"
+                            />
                           )
                         )}
                       </BarChart>
