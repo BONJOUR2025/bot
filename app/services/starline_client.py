@@ -200,9 +200,29 @@ def _ways_mileage(data: Any) -> Optional[float]:
     return None
 
 
-def _ways_no_signal_km(data: Any) -> tuple[float, int]:
-    """Straight-line distance (km) spanned by NO_SIGNAL gaps in a /ways response,
-    and how many such gaps there were.
+# A single NO_SIGNAL gap wider than this is almost certainly a bad GPS fix
+# (e.g. StarLine sending "null island" 0°,0° or another sentinel as a
+# placeholder for "no position"), not the car actually driving that far
+# while unreachable — a courier car doesn't teleport hundreds of km between
+# two pings. Gaps past this are excluded from the total and reported
+# separately so they don't silently blow up the "distance at risk" figure.
+NO_SIGNAL_GAP_SANITY_KM = 60.0
+
+
+def _valid_coord(x: Optional[float], y: Optional[float]) -> bool:
+    """Reject missing values and "null island" (0°,0° ± a hair) — a common
+    sentinel for "no GPS fix" that some devices/backends send instead of
+    omitting the field, which would otherwise register as a huge bogus jump
+    from the car's real location to the Gulf of Guinea."""
+    if x is None or y is None:
+        return False
+    if abs(x) < 0.01 and abs(y) < 0.01:
+        return False
+    return -180 <= x <= 180 and -90 <= y <= 90
+
+
+def _ways_no_signal_km(data: Any) -> dict:
+    """Straight-line distance (km) spanned by NO_SIGNAL gaps in a /ways response.
 
     A NO_SIGNAL segment always reports mileage=0 (StarLine has no track for that
     stretch, so it doesn't count it towards the total) even when the start/finish
@@ -210,13 +230,18 @@ def _ways_no_signal_km(data: Any) -> tuple[float, int]:
     know the path. Whether a given gap gets classified as NO_SIGNAL (excluded)
     or as an interpolated TRACK segment (included) can change as StarLine
     reprocesses a still-forming day between calls — this is the actual source
-    of the "mileage went down" anomaly, not our arithmetic. Surfacing this
-    number tells the caller how much of the total is at risk of moving either
-    way once the day settles."""
+    of the "mileage went down" anomaly, not our arithmetic.
+
+    Individual gaps above NO_SIGNAL_GAP_SANITY_KM (bad fixes, not real driving)
+    and gaps with invalid/null-island coordinates are excluded from the sum
+    and reported separately in "excluded" — without this, a single corrupt
+    point can inflate the "distance at risk" figure by thousands of km."""
     way = data.get("way") if isinstance(data, dict) else None
     if not isinstance(way, list):
-        return 0.0, 0
+        return {"km": 0.0, "gaps": 0, "excluded_count": 0, "excluded_km": 0.0, "top_gaps": []}
     total_km, gaps = 0.0, 0
+    excluded_count, excluded_km = 0, 0.0
+    all_gaps: list[dict] = []
     for w in way:
         if not isinstance(w, dict) or w.get("type") != "NO_SIGNAL":
             continue
@@ -224,13 +249,26 @@ def _ways_no_signal_km(data: Any) -> tuple[float, int]:
         if not isinstance(s, dict) or not isinstance(f, dict):
             continue
         x1, y1, x2, y2 = _num(s.get("x")), _num(s.get("y")), _num(f.get("x")), _num(f.get("y"))
-        if None in (x1, y1, x2, y2):
+        if not (_valid_coord(x1, y1) and _valid_coord(x2, y2)):
             continue
         d = _haversine_km((x1, y1), (x2, y2))
-        if d > 0:
+        if d <= 0:
+            continue
+        entry = {"km": round(d, 1), "start": {"t": s.get("t"), "x": x1, "y": y1}, "finish": {"t": f.get("t"), "x": x2, "y": y2}}
+        if d > NO_SIGNAL_GAP_SANITY_KM:
+            excluded_count += 1
+            excluded_km += d
+            entry["excluded"] = True
+        else:
             total_km += d
             gaps += 1
-    return round(total_km, 1), gaps
+        all_gaps.append(entry)
+    all_gaps.sort(key=lambda g: g["km"], reverse=True)
+    return {
+        "km": round(total_km, 1), "gaps": gaps,
+        "excluded_count": excluded_count, "excluded_km": round(excluded_km, 1),
+        "top_gaps": all_gaps[:15],
+    }
 
 
 async def get_ways_mileage(device_id: str, ts_from: int, ts_to: int) -> Optional[float]:
@@ -247,16 +285,25 @@ async def get_ways_diagnostics(device_id: str, ts_from: int, ts_to: int) -> dict
     rate_limited/retry_after distinguish StarLine's own 429 from "no data",
     so the caller can tell the user to retry shortly instead of suggesting
     a manual entry."""
+    empty_signal = {"km": 0.0, "gaps": 0, "excluded_count": 0, "excluded_km": 0.0, "top_gaps": []}
     try:
         raw = await get_ways(device_id, ts_from, ts_to)
     except StarLineRateLimited as exc:
         log.warning("StarLine get_ways_diagnostics rate-limited (retry_after=%s)", exc.retry_after)
-        return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0, "rate_limited": True, "retry_after": exc.retry_after}
+        return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0, "no_signal_excluded_count": 0,
+                "no_signal_excluded_km": 0.0, "no_signal_top_gaps": [], "rate_limited": True, "retry_after": exc.retry_after}
     except Exception as exc:
         log.warning("StarLine get_ways_diagnostics failed: %s", exc)
-        return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0, "rate_limited": False, "retry_after": None}
-    no_signal_km, gaps = _ways_no_signal_km(raw)
-    return {"km": _ways_mileage(raw), "no_signal_km": no_signal_km, "no_signal_gaps": gaps, "rate_limited": False, "retry_after": None}
+        return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0, "no_signal_excluded_count": 0,
+                "no_signal_excluded_km": 0.0, "no_signal_top_gaps": [], "rate_limited": False, "retry_after": None}
+    signal = _ways_no_signal_km(raw)
+    return {
+        "km": _ways_mileage(raw),
+        "no_signal_km": signal["km"], "no_signal_gaps": signal["gaps"],
+        "no_signal_excluded_count": signal["excluded_count"], "no_signal_excluded_km": signal["excluded_km"],
+        "no_signal_top_gaps": signal["top_gaps"],
+        "rate_limited": False, "retry_after": None,
+    }
 
 
 async def _user_id() -> Any:

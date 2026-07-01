@@ -254,9 +254,11 @@ def create_courier_salary_router(
             ts_from, ts_to = _period_ts(period)
         try:
             raw = await starline_client.get_ways(device_id, ts_from, ts_to)
-            no_signal_km, no_signal_gaps = starline_client._ways_no_signal_km(raw)
-            return {"km": starline_client._ways_mileage(raw), "no_signal_km": no_signal_km,
-                    "no_signal_gaps": no_signal_gaps, "ts_from": ts_from, "ts_to": ts_to, "raw": raw}
+            signal = starline_client._ways_no_signal_km(raw)
+            return {"km": starline_client._ways_mileage(raw), "no_signal_km": signal["km"],
+                    "no_signal_gaps": signal["gaps"], "no_signal_excluded_count": signal["excluded_count"],
+                    "no_signal_excluded_km": signal["excluded_km"], "no_signal_top_gaps": signal["top_gaps"],
+                    "ts_from": ts_from, "ts_to": ts_to, "raw": raw}
         except starline_client.StarLineRateLimited as exc:
             raise HTTPException(status_code=429, detail=f"StarLine rate limit (429). retry_after={exc.retry_after}")
         except Exception as exc:
@@ -302,10 +304,21 @@ def create_courier_salary_router(
             "gps_km": km,
             "no_signal_km": diag["no_signal_km"],
             "no_signal_gaps": diag["no_signal_gaps"],
+            "no_signal_excluded_count": diag["no_signal_excluded_count"],
+            "no_signal_excluded_km": diag["no_signal_excluded_km"],
+            "no_signal_top_gaps": diag["no_signal_top_gaps"],
             "estimated_range_km": None if km is None else [km, round(km + diag["no_signal_km"], 1)],
             "rate_limited": diag.get("rate_limited", False),
             "retry_after": diag.get("retry_after"),
-            "note": "estimated_range_km — нижняя граница (по треку) и оценка сверху (+ разрывы GPS по прямой). Реальный одометр обычно попадает в этот диапазон или выше, если машина ехала не по прямой во время потери сигнала.",
+            "note": (
+                "estimated_range_km — нижняя граница (по треку) и оценка сверху (+ разрывы GPS по прямой, "
+                "без явно битых точек). Реальный одометр обычно попадает в этот диапазон или выше, если машина "
+                "ехала не по прямой во время потери сигнала. no_signal_excluded_km — сумма разрывов длиннее "
+                f"{starline_client.NO_SIGNAL_GAP_SANITY_KM} км за один скачок: это почти всегда битые координаты "
+                "устройства (например «нулевой остров» 0°,0°), а не реальная езда, поэтому они не входят в km/"
+                "no_signal_km — но если no_signal_excluded_km велика, посмотрите no_signal_top_gaps, чтобы "
+                "убедиться сами."
+            ),
         }
         if odometer_start is not None and odometer_end is not None:
             real_km = round(odometer_end - odometer_start, 1)
