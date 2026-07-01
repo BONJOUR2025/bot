@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
+
+const CAT_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899'];
 
 const MONTH_NAMES = [
   'Январь','Февраль','Март','Апрель','Май','Июнь',
@@ -408,6 +411,7 @@ export default function PaymentCalendar() {
   const [detailItem, setDetailItem] = useState(null); // { schedule, record? }
   const [tab, setTab] = useState('calendar'); // 'calendar' | 'schedules' | 'settings'
   const [highlightDay, setHighlightDay] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState(null);
 
   const yearMonth = `${year}-${String(month + 1).padStart(2, '0')}`;
 
@@ -475,6 +479,25 @@ export default function PaymentCalendar() {
     const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     return due < t;
   }).length;
+
+  const categoryData = (() => {
+    const map = {};
+    for (const s of schedules) {
+      if (!s.is_active) continue;
+      const cat = s.category || 'Без категории';
+      map[cat] = (map[cat] || 0) + (Number(s.planned_amount) || 0);
+    }
+    return Object.entries(map)
+      .map(([name, value], i) => ({ name, value, color: CAT_COLORS[i % CAT_COLORS.length] }))
+      .filter((d) => d.value > 0)
+      .sort((a, b) => b.value - a.value);
+  })();
+  const categoryTotal = categoryData.reduce((s, d) => s + d.value, 0);
+
+  function selectCategory(name) {
+    setCategoryFilter((prev) => (prev === name ? null : name));
+    setTab('schedules');
+  }
 
   async function handlePay(recordId, actualAmount, comment) {
     try {
@@ -618,6 +641,48 @@ export default function PaymentCalendar() {
             </div>
           )}
 
+          {/* Category breakdown — click a slice to jump to filtered payments */}
+          {!loading && categoryData.length > 0 && (
+            <div className="app-card p-5">
+              <div className="text-sm font-semibold mb-4 flex items-center gap-2 text-[color:var(--color-text)]">
+                Структура расходов по категориям
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <div style={{ width: 150, height: 150, flexShrink: 0 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={categoryData} dataKey="value" nameKey="name" innerRadius="50%" outerRadius="80%"
+                        paddingAngle={2} onClick={(entry) => selectCategory(entry.name)} cursor="pointer">
+                        {categoryData.map((d) => <Cell key={d.name} fill={d.color} stroke="none" />)}
+                      </Pie>
+                      <Tooltip formatter={(v) => [`${fmt(v)} ₽`, 'Сумма']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex-1 space-y-2 min-w-0 w-full">
+                  {categoryData.map((d) => {
+                    const pct = categoryTotal > 0 ? (d.value / categoryTotal) * 100 : 0;
+                    return (
+                      <button key={d.name} type="button" onClick={() => selectCategory(d.name)}
+                        className="flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs truncate">{d.name}</span>
+                            <span className="text-xs font-semibold shrink-0">{fmt(d.value)} ₽ ({pct.toFixed(0)}%)</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color }} />
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Calendar grid */}
           <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl overflow-hidden">
             <div className="grid grid-cols-7 bg-[color:var(--color-bg-subtle)] border-b">
@@ -757,14 +822,22 @@ export default function PaymentCalendar() {
           <p className="text-sm text-[color:var(--color-text-muted)]">
             Список регулярных платежей. Каждый месяц для них автоматически создаются записи.
           </p>
-          {schedules.length === 0 ? (
+          {categoryFilter && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[color:var(--color-muted-foreground)]">Фильтр по категории:</span>
+              <button className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium" onClick={() => setCategoryFilter(null)}>
+                {categoryFilter} ✕
+              </button>
+            </div>
+          )}
+          {(categoryFilter ? schedules.filter((s) => (s.category || 'Без категории') === categoryFilter) : schedules).length === 0 ? (
             <div className="text-center py-12 text-[color:var(--color-text-faint)]">
               <p className="text-4xl mb-2">📋</p>
               <p>Нет платежей. Добавьте первый.</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {schedules.map(s => (
+              {(categoryFilter ? schedules.filter((s) => (s.category || 'Без категории') === categoryFilter) : schedules).map(s => (
                 <div key={s.id} onClick={() => setDetailItem({ schedule: s })}
                   className={`bg-[color:var(--color-surface)] border rounded-xl p-4 flex items-center justify-between gap-3 cursor-pointer hover:border-blue-200 hover:bg-blue-50/30 transition-colors
                   ${!s.is_active ? 'opacity-50' : ''}`}>
