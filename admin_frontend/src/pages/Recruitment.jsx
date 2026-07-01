@@ -1112,6 +1112,58 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
   );
 }
 
+// ── Funnel conversion stats (executive summary above the board) ────
+function FunnelStats({ candidates, activeStage, onSelectStage }) {
+  const total = candidates.length;
+  if (!total) return null;
+  const hired = candidates.filter(c => c.stage === 'нанят').length;
+  const rejected = candidates.filter(c => c.stage === 'отказ').length;
+  const inProgress = total - hired - rejected;
+  const hireRate = total > 0 ? Math.round((hired / total) * 100) : 0;
+
+  return (
+    <div className="px-6 sm:px-10 pt-4 pb-1">
+      <div className="app-card p-4">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <div className="shrink-0">
+            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Всего кандидатов</div>
+            <div className="text-xl font-bold text-[color:var(--color-text)]">{total}</div>
+          </div>
+          <div className="shrink-0">
+            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">В работе</div>
+            <div className="text-xl font-bold text-[color:var(--color-primary)]">{inProgress}</div>
+          </div>
+          <div className="shrink-0">
+            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Нанято</div>
+            <div className="text-xl font-bold text-[color:var(--color-success)]">{hired}</div>
+          </div>
+          <div className="shrink-0">
+            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Конверсия в найм</div>
+            <div className="text-xl font-bold" style={{ color: hireRate >= 15 ? 'var(--color-success)' : hireRate >= 5 ? 'var(--color-warning)' : 'var(--color-danger)' }}>{hireRate}%</div>
+          </div>
+          <div className="flex-1 min-w-[200px] flex items-center gap-1.5 flex-wrap">
+            {STAGES.map(stage => {
+              const count = candidates.filter(c => c.stage === stage.key).length;
+              const pct = total > 0 ? (count / total) * 100 : 0;
+              const isActive = activeStage === stage.key;
+              return (
+                <button key={stage.key} type="button" onClick={() => onSelectStage?.(isActive ? null : stage.key)}
+                  className={`flex flex-col items-center gap-1 px-2 py-1 rounded-lg transition-colors ${onSelectStage ? 'cursor-pointer hover:bg-[color:var(--color-bg-secondary)]' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
+                  <span className="text-[10px] text-[color:var(--color-muted-foreground)] whitespace-nowrap">{stage.label}</span>
+                  <span className="text-xs font-semibold">{count}</span>
+                  <div className="w-12 h-1 rounded-full bg-[color:var(--color-bg-secondary)] overflow-hidden">
+                    <div className={`h-full rounded-full ${stage.dot}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Kanban board (desktop) ─────────────────────────────────────────
 function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMode, selectedIds, onToggle }) {
   const [dragOver, setDragOver] = useState(null);
@@ -1126,7 +1178,7 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
           const isDragSrc = dragging != null && candidates.find(c => c.id === dragging)?.stage === stage.key;
           const colSelected = cards.filter(c => selectedIds.has(c.id)).length;
           return (
-            <div key={stage.key} className="w-[230px] flex flex-col">
+            <div key={stage.key} id={`kanban-col-${stage.key}`} className="w-[230px] flex flex-col">
               <div className="flex items-center justify-between mb-3 px-0.5">
                 <div className="flex items-center gap-2">
                   {selectionMode && cards.length > 0 && (
@@ -1734,6 +1786,14 @@ export default function Recruitment() {
       {/* Interview schedule view */}
       {mainView === 'interviews' && (
         <InterviewSchedule onCandidateClick={c => setDetailModal(c)} />
+      )}
+
+      {/* Funnel conversion summary — click a stage to scroll the board to it */}
+      {mainView === 'funnel' && selectedId && (
+        <FunnelStats candidates={candidates} onSelectStage={(key) => {
+          if (!key) return;
+          document.getElementById(`kanban-col-${key}`)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        }} />
       )}
 
       {/* Two-panel layout */}
