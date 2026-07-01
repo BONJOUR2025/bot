@@ -65,6 +65,7 @@ const navStructure = [
       { to: '/admin/payouts-control',  label: 'Контроль выплат',      permission: 'payouts-control', icon: ShieldCheck },
       { to: '/admin/incentives',       label: 'Штрафы и премии',      permission: 'incentives',      icon: Award },
       { to: '/admin/cash-moves',       label: 'Кассовые перемещения', permission: 'cash-moves',      icon: ArrowLeftRight },
+      { to: '/admin/cash-summary',     label: 'Сводный отчёт (касса)', permission: 'cash-moves',     icon: BarChart2 },
       { to: '/admin/payment-calendar', label: 'Платежный календарь',  permission: 'payment-calendar',icon: CalendarDays },
     ],
   },
