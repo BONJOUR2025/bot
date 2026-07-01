@@ -486,7 +486,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
               />
             ) : null}
-            <div className={`w-16 h-16 rounded-2xl border-2 border-white shadow-md bg-[color:var(--color-muted)] items-center justify-center text-[color:var(--color-muted-foreground)] ${candidate.photo_url ? 'hidden' : 'flex'}`}>
+            <div className={`w-16 h-16 rounded-2xl border-2 border-white shadow-md bg-[color:var(--color-bg-secondary)] items-center justify-center text-[color:var(--color-muted-foreground)] ${candidate.photo_url ? 'hidden' : 'flex'}`}>
               <User size={28} />
             </div>
           </div>
@@ -972,7 +972,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                   {!!(p.tags || []).length && (
                     <div className="flex flex-wrap gap-1.5">
                       {p.tags.map((t, i) => (
-                        <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">#{t}</span>
+                        <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)]">#{t}</span>
                       ))}
                     </div>
                   )}

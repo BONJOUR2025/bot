@@ -80,7 +80,7 @@ function EntryRow({ entry, onEdit, onDelete }) {
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <ScopeBadge scope={entry.scope} vacancyTitle={entry.vacancy_title} />
             {entry.category && (
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)]">
                 {entry.category}
               </span>
             )}

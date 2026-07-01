@@ -173,7 +173,7 @@ export default function AdminEmployeeProfile() {
             onClick={() => window.open(employee.photo_url, '_blank')}
           />
         ) : (
-          <div className="w-16 h-16 rounded-full bg-[color:var(--color-muted)] flex items-center justify-center shrink-0 text-2xl font-semibold text-[color:var(--color-muted-foreground)]">
+          <div className="w-16 h-16 rounded-full bg-[color:var(--color-bg-secondary)] flex items-center justify-center shrink-0 text-2xl font-semibold text-[color:var(--color-muted-foreground)]">
             {(employee.full_name || employee.name || '?')[0].toUpperCase()}
           </div>
         )}

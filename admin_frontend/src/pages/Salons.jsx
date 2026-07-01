@@ -396,10 +396,10 @@ function SalonCard({ salon, employees, onClick }) {
       {assignedNames.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[color:var(--color-border)] flex flex-wrap gap-1">
           {assignedNames.map((n, i) => (
-            <span key={i} className="inline-block bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)] rounded-full px-2 py-0.5 text-xs">{n}</span>
+            <span key={i} className="inline-block bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)] rounded-full px-2 py-0.5 text-xs">{n}</span>
           ))}
           {salon.employees.length > 3 && (
-            <span className="inline-block bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)] rounded-full px-2 py-0.5 text-xs">+{salon.employees.length - 3}</span>
+            <span className="inline-block bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)] rounded-full px-2 py-0.5 text-xs">+{salon.employees.length - 3}</span>
           )}
         </div>
       )}
@@ -678,7 +678,7 @@ export default function Salons() {
               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 statusFilter === o.value
                   ? 'bg-[color:var(--color-primary)] text-white'
-                  : 'bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-muted)]/80'
+                  : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-control-bg-hover)]'
               }`}
             >
               {o.label}
