@@ -59,6 +59,24 @@ class CourierMileageRepository:
     def upsert(self, employee_code: str, period: str, **fields) -> dict[str, Any]:
         key = self._key(employee_code, period)
         cur = self._data.get(key, {})
+
+        # Mileage physically cannot decrease. StarLine's /ways recompute is not
+        # guaranteed monotonic while "today" is still in progress (its own
+        # server-side filtering re-processes the still-forming daily track
+        # between calls), so an auto-sync can legitimately return a smaller
+        # number than a previous sync of the same period. A manual correction
+        # (source="manual") is the one case that should always win outright —
+        # anything else is floored at whatever is already on record.
+        if fields.get("source") not in (None, "manual"):
+            prev_km = self._with_km({**DEFAULTS, **cur}).get("km")
+            if prev_km is not None:
+                if fields.get("km_explicit") is not None and fields["km_explicit"] < prev_km:
+                    fields = {**fields, "km_explicit": prev_km}
+                new_end = fields.get("odometer_end")
+                old_end = cur.get("odometer_end")
+                if new_end is not None and old_end is not None and new_end < old_end:
+                    fields = {**fields, "odometer_end": old_end}
+
         # explicit None is meaningful for these (clear the value)
         for k in ("odometer_start", "odometer_end", "km_explicit", "source"):
             if k in fields:
