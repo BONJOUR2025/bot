@@ -624,7 +624,7 @@ function KpiCard({ label, value, sub, accent, icon: Icon }) {
   );
 }
 
-function CashDayHeatmap({ data }) {
+function CashDayHeatmap({ data, activeDay, onSelect }) {
   const max = Math.max(...data.map((d) => d.sum), 1);
   return (
     <div className="app-card p-5">
@@ -633,20 +633,26 @@ function CashDayHeatmap({ data }) {
         Активность по дням недели
       </div>
       <div className="space-y-2.5">
-        {data.map((d) => {
+        {data.map((d, i) => {
           const pct = max > 0 ? (d.sum / max) * 100 : 0;
           const isWeekend = d.day === 'Вс' || d.day === 'Сб';
+          const isActive = activeDay === i;
           return (
-            <div key={d.day} className="flex items-center gap-3">
+            <button
+              key={d.day}
+              type="button"
+              onClick={() => onSelect?.(i)}
+              className={`flex items-center gap-3 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+            >
               <div className="w-6 text-xs text-right text-[color:var(--color-muted-foreground)] shrink-0 font-medium">{d.day}</div>
               <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
                 <div
                   className="h-full rounded-lg transition-all duration-500"
-                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: 0.75 }}
+                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
                 />
               </div>
               <div className="text-xs font-medium w-20 text-right shrink-0">{fmtK(d.sum)}</div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -664,7 +670,7 @@ function CashDayHeatmap({ data }) {
   );
 }
 
-function BranchLeaderboard({ data, total }) {
+function BranchLeaderboard({ data, total, activeName, onSelect }) {
   const medals = ['🥇', '🥈', '🥉'];
   return (
     <div className="app-card p-5">
@@ -675,8 +681,14 @@ function BranchLeaderboard({ data, total }) {
       <div className="space-y-4">
         {data.slice(0, 6).map(([name, { sum, count }], i) => {
           const pct = total > 0 ? (sum / total) * 100 : 0;
+          const isActive = activeName === name;
           return (
-            <div key={name}>
+            <button
+              key={name}
+              type="button"
+              onClick={() => onSelect?.(name)}
+              className={`block w-full text-left rounded-md -mx-1 px-1 py-1 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+            >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2 min-w-0">
                   {i < 3
@@ -696,7 +708,7 @@ function BranchLeaderboard({ data, total }) {
                   style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }}
                 />
               </div>
-            </div>
+            </button>
           );
         })}
         {data.length === 0 && (
@@ -707,14 +719,15 @@ function BranchLeaderboard({ data, total }) {
   );
 }
 
-function CatDonut({ data, total }) {
-  const [active, setActive] = useState(null);
+function CatDonut({ data, total, activeName, onSelect }) {
+  const [hover, setHover] = useState(null);
   if (!data.length) return null;
   return (
     <div className="app-card p-5">
       <div className="text-sm font-semibold mb-4 flex items-center gap-2">
         <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
         Категории
+        {activeName && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· фильтр: {activeName}</span>}
       </div>
       <div className="flex flex-col sm:flex-row gap-4 items-center">
         <div style={{ width: 160, height: 160, flexShrink: 0 }}>
@@ -727,14 +740,16 @@ function CatDonut({ data, total }) {
                 innerRadius="50%"
                 outerRadius="80%"
                 paddingAngle={2}
-                onMouseEnter={(_, i) => setActive(i)}
-                onMouseLeave={() => setActive(null)}
+                onMouseEnter={(_, i) => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+                onClick={(entry) => onSelect?.(entry.name)}
+                cursor={onSelect ? 'pointer' : 'default'}
               >
                 {data.map((entry, i) => (
                   <Cell
                     key={entry.name}
                     fill={CHART_COLORS[i % CHART_COLORS.length]}
-                    opacity={active === null || active === i ? 1 : 0.4}
+                    opacity={activeName && activeName !== entry.name ? 0.35 : (hover === null || hover === i ? 1 : 0.4)}
                     stroke="none"
                   />
                 ))}
@@ -746,8 +761,14 @@ function CatDonut({ data, total }) {
         <div className="flex-1 space-y-2 min-w-0">
           {data.map((d, i) => {
             const pct = total > 0 ? (d.sum / total) * 100 : 0;
+            const isActive = activeName === d.name;
             return (
-              <div key={d.name} className="flex items-center gap-2">
+              <button
+                key={d.name}
+                type="button"
+                onClick={() => onSelect?.(d.name)}
+                className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+              >
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
@@ -758,7 +779,7 @@ function CatDonut({ data, total }) {
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -806,6 +827,7 @@ export default function CashMovements() {
   const [linkedPayoutRecord, setLinkedPayoutRecord] = useState(null);
   const [noPayoutOnly, setNoPayoutOnly]   = useState(false);
   const [selected, setSelected]   = useState(new Set());
+  const [dayFilter, setDayFilter] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -924,6 +946,7 @@ export default function CashMovements() {
     if (selCatFilters.length) out = out.filter((r) => selCatFilters.includes(r.category ?? '__invalid__'));
     if (invalidOnly)          out = out.filter((r) => !r.prefix_ok);
     if (noPayoutOnly)         out = out.filter((r) => !r.has_payout);
+    if (dayFilter != null)    out = out.filter((r) => { const d = new Date(r.DK_DATE); return !isNaN(d) && d.getDay() === dayFilter; });
     if (query.trim()) {
       const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
       out = out.filter((r) => { const b = (r.BASIS || '').toLowerCase(); return searchOr ? terms.some((t) => b.includes(t)) : terms.every((t) => b.includes(t)); });
@@ -938,7 +961,7 @@ export default function CashMovements() {
       if (sort.field === 'category')  return mult * (a.category  || '').localeCompare(b.category  || '', 'ru');
       return 0;
     });
-  }, [safeRows, selDeps, selUsers, selCatFilters, invalidOnly, noPayoutOnly, query, searchOr, sort]);
+  }, [safeRows, selDeps, selUsers, selCatFilters, invalidOnly, noPayoutOnly, dayFilter, query, searchOr, sort]);
 
   const filteredIds = useMemo(() => filtered.map((r) => r.ID_KASSES_MOVE), [filtered]);
   const allChecked  = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
@@ -1004,6 +1027,24 @@ export default function CashMovements() {
   const withPayoutCnt = useMemo(() => filtered.filter((r) => r.has_payout).length, [filtered]);
   const selectedSum   = useMemo(() => filtered.filter((r) => selected.has(r.ID_KASSES_MOVE)).reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered, selected]);
   const selectedCount = selected.size;
+
+  // Chart-driven drill-down: clicking a chart segment applies the matching filter and jumps to the filtered list.
+  function selectCategory(name) {
+    setSelCatFilters((prev) => (prev.length === 1 && prev[0] === name ? [] : [name]));
+    setActiveTab('movements');
+  }
+  function selectBranch(name) {
+    const opt = depOptions.find((o) => o.name === name);
+    if (!opt) return;
+    setSelDeps((prev) => (prev.length === 1 && prev[0] === opt.id ? [] : [opt.id]));
+    setActiveTab('movements');
+  }
+  function selectDay(i) {
+    setDayFilter((prev) => (prev === i ? null : i));
+    setActiveTab('movements');
+  }
+  const activeCategoryName = selCatFilters.length === 1 ? selCatFilters[0] : null;
+  const activeBranchName = selDeps.length === 1 ? (depOptions.find((o) => o.id === selDeps[0])?.name ?? null) : null;
 
   const mainTabs = [
     { key: 'overview',   label: 'Обзор',    icon: <BarChart3 size={14} /> },
@@ -1128,14 +1169,14 @@ export default function CashMovements() {
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
-                  <CatDonut data={donutData} total={totalSum} />
+                  <CatDonut data={donutData} total={totalSum} activeName={activeCategoryName} onSelect={selectCategory} />
                 </div>
               )}
 
               {/* Branch leaderboard + Day heatmap */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <BranchLeaderboard data={salonBreakdown} total={totalSum} />
-                <CashDayHeatmap data={dayData} />
+                <BranchLeaderboard data={salonBreakdown} total={totalSum} activeName={activeBranchName} onSelect={selectBranch} />
+                <CashDayHeatmap data={dayData} activeDay={dayFilter} onSelect={selectDay} />
               </div>
 
               {/* Category bar chart */}
@@ -1155,9 +1196,9 @@ export default function CashMovements() {
                       <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
                       <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={130} />
                       <Tooltip formatter={(v, n, p) => [fmtMoneyShort(v), 'Сумма']} labelFormatter={(l) => l} />
-                      <Bar dataKey="sum" radius={[0, 4, 4, 0]}>
+                      <Bar dataKey="sum" radius={[0, 4, 4, 0]} onClick={(entry) => selectCategory(entry.name)} cursor="pointer">
                         {breakdown.map(([name], i) => (
-                          <Cell key={name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          <Cell key={name} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={activeCategoryName && activeCategoryName !== name ? 0.35 : 1} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -1172,6 +1213,15 @@ export default function CashMovements() {
       {/* ── Движения ──────────────────────────────────────────── */}
       {activeTab === 'movements' && (
         <div className="space-y-4">
+          {dayFilter != null && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-[color:var(--color-muted-foreground)]">Фильтр из графика:</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+                {DAY_NAMES[dayFilter]}
+                <button onClick={() => setDayFilter(null)} className="hover:opacity-70"><X size={12} /></button>
+              </span>
+            </div>
+          )}
           {/* Filters */}
           <div className="app-card p-4 space-y-4">
             <div className="flex flex-wrap gap-2">

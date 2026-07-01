@@ -41,6 +41,7 @@ const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонен�
 const MANAGE_DATES_PERMISSION = 'payouts-manage-dates';
 
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899'];
+const METHOD_RAW = { 'На карту': '💳 На карту', 'Из кассы': '🏦 Из кассы', 'Наличными': '🤝 Наличными' };
 const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const STATUS_COLORS = { 'Ожидает': '#f59e0b', 'Одобрено': '#10b981', 'Отклонено': '#ef4444', 'Выплачено': '#6366f1' };
 
@@ -101,7 +102,7 @@ function KpiCard({ label, value, sub, accent, icon: Icon }) {
   );
 }
 
-function PayoutDayHeatmap({ data }) {
+function PayoutDayHeatmap({ data, activeDay, onSelect }) {
   const max = Math.max(...data.map((d) => d.sum), 1);
   return (
     <div className="app-card p-5">
@@ -110,20 +111,26 @@ function PayoutDayHeatmap({ data }) {
         Активность по дням недели
       </div>
       <div className="space-y-2.5">
-        {data.map((d) => {
+        {data.map((d, i) => {
           const pct = max > 0 ? (d.sum / max) * 100 : 0;
           const isWeekend = d.day === 'Вс' || d.day === 'Сб';
+          const isActive = activeDay === i;
           return (
-            <div key={d.day} className="flex items-center gap-3">
+            <button
+              key={d.day}
+              type="button"
+              onClick={() => onSelect?.(i)}
+              className={`flex items-center gap-3 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+            >
               <div className="w-6 text-xs text-right text-[color:var(--color-muted-foreground)] shrink-0 font-medium">{d.day}</div>
               <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
                 <div
                   className="h-full rounded-lg transition-all duration-500"
-                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: 0.75 }}
+                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
                 />
               </div>
               <div className="text-xs font-medium w-20 text-right shrink-0">{fmtK(d.sum)}</div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -141,7 +148,7 @@ function PayoutDayHeatmap({ data }) {
   );
 }
 
-function EmployeeLeaderboard({ data, total }) {
+function EmployeeLeaderboard({ data, total, activeName, onSelect }) {
   const medals = ['🥇', '🥈', '🥉'];
   return (
     <div className="app-card p-5">
@@ -152,8 +159,14 @@ function EmployeeLeaderboard({ data, total }) {
       <div className="space-y-4">
         {data.slice(0, 6).map(([name, { sum, count }], i) => {
           const pct = total > 0 ? (sum / total) * 100 : 0;
+          const isActive = activeName === name;
           return (
-            <div key={name}>
+            <button
+              key={name}
+              type="button"
+              onClick={() => onSelect?.(name)}
+              className={`block w-full text-left rounded-md -mx-1 px-1 py-1 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+            >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2 min-w-0">
                   {i < 3
@@ -173,7 +186,7 @@ function EmployeeLeaderboard({ data, total }) {
                   style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }}
                 />
               </div>
-            </div>
+            </button>
           );
         })}
         {data.length === 0 && (
@@ -184,15 +197,16 @@ function EmployeeLeaderboard({ data, total }) {
   );
 }
 
-function StatusDonut({ data, total, title, icon: Icon, colorOf, formatValue, tooltipLabel = 'Кол-во' }) {
+function StatusDonut({ data, total, title, icon: Icon, colorOf, formatValue, tooltipLabel = 'Кол-во', activeName, onSelect }) {
   const fmtVal = formatValue || ((v) => v);
-  const [active, setActive] = useState(null);
+  const [hover, setHover] = useState(null);
   if (!data.length) return null;
   return (
     <div className="app-card p-5">
       <div className="text-sm font-semibold mb-4 flex items-center gap-2">
         <Icon size={15} className="text-[color:var(--color-primary)]" />
         {title}
+        {activeName && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· фильтр: {activeName}</span>}
       </div>
       <div className="flex flex-col sm:flex-row gap-4 items-center">
         <div style={{ width: 160, height: 160, flexShrink: 0 }}>
@@ -205,14 +219,16 @@ function StatusDonut({ data, total, title, icon: Icon, colorOf, formatValue, too
                 innerRadius="50%"
                 outerRadius="80%"
                 paddingAngle={2}
-                onMouseEnter={(_, i) => setActive(i)}
-                onMouseLeave={() => setActive(null)}
+                onMouseEnter={(_, i) => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+                onClick={(entry) => onSelect?.(entry.name)}
+                cursor={onSelect ? 'pointer' : 'default'}
               >
                 {data.map((entry, i) => (
                   <Cell
                     key={entry.name}
                     fill={colorOf ? colorOf(entry.name, i) : CHART_COLORS[i % CHART_COLORS.length]}
-                    opacity={active === null || active === i ? 1 : 0.4}
+                    opacity={activeName && activeName !== entry.name ? 0.35 : (hover === null || hover === i ? 1 : 0.4)}
                     stroke="none"
                   />
                 ))}
@@ -225,8 +241,14 @@ function StatusDonut({ data, total, title, icon: Icon, colorOf, formatValue, too
           {data.map((d, i) => {
             const pct = total > 0 ? (d.value / total) * 100 : 0;
             const color = colorOf ? colorOf(d.name, i) : CHART_COLORS[i % CHART_COLORS.length];
+            const isActive = activeName === d.name;
             return (
-              <div key={d.name} className="flex items-center gap-2">
+              <button
+                key={d.name}
+                type="button"
+                onClick={() => onSelect?.(d.name)}
+                className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+              >
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
@@ -237,7 +259,7 @@ function StatusDonut({ data, total, title, icon: Icon, colorOf, formatValue, too
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -615,6 +637,7 @@ export default function Payouts() {
   const [activity, setActivity] = useState([]);
   const [showActivity, setShowActivity] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [dayFilter, setDayFilter] = useState(null);
 
   useEffect(() => {
     loadEmployees();
@@ -717,6 +740,40 @@ export default function Payouts() {
     }
     return Object.entries(map).sort(([, a], [, b]) => b.sum - a.sum);
   }, [payouts]);
+
+  // Client-side day-of-week narrowing on top of the server-filtered `payouts` —
+  // used only for chart drill-down, kept separate from `filters` (which round-trips to the API).
+  const visiblePayouts = useMemo(() => {
+    if (dayFilter == null) return payouts;
+    return payouts.filter((p) => {
+      if (!p.timestamp) return false;
+      const d = new Date(p.timestamp.replace(' ', 'T'));
+      return !isNaN(d) && d.getDay() === dayFilter;
+    });
+  }, [payouts, dayFilter]);
+
+  // Chart-driven drill-down: clicking a chart segment applies the matching filter and jumps to the list.
+  function selectStatus(name) {
+    setFilters((f) => ({ ...f, status: f.status === name ? '' : name }));
+    setActiveTab('list');
+  }
+  function selectType(name) {
+    setFilters((f) => ({ ...f, type: f.type === name ? '' : name }));
+    setActiveTab('list');
+  }
+  function selectMethod(name) {
+    const raw = METHOD_RAW[name] || name;
+    setFilters((f) => ({ ...f, method: f.method === raw ? '' : raw }));
+    setActiveTab('list');
+  }
+  function selectEmployee(name) {
+    setFilters((f) => ({ ...f, query: f.query === name ? '' : name }));
+    setActiveTab('list');
+  }
+  function selectDay(i) {
+    setDayFilter((prev) => (prev === i ? null : i));
+    setActiveTab('list');
+  }
 
   const mainTabs = [
     { key: 'overview', label: 'Обзор', icon: <BarChart3 size={14} /> },
@@ -886,10 +943,10 @@ export default function Payouts() {
   }
 
   function toggleSelectAll() {
-    if (selected.size === payouts.length) {
+    if (selected.size === visiblePayouts.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(payouts.map((p) => p.id)));
+      setSelected(new Set(visiblePayouts.map((p) => p.id)));
     }
   }
 
@@ -1166,13 +1223,15 @@ export default function Payouts() {
                     title="Статусы"
                     icon={BarChart3}
                     colorOf={(name) => STATUS_COLORS[name] || '#94a3b8'}
+                    activeName={filters.status || null}
+                    onSelect={selectStatus}
                   />
                 </div>
               )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <EmployeeLeaderboard data={employeeLeaderboard} total={totalSum} />
-                <PayoutDayHeatmap data={dayData} />
+                <EmployeeLeaderboard data={employeeLeaderboard} total={totalSum} activeName={filters.query || null} onSelect={selectEmployee} />
+                <PayoutDayHeatmap data={dayData} activeDay={dayFilter} onSelect={selectDay} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1183,6 +1242,8 @@ export default function Payouts() {
                   icon={Layers}
                   formatValue={fmtK}
                   tooltipLabel="Сумма"
+                  activeName={filters.type || null}
+                  onSelect={selectType}
                 />
                 {methodData.length > 0 && (
                   <div className="app-card p-5">
@@ -1200,9 +1261,9 @@ export default function Payouts() {
                         <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
                         <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={100} />
                         <Tooltip formatter={(v) => [fmtMoneyShort(v), 'Сумма']} />
-                        <Bar dataKey="sum" radius={[0, 4, 4, 0]}>
+                        <Bar dataKey="sum" radius={[0, 4, 4, 0]} onClick={(entry) => selectMethod(entry.name)} cursor="pointer">
                           {methodData.map((d, i) => (
-                            <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                            <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={filters.method && METHOD_RAW[d.name] !== filters.method ? 0.35 : 1} />
                           ))}
                         </Bar>
                       </BarChart>
@@ -1218,6 +1279,15 @@ export default function Payouts() {
       {/* ── Заявки ────────────────────────────────────────────── */}
       {activeTab === 'list' && (
         <>
+      {dayFilter != null && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-[color:var(--color-muted-foreground)]">Фильтр из графика:</span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+            {DAY_NAMES[dayFilter]}
+            <button onClick={() => setDayFilter(null)} className="hover:opacity-70"><X size={12} /></button>
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 items-end">
         <input
           className="input flex-grow"
@@ -1328,18 +1398,18 @@ export default function Payouts() {
         </div>
       ) : (
         <>
-          {payouts.length > 0 && (
+          {visiblePayouts.length > 0 && (
             <label className="flex items-center gap-2 text-sm text-[color:var(--color-text-muted)]">
               <input
                 type="checkbox"
-                checked={selected.size === payouts.length}
+                checked={selected.size === visiblePayouts.length}
                 onChange={toggleSelectAll}
               />
               Выбрать все
             </label>
           )}
           <ResponsiveTable
-            data={payouts}
+            data={visiblePayouts}
             keyFn={(p) => p.id}
             rowClass={(p) => (selected.has(p.id) ? 'bg-blue-50' : '')}
             emptyText="Нет данных"

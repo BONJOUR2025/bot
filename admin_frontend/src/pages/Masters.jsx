@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle,
   Hammer, ListChecks, CheckCircle2, Clock, Users, Receipt, ClipboardList,
-  BarChart3, Trophy, Layers,
+  BarChart3, Trophy, Layers, X,
 } from 'lucide-react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -264,7 +264,7 @@ function fmtRubShort(v) {
   return Math.round(n) + ' ₽';
 }
 
-function TopMastersChart({ data }) {
+function TopMastersChart({ data, activeName, onSelect }) {
   if (!data.length) return null;
   return (
     <div className="app-card p-5">
@@ -278,8 +278,8 @@ function TopMastersChart({ data }) {
           <XAxis type="number" tickFormatter={fmtRubShort} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
           <YAxis type="category" dataKey="master" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={120} />
           <Tooltip formatter={(v) => [fmtRubShort(v), 'Зарплата']} />
-          <Bar dataKey="total_salary" radius={[0, 4, 4, 0]}>
-            {data.map((d, i) => <Cell key={d.master} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+          <Bar dataKey="total_salary" radius={[0, 4, 4, 0]} onClick={(entry) => onSelect?.(entry.master)} cursor={onSelect ? 'pointer' : 'default'}>
+            {data.map((d, i) => <Cell key={d.master} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={activeName && activeName !== d.master ? 0.35 : 1} />)}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -287,8 +287,8 @@ function TopMastersChart({ data }) {
   );
 }
 
-function StatusDonut({ data, total }) {
-  const [active, setActive] = useState(null);
+function StatusDonut({ data, total, activeName, onSelect }) {
+  const [hover, setHover] = useState(null);
   if (!data.length) return null;
   return (
     <div className="app-card p-5">
@@ -303,10 +303,12 @@ function StatusDonut({ data, total }) {
               <Pie
                 data={data} dataKey="value" nameKey="name"
                 innerRadius="50%" outerRadius="80%" paddingAngle={2}
-                onMouseEnter={(_, i) => setActive(i)} onMouseLeave={() => setActive(null)}
+                onMouseEnter={(_, i) => setHover(i)} onMouseLeave={() => setHover(null)}
+                onClick={(entry) => entry.name !== 'Прочее' && onSelect?.(entry.name)}
+                cursor={onSelect ? 'pointer' : 'default'}
               >
                 {data.map((entry, i) => (
-                  <Cell key={entry.name} fill={entry.color} opacity={active === null || active === i ? 1 : 0.4} stroke="none" />
+                  <Cell key={entry.name} fill={entry.color} opacity={activeName && activeName !== entry.name ? 0.35 : (hover === null || hover === i ? 1 : 0.4)} stroke="none" />
                 ))}
               </Pie>
               <Tooltip formatter={(v) => [v, 'Услуг']} />
@@ -316,8 +318,16 @@ function StatusDonut({ data, total }) {
         <div className="flex-1 space-y-2 min-w-0 w-full">
           {data.map((d) => {
             const pct = total > 0 ? (d.value / total) * 100 : 0;
+            const clickable = d.name !== 'Прочее';
+            const isActive = activeName === d.name;
             return (
-              <div key={d.name} className="flex items-center gap-2">
+              <button
+                key={d.name}
+                type="button"
+                disabled={!clickable}
+                onClick={() => onSelect?.(d.name)}
+                className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect && clickable ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+              >
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
@@ -328,7 +338,7 @@ function StatusDonut({ data, total }) {
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color }} />
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -337,8 +347,8 @@ function StatusDonut({ data, total }) {
   );
 }
 
-function CategoryDonut({ data, total }) {
-  const [active, setActive] = useState(null);
+function CategoryDonut({ data, total, activeNames, onSelect }) {
+  const [hover, setHover] = useState(null);
   if (!data.length) return null;
   return (
     <div className="app-card p-5">
@@ -353,10 +363,12 @@ function CategoryDonut({ data, total }) {
               <Pie
                 data={data} dataKey="value" nameKey="name"
                 innerRadius="50%" outerRadius="80%" paddingAngle={2}
-                onMouseEnter={(_, i) => setActive(i)} onMouseLeave={() => setActive(null)}
+                onMouseEnter={(_, i) => setHover(i)} onMouseLeave={() => setHover(null)}
+                onClick={(entry) => entry.name !== 'Прочие' && onSelect?.(entry.name)}
+                cursor={onSelect ? 'pointer' : 'default'}
               >
                 {data.map((entry, i) => (
-                  <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={active === null || active === i ? 1 : 0.4} stroke="none" />
+                  <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={activeNames?.size && !activeNames.has(entry.name) ? 0.35 : (hover === null || hover === i ? 1 : 0.4)} stroke="none" />
                 ))}
               </Pie>
               <Tooltip formatter={(v) => [fmtRubShort(v), 'Сумма']} />
@@ -366,8 +378,16 @@ function CategoryDonut({ data, total }) {
         <div className="flex-1 space-y-2 min-w-0 w-full">
           {data.map((d, i) => {
             const pct = total > 0 ? (d.value / total) * 100 : 0;
+            const clickable = d.name !== 'Прочие';
+            const isActive = activeNames?.has(d.name);
             return (
-              <div key={d.name} className="flex items-center gap-2">
+              <button
+                key={d.name}
+                type="button"
+                disabled={!clickable}
+                onClick={() => onSelect?.(d.name)}
+                className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect && clickable ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+              >
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
@@ -378,7 +398,7 @@ function CategoryDonut({ data, total }) {
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -387,7 +407,7 @@ function CategoryDonut({ data, total }) {
   );
 }
 
-function ServiceDayHeatmap({ data }) {
+function ServiceDayHeatmap({ data, activeDay, onSelect }) {
   const max = Math.max(...data.map((d) => d.count), 1);
   return (
     <div className="app-card p-5">
@@ -396,20 +416,26 @@ function ServiceDayHeatmap({ data }) {
         Активность по дням недели
       </div>
       <div className="space-y-2.5">
-        {data.map((d) => {
+        {data.map((d, i) => {
           const pct = max > 0 ? (d.count / max) * 100 : 0;
           const isWeekend = d.day === 'Вс' || d.day === 'Сб';
+          const isActive = activeDay === i;
           return (
-            <div key={d.day} className="flex items-center gap-3">
+            <button
+              key={d.day}
+              type="button"
+              onClick={() => onSelect?.(i)}
+              className={`flex items-center gap-3 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+            >
               <div className="w-6 text-xs text-right text-[color:var(--color-muted-foreground)] shrink-0 font-medium">{d.day}</div>
               <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
                 <div
                   className="h-full rounded-lg transition-all duration-500"
-                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: 0.75 }}
+                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
                 />
               </div>
               <div className="text-xs font-medium w-16 text-right shrink-0">{d.count} усл.</div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -440,6 +466,7 @@ export default function Masters() {
   const [durationFilter, setDurationFilter] = useState('all');
   const [categoryFilter, setCategoryFilter]       = useState(new Set());
   const [warningTypeFilter, setWarningTypeFilter] = useState(new Set());
+  const [dayFilter, setDayFilter] = useState(null);
 
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -534,8 +561,15 @@ export default function Masters() {
       const opt = DURATION_OPTIONS.find((o) => o.value === durationFilter);
       if (opt) r = r.filter((x) => opt.test(x.duration_min));
     }
+    if (dayFilter != null) {
+      r = r.filter((x) => {
+        const t = x.out_time || x.in_time;
+        const d = t && new Date(t);
+        return d && !isNaN(d) && d.getDay() === dayFilter;
+      });
+    }
     return r;
-  }, [rows, statusFilter, warningsOnly, warningTypeFilter, categoryFilter, masterSearch, nameSearch, docSearch, codeSearch, durationFilter]);
+  }, [rows, statusFilter, warningsOnly, warningTypeFilter, categoryFilter, masterSearch, nameSearch, docSearch, codeSearch, durationFilter, dayFilter]);
 
   const sorted = useMemo(() => {
     if (!sortCol) return filtered;
@@ -749,15 +783,17 @@ export default function Masters() {
 
               {(topMastersChart.length > 0 || statusDonutData.length > 0) && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  <div className="lg:col-span-2"><TopMastersChart data={topMastersChart} /></div>
-                  <StatusDonut data={statusDonutData} total={kpi.total} />
+                  <div className="lg:col-span-2">
+                    <TopMastersChart data={topMastersChart} activeName={masterSearch || null} onSelect={(name) => { setMasterSearch((prev) => (prev === name ? '' : name)); setTab('services'); }} />
+                  </div>
+                  <StatusDonut data={statusDonutData} total={kpi.total} activeName={statusFilter !== 'Все' ? statusFilter : null} onSelect={(name) => { setStatusFilter((prev) => (prev === name ? 'Все' : name)); setTab('services'); }} />
                 </div>
               )}
 
               {(categoryDonutData.length > 0 || dayHeatmapData.some((d) => d.count > 0)) && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <CategoryDonut data={categoryDonutData} total={kpi.totalKredit} />
-                  <ServiceDayHeatmap data={dayHeatmapData} />
+                  <CategoryDonut data={categoryDonutData} total={kpi.totalKredit} activeNames={categoryFilter} onSelect={(name) => { toggleCategory(name); setTab('services'); }} />
+                  <ServiceDayHeatmap data={dayHeatmapData} activeDay={dayFilter} onSelect={(i) => { setDayFilter((prev) => (prev === i ? null : i)); setTab('services'); }} />
                 </div>
               )}
 
@@ -767,6 +803,15 @@ export default function Masters() {
 
           {tab === 'services' && (
             <div className="space-y-4">
+              {dayFilter != null && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-[color:var(--color-muted-foreground)]">Фильтр из графика:</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+                    {DAY_NAMES[dayFilter]}
+                    <button onClick={() => setDayFilter(null)} className="hover:opacity-70"><X size={12} /></button>
+                  </span>
+                </div>
+              )}
               {/* Filters */}
               <div className="app-card p-4 space-y-3">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
