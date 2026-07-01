@@ -29,6 +29,15 @@ log = logging.getLogger(__name__)
 ID_BASE = "https://id.starline.ru/apiV3"
 DEV_BASE = "https://developer.starline.ru/json"
 
+
+class StarLineRateLimited(RuntimeError):
+    """StarLine's own API rate limit (HTTP 429) — distinct from "no data for
+    this device/period" so callers can tell the user to retry shortly instead
+    of suggesting a manual entry."""
+    def __init__(self, retry_after: Optional[int] = None):
+        self.retry_after = retry_after
+        super().__init__("StarLine rate limit exceeded (429)")
+
 # Cached session (app token ~4h, slnet token ~ until it 401s).
 _session: dict[str, Any] = {"app_token": "", "app_token_ts": 0.0, "slnet": "", "user_id": None}
 
@@ -110,6 +119,8 @@ async def _authed_get(path: str, params: Optional[dict] = None) -> dict:
             _reset_session()
             slnet, _ = await _auth(client)
             resp = await client.get(url, params=params, cookies={"slnet": slnet})
+        if resp.status_code == 429:
+            raise StarLineRateLimited(_retry_after(resp))
         resp.raise_for_status()
         return resp.json()
 
@@ -126,8 +137,18 @@ async def _authed_post(path: str, body: dict) -> dict:
             _reset_session()
             slnet, _ = await _auth(client)
             resp = await client.post(url, json=body, cookies={"slnet": slnet})
+        if resp.status_code == 429:
+            raise StarLineRateLimited(_retry_after(resp))
         resp.raise_for_status()
         return resp.json()
+
+
+def _retry_after(resp: httpx.Response) -> Optional[int]:
+    v = resp.headers.get("Retry-After")
+    try:
+        return int(v) if v is not None else None
+    except ValueError:
+        return None
 
 
 async def get_status() -> dict:
@@ -222,14 +243,20 @@ async def get_ways_mileage(device_id: str, ts_from: int, ts_to: int) -> Optional
 
 async def get_ways_diagnostics(device_id: str, ts_from: int, ts_to: int) -> dict:
     """km + how much distance sits in NO_SIGNAL gaps (excluded from km, but real
-    movement) — see _ways_no_signal_km. Never raises; km is None on failure."""
+    movement) — see _ways_no_signal_km. Never raises; km is None on failure.
+    rate_limited/retry_after distinguish StarLine's own 429 from "no data",
+    so the caller can tell the user to retry shortly instead of suggesting
+    a manual entry."""
     try:
         raw = await get_ways(device_id, ts_from, ts_to)
+    except StarLineRateLimited as exc:
+        log.warning("StarLine get_ways_diagnostics rate-limited (retry_after=%s)", exc.retry_after)
+        return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0, "rate_limited": True, "retry_after": exc.retry_after}
     except Exception as exc:
         log.warning("StarLine get_ways_diagnostics failed: %s", exc)
-        return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0}
+        return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0, "rate_limited": False, "retry_after": None}
     no_signal_km, gaps = _ways_no_signal_km(raw)
-    return {"km": _ways_mileage(raw), "no_signal_km": no_signal_km, "no_signal_gaps": gaps}
+    return {"km": _ways_mileage(raw), "no_signal_km": no_signal_km, "no_signal_gaps": gaps, "rate_limited": False, "retry_after": None}
 
 
 async def _user_id() -> Any:

@@ -159,6 +159,10 @@ def create_courier_salary_router(
             source = "starline-track"
             no_signal_km = no_signal_gaps = None
         if not km:
+            if diag.get("rate_limited"):
+                retry = diag.get("retry_after")
+                suffix = f" Повторите примерно через {retry} сек." if retry else " Повторите попытку через минуту."
+                raise HTTPException(status_code=429, detail=f"StarLine временно ограничил частоту запросов.{suffix}")
             raise HTTPException(status_code=502, detail="StarLine не вернул пробег за период (нет трека) — введите пробег вручную")
         return repo.upsert(employee_code, period, km_explicit=km, source=source,
                            no_signal_km=no_signal_km, no_signal_gaps=no_signal_gaps)
@@ -253,6 +257,8 @@ def create_courier_salary_router(
             no_signal_km, no_signal_gaps = starline_client._ways_no_signal_km(raw)
             return {"km": starline_client._ways_mileage(raw), "no_signal_km": no_signal_km,
                     "no_signal_gaps": no_signal_gaps, "ts_from": ts_from, "ts_to": ts_to, "raw": raw}
+        except starline_client.StarLineRateLimited as exc:
+            raise HTTPException(status_code=429, detail=f"StarLine rate limit (429). retry_after={exc.retry_after}")
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
