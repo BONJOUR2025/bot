@@ -4,14 +4,18 @@ import {
   Wallet, CheckCircle2, Palmtree, AlertTriangle,
   ArrowRight, CalendarDays, ClipboardList, Clock,
   ListTodo, CirclePlay, RefreshCw, Scissors,
-  UserPlus, MessageSquare, Send,
+  UserPlus, MessageSquare, Send, Trophy,
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import Skeleton, { SkeletonCard } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
+
+const SALES_COLORS = { repair: '#6366f1', cosmetics: '#22c55e', shoes: '#f59e0b' };
+const SALES_LABELS = { repair: 'Ремонт', cosmetics: 'Косметика', shoes: 'Обувь' };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +72,13 @@ const VACATION_TONE = { Отпуск: 'info', Больничный: 'warning', �
 
 function StatCard({ icon: Icon, label, value, sub, tone = 'primary', to }) {
   const navigate = useNavigate();
+  const accent = {
+    primary: '#6366f1',
+    warning: '#f59e0b',
+    danger:  '#ef4444',
+    success: '#10b981',
+    info:    '#3b82f6',
+  }[tone] ?? '#6366f1';
   const iconCls = {
     primary: 'text-[color:var(--color-primary)] bg-[color:var(--color-primary-muted)]',
     warning: 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-muted)]',
@@ -79,6 +90,7 @@ function StatCard({ icon: Icon, label, value, sub, tone = 'primary', to }) {
   return (
     <div
       onClick={to ? () => navigate(to) : undefined}
+      style={{ borderLeft: `3px solid ${accent}` }}
       className={`flex items-center gap-4 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-5 shadow-sm transition-shadow duration-200 ${to ? 'cursor-pointer hover:shadow-md' : ''}`}
     >
       <div className={`rounded-xl p-3 shrink-0 ${iconCls}`}>
@@ -454,7 +466,36 @@ export default function Dashboard() {
               ...rows,
               { description: 'Итого', repair: totRepair, cosmetics: totCosmetics, shoes: totShoes, isTotal: true },
             ];
+            const salesDonut = [
+              { key: 'repair', value: totRepair },
+              { key: 'cosmetics', value: totCosmetics },
+              { key: 'shoes', value: totShoes },
+            ].filter((d) => d.value > 0);
             return (
+              <>
+              {salesDonut.length > 0 && (
+                <div className="flex items-center gap-4 pb-4 mb-4 border-b border-[color:var(--color-border)]">
+                  <div style={{ width: 76, height: 76, flexShrink: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={salesDonut} dataKey="value" nameKey="key" innerRadius="55%" outerRadius="90%" paddingAngle={2} isAnimationActive={false}>
+                          {salesDonut.map((d) => <Cell key={d.key} fill={SALES_COLORS[d.key]} stroke="none" />)}
+                        </Pie>
+                        <Tooltip formatter={(v, n, p) => [`${fmt(v)} ₽`, SALES_LABELS[p.payload.key]]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 flex flex-wrap gap-x-5 gap-y-1.5">
+                    {salesDonut.map((d) => (
+                      <div key={d.key} className="flex items-center gap-1.5 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: SALES_COLORS[d.key] }} />
+                        <span className="text-[color:var(--color-text-muted)]">{SALES_LABELS[d.key]}</span>
+                        <span className="font-semibold">{fmt(d.value)} ₽</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <ResponsiveTable
                 data={salesRows}
                 keyFn={(r) => r.description}
@@ -517,6 +558,7 @@ export default function Dashboard() {
                   },
                 ]}
               />
+              </>
             );
           })()}
         </Card>
@@ -547,7 +589,29 @@ export default function Dashboard() {
                 isTotal: true,
               },
             ];
+            const topMasters = [...rows].sort((a, b) => (b.total_kredit ?? 0) - (a.total_kredit ?? 0)).slice(0, 5);
+            const maxKredit = Math.max(1, ...topMasters.map((m) => m.total_kredit ?? 0));
             return (
+              <>
+              {topMasters.length > 0 && (
+                <div className="pb-4 mb-4 border-b border-[color:var(--color-border)] space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--color-text-muted)] mb-1">
+                    <Trophy size={13} /> Топ по выручке
+                  </div>
+                  {topMasters.map((m, i) => {
+                    const pct = maxKredit > 0 ? ((m.total_kredit ?? 0) / maxKredit) * 100 : 0;
+                    return (
+                      <div key={m.master} className="flex items-center gap-2">
+                        <span className="text-xs w-24 truncate shrink-0 text-[color:var(--color-text)]">{m.master}</span>
+                        <div className="flex-1 h-2 rounded-full bg-[color:var(--color-bg-secondary)] overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: '#6366f1' }} />
+                        </div>
+                        <span className="text-xs font-semibold w-20 text-right shrink-0">{fmt(m.total_kredit)} ₽</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <ResponsiveTable
                 data={masterRows}
                 keyFn={(m) => m.master}
@@ -606,6 +670,7 @@ export default function Dashboard() {
                   },
                 ]}
               />
+              </>
             );
           })()}
         </Card>

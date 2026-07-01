@@ -163,7 +163,8 @@ export default function AdminEmployeeProfile() {
       </div>
 
       {/* Header card */}
-      <div className="app-card p-5 flex items-center gap-4">
+      <div className="app-card p-5">
+      <div className="flex items-center gap-4">
         {employee.photo_url ? (
           <img
             src={employee.photo_url}
@@ -201,6 +202,7 @@ export default function AdminEmployeeProfile() {
         >
           <Pencil size={14} /> Редактировать
         </Link>
+      </div>
       </div>
 
       {/* Details */}

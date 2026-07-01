@@ -1,9 +1,43 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
-import { ChevronDown, ChevronUp, Info, Target, Building2, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Info, Target, Building2, Users, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { StatCard, Tabs } from '../components/ui/SalaryUI.jsx';
+
+const PLAN_COLORS = { repair_plan: '#6366f1', cosmetics_plan: '#22c55e', shoes_plan: '#f59e0b' };
+const PLAN_LABELS = { repair_plan: 'Ремонт / Химчистка', cosmetics_plan: 'Косметика', shoes_plan: 'Обувь' };
+
+function LocationPlansChart({ codes, plans }) {
+  const data = codes.map((c) => ({
+    name: c.name,
+    repair_plan: plans[c.code]?.repair_plan || 0,
+    cosmetics_plan: plans[c.code]?.cosmetics_plan || 0,
+    shoes_plan: plans[c.code]?.shoes_plan || 0,
+  })).filter((d) => d.repair_plan || d.cosmetics_plan || d.shoes_plan);
+  if (!data.length) return null;
+  return (
+    <div className="app-card p-4">
+      <div className="text-sm font-semibold mb-3 flex items-center gap-2">
+        <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+        План продаж по точкам
+      </div>
+      <ResponsiveContainer width="100%" height={Math.max(140, data.length * 44)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
+          <XAxis type="number" tickFormatter={fmt} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+          <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={100} />
+          <Tooltip formatter={(v, key) => [`${fmt(v)} ₽`, PLAN_LABELS[key]]} />
+          <Legend formatter={(key) => PLAN_LABELS[key]} wrapperStyle={{ fontSize: 11 }} />
+          <Bar dataKey="repair_plan" name="repair_plan" stackId="a" fill={PLAN_COLORS.repair_plan} radius={[0, 0, 0, 0]} />
+          <Bar dataKey="cosmetics_plan" name="cosmetics_plan" stackId="a" fill={PLAN_COLORS.cosmetics_plan} />
+          <Bar dataKey="shoes_plan" name="shoes_plan" stackId="a" fill={PLAN_COLORS.shoes_plan} radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 const MONTHS = [
   'ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ',
@@ -104,7 +138,9 @@ function PlansTable({ codes, plans, onChange }) {
   ];
 
   return (
-    <div className="app-card overflow-hidden">
+    <div className="space-y-4">
+      <LocationPlansChart codes={codes} plans={plans} />
+      <div className="app-card overflow-hidden">
       <div className="px-4 py-3 border-b border-[color:var(--color-border)] font-semibold text-sm">
         Планы по точкам
       </div>
@@ -124,6 +160,7 @@ function PlansTable({ codes, plans, onChange }) {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

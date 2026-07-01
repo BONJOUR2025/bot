@@ -176,19 +176,21 @@ function KpiStat({ label, value, delta, sub, accent = '#6366f1', icon }) {
   const up = delta != null && delta > 0;
   const dn = delta != null && delta < 0;
   return (
-    <div className="app-card p-4 flex gap-3" style={{ borderLeft: `3px solid ${accent}` }}>
-      {icon && <div className="mt-0.5 shrink-0" style={{ color: accent }}>{icon}</div>}
-      <div className="min-w-0 flex-1">
-        <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] font-medium">{label}</div>
-        <div className="text-xl sm:text-2xl font-bold tabular-nums mt-0.5 leading-tight" style={{ color: accent }}>{value}</div>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {delta != null && Math.abs(delta) >= 0.1 && (
-            <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400'}`}>
-              {up ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-              {up ? '+' : ''}{delta.toFixed(1)}%
-            </span>
-          )}
-          {sub && <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{sub}</span>}
+    <div className="app-card p-4" style={{ borderLeft: `3px solid ${accent}` }}>
+      <div className="flex gap-3">
+        {icon && <div className="mt-0.5 shrink-0" style={{ color: accent }}>{icon}</div>}
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] font-medium">{label}</div>
+          <div className="text-xl sm:text-2xl font-bold tabular-nums mt-0.5 leading-tight" style={{ color: accent }}>{value}</div>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {delta != null && Math.abs(delta) >= 0.1 && (
+              <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400'}`}>
+                {up ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                {up ? '+' : ''}{delta.toFixed(1)}%
+              </span>
+            )}
+            {sub && <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{sub}</span>}
+          </div>
         </div>
       </div>
     </div>

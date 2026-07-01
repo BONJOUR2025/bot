@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Users, Copy, RefreshCw, KeyRound, Link as LinkIcon, RotateCcw,
+  LogIn, LogOut, UsersRound,
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
@@ -9,6 +10,22 @@ import {
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
+
+function KpiCard({ label, value, accent, icon: Icon }) {
+  return (
+    <div className="app-card p-4" style={{ borderLeft: `3px solid ${accent}` }}>
+      <div className="flex items-center gap-3">
+        <div className="rounded-xl p-2.5 shrink-0" style={{ background: `${accent}18` }}>
+          <Icon size={18} style={{ color: accent }} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-xl font-bold leading-none" style={{ color: accent }}>{value}</div>
+          <div className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">{label}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function fmtDateTime(value) {
   if (!value) return '';
@@ -208,22 +225,24 @@ export default function VisitorCounters() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cumulative.map((row) => (
-          <div key={row.salon_id} className="app-card flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <div className="text-xs text-[color:var(--color-text-muted)]">
-                {row.salon_name || row.salon_id}{row.reset_at ? ` · с ${fmtDateTime(row.reset_at)}` : ''}
+          <div key={row.salon_id} className="app-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs text-[color:var(--color-text-muted)]">
+                  {row.salon_name || row.salon_id}{row.reset_at ? ` · с ${fmtDateTime(row.reset_at)}` : ''}
+                </div>
+                <div className="text-2xl font-semibold text-[color:var(--color-text)]">{row.in_count}</div>
+                <div className="text-xs text-[color:var(--color-text-muted)] mt-1">Вышло: {row.out_count} · Сейчас в зале: {row.net}</div>
               </div>
-              <div className="text-2xl font-semibold text-[color:var(--color-text)]">{row.in_count}</div>
-              <div className="text-xs text-[color:var(--color-text-muted)] mt-1">Вышло: {row.out_count} · Сейчас в зале: {row.net}</div>
+              <button
+                type="button"
+                className="btn flex items-center gap-1.5"
+                onClick={() => handleReset(row.salon_id, row.salon_name || row.salon_id)}
+                disabled={resetting === row.salon_id}
+              >
+                <RotateCcw size={14} /> Обнулить
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn flex items-center gap-1.5"
-              onClick={() => handleReset(row.salon_id, row.salon_name || row.salon_id)}
-              disabled={resetting === row.salon_id}
-            >
-              <RotateCcw size={14} /> Обнулить
-            </button>
           </div>
         ))}
         {cumulative.length === 0 && (
@@ -231,9 +250,10 @@ export default function VisitorCounters() {
         )}
       </div>
 
-      <div className="flex gap-4 text-sm text-[color:var(--color-text-muted)]">
-        <span>Вошло за период: <strong className="text-[color:var(--color-text)]">{totals.in}</strong></span>
-        <span>Вышло за период: <strong className="text-[color:var(--color-text)]">{totals.out}</strong></span>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <KpiCard label="Вошло за период" value={totals.in} accent="#10b981" icon={LogIn} />
+        <KpiCard label="Вышло за период" value={totals.out} accent="#f59e0b" icon={LogOut} />
+        <KpiCard label="Сейчас в зале" value={Math.max(0, totals.in - totals.out)} accent="#6366f1" icon={UsersRound} />
       </div>
 
       {tab === 'table' && (

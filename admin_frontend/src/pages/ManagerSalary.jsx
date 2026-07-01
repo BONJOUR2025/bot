@@ -8,6 +8,27 @@ import { useToast } from '../providers/ToastProvider.jsx';
 import { fmtMoney, fmtPct, Term, StatCard, MetricBar, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 
+function KpiRing({ pct, size = 84 }) {
+  const clamped = Math.max(0, Math.min(pct ?? 0, 999));
+  const r = (size - 10) / 2;
+  const c = 2 * Math.PI * r;
+  const dash = Math.min(clamped, 100) / 100 * c;
+  const color = clamped >= 100 ? '#10b981' : clamped >= 79 ? '#6366f1' : '#f59e0b';
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-bg-secondary)" strokeWidth="7" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round"
+          strokeDasharray={`${dash} ${c}`} style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-sm font-bold tabular-nums" style={{ color }}>{Math.round(clamped)}%</span>
+        <span className="text-[9px] text-[color:var(--color-muted-foreground)] uppercase tracking-wide">KPI</span>
+      </div>
+    </div>
+  );
+}
+
 const MANAGER_POSITION = 'менеджер по работе с клиентами';
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
@@ -372,15 +393,18 @@ export default function ManagerSalary() {
           {/* Hero: payout summary + action */}
           <section className="app-card overflow-hidden">
             <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
-              <div className="min-w-0">
-                <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
-                  К выплате · {manager?.full_name || manager?.name} · {periodLabel}
-                </div>
-                <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
-                  {fmtMoney(result.to_pay)}
-                </div>
-                <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
-                  Начислено {fmtMoney(result.gross)}{kept ? <> · удержано <span className="text-[color:var(--color-danger)]">{fmtMoney(kept)}</span></> : null}
+              <div className="flex items-center gap-4 min-w-0">
+                <KpiRing pct={result.kpi_max > 0 ? (result.kpi / result.kpi_max) * 100 : 0} />
+                <div className="min-w-0">
+                  <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                    К выплате · {manager?.full_name || manager?.name} · {periodLabel}
+                  </div>
+                  <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
+                    {fmtMoney(result.to_pay)}
+                  </div>
+                  <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
+                    Начислено {fmtMoney(result.gross)}{kept ? <> · удержано <span className="text-[color:var(--color-danger)]">{fmtMoney(kept)}</span></> : null}
+                  </div>
                 </div>
               </div>
               <div className="shrink-0 sm:text-right">
