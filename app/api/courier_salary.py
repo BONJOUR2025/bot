@@ -15,6 +15,14 @@ from pydantic import BaseModel
 from app.services.payout_service import PayoutService
 from app.services.access_control_service import AccessControlService, ResolvedUser
 from app.services import starline_client, yandex_router_client, ors_client
+from app.data.courier_plan_repository import get_courier_plan_repository
+from app.data.courier_mileage_repository import get_courier_mileage_repository
+from app.data.courier_salary_repository import get_courier_salary_repository
+
+from .dependencies import require_permission
+from .manager_salary import _advances_since_last_salary, SALARY_TYPE
+
+COURIER_PERMISSION = "payroll"
 
 ROUTING_PROVIDERS = {"yandex": yandex_router_client, "ors": ors_client}
 
@@ -32,22 +40,38 @@ def _pick_routing_provider(name: Optional[str]):
     if ors_client.is_configured():
         return ors_client
     return yandex_router_client
-from app.data.courier_plan_repository import get_courier_plan_repository
-from app.data.courier_mileage_repository import get_courier_mileage_repository
-from app.data.courier_salary_repository import get_courier_salary_repository
 
-from .dependencies import require_permission
-from .manager_salary import _advances_since_last_salary, SALARY_TYPE
-
-COURIER_PERMISSION = "payroll"
 
 # Safety net independent of routing_min_km: however low the threshold, never
 # fire more than this many Router API calls for one diagnostics request —
-# Yandex Router API is a paid product past its trial quota, and a fat-fingered
-# routing_min_km=0 over a 2000-gap month shouldn't be able to burn the quota
-# in one request.
+# a fat-fingered routing_min_km=0 over a 2000-gap month shouldn't be able to
+# burn a whole day's quota in one request.
 MAX_ROUTED_GAPS = 200
-ROUTING_CONCURRENCY = 4
+ROUTING_CONCURRENCY = 3
+# Minimum spacing between dispatched requests, regardless of concurrency —
+# ORS's free tier is documented around 40/min; 1.6s keeps us under that with
+# margin even before the per-client 429 retry kicks in. This is deliberately
+# a floor on *dispatch* rate, not a token bucket — simple and enough here.
+ROUTING_MIN_INTERVAL_S = 1.6
+
+
+class RateGate:
+    """Ensures callers are spaced at least `interval` seconds apart, no
+    matter how many call `wait()` concurrently — a minimal pacing primitive,
+    not a full token bucket (we don't need burst allowance here)."""
+    def __init__(self, interval: float):
+        self._interval = interval
+        self._lock = asyncio.Lock()
+        self._next_time = 0.0
+
+    async def wait(self) -> None:
+        async with self._lock:
+            loop = asyncio.get_event_loop()
+            now = loop.time()
+            delay = max(self._next_time - now, 0.0)
+            self._next_time = max(self._next_time, now) + self._interval
+        if delay > 0:
+            await asyncio.sleep(delay)
 
 
 def _calc(oklad, advances, bonuses, penalties) -> dict:
@@ -84,21 +108,31 @@ async def refine_gaps_with_routing(
     gaps: list[dict], min_km: float,
     route_fn=yandex_router_client.route_distance_km,
     max_gaps: int = MAX_ROUTED_GAPS, concurrency: int = ROUTING_CONCURRENCY,
+    min_interval: float = ROUTING_MIN_INTERVAL_S,
 ) -> dict:
     """Re-measure NO_SIGNAL gaps (>= min_km, capped at max_gaps) via a routing
     function (Yandex Router API by default; injectable for tests) instead of
     trusting the straight-line estimate. Each gap that gets a road distance
     carries it as "road_km"; gaps below the threshold, over the cap, or where
-    routing failed keep only "km" (straight-line) and are summed as-is.
-    Mutates the "gaps" entries in place (adds "road_km" where resolved)."""
+    routing failed (after the client's own 429 retries) keep only "km"
+    (straight-line) and are summed as-is. Mutates the "gaps" entries in
+    place (adds "road_km" where resolved).
+
+    Requests are paced via RateGate on top of the concurrency limit — with
+    only a concurrency cap, 3 workers dispatch as fast as the network allows
+    and blow through a provider's per-minute quota in seconds; pacing keeps
+    the *dispatch* rate itself under that quota instead of just retrying
+    after the fact."""
     candidates = [g for g in gaps if not g.get("excluded") and g["km"] >= min_km]
     capped = candidates[:max_gaps]
     skipped_over_cap = max(len(candidates) - len(capped), 0)
 
     sem = asyncio.Semaphore(concurrency)
+    gate = RateGate(min_interval)
 
     async def route_one(g: dict) -> None:
         async with sem:
+            await gate.wait()
             road_km = await route_fn(g["start"]["y"], g["start"]["x"], g["finish"]["y"], g["finish"]["x"])
         if road_km is not None:
             g["road_km"] = road_km
@@ -400,6 +434,7 @@ def create_courier_salary_router(
             routing_info = {
                 "provider": "yandex" if provider is yandex_router_client else "ors",
                 "routed_count": refined["routed_count"],
+                "routed_requested": refined["routed_requested"],
                 "routing_min_km": routing_min_km,
                 "skipped_over_cap": refined["skipped_over_cap"],
             }

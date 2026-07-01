@@ -14,6 +14,7 @@ exercised against a live key in this project. get_route_raw() is exposed so
 the payload can be inspected the first time a real key is used."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -27,8 +28,25 @@ log = logging.getLogger(__name__)
 ORS_BASE = "https://api.openrouteservice.org/v2/directions/driving-car"
 
 
+class ORSRateLimited(RuntimeError):
+    """ORS's own per-minute quota (HTTP 429) — distinct from a generic
+    failure so route_distance_km can back off and retry instead of just
+    giving up on the gap."""
+    def __init__(self, retry_after: Optional[float] = None):
+        self.retry_after = retry_after
+        super().__init__("OpenRouteService rate limit exceeded (429)")
+
+
 def is_configured() -> bool:
     return bool(settings.ors_api_key)
+
+
+def _retry_after(resp: httpx.Response) -> Optional[float]:
+    v = resp.headers.get("Retry-After")
+    try:
+        return float(v) if v is not None else None
+    except ValueError:
+        return None
 
 
 async def get_route_raw(lat1: float, lon1: float, lat2: float, lon2: float) -> dict:
@@ -41,6 +59,8 @@ async def get_route_raw(lat1: float, lon1: float, lat2: float, lon2: float) -> d
     headers = {"Authorization": settings.ors_api_key, "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(ORS_BASE, json=body, headers=headers)
+        if resp.status_code == 429:
+            raise ORSRateLimited(_retry_after(resp))
         resp.raise_for_status()
         return resp.json()
 
@@ -87,12 +107,26 @@ def _find_distance_m(node: Any) -> Optional[float]:
 
 async def route_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> Optional[float]:
     """Driving-route distance (km) between two points, or None if the API
-    isn't configured, returns no route, or errors. Never raises — callers
-    treat None as "fall back to the straight-line estimate for this gap"."""
-    try:
-        raw = await get_route_raw(lat1, lon1, lat2, lon2)
-    except Exception as exc:
-        log.warning("ORS route_distance_km failed: %s", exc)
-        return None
-    m = _find_distance_m(raw)
-    return round(m / 1000, 2) if m is not None else None
+    isn't configured, returns no route (after retries), or errors. Never
+    raises — callers treat None as "fall back to the straight-line estimate
+    for this gap". On a 429, retries a few times honoring Retry-After (or a
+    default backoff) — a burst of gaps easily outruns ORS's free-tier
+    per-minute quota even with the caller's own pacing, so a couple of
+    retries here meaningfully cuts how many gaps silently fall back."""
+    delay = 2.0
+    for attempt in range(3):
+        try:
+            raw = await get_route_raw(lat1, lon1, lat2, lon2)
+        except ORSRateLimited as exc:
+            wait = exc.retry_after or delay
+            log.warning("ORS rate-limited (attempt %d/3), waiting %.1fs", attempt + 1, wait)
+            await asyncio.sleep(wait)
+            delay *= 2
+            continue
+        except Exception as exc:
+            log.warning("ORS route_distance_km failed: %s", exc)
+            return None
+        m = _find_distance_m(raw)
+        return round(m / 1000, 2) if m is not None else None
+    log.warning("ORS route_distance_km gave up after repeated rate limiting")
+    return None
