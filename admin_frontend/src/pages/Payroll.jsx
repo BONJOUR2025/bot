@@ -2,8 +2,9 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   Download, Search, X, Settings, ChevronDown, ChevronUp, Percent,
   CheckSquare, Square, BadgeCheck, AlertTriangle, MessageSquare,
-  History, FileSpreadsheet, TrendingUp, TrendingDown, Minus,
+  History, FileSpreadsheet, TrendingUp, TrendingDown, Minus, Trophy, PieChart as PieChartIcon,
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -132,6 +133,100 @@ function SummaryBar({ rows }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{rowTop.map(Card)}</div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{rowBottom.map(Card)}</div>
+    </div>
+  );
+}
+
+// ── Composition donut + top earners (click-to-filter by name) ─────
+const COMP_COLORS = ['#6366f1', '#10b981', '#f59e0b'];
+
+function CompositionAndLeaders({ rows, query, onSelectEmployee }) {
+  const totalSalary     = rows.reduce((s, r) => s + (r.base_salary || 0), 0);
+  const totalCommission = rows.reduce((s, r) => s + (r.total_commission || 0), 0);
+  const totalBonuses    = rows.reduce((s, r) => s + (r.bonuses || 0) + (r.excel_bonus || 0), 0);
+  const compData = [
+    { name: 'Оклады', value: totalSalary, color: COMP_COLORS[0] },
+    { name: 'Комиссии', value: totalCommission, color: COMP_COLORS[1] },
+    { name: 'Премии', value: totalBonuses, color: COMP_COLORS[2] },
+  ].filter((d) => d.value > 0);
+  const compTotal = totalSalary + totalCommission + totalBonuses;
+
+  const leaders = [...rows]
+    .sort((a, b) => grossOf(b) - grossOf(a))
+    .slice(0, 6);
+  const medals = ['🥇', '🥈', '🥉'];
+
+  if (!rows.length) return null;
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-4">
+      <div className="app-card p-5">
+        <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+          <PieChartIcon size={15} className="text-[color:var(--color-primary)]" />
+          Структура начислений
+        </div>
+        {compData.length === 0 ? (
+          <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8">Нет данных</div>
+        ) : (
+          <div className="flex flex-col sm:flex-row gap-4 items-center">
+            <div style={{ width: 150, height: 150, flexShrink: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={compData} dataKey="value" nameKey="name" innerRadius="50%" outerRadius="80%" paddingAngle={2}>
+                    {compData.map((d) => <Cell key={d.name} fill={d.color} stroke="none" />)}
+                  </Pie>
+                  <Tooltip formatter={(v) => [fmtMoney(v), 'Сумма']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex-1 space-y-2 min-w-0 w-full">
+              {compData.map((d) => {
+                const pct = compTotal > 0 ? (d.value / compTotal) * 100 : 0;
+                return (
+                  <div key={d.name} className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs truncate">{d.name}</span>
+                        <span className="text-xs font-semibold shrink-0">{fmtMoney(d.value)} ({pct.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="app-card p-5">
+        <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+          <Trophy size={15} className="text-[color:var(--color-primary)]" />
+          Топ по начислению
+          {query && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· фильтр: {query}</span>}
+        </div>
+        <div className="space-y-3">
+          {leaders.map((r, i) => {
+            const isActive = query === r.employee_name;
+            return (
+              <button key={r.employee_code} type="button" onClick={() => onSelectEmployee(isActive ? '' : r.employee_name)}
+                className={`w-full text-left rounded-md -mx-1 px-1 py-1 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {i < 3 ? <span className="text-base shrink-0">{medals[i]}</span> : <span className="w-5 text-center text-xs font-bold text-[color:var(--color-muted-foreground)] shrink-0">{i + 1}</span>}
+                    <span className="text-sm font-medium truncate">{r.employee_name}</span>
+                  </div>
+                  <span className="text-sm font-bold text-[color:var(--color-primary)] shrink-0 ml-2">{fmtMoney(grossOf(r))}</span>
+                </div>
+              </button>
+            );
+          })}
+          {leaders.length === 0 && <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-4">Нет данных</div>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -737,6 +832,10 @@ export default function Payroll() {
 
       {/* Summary */}
       {!loading && rows.length > 0 && <SummaryBar rows={filtered} />}
+
+      {!loading && rows.length > 0 && (
+        <CompositionAndLeaders rows={filtered} query={query} onSelectEmployee={setQuery} />
+      )}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs text-[color:var(--color-muted-foreground)]">
