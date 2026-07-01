@@ -262,6 +262,58 @@ def create_courier_salary_router(
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
+    @router.get("/diagnostics/{employee_code}")
+    async def mileage_diagnostics(employee_code: str,
+                                  date_from: str = Query(..., description="YYYY-MM-DD"),
+                                  date_to: str = Query(..., description="YYYY-MM-DD"),
+                                  odometer_start: Optional[float] = Query(None, description="Реальные показания одометра на начало периода — для сверки"),
+                                  odometer_end: Optional[float] = Query(None, description="Реальные показания одометра на конец периода — для сверки"),
+                                  device_id: Optional[str] = Query(None),
+                                  current: ResolvedUser = Depends(perm)):
+        """Browser-friendly diagnostic: paste this URL (with a valid session
+        cookie) to see raw GPS-derived mileage for an arbitrary date range,
+        without hunting for the device_id or a bearer token by hand. Pass
+        odometer_start/odometer_end to see the delta against a real odometer
+        reading in the same response."""
+        from datetime import datetime
+        try:
+            ts_from = int(datetime.strptime(date_from, "%Y-%m-%d").timestamp())
+            ts_to = int(datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59).timestamp())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Формат даты: YYYY-MM-DD")
+
+        dev = str(device_id or "")
+        if not dev:
+            plan_repo = get_courier_plan_repository()
+            for period in {date_to[:7], date_from[:7]}:
+                dev = str(plan_repo.get(employee_code, period).get("starline_device_id") or "")
+                if dev:
+                    break
+        if not dev:
+            raise HTTPException(status_code=400, detail="У сотрудника не привязано устройство StarLine ни на один из месяцев периода — передайте device_id вручную")
+
+        diag = await starline_client.get_ways_diagnostics(dev, ts_from, ts_to)
+        km = diag["km"]
+        result = {
+            "employee_code": employee_code,
+            "device_id": dev,
+            "date_from": date_from,
+            "date_to": date_to,
+            "gps_km": km,
+            "no_signal_km": diag["no_signal_km"],
+            "no_signal_gaps": diag["no_signal_gaps"],
+            "estimated_range_km": None if km is None else [km, round(km + diag["no_signal_km"], 1)],
+            "rate_limited": diag.get("rate_limited", False),
+            "retry_after": diag.get("retry_after"),
+            "note": "estimated_range_km — нижняя граница (по треку) и оценка сверху (+ разрывы GPS по прямой). Реальный одометр обычно попадает в этот диапазон или выше, если машина ехала не по прямой во время потери сигнала.",
+        }
+        if odometer_start is not None and odometer_end is not None:
+            real_km = round(odometer_end - odometer_start, 1)
+            result["odometer_km"] = real_km
+            result["odometer_vs_gps_diff_km"] = None if km is None else round(real_km - km, 1)
+            result["odometer_vs_gps_diff_pct"] = None if not km else round((real_km - km) / km * 100, 1)
+        return result
+
     @router.get("/starline/probe-all/{device_id}")
     async def starline_probe_all(device_id: str, period: str = Query("2026-06"),
                                  current: ResolvedUser = Depends(perm)):
