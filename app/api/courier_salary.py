@@ -14,7 +14,24 @@ from pydantic import BaseModel
 
 from app.services.payout_service import PayoutService
 from app.services.access_control_service import AccessControlService, ResolvedUser
-from app.services import starline_client, yandex_router_client
+from app.services import starline_client, yandex_router_client, ors_client
+
+ROUTING_PROVIDERS = {"yandex": yandex_router_client, "ors": ors_client}
+
+
+def _pick_routing_provider(name: Optional[str]):
+    """Explicit choice wins; otherwise prefer whichever provider actually has
+    a key configured (ORS first — free/open by default), falling back to
+    Yandex so an explicit "yandex" always errors clearly if unconfigured
+    rather than silently no-opping."""
+    if name:
+        provider = ROUTING_PROVIDERS.get(name)
+        if provider is None:
+            raise HTTPException(status_code=400, detail=f"Неизвестный провайдер маршрутизации: {name!r}. Доступны: {', '.join(ROUTING_PROVIDERS)}")
+        return provider
+    if ors_client.is_configured():
+        return ors_client
+    return yandex_router_client
 from app.data.courier_plan_repository import get_courier_plan_repository
 from app.data.courier_mileage_repository import get_courier_mileage_repository
 from app.data.courier_salary_repository import get_courier_salary_repository
@@ -240,6 +257,26 @@ def create_courier_salary_router(
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
+    @router.get("/ors/status")
+    async def ors_status(current: ResolvedUser = Depends(perm)):
+        return {"configured": ors_client.is_configured()}
+
+    @router.get("/ors/route-raw")
+    async def ors_route_raw(lat1: float = Query(...), lon1: float = Query(...),
+                            lat2: float = Query(...), lon2: float = Query(...),
+                            current: ResolvedUser = Depends(perm)):
+        """Diagnostic: raw OpenRouteService response for one pair of points —
+        use this once a real ORS_API_KEY is set to verify the distance field
+        is where ors_client._find_distance_m expects it (documented shape,
+        not yet exercised against a live key in this project); adjust that
+        function if the real payload differs."""
+        try:
+            raw = await ors_client.get_route_raw(lat1, lon1, lat2, lon2)
+            parsed_m = ors_client._find_distance_m(raw)
+            return {"parsed_km": None if parsed_m is None else round(parsed_m / 1000, 2), "raw": raw}
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+
     @router.get("/starline/devices")
     async def starline_devices(current: ResolvedUser = Depends(perm)):
         try:
@@ -334,7 +371,7 @@ def create_courier_salary_router(
 
     async def _mileage_diagnostics(dev: str, date_from: str, date_to: str,
                                     odometer_start: Optional[float], odometer_end: Optional[float],
-                                    use_routing: bool, routing_min_km: float,
+                                    use_routing: bool, routing_min_km: float, routing_provider: Optional[str],
                                     extra: dict) -> dict:
         """Shared by the employee_code and device_id diagnostic routes."""
         from datetime import datetime
@@ -351,12 +388,17 @@ def create_courier_salary_router(
         routing_info = None
 
         if use_routing:
-            if not yandex_router_client.is_configured():
-                raise HTTPException(status_code=400, detail="YANDEX_ROUTER_API_KEY не настроен в .env — уточнение по дорогам недоступно")
-            refined = await refine_gaps_with_routing(diag["no_signal_all_gaps"], routing_min_km)
+            provider = _pick_routing_provider(routing_provider)
+            if not provider.is_configured():
+                raise HTTPException(status_code=400, detail=(
+                    f"Провайдер маршрутизации {'yandex' if provider is yandex_router_client else 'ors'} "
+                    "не настроен (нет соответствующего *_API_KEY в .env) — уточнение по дорогам недоступно"
+                ))
+            refined = await refine_gaps_with_routing(diag["no_signal_all_gaps"], routing_min_km, route_fn=provider.route_distance_km)
             no_signal_km = refined["km"]
             no_signal_top_gaps = refined["top_gaps"]
             routing_info = {
+                "provider": "yandex" if provider is yandex_router_client else "ors",
                 "routed_count": refined["routed_count"],
                 "routing_min_km": routing_min_km,
                 "skipped_over_cap": refined["skipped_over_cap"],
@@ -379,13 +421,14 @@ def create_courier_salary_router(
             "retry_after": diag.get("retry_after"),
             "note": (
                 "estimated_range_km — нижняя граница (по треку) и оценка сверху (+ разрывы GPS, "
-                + ("по дорогам через Yandex Router API" if use_routing else "по прямой")
+                + (f"по дорогам через {routing_info['provider']}" if routing_info else "по прямой")
                 + ", без явно битых точек). Реальный одометр обычно попадает в этот диапазон или чуть выше. "
                 "no_signal_excluded_km — сумма разрывов длиннее "
                 f"{starline_client.NO_SIGNAL_GAP_SANITY_KM} км за один скачок: это почти всегда битые координаты "
                 "устройства (например «нулевой остров» 0°,0°), а не реальная езда — не входят в km/no_signal_km. "
                 + ("" if use_routing else "Добавьте &use_routing=true, чтобы уточнить разрывы по дорогам "
-                   "вместо прямой линии (нужен YANDEX_ROUTER_API_KEY в .env; ограничено "
+                   "вместо прямой линии (нужен ORS_API_KEY или YANDEX_ROUTER_API_KEY в .env, provider выбирается "
+                   "автоматически или явно через &routing_provider=ors|yandex; ограничено "
                    f"{MAX_ROUTED_GAPS} запросами и порогом routing_min_km, по умолчанию 1 км).")
             ),
         }
@@ -402,15 +445,16 @@ def create_courier_salary_router(
                                             date_to: str = Query(..., description="YYYY-MM-DD"),
                                             odometer_start: Optional[float] = Query(None, description="Реальные показания одометра на начало периода — для сверки"),
                                             odometer_end: Optional[float] = Query(None, description="Реальные показания одометра на конец периода — для сверки"),
-                                            use_routing: bool = Query(False, description="Уточнить разрывы GPS по дорогам через Yandex Router API вместо прямой линии"),
+                                            use_routing: bool = Query(False, description="Уточнить разрывы GPS по дорогам вместо прямой линии"),
                                             routing_min_km: float = Query(1.0, description="Считать маршрут только для разрывов от этого числа км (экономия запросов)"),
+                                            routing_provider: Optional[str] = Query(None, description="ors | yandex — по умолчанию берётся тот, для которого настроен ключ (приоритет ORS)"),
                                             current: ResolvedUser = Depends(perm)):
         """Browser-friendly diagnostic straight by StarLine device_id — no
         employee_code/plan lookup involved. Paste the URL (with a valid
         session cookie) to see raw GPS-derived mileage for an arbitrary date
         range. Pass odometer_start/odometer_end to see the delta against a
         real odometer reading in the same response."""
-        return await _mileage_diagnostics(device_id, date_from, date_to, odometer_start, odometer_end, use_routing, routing_min_km, {})
+        return await _mileage_diagnostics(device_id, date_from, date_to, odometer_start, odometer_end, use_routing, routing_min_km, routing_provider, {})
 
     @router.get("/diagnostics/{employee_code}")
     async def mileage_diagnostics(employee_code: str,
@@ -418,8 +462,9 @@ def create_courier_salary_router(
                                   date_to: str = Query(..., description="YYYY-MM-DD"),
                                   odometer_start: Optional[float] = Query(None, description="Реальные показания одометра на начало периода — для сверки"),
                                   odometer_end: Optional[float] = Query(None, description="Реальные показания одометра на конец периода — для сверки"),
-                                  use_routing: bool = Query(False, description="Уточнить разрывы GPS по дорогам через Yandex Router API вместо прямой линии"),
+                                  use_routing: bool = Query(False, description="Уточнить разрывы GPS по дорогам вместо прямой линии"),
                                   routing_min_km: float = Query(1.0, description="Считать маршрут только для разрывов от этого числа км (экономия запросов)"),
+                                  routing_provider: Optional[str] = Query(None, description="ors | yandex — по умолчанию берётся тот, для которого настроен ключ (приоритет ORS)"),
                                   device_id: Optional[str] = Query(None),
                                   current: ResolvedUser = Depends(perm)):
         """Same as /diagnostics/device/{device_id}, but resolves the device
@@ -434,7 +479,7 @@ def create_courier_salary_router(
                     break
         if not dev:
             raise HTTPException(status_code=400, detail="У сотрудника не привязано устройство StarLine ни на один из месяцев периода — передайте device_id вручную")
-        return await _mileage_diagnostics(dev, date_from, date_to, odometer_start, odometer_end, use_routing, routing_min_km, {"employee_code": employee_code})
+        return await _mileage_diagnostics(dev, date_from, date_to, odometer_start, odometer_end, use_routing, routing_min_km, routing_provider, {"employee_code": employee_code})
 
     @router.get("/starline/probe-all/{device_id}")
     async def starline_probe_all(device_id: str, period: str = Query("2026-06"),

@@ -143,8 +143,10 @@ class Settings(BaseSettings):
     starline_login: str = Field("", validation_alias="STARLINE_LOGIN")
     starline_password: str = Field("", validation_alias="STARLINE_PASSWORD")
 
-    # Yandex Router API (уточнение длины GPS-разрывов по дорогам, а не по прямой)
+    # Уточнение длины GPS-разрывов по дорогам, а не по прямой (курьерский пробег).
+    # Оба провайдера опциональны и независимы; если задан только один — используется он.
     yandex_router_api_key: str = Field("", validation_alias="YANDEX_ROUTER_API_KEY")
+    ors_api_key: str = Field("", validation_alias="ORS_API_KEY")  # openrouteservice.org
 
     # Файлы для зарплаты курьера
     courier_plans_file: str = Field("courier_plans.json", validation_alias="COURIER_PLANS_FILE")
