@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Truck, RefreshCw, Wallet, Banknote, Trash2, CheckCircle2, Gauge, Save, RotateCw } from 'lucide-react';
+import { Truck, RefreshCw, Wallet, Banknote, Trash2, CheckCircle2, Gauge, Save, RotateCw, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { fmtMoney, Term, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
@@ -264,6 +264,12 @@ export default function CourierSalary() {
                   <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{mileage.source === 'starline-ways' ? 'StarLine (трек за период)' : mileage.source === 'starline-track' ? 'StarLine (свой трек)' : mileage.source === 'starline' ? 'StarLine (одометр)' : 'вручную'} · {mileage.updated_at.slice(0, 16).replace('T', ' ')}</span>
                 )}
               </div>
+              {mileage?.no_signal_km > 0.5 && (
+                <div className="flex items-start gap-1.5 text-[11px] text-[color:var(--color-warning)] bg-[color:var(--color-warning-muted)] rounded-lg px-2.5 py-1.5">
+                  <AlertTriangle size={13} className="shrink-0 mt-px" />
+                  <span>~{fmtKm(mileage.no_signal_km)} могли не попасть в расчёт — GPS терял сигнал ({mileage.no_signal_gaps ?? '?'} {mileage.no_signal_gaps === 1 ? 'разрыв' : 'разрывов'}). Значение может ещё измениться при повторной синхронизации.</span>
+                </div>
+              )}
               {starline?.configured && (
                 <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[color:var(--color-border)] text-[11px] text-[color:var(--color-muted-foreground)]">
                   <span>Авто-трек: <span className="font-medium text-[color:var(--color-text)]">{track?.points ?? 0}</span> точек{track?.km != null ? <> · по треку <span className="font-medium text-[color:var(--color-text)]">{fmtKm(track.km)}</span></> : ''}</span>

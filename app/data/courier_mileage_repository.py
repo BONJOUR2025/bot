@@ -16,8 +16,11 @@ from app.settings import settings
 DEFAULT_FILE = "courier_mileage.json"
 # km_explicit holds a directly-known distance (e.g. GPS-track length for a beacon
 # without an odometer); otherwise km is computed as odometer_end − odometer_start.
+# no_signal_km is purely informational: how much distance (km) sat in GPS
+# NO_SIGNAL gaps on the last StarLine sync and so is NOT included in km —
+# a rough measure of how much the total could still be understated/revised.
 DEFAULTS = {"odometer_start": None, "odometer_end": None, "km_explicit": None,
-            "source": "manual", "updated_at": None}
+            "source": "manual", "updated_at": None, "no_signal_km": None, "no_signal_gaps": None}
 
 
 class CourierMileageRepository:
@@ -78,7 +81,7 @@ class CourierMileageRepository:
                     fields = {**fields, "odometer_end": old_end}
 
         # explicit None is meaningful for these (clear the value)
-        for k in ("odometer_start", "odometer_end", "km_explicit", "source"):
+        for k in ("odometer_start", "odometer_end", "km_explicit", "source", "no_signal_km", "no_signal_gaps"):
             if k in fields:
                 cur[k] = fields[k]
         cur["updated_at"] = datetime.now().isoformat(timespec="seconds")

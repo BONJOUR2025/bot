@@ -179,12 +179,57 @@ def _ways_mileage(data: Any) -> Optional[float]:
     return None
 
 
+def _ways_no_signal_km(data: Any) -> tuple[float, int]:
+    """Straight-line distance (km) spanned by NO_SIGNAL gaps in a /ways response,
+    and how many such gaps there were.
+
+    A NO_SIGNAL segment always reports mileage=0 (StarLine has no track for that
+    stretch, so it doesn't count it towards the total) even when the start/finish
+    points are kilometers apart — the car clearly moved, StarLine just doesn't
+    know the path. Whether a given gap gets classified as NO_SIGNAL (excluded)
+    or as an interpolated TRACK segment (included) can change as StarLine
+    reprocesses a still-forming day between calls — this is the actual source
+    of the "mileage went down" anomaly, not our arithmetic. Surfacing this
+    number tells the caller how much of the total is at risk of moving either
+    way once the day settles."""
+    way = data.get("way") if isinstance(data, dict) else None
+    if not isinstance(way, list):
+        return 0.0, 0
+    total_km, gaps = 0.0, 0
+    for w in way:
+        if not isinstance(w, dict) or w.get("type") != "NO_SIGNAL":
+            continue
+        s, f = w.get("start"), w.get("finish")
+        if not isinstance(s, dict) or not isinstance(f, dict):
+            continue
+        x1, y1, x2, y2 = _num(s.get("x")), _num(s.get("y")), _num(f.get("x")), _num(f.get("y"))
+        if None in (x1, y1, x2, y2):
+            continue
+        d = _haversine_km((x1, y1), (x2, y2))
+        if d > 0:
+            total_km += d
+            gaps += 1
+    return round(total_km, 1), gaps
+
+
 async def get_ways_mileage(device_id: str, ts_from: int, ts_to: int) -> Optional[float]:
     try:
         return _ways_mileage(await get_ways(device_id, ts_from, ts_to))
     except Exception as exc:
         log.warning("StarLine get_ways_mileage failed: %s", exc)
         return None
+
+
+async def get_ways_diagnostics(device_id: str, ts_from: int, ts_to: int) -> dict:
+    """km + how much distance sits in NO_SIGNAL gaps (excluded from km, but real
+    movement) — see _ways_no_signal_km. Never raises; km is None on failure."""
+    try:
+        raw = await get_ways(device_id, ts_from, ts_to)
+    except Exception as exc:
+        log.warning("StarLine get_ways_diagnostics failed: %s", exc)
+        return {"km": None, "no_signal_km": 0.0, "no_signal_gaps": 0}
+    no_signal_km, gaps = _ways_no_signal_km(raw)
+    return {"km": _ways_mileage(raw), "no_signal_km": no_signal_km, "no_signal_gaps": gaps}
 
 
 async def _user_id() -> Any:

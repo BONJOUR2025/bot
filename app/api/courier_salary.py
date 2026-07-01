@@ -124,7 +124,7 @@ def create_courier_salary_router(
         return get_courier_mileage_repository().upsert(
             data.employee_code, data.period,
             odometer_start=data.odometer_start, odometer_end=data.odometer_end,
-            km_explicit=None, source="manual")
+            km_explicit=None, source="manual", no_signal_km=None, no_signal_gaps=None)
 
     @router.post("/mileage/sync")
     async def sync_mileage(employee_code: str = Query(...), period: str = Query(...),
@@ -146,19 +146,22 @@ def create_courier_salary_router(
             if start is None:
                 start = repo.get(employee_code, _prev_period(period)).get("odometer_end")
             return repo.upsert(employee_code, period, odometer_start=start,
-                               odometer_end=odo, km_explicit=None, source="starline")
+                               odometer_end=odo, km_explicit=None, source="starline", no_signal_km=None, no_signal_gaps=None)
         # No odometer (Маяк) → StarLine /ways gives the historical track + mileage
         # for the period; fall back to our accumulated poller track.
         ts_from, ts_to = _period_ts(period)
-        km = await starline_client.get_ways_mileage(dev, ts_from, ts_to)
+        diag = await starline_client.get_ways_diagnostics(dev, ts_from, ts_to)
+        km, no_signal_km, no_signal_gaps = diag["km"], diag["no_signal_km"], diag["no_signal_gaps"]
         source = "starline-ways"
         if not km:
             from app.data.courier_track_repository import get_courier_track_repository
             km = get_courier_track_repository().mileage(dev, ts_from, ts_to)
             source = "starline-track"
+            no_signal_km = no_signal_gaps = None
         if not km:
             raise HTTPException(status_code=502, detail="StarLine не вернул пробег за период (нет трека) — введите пробег вручную")
-        return repo.upsert(employee_code, period, km_explicit=km, source=source)
+        return repo.upsert(employee_code, period, km_explicit=km, source=source,
+                           no_signal_km=no_signal_km, no_signal_gaps=no_signal_gaps)
 
     # ── StarLine diagnostics (verify shapes against a real account) ────
     @router.get("/starline/status")
@@ -247,7 +250,9 @@ def create_courier_salary_router(
             ts_from, ts_to = _period_ts(period)
         try:
             raw = await starline_client.get_ways(device_id, ts_from, ts_to)
-            return {"km": starline_client._ways_mileage(raw), "ts_from": ts_from, "ts_to": ts_to, "raw": raw}
+            no_signal_km, no_signal_gaps = starline_client._ways_no_signal_km(raw)
+            return {"km": starline_client._ways_mileage(raw), "no_signal_km": no_signal_km,
+                    "no_signal_gaps": no_signal_gaps, "ts_from": ts_from, "ts_to": ts_to, "raw": raw}
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
