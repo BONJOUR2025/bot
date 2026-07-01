@@ -640,16 +640,37 @@ tbody tr:last-child td { border-bottom: none; }
   box-shadow: var(--shadow-glow-danger) !important;
 }
 
-.bg-green-50, .bg-green-100, .bg-green-200, .bg-green-300 { background-color: var(--color-success-muted) !important; }
-.text-green-700, .text-green-800 { color: var(--color-success) !important; }
-.bg-red-50, .bg-red-100, .bg-red-200 { background-color: var(--color-danger-muted) !important; }
-.text-red-600, .text-red-700, .text-red-800 { color: var(--color-danger) !important; }
-.bg-yellow-100, .bg-yellow-200 { background-color: var(--color-warning-muted) !important; }
-.text-yellow-800 { color: var(--color-warning) !important; }
-.bg-blue-100, .bg-blue-200 { background-color: var(--color-info-muted) !important; }
-.text-blue-800 { color: var(--color-info) !important; }
-.bg-orange-50 { background-color: var(--color-accent-muted) !important; }
+.bg-green-50, .bg-green-100, .bg-green-200, .bg-green-300,
+.hover\:bg-green-50:hover, .hover\:bg-green-100:hover, .hover\:bg-emerald-100:hover, .hover\:bg-emerald-200:hover,
+.bg-emerald-50, .bg-emerald-100 { background-color: var(--color-success-muted) !important; }
+.text-green-700, .text-green-800, .text-green-300, .text-green-400, .text-emerald-400 { color: var(--color-success) !important; }
+.border-green-200, .border-green-300, .border-green-400, .border-emerald-200, .border-emerald-300 { border-color: var(--color-success) !important; }
+
+.bg-red-50, .bg-red-100, .bg-red-200, .bg-red-400,
+.hover\:bg-red-50:hover, .hover\:bg-red-100:hover, .hover\:bg-red-200:hover { background-color: var(--color-danger-muted) !important; }
+.text-red-600, .text-red-700, .text-red-800, .text-red-300, .text-red-400, .hover\:text-red-400:hover { color: var(--color-danger) !important; }
+.border-red-100, .border-red-200, .border-red-400, .hover\:border-red-400:hover { border-color: var(--color-danger) !important; }
+
+.bg-yellow-50, .bg-yellow-100, .bg-yellow-200, .bg-yellow-400, .bg-amber-50, .bg-amber-100, .bg-amber-200, .bg-amber-400,
+.hover\:bg-amber-50:hover, .hover\:bg-amber-100:hover { background-color: var(--color-warning-muted) !important; }
+.text-yellow-800, .text-yellow-300, .text-yellow-400, .hover\:text-yellow-400:hover, .text-amber-300, .text-amber-400 { color: var(--color-warning) !important; }
+.border-yellow-200, .border-yellow-400, .border-amber-100, .border-amber-200, .border-amber-300, .border-amber-400,
+.hover\:border-amber-400:hover { border-color: var(--color-warning) !important; }
+
+.bg-blue-50, .bg-blue-100, .bg-blue-200, .bg-blue-400, .hover\:bg-blue-50:hover { background-color: var(--color-info-muted) !important; }
+.text-blue-700, .text-blue-800, .text-blue-300, .text-blue-400 { color: var(--color-info) !important; }
+.border-blue-100, .border-blue-200, .border-blue-300, .border-blue-400, .hover\:border-blue-200:hover { border-color: var(--color-info) !important; }
+
+.bg-orange-50, .bg-orange-100, .hover\:bg-orange-100:hover { background-color: var(--color-accent-muted) !important; }
+.text-orange-300, .text-orange-400 { color: var(--color-accent) !important; }
+.border-orange-200, .border-orange-400 { border-color: var(--color-accent) !important; }
+
+.bg-indigo-50, .bg-indigo-100, .bg-purple-100, .bg-purple-400 { background-color: var(--color-primary-muted) !important; }
+.text-indigo-400, .text-purple-300, .text-purple-400 { color: var(--color-primary) !important; }
+.border-indigo-200, .border-indigo-300, .border-purple-400 { border-color: var(--color-primary) !important; }
+
 .bg-neutral-100 { background-color: var(--color-control-bg) !important; }
+.text-gray-100 { color: var(--color-text) !important; }
 
 .border, .border-gray-100, .border-gray-200, .border-gray-300 { border-color: var(--color-table-border) !important; }
 .text-gray-400 { color: var(--color-text-faint) !important; }
