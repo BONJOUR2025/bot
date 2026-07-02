@@ -61,7 +61,11 @@ async def get_route_raw(lat1: float, lon1: float, lat2: float, lon2: float) -> d
         resp = await client.post(ORS_BASE, json=body, headers=headers)
         if resp.status_code == 429:
             raise ORSRateLimited(_retry_after(resp))
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # ORS puts the actual reason (e.g. "no routable point near
+            # coordinate", bad/missing key, wrong plan) in the JSON body —
+            # httpx's own message just says "404 Not Found" with no detail.
+            raise RuntimeError(f"ORS {resp.status_code}: {resp.text[:500]}")
         return resp.json()
 
 
