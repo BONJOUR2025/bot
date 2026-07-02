@@ -59,7 +59,7 @@ class CourierMileageRepository:
     def get(self, employee_code: str, period: str) -> dict[str, Any]:
         return self._with_km({**DEFAULTS, **self._data.get(self._key(employee_code, period), {})})
 
-    def upsert(self, employee_code: str, period: str, **fields) -> dict[str, Any]:
+    def upsert(self, employee_code: str, period: str, force: bool = False, **fields) -> dict[str, Any]:
         key = self._key(employee_code, period)
         cur = self._data.get(key, {})
 
@@ -70,7 +70,13 @@ class CourierMileageRepository:
         # number than a previous sync of the same period. A manual correction
         # (source="manual") is the one case that should always win outright —
         # anything else is floored at whatever is already on record.
-        if fields.get("source") not in (None, "manual"):
+        #
+        # force=True bypasses the floor for a single call — needed right after
+        # fixing a bug in how distance is computed (e.g. the StarLine lat/lon
+        # swap): the recomputed number is legitimately smaller and correct,
+        # not transient noise, so it must be allowed to overwrite a value
+        # recorded under the old, wrong arithmetic.
+        if not force and fields.get("source") not in (None, "manual"):
             prev_km = self._with_km({**DEFAULTS, **cur}).get("km")
             if prev_km is not None:
                 if fields.get("km_explicit") is not None and fields["km_explicit"] < prev_km:

@@ -230,6 +230,11 @@ def create_courier_salary_router(
     @router.post("/mileage/sync")
     async def sync_mileage(employee_code: str = Query(...), period: str = Query(...),
                            device_id: Optional[str] = Query(None),
+                           force: bool = Query(False, description=(
+                               "Пересчитать и записать даже меньшее значение, в обход защиты "
+                               "от отката пробега — используйте один раз после починки бага в "
+                               "расчёте расстояния, когда новое число правильное, но ниже старого."
+                           )),
                            current: ResolvedUser = Depends(perm)):
         """Fill the period's mileage from StarLine. If the device exposes an OBD
         odometer, store it as the period's end (carrying the start from the
@@ -247,7 +252,8 @@ def create_courier_salary_router(
             if start is None:
                 start = repo.get(employee_code, _prev_period(period)).get("odometer_end")
             return repo.upsert(employee_code, period, odometer_start=start,
-                               odometer_end=odo, km_explicit=None, source="starline", no_signal_km=None, no_signal_gaps=None)
+                               odometer_end=odo, km_explicit=None, source="starline", no_signal_km=None, no_signal_gaps=None,
+                               force=force)
         # No odometer (Маяк) → StarLine /ways gives the historical track + mileage
         # for the period; fall back to our accumulated poller track.
         ts_from, ts_to = _period_ts(period)
@@ -266,7 +272,7 @@ def create_courier_salary_router(
                 raise HTTPException(status_code=429, detail=f"StarLine временно ограничил частоту запросов.{suffix}")
             raise HTTPException(status_code=502, detail="StarLine не вернул пробег за период (нет трека) — введите пробег вручную")
         return repo.upsert(employee_code, period, km_explicit=km, source=source,
-                           no_signal_km=no_signal_km, no_signal_gaps=no_signal_gaps)
+                           no_signal_km=no_signal_km, no_signal_gaps=no_signal_gaps, force=force)
 
     # ── StarLine diagnostics (verify shapes against a real account) ────
     @router.get("/starline/status")
