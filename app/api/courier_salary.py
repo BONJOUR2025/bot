@@ -133,7 +133,9 @@ async def refine_gaps_with_routing(
     async def route_one(g: dict) -> None:
         async with sem:
             await gate.wait()
-            road_km = await route_fn(g["start"]["y"], g["start"]["x"], g["finish"]["y"], g["finish"]["x"])
+            # StarLine's "x"/"y" are (lat, lon), not (lon, lat) — see
+            # starline_client._valid_coord.
+            road_km = await route_fn(g["start"]["x"], g["start"]["y"], g["finish"]["x"], g["finish"]["y"])
         if road_km is not None:
             g["road_km"] = road_km
 

@@ -213,12 +213,17 @@ def _valid_coord(x: Optional[float], y: Optional[float]) -> bool:
     """Reject missing values and "null island" (0°,0° ± a hair) — a common
     sentinel for "no GPS fix" that some devices/backends send instead of
     omitting the field, which would otherwise register as a huge bogus jump
-    from the car's real location to the Gulf of Guinea."""
+    from the car's real location to the Gulf of Guinea.
+
+    StarLine's "x"/"y" fields are latitude/longitude respectively (verified
+    against real device data — not the "x=lon, y=lat" screen-coordinate
+    convention the naming suggests), so the bounds below check x as lat
+    (-90..90) and y as lon (-180..180)."""
     if x is None or y is None:
         return False
     if abs(x) < 0.01 and abs(y) < 0.01:
         return False
-    return -180 <= x <= 180 and -90 <= y <= 90
+    return -90 <= x <= 90 and -180 <= y <= 180
 
 
 def _ways_no_signal_km(data: Any) -> dict:
@@ -251,7 +256,8 @@ def _ways_no_signal_km(data: Any) -> dict:
         x1, y1, x2, y2 = _num(s.get("x")), _num(s.get("y")), _num(f.get("x")), _num(f.get("y"))
         if not (_valid_coord(x1, y1) and _valid_coord(x2, y2)):
             continue
-        d = _haversine_km((x1, y1), (x2, y2))
+        # x=lat, y=lon (see _valid_coord) — _haversine_km wants (lon, lat).
+        d = _haversine_km((y1, x1), (y2, x2))
         if d <= 0:
             continue
         entry = {"km": round(d, 1), "start": {"t": s.get("t"), "x": x1, "y": y1}, "finish": {"t": f.get("t"), "x": x2, "y": y2}}
@@ -367,15 +373,16 @@ def _extract_mileage(node: Any) -> Optional[float]:
 
 
 async def get_position(device_id: str) -> Optional[dict]:
-    """Current GPS point: {ts, lat, lon} from user/data (position.x=lon, y=lat),
-    or None. Used by the background poller to build a track for «Маяк» beacons."""
+    """Current GPS point: {ts, lat, lon} from user/data (position.x=lat, y=lon —
+    verified against real device data), or None. Used by the background
+    poller to build a track for «Маяк» beacons."""
     try:
         dev = _find_device(await get_user_data(), device_id)
         pos = (dev or {}).get("position") or {}
-        x, y = _num(pos.get("x")), _num(pos.get("y"))   # x=lon, y=lat
+        x, y = _num(pos.get("x")), _num(pos.get("y"))   # x=lat, y=lon
         if x is None or y is None:
             return None
-        return {"ts": _num(pos.get("ts")) or 0.0, "lat": y, "lon": x}
+        return {"ts": _num(pos.get("ts")) or 0.0, "lat": x, "lon": y}
     except Exception as exc:
         log.warning("StarLine get_position failed: %s", exc)
         return None
@@ -421,13 +428,17 @@ def _num(v: Any) -> Optional[float]:
 
 
 def _collect_points(node: Any, acc: list[tuple[float, float, float]]) -> None:
-    """Recursively gather (ts, lon, lat) from any coordinate-bearing dicts."""
+    """Recursively gather (ts, lon, lat) from any coordinate-bearing dicts.
+    StarLine's own "x"/"y" fields are (lat, lon) — see _valid_coord — while a
+    fallback "lat"/"lon"-named payload is already correctly labeled."""
     if isinstance(node, dict):
-        x = _num(node.get("x")) if node.get("x") is not None else _num(node.get("lon", node.get("lng")))
-        y = _num(node.get("y")) if node.get("y") is not None else _num(node.get("lat"))
-        if x is not None and y is not None:
+        if node.get("x") is not None and node.get("y") is not None:
+            lat, lon = _num(node.get("x")), _num(node.get("y"))
+        else:
+            lon, lat = _num(node.get("lon", node.get("lng"))), _num(node.get("lat"))
+        if lat is not None and lon is not None:
             ts = _num(node.get("ts") or node.get("t") or node.get("time")) or 0.0
-            acc.append((ts, x, y))
+            acc.append((ts, lon, lat))
         for v in node.values():
             _collect_points(v, acc)
     elif isinstance(node, list):
