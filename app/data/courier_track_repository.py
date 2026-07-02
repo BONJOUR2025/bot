@@ -20,6 +20,14 @@ MAX_AGE_DAYS = 180
 MAX_POINTS = 30000
 MIN_MOVE_KM = 0.02        # < 20 m from the last point → treat as parked/jitter, skip
 
+# A single poll-to-poll jump implying more than this average speed is a bad
+# GPS fix, not real driving — e.g. one point landing far from where the car
+# actually was (multipath/urban-canyon glitch, or old data recorded under a
+# since-fixed coordinate convention bug meeting freshly-correct data at the
+# seam). Excluded from the mileage sum the same way NO_SIGNAL gaps are in
+# starline_client, so one bad point doesn't blow up the period total.
+MAX_SPEED_KMH = 120.0
+
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0088
@@ -76,8 +84,15 @@ class CourierTrackRepository:
                      key=lambda p: p[0])
         if len(pts) < 2:
             return None
-        km = sum(_haversine_km(pts[i - 1][1], pts[i - 1][2], pts[i][1], pts[i][2])
-                 for i in range(1, len(pts)))
+        km = 0.0
+        for i in range(1, len(pts)):
+            t0, lat0, lon0 = pts[i - 1]
+            t1, lat1, lon1 = pts[i]
+            d = _haversine_km(lat0, lon0, lat1, lon1)
+            duration_h = (t1 - t0) / 3600 if t1 > t0 else None
+            if duration_h and (d / duration_h) > MAX_SPEED_KMH:
+                continue
+            km += d
         return round(km, 1)
 
     def status(self, device_id: str) -> dict[str, Any]:
