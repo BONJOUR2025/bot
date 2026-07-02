@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from pathlib import Path
 
@@ -68,11 +69,19 @@ async def open_salon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"{sent_at.strftime('%Y%m%d_%H%M%S')}_{user_id}.jpg"
     filepath = MEDIA_DIR / filename
-    try:
-        tg_file = await message.photo[-1].get_file()
-        await tg_file.download_to_drive(filepath)
-    except Exception as e:
-        log(f"⚠️ [shift_checkin] Failed to save photo: {e}")
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            tg_file = await message.photo[-1].get_file()
+            await tg_file.download_to_drive(filepath, read_timeout=60.0, connect_timeout=60.0)
+            last_error = None
+            break
+        except Exception as e:
+            last_error = e
+            log(f"⚠️ [shift_checkin] Failed to save photo (attempt {attempt + 1}/3): {e}")
+            if attempt < 2:
+                await asyncio.sleep(2)
+    if last_error is not None:
         await message.reply_text("❌ Не удалось сохранить фото, попробуйте ещё раз.")
         return ShiftCheckinStates.AWAITING_PHOTO
 
