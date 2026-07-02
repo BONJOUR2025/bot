@@ -140,6 +140,7 @@ a:hover { text-decoration: underline; }
   height: 100%;
   background: var(--color-panel);
   border-right: 1px solid var(--color-border);
+  -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
   transition: transform var(--transition);
 }
@@ -149,6 +150,10 @@ a:hover { text-decoration: underline; }
   transform: translateX(-100%);
   max-width: min(320px, 85vw);
   box-shadow: var(--shadow-xl);
+  /* Edge-to-edge overlay on a notched iPhone — keep its content clear of
+     the status bar and home indicator. */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .app-shell--mobile .app-shell__sidebar.is-open { transform: translateX(0); }
 
@@ -156,6 +161,7 @@ a:hover { text-decoration: underline; }
   position: fixed;
   inset: 0;
   background: var(--color-modal-backdrop);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   z-index: 20;
 }
@@ -183,11 +189,16 @@ a:hover { text-decoration: underline; }
   justify-content: space-between;
   gap: 1rem;
   padding: 0 2rem;
-  height: var(--header-height);
+  /* iOS home-screen apps with a translucent status bar (see index.html's
+     apple-mobile-web-app-status-bar-style) render content under the status
+     bar/notch — without this the sticky header's top row sits behind it. */
+  padding-top: env(safe-area-inset-top, 0px);
+  height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
   position: sticky;
   top: 0;
   z-index: 5;
   background: linear-gradient(180deg, var(--color-bg) 60%, transparent 100%);
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--color-border);
 }
@@ -219,6 +230,9 @@ a:hover { text-decoration: underline; }
 .app-shell__content {
   flex: 1;
   padding: 2rem 2.5rem 3rem;
+  padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(2.5rem + env(safe-area-inset-left, 0px));
+  padding-right: calc(2.5rem + env(safe-area-inset-right, 0px));
   max-width: var(--max-content-width);
   width: 100%;
   margin: 0 auto;
@@ -304,6 +318,7 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow-lg);
   display: grid;
   gap: 1.75rem;
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
 }
 .auth-card--mobile { padding: 2rem 1.5rem 2.5rem; border-radius: var(--radius-xl); }
@@ -425,6 +440,7 @@ select option { color: #0f172a; background-color: #ffffff; }
   justify-content: center;
   padding: 1.5rem;
   background: var(--color-modal-backdrop);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   animation: fadeIn var(--transition) forwards;
 }
@@ -449,6 +465,7 @@ select option { color: #0f172a; background-color: #ffffff; }
      actual width no matter what's nested inside. */
   grid-template-columns: minmax(0, 1fr);
   gap: 0.875rem;
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   animation: slideUp var(--transition) forwards;
 }
@@ -502,6 +519,7 @@ select, option, textarea {
   padding: 1.5rem 1.75rem;
   display: grid;
   gap: 1rem;
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   transition: box-shadow var(--transition);
 }
@@ -580,6 +598,7 @@ tbody tr:last-child td { border-bottom: none; }
   font-weight: 500;
   color: #fff;
   box-shadow: var(--shadow-lg);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   animation: slideInRight var(--transition) forwards;
 }
@@ -694,12 +713,34 @@ tbody tr:last-child td { border-bottom: none; }
    Responsive
    ================================================================ */
 @media (max-width: 1024px) {
-  .app-shell__header { padding: 0 1.25rem; }
-  .app-shell__content { padding: 1.5rem 1.25rem 2rem; }
+  .app-shell__header {
+    padding-left: calc(1.25rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(1.25rem + env(safe-area-inset-right, 0px));
+  }
+  .app-shell__content {
+    padding: 1.5rem 1.25rem 2rem;
+    padding-top: 1.5rem;
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(1.25rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(1.25rem + env(safe-area-inset-right, 0px));
+  }
 }
 
 @media (max-width: 768px) {
-  .app-shell__content { padding: 1rem 1rem 1.5rem; }
+  .app-shell__content {
+    padding: 1rem 1rem 1.5rem;
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+  }
+
+  /* iOS Safari auto-zooms the page on focusing any input/select/textarea
+     with a computed font-size under 16px — at the 0.875rem (14px) desktop
+     size that reads as the whole page "jumping" broken on tap. */
+  .input, .input-field, .modal-control,
+  .form-field input, .form-field select, .form-field textarea {
+    font-size: 16px;
+  }
 }
 
 /* ================================================================
