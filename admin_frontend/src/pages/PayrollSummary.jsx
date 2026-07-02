@@ -99,11 +99,16 @@ function monthsInRange(dateFrom, dateTo) {
 }
 
 function mergeRowsAcrossMonths(rowArrays) {
+  // Key by employee_code (stable across months) when available — merging by
+  // display name alone splits one person into two rows the moment their
+  // name is spelled slightly differently between months (nickname vs full
+  // name, a typo fix, etc.), which reads as a phantom duplicate employee.
   const map = new Map();
   for (const rows of rowArrays) {
     for (const r of rows) {
-      if (!map.has(r.name)) { map.set(r.name, { ...r }); continue; }
-      const acc = map.get(r.name);
+      const key = r.code || r.name;
+      if (!map.has(key)) { map.set(key, { ...r }); continue; }
+      const acc = map.get(key);
       for (const k of ['oklad', 'commission', 'bonuses', 'penalties', 'advances', 'gross', 'to_pay']) {
         acc[k] = (acc[k] || 0) + (r[k] || 0);
       }
@@ -135,6 +140,7 @@ async function loadAdminsMonth(period) {
   const monthName = MONTHS_RU[m - 1].toUpperCase();
   const res = await api.get('payroll/calculate', { params: { month: monthName, year: y } });
   return (res.data?.rows || []).map((r) => ({
+    code: r.employee_code || '',
     name: r.employee_name || r.employee_code || '—',
     oklad: r.base_salary || 0,
     commission: r.total_commission || 0,
@@ -193,7 +199,7 @@ async function loadManagersMonth(period, rangeFrom, rangeTo) {
     }).then((r) => r.data).catch(() => null);
     if (!calc) return null;
     return {
-      name: mgr.full_name || mgr.name, oklad: calc.oklad, commission: calc.kpi,
+      code: mgr.id, name: mgr.full_name || mgr.name, oklad: calc.oklad, commission: calc.kpi,
       bonuses: calc.bonuses, penalties: calc.penalties, advances: calc.advances,
       gross: calc.gross, to_pay: calc.to_pay,
     };
@@ -220,7 +226,7 @@ async function loadCouriersMonth(period, rangeFrom, rangeTo) {
     const penalties = (inc || []).filter((i) => i.type === 'penalty').reduce((s, i) => s + (Number(i.amount) || 0), 0);
     const calc = await api.post('courier-salary/calc', { oklad: plan.oklad, advances: adv?.total || 0, bonuses, penalties }).then((r) => r.data).catch(() => null);
     if (!calc) return null;
-    return { name: c.full_name || c.name, oklad: calc.oklad, commission: 0, bonuses: calc.bonuses, penalties: calc.penalties, advances: calc.advances, gross: calc.gross, to_pay: calc.to_pay };
+    return { code: c.id, name: c.full_name || c.name, oklad: calc.oklad, commission: 0, bonuses: calc.bonuses, penalties: calc.penalties, advances: calc.advances, gross: calc.gross, to_pay: calc.to_pay };
   }));
   return rows.filter(Boolean).filter((r) => r.gross || r.advances);
 }
