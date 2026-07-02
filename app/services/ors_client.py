@@ -55,7 +55,11 @@ async def get_route_raw(lat1: float, lon1: float, lat2: float, lon2: float) -> d
     if not is_configured():
         raise RuntimeError("OpenRouteService не настроен (нет ORS_API_KEY в .env)")
     # ORS wants [lon, lat] pairs, not [lat, lon].
-    body = {"coordinates": [[lon1, lat1], [lon2, lat2]]}
+    # radiuses=-1 (no limit) lets it snap to the nearest road however far —
+    # NO_SIGNAL gap endpoints are exactly where a courier stopped (courtyard,
+    # parking lot, under a roof), so the default ~350m search often finds
+    # nothing (ORS error 2010) even though a real nearby road exists.
+    body = {"coordinates": [[lon1, lat1], [lon2, lat2]], "radiuses": [-1, -1]}
     headers = {"Authorization": settings.ors_api_key, "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(ORS_BASE, json=body, headers=headers)
