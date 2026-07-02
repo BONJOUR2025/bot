@@ -461,8 +461,10 @@ def create_courier_salary_router(
                 + (f"по дорогам через {routing_info['provider']}" if routing_info else "по прямой")
                 + ", без явно битых точек). Реальный одометр обычно попадает в этот диапазон или чуть выше. "
                 "no_signal_excluded_km — сумма разрывов длиннее "
-                f"{starline_client.NO_SIGNAL_GAP_SANITY_KM} км за один скачок: это почти всегда битые координаты "
-                "устройства (например «нулевой остров» 0°,0°), а не реальная езда — не входят в km/no_signal_km. "
+                f"{starline_client.NO_SIGNAL_GAP_SANITY_KM} км за один скачок, а также разрывов с нереалистичной "
+                f"средней скоростью (> {starline_client.NO_SIGNAL_GAP_MAX_SPEED_KMH} км/ч): это почти всегда битые "
+                "координаты устройства (например «нулевой остров» 0°,0° или разовый сбой GPS-фикса), "
+                "а не реальная езда — не входят в km/no_signal_km. "
                 + ("" if use_routing else "Добавьте &use_routing=true, чтобы уточнить разрывы по дорогам "
                    "вместо прямой линии (нужен ORS_API_KEY или YANDEX_ROUTER_API_KEY в .env, provider выбирается "
                    "автоматически или явно через &routing_provider=ors|yandex; ограничено "
