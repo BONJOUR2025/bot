@@ -208,6 +208,13 @@ def _ways_mileage(data: Any) -> Optional[float]:
 # separately so they don't silently blow up the "distance at risk" figure.
 NO_SIGNAL_GAP_SANITY_KM = 60.0
 
+# A gap can be under the distance cap above and still be a bad fix — e.g. one
+# wildly-off coordinate that "corrects itself" a couple of minutes later,
+# which reads as a huge straight-line jump but a small elapsed time. No
+# courier car sustains this average speed, so gaps implying more are treated
+# the same as a too-long gap (excluded, not counted as real driving).
+NO_SIGNAL_GAP_MAX_SPEED_KMH = 120.0
+
 
 def _valid_coord(x: Optional[float], y: Optional[float]) -> bool:
     """Reject missing values and "null island" (0°,0° ± a hair) — a common
@@ -261,10 +268,15 @@ def _ways_no_signal_km(data: Any) -> dict:
         if d <= 0:
             continue
         entry = {"km": round(d, 1), "start": {"t": s.get("t"), "x": x1, "y": y1}, "finish": {"t": f.get("t"), "x": x2, "y": y2}}
-        if d > NO_SIGNAL_GAP_SANITY_KM:
+        t1, t2 = _num(s.get("t")), _num(f.get("t"))
+        duration_h = (t2 - t1) / 3600 if (t1 is not None and t2 is not None and t2 > t1) else None
+        implausible_speed = duration_h is not None and (d / duration_h) > NO_SIGNAL_GAP_MAX_SPEED_KMH
+        if d > NO_SIGNAL_GAP_SANITY_KM or implausible_speed:
             excluded_count += 1
             excluded_km += d
             entry["excluded"] = True
+            if implausible_speed and d <= NO_SIGNAL_GAP_SANITY_KM:
+                entry["excluded_reason"] = "implausible_speed"
         else:
             total_km += d
             gaps += 1
