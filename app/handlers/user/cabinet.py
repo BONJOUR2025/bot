@@ -11,8 +11,27 @@ from ...config import (
 )
 from ...services.users import load_users_map, save_users, add_user, update_user, delete_user
 from ...services.advance_requests import load_advance_requests
+from ...services import vk_client
+from ...data.employee_repository import EmployeeRepository
 from ...keyboards.reply_user import get_cabinet_menu, get_main_menu
+from ...utils import is_valid_user_id
 from ...utils.logger import log
+
+
+async def _notify_employee_result(context: ContextTypes.DEFAULT_TYPE, user_id: str, text: str) -> None:
+    """Same Telegram-or-VK dispatch as payout_actions._notify_employee — a
+    VK-only employee's id is an "nb_..." stub, not a real Telegram chat id."""
+    if is_valid_user_id(user_id):
+        try:
+            await context.bot.send_message(chat_id=user_id, text=text, reply_markup=get_cabinet_menu())
+        except Exception as exc:
+            log(f"❌ [cabinet] Failed to send message to chat {user_id} — {exc}")
+        return
+    employee = EmployeeRepository().get_employee(str(user_id))
+    if employee and employee.vk_id:
+        await vk_client.send_message(employee.vk_id, text)
+    else:
+        log(f"⚠️ [cabinet] Skipping message — invalid or fake user_id and no vk_id: {user_id}")
 
 
 async def personal_cabinet(
@@ -233,11 +252,7 @@ async def handle_admin_change_response(
         await query.edit_message_text(
             f"✅ Изменение {field} для {users[user_id]['name']} одобрено: {new_value}"
         )
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"✅ Ваш запрос на изменение {field} одобрен: {new_value}",
-            reply_markup=get_cabinet_menu(),
-        )
+        await _notify_employee_result(context, user_id, f"✅ Ваш запрос на изменение {field} одобрен: {new_value}")
     elif data.startswith("reject_change_"):
         user_id = data.split("_")[-1]
         users = load_users_map()
@@ -255,11 +270,7 @@ async def handle_admin_change_response(
         await query.edit_message_text(
             f"❌ Изменение {field} для {users[user_id]['name']} отклонено."
         )
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"❌ Ваш запрос на изменение {field} отклонён администратором.",
-            reply_markup=get_cabinet_menu(),
-        )
+        await _notify_employee_result(context, user_id, f"❌ Ваш запрос на изменение {field} отклонён администратором.")
 
 
 async def view_request_history(update: Update,

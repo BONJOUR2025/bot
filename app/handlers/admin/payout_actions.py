@@ -32,6 +32,8 @@ from ...services.advance_requests import (
     save_advance_requests,
     update_request_status,
 )
+from ...services import vk_client
+from ...data.employee_repository import EmployeeRepository
 from ...utils.logger import log
 from ...utils import is_valid_user_id
 
@@ -48,6 +50,27 @@ if not audit_logger.handlers:
     audit_logger.setLevel(logging.INFO)
 
 PENDING_STATUSES = {PAYOUT_STATUSES[0]}
+
+
+async def _notify_employee(context: ContextTypes.DEFAULT_TYPE, user_id: str, text: str) -> None:
+    """Send a decision notice to the employee — via Telegram if user_id is a
+    real Telegram id, otherwise via VK if this employee has a linked vk_id
+    (an "nb_..." stub id that only exists as a VK-linked profile).
+    Previously such employees were silently skipped entirely."""
+    if is_valid_user_id(user_id):
+        log(f"[Telegram] sending notice to {user_id} — text: '{text[:50]}'")
+        try:
+            await context.bot.send_message(chat_id=user_id, text=text)
+        except (BadRequest, Forbidden) as e:
+            log(f"❌ Failed to send message to chat {user_id} — {e}")
+        return
+
+    employee = EmployeeRepository().get_employee(str(user_id))
+    if employee and employee.vk_id:
+        log(f"[VK] sending notice to vk_id {employee.vk_id} — text: '{text[:50]}'")
+        await vk_client.send_message(employee.vk_id, text)
+    else:
+        log(f"⚠️ Skipping message — invalid or fake user_id and no vk_id: {user_id}")
 
 
 def _resolve_cashier_chat(
@@ -148,17 +171,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"Сумма: {request_to_approve['amount']} ₽\n"
         f"Метод: {method or 'Не указан'}"
     )
-    if is_valid_user_id(user_id):
-        log(
-            f"[Telegram] sending approval notice to {user_id} — text: '{user_message[:50]}'"
-        )
-        try:
-            await context.bot.send_message(chat_id=user_id, text=user_message)
-        except (BadRequest, Forbidden) as e:
-            log(f"❌ Failed to send message to chat {user_id} — {e}")
-            # Do not interrupt the payout process if user notification fails
-    else:
-        log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
+    await _notify_employee(context, user_id, user_message)
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n✅ Одобрено"
@@ -303,15 +316,7 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"Сумма: {request_to_deny['amount']} ₽\n"
         f"Метод: {request_to_deny['method']}"
     )
-    if is_valid_user_id(user_id):
-        log(f"[Telegram] sending denial notice to {user_id} — text: '{user_message[:50]}'")
-        try:
-            await context.bot.send_message(chat_id=user_id, text=user_message)
-        except (BadRequest, Forbidden) as e:
-            log(f"❌ Failed to send message to chat {user_id} — {e}")
-            # Do not interrupt the payout process if user notification fails
-    else:
-        log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
+    await _notify_employee(context, user_id, user_message)
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n❌ Отклонено"
