@@ -121,6 +121,19 @@ class EmployeeService:
                 return emp
         return None
 
+    def find_by_vk_id(self, vk_id: str, exclude_id: str | None = None) -> Optional[Employee]:
+        """vk_id isn't a dict key like id is, so nothing stops two employee
+        records from ending up with the same one unless checked explicitly —
+        that would make notifications/linking silently ambiguous."""
+        if not vk_id:
+            return None
+        for emp in self._employees:
+            if emp.id == exclude_id:
+                continue
+            if getattr(emp, "vk_id", "") == vk_id:
+                return emp
+        return None
+
 
 class EmployeeAPIService:
     """Adapter that uses EmployeeService for API operations."""
@@ -139,6 +152,8 @@ class EmployeeAPIService:
         return EmployeeOut(**employee.__dict__)
 
     async def create_employee(self, data: EmployeeCreate) -> EmployeeOut:
+        if data.vk_id and self.service.find_by_vk_id(data.vk_id):
+            raise HTTPException(status_code=400, detail="vk_id_already_linked")
         if data.bot_user:
             employee_id = data.id or ""
         else:
@@ -165,6 +180,7 @@ class EmployeeAPIService:
             archived_at=data.archived_at,
             passport_url=data.passport_url or "",
             external_code=data.external_code or "",
+            vk_id=data.vk_id or "",
         )
         try:
             created = self.service.add_employee(employee)
@@ -176,6 +192,8 @@ class EmployeeAPIService:
             self,
             employee_id: str,
             data: EmployeeUpdate) -> EmployeeOut:
+        if data.vk_id and self.service.find_by_vk_id(data.vk_id, exclude_id=employee_id):
+            raise HTTPException(status_code=400, detail="vk_id_already_linked")
         try:
             emp = self.service.update_employee(
                 employee_id, **data.dict(exclude_unset=True)

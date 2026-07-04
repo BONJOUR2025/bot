@@ -205,6 +205,7 @@ export default function Employees() {
     amo_user_id: '',
     is_admin: false,
     bot_user: false,
+    vk_id: '',
     sync_to_bot: false,
     photo_file: null,
     photo_url: '',
@@ -400,6 +401,7 @@ export default function Employees() {
       amo_user_id: form.amo_user_id || '',
       is_admin: form.is_admin,
       bot_user: form.bot_user,
+      vk_id: form.vk_id || '',
       payout_chat_key: form.payout_chat_key || null,
     };
     try {
@@ -880,6 +882,13 @@ export default function Employees() {
                 <input className="modal-control" value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} />
               </div>
             )}
+
+            <div>
+              <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">
+                VK ID <span className="text-[color:var(--color-muted-foreground)] font-normal">(необязательно — второй канал бота, в дополнение к Telegram)</span>
+              </label>
+              <input className="modal-control" value={form.vk_id} onChange={(e) => setForm({ ...form, vk_id: e.target.value })} placeholder="Обычно проще привязать на странице «Доступы»" />
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

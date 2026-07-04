@@ -19,18 +19,22 @@ from ...utils.logger import log
 
 
 async def _notify_employee_result(context: ContextTypes.DEFAULT_TYPE, user_id: str, text: str) -> None:
-    """Same Telegram-or-VK dispatch as payout_actions._notify_employee — a
-    VK-only employee's id is an "nb_..." stub, not a real Telegram chat id."""
+    """Same Telegram+VK "send to every linked channel" dispatch as
+    payout_actions._notify_employee — an employee can be linked to both."""
+    sent = False
     if is_valid_user_id(user_id):
         try:
             await context.bot.send_message(chat_id=user_id, text=text, reply_markup=get_cabinet_menu())
+            sent = True
         except Exception as exc:
             log(f"❌ [cabinet] Failed to send message to chat {user_id} — {exc}")
-        return
+
     employee = EmployeeRepository().get_employee(str(user_id))
     if employee and employee.vk_id:
-        await vk_client.send_message(employee.vk_id, text)
-    else:
+        if await vk_client.send_message(employee.vk_id, text) is not None:
+            sent = True
+
+    if not sent:
         log(f"⚠️ [cabinet] Skipping message — invalid or fake user_id and no vk_id: {user_id}")
 
 

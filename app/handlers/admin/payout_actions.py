@@ -53,23 +53,26 @@ PENDING_STATUSES = {PAYOUT_STATUSES[0]}
 
 
 async def _notify_employee(context: ContextTypes.DEFAULT_TYPE, user_id: str, text: str) -> None:
-    """Send a decision notice to the employee — via Telegram if user_id is a
-    real Telegram id, otherwise via VK if this employee has a linked vk_id
-    (an "nb_..." stub id that only exists as a VK-linked profile).
-    Previously such employees were silently skipped entirely."""
+    """Send a decision notice to the employee on every channel they have
+    linked — Telegram (if user_id is a real Telegram id) AND VK (if this
+    employee has a linked vk_id). An employee can have both at once, so this
+    is "send to all", not "pick one"."""
+    sent = False
     if is_valid_user_id(user_id):
         log(f"[Telegram] sending notice to {user_id} — text: '{text[:50]}'")
         try:
             await context.bot.send_message(chat_id=user_id, text=text)
+            sent = True
         except (BadRequest, Forbidden) as e:
             log(f"❌ Failed to send message to chat {user_id} — {e}")
-        return
 
     employee = EmployeeRepository().get_employee(str(user_id))
     if employee and employee.vk_id:
         log(f"[VK] sending notice to vk_id {employee.vk_id} — text: '{text[:50]}'")
-        await vk_client.send_message(employee.vk_id, text)
-    else:
+        if await vk_client.send_message(employee.vk_id, text) is not None:
+            sent = True
+
+    if not sent:
         log(f"⚠️ Skipping message — invalid or fake user_id and no vk_id: {user_id}")
 
 

@@ -502,6 +502,7 @@ export default function AccessControl() {
                   {user.employee_id && (
                     <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Личный кабинет</span><span>сотрудник #{user.employee_id}</span></div>
                   )}
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">VK</span><span>{user.vk_id ? '✅ привязан' : '— не привязан'}</span></div>
                 </div>
                 <div className="px-4 py-2 border-t flex justify-end gap-3">
                   <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>
@@ -554,6 +555,9 @@ export default function AccessControl() {
                         Личный кабинет: сотрудник #{user.employee_id}
                       </p>
                     )}
+                    <p className="text-sm">
+                      VK: {user.vk_id ? '✅ привязан' : '— не привязан'}
+                    </p>
                   </div>
                   <div className="flex gap-2">
                     <button className="btn" onClick={() => startUserEdit(user)}>Изменить</button>

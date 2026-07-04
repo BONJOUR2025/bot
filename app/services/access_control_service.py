@@ -347,6 +347,7 @@ class AccessControlService:
                     "resolved_employee_names": self._employee_names(allowed_ids),
                     "resolved_departments": allowed_departments or [],
                     "employee_id": resolved.employee_id,
+                    "vk_id": getattr(self.employee_repo.get_employee(resolved.id), "vk_id", "") or "",
                 }
             )
         return result

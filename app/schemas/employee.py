@@ -25,6 +25,7 @@ class EmployeeBase(BaseModel):
     passport_url: str = ""
     external_code: str = ""
     amo_user_id: Optional[str] = ""   # amoCRM responsible_user_id (для ЗП менеджеров)
+    vk_id: Optional[str] = ""         # VK user id — второй, независимый от Telegram канал
 
 
 class EmployeeCreate(EmployeeBase):
