@@ -35,3 +35,4 @@ class Employee:
     passport_url: str = ""
     external_code: str = ""
     amo_user_id: str = ""   # amoCRM responsible_user_id (для ЗП менеджеров)
+    vk_id: str = ""         # VK user id — привязывается отдельно от id (который остаётся Telegram id)

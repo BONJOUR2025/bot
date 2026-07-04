@@ -34,10 +34,13 @@ export default function AccessControl() {
   const [isUserNew, setIsUserNew] = useState(false);
   const [botUsers, setBotUsers] = useState([]);
   const [linkSelections, setLinkSelections] = useState({});
+  const [vkBotUsers, setVkBotUsers] = useState([]);
+  const [vkLinkSelections, setVkLinkSelections] = useState({});
 
   useEffect(() => {
     load();
     loadBotUsers();
+    loadVkBotUsers();
   }, []);
 
   async function load() {
@@ -82,6 +85,38 @@ export default function AccessControl() {
     } catch (err) {
       console.error(err);
       toast('Не удалось привязать пользователя', 'error');
+    }
+  }
+
+  async function loadVkBotUsers() {
+    try {
+      const res = await api.get('vk-bot-users/');
+      setVkBotUsers(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function linkVkBotUser(vkId) {
+    const employeeId = vkLinkSelections[vkId];
+    if (!employeeId) return;
+    try {
+      await api.post(`vk-bot-users/${vkId}/link`, { employee_id: employeeId });
+      setVkLinkSelections((prev) => ({ ...prev, [vkId]: '' }));
+      loadVkBotUsers();
+    } catch (err) {
+      console.error(err);
+      toast('Не удалось привязать пользователя', 'error');
+    }
+  }
+
+  async function unlinkVkBotUser(vkId) {
+    try {
+      await api.post(`vk-bot-users/${vkId}/unlink`);
+      loadVkBotUsers();
+    } catch (err) {
+      console.error(err);
+      toast('Не удалось отвязать пользователя', 'error');
     }
   }
 
@@ -840,6 +875,70 @@ export default function AccessControl() {
                       className="btn"
                       disabled={!linkSelections[u.telegram_id]}
                       onClick={() => linkBotUser(u.telegram_id)}
+                    >
+                      Связать
+                    </button>
+                  </div>
+                ),
+            },
+          ]}
+        />
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Пользователи ВКонтакте</h2>
+        <p className="text-sm text-[color:var(--color-text-muted)]">
+          Заготовка под будущего VK-бота: как только он появится, каждый написавший ему будет попадать сюда —
+          так же, как в Telegram выше. Привязка не меняет Telegram-профиль сотрудника, а просто добавляет
+          VK как второй канал того же профиля.
+        </p>
+        <ResponsiveTable
+          data={vkBotUsers}
+          keyFn={(u) => u.vk_id}
+          emptyText="Пока никто не запускал VK-бота."
+          columns={[
+            { label: 'VK ID', key: 'vk_id' },
+            { label: 'Screen name', primary: true, render: (u) => (u.screen_name ? `@${u.screen_name}` : '—') },
+            { label: 'Имя', render: (u) => [u.first_name, u.last_name].filter(Boolean).join(' ') || '—' },
+            { label: 'Первый запуск', render: (u) => fmtDateTime(u.first_seen) },
+            { label: 'Последний запуск', render: (u) => fmtDateTime(u.last_seen) },
+            {
+              label: 'Сотрудник',
+              render: (u) =>
+                u.employee_id ? (
+                  u.employee_name || `#${u.employee_id}`
+                ) : (
+                  <span className="text-[color:var(--color-text-faint)]">Не привязан</span>
+                ),
+            },
+            {
+              label: '',
+              isAction: true,
+              render: (u) =>
+                u.employee_id ? (
+                  <button className="btn" onClick={() => unlinkVkBotUser(u.vk_id)}>
+                    Отвязать
+                  </button>
+                ) : (
+                  <div className="flex gap-2 items-center">
+                    <select
+                      className="input"
+                      value={vkLinkSelections[u.vk_id] || ''}
+                      onChange={(e) =>
+                        setVkLinkSelections((prev) => ({ ...prev, [u.vk_id]: e.target.value }))
+                      }
+                    >
+                      <option value="">Сотрудник…</option>
+                      {data.available_employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name}{emp.department ? ` · ${emp.department}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="btn"
+                      disabled={!vkLinkSelections[u.vk_id]}
+                      onClick={() => linkVkBotUser(u.vk_id)}
                     >
                       Связать
                     </button>

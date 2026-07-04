@@ -68,6 +68,7 @@ SHIFT_CHECKINS_FILE = settings.shift_checkins_file
 VISITOR_EVENTS_FILE = settings.visitor_events_file
 VISITOR_COUNTER_RESETS_FILE = settings.visitor_counter_resets_file
 BOT_USERS_FILE = settings.bot_users_file
+VK_BOT_USERS_FILE = settings.vk_bot_users_file
 ASSETS_FILE = settings.assets_file
 ADMIN_ID = settings.admin_id
 ADMIN_CHAT_ID = settings.admin_chat_id

@@ -63,6 +63,7 @@ class EmployeeRepository:
             "passport_url": data.get("passport_url", ""),
             "external_code": data.get("external_code", ""),
             "amo_user_id": data.get("amo_user_id", ""),
+            "vk_id": data.get("vk_id", ""),
         }
         return Employee(**record)
 
@@ -143,6 +144,33 @@ class EmployeeRepository:
         if employee_id in self._data:
             self._data.pop(employee_id)
             self._save()
+
+    def get_by_vk_id(self, vk_id: str) -> Employee | None:
+        vk_id = str(vk_id)
+        for uid, data in self._data.items():
+            if isinstance(data, dict) and str(data.get("vk_id") or "") == vk_id:
+                return self._create_employee(uid, data)
+        return None
+
+    def link_vk_id(self, employee_id: str, vk_id: str) -> Employee | None:
+        """Attach a VK user id to an existing employee record, without
+        touching its Telegram identity (employee.id) — unlike Telegram
+        binding, VK is a secondary channel on the same profile so both can
+        be linked at once instead of one replacing the other."""
+        employee_id = str(employee_id)
+        if employee_id not in self._data:
+            return None
+        self._data[employee_id]["vk_id"] = str(vk_id)
+        self._save()
+        return self._create_employee(employee_id, self._data[employee_id])
+
+    def unlink_vk_id(self, employee_id: str) -> Employee | None:
+        employee_id = str(employee_id)
+        if employee_id not in self._data:
+            return None
+        self._data[employee_id]["vk_id"] = ""
+        self._save()
+        return self._create_employee(employee_id, self._data[employee_id])
 
     def rekey_employee(self, old_id: str, new_id: str) -> Employee | None:
         """Change the id (Telegram user id) of an existing employee record."""
