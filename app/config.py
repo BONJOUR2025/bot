@@ -56,6 +56,7 @@ def _normalize_card_dispatch_chats(
 settings = _load_settings()
 
 TOKEN = settings.telegram_bot_token
+VK_API_TOKEN = settings.vk_api_token
 EXCEL_FILE = settings.excel_file
 USERS_FILE = settings.users_file
 ADVANCE_REQUESTS_FILE = settings.advance_requests_file

@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field(
         "dummy", validation_alias="TELEGRAM_BOT_TOKEN"
     )
+    # Community/group access token (messages scope) for the (future) VK bot —
+    # empty until a VK community exists; app/vk_main.py refuses to start
+    # without it rather than crashing on a bad token.
+    vk_api_token: str = Field("", validation_alias="VK_API_TOKEN")
     excel_file: str = Field("data.xlsx", validation_alias="EXCEL_FILE")
     users_file: str = Field("user.json", validation_alias="USERS_FILE")
     advance_requests_file: str = Field(
