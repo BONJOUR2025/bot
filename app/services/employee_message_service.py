@@ -9,8 +9,8 @@ from pathlib import Path
 
 logger = logging.getLogger("employee_message_actions")
 if not logger.handlers:
-    Path("logs").mkdir(exist_ok=True)
-    handler = logging.FileHandler("logs/employee_message_actions.log", encoding="utf-8")
+    Path("logs/messages").mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler("logs/messages/employee_message_actions.log", encoding="utf-8")
     handler.setFormatter(logging.Formatter("[%(asctime)s] %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)

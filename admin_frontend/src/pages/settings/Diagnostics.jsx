@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, FileText, Download } from 'lucide-react';
+import { RefreshCw, FileText, Download, Folder, ChevronLeft } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../../providers/ToastProvider.jsx';
 import { Section } from './shared.jsx';
@@ -10,10 +10,22 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
+// What each on-disk folder actually holds — see app/utils/logger.py and the
+// modules listed there for exactly which log writes where.
+const FOLDER_HINTS = {
+  bot: 'Общий лог, ошибки, запуск/остановка ботов (Telegram и VK), вход/выход из админки',
+  users: 'Активность каждого сотрудника (Telegram и VK) — один файл на человека',
+  payouts: 'Одобрение/отклонение выплат',
+  messages: 'Рассылки, сообщения от сотрудников, журнал отправленных сообщений',
+  leave_requests: 'Заявки на отпуск/отгул',
+  payment_calendar: 'Отправка счетов кассиру',
+};
+
 export default function SettingsDiagnostics() {
   const { toast } = useToast();
-  const [files, setFiles] = useState([]);
-  const [filesLoading, setFilesLoading] = useState(false);
+  const [folders, setFolders] = useState([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
+  const [openFolder, setOpenFolder] = useState(null);
   const [selected, setSelected] = useState(null);
   const [content, setContent] = useState('');
   const [totalLines, setTotalLines] = useState(0);
@@ -22,7 +34,7 @@ export default function SettingsDiagnostics() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const preRef = useRef(null);
 
-  useEffect(() => { loadFiles(); }, []);
+  useEffect(() => { loadFolders(); }, []);
 
   useEffect(() => {
     if (selected) loadContent(selected, lines);
@@ -34,20 +46,15 @@ export default function SettingsDiagnostics() {
     return () => clearInterval(id);
   }, [autoRefresh, selected, lines]);
 
-  async function loadFiles() {
-    setFilesLoading(true);
+  async function loadFolders() {
+    setFoldersLoading(true);
     try {
       const res = await api.get('system/logs');
-      const list = res.data.files || [];
-      setFiles(list);
-      if (!selected && list.length) {
-        const general = list.find((f) => f.name === 'app.log') || list[0];
-        setSelected(general.name);
-      }
+      setFolders(res.data.folders || []);
     } catch {
       toast('Ошибка загрузки списка логов', 'error');
     } finally {
-      setFilesLoading(false);
+      setFoldersLoading(false);
     }
   }
 
@@ -76,25 +83,75 @@ export default function SettingsDiagnostics() {
     URL.revokeObjectURL(url);
   }
 
+  function openFolderView(folder) {
+    setOpenFolder(folder);
+    setSelected(null);
+    setContent('');
+    // Jump straight to the folder's first (or "general") file so it's not
+    // an extra click for the common case of one-file-per-folder.
+    const first = folder.files.find((f) => f.file === 'app.log') || folder.files[0];
+    if (first) setSelected(first.name);
+  }
+
+  if (!openFolder) {
+    return (
+      <div className="space-y-6 max-w-6xl">
+        <Section title="Диагностика — журналы">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-[color:var(--color-muted-foreground)]">
+              {folders.length ? `${folders.length} папок` : ''}
+            </span>
+            <button type="button" onClick={loadFolders} disabled={foldersLoading}
+              className="btn text-xs flex items-center gap-1.5 disabled:opacity-50">
+              <RefreshCw size={13} className={foldersLoading ? 'animate-spin' : ''} /> Обновить
+            </button>
+          </div>
+          {folders.length === 0 && (
+            <div className="p-6 text-center text-sm text-[color:var(--color-muted-foreground)]">
+              {foldersLoading ? 'Загрузка…' : 'Логи не найдены'}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {folders.map((folder) => (
+              <button
+                key={folder.name}
+                type="button"
+                onClick={() => openFolderView(folder)}
+                className="text-left border border-[color:var(--color-border)] rounded-lg p-4 hover:border-[color:var(--color-primary)] hover:bg-[color:var(--color-bg-secondary)] transition-colors"
+              >
+                <div className="flex items-center gap-2 font-medium">
+                  <Folder size={16} className="shrink-0 text-[color:var(--color-primary)]" />
+                  <span className="font-mono truncate">{folder.name}</span>
+                </div>
+                {FOLDER_HINTS[folder.name] && (
+                  <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1.5">{FOLDER_HINTS[folder.name]}</p>
+                )}
+                <p className="text-xs text-[color:var(--color-muted-foreground)] mt-2">
+                  {folder.count} {folder.count === 1 ? 'файл' : 'файлов'} · {formatSize(folder.total_size)}
+                </p>
+              </button>
+            ))}
+          </div>
+        </Section>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-6xl">
       <Section title="Диагностика — журналы">
+        <button
+          type="button"
+          onClick={() => { setOpenFolder(null); setSelected(null); setContent(''); }}
+          className="btn text-xs flex items-center gap-1.5 mb-3"
+        >
+          <ChevronLeft size={13} /> Все папки
+        </button>
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="lg:w-64 shrink-0 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-[color:var(--color-muted-foreground)]">Файлы логов</span>
-              <button type="button" onClick={loadFiles} disabled={filesLoading}
-                className="btn text-xs p-1.5 disabled:opacity-50">
-                <RefreshCw size={13} className={filesLoading ? 'animate-spin' : ''} />
-              </button>
-            </div>
+            <div className="text-xs font-medium text-[color:var(--color-muted-foreground)] font-mono">{openFolder.name}/</div>
             <div className="border border-[color:var(--color-border)] rounded-lg max-h-[60vh] overflow-y-auto divide-y divide-[color:var(--color-border)]">
-              {files.length === 0 && (
-                <div className="p-3 text-sm text-[color:var(--color-muted-foreground)]">
-                  {filesLoading ? 'Загрузка…' : 'Логи не найдены'}
-                </div>
-              )}
-              {files.map((f) => (
+              {openFolder.files.map((f) => (
                 <button
                   key={f.name}
                   type="button"
@@ -106,7 +163,7 @@ export default function SettingsDiagnostics() {
                   }`}
                 >
                   <FileText size={14} className="shrink-0" />
-                  <span className="truncate font-mono text-xs flex-1">{f.name}</span>
+                  <span className="truncate font-mono text-xs flex-1">{f.file}</span>
                   <span className={`text-xs shrink-0 ${selected === f.name ? 'text-white/80' : 'text-[color:var(--color-muted-foreground)]'}`}>
                     {formatSize(f.size)}
                   </span>

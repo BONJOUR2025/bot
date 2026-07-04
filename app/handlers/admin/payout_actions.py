@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 
 audit_logger = logging.getLogger("payout_actions")
 if not audit_logger.handlers:
-    Path("logs").mkdir(exist_ok=True)
-    handler = logging.FileHandler("logs/payout_actions.log", encoding="utf-8")
+    Path("logs/payouts").mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler("logs/payouts/payout_actions.log", encoding="utf-8")
     formatter = logging.Formatter("[%(asctime)s] %(message)s")
     handler.setFormatter(formatter)
     audit_logger.addHandler(handler)

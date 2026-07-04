@@ -104,20 +104,36 @@ def create_system_router() -> APIRouter:
 
     @router.get("/logs")
     async def list_logs(_=Depends(perm)):
-        """List all log files under logs/ (general, errors, connections, per-user)."""
-        items = []
+        """Log files under logs/, grouped by their top-level subdirectory
+        (bot, users, payouts, messages, leave_requests, payment_calendar —
+        see app/utils/logger.py for what writes into each). A stray file
+        directly under logs/ (leftover from before this layout, or a future
+        addition that doesn't use a subfolder) is grouped under "—"."""
+        folders: dict[str, list[dict]] = {}
         if LOGS_DIR.exists():
             for p in sorted(LOGS_DIR.rglob("*.log*")):
                 if not p.is_file():
                     continue
-                rel = p.relative_to(LOGS_DIR).as_posix()
+                rel = p.relative_to(LOGS_DIR)
+                parts = rel.parts
+                folder = parts[0] if len(parts) > 1 else "—"
                 stat = p.stat()
-                items.append({
-                    "name": rel,
+                folders.setdefault(folder, []).append({
+                    "name": rel.as_posix(),
+                    "file": parts[-1],
                     "size": stat.st_size,
                     "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 })
-        return {"files": items}
+        result = [
+            {
+                "name": folder,
+                "files": files,
+                "count": len(files),
+                "total_size": sum(f["size"] for f in files),
+            }
+            for folder, files in sorted(folders.items())
+        ]
+        return {"folders": result}
 
     @router.get("/logs/content")
     async def log_content(

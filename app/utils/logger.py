@@ -6,7 +6,11 @@ from typing import Any
 
 LOGS_DIR = Path("logs")
 USERS_LOG_DIR = LOGS_DIR / "users"
+BOT_LOG_DIR = LOGS_DIR / "bot"
+PAYMENT_CALENDAR_LOG_DIR = LOGS_DIR / "payment_calendar"
 USERS_LOG_DIR.mkdir(parents=True, exist_ok=True)
+BOT_LOG_DIR.mkdir(parents=True, exist_ok=True)
+PAYMENT_CALENDAR_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
 _BACKUP_COUNT = 5
@@ -24,13 +28,13 @@ def _rotating_handler(path: Path, level: int = logging.INFO) -> RotatingFileHand
 
 
 # ----------------------------------------------------------------------
-# Root logger: everything goes to logs/app.log, errors also go to
-# logs/errors.log, and everything is mirrored to the console.
+# Root logger: everything goes to logs/bot/app.log, errors also go to
+# logs/bot/errors.log, and everything is mirrored to the console.
 # ----------------------------------------------------------------------
 _root_logger = logging.getLogger()
 _root_logger.setLevel(logging.INFO)
-_root_logger.addHandler(_rotating_handler(LOGS_DIR / "app.log"))
-_root_logger.addHandler(_rotating_handler(LOGS_DIR / "errors.log", level=logging.ERROR))
+_root_logger.addHandler(_rotating_handler(BOT_LOG_DIR / "app.log"))
+_root_logger.addHandler(_rotating_handler(BOT_LOG_DIR / "errors.log", level=logging.ERROR))
 _console_handler = logging.StreamHandler()
 _console_handler.setFormatter(_FORMATTER)
 _root_logger.addHandler(_console_handler)
@@ -38,11 +42,13 @@ _root_logger.addHandler(_console_handler)
 
 # ----------------------------------------------------------------------
 # Connections log: bot start/stop, admin logins/logouts, telegram /start, etc.
-# Propagates to the root logger as well, so it's also visible in app.log.
+# (Telegram and VK both write here — see app/main.py, app/vk_main.py,
+# app/handlers/user/start.py.) Propagates to the root logger as well, so
+# it's also visible in app.log.
 # ----------------------------------------------------------------------
 _connections_logger = logging.getLogger("connections")
 _connections_logger.setLevel(logging.INFO)
-_connections_logger.addHandler(_rotating_handler(LOGS_DIR / "connections.log"))
+_connections_logger.addHandler(_rotating_handler(BOT_LOG_DIR / "connections.log"))
 
 
 # ----------------------------------------------------------------------
@@ -115,7 +121,7 @@ def log_connection(message: Any) -> None:
 
 _payment_calendar_logger = logging.getLogger("payment_calendar")
 _payment_calendar_logger.setLevel(logging.INFO)
-_payment_calendar_logger.addHandler(_rotating_handler(LOGS_DIR / "payment_calendar.log"))
+_payment_calendar_logger.addHandler(_rotating_handler(PAYMENT_CALENDAR_LOG_DIR / "payment_calendar.log"))
 
 
 def log_payment_calendar(message: Any) -> None:

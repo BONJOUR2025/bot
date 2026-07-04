@@ -21,8 +21,8 @@ from app.data.employee_repository import EmployeeRepository
 
 logger = logging.getLogger("broadcast")
 if not logger.handlers:
-    Path("logs").mkdir(exist_ok=True)
-    fh = logging.FileHandler("logs/broadcast.log", encoding="utf-8")
+    Path("logs/messages").mkdir(parents=True, exist_ok=True)
+    fh = logging.FileHandler("logs/messages/broadcast.log", encoding="utf-8")
     formatter = logging.Formatter("[%(asctime)s] %(message)s")
     fh.setFormatter(formatter)
     logger.addHandler(fh)
@@ -54,8 +54,8 @@ class TelegramService:
             self.bot = self._create_bot_with_proxy()
         else:
             self.bot = None
-        Path("logs").mkdir(exist_ok=True)
-        self.msg_log = Path("logs/sent_messages.json")
+        Path("logs/messages").mkdir(parents=True, exist_ok=True)
+        self.msg_log = Path("logs/messages/sent_messages.json")
         if not self.msg_log.exists():
             self.msg_log.write_text("[]", encoding="utf-8")
         if not ADMIN_CHAT_ID:
@@ -195,7 +195,7 @@ class TelegramService:
     def update_sent_message_status(
         cls, user_id: str, message_id: int, status: str
     ) -> None:
-        log_file = Path("logs/sent_messages.json")
+        log_file = Path("logs/messages/sent_messages.json")
         if not log_file.exists():
             return
         try:

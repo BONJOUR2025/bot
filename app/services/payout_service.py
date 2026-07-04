@@ -14,8 +14,8 @@ from pathlib import Path
 
 logger = logging.getLogger("payout_actions")
 if not logger.handlers:
-    Path("logs").mkdir(exist_ok=True)
-    handler = logging.FileHandler("logs/payout_actions.log", encoding="utf-8")
+    Path("logs/payouts").mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler("logs/payouts/payout_actions.log", encoding="utf-8")
     formatter = logging.Formatter("[%(asctime)s] %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)

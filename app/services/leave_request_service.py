@@ -10,8 +10,8 @@ from pathlib import Path
 
 logger = logging.getLogger("leave_request_actions")
 if not logger.handlers:
-    Path("logs").mkdir(exist_ok=True)
-    handler = logging.FileHandler("logs/leave_request_actions.log", encoding="utf-8")
+    Path("logs/leave_requests").mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler("logs/leave_requests/leave_request_actions.log", encoding="utf-8")
     handler.setFormatter(logging.Formatter("[%(asctime)s] %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
