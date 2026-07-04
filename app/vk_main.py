@@ -167,7 +167,7 @@ def main() -> None:
         return
     log("🚀 VK bot started and waiting for messages...")
     log_connection("VK bot process started (long poll)")
-    bot.run_forever()
+    bot.run()
 
 
 if __name__ == "__main__":
