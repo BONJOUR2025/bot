@@ -25,11 +25,21 @@ const MONTHS_KEY_RU  = ['ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ
 const DAY_NAMES      = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 const CHART_COLORS   = ['#6366f1','#22c55e','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#a3e635'];
 
-const EMP_NAMES = {
-  '0102':'Вера','7272':'Арина','2404':'Эмиль','5984':'Полина',
-  '3007':'Юля','2201':'Катя','2502':'Виктория','1996':'Вероника',
-  '2106':'Валерия','1302':'Любовь','2104':'Алекс','0208':'Марина',
-};
+// Populated from EmployeeRepository (see loadEmployeeNames in the main
+// component) — employee.name in the system is "Имя КОД" (e.g. "Вера 0102"),
+// the same 4-digit code Firebird's sales data is keyed by. Module-level so
+// empName() stays a plain lookup usable from every subcomponent below,
+// without threading the map through props everywhere it's called.
+let EMP_CODE_NAMES = {};
+
+function buildCodeNameMap(employees) {
+  const map = {};
+  for (const emp of employees) {
+    const match = String(emp.name || '').match(/^(.*?)\s*(\d{4})$/);
+    if (match) map[match[2]] = match[1].trim() || emp.name;
+  }
+  return map;
+}
 
 const CATEGORIES = [
   { key:'repair',    label:'Ремонт / Химчистка', color:'#6366f1' },
@@ -55,7 +65,7 @@ const fmtK   = (v) => v == null ? '—'
   : `${Math.round(v)} ₽`;
 const fmtPct = (v) => v == null ? '—' : v.toFixed(1) + '%';
 
-const empName = (code) => EMP_NAMES[code] || code;
+const empName = (code) => EMP_CODE_NAMES[code] || code;
 
 function initials(name) {
   const parts = name.trim().split(/\s+/);
@@ -452,6 +462,14 @@ export default function SalesAnalytics() {
         api.get('/sales/daily', { params: { date_from: prevFrom.toISOString().slice(0,10), date_to: prevTo.toISOString().slice(0,10) } }),
         api.get('/sales/plans', { params: { month_keys: monthKeys } }),
       ]);
+      // Best-effort — a failure here shouldn't block sales data from
+      // showing, it just leaves empName() falling back to the raw code.
+      try {
+        const empRes = await api.get('employees/', { params: { archived: false } });
+        EMP_CODE_NAMES = buildCodeNameMap(empRes.data || []);
+      } catch (e) {
+        console.error('Не удалось загрузить имена сотрудников', e);
+      }
       setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setLoaded(true);
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
