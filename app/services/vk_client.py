@@ -31,6 +31,7 @@ async def send_message(vk_id: int | str, text: str) -> Optional[int]:
     if not is_configured():
         log("⚠️ [vk_client] VK_API_TOKEN не задан — сообщение не отправлено")
         return None
+    log(f"[VK] Sending message to {vk_id} — text: '{text[:50]}'")
     params = {
         "access_token": settings.vk_api_token,
         "v": VK_API_VERSION,
@@ -45,7 +46,9 @@ async def send_message(vk_id: int | str, text: str) -> Optional[int]:
         if "error" in data:
             log(f"❌ [vk_client] Ошибка отправки сообщения {vk_id}: {data['error']}")
             return None
-        return data.get("response")
+        message_id = data.get("response")
+        log(f"✅ [vk_client] Сообщение {vk_id} отправлено, message_id={message_id}")
+        return message_id
     except Exception as exc:
         log(f"❌ [vk_client] Не удалось отправить сообщение {vk_id}: {exc}")
         return None

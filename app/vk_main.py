@@ -31,6 +31,7 @@ from .config import VK_API_TOKEN
 from .data.vk_bot_user_repository import get_vk_bot_user_repository
 from .services.users import load_users_map
 from .utils.logger import log, log_connection
+from .vk.activity_logger import log_activity
 from .vk.context import resolve_employee
 from .vk.keyboards import main_menu
 from .vk.states import MenuStates, CabinetStates, PayoutStates, ShiftCheckinStates
@@ -80,6 +81,7 @@ async def route_message(message: Message) -> None:
     await _register_contact(message)
 
     employee = resolve_employee(message.from_id)
+    log_activity(message, employee.id if employee else None, employee.name if employee else None)
     if not employee:
         await message.answer(
             "❌ Ваш профиль не найден. Обратитесь к администратору, чтобы он привязал этот аккаунт "

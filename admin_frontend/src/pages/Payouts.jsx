@@ -16,6 +16,7 @@ import {
   ChevronUp,
   Send,
   Smartphone,
+  MessageCircle,
   BarChart3,
   TrendingUp,
   Wallet,
@@ -510,6 +511,11 @@ const DELIVERY_META = {
   failed:  { label: 'Ошибка',     cls: 'text-[color:var(--color-danger)]',  dot: 'bg-[color:var(--color-danger)]' },
   skipped: { label: 'Пропущено',  cls: 'text-[color:var(--color-muted-foreground)]', dot: 'bg-[color:var(--color-text-faint)]' },
 };
+const CHANNEL_META = {
+  telegram: { label: 'Telegram', Icon: Send },
+  vk:       { label: 'VK',       Icon: MessageCircle },
+  push:     { label: 'Push',     Icon: Smartphone },
+};
 
 function NotificationJournal({ entries, open, onToggle, onRefresh }) {
   const fmtTime = (iso) => {
@@ -553,6 +559,8 @@ function NotificationJournal({ entries, open, onToggle, onRefresh }) {
             <ul className="divide-y divide-[color:var(--color-border)] max-h-96 overflow-y-auto">
               {entries.map((e) => {
                 const meta = DELIVERY_META[e.delivery] || DELIVERY_META.skipped;
+                const channelMeta = CHANNEL_META[e.channel] || CHANNEL_META.push;
+                const ChannelIcon = channelMeta.Icon;
                 return (
                   <li key={e.id} className="px-4 py-2.5 text-sm flex items-start gap-3">
                     <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${meta.dot}`} title={meta.label} />
@@ -562,8 +570,8 @@ function NotificationJournal({ entries, open, onToggle, onRefresh }) {
                         <span className="text-xs text-[color:var(--color-muted-foreground)]">·</span>
                         <span className="text-xs">{e.status}</span>
                         <span className="inline-flex items-center gap-1 text-xs text-[color:var(--color-muted-foreground)]">
-                          {e.channel === 'telegram' ? <Send size={11} /> : <Smartphone size={11} />}
-                          {e.channel === 'telegram' ? 'Telegram' : 'Push'}
+                          <ChannelIcon size={11} />
+                          {channelMeta.label}
                         </span>
                         <span className={`text-xs font-medium ${meta.cls}`}>{meta.label}</span>
                       </div>

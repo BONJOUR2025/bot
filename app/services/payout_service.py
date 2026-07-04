@@ -4,6 +4,8 @@ from typing import List, Optional, Dict, Any
 
 from app.schemas.payout import Payout, PayoutCreate, PayoutUpdate
 from app.data.payout_repository import PayoutRepository
+from app.data.employee_repository import EmployeeRepository
+from . import vk_client
 from .telegram_service import TelegramService
 from app.core.enums import PAYOUT_STATUSES
 
@@ -230,6 +232,7 @@ class PayoutService:
                 else:
                     delivery, error = "skipped", "Telegram не настроен"
                 self._log_notification(updated, new_status, "telegram", tg_text, delivery, error)
+                await self._notify_vk(updated, new_status, tg_text)
             logger.info(
                 f"✏️ Выплата {payout_id} обновлена — статус: {updates['status']}")
         else:
@@ -293,7 +296,23 @@ class PayoutService:
                 else:
                     delivery, error = "skipped", "Telegram не настроен"
                 self._log_notification(updated, status, "telegram", tg_text, delivery, error)
+                await self._notify_vk(updated, status, tg_text)
         return Payout(**updated)
+
+    async def _notify_vk(self, payout, status: str, text: str) -> None:
+        """Send the same status text over VK, if this employee has a linked
+        vk_id — independent of (and in addition to) the Telegram attempt
+        above, since an employee can have both channels linked at once."""
+        employee = EmployeeRepository().get_employee(str(payout.get("user_id", "")))
+        vk_id = getattr(employee, "vk_id", "") if employee else ""
+        if not vk_id:
+            self._log_notification(payout, status, "vk", text, "skipped", "VK не привязан")
+            return
+        message_id = await vk_client.send_message(vk_id, text)
+        if message_id is not None:
+            self._log_notification(payout, status, "vk", text, "sent", None)
+        else:
+            self._log_notification(payout, status, "vk", text, "failed", "Ошибка отправки VK")
 
     @staticmethod
     def _log_notification(payout, status, channel, message, delivery, error):
