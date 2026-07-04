@@ -18,6 +18,7 @@ from app.utils import is_valid_user_id
 from app.config import TOKEN, ADMIN_CHAT_ID
 from app.settings import settings
 from app.data.employee_repository import EmployeeRepository
+from . import vk_client
 
 logger = logging.getLogger("broadcast")
 if not logger.handlers:
@@ -226,7 +227,18 @@ class TelegramService:
             parse_mode: str = "HTML",
             photo_url: Optional[str] = None,
             filters: Optional[Dict[str, Any]] = None,
-            test_user_id: Optional[str] = None) -> dict:
+            test_user_id: Optional[str] = None,
+            channels: Optional[Sequence[str]] = None) -> dict:
+        channels = list(channels) if channels else ["telegram"]
+        want_telegram = "telegram" in channels
+        want_vk = "vk" in channels
+        if want_telegram and self.bot is None:
+            if not want_vk:
+                log("⚠️ Telegram bot not configured; cannot broadcast")
+                raise TelegramNotConfiguredError("Telegram bot not configured")
+            log("⚠️ Telegram bot not configured; broadcasting over VK only")
+            want_telegram = False
+
         if filters is None:
             filters = {}
         if "archived" not in filters:
@@ -234,64 +246,80 @@ class TelegramService:
         employees = self.repo.list_employees(**filters)
         if test_user_id:
             employees = [e for e in employees if str(e.id) == str(test_user_id)]
-        if self.bot is None:
-            log("⚠️ Telegram bot not configured; cannot broadcast")
-            raise TelegramNotConfiguredError("Telegram bot not configured")
 
         success = 0
         recipients: List[Dict[str, Any]] = []
         for emp in employees:
-            if not is_valid_user_id(emp.id):
-                log(f"⚠️ Skipping message — invalid or fake user_id: {emp.id}")
-                recipients.append({
-                    "user_id": str(emp.id),
-                    "name": emp.full_name or emp.name,
-                    "status": "невалидный id",
-                })
-                continue
             try:
                 personalized = message.format(**emp.__dict__)
             except (KeyError, ValueError) as exc:
                 logger.error(f"Failed to format message for {emp.id}: {exc}")
                 continue
-            log(
-                f"[Telegram] Broadcasting to {emp.id} — text: '{personalized[:50]}', photo: {bool(photo_url)}"
-            )
-            try:
-                if photo_url:
-                    await self.bot.send_photo(
-                        chat_id=emp.id,
-                        photo=photo_url,
-                        caption=personalized,
-                        parse_mode=parse_mode,
-                    )
+
+            attempted = False
+            if want_telegram:
+                if not is_valid_user_id(emp.id):
+                    log(f"⚠️ Skipping Telegram — invalid or fake user_id: {emp.id}")
                 else:
-                    await self.bot.send_message(
-                        chat_id=emp.id,
-                        text=personalized,
-                        parse_mode=parse_mode,
+                    attempted = True
+                    log(
+                        f"[Telegram] Broadcasting to {emp.id} — text: '{personalized[:50]}', photo: {bool(photo_url)}"
                     )
-                success += 1
-                logger.info(f"Sent to {emp.id}")
+                    try:
+                        if photo_url:
+                            await self.bot.send_photo(
+                                chat_id=emp.id, photo=photo_url,
+                                caption=personalized, parse_mode=parse_mode,
+                            )
+                        else:
+                            await self.bot.send_message(
+                                chat_id=emp.id, text=personalized, parse_mode=parse_mode,
+                            )
+                        success += 1
+                        logger.info(f"Sent to {emp.id} (telegram)")
+                        recipients.append({
+                            "user_id": str(emp.id), "name": emp.full_name or emp.name,
+                            "channel": "telegram", "status": "отправлено",
+                        })
+                    except BadRequest as exc:
+                        log(f"❌ Failed to send broadcast to chat {emp.id} — {exc}")
+                        recipients.append({
+                            "user_id": str(emp.id), "name": emp.full_name or emp.name,
+                            "channel": "telegram", "status": f"ошибка: {exc}",
+                        })
+                    except Exception as exc:
+                        logger.warning(f"Failed for {emp.id}: {exc}")
+                        recipients.append({
+                            "user_id": str(emp.id), "name": emp.full_name or emp.name,
+                            "channel": "telegram", "status": f"ошибка: {exc}",
+                        })
+
+            if want_vk:
+                if not emp.vk_id:
+                    log(f"⚠️ Skipping VK — no vk_id linked: {emp.id}")
+                else:
+                    attempted = True
+                    # VK broadcast is text-only — no upload-server round trip
+                    # for photo_url here, unlike the Telegram side above.
+                    message_id = await vk_client.send_message(emp.vk_id, personalized)
+                    if message_id is not None:
+                        success += 1
+                        recipients.append({
+                            "user_id": str(emp.id), "name": emp.full_name or emp.name,
+                            "channel": "vk", "status": "отправлено",
+                        })
+                    else:
+                        recipients.append({
+                            "user_id": str(emp.id), "name": emp.full_name or emp.name,
+                            "channel": "vk", "status": "ошибка отправки",
+                        })
+
+            if not attempted:
                 recipients.append({
-                    "user_id": str(emp.id),
-                    "name": emp.full_name or emp.name,
-                    "status": "отправлено",
+                    "user_id": str(emp.id), "name": emp.full_name or emp.name,
+                    "channel": "-", "status": "нет привязанного канала",
                 })
-            except BadRequest as exc:
-                log(f"❌ Failed to send broadcast to chat {emp.id} — {exc}")
-                recipients.append({
-                    "user_id": str(emp.id),
-                    "name": emp.full_name or emp.name,
-                    "status": f"ошибка: {exc}",
-                })
-            except Exception as exc:
-                logger.warning(f"Failed for {emp.id}: {exc}")
-                recipients.append({
-                    "user_id": str(emp.id),
-                    "name": emp.full_name or emp.name,
-                    "status": f"ошибка: {exc}",
-                })
+
         log_entry = {
             "id": str(uuid4()),
             "broadcast": True,
@@ -312,7 +340,16 @@ class TelegramService:
             photo_url: Optional[str] = None,
             require_ack: bool = False,
             batch_id: Optional[str] = None,
-    ) -> int:
+            channels: Optional[Sequence[str]] = None,
+    ) -> Optional[int]:
+        """Send to any combination of Telegram/VK. Raises only if every
+        requested channel failed (message_id, if any, is from Telegram —
+        VK doesn't have an equivalent concept here); a partial success (e.g.
+        Telegram configured but VK not linked) is not an error."""
+        channels = list(channels) if channels else ["telegram"]
+        want_telegram = "telegram" in channels
+        want_vk = "vk" in channels
+
         employee = None
         if hasattr(self.repo, "get_employee"):
             try:
@@ -324,95 +361,71 @@ class TelegramService:
             if employee
             else None
         )
-        if self.bot is None:
-            log("⚠️ Telegram bot not configured; cannot send message")
-            exc = TelegramNotConfiguredError("Telegram bot not configured")
-            self._append_personal_log_entry(
-                user_id=user_id,
-                user_name=user_name,
-                message=message,
-                status=f"ошибка: {exc}",
-                photo_url=photo_url,
-                require_ack=require_ack,
-                batch_id=batch_id,
-            )
-            raise exc
-        if not is_valid_user_id(user_id):
-            log(f"⚠️ Skipping message — invalid or fake user_id: {user_id}")
-            exc = InvalidTelegramUserIdError(
-                f"Invalid Telegram user id supplied: {user_id}"
-            )
-            self._append_personal_log_entry(
-                user_id=user_id,
-                user_name=user_name,
-                message=message,
-                status=f"ошибка: {exc}",
-                photo_url=photo_url,
-                require_ack=require_ack,
-                batch_id=batch_id,
-            )
-            raise exc
-        reply_markup = None
-        if require_ack:
-            reply_markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("✅ Принято", callback_data=f"ack_{user_id}")]]
-            )
-        log(
-            f"[Telegram] Sending personal message to {user_id} — text: '{message[:50]}'"
-        )
-        try:
-            if photo_url:
-                result = await self.bot.send_photo(
-                    chat_id=user_id,
-                    photo=photo_url,
-                    caption=message,
-                    parse_mode=parse_mode,
-                    reply_markup=reply_markup,
-                )
+
+        message_id: Optional[int] = None
+        sent_channels: list[str] = []
+        errors: list[str] = []
+
+        if want_telegram:
+            if self.bot is None:
+                errors.append("Telegram не настроен")
+            elif not is_valid_user_id(user_id):
+                errors.append("Невалидный Telegram id")
             else:
-                result = await self.bot.send_message(
-                    chat_id=user_id,
-                    text=message,
-                    parse_mode=parse_mode,
-                    reply_markup=reply_markup,
-                )
-        except BadRequest as exc:
-            log(f"❌ Failed to send message to chat {user_id} — {exc}")
-            self._append_personal_log_entry(
-                user_id=user_id,
-                user_name=user_name,
-                message=message,
-                status=f"ошибка: {exc}",
-                photo_url=photo_url,
-                require_ack=require_ack,
-                batch_id=batch_id,
-                extra={"error": str(exc)},
-            )
-            raise TelegramAPIError(str(exc)) from exc
-        except Exception as exc:
-            log(f"❌ Unexpected error while sending message to {user_id}: {exc}")
-            self._append_personal_log_entry(
-                user_id=user_id,
-                user_name=user_name,
-                message=message,
-                status=f"ошибка: {exc}",
-                photo_url=photo_url,
-                require_ack=require_ack,
-                batch_id=batch_id,
-                extra={"error": str(exc)},
-            )
-            raise
+                reply_markup = None
+                if require_ack:
+                    reply_markup = InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("✅ Принято", callback_data=f"ack_{user_id}")]]
+                    )
+                log(f"[Telegram] Sending personal message to {user_id} — text: '{message[:50]}'")
+                try:
+                    if photo_url:
+                        result = await self.bot.send_photo(
+                            chat_id=user_id, photo=photo_url, caption=message,
+                            parse_mode=parse_mode, reply_markup=reply_markup,
+                        )
+                    else:
+                        result = await self.bot.send_message(
+                            chat_id=user_id, text=message,
+                            parse_mode=parse_mode, reply_markup=reply_markup,
+                        )
+                    message_id = result.message_id
+                    sent_channels.append("telegram")
+                except BadRequest as exc:
+                    log(f"❌ Failed to send message to chat {user_id} — {exc}")
+                    errors.append(f"Telegram: {exc}")
+                except Exception as exc:
+                    log(f"❌ Unexpected error while sending message to {user_id}: {exc}")
+                    errors.append(f"Telegram: {exc}")
+
+        if want_vk:
+            vk_id = getattr(employee, "vk_id", "") if employee else ""
+            if not vk_id:
+                errors.append("VK не привязан")
+            else:
+                log(f"[VK] Sending personal message to {vk_id} — text: '{message[:50]}'")
+                vk_message_id = await vk_client.send_message(vk_id, message)
+                if vk_message_id is not None:
+                    sent_channels.append("vk")
+                else:
+                    errors.append("VK: ошибка отправки")
+
+        ok = bool(sent_channels)
+        status = "отправлено" if ok else f"ошибка: {'; '.join(errors)}"
         self._append_personal_log_entry(
             user_id=user_id,
             user_name=user_name,
             message=message,
-            status="отправлено",
-            message_id=result.message_id,
+            status=status,
+            message_id=message_id,
             photo_url=photo_url,
             require_ack=require_ack,
             batch_id=batch_id,
+            extra={"channels_sent": sent_channels} if sent_channels else None,
         )
-        return result.message_id
+        if not ok:
+            raise TelegramAPIError("; ".join(errors) or "unknown error")
+        return message_id
 
     async def send_employee_message_to_admin(self, name: str, message: str) -> None:
         """Notify the admin chat about a message sent by an employee from their personal area."""

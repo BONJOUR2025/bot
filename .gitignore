@@ -11,6 +11,9 @@ payroll_audit.json
 manager_salary_accruals.json
 manager_plans.json
 
+# Runtime logs (see app/utils/logger.py — categorized under logs/<category>/)
+logs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

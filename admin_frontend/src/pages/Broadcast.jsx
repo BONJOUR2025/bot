@@ -10,6 +10,7 @@ export default function Broadcast() {
   const [templates, setTemplates] = useState([]);
   const [selectedTpl, setSelectedTpl] = useState('');
   const [status, setStatus] = useState('active');
+  const [channels, setChannels] = useState(['telegram', 'vk']);
   const [openRecipients, setOpenRecipients] = useState(false);
   const [sent, setSent] = useState([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -62,6 +63,12 @@ export default function Broadcast() {
     );
   }
 
+  function toggleChannel(channel) {
+    setChannels((prev) =>
+      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel]
+    );
+  }
+
   async function deleteMessage(id) {
     try {
       await api.delete(`telegram/sent_messages/${id}`);
@@ -89,12 +96,13 @@ export default function Broadcast() {
   }
 
   async function sendAll(mode) {
-    if (!message.trim()) return;
+    if (!message.trim() || channels.length === 0) return;
     if (mode !== 'test' && !window.confirm('Отправить сообщение всем?')) return;
     try {
       await api.post('telegram/broadcast', {
         message,
         status,
+        channels,
         test_user_id: mode === 'test' ? selected[0] : undefined,
       });
       setMessage('');
@@ -105,7 +113,7 @@ export default function Broadcast() {
   }
 
   async function sendOne() {
-    if (!message.trim() || selected.length === 0) return;
+    if (!message.trim() || selected.length === 0 || channels.length === 0) return;
     const batchId = generateBatchId();
     for (const id of selected) {
       try {
@@ -114,6 +122,7 @@ export default function Broadcast() {
           message,
           require_ack: true,
           batch_id: batchId,
+          channels,
         });
       } catch (err) {
         console.error(err);
@@ -171,10 +180,24 @@ export default function Broadcast() {
             <option value="inactive">Неактивные</option>
           </select>
         </div>
+        <div className="mt-2 flex items-center gap-4">
+          <span className="text-sm font-medium text-[color:var(--color-text)]">Куда отправить:</span>
+          <label className="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={channels.includes('telegram')} onChange={() => toggleChannel('telegram')} />
+            Telegram
+          </label>
+          <label className="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={channels.includes('vk')} onChange={() => toggleChannel('vk')} />
+            VK
+          </label>
+          {channels.length === 0 && (
+            <span className="text-xs text-[color:var(--color-danger)]">Выберите хотя бы один канал</span>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <button onClick={() => sendAll()} className="btn shadow">
+        <button onClick={() => sendAll()} disabled={channels.length === 0} className="btn shadow disabled:opacity-50">
           <Send size={16} /> Отправить всем
         </button>
 
@@ -188,7 +211,7 @@ export default function Broadcast() {
           </button>
           {openRecipients && (
             <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-[color:var(--color-modal-bg)] border border-[color:var(--color-border)] rounded-lg shadow-lg">
-              {employees.filter(e => e.bot_user || (!String(e.id).startsWith('nb_') && !!e.id)).map((e) => (
+              {employees.filter(e => e.bot_user || e.vk_id || (!String(e.id).startsWith('nb_') && !!e.id)).map((e) => (
                 <label
                   key={e.id}
                   className="flex items-center px-2 py-1 gap-2"
@@ -207,14 +230,16 @@ export default function Broadcast() {
 
         <button
           onClick={sendOne}
-          className="btn bg-green-600 hover:bg-green-700 shadow"
+          disabled={channels.length === 0}
+          className="btn bg-green-600 hover:bg-green-700 shadow disabled:opacity-50"
         >
           <User size={16} /> Отправить выбранным
         </button>
 
         <button
           onClick={() => sendAll('test')}
-          className="btn bg-purple-600 hover:bg-purple-700 shadow"
+          disabled={channels.length === 0}
+          className="btn bg-purple-600 hover:bg-purple-700 shadow disabled:opacity-50"
         >
           <Send size={16} /> Тест
         </button>
@@ -260,10 +285,11 @@ export default function Broadcast() {
                   <div className="font-medium whitespace-pre-wrap mb-2">{m.message}</div>
                   <ResponsiveTable
                     data={m.recipients || []}
-                    keyFn={(r) => r.user_id}
+                    keyFn={(r) => `${r.user_id}_${r.channel}`}
                     emptyText="Нет получателей"
                     columns={[
                       { label: 'Получатель', key: 'name', primary: true },
+                      { label: 'Канал', render: (r) => r.channel === 'telegram' ? 'Telegram' : r.channel === 'vk' ? 'VK' : (r.channel || '—') },
                       { label: 'Статус', key: 'status' },
                     ]}
                   />

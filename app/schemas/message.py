@@ -9,6 +9,7 @@ class MessageRequest(BaseModel):
     require_ack: bool = False
     photo_url: Optional[str] = None
     batch_id: Optional[str] = None
+    channels: list[str] = ["telegram"]  # any of "telegram" / "vk"
 
 
 class MessageOut(BaseModel):
@@ -33,6 +34,7 @@ class BroadcastRequest(BaseModel):
     birthday_today: bool = False
     tags: Optional[list[str]] = None
     test_user_id: Optional[str] = None
+    channels: list[str] = ["telegram"]  # any of "telegram" / "vk"
 
 
 class SentMessage(BaseModel):

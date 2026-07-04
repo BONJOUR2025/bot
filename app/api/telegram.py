@@ -19,7 +19,7 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
 
     @router.post("/send_message", dependencies=[Depends(require_permission("broadcast"))])
     async def send_message(data: MessageRequest):
-        if service.bot is None:
+        if "telegram" in data.channels and "vk" not in data.channels and service.bot is None:
             raise HTTPException(status_code=400, detail="Telegram token not configured")
         try:
             message_id = await service.send_message_to_user(
@@ -29,6 +29,7 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
                 photo_url=data.photo_url,
                 require_ack=data.require_ack,
                 batch_id=data.batch_id,
+                channels=data.channels,
             )
             return {
                 "success": True,
@@ -70,7 +71,7 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
 
     @router.post("/broadcast", dependencies=[Depends(require_permission("broadcast"))])
     async def broadcast(data: BroadcastRequest):
-        if service.bot is None:
+        if "telegram" in data.channels and "vk" not in data.channels and service.bot is None:
             raise HTTPException(status_code=400, detail="Telegram token not configured")
         try:
             filters = {
@@ -85,6 +86,7 @@ def create_telegram_router(repo: EmployeeRepository) -> APIRouter:
                 photo_url=data.photo_url,
                 filters=filters,
                 test_user_id=data.test_user_id,
+                channels=data.channels,
             )
             return result
         except TelegramNotConfiguredError as exc:
