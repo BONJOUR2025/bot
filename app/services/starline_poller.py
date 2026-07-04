@@ -5,6 +5,8 @@ Mirrors the cash_move_auto_linker worker pattern.
 import asyncio
 import logging
 
+from app.utils.logger import log_job
+
 logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 15 * 60
@@ -12,6 +14,7 @@ INTERVAL_SECONDS = 15 * 60
 _task: "asyncio.Task | None" = None
 
 
+@log_job("starline_poller")
 async def poll_once() -> int:
     """Snapshot the current position of every tracked device. Returns points stored."""
     from app.services import starline_client

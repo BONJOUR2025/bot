@@ -1,10 +1,11 @@
 """hh.ru Employer API client."""
-import logging
 from urllib.parse import urlencode
 
 import httpx
 
-log = logging.getLogger(__name__)
+from app.utils.logger import get_service_logger
+
+log = get_service_logger("hh")
 
 HH_BASE = "https://api.hh.ru"
 HH_AUTH_BASE = "https://hh.ru"

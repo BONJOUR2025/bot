@@ -14,7 +14,9 @@ from typing import Optional
 import httpx
 
 from app.settings import settings
-from app.utils.logger import log
+from app.utils.logger import get_service_logger
+
+log = get_service_logger("vk_api")
 
 VK_API_BASE = "https://api.vk.com/method"
 VK_API_VERSION = "5.199"
@@ -29,9 +31,9 @@ async def send_message(vk_id: int | str, text: str) -> Optional[int]:
     None if VK isn't configured or the send failed (never raises — callers
     treat a notification failure as non-fatal, same as the Telegram side)."""
     if not is_configured():
-        log("⚠️ [vk_client] VK_API_TOKEN не задан — сообщение не отправлено")
+        log.info("⚠️ [vk_client] VK_API_TOKEN не задан — сообщение не отправлено")
         return None
-    log(f"[VK] Sending message to {vk_id} — text: '{text[:50]}'")
+    log.info(f"[VK] Sending message to {vk_id} — text: '{text[:50]}'")
     params = {
         "access_token": settings.vk_api_token,
         "v": VK_API_VERSION,
@@ -44,11 +46,11 @@ async def send_message(vk_id: int | str, text: str) -> Optional[int]:
             resp = await client.post(f"{VK_API_BASE}/messages.send", data=params)
             data = resp.json()
         if "error" in data:
-            log(f"❌ [vk_client] Ошибка отправки сообщения {vk_id}: {data['error']}")
+            log.info(f"❌ [vk_client] Ошибка отправки сообщения {vk_id}: {data['error']}")
             return None
         message_id = data.get("response")
-        log(f"✅ [vk_client] Сообщение {vk_id} отправлено, message_id={message_id}")
+        log.info(f"✅ [vk_client] Сообщение {vk_id} отправлено, message_id={message_id}")
         return message_id
     except Exception as exc:
-        log(f"❌ [vk_client] Не удалось отправить сообщение {vk_id}: {exc}")
+        log.info(f"❌ [vk_client] Не удалось отправить сообщение {vk_id}: {exc}")
         return None

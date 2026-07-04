@@ -292,7 +292,9 @@ def register_jobs(app):
     from telegram.ext import ContextTypes
     from ..config import ADMIN_CHAT_ID
     from ..services.birthday_service import get_upcoming_birthdays
+    from ..utils.logger import log_job
 
+    @log_job("birthday_reminder")
     async def birthday_reminder(context: ContextTypes.DEFAULT_TYPE):
         today = datetime.date.today()
         upcoming = get_upcoming_birthdays(1)
@@ -319,6 +321,7 @@ def register_jobs(app):
 
     app.job_queue.run_daily(birthday_reminder, time(hour=9, minute=0))
 
+    @log_job("payment_reminder")
     async def payment_reminder(context: ContextTypes.DEFAULT_TYPE):
         from ..data.payment_calendar_repository import get_payment_calendar_repository
         import datetime as dt
@@ -357,12 +360,14 @@ def register_jobs(app):
 
     app.job_queue.run_daily(payment_reminder, time(hour=9, minute=0))
 
+    @log_job("follow_up")
     async def follow_up_job(context: ContextTypes.DEFAULT_TYPE):
         from ..services.follow_up_service import run_follow_up_check
         await run_follow_up_check()
 
     app.job_queue.run_repeating(follow_up_job, interval=900, first=60)
 
+    @log_job("morning_briefing")
     async def morning_briefing_job(context: ContextTypes.DEFAULT_TYPE):
         from ..services.briefing_service import send_morning_briefing
         await send_morning_briefing()

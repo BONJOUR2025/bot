@@ -15,14 +15,14 @@ the payload can be inspected the first time a real key is used."""
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any, Optional
 
 import httpx
 
 from app.settings import settings
+from app.utils.logger import get_service_logger
 
-log = logging.getLogger(__name__)
+log = get_service_logger("routing")
 
 # Driving profile suits a courier car; ORS also has cycling/walking/etc.
 ORS_BASE = "https://api.openrouteservice.org/v2/directions/driving-car"

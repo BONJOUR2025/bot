@@ -17,14 +17,14 @@ time a real key is used, the same way starline_client's /raw diagnostics work.
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any, Optional
 
 import httpx
 
 from app.settings import settings
+from app.utils.logger import get_service_logger
 
-log = logging.getLogger(__name__)
+log = get_service_logger("routing")
 
 ROUTER_BASE = "https://api.routing.yandex.net/v2/route"
 

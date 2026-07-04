@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, FileText, Download, Folder, ChevronLeft } from 'lucide-react';
+import { RefreshCw, FileText, Download, Folder, ChevronLeft, Circle } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../../providers/ToastProvider.jsx';
 import { Section } from './shared.jsx';
@@ -8,6 +8,13 @@ function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+}
+
+function formatAge(ageS) {
+  if (ageS == null) return 'нет данных';
+  if (ageS < 60) return `${Math.round(ageS)} сек назад`;
+  if (ageS < 3600) return `${Math.round(ageS / 60)} мин назад`;
+  return `${Math.round(ageS / 3600)} ч назад`;
 }
 
 // What each on-disk folder actually holds — see app/utils/logger.py and the
@@ -19,7 +26,58 @@ const FOLDER_HINTS = {
   messages: 'Рассылки, сообщения от сотрудников, журнал отправленных сообщений',
   leave_requests: 'Заявки на отпуск/отгул',
   payment_calendar: 'Отправка счетов кассиру',
+  external_apis: 'Внешние интеграции: StarLine, VK API, роутинг (ORS/Яндекс), amoCRM, Avito, hh.ru',
+  jobs: 'Фоновые задачи по расписанию — каждый прогон, не только ошибки',
+  processes: 'История heartbeat-ов процессов (см. панель статуса выше)',
 };
+
+function ProcessStatusPanel() {
+  const [processes, setProcesses] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await api.get('system/process-status');
+      setProcesses(res.data.processes || []);
+    } catch {
+      // silent — this is a secondary panel, not worth a toast on failure
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <Section title="Статус процессов">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-[color:var(--color-muted-foreground)]">Обновляется каждые 30 сек</span>
+        <button type="button" onClick={load} disabled={loading} className="btn text-xs p-1.5 disabled:opacity-50">
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {processes.map((p) => (
+          <div key={p.name} className="border border-[color:var(--color-border)] rounded-lg p-3">
+            <div className="flex items-center gap-2 font-medium">
+              <Circle size={10} className={p.online ? 'fill-green-500 text-green-500' : 'fill-red-500 text-red-500'} />
+              {p.label}
+            </div>
+            <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+              {p.online ? 'онлайн' : 'офлайн'} · {formatAge(p.age_s)}
+              {p.pid ? ` · PID ${p.pid}` : ''}
+            </p>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
 
 export default function SettingsDiagnostics() {
   const { toast } = useToast();
@@ -96,6 +154,7 @@ export default function SettingsDiagnostics() {
   if (!openFolder) {
     return (
       <div className="space-y-6 max-w-6xl">
+        <ProcessStatusPanel />
         <Section title="Диагностика — журналы">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-[color:var(--color-muted-foreground)]">

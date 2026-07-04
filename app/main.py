@@ -9,7 +9,7 @@ if sys.platform == "win32":
 from .core.application import create_application
 from .db.session import init_db
 from .models.asset import Asset as _AssetModel  # noqa: F401 — registers table with Base
-from .utils.logger import log, log_connection
+from .utils.logger import log, log_connection, write_heartbeat
 
 
 def main() -> None:
@@ -24,6 +24,10 @@ def main() -> None:
     app = create_application()
     log("🚀 Bot started and waiting for commands...")
     log_connection("Bot process started (polling)")
+    async def _heartbeat(context) -> None:
+        write_heartbeat("telegram_bot")
+
+    app.job_queue.run_repeating(_heartbeat, interval=60, first=0)
     try:
         app.run_polling(
             bootstrap_retries=5,

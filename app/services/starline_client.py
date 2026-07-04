@@ -16,15 +16,15 @@ return raw payloads to verify the mapping against a real account.
 from __future__ import annotations
 
 import hashlib
-import logging
 import time
 from typing import Any, Optional
 
 import httpx
 
 from app.settings import settings
+from app.utils.logger import get_service_logger
 
-log = logging.getLogger(__name__)
+log = get_service_logger("starline")
 
 ID_BASE = "https://id.starline.ru/apiV3"
 DEV_BASE = "https://developer.starline.ru/json"

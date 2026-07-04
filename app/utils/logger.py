@@ -1,5 +1,8 @@
+import json
 import logging
+import os
 import re
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -8,9 +11,15 @@ LOGS_DIR = Path("logs")
 USERS_LOG_DIR = LOGS_DIR / "users"
 BOT_LOG_DIR = LOGS_DIR / "bot"
 PAYMENT_CALENDAR_LOG_DIR = LOGS_DIR / "payment_calendar"
+EXTERNAL_API_LOG_DIR = LOGS_DIR / "external_apis"
+JOBS_LOG_DIR = LOGS_DIR / "jobs"
+PROCESSES_LOG_DIR = LOGS_DIR / "processes"
 USERS_LOG_DIR.mkdir(parents=True, exist_ok=True)
 BOT_LOG_DIR.mkdir(parents=True, exist_ok=True)
 PAYMENT_CALENDAR_LOG_DIR.mkdir(parents=True, exist_ok=True)
+EXTERNAL_API_LOG_DIR.mkdir(parents=True, exist_ok=True)
+JOBS_LOG_DIR.mkdir(parents=True, exist_ok=True)
+PROCESSES_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
 _BACKUP_COUNT = 5
@@ -147,3 +156,116 @@ def log_user_action(user_id: Any, label: str | None, action: str, **details: Any
         who = f"{user_id} ({label})"
     message = f"[{who}] {action}{extra}"
     _get_user_logger(user_id, label).info(message)
+
+
+# ----------------------------------------------------------------------
+# External API logs: one file per integration under logs/external_apis/ —
+# StarLine, VK, routing providers, amoCRM, Avito, hh.ru, etc. Still
+# propagates to the root logger (app.log), same as everything else; this
+# just additionally gives each integration its own file so a flaky
+# third-party API can be diagnosed without grepping through the whole
+# general log.
+# ----------------------------------------------------------------------
+_service_loggers: dict[str, logging.Logger] = {}
+
+
+def get_service_logger(name: str) -> logging.Logger:
+    logger = _service_loggers.get(name)
+    if logger is None:
+        logger = logging.getLogger(f"external.{name}")
+        logger.setLevel(logging.INFO)
+        logger.addHandler(_rotating_handler(EXTERNAL_API_LOG_DIR / f"{name}.log"))
+        _service_loggers[name] = logger
+    return logger
+
+
+# ----------------------------------------------------------------------
+# Background job logs: one file per scheduled/repeating job under
+# logs/jobs/ — birthday reminders, payment reminders, the StarLine poller,
+# etc. Unlike ad hoc log() calls scattered in each job, this records every
+# run (not just failures), so "did this even run today" is answerable.
+# ----------------------------------------------------------------------
+_job_loggers: dict[str, logging.Logger] = {}
+
+
+def get_job_logger(name: str) -> logging.Logger:
+    logger = _job_loggers.get(name)
+    if logger is None:
+        logger = logging.getLogger(f"job.{name}")
+        logger.setLevel(logging.INFO)
+        logger.addHandler(_rotating_handler(JOBS_LOG_DIR / f"{name}.log"))
+        _job_loggers[name] = logger
+    return logger
+
+
+def log_job_run(name: str, *, ok: bool = True, duration_s: float | None = None, **details: Any) -> None:
+    """Log one completed run of a background job — start/end aren't tracked
+    separately, this is called once the run finishes (success or not)."""
+    extra = " " + " ".join(f"{k}={v}" for k, v in details.items()) if details else ""
+    dur = f" ({duration_s:.1f}s)" if duration_s is not None else ""
+    status = "OK" if ok else "FAILED"
+    get_job_logger(name).info(f"[{status}]{dur}{extra}")
+
+
+def log_job(name: str):
+    """Decorator for an async job function — logs every run via
+    log_job_run (success + duration, or failure + error) automatically,
+    so individual jobs don't each need their own timing/try-except
+    boilerplate just to be visible in logs/jobs/."""
+    import functools
+    import time as _time
+
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            started = _time.monotonic()
+            try:
+                result = await func(*args, **kwargs)
+                log_job_run(name, ok=True, duration_s=_time.monotonic() - started)
+                return result
+            except Exception as exc:
+                log_job_run(name, ok=False, duration_s=_time.monotonic() - started, error=str(exc))
+                raise
+        return wrapper
+    return decorator
+
+
+# ----------------------------------------------------------------------
+# Process heartbeat: logs/processes/<name>.json — a small "I'm alive"
+# marker each long-running process (app.main, app.vk_main, the API/uvicorn
+# process) writes on a timer. Surfaced in the Diagnostics UI as an
+# online/offline indicator — right now a hung-but-not-crashed process is
+# indistinguishable from a healthy one without SSHing in to check.
+# ----------------------------------------------------------------------
+
+_process_loggers: dict[str, logging.Logger] = {}
+
+
+def _get_process_logger(name: str) -> logging.Logger:
+    logger = _process_loggers.get(name)
+    if logger is None:
+        logger = logging.getLogger(f"process.{name}")
+        logger.setLevel(logging.INFO)
+        logger.addHandler(_rotating_handler(PROCESSES_LOG_DIR / f"{name}.log"))
+        _process_loggers[name] = logger
+    return logger
+
+
+def write_heartbeat(process_name: str, **extra: Any) -> None:
+    """Writes both a latest-status JSON snapshot (processes/<name>.status.json
+    — read by the Diagnostics "process status" panel) and a plain log line
+    (processes/<name>.log — so the heartbeat history is also visible in the
+    regular folder browser, e.g. to spot gaps where the process was down)."""
+    data = {
+        "process": process_name,
+        "pid": os.getpid(),
+        "last_seen": datetime.now().isoformat(timespec="seconds"),
+        **extra,
+    }
+    path = PROCESSES_LOG_DIR / f"{process_name}.status.json"
+    try:
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    extra_str = " " + " ".join(f"{k}={v}" for k, v in extra.items()) if extra else ""
+    _get_process_logger(process_name).info(f"alive pid={os.getpid()}{extra_str}")

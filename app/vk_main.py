@@ -13,11 +13,6 @@ full reasoning):
     priority, business_connection specifically is a Telegram Business API
     feature with no VK equivalent.
 
-IMPORTANT: this code has not been run against a live VK bot — there is no
-VK community/token yet (VK_API_TOKEN unset), and vkbottle isn't installed
-in this environment, so it could only be reviewed, not executed or tested.
-Treat the first real run as a testing pass, not a formality.
-
 Requires VK_API_TOKEN in .env (community/group access token, `messages`
 scope). Uses VK's Bot Long Poll API — no public webhook URL needed, same
 long-polling model as the Telegram bot.
@@ -25,12 +20,13 @@ long-polling model as the Telegram bot.
 
 from __future__ import annotations
 
+from vkbottle import interval
 from vkbottle.bot import Bot, Message
 
 from .config import VK_API_TOKEN
 from .data.vk_bot_user_repository import get_vk_bot_user_repository
 from .services.users import load_users_map
-from .utils.logger import log, log_connection
+from .utils.logger import log, log_connection, write_heartbeat
 from .vk.activity_logger import log_activity
 from .vk.context import resolve_employee
 from .vk.keyboards import main_menu
@@ -41,6 +37,14 @@ from .vk.handlers import payout as h_payout
 from .vk.handlers import shift_checkin as h_shift
 
 bot = Bot(token=VK_API_TOKEN)
+
+
+@interval(seconds=60)
+async def _heartbeat() -> None:
+    write_heartbeat("vk_bot")
+
+
+bot.startup_tasks.append(_heartbeat())
 
 HOME_TEXTS = {"🏠 домой", "домой", "🏠домой"}
 

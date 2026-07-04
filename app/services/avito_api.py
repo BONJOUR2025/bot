@@ -1,10 +1,11 @@
 """Avito Jobs API client."""
-import logging
 from datetime import datetime, timedelta
 
 import httpx
 
-log = logging.getLogger(__name__)
+from app.utils.logger import get_service_logger
+
+log = get_service_logger("avito")
 
 AVITO_BASE = "https://api.avito.ru"
 TIMEOUT = 15.0

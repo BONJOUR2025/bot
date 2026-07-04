@@ -99,6 +99,18 @@ def create_app() -> FastAPI:
     async def ping():
         return {"status": "ok"}
 
+    @app.on_event("startup")
+    async def _start_heartbeat():
+        import asyncio
+        from ..utils.logger import write_heartbeat
+
+        async def _loop():
+            while True:
+                write_heartbeat("api_server")
+                await asyncio.sleep(60)
+
+        asyncio.create_task(_loop())
+
     if telegram_app is not None:
 
         @app.on_event("startup")

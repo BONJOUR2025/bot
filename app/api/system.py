@@ -13,7 +13,17 @@ from pydantic import BaseModel
 
 from .dependencies import require_permission
 from app.settings import settings
-from app.utils.logger import LOGS_DIR
+from app.utils.logger import LOGS_DIR, PROCESSES_LOG_DIR
+
+# A process writes its heartbeat every 60s (see write_heartbeat callers in
+# app/main.py, app/vk_main.py, app/api/__init__.py) — 3x that is generous
+# slack for a slow tick without flapping the status between checks.
+HEARTBEAT_STALE_AFTER_S = 180
+PROCESS_LABELS = {
+    "telegram_bot": "Telegram-бот",
+    "vk_bot": "VK-бот",
+    "api_server": "Веб-сервер / админка",
+}
 
 # JSON files that can be cleaned up by archiving old records.
 # Each entry: (filename, date_field_name)
@@ -134,6 +144,48 @@ def create_system_router() -> APIRouter:
             for folder, files in sorted(folders.items())
         ]
         return {"folders": result}
+
+    @router.get("/process-status")
+    async def process_status(_=Depends(perm)):
+        """Latest heartbeat per long-running process (bot(s), API server) —
+        online/offline computed from how stale each heartbeat is, not just
+        whether the process crashed (a hung-but-alive process stops
+        heartbeating too)."""
+        now = datetime.now()
+        items = []
+        seen = set()
+        if PROCESSES_LOG_DIR.exists():
+            for p in sorted(PROCESSES_LOG_DIR.glob("*.status.json")):
+                name = p.name.removesuffix(".status.json")
+                seen.add(name)
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                try:
+                    last_seen = datetime.fromisoformat(data.get("last_seen", ""))
+                    age_s = (now - last_seen).total_seconds()
+                    online = age_s <= HEARTBEAT_STALE_AFTER_S
+                except Exception:
+                    age_s, online = None, False
+                items.append({
+                    "name": name,
+                    "label": PROCESS_LABELS.get(name, name),
+                    "online": online,
+                    "last_seen": data.get("last_seen"),
+                    "age_s": age_s,
+                    "pid": data.get("pid"),
+                })
+        # Processes that are expected but have never written a single
+        # heartbeat (never started, or started before this feature existed)
+        # show up as "never seen" rather than silently missing from the list.
+        for name, label in PROCESS_LABELS.items():
+            if name not in seen:
+                items.append({
+                    "name": name, "label": label, "online": False,
+                    "last_seen": None, "age_s": None, "pid": None,
+                })
+        return {"processes": sorted(items, key=lambda x: x["name"])}
 
     @router.get("/logs/content")
     async def log_content(

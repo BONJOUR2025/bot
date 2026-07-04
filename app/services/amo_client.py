@@ -7,15 +7,15 @@ restarts. Ported from the Msalary sketch and adapted to the main app's config.
 """
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Optional
 
 import httpx
 
 from app.settings import settings
+from app.utils.logger import get_service_logger
 
-log = logging.getLogger(__name__)
+log = get_service_logger("amocrm")
 ENV_PATH = Path(".env")
 
 # In-memory tokens, seeded from settings; refresh updates these + .env.
