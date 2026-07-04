@@ -52,28 +52,47 @@ if not audit_logger.handlers:
 PENDING_STATUSES = {PAYOUT_STATUSES[0]}
 
 
-async def _notify_employee(context: ContextTypes.DEFAULT_TYPE, user_id: str, text: str) -> None:
+async def _notify_employee(context: ContextTypes.DEFAULT_TYPE, payout: dict, status: str, text: str) -> None:
     """Send a decision notice to the employee on every channel they have
     linked — Telegram (if user_id is a real Telegram id) AND VK (if this
-    employee has a linked vk_id). An employee can have both at once, so this
-    is "send to all", not "pick one"."""
-    sent = False
+    employee has a linked vk_id) — and record each attempt in the payout
+    notification journal (same journal PayoutService writes to for
+    web-admin-triggered decisions), so approvals/rejections made from the
+    Telegram bot show up in the "Журнал уведомлений" on the Payouts page too
+    instead of being invisible there."""
+    from app.data.payout_notification_repository import get_payout_notification_repository
+
+    repo = get_payout_notification_repository()
+    user_id = payout.get("user_id")
+    common = dict(
+        payout_id=payout.get("id"), user_id=str(user_id or ""),
+        recipient_name=payout.get("name", ""), status=status,
+        message=text, amount=payout.get("amount"),
+    )
+
     if is_valid_user_id(user_id):
         log(f"[Telegram] sending notice to {user_id} — text: '{text[:50]}'")
         try:
             await context.bot.send_message(chat_id=user_id, text=text)
-            sent = True
+            tg_delivery, tg_error = "sent", None
         except (BadRequest, Forbidden) as e:
             log(f"❌ Failed to send message to chat {user_id} — {e}")
+            tg_delivery, tg_error = "failed", str(e)
+    else:
+        tg_delivery, tg_error = "skipped", "Не Telegram id"
+    repo.add_entry(channel="telegram", delivery=tg_delivery, error=tg_error, **common)
 
     employee = EmployeeRepository().get_employee(str(user_id))
     if employee and employee.vk_id:
         log(f"[VK] sending notice to vk_id {employee.vk_id} — text: '{text[:50]}'")
-        if await vk_client.send_message(employee.vk_id, text) is not None:
-            sent = True
+        message_id = await vk_client.send_message(employee.vk_id, text)
+        vk_delivery, vk_error = ("sent", None) if message_id is not None else ("failed", "Ошибка отправки VK")
+    else:
+        vk_delivery, vk_error = "skipped", "VK не привязан"
+    repo.add_entry(channel="vk", delivery=vk_delivery, error=vk_error, **common)
 
-    if not sent:
-        log(f"⚠️ Skipping message — invalid or fake user_id and no vk_id: {user_id}")
+    if tg_delivery != "sent" and vk_delivery != "sent":
+        log(f"⚠️ Не удалось уведомить сотрудника ни по одному каналу: {user_id}")
 
 
 def _resolve_cashier_chat(
@@ -174,7 +193,7 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"Сумма: {request_to_approve['amount']} ₽\n"
         f"Метод: {method or 'Не указан'}"
     )
-    await _notify_employee(context, user_id, user_message)
+    await _notify_employee(context, request_to_approve, "Одобрено", user_message)
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n✅ Одобрено"
@@ -319,7 +338,7 @@ async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"Сумма: {request_to_deny['amount']} ₽\n"
         f"Метод: {request_to_deny['method']}"
     )
-    await _notify_employee(context, user_id, user_message)
+    await _notify_employee(context, request_to_deny, "Отклонено", user_message)
 
     current_text = query.message.text
     updated_text = f"{current_text}\n\n❌ Отклонено"
