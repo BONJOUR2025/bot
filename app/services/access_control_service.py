@@ -13,6 +13,7 @@ from app.config import SECRET_KEY
 from app.data.bot_user_repository import BotUserRepository, get_bot_user_repository
 from app.data.employee_repository import EmployeeRepository
 from app.data.json_storage import JsonStorage
+from app.utils.file_lock import FileLock
 
 
 AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
@@ -137,8 +138,16 @@ class AccessControlService:
         # user.json path.
         self._employee_storage = self.employee_repo._storage
         self.bot_user_repo = bot_user_repo or get_bot_user_repository()
-        self._data: dict[str, Any] = self.storage.load() or {}
-        self._ensure_defaults()
+        # This file is read/rewritten wholesale by (at least) two OS
+        # processes — bot + web/API — with no other synchronization;
+        # without a real cross-process lock, concurrent read-modify-write
+        # cycles silently drop each other's changes (see FileLock's
+        # docstring). Every method that reloads and/or persists this file
+        # holds this lock for its full read-modify-write span.
+        self._lock = FileLock(path)
+        with self._lock:
+            self._data: dict[str, Any] = self.storage.load() or {}
+            self._ensure_defaults()
 
     # ------------------------------------------------------------------
     # internal helpers
@@ -152,10 +161,11 @@ class AccessControlService:
         # would never be found, and the bot-user's access entry would
         # never get auto-created — looking exactly like "uses the bot but
         # never shows up in Доступы".
-        self.employee_repo = EmployeeRepository(self._employee_storage)
-        self._data = self.storage.load() or {}
-        self._ensure_defaults()
-        self._ensure_bot_users()
+        with self._lock:
+            self.employee_repo = EmployeeRepository(self._employee_storage)
+            self._data = self.storage.load() or {}
+            self._ensure_defaults()
+            self._ensure_bot_users()
 
     def _ensure_bot_users(self) -> None:
         """Auto-create an access control entry for every employee reachable via
@@ -429,141 +439,147 @@ class AccessControlService:
     def create_role(
         self, data: dict[str, Any], actor: ResolvedUser | None = None
     ) -> dict[str, Any]:
-        self._reload()
-        role_id = data.get("id") or secrets.token_hex(6)
-        if self._get_role(role_id):
-            raise ValueError("role_exists")
-        permissions = self._validate_permissions(data.get("permissions")) or []
-        resolved_permissions = (
-            [p["id"] for p in AVAILABLE_PERMISSIONS] if "*" in permissions else permissions
-        )
-        self._check_privilege_escalation(actor, resolved_permissions)
-        role = {
-            "id": role_id,
-            "name": data.get("name", role_id),
-            "permissions": permissions,
-            "bot_buttons": self._validate_buttons(data.get("bot_buttons")) or [],
-        }
-        self._data.setdefault("roles", []).append(role)
-        self._persist()
-        return role
-
-    def update_role(
-        self, role_id: str, data: dict[str, Any], actor: ResolvedUser | None = None
-    ) -> dict[str, Any]:
-        self._reload()
-        role = self._get_role(role_id)
-        if not role:
-            raise ValueError("role_not_found")
-        if "name" in data and data["name"]:
-            role["name"] = data["name"]
-        if "permissions" in data:
+        with self._lock:
+            self._reload()
+            role_id = data.get("id") or secrets.token_hex(6)
+            if self._get_role(role_id):
+                raise ValueError("role_exists")
             permissions = self._validate_permissions(data.get("permissions")) or []
             resolved_permissions = (
                 [p["id"] for p in AVAILABLE_PERMISSIONS] if "*" in permissions else permissions
             )
             self._check_privilege_escalation(actor, resolved_permissions)
-            role["permissions"] = permissions
-        if "bot_buttons" in data:
-            role["bot_buttons"] = self._validate_buttons(data.get("bot_buttons")) or []
-        self._persist()
-        return role
+            role = {
+                "id": role_id,
+                "name": data.get("name", role_id),
+                "permissions": permissions,
+                "bot_buttons": self._validate_buttons(data.get("bot_buttons")) or [],
+            }
+            self._data.setdefault("roles", []).append(role)
+            self._persist()
+            return role
+
+    def update_role(
+        self, role_id: str, data: dict[str, Any], actor: ResolvedUser | None = None
+    ) -> dict[str, Any]:
+        with self._lock:
+            self._reload()
+            role = self._get_role(role_id)
+            if not role:
+                raise ValueError("role_not_found")
+            if "name" in data and data["name"]:
+                role["name"] = data["name"]
+            if "permissions" in data:
+                permissions = self._validate_permissions(data.get("permissions")) or []
+                resolved_permissions = (
+                    [p["id"] for p in AVAILABLE_PERMISSIONS] if "*" in permissions else permissions
+                )
+                self._check_privilege_escalation(actor, resolved_permissions)
+                role["permissions"] = permissions
+            if "bot_buttons" in data:
+                role["bot_buttons"] = self._validate_buttons(data.get("bot_buttons")) or []
+            self._persist()
+            return role
 
     def delete_role(self, role_id: str) -> None:
-        self._reload()
-        if any(user.get("role_id") == role_id for user in self._data.get("users", [])):
-            raise ValueError("role_in_use")
-        self._data["roles"] = [r for r in self._data.get("roles", []) if r.get("id") != role_id]
-        self._persist()
+        with self._lock:
+            self._reload()
+            if any(user.get("role_id") == role_id for user in self._data.get("users", [])):
+                raise ValueError("role_in_use")
+            self._data["roles"] = [r for r in self._data.get("roles", []) if r.get("id") != role_id]
+            self._persist()
 
     def create_user(
         self, data: dict[str, Any], actor: ResolvedUser | None = None
     ) -> dict[str, Any]:
-        self._reload()
-        user_id = str(data.get("id") or secrets.token_hex(8))
-        login = data.get("login")
-        password = data.get("password")
-        if not login or not password:
-            raise ValueError("login_password_required")
-        if self._get_user(user_id):
-            raise ValueError("user_exists")
-        if self._get_user_by_login(login):
-            raise ValueError("login_exists")
-        role_id = data.get("role_id")
-        role = self._get_role(role_id) if role_id else None
-        if role_id and not role:
-            raise ValueError("role_not_found")
-        salt, password_hash = self._hash_password(password)
-        raw_employee_id = data.get("employee_id")
-        employee_id = str(raw_employee_id) if raw_employee_id else None
-        raw_allowed = data.get("allowed_employee_ids")
-        if raw_allowed is None and employee_id:
-            raw_allowed = [employee_id]
-        permissions = self._validate_permissions(data.get("permissions"))
-        user_record = {
-            "id": user_id,
-            "login": login,
-            "role_id": role_id,
-            "permissions": permissions,
-            "bot_buttons": self._validate_buttons(data.get("bot_buttons")),
-            "salt": salt,
-            "password_hash": password_hash,
-            "employee_id": employee_id,
-            "allowed_employee_ids": self._validate_employee_ids(raw_allowed),
-            "allowed_departments": self._validate_departments(
-                data.get("allowed_departments")
-            ),
-        }
-        self._check_privilege_escalation(
-            actor, self._resolve_permissions(user_record, role)
-        )
-        self._data.setdefault("users", []).append(user_record)
-        self._persist()
-        return user_record
+        with self._lock:
+            self._reload()
+            user_id = str(data.get("id") or secrets.token_hex(8))
+            login = data.get("login")
+            password = data.get("password")
+            if not login or not password:
+                raise ValueError("login_password_required")
+            if self._get_user(user_id):
+                raise ValueError("user_exists")
+            if self._get_user_by_login(login):
+                raise ValueError("login_exists")
+            role_id = data.get("role_id")
+            role = self._get_role(role_id) if role_id else None
+            if role_id and not role:
+                raise ValueError("role_not_found")
+            salt, password_hash = self._hash_password(password)
+            raw_employee_id = data.get("employee_id")
+            employee_id = str(raw_employee_id) if raw_employee_id else None
+            raw_allowed = data.get("allowed_employee_ids")
+            if raw_allowed is None and employee_id:
+                raw_allowed = [employee_id]
+            permissions = self._validate_permissions(data.get("permissions"))
+            user_record = {
+                "id": user_id,
+                "login": login,
+                "role_id": role_id,
+                "permissions": permissions,
+                "bot_buttons": self._validate_buttons(data.get("bot_buttons")),
+                "salt": salt,
+                "password_hash": password_hash,
+                "employee_id": employee_id,
+                "allowed_employee_ids": self._validate_employee_ids(raw_allowed),
+                "allowed_departments": self._validate_departments(
+                    data.get("allowed_departments")
+                ),
+            }
+            self._check_privilege_escalation(
+                actor, self._resolve_permissions(user_record, role)
+            )
+            self._data.setdefault("users", []).append(user_record)
+            self._persist()
+            return user_record
 
     def update_user(
         self, user_id: str, data: dict[str, Any], actor: ResolvedUser | None = None
     ) -> dict[str, Any]:
-        self._reload()
-        user = self._get_user(user_id)
-        if not user:
-            raise ValueError("user_not_found")
-        login = data.get("login")
-        if login and login != user.get("login"):
-            if self._get_user_by_login(login):
-                raise ValueError("login_exists")
-            user["login"] = login
-        if "role_id" in data:
-            role_id = data.get("role_id")
-            if role_id and not self._get_role(role_id):
-                raise ValueError("role_not_found")
-            user["role_id"] = role_id
-        if "permissions" in data:
-            user["permissions"] = self._validate_permissions(data.get("permissions"))
-        if "bot_buttons" in data:
-            user["bot_buttons"] = self._validate_buttons(data.get("bot_buttons"))
-        if "allowed_employee_ids" in data:
-            user["allowed_employee_ids"] = self._validate_employee_ids(
-                data.get("allowed_employee_ids")
-            )
-        if "allowed_departments" in data:
-            user["allowed_departments"] = self._validate_departments(
-                data.get("allowed_departments")
-            )
-        if data.get("password"):
-            user["salt"], user["password_hash"] = self._hash_password(data["password"])
-        if "employee_id" in data:
-            raw_emp = data.get("employee_id")
-            user["employee_id"] = str(raw_emp) if raw_emp else None
-        role = self._get_role(user.get("role_id"))
-        self._check_privilege_escalation(actor, self._resolve_permissions(user, role))
-        self._persist()
-        return user
+        with self._lock:
+            self._reload()
+            user = self._get_user(user_id)
+            if not user:
+                raise ValueError("user_not_found")
+            login = data.get("login")
+            if login and login != user.get("login"):
+                if self._get_user_by_login(login):
+                    raise ValueError("login_exists")
+                user["login"] = login
+            if "role_id" in data:
+                role_id = data.get("role_id")
+                if role_id and not self._get_role(role_id):
+                    raise ValueError("role_not_found")
+                user["role_id"] = role_id
+            if "permissions" in data:
+                user["permissions"] = self._validate_permissions(data.get("permissions"))
+            if "bot_buttons" in data:
+                user["bot_buttons"] = self._validate_buttons(data.get("bot_buttons"))
+            if "allowed_employee_ids" in data:
+                user["allowed_employee_ids"] = self._validate_employee_ids(
+                    data.get("allowed_employee_ids")
+                )
+            if "allowed_departments" in data:
+                user["allowed_departments"] = self._validate_departments(
+                    data.get("allowed_departments")
+                )
+            if data.get("password"):
+                user["salt"], user["password_hash"] = self._hash_password(data["password"])
+            if "employee_id" in data:
+                raw_emp = data.get("employee_id")
+                user["employee_id"] = str(raw_emp) if raw_emp else None
+            role = self._get_role(user.get("role_id"))
+            self._check_privilege_escalation(actor, self._resolve_permissions(user, role))
+            self._persist()
+            return user
 
     def delete_user(self, user_id: str) -> None:
-        self._reload()
-        self._data["users"] = [u for u in self._data.get("users", []) if u.get("id") != user_id]
-        self._persist()
+        with self._lock:
+            self._reload()
+            self._data["users"] = [u for u in self._data.get("users", []) if u.get("id") != user_id]
+            self._persist()
 
     # ------------------------------------------------------------------
     # authentication helpers
