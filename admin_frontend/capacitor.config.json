@@ -1,0 +1,12 @@
+{
+  "appId": "pw.bonjour.app",
+  "appName": "Центр управления",
+  "webDir": "dist",
+  "server": {
+    "url": "https://app.bonjour.pw",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "automatic"
+  }
+}
