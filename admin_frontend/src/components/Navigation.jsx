@@ -124,8 +124,13 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
   return (
     <nav className={`flex h-full min-h-screen flex-col bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] shadow-xl transition-all duration-200 ${isMobile ? 'w-full' : isCollapsed ? 'w-[64px]' : 'w-[280px]'}`}>
 
-      {/* Logo */}
-      <div className={`flex pb-5 pt-7 ${isCollapsed ? 'flex-col items-center gap-2 px-0' : 'items-center gap-4 px-6'}`}>
+      {/* Logo — on the mobile drawer this row's background bleeds under the
+          status bar/notch on purpose, but the logo/title/close button
+          themselves need to clear it, same reasoning as .app-shell__header. */}
+      <div
+        className={`flex pb-5 pt-7 ${isCollapsed ? 'flex-col items-center gap-2 px-0' : 'items-center gap-4 px-6'}`}
+        style={isMobile ? { paddingTop: 'calc(1.75rem + env(safe-area-inset-top, 0px))' } : undefined}
+      >
         <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[0_10px_30px_rgba(0,0,0,0.12)] text-sm font-bold">
           ЦУ
         </div>

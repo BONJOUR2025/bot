@@ -194,10 +194,14 @@ a:hover { text-decoration: underline; }
   justify-content: space-between;
   gap: 1rem;
   padding: 0 2rem;
-  /* Intentionally edge-to-edge on iOS home-screen apps — the header's
-     blurred background bleeds under the status bar/notch by design rather
-     than stopping short of it. */
-  height: var(--header-height);
+  /* The header's blurred background still bleeds all the way under the
+     status bar/notch by design (nothing stops it painting there) — but the
+     actual row of text/buttons is pushed down by the safe-area inset so it
+     doesn't sit underneath (and get visually fused with) the system time/
+     battery/signal icons, which are unreadable and untappable when
+     overlapped. Background = edge-to-edge, content = clear of the OS chrome. */
+  padding-top: env(safe-area-inset-top, 0px);
+  height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
   position: sticky;
   top: 0;
   z-index: 5;
