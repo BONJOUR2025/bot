@@ -21,6 +21,18 @@ export default function ThemeProvider({ children }) {
     else root.classList.remove("theme-light");
 
     localStorage.setItem("theme", theme);
+
+    // Only relevant inside the native iOS shell (see admin_frontend/ios) —
+    // a plain browser tab has no such bridge, so this is a silent no-op
+    // there. Unlike the PWA's static apple-mobile-web-app-status-bar-style
+    // meta tag (read once at launch, can't react to an in-app theme
+    // switch), the native status bar can be restyled at any time.
+    import("@capacitor/core").then(({ Capacitor }) => {
+      if (!Capacitor.isNativePlatform()) return;
+      import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
+        StatusBar.setStyle({ style: theme === "light" ? Style.Light : Style.Dark }).catch(() => {});
+      });
+    });
   }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme }), [theme]);

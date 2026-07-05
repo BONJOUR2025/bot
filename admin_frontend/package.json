@@ -15,6 +15,7 @@
   "dependencies": {
     "@capacitor/core": "^8.4.1",
     "@capacitor/ios": "^8.4.1",
+    "@capacitor/status-bar": "^8.0.2",
     "axios": "^1.10.0",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.525.0",
