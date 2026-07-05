@@ -55,7 +55,7 @@ export default function ResponsiveTable({
                 ))}
               </div>
               {actionCol && (
-                <div className="px-4 py-2 border-t border-[color:var(--color-border)] flex justify-end gap-2">
+                <div className="px-4 py-2 border-t border-[color:var(--color-border)] flex justify-end gap-2 min-w-0">
                   {actionCol.render(row)}
                 </div>
               )}

@@ -396,7 +396,12 @@ class AccessControlService:
                     "resolved_employee_names": self._employee_names(allowed_ids),
                     "resolved_departments": allowed_departments or [],
                     "employee_id": resolved.employee_id,
-                    "vk_id": getattr(self.employee_repo.get_employee(resolved.id), "vk_id", "") or "",
+                    # resolved.id is the access-control record's own id — for a
+                    # bot-linked user it happens to equal employee.id, but for a
+                    # regular CMS login (custom id, separate employee_id field)
+                    # it does not, so looking employee up by resolved.id silently
+                    # found nothing and always reported "не привязан".
+                    "vk_id": getattr(self.employee_repo.get_employee(resolved.employee_id or resolved.id), "vk_id", "") or "",
                 }
             )
         return result

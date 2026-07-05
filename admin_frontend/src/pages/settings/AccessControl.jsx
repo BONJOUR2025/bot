@@ -860,9 +860,9 @@ export default function AccessControl() {
                     ⚙️ Права и меню
                   </button>
                 ) : (
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center min-w-0 w-full sm:w-auto">
                     <select
-                      className="input"
+                      className="input min-w-0 w-full sm:w-48"
                       value={linkSelections[u.telegram_id] || ''}
                       onChange={(e) =>
                         setLinkSelections((prev) => ({ ...prev, [u.telegram_id]: e.target.value }))
@@ -876,7 +876,7 @@ export default function AccessControl() {
                       ))}
                     </select>
                     <button
-                      className="btn"
+                      className="btn shrink-0"
                       disabled={!linkSelections[u.telegram_id]}
                       onClick={() => linkBotUser(u.telegram_id)}
                     >
@@ -920,7 +920,7 @@ export default function AccessControl() {
               isAction: true,
               render: (u) =>
                 u.employee_id ? (
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center flex-wrap justify-end">
                     <button className="btn" onClick={() => editBotUserAccess(u.employee_id)}>
                       ⚙️ Права и меню
                     </button>
@@ -929,9 +929,9 @@ export default function AccessControl() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center min-w-0 w-full sm:w-auto">
                     <select
-                      className="input"
+                      className="input min-w-0 w-full sm:w-48"
                       value={vkLinkSelections[u.vk_id] || ''}
                       onChange={(e) =>
                         setVkLinkSelections((prev) => ({ ...prev, [u.vk_id]: e.target.value }))
@@ -945,7 +945,7 @@ export default function AccessControl() {
                       ))}
                     </select>
                     <button
-                      className="btn"
+                      className="btn shrink-0"
                       disabled={!vkLinkSelections[u.vk_id]}
                       onClick={() => linkVkBotUser(u.vk_id)}
                     >
