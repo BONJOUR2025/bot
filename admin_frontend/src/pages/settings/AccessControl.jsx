@@ -920,9 +920,14 @@ export default function AccessControl() {
               isAction: true,
               render: (u) =>
                 u.employee_id ? (
-                  <button className="btn" onClick={() => unlinkVkBotUser(u.vk_id)}>
-                    Отвязать
-                  </button>
+                  <div className="flex gap-2 items-center">
+                    <button className="btn" onClick={() => editBotUserAccess(u.employee_id)}>
+                      ⚙️ Права и меню
+                    </button>
+                    <button className="btn" onClick={() => unlinkVkBotUser(u.vk_id)}>
+                      Отвязать
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex gap-2 items-center">
                     <select

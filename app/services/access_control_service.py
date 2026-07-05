@@ -131,6 +131,11 @@ class AccessControlService:
         self.storage = JsonStorage(path)
         self.secret_key = (secret_key or SECRET_KEY or "change_me").encode("utf-8")
         self.employee_repo = employee_repo or EmployeeRepository()
+        # Kept so _reload() can rebuild employee_repo from the *same*
+        # backing storage each time (see _reload's comment) instead of
+        # silently reverting an injected/custom repo back to the default
+        # user.json path.
+        self._employee_storage = self.employee_repo._storage
         self.bot_user_repo = bot_user_repo or get_bot_user_repository()
         self._data: dict[str, Any] = self.storage.load() or {}
         self._ensure_defaults()
@@ -139,17 +144,31 @@ class AccessControlService:
     # internal helpers
     # ------------------------------------------------------------------
     def _reload(self) -> None:
-        # always fresh from disk (two-process setup)
+        # always fresh from disk (two-process setup) — employee_repo was
+        # previously created once in __init__ and never refreshed here,
+        # so _ensure_bot_users() ran against a stale in-memory snapshot of
+        # user.json: an employee linked/added after this service instance
+        # was first constructed (e.g. right after the process started)
+        # would never be found, and the bot-user's access entry would
+        # never get auto-created — looking exactly like "uses the bot but
+        # never shows up in Доступы".
+        self.employee_repo = EmployeeRepository(self._employee_storage)
         self._data = self.storage.load() or {}
         self._ensure_defaults()
         self._ensure_bot_users()
 
     def _ensure_bot_users(self) -> None:
-        """Auto-create an access control entry for every employee reachable via the bot.
+        """Auto-create an access control entry for every employee reachable via
+        Telegram or VK.
 
-        This lets bot users (matched the same way as the "Пользователи бота" admin
-        page: by Telegram id == employee id) be granted roles/permissions/menu
-        buttons from the "Пользователи" section without requiring an admin-panel login.
+        Telegram is matched the same way as the "Пользователи бота" admin page:
+        by Telegram id == employee id (rekey_employee makes them equal once
+        linked). VK is a secondary channel that does NOT change employee.id
+        (see EmployeeRepository.link_vk_id), so it's matched by employee.vk_id
+        instead, scanning employees rather than the vk_bot_users log.
+
+        This lets bot users be granted roles/permissions/menu buttons from the
+        "Пользователи" section without requiring an admin-panel login.
         """
         changed = False
         for bot_user in self.bot_user_repo.list():
@@ -174,6 +193,26 @@ class AccessControlService:
                 "allowed_departments": None,
             })
             changed = True
+
+        for employee in self.employee_repo.list_employees(archived=None):
+            if not getattr(employee, "vk_id", ""):
+                continue
+            if self._get_user(employee.id):
+                continue
+            self._data.setdefault("users", []).append({
+                "id": employee.id,
+                "login": None,
+                "role_id": "employee",
+                "permissions": None,
+                "bot_buttons": None,
+                "salt": None,
+                "password_hash": None,
+                "employee_id": employee.id,
+                "allowed_employee_ids": None,
+                "allowed_departments": None,
+            })
+            changed = True
+
         if changed:
             self._persist()
 
