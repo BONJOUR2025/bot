@@ -150,9 +150,8 @@ a:hover { text-decoration: underline; }
   transform: translateX(-100%);
   max-width: min(320px, 85vw);
   box-shadow: var(--shadow-xl);
-  /* Edge-to-edge overlay on a notched iPhone — keep its content clear of
-     the status bar and home indicator. */
-  padding-top: env(safe-area-inset-top, 0px);
+  /* Bleeds under the status bar/notch on purpose (matches the header) —
+     only the bottom (home indicator swipe-gesture area) is kept clear. */
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .app-shell--mobile .app-shell__sidebar.is-open { transform: translateX(0); }
@@ -189,11 +188,10 @@ a:hover { text-decoration: underline; }
   justify-content: space-between;
   gap: 1rem;
   padding: 0 2rem;
-  /* iOS home-screen apps with a translucent status bar (see index.html's
-     apple-mobile-web-app-status-bar-style) render content under the status
-     bar/notch — without this the sticky header's top row sits behind it. */
-  padding-top: env(safe-area-inset-top, 0px);
-  height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+  /* Intentionally edge-to-edge on iOS home-screen apps — the header's
+     blurred background bleeds under the status bar/notch by design rather
+     than stopping short of it. */
+  height: var(--header-height);
   position: sticky;
   top: 0;
   z-index: 5;
