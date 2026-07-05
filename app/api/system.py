@@ -175,6 +175,8 @@ def create_system_router() -> APIRouter:
                     "last_seen": data.get("last_seen"),
                     "age_s": age_s,
                     "pid": data.get("pid"),
+                    "cpu_pct": data.get("cpu_pct"),
+                    "memory_mb": data.get("memory_mb"),
                 })
         # Processes that are expected but have never written a single
         # heartbeat (never started, or started before this feature existed)
@@ -184,6 +186,7 @@ def create_system_router() -> APIRouter:
                 items.append({
                     "name": name, "label": label, "online": False,
                     "last_seen": None, "age_s": None, "pid": None,
+                    "cpu_pct": None, "memory_mb": None,
                 })
         return {"processes": sorted(items, key=lambda x: x["name"])}
 

@@ -72,6 +72,13 @@ function ProcessStatusPanel() {
               {p.online ? 'онлайн' : 'офлайн'} · {formatAge(p.age_s)}
               {p.pid ? ` · PID ${p.pid}` : ''}
             </p>
+            {(p.cpu_pct != null || p.memory_mb != null) && (
+              <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+                {p.cpu_pct != null ? `CPU ${p.cpu_pct}%` : ''}
+                {p.cpu_pct != null && p.memory_mb != null ? ' · ' : ''}
+                {p.memory_mb != null ? `${p.memory_mb} МБ` : ''}
+              </p>
+            )}
           </div>
         ))}
       </div>

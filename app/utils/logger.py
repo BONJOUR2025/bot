@@ -7,6 +7,14 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
+try:
+    import psutil
+    _resource_proc: "psutil.Process | None" = psutil.Process()
+    _resource_proc.cpu_percent(interval=None)  # first call is always 0 — prime it
+except Exception:
+    psutil = None
+    _resource_proc = None
+
 LOGS_DIR = Path("logs")
 USERS_LOG_DIR = LOGS_DIR / "users"
 BOT_LOG_DIR = LOGS_DIR / "bot"
@@ -251,15 +259,33 @@ def _get_process_logger(name: str) -> logging.Logger:
     return logger
 
 
+def _sample_resources() -> dict[str, float]:
+    """CPU%/RSS memory for this process — cpu_percent(interval=None) reports
+    the average since the *previous* call, which lines up naturally with
+    write_heartbeat's own ~60s cadence (no blocking interval= sleep needed)."""
+    if _resource_proc is None:
+        return {}
+    try:
+        return {
+            "cpu_pct": round(_resource_proc.cpu_percent(interval=None), 1),
+            "memory_mb": round(_resource_proc.memory_info().rss / (1024 * 1024), 1),
+        }
+    except Exception:
+        return {}
+
+
 def write_heartbeat(process_name: str, **extra: Any) -> None:
     """Writes both a latest-status JSON snapshot (processes/<name>.status.json
     — read by the Diagnostics "process status" panel) and a plain log line
     (processes/<name>.log — so the heartbeat history is also visible in the
-    regular folder browser, e.g. to spot gaps where the process was down)."""
+    regular folder browser, e.g. to spot gaps where the process was down).
+    Includes a CPU/memory sample of this process, if psutil is installed."""
+    res = _sample_resources()
     data = {
         "process": process_name,
         "pid": os.getpid(),
         "last_seen": datetime.now().isoformat(timespec="seconds"),
+        **res,
         **extra,
     }
     path = PROCESSES_LOG_DIR / f"{process_name}.status.json"
@@ -267,5 +293,6 @@ def write_heartbeat(process_name: str, **extra: Any) -> None:
         path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
+    res_str = f" cpu={res['cpu_pct']}% mem={res['memory_mb']}MB" if res else ""
     extra_str = " " + " ".join(f"{k}={v}" for k, v in extra.items()) if extra else ""
-    _get_process_logger(process_name).info(f"alive pid={os.getpid()}{extra_str}")
+    _get_process_logger(process_name).info(f"alive pid={os.getpid()}{res_str}{extra_str}")
