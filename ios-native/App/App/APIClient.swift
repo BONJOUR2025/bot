@@ -89,8 +89,14 @@ final class APIClient {
     }
 
     /// Generic authenticated GET, for screens added later.
-    func authorizedGet<T: Decodable>(_ path: String) async throws -> T {
-        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+    func authorizedGet<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
+        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
+        if !query.isEmpty {
+            components?.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        }
+        guard let url = components?.url else { throw APIError.invalidResponse }
+
+        var request = URLRequest(url: url)
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
 
         let (data, response) = try await session.data(for: request)

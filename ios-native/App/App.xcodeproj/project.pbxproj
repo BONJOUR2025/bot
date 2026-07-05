@@ -17,6 +17,8 @@
 		AF3408461FF33705EC06B1CD /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF83E49EB128BD290492B4F /* LoginView.swift */; };
 		3D199308CAD71E28A1464E81 /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D53D115B3FEE91AF5AF24B61 /* MainShellView.swift */; };
 		6E0B11DDCDEADDD6C7C82D5F /* PlaceholderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61CF19B303738BA9D38B5C07 /* PlaceholderView.swift */; };
+		C09D8504F1D380E794D42DFD /* SalesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F60FAD4F9C4DD9082C54116 /* SalesView.swift */; };
+		95C238666BBBDB112259B16C /* SalesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBEF69224BCAFB9AE7FD7B22 /* SalesViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +35,8 @@
 		0BF83E49EB128BD290492B4F /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		D53D115B3FEE91AF5AF24B61 /* MainShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainShellView.swift; sourceTree = "<group>"; };
 		61CF19B303738BA9D38B5C07 /* PlaceholderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderView.swift; sourceTree = "<group>"; };
+		9F60FAD4F9C4DD9082C54116 /* SalesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalesView.swift; sourceTree = "<group>"; };
+		DBEF69224BCAFB9AE7FD7B22 /* SalesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalesViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +78,8 @@
 				0BF83E49EB128BD290492B4F /* LoginView.swift */,
 				D53D115B3FEE91AF5AF24B61 /* MainShellView.swift */,
 				61CF19B303738BA9D38B5C07 /* PlaceholderView.swift */,
+				9F60FAD4F9C4DD9082C54116 /* SalesView.swift */,
+				DBEF69224BCAFB9AE7FD7B22 /* SalesViewModel.swift */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
@@ -160,6 +166,8 @@
 				AF3408461FF33705EC06B1CD /* LoginView.swift in Sources */,
 				3D199308CAD71E28A1464E81 /* MainShellView.swift in Sources */,
 				6E0B11DDCDEADDD6C7C82D5F /* PlaceholderView.swift in Sources */,
+				C09D8504F1D380E794D42DFD /* SalesView.swift in Sources */,
+				95C238666BBBDB112259B16C /* SalesViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -226,7 +234,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -277,7 +285,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -294,7 +302,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -315,7 +323,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

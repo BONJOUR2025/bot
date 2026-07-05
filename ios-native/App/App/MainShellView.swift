@@ -79,7 +79,11 @@ struct MainShellView: View {
             }
             .navigationTitle("Центр управления")
             .navigationDestination(for: String.self) { title in
-                PlaceholderView(title: title)
+                if title == "Продажи" {
+                    SalesView()
+                } else {
+                    PlaceholderView(title: title)
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
