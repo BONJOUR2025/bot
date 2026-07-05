@@ -2,11 +2,20 @@
   "appId": "pw.bonjour.app",
   "appName": "Центр управления",
   "webDir": "dist",
+  "backgroundColor": "#f8fafc",
   "server": {
     "url": "https://app.bonjour.pw",
     "cleartext": false
   },
   "ios": {
-    "contentInset": "automatic"
+    "backgroundColor": "#f8fafc",
+    "contentInset": "never"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#6366f1",
+      "androidScaleType": "CENTER_CROP"
+    }
   }
 }

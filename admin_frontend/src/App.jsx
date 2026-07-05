@@ -14,6 +14,7 @@ import EmployeeLayout from "./layouts/EmployeeLayout.jsx";
 import { AuthProvider } from "./providers/AuthProvider.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
 import RequireEmployee from "./components/RequireEmployee.jsx";
+import NativeShell from "./components/NativeShell.jsx";
 
 // Login loads eagerly — it's the one page an unauthenticated visitor always
 // needs immediately. Everything below is lazy: previously every route's code
@@ -80,6 +81,7 @@ export default function App() {
         {() => (
           <ToastProvider>
             <AuthProvider>
+              <NativeShell />
               <Router>
               <Suspense fallback={<RouteFallback />}>
               <Routes>

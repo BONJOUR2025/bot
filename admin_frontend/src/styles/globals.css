@@ -153,6 +153,12 @@ a:hover { text-decoration: underline; }
   /* Bleeds under the status bar/notch on purpose (matches the header) —
      only the bottom (home indicator swipe-gesture area) is kept clear. */
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Without its own scroll container, a menu taller than the screen just
+     overflowed the fixed box uncontained — touch-scrolling it then
+     scrolled the nearest actual scroll container behind it (the page)
+     instead of the menu itself. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .app-shell--mobile .app-shell__sidebar.is-open { transform: translateX(0); }
 
