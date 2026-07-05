@@ -62,6 +62,10 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         openapi_url="/openapi.json",
     )
+    # Nothing else was compressing responses — the ~1.7 MB JS bundle was
+    # going out over the wire uncompressed on every first load.
+    from starlette.middleware.gzip import GZipMiddleware
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     telegram_app = None
     if TOKEN and TOKEN != "dummy":
@@ -512,25 +516,42 @@ def create_app() -> FastAPI:
         Path(__file__).resolve().parent.parent.parent / "admin_frontend" / "dist"
     )
 
+    # index.html references the *currently* hashed asset filenames, so it must
+    # always be revalidated (no-cache) — otherwise a stale cached index.html
+    # from a previous deploy could point at JS/CSS files that no longer exist.
+    # Everything under dist/assets/ is content-hashed by Vite (a filename only
+    # ever refers to one immutable set of bytes), so those are safe to cache
+    # for a year with no revalidation at all.
+    def _index_response() -> HTMLResponse:
+        index_path = frontend_path / "index.html"
+        if not index_path.exists():
+            return Response(status_code=404)
+        return HTMLResponse(
+            index_path.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    def _asset_response(file_path: Path) -> FileResponse:
+        headers = (
+            {"Cache-Control": "public, max-age=31536000, immutable"}
+            if "assets" in file_path.parts
+            else None
+        )
+        return FileResponse(str(file_path), headers=headers)
+
     @app.get("/admin", include_in_schema=False)
     async def admin_root(request: Request):
-        index_path = frontend_path / "index.html"
-        if index_path.exists():
-            return HTMLResponse(index_path.read_text(encoding="utf-8"))
-        return Response(status_code=404)
+        return _index_response()
 
     @app.get("/admin/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str, request: Request):
         file_path = frontend_path / full_path
         if file_path.is_file():
-            return FileResponse(str(file_path))
+            return _asset_response(file_path)
         # Don't fall back to SPA for static asset requests (e.g. sw.js, *.png)
         if "." in Path(full_path).name:
             return Response(status_code=404)
-        index_path = frontend_path / "index.html"
-        if index_path.exists():
-            return HTMLResponse(index_path.read_text(encoding="utf-8"))
-        return Response(status_code=404)
+        return _index_response()
 
     @app.get("/manifest.json", include_in_schema=False)
     async def manifest_json():
@@ -548,30 +569,21 @@ def create_app() -> FastAPI:
 
     @app.get("/login", include_in_schema=False)
     async def login_root(request: Request):
-        index_path = frontend_path / "index.html"
-        if index_path.exists():
-            return HTMLResponse(index_path.read_text(encoding="utf-8"))
-        return Response(status_code=404)
+        return _index_response()
 
     @app.get("/employee", include_in_schema=False)
     async def employee_root(request: Request):
-        index_path = frontend_path / "index.html"
-        if index_path.exists():
-            return HTMLResponse(index_path.read_text(encoding="utf-8"))
-        return Response(status_code=404)
+        return _index_response()
 
     @app.get("/employee/{full_path:path}", include_in_schema=False)
     async def employee_spa_fallback(full_path: str, request: Request):
         file_path = frontend_path / full_path
         if file_path.is_file():
-            return FileResponse(str(file_path))
+            return _asset_response(file_path)
         # Don't fall back to SPA for static asset requests
         if "." in Path(full_path).name:
             return Response(status_code=404)
-        index_path = frontend_path / "index.html"
-        if index_path.exists():
-            return HTMLResponse(index_path.read_text(encoding="utf-8"))
-        return Response(status_code=404)
+        return _index_response()
 
     if telegram_app is not None:
 

@@ -1,6 +1,7 @@
 import "./styles/tokens.css";
 import "./styles/globals.css";
 
+import { lazy, Suspense } from "react";
 import ThemeProvider from "./providers/ThemeProvider.jsx";
 import { ViewportProvider } from "./providers/ViewportProvider.jsx";
 import { ToastProvider } from "./providers/ToastProvider.jsx";
@@ -14,50 +15,63 @@ import { AuthProvider } from "./providers/AuthProvider.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
 import RequireEmployee from "./components/RequireEmployee.jsx";
 
-import EmployeeSalary from "./pages/employee/EmployeeSalary.jsx";
-import EmployeePayouts from "./pages/employee/EmployeePayouts.jsx";
-import EmployeeSchedule from "./pages/employee/EmployeeSchedule.jsx";
-import EmployeeProfile from "./pages/employee/EmployeeProfile.jsx";
-import EmployeeHistory from "./pages/employee/EmployeeHistory.jsx";
-import EmployeeLeaveRequests from "./pages/employee/EmployeeLeaveRequests.jsx";
-import EmployeeFeedback from "./pages/employee/EmployeeFeedback.jsx";
-
+// Login loads eagerly — it's the one page an unauthenticated visitor always
+// needs immediately. Everything below is lazy: previously every route's code
+// (Sales, Payroll, Dashboard, ...) shipped in one ~1.7 MB bundle, so even the
+// login page had to download and parse the entire admin app first.
 import Login from "./pages/Login.jsx";
-import Dashboard from "./pages/Dashboard";
-import Employees from "./pages/Employees";
-import ArchivedEmployees from "./pages/ArchivedEmployees";
-import Payouts from "./pages/Payouts";
-import PayoutsControl from "./pages/PayoutsControl";
-import Incentives from "./pages/Incentives";
-import Broadcast from "./pages/Broadcast";
-import KnowledgeBase from "./pages/KnowledgeBase";
-import MessageHistory from "./pages/MessageHistory";
-import Vacations from "./pages/Vacations";
-import LeaveRequests from "./pages/LeaveRequests";
-import EmployeeMessages from "./pages/EmployeeMessages";
-import Birthdays from "./pages/Birthdays";
-import Settings from "./pages/Settings";
-import Assets from "./pages/Assets";
-import Payroll from "./pages/Payroll";
-import PayrollSummary from "./pages/PayrollSummary";
-import ManagerSalary from "./pages/ManagerSalary";
-import CourierSalary from "./pages/CourierSalary";
-import Schedule from "./pages/Schedule";
-import Tasks from "./pages/Tasks";
-import Passwords from "./pages/Passwords";
-import Masters from "./pages/Masters";
-import SalesAnalytics from "./pages/SalesAnalytics";
-import AdminEmployeeProfile from "./pages/AdminEmployeeProfile";
-import Salons from "./pages/Salons";
-import ShiftCheckins from "./pages/ShiftCheckins";
-import LocationPlans from "./pages/LocationPlans";
-import SaleTransfers from "./pages/SaleTransfers";
-import CashMovements from "./pages/CashMovements";
-import CashSummary from "./pages/CashSummary";
-import PaymentCalendar from "./pages/PaymentCalendar";
-import Smses from "./pages/Smses";
-import Recruitment from "./pages/Recruitment";
-import VisitorCounters from "./pages/VisitorCounters";
+
+const EmployeeSalary = lazy(() => import("./pages/employee/EmployeeSalary.jsx"));
+const EmployeePayouts = lazy(() => import("./pages/employee/EmployeePayouts.jsx"));
+const EmployeeSchedule = lazy(() => import("./pages/employee/EmployeeSchedule.jsx"));
+const EmployeeProfile = lazy(() => import("./pages/employee/EmployeeProfile.jsx"));
+const EmployeeHistory = lazy(() => import("./pages/employee/EmployeeHistory.jsx"));
+const EmployeeLeaveRequests = lazy(() => import("./pages/employee/EmployeeLeaveRequests.jsx"));
+const EmployeeFeedback = lazy(() => import("./pages/employee/EmployeeFeedback.jsx"));
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Employees = lazy(() => import("./pages/Employees"));
+const ArchivedEmployees = lazy(() => import("./pages/ArchivedEmployees"));
+const Payouts = lazy(() => import("./pages/Payouts"));
+const PayoutsControl = lazy(() => import("./pages/PayoutsControl"));
+const Incentives = lazy(() => import("./pages/Incentives"));
+const Broadcast = lazy(() => import("./pages/Broadcast"));
+const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase"));
+const MessageHistory = lazy(() => import("./pages/MessageHistory"));
+const Vacations = lazy(() => import("./pages/Vacations"));
+const LeaveRequests = lazy(() => import("./pages/LeaveRequests"));
+const EmployeeMessages = lazy(() => import("./pages/EmployeeMessages"));
+const Birthdays = lazy(() => import("./pages/Birthdays"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Assets = lazy(() => import("./pages/Assets"));
+const Payroll = lazy(() => import("./pages/Payroll"));
+const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
+const ManagerSalary = lazy(() => import("./pages/ManagerSalary"));
+const CourierSalary = lazy(() => import("./pages/CourierSalary"));
+const Schedule = lazy(() => import("./pages/Schedule"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const Passwords = lazy(() => import("./pages/Passwords"));
+const Masters = lazy(() => import("./pages/Masters"));
+const SalesAnalytics = lazy(() => import("./pages/SalesAnalytics"));
+const AdminEmployeeProfile = lazy(() => import("./pages/AdminEmployeeProfile"));
+const Salons = lazy(() => import("./pages/Salons"));
+const ShiftCheckins = lazy(() => import("./pages/ShiftCheckins"));
+const LocationPlans = lazy(() => import("./pages/LocationPlans"));
+const SaleTransfers = lazy(() => import("./pages/SaleTransfers"));
+const CashMovements = lazy(() => import("./pages/CashMovements"));
+const CashSummary = lazy(() => import("./pages/CashSummary"));
+const PaymentCalendar = lazy(() => import("./pages/PaymentCalendar"));
+const Smses = lazy(() => import("./pages/Smses"));
+const Recruitment = lazy(() => import("./pages/Recruitment"));
+const VisitorCounters = lazy(() => import("./pages/VisitorCounters"));
+
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center py-24 text-[color:var(--color-muted-foreground)] text-sm">
+      Загрузка…
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -67,6 +81,7 @@ export default function App() {
           <ToastProvider>
             <AuthProvider>
               <Router>
+              <Suspense fallback={<RouteFallback />}>
               <Routes>
               {/* Единая страница логина */}
               <Route path="/login" element={<PlainLayout />}>
@@ -146,6 +161,7 @@ export default function App() {
               {/* Фолбэк */}
               <Route path="*" element={<Navigate to="/login" replace />} />
               </Routes>
+              </Suspense>
               </Router>
             </AuthProvider>
           </ToastProvider>
