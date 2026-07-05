@@ -1,7 +1,7 @@
 {
   "name": "Центр управления",
   "short_name": "ЦУ",
-  "start_url": "/employee/salary",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#6366f1",
