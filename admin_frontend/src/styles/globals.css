@@ -587,8 +587,11 @@ tbody tr:last-child td { border-bottom: none; }
    ================================================================ */
 .toast-container {
   position: fixed;
-  top: 1rem;
-  right: 1rem;
+  /* Same reasoning as .app-shell__header: without the safe-area inset this
+     sits right under (and gets visually fused with) the status bar's
+     time/battery/signal icons on notched phones. */
+  top: calc(1rem + env(safe-area-inset-top, 0px));
+  right: calc(1rem + env(safe-area-inset-right, 0px));
   z-index: 100;
   display: flex;
   flex-direction: column;
