@@ -1,6 +1,7 @@
 """Payroll calculation service - combines Excel, Firebird, advances and bonuses."""
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import logging
@@ -581,12 +582,16 @@ class PayrollService:
 
         month_key = make_month_key(month, year)
 
-        employees = self._get_employees_from_excel(month)
+        # Excel parsing and the Firebird round-trips below are blocking calls;
+        # run them off the event loop so a slow report (e.g. a multi-month
+        # summary firing several of these concurrently) doesn't freeze every
+        # other request the API process is serving.
+        employees = await asyncio.to_thread(self._get_employees_from_excel, month)
         if not employees:
             return [], []
 
         try:
-            sales_data = self.firebird.get_all_sales(year, month_num)
+            sales_data = await asyncio.to_thread(self.firebird.get_all_sales, year, month_num)
         except Exception as e:
             logger.error(f"Firebird error: {e}")
             sales_data = {}
@@ -601,7 +606,7 @@ class PayrollService:
         settlements_map = self.settlement_repo.get_settlements_map(month_key)
 
         # ── Schedule-based shift counting ─────────────────────────
-        schedule = _parse_schedule_from_excel(month, year)
+        schedule = await asyncio.to_thread(_parse_schedule_from_excel, month, year)
         days_in_month = calendar.monthrange(year, month_num)[1]
         loc_plans_map = self.location_repo.plans_map(month_key)
 
