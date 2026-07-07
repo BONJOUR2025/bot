@@ -182,9 +182,14 @@ a:hover { text-decoration: underline; }
      size), which lets a too-wide descendant (an unwrapped flex row, a
      raw table) blow out the whole page on narrow screens instead of
      scrolling locally. min-width: 0 lets this column shrink to the
-     actual grid track so overflow is contained where it occurs. */
+     actual grid track so overflow is contained where it occurs.
+     The horizontal clip itself lives on .app-shell__content below, not
+     here — setting overflow-x without an explicit overflow-y makes the
+     UA compute overflow-y: auto too (CSS overflow interaction rule),
+     which turns this element into its own scroll container. That broke
+     the sticky header below: it then stuck to *this* box's scrollport
+     instead of the page's, and scrolled out of view on iOS. */
   min-width: 0;
-  overflow-x: hidden;
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
@@ -237,6 +242,8 @@ a:hover { text-decoration: underline; }
 /* ── Content area ─────────────────────────────────────────────── */
 .app-shell__content {
   flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
   padding: 2rem 2.5rem 3rem;
   padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px));
   padding-left: calc(2.5rem + env(safe-area-inset-left, 0px));
