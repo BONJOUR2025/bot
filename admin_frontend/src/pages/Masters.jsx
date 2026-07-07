@@ -257,13 +257,6 @@ function MastersSummaryTable({ rows, onMasterClick }) {
 
 // ── Visualization components ──────────────────────────────────────
 
-function fmtRubShort(v) {
-  const n = Number(v) || 0;
-  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' млн ₽';
-  if (Math.abs(n) >= 1_000) return Math.round(n / 1_000) + 'k ₽';
-  return Math.round(n) + ' ₽';
-}
-
 function TopMastersChart({ data, activeName, onSelect }) {
   if (!data.length) return null;
   return (
@@ -275,9 +268,9 @@ function TopMastersChart({ data, activeName, onSelect }) {
       <ResponsiveContainer width="100%" height={Math.max(150, data.length * 38)}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
-          <XAxis type="number" tickFormatter={fmtRubShort} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+          <XAxis type="number" tickFormatter={fmtRub} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
           <YAxis type="category" dataKey="master" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={120} />
-          <Tooltip formatter={(v) => [fmtRubShort(v), 'Зарплата']} />
+          <Tooltip formatter={(v) => [fmtRub(v), 'Зарплата']} />
           <Bar dataKey="total_salary" radius={[0, 4, 4, 0]} onClick={(entry) => onSelect?.(entry.master)} cursor={onSelect ? 'pointer' : 'default'}>
             {data.map((d, i) => <Cell key={d.master} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={activeName && activeName !== d.master ? 0.35 : 1} />)}
           </Bar>
@@ -371,7 +364,7 @@ function CategoryDonut({ data, total, activeNames, onSelect }) {
                   <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={activeNames?.size && !activeNames.has(entry.name) ? 0.35 : (hover === null || hover === i ? 1 : 0.4)} stroke="none" />
                 ))}
               </Pie>
-              <Tooltip formatter={(v) => [fmtRubShort(v), 'Сумма']} />
+              <Tooltip formatter={(v) => [fmtRub(v), 'Сумма']} />
             </PieChart>
           </ResponsiveContainer>
         </div>

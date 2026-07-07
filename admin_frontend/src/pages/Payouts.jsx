@@ -46,12 +46,6 @@ const METHOD_RAW = { 'На карту': '💳 На карту', 'Из кассы
 const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const STATUS_COLORS = { 'Ожидает': '#f59e0b', 'Одобрено': '#10b981', 'Отклонено': '#ef4444', 'Выплачено': '#6366f1' };
 
-const fmtK = (v) => {
-  const n = Number(v) || 0;
-  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' млн ₽';
-  if (Math.abs(n) >= 1_000) return Math.round(n / 1_000) + 'k ₽';
-  return Math.round(n) + ' ₽';
-};
 const fmtMoneyShort = (v) => (!v ? '—' : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽');
 
 const pad = (value) => String(value).padStart(2, '0');
@@ -130,7 +124,7 @@ function PayoutDayHeatmap({ data, activeDay, onSelect }) {
                   style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
                 />
               </div>
-              <div className="text-xs font-medium w-20 text-right shrink-0">{fmtK(d.sum)}</div>
+              <div className="text-xs font-medium text-right shrink-0 whitespace-nowrap">{fmtMoneyShort(d.sum)}</div>
             </button>
           );
         })}
@@ -177,7 +171,7 @@ function EmployeeLeaderboard({ data, total, activeName, onSelect }) {
                   <span className="text-sm font-medium truncate">{name}</span>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <div className="text-sm font-bold text-[color:var(--color-primary)]">{fmtK(sum)}</div>
+                  <div className="text-sm font-bold text-[color:var(--color-primary)] whitespace-nowrap">{fmtMoneyShort(sum)}</div>
                   <div className="text-xs text-[color:var(--color-muted-foreground)]">{count} зап.</div>
                 </div>
               </div>
@@ -1166,7 +1160,7 @@ export default function Payouts() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard
                   label="Общая сумма"
-                  value={fmtK(totalSum)}
+                  value={fmtMoneyShort(totalSum)}
                   sub={`${payouts.length} заявок`}
                   accent="#6366f1"
                   icon={Wallet}
@@ -1174,21 +1168,21 @@ export default function Payouts() {
                 <KpiCard
                   label="Ожидает"
                   value={statusSummary['Ожидает']?.count || 0}
-                  sub={fmtK(statusSummary['Ожидает']?.sum || 0)}
+                  sub={fmtMoneyShort(statusSummary['Ожидает']?.sum || 0)}
                   accent="#f59e0b"
                   icon={Clock}
                 />
                 <KpiCard
                   label="Одобрено"
                   value={statusSummary['Одобрено']?.count || 0}
-                  sub={fmtK(statusSummary['Одобрено']?.sum || 0)}
+                  sub={fmtMoneyShort(statusSummary['Одобрено']?.sum || 0)}
                   accent="#10b981"
                   icon={CheckCircle}
                 />
                 <KpiCard
                   label="Выплачено"
                   value={statusSummary['Выплачено']?.count || 0}
-                  sub={fmtK(statusSummary['Выплачено']?.sum || 0)}
+                  sub={fmtMoneyShort(statusSummary['Выплачено']?.sum || 0)}
                   accent="#3b82f6"
                   icon={Download}
                 />
@@ -1211,7 +1205,7 @@ export default function Payouts() {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                         <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} />
-                        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={55} />
+                        <YAxis tickFormatter={fmtMoneyShort} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={90} />
                         <Tooltip content={<CustomTooltip />} />
                         <Area
                           type="monotone"
@@ -1248,7 +1242,7 @@ export default function Payouts() {
                   total={totalSum}
                   title="По типам"
                   icon={Layers}
-                  formatValue={fmtK}
+                  formatValue={fmtMoneyShort}
                   tooltipLabel="Сумма"
                   activeName={filters.type || null}
                   onSelect={selectType}
@@ -1266,7 +1260,7 @@ export default function Payouts() {
                         margin={{ top: 0, right: 12, bottom: 0, left: 0 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
-                        <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+                        <XAxis type="number" tickFormatter={fmtMoneyShort} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
                         <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={100} />
                         <Tooltip formatter={(v) => [fmtMoneyShort(v), 'Сумма']} />
                         <Bar dataKey="sum" radius={[0, 4, 4, 0]} onClick={(entry) => selectMethod(entry.name)} cursor="pointer">

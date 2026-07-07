@@ -49,12 +49,6 @@ const MANAGER_POSITION = 'менеджер по работе с клиентам
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
 const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Math.round(Number(v)).toLocaleString('ru-RU')} ₽`);
-const fmtShort = (v) => {
-  v = Math.round(Number(v) || 0);
-  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} млн ₽`;
-  if (Math.abs(v) >= 1e3) return `${Math.round(v / 1e3).toLocaleString('ru-RU')} тыс ₽`;
-  return `${v} ₽`;
-};
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
 const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
 const fmtDateRu = (iso) => { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}`; };
@@ -779,10 +773,10 @@ export default function PayrollSummary() {
               <div className="px-10 py-8 space-y-8">
                 {/* KPI cards */}
                 <div className="grid grid-cols-4 gap-4">
-                  <KpiCard icon={<Wallet size={13} />} label="ФОТ за период" value={fmtMoney(grand.gross)} sub={`средняя ${fmtShort(headcount ? grand.gross / headcount : 0)} / чел.`} color={BRAND} />
+                  <KpiCard icon={<Wallet size={13} />} label="ФОТ за период" value={fmtMoney(grand.gross)} sub={`средняя ${fmtMoney(headcount ? grand.gross / headcount : 0)} / чел.`} color={BRAND} />
                   <KpiCard icon={<Wallet size={13} />} label="К выплате" value={fmtMoney(grand.to_pay)} sub={`${pct(grand.to_pay, grand.gross)}% от начисленного`} color="#10b981" />
                   <KpiCard icon={<UserRound size={13} />} label="Сотрудников" value={String(headcount)} sub={cats.map((c) => `${c.title.slice(0, 4).toLowerCase()}. ${c.rows.length}`).join(' · ') || '—'} />
-                  <KpiCard icon={<TrendingDown size={13} />} label="Удержания" value={fmtMoney(withholdings)} sub={`авансы ${fmtShort(grand.advances)} · штрафы ${fmtShort(grand.penalties)}`} color={DANGER} />
+                  <KpiCard icon={<TrendingDown size={13} />} label="Удержания" value={fmtMoney(withholdings)} sub={`авансы ${fmtMoney(grand.advances)} · штрафы ${fmtMoney(grand.penalties)}`} color={DANGER} />
                 </div>
 
                 {/* Charts row */}
@@ -799,7 +793,7 @@ export default function PayrollSummary() {
                         ) : <div className="w-full h-full rounded-full" style={{ background: T.bg3 }} />}
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
                           <div className="text-[10px] uppercase tracking-wide" style={{ color: T.muted }}>ФОТ</div>
-                          <div className="text-base font-bold tabular-nums" style={{ color: T.ink }}>{fmtShort(grand.gross)}</div>
+                          <div className="text-base font-bold tabular-nums" style={{ color: T.ink }}>{fmtMoney(grand.gross)}</div>
                         </div>
                       </div>
                       <div className="flex-1 space-y-2.5">

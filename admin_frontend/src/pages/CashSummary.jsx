@@ -51,12 +51,6 @@ function ScaledReport({ children }) {
 }
 
 const fmtMoney = (v) => `${Math.round(Number(v) || 0).toLocaleString('ru-RU')} ₽`;
-const fmtShort = (v) => {
-  v = Math.round(Number(v) || 0);
-  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} млн ₽`;
-  if (Math.abs(v) >= 1e3) return `${Math.round(v / 1e3).toLocaleString('ru-RU')} тыс ₽`;
-  return `${v} ₽`;
-};
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
 
 const isoToday = () => new Date().toISOString().slice(0, 10);
@@ -496,7 +490,7 @@ export default function CashSummary() {
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke={T.line} vertical={false} />
                           <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.muted }} axisLine={false} tickLine={false} />
-                          <YAxis tick={{ fontSize: 11, fill: T.muted }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={70} />
+                          <YAxis tick={{ fontSize: 11, fill: T.muted }} axisLine={false} tickLine={false} tickFormatter={fmtMoney} width={90} />
                           <Tooltip content={<CustomTooltip />} />
                           <Area type="monotone" dataKey="sum" stroke={BRAND} strokeWidth={2} fill="url(#cashSummaryGrad)" isAnimationActive={false} />
                         </AreaChart>

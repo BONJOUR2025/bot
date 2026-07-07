@@ -59,10 +59,6 @@ function toggleSet(setter, key) {
 
 /* ── helpers ─────────────────────────────────────────────── */
 const fmtRub = (v) => v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽';
-const fmtK   = (v) => v == null ? '—'
-  : v >= 1_000_000 ? `${(v/1_000_000).toFixed(1)} млн ₽`
-  : v >= 1_000     ? `${(v/1_000).toFixed(0)}k ₽`
-  : `${Math.round(v)} ₽`;
 const fmtPct = (v) => v == null ? '—' : v.toFixed(1) + '%';
 
 const empName = (code) => EMP_CODE_NAMES[code] || code;
@@ -310,7 +306,7 @@ function Leaderboard({ empSummary, planTotals, activeCodes, onSelect }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-sm truncate">{empName(e.code)}</span>
-                  <span className="font-bold tabular-nums text-sm shrink-0" style={{ color }}>{fmtK(e.total)}</span>
+                  <span className="font-bold tabular-nums text-sm shrink-0" style={{ color }}>{fmtRub(e.total)}</span>
                 </div>
                 <div className="mt-1.5 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${share * 100}%`, background: color }} />
@@ -326,7 +322,7 @@ function Leaderboard({ empSummary, planTotals, activeCodes, onSelect }) {
               </div>
               <div className="text-xs text-[color:var(--color-muted-foreground)] shrink-0 text-right hidden sm:block leading-5">
                 <div>{e.activeDays} дн.</div>
-                <div className="text-[10px]">{fmtK(e.activeDays > 0 ? e.total / e.activeDays : 0)}/дн</div>
+                <div className="text-[10px]">{fmtRub(e.activeDays > 0 ? e.total / e.activeDays : 0)}/дн</div>
               </div>
             </button>
           );
@@ -351,7 +347,7 @@ function DayHeatmap({ data }) {
           const h   = maxAvg > 0 ? Math.max((d.avg / maxAvg) * 100, d.count > 0 ? 5 : 0) : 0;
           const wkd = i >= 5;
           return (
-            <div key={d.name} className="flex-1 flex flex-col items-center gap-1 group" title={`${d.name}: ${fmtK(d.avg)} / ${d.count} дн.`}>
+            <div key={d.name} className="flex-1 flex flex-col items-center gap-1 group" title={`${d.name}: ${fmtRub(d.avg)} / ${d.count} дн.`}>
               <div className="w-full flex items-end rounded-t-sm overflow-hidden" style={{ height: 72 }}>
                 <div className="w-full rounded-t-md transition-all group-hover:opacity-70"
                   style={{
@@ -364,7 +360,7 @@ function DayHeatmap({ data }) {
               </div>
               <span className="text-[10px] font-semibold text-[color:var(--color-muted-foreground)]">{d.name}</span>
               <span className="text-[9px] tabular-nums text-[color:var(--color-text-primary)]">
-                {d.count > 0 ? `${(d.avg/1000).toFixed(0)}k` : '—'}
+                {d.count > 0 ? Math.round(d.avg).toLocaleString('ru-RU') : '—'}
               </span>
             </div>
           );
@@ -400,7 +396,7 @@ function PlanGauges({ empSummary, planTotals }) {
                 <span className="font-medium truncate">{empName(e.code)}</span>
                 <span className="font-bold tabular-nums text-xs" style={{ color }}>
                   {done.toFixed(0)}%
-                  <span className="text-[color:var(--color-muted-foreground)] font-normal"> · {fmtK(e.total)} / {fmtK(plan)}</span>
+                  <span className="text-[color:var(--color-muted-foreground)] font-normal"> · {fmtRub(e.total)} / {fmtRub(plan)}</span>
                 </span>
               </div>
               <div className="relative h-2 rounded-full bg-[color:var(--color-border)] overflow-hidden">
@@ -719,13 +715,13 @@ export default function SalesAnalytics() {
         <>
           {/* ── KPI row ─────────────────────────────────────── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KpiStat label="Итого выручка" value={fmtK(kpi.total)} delta={kpi.dTotal} accent="#6366f1"
-              icon={<BarChart3 size={18} />} sub={`∅ ${fmtK(kpi.avgPerActive)} / ${periodLabel}`} />
+            <KpiStat label="Итого выручка" value={fmtRub(kpi.total)} delta={kpi.dTotal} accent="#6366f1"
+              icon={<BarChart3 size={18} />} sub={`∅ ${fmtRub(kpi.avgPerActive)} / ${periodLabel}`} />
             {CATEGORIES.map(({ key, label, color }) => {
               const leader    = categoryLeaders[key];
               const deltaKey  = `d${key.charAt(0).toUpperCase()}${key.slice(1)}`;
               return (
-                <KpiStat key={key} label={label} value={fmtK(kpi[key])} delta={kpi[deltaKey]} accent={color}
+                <KpiStat key={key} label={label} value={fmtRub(kpi[key])} delta={kpi[deltaKey]} accent={color}
                   sub={leader ? `👤 ${empName(leader.code)}` : undefined} />
               );
             })}
@@ -758,7 +754,7 @@ export default function SalesAnalytics() {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border,#e5e7eb)" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: 11 }} angle={-40} textAnchor="end" height={60} interval="preserveStartEnd" />
-                        <YAxis tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} tick={{ fontSize: 11 }} width={44} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={(v) => v.toLocaleString('ru-RU')} tick={{ fontSize: 11 }} width={64} axisLine={false} tickLine={false} />
                         <Tooltip content={<ChartTooltip nameMap={nameMap} />} />
                         {employees.length > 1 && (
                           <Legend formatter={(code) => nameMap[code] || code} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
@@ -780,7 +776,7 @@ export default function SalesAnalytics() {
                 {donutData.length > 0 && (
                   <div className="app-card p-4">
                     <h3 className="font-semibold mb-1">Структура выручки</h3>
-                    <p className="text-xs text-[color:var(--color-muted-foreground)] mb-3">{fmtK(kpi.total)} · {kpi.activePeriods} {periodLabel}</p>
+                    <p className="text-xs text-[color:var(--color-muted-foreground)] mb-3">{fmtRub(kpi.total)} · {kpi.activePeriods} {periodLabel}</p>
                     <ResponsiveContainer width="100%" height={170}>
                       <PieChart>
                         <Pie data={donutData} cx="50%" cy="50%" innerRadius="45%" outerRadius="80%"
@@ -808,7 +804,7 @@ export default function SalesAnalytics() {
                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                             <span className="flex-1 text-[color:var(--color-muted-foreground)] truncate">{d.name}</span>
                             <span className="font-semibold tabular-nums">{pct.toFixed(0)}%</span>
-                            <span className="text-[color:var(--color-muted-foreground)] tabular-nums">{fmtK(d.value)}</span>
+                            <span className="text-[color:var(--color-muted-foreground)] tabular-nums">{fmtRub(d.value)}</span>
                           </button>
                         );
                       })}
@@ -843,7 +839,7 @@ export default function SalesAnalytics() {
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between text-sm font-semibold">
                                 <span className="truncate">{empName(e.code)}</span>
-                                <span style={{ color }}>{fmtK(e.total)}</span>
+                                <span style={{ color }}>{fmtRub(e.total)}</span>
                               </div>
                               <div className="mt-1 h-1 rounded-full bg-[color:var(--color-border)] overflow-hidden">
                                 <div className="h-full rounded-full" style={{ width: `${share*100}%`, background: color }} />
@@ -877,7 +873,7 @@ export default function SalesAnalytics() {
                       <BarChart data={empSummary.map((e) => ({ ...e, displayName: empName(e.code) }))}
                         layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border,#e5e7eb)" horizontal={false} />
-                        <XAxis type="number" tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} tick={{ fontSize: 11 }} axisLine={false} />
+                        <XAxis type="number" tickFormatter={(v) => v.toLocaleString('ru-RU')} tick={{ fontSize: 11 }} axisLine={false} />
                         <YAxis type="category" dataKey="displayName" tick={{ fontSize: 11 }} width={80} />
                         <Tooltip formatter={(v, n) => [fmtRub(v), n]} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
