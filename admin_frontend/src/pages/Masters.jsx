@@ -324,7 +324,7 @@ function StatusDonut({ data, total, activeName, onSelect }) {
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs truncate">{d.name}</span>
+                    <span className="text-xs">{d.name}</span>
                     <span className="text-xs font-semibold shrink-0">{d.value} ({pct.toFixed(0)}%)</span>
                   </div>
                   <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
