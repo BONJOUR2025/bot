@@ -89,23 +89,17 @@ const navStructure = [
   },
 ];
 
-// Button always shows the mode a click will switch TO (not the current one),
-// cycling light → dark → auto → light — same "describes the action"
-// convention the old light/dark-only toggle used.
-const NEXT_MODE = { light: 'dark', dark: 'auto', auto: 'light' };
-const MODE_META = {
-  light: { icon: Sun, label: 'Светлая тема' },
-  dark:  { icon: Moon, label: 'Тёмная тема' },
-  auto:  { icon: Monitor, label: 'Тема по системе' },
-};
+const THEME_MODES = [
+  { key: 'light', icon: Sun,     label: 'Светлая тема' },
+  { key: 'dark',  icon: Moon,    label: 'Тёмная тема' },
+  { key: 'auto',  icon: Monitor, label: 'Тема по системе' },
+];
 
 export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) {
   const location = useLocation();
   const { user } = useAuth();
   const { isMobile } = useViewport();
   const { mode, setMode } = useTheme();
-  const nextMode = NEXT_MODE[mode];
-  const { icon: NextThemeIcon, label: nextThemeLabel } = MODE_META[nextMode];
   const allowed = useMemo(() => new Set(user?.permissions || []), [user?.permissions]);
 
   const handleNavigate = () => {
@@ -209,22 +203,28 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
         ))}
       </div>
 
-      {/* Theme toggle */}
+      {/* Theme toggle — all three modes shown at once, active one highlighted,
+          rather than one button whose label describes a hidden next state. */}
       <div className={`pb-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-        <button
-          type="button"
-          onClick={() => setMode(nextMode)}
-          title={nextThemeLabel}
-          aria-label={`Переключить на: ${nextThemeLabel}`}
-          className={`flex items-center rounded-xl border border-transparent text-[color:var(--color-sidebar-foreground)] opacity-70 transition-all duration-150 hover:bg-[color:var(--color-sidebar-accent)] hover:opacity-100 ${
-            isCollapsed ? 'mx-auto h-10 w-10 justify-center' : 'w-full gap-3 px-4 py-2'
-          }`}
-        >
-          <NextThemeIcon size={isCollapsed ? 18 : 16} className="flex-shrink-0" />
-          {!isCollapsed && (
-            <span className="text-sm font-medium">{nextThemeLabel}</span>
-          )}
-        </button>
+        <div className={`flex items-center gap-1 rounded-xl bg-[color:var(--color-sidebar-accent)] p-1 ${isCollapsed ? 'flex-col mx-auto w-10' : ''}`}>
+          {THEME_MODES.map(({ key, icon: Icon, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setMode(key)}
+              title={label}
+              aria-label={label}
+              aria-pressed={mode === key}
+              className={`flex flex-1 items-center justify-center rounded-lg py-1.5 transition-colors ${
+                mode === key
+                  ? 'bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)]'
+                  : 'text-[color:var(--color-sidebar-foreground)] opacity-60 hover:opacity-100 hover:bg-[color:var(--color-sidebar-accent-foreground)]/10'
+              }`}
+            >
+              <Icon size={16} className="flex-shrink-0" />
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Collapse toggle (desktop only) */}

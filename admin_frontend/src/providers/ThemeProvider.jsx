@@ -2,12 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const VISUAL_FLAG = import.meta.env.VITE_VISUAL_REFRESH === "1";
 const STORAGE_KEY = "theme";
-// Written only by the previous version of this provider — its mere presence
-// doesn't mean the user ever made a real choice (even older builds before
-// that saved STORAGE_KEY unconditionally on every mount). Used once below to
-// avoid misreading a leftover 'light'/'dark' value as an explicit pick
-// instead of defaulting new/undecided users into 'auto'.
-const LEGACY_EXPLICIT_KEY = "theme-explicit";
+const VALID_MODES = new Set(["light", "dark", "auto"]);
 
 const ThemeContext = createContext({ mode: "auto", theme: "light", setMode: () => {} });
 
@@ -18,18 +13,12 @@ function systemPrefersDark() {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
 }
 
-function loadInitialMode() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved === "auto") return "auto";
-  if ((saved === "light" || saved === "dark") && localStorage.getItem(LEGACY_EXPLICIT_KEY)) {
-    return saved;
-  }
-  return "auto";
-}
-
 export default function ThemeProvider({ children }) {
   // mode: what the user picked — 'light' | 'dark' | 'auto'.
-  const [mode, setModeState] = useState(loadInitialMode);
+  const [mode, setModeState] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return VALID_MODES.has(saved) ? saved : "auto";
+  });
   // systemDark: live OS preference, only actually used while mode === 'auto'.
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
 
@@ -65,7 +54,11 @@ export default function ThemeProvider({ children }) {
     import("@capacitor/core").then(({ Capacitor }) => {
       if (!Capacitor.isNativePlatform()) return;
       import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
-        StatusBar.setStyle({ style: theme === "light" ? Style.Light : Style.Dark }).catch(() => {});
+        // Style.Dark = dark icons, for a LIGHT background; Style.Light =
+        // light icons, for a DARK background (mirrors iOS's own
+        // UIStatusBarStyle.darkContent / .lightContent). This was inverted
+        // before, making status bar icons nearly invisible in both themes.
+        StatusBar.setStyle({ style: theme === "light" ? Style.Dark : Style.Light }).catch(() => {});
       });
     });
   }, [theme]);
