@@ -2,45 +2,52 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const VISUAL_FLAG = import.meta.env.VITE_VISUAL_REFRESH === "1";
 const STORAGE_KEY = "theme";
-// Separate from STORAGE_KEY on purpose: older builds wrote STORAGE_KEY
-// unconditionally on every mount, so its mere presence doesn't mean the user
-// ever made a real choice — everyone who'd opened the app before this file
-// would look "explicit" and never get live system updates. This flag only
-// gets set from the actual toggle below.
-const EXPLICIT_KEY = "theme-explicit";
+// Written only by the previous version of this provider — its mere presence
+// doesn't mean the user ever made a real choice (even older builds before
+// that saved STORAGE_KEY unconditionally on every mount). Used once below to
+// avoid misreading a leftover 'light'/'dark' value as an explicit pick
+// instead of defaulting new/undecided users into 'auto'.
+const LEGACY_EXPLICIT_KEY = "theme-explicit";
 
-const ThemeContext = createContext({ theme: "light", setTheme: () => {} });
+const ThemeContext = createContext({ mode: "auto", theme: "light", setMode: () => {} });
 
 // Lets any component read/toggle the theme without prop-drilling.
 export const useTheme = () => useContext(ThemeContext);
 
-export default function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (localStorage.getItem(EXPLICIT_KEY) && saved) return saved;
-    const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-    return prefersDark ? "dark" : "light";
-  });
+function systemPrefersDark() {
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
 
-  // An explicit in-app choice (the toggle in Navigation.jsx) persists and
-  // from then on overrides the OS setting — until then, the matchMedia
-  // listener below keeps following the system live.
-  const setTheme = (next) => {
+function loadInitialMode() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === "auto") return "auto";
+  if ((saved === "light" || saved === "dark") && localStorage.getItem(LEGACY_EXPLICIT_KEY)) {
+    return saved;
+  }
+  return "auto";
+}
+
+export default function ThemeProvider({ children }) {
+  // mode: what the user picked — 'light' | 'dark' | 'auto'.
+  const [mode, setModeState] = useState(loadInitialMode);
+  // systemDark: live OS preference, only actually used while mode === 'auto'.
+  const [systemDark, setSystemDark] = useState(systemPrefersDark);
+
+  const setMode = (next) => {
     localStorage.setItem(STORAGE_KEY, next);
-    localStorage.setItem(EXPLICIT_KEY, "1");
-    setThemeState(next);
+    setModeState(next);
   };
 
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
     if (!mq) return;
-    const onChange = (e) => {
-      if (localStorage.getItem(EXPLICIT_KEY)) return;
-      setThemeState(e.matches ? "dark" : "light");
-    };
+    const onChange = (e) => setSystemDark(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+
+  // theme: the actual light/dark used for styling, resolving 'auto' live.
+  const theme = mode === "auto" ? (systemDark ? "dark" : "light") : mode;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -63,7 +70,7 @@ export default function ThemeProvider({ children }) {
     });
   }, [theme]);
 
-  const value = useMemo(() => ({ theme, setTheme }), [theme]);
+  const value = useMemo(() => ({ mode, theme, setMode }), [mode, theme]);
   // Provide via context; still support the existing render-prop usage in App.
   return (
     <ThemeContext.Provider value={value}>
@@ -71,5 +78,3 @@ export default function ThemeProvider({ children }) {
     </ThemeContext.Provider>
   );
 }
-
-

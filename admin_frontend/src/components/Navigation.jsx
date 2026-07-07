@@ -7,7 +7,7 @@ import {
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
   Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig, Truck,
-  Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon,
+  Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon, Monitor,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -89,12 +89,23 @@ const navStructure = [
   },
 ];
 
+// Button always shows the mode a click will switch TO (not the current one),
+// cycling light → dark → auto → light — same "describes the action"
+// convention the old light/dark-only toggle used.
+const NEXT_MODE = { light: 'dark', dark: 'auto', auto: 'light' };
+const MODE_META = {
+  light: { icon: Sun, label: 'Светлая тема' },
+  dark:  { icon: Moon, label: 'Тёмная тема' },
+  auto:  { icon: Monitor, label: 'Тема по системе' },
+};
+
 export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) {
   const location = useLocation();
   const { user } = useAuth();
   const { isMobile } = useViewport();
-  const { theme, setTheme } = useTheme();
-  const isDark = theme === 'dark';
+  const { mode, setMode } = useTheme();
+  const nextMode = NEXT_MODE[mode];
+  const { icon: NextThemeIcon, label: nextThemeLabel } = MODE_META[nextMode];
   const allowed = useMemo(() => new Set(user?.permissions || []), [user?.permissions]);
 
   const handleNavigate = () => {
@@ -202,18 +213,16 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
       <div className={`pb-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
         <button
           type="button"
-          onClick={() => setTheme(isDark ? 'light' : 'dark')}
-          title={isDark ? 'Светлая тема' : 'Тёмная тема'}
-          aria-label={isDark ? 'Включить светлую тему' : 'Включить тёмную тему'}
+          onClick={() => setMode(nextMode)}
+          title={nextThemeLabel}
+          aria-label={`Переключить на: ${nextThemeLabel}`}
           className={`flex items-center rounded-xl border border-transparent text-[color:var(--color-sidebar-foreground)] opacity-70 transition-all duration-150 hover:bg-[color:var(--color-sidebar-accent)] hover:opacity-100 ${
             isCollapsed ? 'mx-auto h-10 w-10 justify-center' : 'w-full gap-3 px-4 py-2'
           }`}
         >
-          {isDark
-            ? <Sun size={isCollapsed ? 18 : 16} className="flex-shrink-0" />
-            : <Moon size={isCollapsed ? 18 : 16} className="flex-shrink-0" />}
+          <NextThemeIcon size={isCollapsed ? 18 : 16} className="flex-shrink-0" />
           {!isCollapsed && (
-            <span className="text-sm font-medium">{isDark ? 'Светлая тема' : 'Тёмная тема'}</span>
+            <span className="text-sm font-medium">{nextThemeLabel}</span>
           )}
         </button>
       </div>
