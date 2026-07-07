@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const VISUAL_FLAG = import.meta.env.VITE_VISUAL_REFRESH === "1";
+const STORAGE_KEY = "theme";
 
 const ThemeContext = createContext({ theme: "light", setTheme: () => {} });
 
@@ -8,12 +9,32 @@ const ThemeContext = createContext({ theme: "light", setTheme: () => {} });
 export const useTheme = () => useContext(ThemeContext);
 
 export default function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem("theme");
+  const [theme, setThemeState] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) return saved;
     const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
     return prefersDark ? "dark" : "light";
   });
+
+  // An explicit in-app choice (the toggle in Navigation.jsx) persists and
+  // from then on overrides the OS setting — only the initial, un-persisted
+  // detection keeps following the system live (see the matchMedia listener
+  // below).
+  const setTheme = (next) => {
+    localStorage.setItem(STORAGE_KEY, next);
+    setThemeState(next);
+  };
+
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mq) return;
+    const onChange = (e) => {
+      if (localStorage.getItem(STORAGE_KEY)) return;
+      setThemeState(e.matches ? "dark" : "light");
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -22,8 +43,6 @@ export default function ThemeProvider({ children }) {
 
     if (theme === "light") root.classList.add("theme-light");
     else root.classList.remove("theme-light");
-
-    localStorage.setItem("theme", theme);
 
     // Only relevant inside the native iOS shell (see admin_frontend/ios) —
     // a plain browser tab has no such bridge, so this is a silent no-op
