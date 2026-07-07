@@ -80,22 +80,22 @@ export default function SettingsGeneral() {
     <form onSubmit={handleSubmit(save)} className="space-y-6">
       <Section title="Состояние системы">
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Database size={16} className="text-[color:var(--color-muted-foreground)]" />
-              <div>
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <Database size={16} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
+              <div className="min-w-0">
                 <div className="text-sm font-medium">База данных Firebird (Агбис)</div>
                 {status?.firebird?.error && (
-                  <div className="text-xs text-red-600 mt-0.5 font-mono">{status.firebird.error}</div>
+                  <div className="text-xs text-red-600 mt-0.5 font-mono break-words">{status.firebird.error}</div>
                 )}
               </div>
             </div>
             <StatusDot ok={status?.firebird?.ok} loading={statusLoading} />
           </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <FileSpreadsheet size={16} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">Excel-файл расчёта зарплаты</div>
                 {status?.payroll_excel?.path && (
                   <div className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5 font-mono truncate">

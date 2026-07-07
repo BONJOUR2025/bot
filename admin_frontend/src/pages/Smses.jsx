@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { RefreshCw, Search, Download, MessageSquare } from 'lucide-react';
+import { RefreshCw, Search, Download, MessageSquare, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -35,8 +35,10 @@ function fmtDateTime(v) {
   return s.slice(0, 16);
 }
 function SortIcon({ field, sort }) {
-  if (sort.field !== field) return <span className="opacity-30">↕</span>;
-  return <span>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
+  // Plain Unicode arrows (↕ especially) render as boxed emoji glyphs on iOS
+  // instead of a thin text arrow — use vector icons like the other pages do.
+  if (sort.field !== field) return <ChevronsUpDown size={13} className="opacity-30" />;
+  return sort.dir === 'asc' ? <ChevronUp size={13} /> : <ChevronDown size={13} />;
 }
 
 export default function Smses() {
