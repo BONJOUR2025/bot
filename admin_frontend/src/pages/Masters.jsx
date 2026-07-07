@@ -41,6 +41,7 @@ const STATUS_COLORS = {
   'В работе':  'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
   'Прочее':    'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] dark:text-[color:var(--color-text-faint)]',
 };
+const STATUS_OPTIONS = Object.keys(STATUS_COLORS);
 
 const DURATION_OPTIONS = [
   { label: 'Любая', value: 'all' },
@@ -280,7 +281,7 @@ function TopMastersChart({ data, activeName, onSelect }) {
   );
 }
 
-function StatusDonut({ data, total, activeName, onSelect }) {
+function StatusDonut({ data, total, activeNames, onSelect }) {
   const [hover, setHover] = useState(null);
   if (!data.length) return null;
   return (
@@ -297,11 +298,11 @@ function StatusDonut({ data, total, activeName, onSelect }) {
                 data={data} dataKey="value" nameKey="name"
                 innerRadius="50%" outerRadius="80%" paddingAngle={2}
                 onMouseEnter={(_, i) => setHover(i)} onMouseLeave={() => setHover(null)}
-                onClick={(entry) => entry.name !== 'Прочее' && onSelect?.(entry.name)}
+                onClick={(entry) => onSelect?.(entry.name)}
                 cursor={onSelect ? 'pointer' : 'default'}
               >
                 {data.map((entry, i) => (
-                  <Cell key={entry.name} fill={entry.color} opacity={activeName && activeName !== entry.name ? 0.35 : (hover === null || hover === i ? 1 : 0.4)} stroke="none" />
+                  <Cell key={entry.name} fill={entry.color} opacity={activeNames?.size && !activeNames.has(entry.name) ? 0.35 : (hover === null || hover === i ? 1 : 0.4)} stroke="none" />
                 ))}
               </Pie>
               <Tooltip formatter={(v) => [v, 'Услуг']} />
@@ -311,15 +312,13 @@ function StatusDonut({ data, total, activeName, onSelect }) {
         <div className="flex-1 space-y-2 min-w-0 w-full">
           {data.map((d) => {
             const pct = total > 0 ? (d.value / total) * 100 : 0;
-            const clickable = d.name !== 'Прочее';
-            const isActive = activeName === d.name;
+            const isActive = activeNames?.has(d.name);
             return (
               <button
                 key={d.name}
                 type="button"
-                disabled={!clickable}
                 onClick={() => onSelect?.(d.name)}
-                className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect && clickable ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
+                className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-bg-secondary)] cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
               >
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                 <div className="flex-1 min-w-0">
@@ -451,7 +450,7 @@ export default function Masters() {
 
   const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo, setDateTo]     = useState(today);
-  const [statusFilter, setStatusFilter]     = useState('Все');
+  const [statusFilter, setStatusFilter]     = useState(new Set());
   const [masterSearch, setMasterSearch]     = useState('');
   const [nameSearch, setNameSearch]         = useState('');
   const [codeSearch, setCodeSearch]         = useState('');
@@ -481,6 +480,15 @@ export default function Masters() {
     () => [...new Set(rows.map((r) => r.top_parent_name).filter(Boolean))].sort(),
     [rows],
   );
+
+  function toggleStatus(status) {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  }
 
   function toggleCategory(cat) {
     setCategoryFilter((prev) => {
@@ -536,7 +544,7 @@ export default function Masters() {
 
   const filtered = useMemo(() => {
     let r = rows;
-    if (statusFilter !== 'Все') r = r.filter((x) => x.status === statusFilter);
+    if (statusFilter.size > 0) r = r.filter((x) => statusFilter.has(x.status));
     if (warningsOnly) r = r.filter((x) => x.warnings?.length > 0);
     if (warningTypeFilter.size > 0) r = r.filter((x) => [...warningTypeFilter].some((k) => x[k]));
     if (categoryFilter.size > 0) r = r.filter((x) => x.top_parent_name && categoryFilter.has(x.top_parent_name));
@@ -779,7 +787,7 @@ export default function Masters() {
                   <div className="lg:col-span-2">
                     <TopMastersChart data={topMastersChart} activeName={masterSearch || null} onSelect={(name) => { setMasterSearch((prev) => (prev === name ? '' : name)); setTab('services'); }} />
                   </div>
-                  <StatusDonut data={statusDonutData} total={kpi.total} activeName={statusFilter !== 'Все' ? statusFilter : null} onSelect={(name) => { setStatusFilter((prev) => (prev === name ? 'Все' : name)); setTab('services'); }} />
+                  <StatusDonut data={statusDonutData} total={kpi.total} activeNames={statusFilter} onSelect={(name) => { toggleStatus(name); setTab('services'); }} />
                 </div>
               )}
 
@@ -809,13 +817,30 @@ export default function Masters() {
               <div className="app-card p-4 space-y-3">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div>
-                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Статус</label>
-                    <select className="input w-full" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                      <option>Все</option>
-                      <option>Выполнено</option>
-                      <option>В работе</option>
-                      <option>Прочее</option>
-                    </select>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">
+                      Статус
+                      {statusFilter.size > 0 && (
+                        <button onClick={() => setStatusFilter(new Set())} className="ml-2 text-[color:var(--color-primary)] hover:underline">
+                          сбросить
+                        </button>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {STATUS_OPTIONS.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => toggleStatus(s)}
+                          className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                            statusFilter.has(s)
+                              ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                              : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Мастер</label>
