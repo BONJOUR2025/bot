@@ -27,12 +27,6 @@ const fmtMoney = (v) =>
   v == null ? '—' : Number(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
 const fmtMoneyShort = (v) =>
   !v ? '—' : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
-const fmtK = (v) => {
-  const n = Number(v) || 0;
-  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' млн ₽';
-  if (Math.abs(n) >= 1_000) return Math.round(n / 1_000) + 'k ₽';
-  return Math.round(n) + ' ₽';
-};
 
 // ── Date helpers ──────────────────────────────────────────────────
 const isoToday    = ()          => new Date().toISOString().slice(0, 10);
@@ -651,7 +645,7 @@ function CashDayHeatmap({ data, activeDay, onSelect }) {
                   style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
                 />
               </div>
-              <div className="text-xs font-medium w-20 text-right shrink-0">{fmtK(d.sum)}</div>
+              <div className="text-xs font-medium text-right shrink-0 whitespace-nowrap">{fmtMoneyShort(d.sum)}</div>
             </button>
           );
         })}
@@ -698,7 +692,7 @@ function BranchLeaderboard({ data, total, activeName, onSelect }) {
                   <span className="text-sm font-medium truncate">{name}</span>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <div className="text-sm font-bold text-[color:var(--color-primary)]">{fmtK(sum)}</div>
+                  <div className="text-sm font-bold text-[color:var(--color-primary)] whitespace-nowrap">{fmtMoneyShort(sum)}</div>
                   <div className="text-xs text-[color:var(--color-muted-foreground)]">{count} зап.</div>
                 </div>
               </div>
@@ -1109,7 +1103,7 @@ export default function CashMovements() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard
                   label="Общая сумма"
-                  value={fmtK(totalSum)}
+                  value={fmtMoneyShort(totalSum)}
                   sub={`${filtered.length} записей`}
                   accent="#6366f1"
                   icon={Wallet}
@@ -1155,7 +1149,7 @@ export default function CashMovements() {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                         <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} />
-                        <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={55} />
+                        <YAxis tickFormatter={fmtMoneyShort} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={90} />
                         <Tooltip content={<CustomTooltip />} />
                         <Area
                           type="monotone"
@@ -1193,7 +1187,7 @@ export default function CashMovements() {
                       margin={{ top: 0, right: 12, bottom: 0, left: 0 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
-                      <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+                      <XAxis type="number" tickFormatter={fmtMoneyShort} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
                       <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={130} />
                       <Tooltip formatter={(v, n, p) => [fmtMoneyShort(v), 'Сумма']} labelFormatter={(l) => l} />
                       <Bar dataKey="sum" radius={[0, 4, 4, 0]} onClick={(entry) => selectCategory(entry.name)} cursor="pointer">
