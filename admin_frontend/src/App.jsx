@@ -10,6 +10,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import MainLayout from "./layouts/MainLayout.jsx";
 import PlainLayout from "./layouts/PlainLayout.jsx";
 import EmployeeLayout from "./layouts/EmployeeLayout.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 import { AuthProvider } from "./providers/AuthProvider.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
@@ -84,6 +85,7 @@ export default function App() {
             <AuthProvider>
               <NativeShell />
               <Router>
+              <ErrorBoundary>
               <Suspense fallback={<RouteFallback />}>
               <Routes>
               {/* Единая страница логина */}
@@ -166,6 +168,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/login" replace />} />
               </Routes>
               </Suspense>
+              </ErrorBoundary>
               </Router>
             </AuthProvider>
           </ToastProvider>
