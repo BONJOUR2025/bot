@@ -16,9 +16,9 @@ def test_rejected_salary_request_does_not_reset_advances_cutoff():
     not act as a cutoff — advances taken before it still count."""
     svc = PayrollService()
     svc._load_advance_records = lambda: [
-        _row("Иван 1234", "Аванс", "Одобрено", "2025-01-05 10:00:00", amount=5000),
+        _row("Иван 1234", "Аванс", "Выплачено", "2025-01-05 10:00:00", amount=5000),
         _row("Иван 1234", "Зарплата", "Отклонено", "2025-01-10 10:00:00"),
-        _row("Иван 1234", "Аванс", "Одобрено", "2025-01-20 10:00:00", amount=3000),
+        _row("Иван 1234", "Аванс", "Выплачено", "2025-01-20 10:00:00", amount=3000),
     ]
 
     result = svc._get_advances_after_last_salary()
@@ -31,9 +31,9 @@ def test_paid_salary_request_resets_advances_cutoff():
     taken after it should still count."""
     svc = PayrollService()
     svc._load_advance_records = lambda: [
-        _row("Иван 1234", "Аванс", "Одобрено", "2025-01-05 10:00:00", amount=5000),
+        _row("Иван 1234", "Аванс", "Выплачено", "2025-01-05 10:00:00", amount=5000),
         _row("Иван 1234", "Зарплата", "Выплачено", "2025-01-10 10:00:00"),
-        _row("Иван 1234", "Аванс", "Одобрено", "2025-01-20 10:00:00", amount=3000),
+        _row("Иван 1234", "Аванс", "Выплачено", "2025-01-20 10:00:00", amount=3000),
     ]
 
     result = svc._get_advances_after_last_salary()
@@ -45,10 +45,36 @@ def test_pending_salary_request_does_not_reset_advances_cutoff():
     """A still-pending 'Зарплата' request hasn't paid out either."""
     svc = PayrollService()
     svc._load_advance_records = lambda: [
-        _row("Иван 1234", "Аванс", "Одобрено", "2025-01-05 10:00:00", amount=5000),
+        _row("Иван 1234", "Аванс", "Выплачено", "2025-01-05 10:00:00", amount=5000),
         _row("Иван 1234", "Зарплата", "Ожидает", "2025-01-10 10:00:00"),
     ]
 
     result = svc._get_advances_after_last_salary()
 
     assert result["1234"] == 5000
+
+
+def test_approved_but_not_paid_advance_is_not_counted():
+    """Only actually disbursed ('Выплачено') advances count — an approved
+    but not-yet-paid-out advance must not be deducted yet."""
+    svc = PayrollService()
+    svc._load_advance_records = lambda: [
+        _row("Иван 1234", "Аванс", "Одобрено", "2025-01-05 10:00:00", amount=5000),
+        _row("Иван 1234", "Аванс", "Выплачено", "2025-01-20 10:00:00", amount=3000),
+    ]
+
+    result = svc._get_advances_after_last_salary()
+
+    assert result["1234"] == 3000
+
+
+def test_advances_for_month_only_counts_paid():
+    svc = PayrollService()
+    svc._load_advance_records = lambda: [
+        _row("Иван 1234", "Аванс", "Одобрено", "2025-01-05 10:00:00", amount=5000),
+        _row("Иван 1234", "Аванс", "Выплачено", "2025-01-20 10:00:00", amount=3000),
+    ]
+
+    result = svc._get_advances_for_month(2025, 1)
+
+    assert result["1234"] == 3000

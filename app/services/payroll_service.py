@@ -406,7 +406,7 @@ class PayrollService:
     def _get_advances_after_last_salary(self) -> dict[str, float]:
         """Original logic: advances since last salary payment (actual deduction amount)."""
         data = self._load_advance_records()
-        VALID = {"Одобрено", "Выплачено"}
+        VALID = {"Выплачено"}
 
         ops: dict[str, list[dict]] = {}
         for row in data:
@@ -448,7 +448,7 @@ class PayrollService:
     def _get_advances_for_month(self, year: int, month_num: int) -> dict[str, float]:
         """Advances taken DURING a specific calendar month (for historical display)."""
         data = self._load_advance_records()
-        VALID = {"Одобрено", "Выплачено"}
+        VALID = {"Выплачено"}
         out: dict[str, float] = {}
         for row in data:
             if row.get("payout_type") != "Аванс" or row.get("status") not in VALID:
