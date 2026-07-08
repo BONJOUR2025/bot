@@ -538,6 +538,12 @@ select, option, textarea {
   backdrop-filter: blur(12px);
   transition: box-shadow var(--transition);
 }
+/* Grid items default to min-width: auto (their content's max-content size),
+   same gotcha as flex items. Without this, one unbreakable-text descendant
+   (a file path, a long token) anywhere inside a card silently grows the
+   whole card — and everything's own min-w-0/truncate further down stops
+   working, because the overflow never actually reaches them. */
+.app-card > * { min-width: 0; }
 .app-card:hover { box-shadow: var(--shadow-md); }
 .app-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .app-card__title { margin: 0; font-size: 1.1rem; font-weight: 600; }

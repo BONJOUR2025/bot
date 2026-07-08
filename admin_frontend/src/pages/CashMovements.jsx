@@ -963,7 +963,7 @@ export default function CashMovements() {
   const breakdown = useMemo(() => {
     const map = Object.create(null);
     for (const r of filtered) {
-      const cat = r.category ?? '— без категории';
+      const cat = r.category ?? 'Без категории';
       if (!map[cat]) map[cat] = { count: 0, sum: 0 };
       map[cat].count++;
       map[cat].sum += Number(r.SUMM) || 0;
@@ -1545,7 +1545,7 @@ export default function CashMovements() {
                     label: 'Категория',
                     primary: true,
                     render: ([cat]) => {
-                      const invalid = cat === '— без категории';
+                      const invalid = cat === 'Без категории';
                       return (
                         <span className={`font-mono text-xs px-2 py-0.5 rounded-full ${invalid ? 'bg-red-100 text-red-700' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'}`}>
                           {cat}
@@ -1565,7 +1565,7 @@ export default function CashMovements() {
                     label: 'Доля',
                     render: ([cat, { sum }]) => {
                       const share = totalSum > 0 ? (sum / totalSum) * 100 : 0;
-                      const invalid = cat === '— без категории';
+                      const invalid = cat === 'Без категории';
                       return (
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-16 h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
