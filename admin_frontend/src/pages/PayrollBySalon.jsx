@@ -1,16 +1,119 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Store, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { Store, Users, ChevronDown, ChevronUp, Layers, BarChart3 } from 'lucide-react';
+import {
+  BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
-import { fmtMoney, Term, StatCard, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
+import { fmtMoney, StatCard, Tabs } from '../components/ui/SalaryUI.jsx';
+
+const fmtRub = (v) => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽');
+
+// Fixed hue order — never reassigned by value/rank, so a component keeps
+// its color regardless of how big it is this month.
+const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
+const UNALLOCATED_COLOR = '#94a3b8';
+
+const BREAKDOWN_FIELDS = [
+  { key: 'oklad',                label: 'Оклад' },
+  { key: 'bonuses',              label: 'Премии' },
+  { key: 'repair_commission',    label: 'Ремонт' },
+  { key: 'cosmetics_commission', label: 'Косметика' },
+  { key: 'shoes_commission',     label: 'Обувь' },
+];
 
 const TABS = [
-  { key: 'salons',    label: 'По салонам',    icon: <Store size={14} /> },
+  { key: 'salons',    label: 'По салонам',     icon: <Store size={14} /> },
   { key: 'employees', label: 'По сотрудникам', icon: <Users size={14} /> },
 ];
+
+// ── Инфографика: состав ФОТ ──────────────────────────────────────────
+function BreakdownDonut({ totals, total }) {
+  const [hover, setHover] = useState(null);
+  const data = BREAKDOWN_FIELDS
+    .map((f, i) => ({ ...f, value: totals[f.key] || 0, color: CHART_COLORS[i] }))
+    .filter((d) => d.value > 0);
+
+  if (data.length === 0) return null;
+
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <Layers size={15} className="text-[color:var(--color-primary)]" />
+        Состав ФОТ
+      </div>
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <div style={{ width: 150, height: 150, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data} dataKey="value" nameKey="label"
+                innerRadius="55%" outerRadius="85%" paddingAngle={2}
+                onMouseEnter={(_, i) => setHover(i)} onMouseLeave={() => setHover(null)}
+              >
+                {data.map((d, i) => (
+                  <Cell key={d.key} fill={d.color} opacity={hover === null || hover === i ? 1 : 0.4} stroke="none" />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => [fmtRub(v), 'Сумма']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-2 min-w-0 w-full">
+          {data.map((d, i) => {
+            const pct = total > 0 ? (d.value / total) * 100 : 0;
+            return (
+              <div key={d.key} className="rounded-md -mx-1 px-1 py-0.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs">{d.label}</span>
+                      <span className="text-xs font-semibold shrink-0 tabular-nums">{fmtRub(d.value)} ({pct.toFixed(0)}%)</span>
+                    </div>
+                    <div className="h-1 rounded-full bg-[color:var(--color-bg-secondary)] mt-0.5 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.color, opacity: hover === null || hover === i ? 1 : 0.4 }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Инфографика: топ салонов по ФОТ ──────────────────────────────────
+function SalonBarChart({ salons }) {
+  const data = salons.filter((s) => s.total > 0);
+  if (data.length === 0) return null;
+  return (
+    <div className="app-card p-5">
+      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+        Топ салонов по ФОТ
+      </div>
+      <ResponsiveContainer width="100%" height={Math.max(150, data.length * 38)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
+          <XAxis type="number" tickFormatter={fmtRub} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
+          <YAxis type="category" dataKey="salon_name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={140} />
+          <Tooltip formatter={(v) => [fmtRub(v), 'ФОТ']} />
+          <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+            {data.map((s, i) => (
+              <Cell key={s.salon_id} fill={s.salon_id === 'unallocated' ? UNALLOCATED_COLOR : CHART_COLORS[i % CHART_COLORS.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 // ── По салонам ──────────────────────────────────────────────────────
 function SalonRow({ salon }) {
@@ -28,7 +131,7 @@ function SalonRow({ salon }) {
           <span className={`font-medium truncate ${isUnallocated ? 'text-[color:var(--color-muted-foreground)] italic' : ''}`}>
             {salon.salon_name}
           </span>
-          <span className="text-xs text-[color:var(--color-muted-foreground)] shrink-0">
+          <span className="hidden sm:inline text-xs text-[color:var(--color-muted-foreground)] shrink-0">
             {salon.employees.length} {salon.employees.length === 1 ? 'сотрудник' : 'сотрудников'}
           </span>
         </div>
@@ -40,13 +143,16 @@ function SalonRow({ salon }) {
 
       {open && (
         <div className="border-t border-[color:var(--color-border)] px-4 py-3 space-y-3">
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            <Term label="Оклад" value={salon.oklad} />
-            <Term op="+" label="Премии" value={salon.bonuses} />
-            <Term op="+" label="Ремонт" value={salon.repair_commission} />
-            <Term op="+" label="Косметика" value={salon.cosmetics_commission} />
-            <Term op="+" label="Обувь" value={salon.shoes_commission} />
-            <Term op="=" label="Итого" value={salon.total} tone={TONE_TEXT.primary} strong />
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {BREAKDOWN_FIELDS.map((f, i) => (
+              <div key={f.key} className="rounded-lg bg-[color:var(--color-bg-secondary)] px-2.5 py-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: CHART_COLORS[i] }} />
+                  {f.label}
+                </div>
+                <div className="text-sm font-semibold tabular-nums mt-0.5">{fmtMoney(salon[f.key])}</div>
+              </div>
+            ))}
           </div>
           <div className="divide-y divide-[color:var(--color-border)]">
             {salon.employees.map((e) => (
@@ -74,7 +180,7 @@ function EmployeeRow({ employee }) {
       >
         <div className="flex items-center gap-2 min-w-0">
           <span className="font-medium truncate">{employee.employee_name}</span>
-          <span className="text-xs text-[color:var(--color-muted-foreground)] shrink-0">
+          <span className="hidden sm:inline text-xs text-[color:var(--color-muted-foreground)] shrink-0">
             {employee.salons.length} {employee.salons.length === 1 ? 'салон' : 'салона(ов)'}
           </span>
         </div>
@@ -87,17 +193,15 @@ function EmployeeRow({ employee }) {
       {open && (
         <div className="border-t border-[color:var(--color-border)] px-4 py-3 divide-y divide-[color:var(--color-border)]">
           {employee.salons.map((s) => (
-            <div key={s.salon_id} className="py-2 text-sm space-y-1">
+            <div key={s.salon_id} className="py-2 text-sm space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className={`font-medium truncate ${s.salon_id === 'unallocated' ? 'text-[color:var(--color-muted-foreground)] italic' : ''}`}>{s.salon_name}</span>
                 <span className="tabular-nums font-medium shrink-0">{fmtMoney(s.total)}</span>
               </div>
-              <div className="flex flex-wrap gap-x-3 text-xs text-[color:var(--color-muted-foreground)]">
-                <span>Оклад {fmtMoney(s.oklad)}</span>
-                <span>Премии {fmtMoney(s.bonuses)}</span>
-                <span>Ремонт {fmtMoney(s.repair_commission)}</span>
-                <span>Косметика {fmtMoney(s.cosmetics_commission)}</span>
-                <span>Обувь {fmtMoney(s.shoes_commission)}</span>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[color:var(--color-muted-foreground)]">
+                {BREAKDOWN_FIELDS.map((f) => (
+                  <span key={f.key}>{f.label} {fmtMoney(s[f.key])}</span>
+                ))}
               </div>
             </div>
           ))}
@@ -173,6 +277,10 @@ export default function PayrollBySalon() {
   }
 
   const employeeView = useMemo(() => (data ? buildEmployeeView(data.salons) : []), [data]);
+  const sortedSalons = useMemo(
+    () => (data ? [...data.salons].sort((a, b) => b.total - a.total) : []),
+    [data]
+  );
 
   return (
     <div className="space-y-6 max-w-full p-6">
@@ -206,21 +314,25 @@ export default function PayrollBySalon() {
         <>
           {/* Hero: grand total */}
           <section className="app-card overflow-hidden">
-            <div className="p-5 sm:p-6">
-              <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
-                Расходы на ФОТ · {data.salons.length} {data.salons.length === 1 ? 'салон' : 'салонов'}
+            <div className="p-5 sm:p-6 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                  Расходы на ФОТ · {data.salons.length} {data.salons.length === 1 ? 'салон' : 'салонов'}
+                </div>
+                <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
+                  {fmtMoney(data.grand_total.total)}
+                </div>
               </div>
-              <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
-                {fmtMoney(data.grand_total.total)}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {BREAKDOWN_FIELDS.map((f, i) => (
+                  <StatCard
+                    key={f.key}
+                    icon={<span className="w-2.5 h-2.5 rounded-full block" style={{ background: CHART_COLORS[i] }} />}
+                    label={f.label}
+                    value={fmtMoney(data.grand_total[f.key])}
+                  />
+                ))}
               </div>
-            </div>
-            <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
-              <Term label="Оклад" value={data.grand_total.oklad} />
-              <Term op="+" label="Премии" value={data.grand_total.bonuses} />
-              <Term op="+" label="Ремонт" value={data.grand_total.repair_commission} />
-              <Term op="+" label="Косметика" value={data.grand_total.cosmetics_commission} />
-              <Term op="+" label="Обувь" value={data.grand_total.shoes_commission} />
-              <Term op="=" label="Итого" value={data.grand_total.total} tone={TONE_TEXT.primary} strong />
             </div>
           </section>
 
@@ -230,6 +342,11 @@ export default function PayrollBySalon() {
             </div>
           )}
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <BreakdownDonut totals={data.grand_total} total={data.grand_total.total} />
+            <SalonBarChart salons={sortedSalons} />
+          </div>
+
           <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
           {tab === 'salons' && (
@@ -238,7 +355,7 @@ export default function PayrollBySalon() {
                 <StatCard icon={<Store size={18} />} label="Салонов" value={data.salons.length} />
                 <StatCard icon={<Users size={18} />} label="Сотрудников" value={employeeView.length} />
               </div>
-              {data.salons.map((salon) => (
+              {sortedSalons.map((salon) => (
                 <SalonRow key={salon.salon_id} salon={salon} />
               ))}
               {data.salons.length === 0 && (
