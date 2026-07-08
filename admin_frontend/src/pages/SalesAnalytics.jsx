@@ -429,12 +429,13 @@ export default function SalesAnalytics() {
   const [selectedCategories, setSelectedCategories] = useState(new Set());
   const [activeTab, setActiveTab] = useState('overview');
 
-  const [rows,     setRows]     = useState([]);
-  const [prevRows, setPrevRows] = useState([]);
-  const [plans,    setPlans]    = useState({});
-  const [loading,  setLoading]  = useState(false);
-  const [loaded,   setLoaded]   = useState(false);
-  const [error,    setError]    = useState(null);
+  const [rows,      setRows]      = useState([]);
+  const [prevRows,  setPrevRows]  = useState([]);
+  const [plans,     setPlans]     = useState({});
+  const [retention, setRetention] = useState(null);
+  const [loading,   setLoading]   = useState(false);
+  const [loaded,    setLoaded]    = useState(false);
+  const [error,     setError]     = useState(null);
 
   const months = useMemo(() => getMonthsInRange(dateFrom, dateTo), [dateFrom, dateTo]);
 
@@ -453,10 +454,11 @@ export default function SalesAnalytics() {
       const prevTo = new Date(d0); prevTo.setDate(prevTo.getDate() - 1);
       const prevFrom = new Date(+prevTo - (d1 - d0));
       const monthKeys = months.map(toMonthKey).join(',');
-      const [mainRes, prevRes, plansRes] = await Promise.all([
+      const [mainRes, prevRes, plansRes, retentionRes] = await Promise.all([
         api.get('/sales/daily', { params }),
         api.get('/sales/daily', { params: { date_from: prevFrom.toISOString().slice(0,10), date_to: prevTo.toISOString().slice(0,10) } }),
         api.get('/sales/plans', { params: { month_keys: monthKeys } }),
+        api.get('/sales/client-retention', { params }),
       ]);
       // Best-effort — a failure here shouldn't block sales data from
       // showing, it just leaves empName() falling back to the raw code.
@@ -466,7 +468,7 @@ export default function SalesAnalytics() {
       } catch (e) {
         console.error('Не удалось загрузить имена сотрудников', e);
       }
-      setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setLoaded(true);
+      setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setRetention(retentionRes.data); setLoaded(true);
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
     } finally { setLoading(false); }
@@ -714,7 +716,7 @@ export default function SalesAnalytics() {
       {loaded && !loading && (
         <>
           {/* ── KPI row ─────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiStat label="Итого выручка" value={fmtRub(kpi.total)} delta={kpi.dTotal} accent="#6366f1"
               icon={<BarChart3 size={18} />} sub={`∅ ${fmtRub(kpi.avgPerActive)} / ${periodLabel}`} />
             {CATEGORIES.map(({ key, label, color }) => {
@@ -725,6 +727,11 @@ export default function SalesAnalytics() {
                   sub={leader ? `👤 ${empName(leader.code)}` : undefined} />
               );
             })}
+            {retention && retention.total_clients > 0 && (
+              <KpiStat label="Повторные клиенты" value={fmtPct(retention.repeat_rate)} accent="#8b5cf6"
+                icon={<Users size={18} />}
+                sub={`${retention.new_clients} нов. · ${retention.returning_clients} пост.`} />
+            )}
           </div>
 
           <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />

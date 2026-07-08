@@ -45,6 +45,33 @@ def create_sales_router() -> APIRouter:
 
         return rows
 
+    @router.get("/client-retention")
+    async def get_client_retention(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Return new-vs-returning client counts for a date range."""
+        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+
+        if not FIREBIRD_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="Firebird недоступен: драйвер fdb не установлен.",
+            )
+
+        today = date.today()
+        df = date_from or (today - timedelta(days=30))
+        dt = date_to or today
+
+        if df > dt:
+            raise HTTPException(status_code=400, detail="date_from не может быть позже date_to")
+
+        try:
+            svc = get_firebird_service()
+            return svc.get_client_retention(df, dt)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.get("/plans")
     async def get_plans(month_keys: Optional[str] = Query(default=None)):
         """Return sales plans keyed by month_key → employee_code → {repair_plan, cosmetics_plan, shoes_plan}.

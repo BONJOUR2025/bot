@@ -610,6 +610,69 @@ class FirebirdService:
         ]
 
 
+    def get_client_retention(self, date_from: date, date_to: date) -> dict:
+        """New-vs-returning client breakdown for a date range.
+
+        A client is "returning" if their first-ever order (across all
+        history) predates date_from, "new" otherwise. The first-ever-order
+        lookup is a single ungrouped-by-date full scan (~3s regardless of
+        range) rather than one lookup per client — a per-client correlated
+        subquery was measured at 60-100s for a month/year range because it
+        re-executes the MIN(doc_date) query once per distinct client.
+        """
+        empty = {"total_clients": 0, "new_clients": 0, "returning_clients": 0, "repeat_rate": 0.0}
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty client retention")
+            return empty
+
+        sql_active = """
+            SELECT d.contragent_id, COUNT(DISTINCT do.id) AS orders_in_period
+            FROM docs d
+                INNER JOIN docs_order do ON (do.doc_id = d.doc_id)
+            WHERE
+                d.doc_date >= ?
+                AND d.doc_date <= ?
+                AND d.contragent_id IS NOT NULL
+            GROUP BY d.contragent_id
+        """
+        sql_first_order = """
+            SELECT d.contragent_id, MIN(d.doc_date)
+            FROM docs d
+                INNER JOIN docs_order do ON (do.doc_id = d.doc_id)
+            WHERE d.contragent_id IS NOT NULL
+            GROUP BY d.contragent_id
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql_active, (date_from, date_to))
+                active = cur.fetchall()
+                if not active:
+                    return empty
+
+                cur.execute(sql_first_order)
+                first_order = dict(cur.fetchall())
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching client retention: {e}")
+            return empty
+
+        total = len(active)
+        returning = sum(
+            1 for contragent_id, _ in active
+            if (first_order.get(contragent_id) or date_from) < date_from
+        )
+        new_clients = total - returning
+        return {
+            "total_clients": total,
+            "new_clients": new_clients,
+            "returning_clients": returning,
+            "repeat_rate": round(returning / total * 100, 1) if total else 0.0,
+        }
+
     def get_cash_moves(self, date_from: date | None = None, date_to: date | None = None) -> list[dict]:
         """Load cash movements from DOC_KASSA_MOVES."""
         if not FIREBIRD_AVAILABLE:
