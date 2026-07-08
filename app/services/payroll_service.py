@@ -419,7 +419,11 @@ class PayrollService:
             items_sorted = sorted(items, key=lambda r: _parse_dt(_dt_field(r)))
             last_salary_dt = None
             for r in items_sorted:
-                if r.get("payout_type") == "Зарплата":
+                # A rejected (or still-pending) salary request never actually
+                # paid out — it must not reset the "since last salary"
+                # cutoff, or advances taken before it would silently drop
+                # out of the deduction total.
+                if r.get("payout_type") == "Зарплата" and r.get("status") in VALID:
                     last_salary_dt = _parse_dt(_dt_field(r))
 
             if last_salary_dt is None:
