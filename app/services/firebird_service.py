@@ -18,12 +18,24 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 CODE_RE = re.compile(r"(\d{4})$")
+ORDER_SALON_CODE_RE = re.compile(r"-(\d{1,2})$")
 
 
 def _code_from_description(desc: str | None) -> str | None:
     """Extract 4-digit employee code from description like 'Имя 1234'."""
     desc = (desc or "").strip()
     m = CODE_RE.search(desc)
+    return m.group(1) if m else None
+
+
+def _order_salon_code(doc_num: str | None) -> str | None:
+    """Extract the salon order-number suffix (e.g. '7' from '34247-7').
+
+    Mirrors app.services.payroll_service._order_salon_code exactly — this
+    is the same convention the existing payroll-by-salon report keys off,
+    not DOCS.DEP_ID, so salon attribution here stays consistent with it.
+    """
+    m = ORDER_SALON_CODE_RE.search((doc_num or "").strip())
     return m.group(1) if m else None
 
 
@@ -42,6 +54,28 @@ def _connect():
         password=settings.firebird_password or "masterkey",
         charset=settings.firebird_charset,
     )
+
+
+def _fetch_batched(cur, sql_template: str, ids: list, extra_params: tuple = ()) -> list:
+    """Run `sql_template` (containing one `{ph}` IN-list placeholder) once
+    per <=1000-item chunk of `ids`.
+
+    Firebird rejects IN-lists over 1500 values outright, and a per-id
+    correlated subquery is 20-30x slower than one batched IN query
+    (measured on this DB: ~3s batched vs 60-100s correlated for a
+    month/year of distinct ids) — so chunking, not correlating, is how
+    every "look up N ids against a huge history table" query here works.
+    """
+    rows = []
+    if not ids:
+        return rows
+    BATCH = 1000
+    for i in range(0, len(ids), BATCH):
+        chunk = ids[i:i + BATCH]
+        placeholders = ','.join(['?'] * len(chunk))
+        cur.execute(sql_template.format(ph=placeholders), (*chunk, *extra_params))
+        rows.extend(cur.fetchall())
+    return rows
 
 
 SHOES_CODES = (
@@ -671,6 +705,538 @@ class FirebirdService:
             "new_clients": new_clients,
             "returning_clients": returning,
             "repeat_rate": round(returning / total * 100, 1) if total else 0.0,
+        }
+
+    def get_margin_summary(self, date_from: date, date_to: date) -> dict:
+        """Gross margin by category and by employee for a date range.
+
+        Cost is the most recent warehouse-receipt price (DOC_SCLAD_LINES,
+        DOC_TYPE=1 "Приход") at or before date_to for each sold TOVAR_ID.
+        Shoes are deliberately excluded: their commission is computed on
+        paired 0/1+147.x records (see SHOES_CODES/_parse_shoe_pairs), which
+        isn't a per-unit cost-of-goods figure the same way repair/cosmetics
+        are. Repair-category items are mostly labor (cleaning/repair
+        services) with no purchase record at all — those come back with
+        cost=0, which is correct (their real cost is payroll, tracked
+        elsewhere), not a data gap.
+        """
+        empty_cat = {"revenue": 0.0, "cost": 0.0, "margin": 0.0, "margin_pct": 0.0}
+        empty = {
+            "categories": {"repair": dict(empty_cat), "cosmetics": dict(empty_cat)},
+            "total": dict(empty_cat),
+            "by_employee": [],
+            "unpriced_items": 0,
+        }
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty margin summary")
+            return empty
+
+        repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
+        cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
+
+        sql_repair = f"""
+            SELECT users.description, tovars_tbl.tovar_id,
+                   SUM(doc_order_services.kredit), SUM(doc_order_services.qty_kredit)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE
+                docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.folder_id IN ({repair_folders})
+            GROUP BY users.description, tovars_tbl.tovar_id
+        """
+        sql_cosmetics = f"""
+            SELECT users.description, tovars_tbl.tovar_id,
+                   SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
+            FROM doc_order_lines
+                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN users ON docs_order.creater_id = users.user_id
+            WHERE
+                docs_order_history.status_id = 5
+                AND docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.folder_id IN ({cosmetics_folders})
+            GROUP BY users.description, tovars_tbl.tovar_id
+        """
+        sql_cost = """
+            SELECT tovar_id, price, dl_date
+            FROM doc_sclad_lines
+            WHERE tovar_id IN ({ph}) AND doc_type = 1 AND dl_date <= ?
+            ORDER BY tovar_id, dl_date DESC
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql_repair, (date_from, date_to))
+                repair_rows = cur.fetchall()
+                cur.execute(sql_cosmetics, (date_from, date_to))
+                cosmetics_rows = cur.fetchall()
+
+                tovar_ids = sorted({r[1] for r in repair_rows} | {r[1] for r in cosmetics_rows})
+                cost_rows = _fetch_batched(cur, sql_cost, tovar_ids, (date_to,))
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching margin summary: {e}")
+            return empty
+
+        unit_cost: dict[int, float] = {}
+        for tovar_id, price, _dl_date in cost_rows:
+            if tovar_id not in unit_cost:  # first row per tovar_id = latest (ORDER BY ... DESC)
+                unit_cost[tovar_id] = float(price or 0)
+        unpriced_items = len(tovar_ids) - len(unit_cost)
+
+        by_emp: dict[str, dict] = {}
+
+        def _accumulate(rows, category: str) -> None:
+            for desc, tovar_id, revenue, qty in rows:
+                code = _code_from_description(desc)
+                if not code:
+                    continue
+                cost = float(qty or 0) * unit_cost.get(tovar_id, 0.0)
+                entry = by_emp.setdefault(code, {
+                    "code": code, "repair_revenue": 0.0, "repair_cost": 0.0,
+                    "cosmetics_revenue": 0.0, "cosmetics_cost": 0.0,
+                })
+                entry[f"{category}_revenue"] += float(revenue or 0)
+                entry[f"{category}_cost"] += cost
+
+        _accumulate(repair_rows, "repair")
+        _accumulate(cosmetics_rows, "cosmetics")
+
+        categories = {"repair": dict(empty_cat), "cosmetics": dict(empty_cat)}
+        for cat in ("repair", "cosmetics"):
+            rev = sum(e[f"{cat}_revenue"] for e in by_emp.values())
+            cost = sum(e[f"{cat}_cost"] for e in by_emp.values())
+            categories[cat] = {
+                "revenue": rev, "cost": cost, "margin": rev - cost,
+                "margin_pct": round((rev - cost) / rev * 100, 1) if rev else 0.0,
+            }
+
+        total_rev = categories["repair"]["revenue"] + categories["cosmetics"]["revenue"]
+        total_cost = categories["repair"]["cost"] + categories["cosmetics"]["cost"]
+        total = {
+            "revenue": total_rev, "cost": total_cost, "margin": total_rev - total_cost,
+            "margin_pct": round((total_rev - total_cost) / total_rev * 100, 1) if total_rev else 0.0,
+        }
+
+        by_employee = []
+        for entry in by_emp.values():
+            rev = entry["repair_revenue"] + entry["cosmetics_revenue"]
+            cost = entry["repair_cost"] + entry["cosmetics_cost"]
+            by_employee.append({
+                **entry,
+                "revenue": rev, "cost": cost, "margin": rev - cost,
+                "margin_pct": round((rev - cost) / rev * 100, 1) if rev else 0.0,
+            })
+        by_employee.sort(key=lambda e: e["margin"], reverse=True)
+
+        return {
+            "categories": categories,
+            "total": total,
+            "by_employee": by_employee,
+            "unpriced_items": unpriced_items,
+        }
+
+    def get_turnaround_stats(self, date_from: date, date_to: date) -> dict:
+        """Order fulfillment time (order created → actually picked up) for a date range.
+
+        Uses DOCS.DOC_DATE (order creation) vs DOCS_ORDER.DATE_OUT_FACT
+        (actual pickup) — these have a much better fill rate for this
+        business (~91% in a recent H1) than DATE_ORDER_START/EXECUTED
+        (~10-15%). "Late" compares DATE_OUT_FACT against DATE_OUT, the
+        date promised to the client.
+        """
+        empty = {"total": {"avg_days": 0.0, "late_rate": 0.0, "order_count": 0}, "by_employee": []}
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty turnaround stats")
+            return empty
+
+        sql = """
+            SELECT
+                users.description,
+                AVG(CAST(docs_order.date_out_fact AS TIMESTAMP) - CAST(docs.doc_date AS TIMESTAMP)) AS avg_days,
+                COUNT(*) AS order_count,
+                SUM(CASE WHEN docs_order.date_out > DATE '2000-01-01'
+                              AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs_order.date_out AS TIMESTAMP)
+                         THEN 1 ELSE 0 END) AS late_count
+            FROM docs_order
+                INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
+                INNER JOIN users ON (users.user_id = docs_order.creater_id)
+            WHERE
+                docs.doc_date >= ? AND docs.doc_date <= ?
+                AND docs_order.date_out_fact IS NOT NULL
+                AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs.doc_date AS TIMESTAMP)
+            GROUP BY users.description
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, (date_from, date_to))
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching turnaround stats: {e}")
+            return empty
+
+        by_employee = []
+        total_orders = 0
+        total_late = 0
+        total_days_weighted = 0.0
+        for desc, avg_days, order_count, late_count in rows:
+            code = _code_from_description(desc)
+            if not code:
+                continue
+            avg_days = float(avg_days or 0)
+            by_employee.append({
+                "code": code,
+                "avg_days": round(avg_days, 1),
+                "order_count": order_count,
+                "late_count": late_count,
+                "late_rate": round(late_count / order_count * 100, 1) if order_count else 0.0,
+            })
+            total_orders += order_count
+            total_late += late_count
+            total_days_weighted += avg_days * order_count
+
+        by_employee.sort(key=lambda e: e["avg_days"], reverse=True)
+
+        return {
+            "total": {
+                "avg_days": round(total_days_weighted / total_orders, 1) if total_orders else 0.0,
+                "late_rate": round(total_late / total_orders * 100, 1) if total_orders else 0.0,
+                "order_count": total_orders,
+            },
+            "by_employee": by_employee,
+        }
+
+    def get_receivables(self, date_from: date, date_to: date) -> dict:
+        """Unpaid/partially-paid orders created in a date range (дебиторка).
+
+        Filters on (DOCS_ORDER.KREDIT - DEBET) > 0 — the actual outstanding
+        balance — rather than trusting PAY_STATUS_ID alone: sampled orders
+        marked "Оплачен полностью" (status 3) with a positive kredit-debet
+        gap exist, so the status flag can lag the real balance.
+        """
+        empty = {"total_count": 0, "total_amount": 0.0, "orders": []}
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty receivables")
+            return empty
+
+        sql = """
+            SELECT
+                d.doc_num, d.doc_date, do.id, do.pay_status_id,
+                do.kredit, do.debet, c.name, c.telephone
+            FROM docs_order do
+                INNER JOIN docs d ON (d.doc_id = do.doc_id)
+                LEFT JOIN contragents c ON (c.contr_id = d.contragent_id)
+            WHERE
+                d.doc_date >= ? AND d.doc_date <= ?
+                AND (do.kredit - do.debet) > 0
+            ORDER BY d.doc_date ASC
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, (date_from, date_to))
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching receivables: {e}")
+            return empty
+
+        today = date.today()
+        orders = []
+        total_amount = 0.0
+        for doc_num, doc_date, order_id, pay_status_id, kredit, debet, name, phone in rows:
+            amount = float(kredit or 0) - float(debet or 0)
+            total_amount += amount
+            orders.append({
+                "doc_num": str(doc_num),
+                "date": doc_date.isoformat() if hasattr(doc_date, "isoformat") else str(doc_date),
+                "order_id": order_id,
+                "pay_status_id": pay_status_id,
+                "amount": round(amount, 2),
+                "client_name": (name or "").strip() or None,
+                "client_phone": (phone or "").strip() or None,
+                "days_overdue": (today - doc_date).days if hasattr(doc_date, "isoformat") else None,
+            })
+
+        return {
+            "total_count": len(orders),
+            "total_amount": round(total_amount, 2),
+            "orders": orders,
+        }
+
+    def get_returns_summary(self, date_from: date, date_to: date) -> dict:
+        """Returned-order counts/amounts by employee for a date range (DOCS_ORDER.RETURNED=1).
+
+        Read-only report — deliberately not wired into payroll bonuses/
+        penalties. Whether a return should cost an employee money is a
+        case-by-case call for a human, not something to automate from a
+        raw RETURNED flag.
+        """
+        empty = {"total": {"return_count": 0, "return_amount": 0.0, "order_count": 0, "return_rate": 0.0}, "by_employee": []}
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty returns summary")
+            return empty
+
+        sql_returns = """
+            SELECT users.description, COUNT(*), SUM(docs_order.kredit)
+            FROM docs_order
+                INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
+                INNER JOIN users ON (users.user_id = docs_order.creater_id)
+            WHERE
+                docs.doc_date >= ? AND docs.doc_date <= ?
+                AND docs_order.returned = 1
+            GROUP BY users.description
+        """
+        sql_totals = """
+            SELECT users.description, COUNT(*)
+            FROM docs_order
+                INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
+                INNER JOIN users ON (users.user_id = docs_order.creater_id)
+            WHERE docs.doc_date >= ? AND docs.doc_date <= ?
+            GROUP BY users.description
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql_returns, (date_from, date_to))
+                return_rows = cur.fetchall()
+                cur.execute(sql_totals, (date_from, date_to))
+                total_rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching returns summary: {e}")
+            return empty
+
+        order_counts: dict[str, int] = {}
+        for desc, cnt in total_rows:
+            code = _code_from_description(desc)
+            if code:
+                order_counts[code] = order_counts.get(code, 0) + cnt
+
+        by_employee = []
+        total_returns = 0
+        total_amount = 0.0
+        for desc, ret_cnt, ret_amt in return_rows:
+            code = _code_from_description(desc)
+            if not code:
+                continue
+            order_count = order_counts.get(code, 0)
+            by_employee.append({
+                "code": code,
+                "return_count": ret_cnt,
+                "return_amount": float(ret_amt or 0),
+                "order_count": order_count,
+                "return_rate": round(ret_cnt / order_count * 100, 1) if order_count else 0.0,
+            })
+            total_returns += ret_cnt
+            total_amount += float(ret_amt or 0)
+
+        by_employee.sort(key=lambda e: e["return_count"], reverse=True)
+        total_orders = sum(order_counts.values())
+
+        return {
+            "total": {
+                "return_count": total_returns,
+                "return_amount": round(total_amount, 2),
+                "order_count": total_orders,
+                "return_rate": round(total_returns / total_orders * 100, 1) if total_orders else 0.0,
+            },
+            "by_employee": by_employee,
+        }
+
+    def get_workplace_summary(self, date_from: date, date_to: date) -> dict:
+        """Throughput (revenue + operation count) per WORK_PLACE for a date range.
+
+        This is NOT a per-hour productivity figure — that would need
+        DATE_BEG/DATE_END on USER_SESSION_ACTIONS to hold real elapsed
+        work time, but on this DB they're equal (instant event stamps) for
+        effectively all rows, and TECHNOLOGIST_INPUT_ID/OUTPUT_ID are null
+        on every sampled row too. What *is* reliably populated is
+        WORK_PLACE_ID + a link to the sold service (DOC_ORDER_SERVICES_ID),
+        so this reports volume/revenue per checkpoint instead — on this
+        business's data the "work places" turn out to be the repair
+        intake/dispatch scan checkpoints per branch (e.g. "Ремонт ВХОД",
+        "Ремонт ВЫХОД"), so this doubles as a per-branch repair-workflow
+        throughput view.
+        """
+        empty = {"total_revenue": 0.0, "total_operations": 0, "work_places": []}
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty workplace summary")
+            return empty
+
+        sql = """
+            SELECT wp.name, COUNT(*) AS op_count, SUM(dos.kredit) AS revenue
+            FROM user_session_actions usa
+                INNER JOIN doc_order_services dos ON (dos.id = usa.doc_order_services_id)
+                INNER JOIN work_places wp ON (wp.id = usa.work_place_id)
+            WHERE usa.date_beg >= ? AND usa.date_beg <= ?
+            GROUP BY wp.name
+            ORDER BY revenue DESC
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, (date_from, date_to))
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching workplace summary: {e}")
+            return empty
+
+        work_places = [
+            {
+                "name": (name or "").strip(),
+                "operation_count": op_count,
+                "revenue": float(revenue or 0),
+                "avg_ticket": round(float(revenue or 0) / op_count, 2) if op_count else 0.0,
+            }
+            for name, op_count, revenue in rows
+        ]
+
+        return {
+            "total_revenue": round(sum(w["revenue"] for w in work_places), 2),
+            "total_operations": sum(w["operation_count"] for w in work_places),
+            "work_places": work_places,
+        }
+
+    def get_department_comparison(self, date_from: date, date_to: date) -> dict:
+        """Revenue/order comparison by salon for a date range.
+
+        Salon attribution reuses the exact mechanism payroll_service's
+        payroll-by-salon report uses — the -N suffix on DOCS.DOC_NUM,
+        resolved via SalonRepository (time-aware for renamed/relocated
+        points) — rather than DOCS.DEP_ID, so this can't silently disagree
+        with that existing report over what counts as "salon X's revenue".
+        """
+        from app.data.salon_repository import get_salon_repository
+
+        UNALLOC_ID = "unallocated"
+        UNALLOC_NAME = "Не определено"
+
+        empty = {"total_revenue": 0.0, "departments": []}
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty department comparison")
+            return empty
+
+        repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
+        cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
+        shoes_sales_codes = tuple(c for c in SHOES_CODES if c not in ('0', '1'))
+        shoes_placeholders = ','.join(['?'] * len(shoes_sales_codes))
+
+        sql_repair = f"""
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+            WHERE
+                docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.folder_id IN ({repair_folders})
+            GROUP BY docs.doc_num, docs.doc_date
+        """
+        sql_cosmetics = f"""
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_lines.kredit)
+            FROM doc_order_lines
+                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+            WHERE
+                docs_order_history.status_id = 5
+                AND docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.folder_id IN ({cosmetics_folders})
+            GROUP BY docs.doc_num, docs.doc_date
+        """
+        sql_shoes = f"""
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+            WHERE
+                docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.code IN ({shoes_placeholders})
+            GROUP BY docs.doc_num, docs.doc_date
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql_repair, (date_from, date_to))
+                rows = list(cur.fetchall())
+                cur.execute(sql_cosmetics, (date_from, date_to))
+                rows += cur.fetchall()
+                cur.execute(sql_shoes, (date_from, date_to, *shoes_sales_codes))
+                rows += cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching department comparison: {e}")
+            return empty
+
+        # SalonRepository.get_by_order_code() re-reads salons.json from disk
+        # on every call (by design, for the two-process HR/payroll setup) —
+        # fine for occasional lookups, but for thousands of order rows here
+        # it dominates runtime, so load once and suppress the reload for
+        # the duration of this loop.
+        repo = get_salon_repository()
+        repo._load()
+        original_load = repo._load
+        repo._load = lambda: None
+        try:
+            totals: dict[str, dict] = {}
+            for doc_num, doc_date, revenue in rows:
+                code = _order_salon_code(doc_num)
+                salon = repo.get_by_order_code(code, doc_date.year, doc_date.month) if code else None
+                salon_id = salon.id if salon else UNALLOC_ID
+                salon_name = salon.name if salon else UNALLOC_NAME
+                entry = totals.setdefault(salon_id, {
+                    "salon_id": salon_id, "salon_name": salon_name,
+                    "revenue": 0.0, "doc_nums": set(),
+                })
+                entry["revenue"] += float(revenue or 0)
+                entry["doc_nums"].add(str(doc_num))
+        finally:
+            repo._load = original_load
+
+        departments = []
+        for entry in totals.values():
+            order_count = len(entry["doc_nums"])
+            departments.append({
+                "salon_id": entry["salon_id"],
+                "salon_name": entry["salon_name"],
+                "revenue": round(entry["revenue"], 2),
+                "order_count": order_count,
+                "avg_check": round(entry["revenue"] / order_count, 2) if order_count else 0.0,
+            })
+        departments.sort(key=lambda d: d["revenue"], reverse=True)
+
+        return {
+            "total_revenue": round(sum(d["revenue"] for d in departments), 2),
+            "departments": departments,
         }
 
     def get_cash_moves(self, date_from: date | None = None, date_to: date | None = None) -> list[dict]:

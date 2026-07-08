@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   RefreshCw, Download, EyeOff, Eye, ChevronDown, Check,
   TrendingUp, TrendingDown, BarChart3, Trophy, Users, Target, Calendar,
+  Percent, Clock, RotateCcw, Gauge, Building2,
 } from 'lucide-react';
 import {
   ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid,
@@ -433,6 +434,11 @@ export default function SalesAnalytics() {
   const [prevRows,  setPrevRows]  = useState([]);
   const [plans,     setPlans]     = useState({});
   const [retention, setRetention] = useState(null);
+  const [margin,    setMargin]    = useState(null);
+  const [turnaround, setTurnaround] = useState(null);
+  const [returns,   setReturns]    = useState(null);
+  const [workplaces, setWorkplaces] = useState(null);
+  const [departments, setDepartments] = useState(null);
   const [loading,   setLoading]   = useState(false);
   const [loaded,    setLoaded]    = useState(false);
   const [error,     setError]     = useState(null);
@@ -454,11 +460,16 @@ export default function SalesAnalytics() {
       const prevTo = new Date(d0); prevTo.setDate(prevTo.getDate() - 1);
       const prevFrom = new Date(+prevTo - (d1 - d0));
       const monthKeys = months.map(toMonthKey).join(',');
-      const [mainRes, prevRes, plansRes, retentionRes] = await Promise.all([
+      const [mainRes, prevRes, plansRes, retentionRes, marginRes, turnaroundRes, returnsRes, workplacesRes, departmentsRes] = await Promise.all([
         api.get('/sales/daily', { params }),
         api.get('/sales/daily', { params: { date_from: prevFrom.toISOString().slice(0,10), date_to: prevTo.toISOString().slice(0,10) } }),
         api.get('/sales/plans', { params: { month_keys: monthKeys } }),
         api.get('/sales/client-retention', { params }),
+        api.get('/sales/margin', { params }),
+        api.get('/sales/turnaround', { params }),
+        api.get('/sales/returns', { params }),
+        api.get('/sales/workplaces', { params }),
+        api.get('/sales/departments', { params }),
       ]);
       // Best-effort — a failure here shouldn't block sales data from
       // showing, it just leaves empName() falling back to the raw code.
@@ -468,7 +479,7 @@ export default function SalesAnalytics() {
       } catch (e) {
         console.error('Не удалось загрузить имена сотрудников', e);
       }
-      setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setRetention(retentionRes.data); setLoaded(true);
+      setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setRetention(retentionRes.data); setMargin(marginRes.data); setTurnaround(turnaroundRes.data); setReturns(returnsRes.data); setWorkplaces(workplacesRes.data); setDepartments(departmentsRes.data); setLoaded(true);
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
     } finally { setLoading(false); }
@@ -614,6 +625,11 @@ export default function SalesAnalytics() {
     { key: 'overview',   label: 'Обзор',        icon: <BarChart3 size={15} /> },
     { key: 'employees',  label: 'Сотрудники',   icon: <Users size={15} />, badge: employees.length || undefined },
     { key: 'details',    label: 'Сводная',       icon: <Target size={15} /> },
+    { key: 'margin',     label: 'Маржа',        icon: <Percent size={15} /> },
+    { key: 'turnaround', label: 'Сроки',         icon: <Clock size={15} /> },
+    { key: 'returns',    label: 'Возвраты',      icon: <RotateCcw size={15} /> },
+    { key: 'workplaces', label: 'Пропускная способность', icon: <Gauge size={15} /> },
+    { key: 'departments', label: 'Салоны',      icon: <Building2 size={15} /> },
   ];
 
   return (
@@ -973,6 +989,252 @@ export default function SalesAnalytics() {
                         render: (row) => <span className={`font-semibold ${row.isTotal ? 'text-[color:var(--color-primary)]' : ''}`}>{Math.round(row.rowTotal||0).toLocaleString('ru-RU')}</span> },
                     ]}
                   />
+                </div>
+              </div>
+            ) : (
+              <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>
+            )
+          )}
+
+          {/* ══ MARGIN tab ══════════════════════════════════ */}
+          {activeTab === 'margin' && (
+            margin && margin.total.revenue > 0 ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <KpiStat label="Выручка" value={fmtRub(margin.total.revenue)} accent="#6366f1" icon={<BarChart3 size={18} />} />
+                  <KpiStat label="Себестоимость" value={fmtRub(margin.total.cost)} accent="#ef4444" icon={<Percent size={18} />} />
+                  <KpiStat label="Валовая прибыль" value={fmtRub(margin.total.margin)} accent="#22c55e" icon={<TrendingUp size={18} />} />
+                  <KpiStat label="Маржа" value={fmtPct(margin.total.margin_pct)} accent="#8b5cf6" icon={<Target size={18} />} />
+                </div>
+
+                <div className="app-card overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+                    <h3 className="font-semibold">По категориям</h3>
+                  </div>
+                  <div className="p-3">
+                    <ResponsiveTable
+                      data={CATEGORIES.filter((c) => c.key !== 'shoes').map((c) => ({ ...c, ...margin.categories[c.key] }))}
+                      keyFn={(c) => c.key}
+                      emptyText="Нет данных"
+                      columns={[
+                        { label: 'Категория', primary: true, render: (c) => (
+                          <span className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                            {c.label}
+                          </span>
+                        )},
+                        { label: 'Выручка', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (c) => fmtRub(c.revenue) },
+                        { label: 'Себестоимость', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (c) => fmtRub(c.cost) },
+                        { label: 'Прибыль', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (c) => fmtRub(c.margin) },
+                        { label: 'Маржа', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (c) => fmtPct(c.margin_pct) },
+                      ]}
+                    />
+                  </div>
+                  <div className="px-4 py-2.5 border-t border-[color:var(--color-border)] text-xs text-[color:var(--color-muted-foreground)]">
+                    «Ремонт/химчистка» — это в основном услуги (труд), а не перепродаваемый товар: закупочная себестоимость по складским приходам
+                    для них почти нулевая, поэтому маржа там близка к 100% — это ожидаемо, не ошибка расчёта. Себестоимость считается по последней
+                    цене прихода на складе на конец периода{margin.unpriced_items > 0 ? `; для ${margin.unpriced_items} позиций приход в базе не найден — их себестоимость взята как 0` : ''}.
+                  </div>
+                </div>
+
+                <div className="app-card overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+                    <h3 className="font-semibold">По сотрудникам</h3>
+                  </div>
+                  <div className="p-3">
+                    <ResponsiveTable
+                      data={margin.by_employee}
+                      keyFn={(e) => e.code}
+                      emptyText="Нет данных"
+                      columns={[
+                        { label: 'Сотрудник', primary: true, render: (e) => (
+                          <div className="flex items-center gap-2">
+                            <EmpAvatar name={empName(e.code)} color={CHART_COLORS[margin.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
+                            <span>{empName(e.code)}</span>
+                          </div>
+                        )},
+                        { label: 'Выручка', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => fmtRub(e.revenue) },
+                        { label: 'Себестоимость', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => fmtRub(e.cost) },
+                        { label: 'Прибыль', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => fmtRub(e.margin) },
+                        { label: 'Маржа', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => fmtPct(e.margin_pct) },
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>
+            )
+          )}
+
+          {/* ══ TURNAROUND tab ══════════════════════════════ */}
+          {activeTab === 'turnaround' && (
+            turnaround && turnaround.total.order_count > 0 ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  <KpiStat label="Средний срок" value={`${turnaround.total.avg_days} дн.`} accent="#6366f1" icon={<Clock size={18} />} />
+                  <KpiStat label="Просрочено" value={fmtPct(turnaround.total.late_rate)} accent="#ef4444" icon={<TrendingDown size={18} />}
+                    sub="факт позже обещанной даты" />
+                  <KpiStat label="Заказов с датой выдачи" value={turnaround.total.order_count.toLocaleString('ru-RU')} accent="#22c55e" icon={<Target size={18} />} />
+                </div>
+
+                <div className="app-card overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+                    <h3 className="font-semibold">По сотрудникам</h3>
+                    <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">Срок — от создания заказа до фактической выдачи. Просрочка — выдали позже даты, обещанной клиенту.</p>
+                  </div>
+                  <div className="p-3">
+                    <ResponsiveTable
+                      data={turnaround.by_employee}
+                      keyFn={(e) => e.code}
+                      emptyText="Нет данных"
+                      columns={[
+                        { label: 'Сотрудник', primary: true, render: (e) => (
+                          <div className="flex items-center gap-2">
+                            <EmpAvatar name={empName(e.code)} color={CHART_COLORS[turnaround.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
+                            <span>{empName(e.code)}</span>
+                          </div>
+                        )},
+                        { label: 'Заказов', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => e.order_count.toLocaleString('ru-RU') },
+                        { label: 'Ср. срок', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => `${e.avg_days} дн.` },
+                        { label: 'Просрочено', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => `${e.late_count}` },
+                        { label: '% просрочки', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => (
+                          <span className={e.late_rate >= 50 ? 'text-red-500' : e.late_rate >= 25 ? 'text-amber-500' : 'text-emerald-600'}>{fmtPct(e.late_rate)}</span>
+                        )},
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>
+            )
+          )}
+
+          {/* ══ RETURNS tab ═════════════════════════════════ */}
+          {activeTab === 'returns' && (
+            returns ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  <KpiStat label="Возвратов" value={returns.total.return_count.toLocaleString('ru-RU')} accent="#ef4444" icon={<RotateCcw size={18} />} />
+                  <KpiStat label="% от заказов" value={fmtPct(returns.total.return_rate)} accent="#f59e0b" icon={<Target size={18} />} />
+                  <KpiStat label="Заказов всего" value={returns.total.order_count.toLocaleString('ru-RU')} accent="#6366f1" icon={<BarChart3 size={18} />} />
+                </div>
+
+                {returns.by_employee.length > 0 ? (
+                  <div className="app-card overflow-hidden">
+                    <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+                      <h3 className="font-semibold">По сотрудникам</h3>
+                      <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+                        Только отчёт — решение о штрафах/премиях по возвратам принимается вручную.
+                      </p>
+                    </div>
+                    <div className="p-3">
+                      <ResponsiveTable
+                        data={returns.by_employee}
+                        keyFn={(e) => e.code}
+                        emptyText="Нет возвратов за период"
+                        columns={[
+                          { label: 'Сотрудник', primary: true, render: (e) => (
+                            <div className="flex items-center gap-2">
+                              <EmpAvatar name={empName(e.code)} color={CHART_COLORS[returns.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
+                              <span>{empName(e.code)}</span>
+                            </div>
+                          )},
+                          { label: 'Заказов', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => e.order_count.toLocaleString('ru-RU') },
+                          { label: 'Возвратов', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => e.return_count },
+                          { label: '% возвратов', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => (
+                            <span className={e.return_rate >= 5 ? 'text-red-500' : e.return_rate >= 1 ? 'text-amber-500' : 'text-emerald-600'}>{fmtPct(e.return_rate)}</span>
+                          )},
+                        ]}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Возвратов за выбранный период нет</div>
+                )}
+              </div>
+            ) : (
+              <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>
+            )
+          )}
+
+          {/* ══ WORKPLACES tab ══════════════════════════════ */}
+          {activeTab === 'workplaces' && (
+            workplaces && workplaces.work_places.length > 0 ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <KpiStat label="Выручка через точки" value={fmtRub(workplaces.total_revenue)} accent="#6366f1" icon={<Gauge size={18} />} />
+                  <KpiStat label="Операций" value={workplaces.total_operations.toLocaleString('ru-RU')} accent="#22c55e" icon={<BarChart3 size={18} />} />
+                </div>
+
+                <div className="app-card overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+                    <h3 className="font-semibold">По точкам приёма/выдачи ремонта</h3>
+                    <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+                      Это не «выручка в час» — в базе нет надёжного учёта фактического времени выполнения по мастерам (начало/конец операции
+                      совпадают почти во всех записях). Показана пропускная способность точек сканирования приёма/выдачи ремонта по филиалам —
+                      количество операций и выручка через каждую из них.
+                    </p>
+                  </div>
+                  <div className="p-3">
+                    <ResponsiveTable
+                      data={workplaces.work_places}
+                      keyFn={(w) => w.name}
+                      emptyText="Нет данных"
+                      columns={[
+                        { label: 'Точка', primary: true, render: (w) => w.name },
+                        { label: 'Операций', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (w) => w.operation_count.toLocaleString('ru-RU') },
+                        { label: 'Выручка', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (w) => fmtRub(w.revenue) },
+                        { label: 'Средний чек', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (w) => fmtRub(w.avg_ticket) },
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>
+            )
+          )}
+
+          {/* ══ DEPARTMENTS tab ═════════════════════════════ */}
+          {activeTab === 'departments' && (
+            departments && departments.departments.length > 0 ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <KpiStat label="Выручка по всем салонам" value={fmtRub(departments.total_revenue)} accent="#6366f1" icon={<Building2 size={18} />} />
+                  <KpiStat label="Салонов" value={departments.departments.length.toLocaleString('ru-RU')} accent="#22c55e" icon={<Target size={18} />} />
+                </div>
+
+                <div className="app-card overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+                    <h3 className="font-semibold">Рейтинг салонов</h3>
+                    <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+                      Привязка заказа к салону — по коду в номере заказа (как в «ФОТ по салонам»), не по внутреннему DEP_ID Агбис.
+                    </p>
+                  </div>
+                  <div className="divide-y divide-[color:var(--color-border)]">
+                    {departments.departments.map((d, i) => {
+                      const maxRev = departments.departments[0].revenue || 1;
+                      const share = d.revenue / maxRev;
+                      const color = CHART_COLORS[i % CHART_COLORS.length];
+                      return (
+                        <div key={d.salon_id} className="px-5 py-3">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className="font-semibold text-sm truncate">{d.salon_name}</span>
+                            <span className="font-bold tabular-nums text-sm shrink-0" style={{ color }}>{fmtRub(d.revenue)}</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${share * 100}%`, background: color }} />
+                          </div>
+                          <div className="flex items-center justify-between mt-1 text-xs text-[color:var(--color-muted-foreground)]">
+                            <span>{d.order_count.toLocaleString('ru-RU')} заказ.</span>
+                            <span>ср. чек {fmtRub(d.avg_check)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : (

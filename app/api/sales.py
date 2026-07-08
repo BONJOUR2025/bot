@@ -9,6 +9,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from .dependencies import require_permission
 
 
+def _resolve_range(date_from: Optional[date], date_to: Optional[date]) -> tuple[date, date]:
+    """Shared default-range + validation for every /sales/* endpoint below."""
+    from app.services.firebird_service import FIREBIRD_AVAILABLE
+
+    if not FIREBIRD_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
+
+    today = date.today()
+    df = date_from or (today - timedelta(days=30))
+    dt = date_to or today
+    if df > dt:
+        raise HTTPException(status_code=400, detail="date_from не может быть позже date_to")
+    return df, dt
+
+
 def create_sales_router() -> APIRouter:
     router = APIRouter(
         prefix="/sales",
@@ -22,28 +37,14 @@ def create_sales_router() -> APIRouter:
         date_to: Optional[date] = Query(default=None),
     ):
         """Return daily repair + cosmetics sales by employee for a date range."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service
 
-        if not FIREBIRD_AVAILABLE:
-            raise HTTPException(
-                status_code=503,
-                detail="Firebird недоступен: драйвер fdb не установлен.",
-            )
-
-        today = date.today()
-        df = date_from or (today - timedelta(days=30))
-        dt = date_to or today
-
-        if df > dt:
-            raise HTTPException(status_code=400, detail="date_from не может быть позже date_to")
-
+        df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            rows = svc.get_daily_sales(df, dt)
+            return svc.get_daily_sales(df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
-
-        return rows
 
     @router.get("/client-retention")
     async def get_client_retention(
@@ -51,24 +52,102 @@ def create_sales_router() -> APIRouter:
         date_to: Optional[date] = Query(default=None),
     ):
         """Return new-vs-returning client counts for a date range."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service
 
-        if not FIREBIRD_AVAILABLE:
-            raise HTTPException(
-                status_code=503,
-                detail="Firebird недоступен: драйвер fdb не установлен.",
-            )
-
-        today = date.today()
-        df = date_from or (today - timedelta(days=30))
-        dt = date_to or today
-
-        if df > dt:
-            raise HTTPException(status_code=400, detail="date_from не может быть позже date_to")
-
+        df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
             return svc.get_client_retention(df, dt)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/margin")
+    async def get_margin_summary(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Return gross-margin breakdown (repair/cosmetics, by employee) for a date range."""
+        from app.services.firebird_service import get_firebird_service
+
+        df, dt = _resolve_range(date_from, date_to)
+        try:
+            svc = get_firebird_service()
+            return svc.get_margin_summary(df, dt)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/turnaround")
+    async def get_turnaround_stats(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Return order fulfillment time (creation → pickup) and lateness rate by employee."""
+        from app.services.firebird_service import get_firebird_service
+
+        df, dt = _resolve_range(date_from, date_to)
+        try:
+            svc = get_firebird_service()
+            return svc.get_turnaround_stats(df, dt)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/receivables")
+    async def get_receivables(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Return unpaid/partially-paid orders created in a date range."""
+        from app.services.firebird_service import get_firebird_service
+
+        df, dt = _resolve_range(date_from, date_to)
+        try:
+            svc = get_firebird_service()
+            return svc.get_receivables(df, dt)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/returns")
+    async def get_returns_summary(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Return returned-order counts/amounts by employee for a date range."""
+        from app.services.firebird_service import get_firebird_service
+
+        df, dt = _resolve_range(date_from, date_to)
+        try:
+            svc = get_firebird_service()
+            return svc.get_returns_summary(df, dt)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/workplaces")
+    async def get_workplace_summary(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Return revenue/volume throughput per work place (repair intake/dispatch checkpoints) for a date range."""
+        from app.services.firebird_service import get_firebird_service
+
+        df, dt = _resolve_range(date_from, date_to)
+        try:
+            svc = get_firebird_service()
+            return svc.get_workplace_summary(df, dt)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/departments")
+    async def get_department_comparison(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Return revenue/order comparison by salon for a date range."""
+        from app.services.firebird_service import get_firebird_service
+
+        df, dt = _resolve_range(date_from, date_to)
+        try:
+            svc = get_firebird_service()
+            return svc.get_department_comparison(df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
