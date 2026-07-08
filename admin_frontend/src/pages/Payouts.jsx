@@ -84,7 +84,7 @@ function KpiCard({ label, value, sub, accent, icon: Icon }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
-          <div className="text-xl font-bold truncate" style={{ color: accent || '#6366f1' }}>{value}</div>
+          <div className="text-lg font-bold leading-tight" style={{ color: accent || '#6366f1' }}>{value}</div>
           {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
         </div>
         {Icon && (
