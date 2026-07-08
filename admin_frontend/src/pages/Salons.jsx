@@ -87,7 +87,7 @@ function SelectField({ label, name, value, onChange, options }) {
 // ── Empty form state ─────────────────────────────────────────────
 function emptyForm() {
   return {
-    name: '', code: '', address: '', phone: '',
+    name: '', code: '', order_code: '', address: '', phone: '',
     status: 'active', point_type: 'ТЦ',
     area_sqm: '', opening_date: '',
     work_hours_weekday: '', work_hours_weekend: '',
@@ -103,6 +103,7 @@ function salonToForm(s) {
   return {
     name: s.name ?? '',
     code: s.code ?? '',
+    order_code: s.order_code ?? '',
     address: s.address ?? '',
     phone: s.phone ?? '',
     status: s.status ?? 'active',
@@ -234,6 +235,7 @@ function SalonModal({ salon, employees, onSave, onClose }) {
                 <InputField label="Название *" name="name" value={form.name} onChange={handleChange} placeholder="Пассаж" />
                 <InputField label="Код точки" name="code" value={form.code} onChange={handleChange} placeholder="П" />
               </div>
+              <InputField label="Код точки продаж (Firebird)" name="order_code" value={form.order_code} onChange={handleChange} placeholder="7" />
               <InputField label="Адрес" name="address" value={form.address} onChange={handleChange} placeholder="Лиговский пр., 30" />
               <div className="grid grid-cols-2 gap-3">
                 <InputField label="Телефон" name="phone" value={form.phone} onChange={handleChange} placeholder="+7 (812) 000-00-00" />
@@ -390,6 +392,12 @@ function SalonCard({ salon, employees, onClick }) {
             <span className="truncate">{salon.legal_entity}</span>
           </div>
         )}
+        {salon.order_code && (
+          <div className="flex items-center gap-2">
+            <span>🧾</span>
+            <span>Код продаж: {salon.order_code}</span>
+          </div>
+        )}
       </div>
 
       {/* Staff chips */}
@@ -477,6 +485,12 @@ function SalonDrawer({ salon, employees, onEdit, onDelete, onClose }) {
                 <Field label="Телефон">{salon.phone}</Field>
                 <Field label="Дата открытия">{salon.opening_date}</Field>
               </div>
+              {salon.order_code && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span>🧾</span>
+                  <span>Код продаж: {salon.order_code}</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Часы (будни)">{salon.work_hours_weekday}</Field>
                 <Field label="Часы (вых.)">{salon.work_hours_weekend}</Field>

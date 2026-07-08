@@ -112,10 +112,10 @@ def _parse_shoe_pairs(items: list[tuple]) -> list[float]:
 class FirebirdService:
     """Service for connecting to Firebird database and querying sales data."""
 
-    def get_repair_sales(self, year: int, month: int) -> dict[str, float]:
+    def get_repair_sales_orders(self, year: int, month: int) -> dict[str, list[dict]]:
         """
-        Get repair/dry cleaning sales by employee for a given month.
-        Returns dict: {employee_code: total_sales}
+        Get repair/dry cleaning sales by employee, broken down per order.
+        Returns: {employee_code: [{doc_num: str, kredit: float}, ...]}
         """
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty repair sales")
@@ -128,6 +128,7 @@ class FirebirdService:
         sql = f"""
             SELECT
                 users.description AS DESCRIPTION,
+                docs.doc_num AS DOC_NUM,
                 SUM(doc_order_services.kredit) AS SUM_KREDIT
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
@@ -138,19 +139,22 @@ class FirebirdService:
                 docs.doc_date >= ?
                 AND docs.doc_date < ?
                 AND tovars_tbl.folder_id IN ({','.join(str(x) for x in folder_ids)})
-            GROUP BY users.description
+            GROUP BY users.description, docs.doc_num
         """
 
-        out: dict[str, float] = {}
+        out: dict[str, list[dict]] = {}
         try:
             con = _connect()
             try:
                 cur = con.cursor()
                 cur.execute(sql, (start, end))
-                for desc, s in cur.fetchall():
+                for desc, doc_num, s in cur.fetchall():
                     code = _code_from_description(desc)
-                    if code:
-                        out[code] = float(s or 0)
+                    if code and doc_num is not None:
+                        out.setdefault(code, []).append({
+                            "doc_num": str(doc_num),
+                            "kredit": float(s or 0),
+                        })
             finally:
                 con.close()
         except Exception as e:
@@ -158,10 +162,18 @@ class FirebirdService:
 
         return out
 
-    def get_cosmetics_sales(self, year: int, month: int) -> dict[str, float]:
+    def get_repair_sales(self, year: int, month: int) -> dict[str, float]:
         """
-        Get cosmetics sales by employee for a given month.
+        Get repair/dry cleaning sales by employee for a given month.
         Returns dict: {employee_code: total_sales}
+        """
+        orders = self.get_repair_sales_orders(year, month)
+        return {code: sum(o["kredit"] for o in os) for code, os in orders.items()}
+
+    def get_cosmetics_sales_orders(self, year: int, month: int) -> dict[str, list[dict]]:
+        """
+        Get cosmetics sales by employee, broken down per order.
+        Returns: {employee_code: [{doc_num: str, kredit: float}, ...]}
         """
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty cosmetics sales")
@@ -174,6 +186,7 @@ class FirebirdService:
         sql = f"""
             SELECT
                 users.description AS DESCRIPTION,
+                docs.doc_num AS DOC_NUM,
                 SUM(doc_order_lines.kredit) AS SUM_KREDIT
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
@@ -186,25 +199,36 @@ class FirebirdService:
                 AND docs.doc_date >= ?
                 AND docs.doc_date < ?
                 AND tovars_tbl.folder_id IN ({','.join(str(x) for x in folder_ids)})
-            GROUP BY users.description
+            GROUP BY users.description, docs.doc_num
         """
 
-        out: dict[str, float] = {}
+        out: dict[str, list[dict]] = {}
         try:
             con = _connect()
             try:
                 cur = con.cursor()
                 cur.execute(sql, (start, end))
-                for desc, s in cur.fetchall():
+                for desc, doc_num, s in cur.fetchall():
                     code = _code_from_description(desc)
-                    if code:
-                        out[code] = float(s or 0)
+                    if code and doc_num is not None:
+                        out.setdefault(code, []).append({
+                            "doc_num": str(doc_num),
+                            "kredit": float(s or 0),
+                        })
             finally:
                 con.close()
         except Exception as e:
             logger.error(f"Error fetching cosmetics sales: {e}")
 
         return out
+
+    def get_cosmetics_sales(self, year: int, month: int) -> dict[str, float]:
+        """
+        Get cosmetics sales by employee for a given month.
+        Returns dict: {employee_code: total_sales}
+        """
+        orders = self.get_cosmetics_sales_orders(year, month)
+        return {code: sum(o["kredit"] for o in os) for code, os in orders.items()}
 
     def get_shoes_data(self, year: int, month: int) -> dict[str, list[dict]]:
         """
@@ -287,14 +311,18 @@ class FirebirdService:
 
     def get_all_sales(self, year: int, month: int) -> dict[str, dict]:
         """
-        Get all sales data for a month including per-DOC_NUM shoes data.
-        Returns: {employee_code: {repair: X, cosmetics: Y, shoes: Z, shoes_orders: [{doc_num, kredit}, ...]}}
-        shoes_orders items: {"doc_num": str, "kredit": float}
+        Get all sales data for a month including per-DOC_NUM breakdowns.
+        Returns: {employee_code: {repair: X, cosmetics: Y, shoes: Z,
+                  repair_orders: [{doc_num, kredit}, ...],
+                  cosmetics_orders: [{doc_num, kredit}, ...],
+                  shoes_orders: [{doc_num, kredit}, ...]}}
         """
-        repair = self.get_repair_sales(year, month)
-        cosmetics = self.get_cosmetics_sales(year, month)
+        repair_orders = self.get_repair_sales_orders(year, month)
+        cosmetics_orders = self.get_cosmetics_sales_orders(year, month)
         shoes_data = self.get_shoes_data(year, month)
 
+        repair = {code: sum(o["kredit"] for o in os) for code, os in repair_orders.items()}
+        cosmetics = {code: sum(o["kredit"] for o in os) for code, os in cosmetics_orders.items()}
         # Total KREDIT per employee (for display)
         shoes_totals = {
             code: sum(o["kredit"] for o in orders)
@@ -307,6 +335,8 @@ class FirebirdService:
                 "repair": repair.get(code, 0.0),
                 "cosmetics": cosmetics.get(code, 0.0),
                 "shoes": shoes_totals.get(code, 0.0),
+                "repair_orders": repair_orders.get(code, []),
+                "cosmetics_orders": cosmetics_orders.get(code, []),
                 "shoes_orders": shoes_data.get(code, []),
             }
             for code in all_codes

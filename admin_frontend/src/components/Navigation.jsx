@@ -53,6 +53,7 @@ const navStructure = [
     items: [
       { to: '/admin/payroll-summary',  label: 'Сводный отчёт',        permission: 'payroll',         icon: BarChart2 },
       { to: '/admin/payroll',          label: 'Администраторы',        permission: 'payroll',         icon: Calculator },
+      { to: '/admin/payroll-by-salon', label: 'ФОТ по салонам',       permission: 'payroll',         icon: Store },
       { to: '/admin/masters',          label: 'Мастера',              permission: 'payroll',         icon: Hammer },
       { to: '/admin/manager-salary',   label: 'Менеджеры',            permission: 'manager-salary',  icon: Users },
       { to: '/admin/courier-salary',   label: 'Курьер',               permission: 'payroll',         icon: Truck },

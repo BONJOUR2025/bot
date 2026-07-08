@@ -47,6 +47,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Assets = lazy(() => import("./pages/Assets"));
 const Payroll = lazy(() => import("./pages/Payroll"));
 const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
+const PayrollBySalon = lazy(() => import("./pages/PayrollBySalon"));
 const ManagerSalary = lazy(() => import("./pages/ManagerSalary"));
 const CourierSalary = lazy(() => import("./pages/CourierSalary"));
 const Schedule = lazy(() => import("./pages/Schedule"));
@@ -121,6 +122,7 @@ export default function App() {
                 <Route path="settings/*" element={<Settings />} />
                 <Route path="payroll" element={<Payroll />} />
                 <Route path="payroll-summary" element={<PayrollSummary />} />
+                <Route path="payroll-by-salon" element={<PayrollBySalon />} />
                 <Route path="manager-salary" element={<ManagerSalary />} />
                 <Route path="courier-salary" element={<CourierSalary />} />
                 <Route path="schedule" element={<Schedule />} />

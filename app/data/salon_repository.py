@@ -47,6 +47,21 @@ class SalonRepository:
                 return salon
         return None
 
+    def get_by_order_code(self, order_code: str) -> Salon | None:
+        """Look up a salon by its Firebird order-number suffix code.
+
+        No status filter — a closed/renovation salon must still resolve so
+        historical payroll-by-salon reports keep attributing correctly.
+        """
+        self._load()  # always fresh from disk (two-process setup)
+        order_code = (order_code or "").strip()
+        if not order_code:
+            return None
+        for salon in self._salons.values():
+            if (salon.order_code or "").strip() == order_code:
+                return salon
+        return None
+
     def create(self, data: SalonCreate) -> Salon:
         self._load()  # sync with disk before mutating
         salon = new_salon(data)

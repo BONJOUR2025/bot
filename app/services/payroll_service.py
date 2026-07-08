@@ -18,6 +18,7 @@ from app.settings import settings
 from app.data.sales_plans_repository import SalesPlansRepository, get_sales_plans_repository
 from app.data.payroll_settlement_repository import PayrollSettlementRepository, get_payroll_settlement_repository
 from app.data.location_repository import LocationRepository, get_location_repository
+from app.data.salon_repository import SalonRepository, get_salon_repository
 from app.services.firebird_service import FirebirdService, get_firebird_service
 from app.config import EXCEL_FILE
 
@@ -39,9 +40,20 @@ PLAN_THRESHOLD = 0.80
 
 CODE_RE = re.compile(r"(\d{4})$")
 
+# Firebird order numbers look like "12345-6" or "12345-12" — the digits
+# after the dash identify the salon the sale happened at. Separate code
+# space from the employee's 4-digit CODE_RE and from Salon.code (the
+# letter-based schedule/shift point code).
+ORDER_SALON_CODE_RE = re.compile(r"-(\d{1,2})$")
+
 
 def _extract_code(name: str | None) -> str | None:
     m = CODE_RE.search((name or "").strip())
+    return m.group(1) if m else None
+
+
+def _order_salon_code(doc_num: str | None) -> str | None:
+    m = ORDER_SALON_CODE_RE.search((doc_num or "").strip())
     return m.group(1) if m else None
 
 
@@ -251,6 +263,7 @@ class PayrollService:
         plans_repo: SalesPlansRepository | None = None,
         settlement_repo: PayrollSettlementRepository | None = None,
         location_repo: LocationRepository | None = None,
+        salon_repo: SalonRepository | None = None,
         advance_requests_file: str | None = None,
         bonuses_penalties_file: str | None = None,
         users_file: str | None = None,
@@ -260,6 +273,7 @@ class PayrollService:
         self.plans_repo = plans_repo or get_sales_plans_repository()
         self.settlement_repo = settlement_repo or get_payroll_settlement_repository()
         self.location_repo = location_repo or get_location_repository()
+        self.salon_repo = salon_repo or get_salon_repository()
         self.advance_requests_file = Path(advance_requests_file or settings.advance_requests_file)
         self.bonuses_penalties_file = Path(bonuses_penalties_file or settings.bonuses_penalties_file)
         self.users_file = Path(users_file or settings.users_file)
@@ -509,6 +523,11 @@ class PayrollService:
         subtract from the original employee/category and add to the new one.
         The destination category's commission rate applies from then on,
         since it's just a regular sale in that category once moved.
+
+        All three categories (repair/cosmetics/shoes) carry both a scalar
+        total and a per-order list (`{category}_orders`) — moving by doc_num
+        keeps both in sync, so the salon-attribution report (which reads the
+        order lists directly) stays correct after a manual correction too.
         """
         try:
             from app.services.sale_transfer_service import list_transfers
@@ -520,8 +539,15 @@ class PayrollService:
         def _ensure(code: str) -> dict:
             entry = sales_data.get(code)
             if entry is None:
-                entry = {"repair": 0.0, "cosmetics": 0.0, "shoes": 0.0, "shoes_orders": []}
+                entry = {
+                    "repair": 0.0, "cosmetics": 0.0, "shoes": 0.0,
+                    "repair_orders": [], "cosmetics_orders": [], "shoes_orders": [],
+                }
                 sales_data[code] = entry
+            else:
+                entry.setdefault("repair_orders", [])
+                entry.setdefault("cosmetics_orders", [])
+                entry.setdefault("shoes_orders", [])
             return entry
 
         for t in transfers:
@@ -538,27 +564,25 @@ class PayrollService:
             src = _ensure(from_code)
             dst = _ensure(to_code)
 
-            moved_orders = None
-            if from_category == "shoes":
-                src_orders = src.get("shoes_orders", []) or []
-                moved_orders = t.get("shoes_orders") or [
-                    o for o in src_orders if str(o.get("doc_num")) == doc_num
-                ]
-                src["shoes_orders"] = [
-                    o for o in src_orders if str(o.get("doc_num")) != doc_num
-                ]
-                src["shoes"] = sum(o.get("kredit", 0.0) for o in src["shoes_orders"])
-            else:
-                src[from_category] = src.get(from_category, 0.0) - amount
+            src_key = f"{from_category}_orders"
+            src_orders = src.get(src_key, []) or []
+            # `shoes_orders` on the transfer itself carries the exact pairs
+            # being moved when a doc_num covers more than one pair and only
+            # some of them should move; falls back to matching by doc_num.
+            moved_orders = t.get("shoes_orders") or [
+                o for o in src_orders if str(o.get("doc_num")) == doc_num
+            ]
+            if not moved_orders:
+                # No per-order rows matched (e.g. a doc_num typo, or data
+                # from before per-order tracking existed) — fall back to a
+                # synthetic single order so the scalar total still moves.
+                moved_orders = [{"doc_num": doc_num, "kredit": amount}]
+            src[src_key] = [o for o in src_orders if str(o.get("doc_num")) != doc_num]
+            src[from_category] = sum(o.get("kredit", 0.0) for o in src[src_key])
 
-            if to_category == "shoes":
-                orders = moved_orders if moved_orders is not None else [
-                    {"doc_num": doc_num, "kredit": amount}
-                ]
-                dst.setdefault("shoes_orders", []).extend(orders)
-                dst["shoes"] = sum(o.get("kredit", 0.0) for o in dst.get("shoes_orders", []))
-            else:
-                dst[to_category] = dst.get(to_category, 0.0) + amount
+            dst_key = f"{to_category}_orders"
+            dst.setdefault(dst_key, []).extend(moved_orders)
+            dst[to_category] = sum(o.get("kredit", 0.0) for o in dst.get(dst_key, []))
 
     # ── Commission ────────────────────────────────────────────────
 
@@ -575,11 +599,21 @@ class PayrollService:
 
     async def calculate_payroll(self, month: str, year: int | None = None) -> tuple[list[PayrollRow], list[str]]:
         """Returns (rows, unknown_location_codes)."""
+        rows, unknown_codes, _order_detail = await self._calculate_payroll_internal(month, year)
+        return rows, unknown_codes
+
+    async def _calculate_payroll_internal(
+        self, month: str, year: int | None = None
+    ) -> tuple[list[PayrollRow], list[str], dict[str, dict]]:
+        """Same computation as `calculate_payroll`, plus per-employee raw order
+        detail (`order_detail`) needed by the by-salon report — kept as a
+        single internal worker so both callers share one Excel parse, one
+        Firebird round-trip, and one sale-transfer application."""
         self._refresh_user_mappings_if_changed()
         month = month.strip().upper()
         month_num = MONTH_NAMES.get(month)
         if not month_num:
-            return [], []
+            return [], [], {}
 
         if year is None:
             year = datetime.now().year
@@ -592,7 +626,7 @@ class PayrollService:
         # other request the API process is serving.
         employees = await asyncio.to_thread(self._get_employees_from_excel, month)
         if not employees:
-            return [], []
+            return [], [], {}
 
         try:
             sales_data = await asyncio.to_thread(self.firebird.get_all_sales, year, month_num)
@@ -632,6 +666,7 @@ class PayrollService:
         })
 
         results = []
+        order_detail: dict[str, dict] = {}
         for emp in employees:
             code = emp["code"]
             name = emp["name"]
@@ -663,6 +698,8 @@ class PayrollService:
             shoes_sales = emp_sales.get("shoes", 0.0)
             shoes_order_items = emp_sales.get("shoes_orders", [])
             shoes_orders = [o["doc_num"] for o in shoes_order_items if isinstance(o, dict)]
+            repair_order_items = emp_sales.get("repair_orders", [])
+            cosmetics_order_items = emp_sales.get("cosmetics_orders", [])
 
             plan = plans_map.get(code)
             ignore_kpi = plan.ignore_kpi if plan else False
@@ -783,7 +820,13 @@ class PayrollService:
                 shifts_by_point=shifts_by_point,
             ))
 
-        return results, unknown_codes
+            order_detail[code] = {
+                "repair_orders": repair_order_items,
+                "cosmetics_orders": cosmetics_order_items,
+                "shoes_order_items": shoes_order_items,
+            }
+
+        return results, unknown_codes, order_detail
 
     async def get_employee_details(self, employee_code: str, month: str, year: int | None = None):
         rows, _ = await self.calculate_payroll(month, year)
@@ -791,6 +834,178 @@ class PayrollService:
             if row.employee_code == employee_code:
                 return row
         return None
+
+    UNALLOCATED_SALON_ID = "unallocated"
+    UNALLOCATED_SALON_NAME = "Не определено"
+
+    async def get_payroll_by_salon(self, month: str, year: int | None = None) -> dict:
+        """Same commission/oklad totals as `calculate_payroll`, split by the
+        salon each order/shift happened at. An employee's monthly rate
+        (already resolved for plan fulfillment / force_max / force_min) is
+        applied to that employee's sales at each specific salon — no
+        per-salon plan is computed or invented."""
+        rows, unknown_codes, order_detail = await self._calculate_payroll_internal(month, year)
+        month = month.strip().upper()
+        if year is None:
+            year = datetime.now().year
+        month_key = make_month_key(month, year)
+
+        UNALLOC_ID = self.UNALLOCATED_SALON_ID
+        UNALLOC_NAME = self.UNALLOCATED_SALON_NAME
+
+        salons: dict[str, dict] = {}
+
+        def _bucket(salon_id: str, salon_name: str) -> dict:
+            b = salons.get(salon_id)
+            if b is None:
+                b = {
+                    "salon_id": salon_id,
+                    "salon_name": salon_name,
+                    "oklad": 0.0,
+                    "repair_commission": 0.0,
+                    "cosmetics_commission": 0.0,
+                    "shoes_commission": 0.0,
+                    "total": 0.0,
+                    "employees": {},
+                }
+                salons[salon_id] = b
+            return b
+
+        def _emp_entry(bucket: dict, code: str, name: str) -> dict:
+            e = bucket["employees"].get(code)
+            if e is None:
+                e = {
+                    "employee_code": code,
+                    "employee_name": name,
+                    "oklad": 0.0,
+                    "repair_commission": 0.0,
+                    "cosmetics_commission": 0.0,
+                    "shoes_commission": 0.0,
+                    "total": 0.0,
+                }
+                bucket["employees"][code] = e
+            return e
+
+        def _add(bucket: dict, emp: dict, field: str, amount: float) -> None:
+            if not amount:
+                return
+            bucket[field] += amount
+            bucket["total"] += amount
+            emp[field] += amount
+            emp["total"] += amount
+
+        grand_total = {
+            "oklad": 0.0,
+            "repair_commission": 0.0,
+            "cosmetics_commission": 0.0,
+            "shoes_commission": 0.0,
+            "total": 0.0,
+        }
+
+        def _resolve_by_order(doc_num: str | None) -> tuple[str, str]:
+            salon = self.salon_repo.get_by_order_code(_order_salon_code(doc_num))
+            if salon:
+                return salon.id, salon.name
+            return UNALLOC_ID, UNALLOC_NAME
+
+        for row in rows:
+            code = row.employee_code
+            name = row.employee_name
+
+            # ── Oklad: split proportionally across the salons worked this month ──
+            shifts_by_point = row.shifts_by_point or {}
+            total_shifts = sum(shifts_by_point.values())
+            if row.base_salary:
+                if total_shifts > 0:
+                    for pt_code, pt_shifts in shifts_by_point.items():
+                        if not pt_shifts:
+                            continue
+                        salon = self.salon_repo.get_by_code(pt_code)
+                        salon_id = salon.id if salon else UNALLOC_ID
+                        salon_name = salon.name if salon else UNALLOC_NAME
+                        bucket = _bucket(salon_id, salon_name)
+                        emp = _emp_entry(bucket, code, name)
+                        portion = row.base_salary * pt_shifts / total_shifts
+                        _add(bucket, emp, "oklad", portion)
+                        grand_total["oklad"] += portion
+                else:
+                    bucket = _bucket(UNALLOC_ID, UNALLOC_NAME)
+                    emp = _emp_entry(bucket, code, name)
+                    _add(bucket, emp, "oklad", row.base_salary)
+                    grand_total["oklad"] += row.base_salary
+
+            # ignore_kpi zeroes the row's final commission but NOT its
+            # resolved rates — multiplying rate × per-order sales here would
+            # silently resurrect commission the main calculation zeroed out.
+            if row.ignore_kpi:
+                continue
+
+            detail = order_detail.get(code, {})
+
+            for order in detail.get("repair_orders", []):
+                if not isinstance(order, dict):
+                    continue
+                kredit = float(order.get("kredit") or 0.0)
+                if not kredit:
+                    continue
+                commission = kredit * row.repair_rate
+                salon_id, salon_name = _resolve_by_order(order.get("doc_num"))
+                bucket = _bucket(salon_id, salon_name)
+                emp = _emp_entry(bucket, code, name)
+                _add(bucket, emp, "repair_commission", commission)
+                grand_total["repair_commission"] += commission
+
+            for order in detail.get("cosmetics_orders", []):
+                if not isinstance(order, dict):
+                    continue
+                kredit = float(order.get("kredit") or 0.0)
+                if not kredit:
+                    continue
+                commission = kredit * row.cosmetics_rate
+                salon_id, salon_name = _resolve_by_order(order.get("doc_num"))
+                bucket = _bucket(salon_id, salon_name)
+                emp = _emp_entry(bucket, code, name)
+                _add(bucket, emp, "cosmetics_commission", commission)
+                grand_total["cosmetics_commission"] += commission
+
+            for order in detail.get("shoes_order_items", []):
+                if not isinstance(order, dict):
+                    continue
+                kredit = float(order.get("kredit") or 0.0)
+                if "shoes" in row.force_max:
+                    commission = 1000.0
+                elif "shoes" in row.force_min:
+                    commission = 500.0
+                else:
+                    commission = 1000.0 if kredit > 11000 else 500.0
+                salon_id, salon_name = _resolve_by_order(order.get("doc_num"))
+                bucket = _bucket(salon_id, salon_name)
+                emp = _emp_entry(bucket, code, name)
+                _add(bucket, emp, "shoes_commission", commission)
+                grand_total["shoes_commission"] += commission
+
+        grand_total["total"] = (
+            grand_total["oklad"]
+            + grand_total["repair_commission"]
+            + grand_total["cosmetics_commission"]
+            + grand_total["shoes_commission"]
+        )
+
+        salon_list = []
+        for bucket in salons.values():
+            bucket = dict(bucket)
+            bucket["employees"] = sorted(
+                bucket["employees"].values(), key=lambda e: e["employee_name"]
+            )
+            salon_list.append(bucket)
+        salon_list.sort(key=lambda s: (s["salon_id"] == UNALLOC_ID, s["salon_name"]))
+
+        return {
+            "month_key": month_key,
+            "salons": salon_list,
+            "unknown_codes": unknown_codes,
+            "grand_total": grand_total,
+        }
 
     def get_code_for_employee(self, employee_id: str | None = None, full_name: str | None = None) -> str | None:
         """Resolve payroll employee_code by employee_id (telegram id) or full_name."""

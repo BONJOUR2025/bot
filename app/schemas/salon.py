@@ -16,6 +16,10 @@ class SalonContact(BaseModel):
 class SalonCreate(BaseModel):
     name: str
     code: str = ""
+    # Separate from `code` (the letter-based schedule/shift point code) —
+    # this is the 1-2 digit salon id that appears after the dash in Firebird
+    # order numbers ("12345-6"), used to attribute KPI commission per salon.
+    order_code: str = ""
     address: str = ""
     phone: str = ""
     status: str = "active"          # active | renovation | closed
@@ -46,6 +50,7 @@ class SalonCreate(BaseModel):
 class SalonUpdate(BaseModel):
     name: Optional[str] = None
     code: Optional[str] = None
+    order_code: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
     status: Optional[str] = None
@@ -80,6 +85,7 @@ class Salon(SalonCreate):
             id=data["id"],
             name=data.get("name", ""),
             code=data.get("code", ""),
+            order_code=data.get("order_code", ""),
             address=data.get("address", ""),
             phone=data.get("phone", ""),
             status=data.get("status", "active"),
@@ -105,6 +111,7 @@ class Salon(SalonCreate):
             "id": self.id,
             "name": self.name,
             "code": self.code,
+            "order_code": self.order_code,
             "address": self.address,
             "phone": self.phone,
             "status": self.status,

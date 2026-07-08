@@ -178,6 +178,16 @@ def create_payroll_router(
         row = await _payroll.get_employee_details(employee_code, month, year)
         return PayrollRowOutput(**row.to_dict()) if row else None
 
+    # ── ФОТ по салонам ──────────────────────────────────────────────
+    @router.get("/by-salon")
+    async def get_payroll_by_salon(
+        month: str = Query(...),
+        year: Optional[int] = Query(None),
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        _check(current)
+        return await _payroll.get_payroll_by_salon(month, year)
+
     # ── Advances history ──────────────────────────────────────────
     @router.get("/advances-history")
     async def advances_history(
