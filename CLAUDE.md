@@ -21,7 +21,11 @@ uvicorn app.server:app --host 0.0.0.0 --port 8000
 # Telegram bot only, polling mode (this process owns all scheduled jobs)
 python -m app.main
 
-# VK bot (stub, contact registration only)
+# VK bot — mirrors the employee-facing Telegram scenarios (menu, salary/
+# schedule viewing, personal cabinet, payout requests, shift check-in).
+# Admin scenarios and the recruitment/LLM layer are deliberately NOT
+# ported (see app/vk_main.py's module docstring for the current list and
+# reasoning) — the web admin covers those.
 python -m app.vk_main
 
 # One-time JSON → SQLite migration (idempotent)
@@ -56,12 +60,13 @@ The frontend calls the API via axios with `baseURL: '/api'` and a Bearer token f
 
 ## Architecture
 
-### Two processes, shared state
+### Three processes, shared state
 
-The system runs as two separate processes that share the same data files and SQLite DB:
+The system runs as three separate long-lived processes that share the same data files and SQLite DB:
 
 1. **Bot process** (`python -m app.main`) — Telegram polling. This is the ONLY process that registers scheduled jobs (morning briefing, reminders); it also runs `init_db()` on startup.
 2. **API process** (`uvicorn app.server:app`) — FastAPI app built by `app/api/create_app()`. It builds the Telegram Application with `create_application(with_jobs=False)` — registering jobs here too would double every scheduled message.
+3. **VK bot process** (`python -m app.vk_main`) — a `vkbottle`-based port of the employee-facing Telegram scenarios only (see Commands above). Uses VK's Bot Long Poll API, no public webhook needed.
 
 SQLite (`hr.db`) runs in WAL mode with a busy timeout (`app/db/session.py`) specifically so both processes can read/write concurrently. `launcher.py` is a Tkinter GUI (built into a Windows EXE) that starts/stops both processes; production runs on Windows behind ngrok.
 
