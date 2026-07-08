@@ -631,6 +631,7 @@ export default function Payouts() {
     method: '',
     from: '',
     to: '',
+    position: '',
   });
   const [showEditor, setShowEditor] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -664,6 +665,17 @@ export default function Payouts() {
         [...list].sort((a, b) => displayName(a).localeCompare(displayName(b), 'ru')),
       ]);
   }, [employees, useFullName]);
+
+  const employeeById = useMemo(() => {
+    const map = {};
+    for (const e of employees) map[String(e.id)] = e;
+    return map;
+  }, [employees]);
+
+  const positionOptions = useMemo(
+    () => employeesByPosition.map(([position]) => position),
+    [employeesByPosition],
+  );
 
   const totalSum = useMemo(() => payouts.reduce((s, p) => s + Number(p.amount || 0), 0), [payouts]);
 
@@ -817,6 +829,12 @@ export default function Payouts() {
         const q = filters.query.toLowerCase();
         list = list.filter((p) => p.name?.toLowerCase().includes(q));
       }
+      if (filters.position) {
+        list = list.filter((p) => {
+          const position = employeeById[String(p.user_id)]?.position || 'Без должности';
+          return position === filters.position;
+        });
+      }
       setPayouts(list);
       if (params.from_date || params.to_date) {
         loadMoveMatches(params.from_date, params.to_date);
@@ -893,7 +911,7 @@ export default function Payouts() {
   }
 
   function resetFilters() {
-    setFilters({ query: '', type: '', status: '', method: '', from: '', to: '' });
+    setFilters({ query: '', type: '', status: '', method: '', from: '', to: '', position: '' });
     load();
   }
 
@@ -1327,6 +1345,18 @@ export default function Payouts() {
           <option value="💳 На карту">На карту</option>
           <option value="🏦 Из кассы">Из кассы</option>
           <option value="🤝 Наличными">Наличными</option>
+        </select>
+        <select
+          className="input"
+          value={filters.position}
+          onChange={(e) => setFilters({ ...filters, position: e.target.value })}
+        >
+          <option value="">Все должности</option>
+          {positionOptions.map((position) => (
+            <option key={position} value={position}>
+              {position}
+            </option>
+          ))}
         </select>
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
           <input
