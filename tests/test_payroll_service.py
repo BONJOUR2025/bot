@@ -148,7 +148,7 @@ class _FakeSalonRepo:
     def get_by_code(self, code: str):
         return self._by_code.get(code)
 
-    def get_by_order_code(self, order_code: str):
+    def get_by_order_code(self, order_code: str, year: int | None = None, month: int | None = None):
         return self._by_order_code.get(order_code)
 
 
@@ -375,3 +375,65 @@ def test_salon_repository_get_by_order_code(tmp_path):
     assert repo.get_by_order_code(" 7 ").id == salon.id
     assert repo.get_by_order_code("99") is None
     assert repo.get_by_order_code("") is None
+
+
+def test_get_by_order_code_disambiguates_renamed_salon_by_opening_date(tmp_path):
+    """Regression: «Пассаж» (код "П") переехал и стал «Гранд Палас» (код
+    "Гп") в мае, но номер заказа в Firebird ("...-7") не изменился — обе
+    записи Salon имеют order_code="7". Без учёта месяца это раньше
+    разъезжалось произвольно (по порядку словаря)."""
+    repo = SalonRepository(path=tmp_path / "salons.json")
+    old_salon = repo.create(SalonCreate(name="Пассаж", code="П", order_code="7"))
+    new_salon = repo.create(SalonCreate(name="Гранд Палас", code="Гп", order_code="7", opening_date="2025-05-01"))
+
+    # До переезда (январь) должен резолвиться только старый салон —
+    # «Гранд Палас» с точки зрения графика ещё не существовал.
+    assert repo.get_by_order_code("7", 2025, 1).id == old_salon.id
+    assert repo.get_by_order_code("7", 2025, 4).id == old_salon.id
+
+    # В месяц переезда и после — уже новый.
+    assert repo.get_by_order_code("7", 2025, 5).id == new_salon.id
+    assert repo.get_by_order_code("7", 2025, 12).id == new_salon.id
+
+    # Без указания месяца — прежнее поведение (первый найденный), для
+    # обратной совместимости c уже существующими вызовами.
+    assert repo.get_by_order_code("7") is not None
+
+
+def test_get_by_order_code_ambiguous_without_opening_date_returns_none(tmp_path):
+    """Если ни у одной из задвоенных записей нет opening_date — различить
+    их по месяцу нечем, лучше явно не угадать, чем молча приписать не тому
+    салону."""
+    repo = SalonRepository(path=tmp_path / "salons.json")
+    repo.create(SalonCreate(name="Пассаж", code="П", order_code="7"))
+    repo.create(SalonCreate(name="Гранд Палас", code="Гп", order_code="7"))
+
+    assert repo.get_by_order_code("7", 2025, 1) is None
+
+
+def test_by_salon_renamed_salon_attributed_to_correct_era(tmp_path):
+    """End-to-end: комиссия за январь должна целиком уйти на «Пассаж», а
+    не разъехаться с ещё не существовавшим на тот момент «Гранд Паласом»,
+    даже если обе записи имеют order_code="7"."""
+    repo = SalonRepository(path=tmp_path / "salons.json")
+    old_salon = repo.create(SalonCreate(name="Пассаж", code="П", order_code="7"))
+    repo.create(SalonCreate(name="Гранд Палас", code="Гп", order_code="7", opening_date="2025-05-01"))
+
+    svc = PayrollService()
+    svc.salon_repo = repo
+
+    row = _payroll_row(repair_rate=0.02, cosmetics_rate=0.08)
+    order_detail = {
+        "1234": {
+            "repair_orders": [{"doc_num": "555-7", "kredit": 1000.0}],
+            "cosmetics_orders": [],
+            "shoes_order_items": [],
+        }
+    }
+    _mock_internal(svc, [row], order_detail)
+
+    result = _run(svc.get_payroll_by_salon("JANUARY", 2025))
+
+    salon_ids = {s["salon_id"] for s in result["salons"]}
+    assert salon_ids == {old_salon.id}
+    assert result["grand_total"]["repair_commission"] == pytest.approx(20.0)

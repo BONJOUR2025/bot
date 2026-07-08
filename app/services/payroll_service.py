@@ -848,6 +848,7 @@ class PayrollService:
         month = month.strip().upper()
         if year is None:
             year = datetime.now().year
+        month_num = MONTH_NAMES.get(month)
         month_key = make_month_key(month, year)
 
         UNALLOC_ID = self.UNALLOCATED_SALON_ID
@@ -906,7 +907,9 @@ class PayrollService:
         }
 
         def _resolve_by_order(doc_num: str | None) -> tuple[str, str]:
-            salon = self.salon_repo.get_by_order_code(_order_salon_code(doc_num))
+            salon = self.salon_repo.get_by_order_code(
+                _order_salon_code(doc_num), year, month_num
+            )
             if salon:
                 return salon.id, salon.name
             return UNALLOC_ID, UNALLOC_NAME
