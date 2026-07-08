@@ -862,6 +862,7 @@ class PayrollService:
                     "salon_id": salon_id,
                     "salon_name": salon_name,
                     "oklad": 0.0,
+                    "bonuses": 0.0,
                     "repair_commission": 0.0,
                     "cosmetics_commission": 0.0,
                     "shoes_commission": 0.0,
@@ -878,6 +879,7 @@ class PayrollService:
                     "employee_code": code,
                     "employee_name": name,
                     "oklad": 0.0,
+                    "bonuses": 0.0,
                     "repair_commission": 0.0,
                     "cosmetics_commission": 0.0,
                     "shoes_commission": 0.0,
@@ -896,6 +898,7 @@ class PayrollService:
 
         grand_total = {
             "oklad": 0.0,
+            "bonuses": 0.0,
             "repair_commission": 0.0,
             "cosmetics_commission": 0.0,
             "shoes_commission": 0.0,
@@ -912,10 +915,15 @@ class PayrollService:
             code = row.employee_code
             name = row.employee_name
 
-            # ── Oklad: split proportionally across the salons worked this month ──
+            # ── Employee-level amounts (oklad, премии): not tied to any
+            # specific sale, so split proportionally across the salons
+            # worked this month — same rule as the oklad itself.
             shifts_by_point = row.shifts_by_point or {}
             total_shifts = sum(shifts_by_point.values())
-            if row.base_salary:
+
+            def _split_by_shifts(field: str, amount: float) -> None:
+                if not amount:
+                    return
                 if total_shifts > 0:
                     for pt_code, pt_shifts in shifts_by_point.items():
                         if not pt_shifts:
@@ -925,14 +933,17 @@ class PayrollService:
                         salon_name = salon.name if salon else UNALLOC_NAME
                         bucket = _bucket(salon_id, salon_name)
                         emp = _emp_entry(bucket, code, name)
-                        portion = row.base_salary * pt_shifts / total_shifts
-                        _add(bucket, emp, "oklad", portion)
-                        grand_total["oklad"] += portion
+                        portion = amount * pt_shifts / total_shifts
+                        _add(bucket, emp, field, portion)
+                        grand_total[field] += portion
                 else:
                     bucket = _bucket(UNALLOC_ID, UNALLOC_NAME)
                     emp = _emp_entry(bucket, code, name)
-                    _add(bucket, emp, "oklad", row.base_salary)
-                    grand_total["oklad"] += row.base_salary
+                    _add(bucket, emp, field, amount)
+                    grand_total[field] += amount
+
+            _split_by_shifts("oklad", row.base_salary)
+            _split_by_shifts("bonuses", (row.bonuses or 0.0) + (row.excel_bonus or 0.0))
 
             # ignore_kpi zeroes the row's final commission but NOT its
             # resolved rates — multiplying rate × per-order sales here would
@@ -986,6 +997,7 @@ class PayrollService:
 
         grand_total["total"] = (
             grand_total["oklad"]
+            + grand_total["bonuses"]
             + grand_total["repair_commission"]
             + grand_total["cosmetics_commission"]
             + grand_total["shoes_commission"]

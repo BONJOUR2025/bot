@@ -42,6 +42,7 @@ function SalonRow({ salon }) {
         <div className="border-t border-[color:var(--color-border)] px-4 py-3 space-y-3">
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             <Term label="Оклад" value={salon.oklad} />
+            <Term op="+" label="Премии" value={salon.bonuses} />
             <Term op="+" label="Ремонт" value={salon.repair_commission} />
             <Term op="+" label="Косметика" value={salon.cosmetics_commission} />
             <Term op="+" label="Обувь" value={salon.shoes_commission} />
@@ -93,6 +94,7 @@ function EmployeeRow({ employee }) {
               </div>
               <div className="flex flex-wrap gap-x-3 text-xs text-[color:var(--color-muted-foreground)]">
                 <span>Оклад {fmtMoney(s.oklad)}</span>
+                <span>Премии {fmtMoney(s.bonuses)}</span>
                 <span>Ремонт {fmtMoney(s.repair_commission)}</span>
                 <span>Косметика {fmtMoney(s.cosmetics_commission)}</span>
                 <span>Обувь {fmtMoney(s.shoes_commission)}</span>
@@ -119,6 +121,7 @@ function buildEmployeeView(salons) {
         salon_id: salon.salon_id,
         salon_name: salon.salon_name,
         oklad: emp.oklad,
+        bonuses: emp.bonuses,
         repair_commission: emp.repair_commission,
         cosmetics_commission: emp.cosmetics_commission,
         shoes_commission: emp.shoes_commission,
@@ -213,6 +216,7 @@ export default function PayrollBySalon() {
             </div>
             <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
               <Term label="Оклад" value={data.grand_total.oklad} />
+              <Term op="+" label="Премии" value={data.grand_total.bonuses} />
               <Term op="+" label="Ремонт" value={data.grand_total.repair_commission} />
               <Term op="+" label="Косметика" value={data.grand_total.cosmetics_commission} />
               <Term op="+" label="Обувь" value={data.grand_total.shoes_commission} />

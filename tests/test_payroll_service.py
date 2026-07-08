@@ -234,6 +234,43 @@ def test_by_salon_unrecognized_code_goes_to_unallocated_and_reconciles():
     )
 
 
+def test_by_salon_bonuses_included_and_reconciles_with_total_gross():
+    """Regression: премии (bonuses/excel_bonus) не привязаны к продаже, но
+    обязаны попасть в отчёт — иначе ФОТ по салонам расходится с ФОТ на
+    странице расчёта зарплаты (total_gross)."""
+    svc = PayrollService()
+    salon_a = _FakeSalon(id="salon-a", name="Салон А")
+    svc.salon_repo = _FakeSalonRepo(by_code={"A": salon_a}, by_order_code={"1": salon_a})
+
+    total_commission = 20.0 + 40.0 + 1000.0
+    row = _payroll_row(
+        base_salary=1000.0,
+        shifts_by_point={"A": 10},
+        bonuses=500.0,
+        excel_bonus=200.0,
+        repair_rate=0.02,
+        cosmetics_rate=0.08,
+        repair_commission=20.0,
+        cosmetics_commission=40.0,
+        shoes_commission=1000.0,
+        total_commission=total_commission,
+        total_gross=1000.0 + total_commission + 500.0 + 200.0,
+    )
+    order_detail = {
+        "1234": {
+            "repair_orders": [{"doc_num": "555-1", "kredit": 1000.0}],
+            "cosmetics_orders": [{"doc_num": "555-1", "kredit": 500.0}],
+            "shoes_order_items": [{"doc_num": "555-1", "kredit": 12000.0}],
+        }
+    }
+    _mock_internal(svc, [row], order_detail)
+
+    result = _run(svc.get_payroll_by_salon("JANUARY", 2025))
+
+    assert result["grand_total"]["bonuses"] == pytest.approx(700.0)
+    assert result["grand_total"]["total"] == pytest.approx(row.total_gross)
+
+
 def test_by_salon_oklad_split_by_shifts_with_unresolved_and_empty_fallback():
     svc = PayrollService()
     salon_a = _FakeSalon(id="salon-a", name="Салон А")
