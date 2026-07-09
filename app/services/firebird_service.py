@@ -39,6 +39,37 @@ def _order_salon_code(doc_num: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+_RECEIPT_DOC_NUM_RE = re.compile(r"Номер документа\s*:\s*(\S+?);?(?:\s|$)")
+_WAREHOUSE_INVOICE_RE = re.compile(r"накладной\s+ВнНомер(\S+)")
+
+
+def _humanize_order_action(basis: str) -> str:
+    """Translate one Agbis DOCS_ORDER_HISTORY.BASIS string into a short
+    plain-language summary for the "Пользователи АГБИС" action log — the
+    raw text is kept alongside (see get_agbis_user_actions) so nothing is
+    lost if this misses a pattern, it just falls back to the raw text.
+    """
+    if basis.startswith('Сохранение заказа при создании'):
+        return "Создали заказ"
+    if basis.startswith('Распечатан чек'):
+        m = _RECEIPT_DOC_NUM_RE.search(basis)
+        return f"Распечатали чек полного расчёта (документ №{m.group(1)})" if m else "Распечатали чек полного расчёта"
+    if basis.startswith('Выдача заказа'):
+        return "Выдали заказ клиенту"
+    if basis.startswith('Изменение текущего склада'):
+        m = _WAREHOUSE_INVOICE_RE.search(basis)
+        return f"Переместили заказ между складами (накладная №{m.group(1)})" if m else "Переместили заказ между складами"
+    if 'изменена сумма' in basis:
+        return "Изменили сумму услуги"
+    if basis.startswith('СМС сформированная для отправки'):
+        return "Сформировали СМС клиенту"
+    if basis.startswith('Новое изменение статуса СМС'):
+        return "Обновился статус СМС"
+    if basis.startswith('Сохранение заказа при изменении'):
+        return "Изменили заказ"
+    return basis or "Действие без описания"
+
+
 class _SalonResolver:
     """Resolves (doc_num, doc_date) -> salon_id for a batch of rows.
 
@@ -2120,10 +2151,11 @@ class FirebirdService:
         ]
 
     def get_agbis_user_actions(self, user_id: int, day: date) -> list[dict]:
-        """Per-order action log for one user on one day, from
-        DOCS_ORDER_HISTORY.BASIS — a free-text description Agbis itself
-        writes for every order create/edit/pickup/warehouse-move event
-        ("Сохранение заказа при создании", "Выдача заказа", ...).
+        """Per-order action log for one user on one day, translated from
+        Agbis's raw DOCS_ORDER_HISTORY rows into human-readable entries —
+        what kind of action it was, and (when the underlying fields
+        actually changed) what changed from what to what: status, oplata,
+        delivery status, deadline date, amount, discount, warehouse.
 
         Filters on DOH.USER_ID (the actor who made *this* history entry),
         not CREATER_ID (the order's original creator) — a user's edits on
@@ -2134,28 +2166,104 @@ class FirebirdService:
         entry attributed to this USER_ID whose own text read "Пользователь
         внесший изменения: <other name>") — Agbis's own quirk, not
         something this query can resolve further.
+
+        Before/after diffs come from comparing each row's field snapshot
+        (STATUS_ID, PAY_STATUS_ID, DELIVERY_STATUS_ID, DATE_OUT, DEBET,
+        KREDIT, DISCOUNT, CURRENT_SCLAD_ID) to the *previous* history row
+        for the same DOC_ORDER_ID (by any user, not just this one) — Agbis
+        itself doesn't store a diff, only point-in-time snapshots, so this
+        pulls the full history of every order touched that day (usually a
+        few dozen rows each) to reconstruct it locally.
         """
         if not FIREBIRD_AVAILABLE:
             return []
-        sql = """
-            SELECT doh.dt, doh.basis
-            FROM docs_order_history doh
-            WHERE doh.user_id = ? AND doh.dt >= ? AND doh.dt < ?
-            ORDER BY doh.dt
-        """
         next_day = day + timedelta(days=1)
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql, (user_id, day, next_day))
-                rows = cur.fetchall()
+                cur.execute(
+                    "SELECT DISTINCT doc_order_id FROM docs_order_history WHERE user_id = ? AND dt >= ? AND dt < ?",
+                    (user_id, day, next_day),
+                )
+                doc_order_ids = [r[0] for r in cur.fetchall()]
+                if not doc_order_ids:
+                    return []
+
+                order_num_by_id: dict[int, str] = {}
+                num_rows = _fetch_batched(
+                    cur,
+                    "SELECT do2.id, d.doc_num FROM docs_order do2 "
+                    "INNER JOIN docs d ON d.doc_id = do2.doc_id WHERE do2.id IN ({ph})",
+                    doc_order_ids,
+                )
+                order_num_by_id = {oid: (num or "").strip() for oid, num in num_rows}
+
+                history_rows = _fetch_batched(
+                    cur,
+                    "SELECT doc_order_id, dt, user_id, basis, status_id, pay_status_id, "
+                    "delivery_status_id, debet, kredit, discount, date_out, current_sclad_id "
+                    "FROM docs_order_history WHERE doc_order_id IN ({ph}) ORDER BY doc_order_id, dt",
+                    doc_order_ids,
+                )
+
+                cur.execute("SELECT id, name FROM sclads")
+                sclad_names = {sid: (name or "").strip() for sid, name in cur.fetchall()}
             finally:
                 con.close()
         except Exception as e:
             logger.warning(f"get_agbis_user_actions error: {e}")
             return []
-        return [{"dttm": dt.isoformat(), "text": (basis or "").strip()} for dt, basis in rows]
+
+        order_status = {1: "Новый", 2: "На хранении", 3: "В исполнении", 4: "Исполненный",
+                         5: "Выданный", 6: "Закрытый", 7: "Отменённый"}
+        pay_status = {1: "Не оплачен", 2: "Оплачен частично", 3: "Оплачен полностью"}
+        delivery_status = {1: "Оформлен на курьера", 2: "Оформлен в чистомат", 3: "Принят в Чистомат",
+                            4: "Принят курьером", 5: "Принят на фабрику", 6: "Ожидает согласования",
+                            7: "Согласован", 8: "Не согласован", 9: "Обработан", 10: "Передан курьеру",
+                            11: "Размещен в Чистомате", 12: "Выдан клиенту", 13: "Просрочен"}
+
+        results: list[dict] = []
+        prev_by_order: dict[int, tuple] = {}
+        for doc_order_id, dt, row_user_id, basis, status_id, pay_status_id, \
+                delivery_status_id, debet, kredit, discount, date_out, current_sclad_id in history_rows:
+            prev = prev_by_order.get(doc_order_id)
+            changes: list[str] = []
+            if prev is not None:
+                (p_status, p_pay, p_delivery, p_debet, p_kredit, p_discount, p_date_out, p_sclad) = prev
+                if status_id != p_status:
+                    changes.append(f"статус: {order_status.get(p_status, p_status)} → {order_status.get(status_id, status_id)}")
+                if pay_status_id != p_pay:
+                    changes.append(f"оплата: {pay_status.get(p_pay, p_pay)} → {pay_status.get(pay_status_id, pay_status_id)}")
+                if delivery_status_id != p_delivery:
+                    changes.append(f"доставка: {delivery_status.get(p_delivery, p_delivery)} → {delivery_status.get(delivery_status_id, delivery_status_id)}")
+                if date_out != p_date_out and date_out is not None:
+                    old_d = p_date_out.strftime('%d.%m.%Y') if p_date_out else "—"
+                    changes.append(f"дата выдачи: {old_d} → {date_out.strftime('%d.%m.%Y')}")
+                if debet != p_debet or kredit != p_kredit:
+                    if debet != p_debet:
+                        changes.append(f"сумма прихода: {p_debet or 0:.0f} ₽ → {debet or 0:.0f} ₽")
+                    if kredit != p_kredit:
+                        changes.append(f"сумма расхода: {p_kredit or 0:.0f} ₽ → {kredit or 0:.0f} ₽")
+                if discount != p_discount and (discount or 0) != (p_discount or 0):
+                    changes.append(f"скидка: {p_discount or 0}% → {discount or 0}%")
+                if current_sclad_id != p_sclad:
+                    old_s = sclad_names.get(p_sclad, p_sclad)
+                    new_s = sclad_names.get(current_sclad_id, current_sclad_id)
+                    changes.append(f"склад: {old_s} → {new_s}")
+            prev_by_order[doc_order_id] = (status_id, pay_status_id, delivery_status_id, debet, kredit, discount, date_out, current_sclad_id)
+
+            if row_user_id == user_id and day <= dt.date() < next_day:
+                results.append({
+                    "dttm": dt.isoformat(),
+                    "order_num": order_num_by_id.get(doc_order_id, ""),
+                    "summary": _humanize_order_action((basis or "").strip()),
+                    "changes": changes,
+                    "raw": (basis or "").strip(),
+                })
+
+        results.sort(key=lambda r: r["dttm"])
+        return results
 
     def get_users_list(self, search: str = "") -> list[dict]:
         """Load {user_id, description} list from USERS table for matching with bot employees."""

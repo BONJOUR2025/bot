@@ -9,19 +9,6 @@ import Modal from '../components/Modal.jsx';
 
 const isoToday = () => new Date().toISOString().slice(0, 10);
 
-// Groups DOCS_ORDER_HISTORY's free-text BASIS into the handful of action
-// kinds that actually show up, so the modal can lead with counts instead
-// of 100+ raw rows.
-function categorize(text) {
-  if (text.startsWith('Сохранение заказа при создании')) return 'Создание заказа';
-  if (text.startsWith('Сохранение заказа при изменении')) return 'Изменение заказа';
-  if (text.startsWith('Распечатан чек')) return 'Печать чека';
-  if (text.startsWith('Выдача заказа')) return 'Выдача заказа';
-  if (text.startsWith('Изменение текущего склада')) return 'Изменение склада';
-  if (/сумма/i.test(text)) return 'Изменение суммы услуги';
-  return 'Прочее';
-}
-
 function UserActionsModal({ user, onClose }) {
   const [day, setDay] = useState(isoToday());
   const [actions, setActions] = useState(null);
@@ -48,8 +35,7 @@ function UserActionsModal({ user, onClose }) {
     if (!actions) return [];
     const map = new Map();
     actions.forEach((a) => {
-      const cat = categorize(a.text);
-      map.set(cat, (map.get(cat) || 0) + 1);
+      map.set(a.summary, (map.get(a.summary) || 0) + 1);
     });
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [actions]);
@@ -88,11 +74,27 @@ function UserActionsModal({ user, onClose }) {
               </div>
               <div className="divide-y divide-[color:var(--color-border)] rounded-lg border border-[color:var(--color-border)]">
                 {actions.map((a, i) => (
-                  <div key={i} className="px-3 py-2 text-sm flex items-start gap-3">
+                  <div key={i} className="px-3 py-2 text-sm flex items-start gap-3" title={a.raw}>
                     <span className="text-[color:var(--color-muted-foreground)] tabular-nums shrink-0 whitespace-nowrap">
                       {a.dttm.slice(11, 19)}
                     </span>
-                    <span className="min-w-0">{a.text}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{a.summary}</span>
+                        {a.order_num && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-[color:var(--color-muted)]/50 text-[color:var(--color-muted-foreground)] tabular-nums">
+                            №{a.order_num}
+                          </span>
+                        )}
+                      </div>
+                      {a.changes.length > 0 && (
+                        <ul className="mt-0.5 space-y-0.5">
+                          {a.changes.map((c, j) => (
+                            <li key={j} className="text-xs text-[color:var(--color-muted-foreground)]">— {c}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
