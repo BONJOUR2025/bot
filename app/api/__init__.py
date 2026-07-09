@@ -366,6 +366,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Agbis users directory
+    from .agbis_users import create_agbis_users_router
+
+    app.include_router(
+        create_agbis_users_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Sales analytics
     from .sales import create_sales_router
 

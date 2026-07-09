@@ -2064,6 +2064,61 @@ class FirebirdService:
             return None
 
 
+    def get_agbis_users(self) -> list[dict]:
+        """All USERS rows for the "Пользователи АГБИС" admin page — role
+        (MST_ROLES), подразделение (DEPS) and the per-user flags Agbis
+        itself exposes (курьер/инкассатор/технолог/бригадир/личный
+        кабинет). USER_POSTS (должность) isn't joined: every row in this
+        DB has a NULL name, so it's unused in this deployment.
+        """
+        if not FIREBIRD_AVAILABLE:
+            return []
+        sql = """
+            SELECT u.user_id, u.description, u.is_working, r.name, r.is_admin,
+                   d.name, u.phone, u.teleph_cell, u.email, u.comment,
+                   u.is_courier, u.is_inkass, u.is_technologist, u.is_brigadier,
+                   u.is_cabinet_user, u.is_cabinet_admin, u.is_system
+            FROM users u
+                LEFT JOIN mst_roles r ON r.id = u.role_id
+                LEFT JOIN deps d ON d.dep_id = u.dep_id
+            ORDER BY u.is_working DESC, u.description
+        """
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql)
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.warning(f"get_agbis_users error: {e}")
+            return []
+        return [
+            {
+                "user_id": user_id,
+                "description": (description or "").strip(),
+                "is_working": bool(is_working),
+                "role_name": (role_name or "").strip() if role_name else None,
+                "is_admin_role": bool(is_admin),
+                "dep_name": (dep_name or "").strip() if dep_name else None,
+                "phone": (phone or "").strip() or None,
+                "mobile": (mobile or "").strip() or None,
+                "email": (email or "").strip() or None,
+                "comment": (comment or "").strip() or None,
+                "is_courier": bool(is_courier),
+                "is_inkass": bool(is_inkass),
+                "is_technologist": bool(is_technologist),
+                "is_brigadier": bool(is_brigadier),
+                "is_cabinet_user": bool(is_cabinet_user),
+                "is_cabinet_admin": bool(is_cabinet_admin),
+                "is_system": bool(is_system),
+            }
+            for (user_id, description, is_working, role_name, is_admin, dep_name, phone, mobile,
+                 email, comment, is_courier, is_inkass, is_technologist, is_brigadier,
+                 is_cabinet_user, is_cabinet_admin, is_system) in rows
+        ]
+
     def get_users_list(self, search: str = "") -> list[dict]:
         """Load {user_id, description} list from USERS table for matching with bot employees."""
         if not FIREBIRD_AVAILABLE:

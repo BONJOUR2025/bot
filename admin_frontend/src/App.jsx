@@ -55,6 +55,7 @@ const Schedule = lazy(() => import("./pages/Schedule"));
 const Tasks = lazy(() => import("./pages/Tasks"));
 const Passwords = lazy(() => import("./pages/Passwords"));
 const Masters = lazy(() => import("./pages/Masters"));
+const AgbisUsers = lazy(() => import("./pages/AgbisUsers"));
 const SalesAnalytics = lazy(() => import("./pages/SalesAnalytics"));
 const AdminEmployeeProfile = lazy(() => import("./pages/AdminEmployeeProfile"));
 const Salons = lazy(() => import("./pages/Salons"));
@@ -133,6 +134,7 @@ export default function App() {
                 <Route path="tasks" element={<Tasks />} />
                 <Route path="passwords" element={<Passwords />} />
                 <Route path="masters" element={<Masters />} />
+                <Route path="agbis-users" element={<AgbisUsers />} />
                 <Route path="sales" element={<SalesAnalytics />} />
                 <Route path="salons" element={<Salons />} />
                 <Route path="shift-checkins" element={<ShiftCheckins />} />
