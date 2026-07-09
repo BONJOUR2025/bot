@@ -576,9 +576,15 @@ export default function SalesAnalytics() {
   const [workplaces, setWorkplaces] = useState(null);
   const [departments, setDepartments] = useState(null);
   const [topProducts, setTopProducts] = useState(null);
+  const [tabLoading, setTabLoading] = useState(false);
   const [loading,   setLoading]   = useState(false);
   const [loaded,    setLoaded]    = useState(false);
   const [error,     setError]     = useState(null);
+  // Bumped on every "Загрузить"/"Обновить" click — the lazy-tab effect below
+  // refetches the *active* tab whenever this changes, and every other lazy
+  // tab's cached state was already cleared by load(), so it refetches too
+  // next time the user actually visits it instead of eagerly on every click.
+  const [filterVersion, setFilterVersion] = useState(0);
 
   const months = useMemo(() => getMonthsInRange(dateFrom, dateTo), [dateFrom, dateTo]);
 
@@ -587,39 +593,64 @@ export default function SalesAnalytics() {
     return selectedCategories.size === 0 ? all : all.filter((k) => selectedCategories.has(k));
   }, [selectedCategories]);
 
+  function buildParams() {
+    const params = {};
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo)   params.date_to   = dateTo;
+    const salonIds = selectedSalons.size ? [...selectedSalons].join(',') : undefined;
+    return salonIds ? { ...params, salon_ids: salonIds } : params;
+  }
+
+  // Firebird-backed reports fired 8-10 at once on every load — each one is
+  // its own connection/query against a single remote Firebird server, and
+  // under concurrent load that contention made even individually-fast
+  // queries take several seconds longer than in isolation (e.g. one report
+  // measured 0.9s alone vs 4.3s in this stampede), which is what made the
+  // whole page feel hung. Only the data the KPI row + default tab need
+  // (daily×2, plans, retention) loads eagerly now; the rest is one request
+  // each, fired only when its tab is actually opened (see the effect below).
+  const LAZY_TABS = {
+    margin:      { path: '/sales/margin',      set: setMargin },
+    turnaround:  { path: '/sales/turnaround',   set: setTurnaround },
+    returns:     { path: '/sales/returns',      set: setReturns },
+    workplaces:  { path: '/sales/workplaces',   set: setWorkplaces },
+    departments: { path: '/sales/departments',  set: setDepartments },
+    products:    { path: '/sales/top-products', set: setTopProducts },
+  };
+
+  useEffect(() => {
+    const tab = LAZY_TABS[activeTab];
+    if (!loaded || !tab) return;
+    let cancelled = false;
+    setTabLoading(true);
+    api.get(tab.path, { params: buildParams() })
+      .then((res) => { if (!cancelled) tab.set(res.data); })
+      .catch((e) => { if (!cancelled) setError(e.response?.data?.detail || e.message || 'Ошибка загрузки'); })
+      .finally(() => { if (!cancelled) setTabLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, loaded, filterVersion]);
+
   async function load() {
     setLoading(true); setError(null);
     try {
-      const params = {};
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo)   params.date_to   = dateTo;
-      const salonIds = selectedSalons.size ? [...selectedSalons].join(',') : undefined;
-      // Only endpoints that actually resolve DOC_NUM -> salon server-side get
-      // salon_ids — sending it to the rest (retention/workplaces/departments/
-      // top-products) would silently no-op there, which is worse than not
-      // claiming to filter them at all.
-      const salonParams = salonIds ? { ...params, salon_ids: salonIds } : params;
+      const params = buildParams();
       const d0 = new Date(dateFrom || TODAY), d1 = new Date(dateTo || TODAY);
       const prevTo = new Date(d0); prevTo.setDate(prevTo.getDate() - 1);
       const prevFrom = new Date(+prevTo - (d1 - d0));
-      const prevParams = {
-        date_from: prevFrom.toISOString().slice(0,10),
-        date_to: prevTo.toISOString().slice(0,10),
-        ...(salonIds ? { salon_ids: salonIds } : {}),
-      };
+      const prevParams = { ...params, date_from: prevFrom.toISOString().slice(0,10), date_to: prevTo.toISOString().slice(0,10) };
       const monthKeys = months.map(toMonthKey).join(',');
-      const [mainRes, prevRes, plansRes, retentionRes, marginRes, turnaroundRes, returnsRes, workplacesRes, departmentsRes, topProductsRes] = await Promise.all([
-        api.get('/sales/daily', { params: salonParams }),
+      const [mainRes, prevRes, plansRes, retentionRes] = await Promise.all([
+        api.get('/sales/daily', { params }),
         api.get('/sales/daily', { params: prevParams }),
         api.get('/sales/plans', { params: { month_keys: monthKeys } }),
         api.get('/sales/client-retention', { params }),
-        api.get('/sales/margin', { params: salonParams }),
-        api.get('/sales/turnaround', { params: salonParams }),
-        api.get('/sales/returns', { params: salonParams }),
-        api.get('/sales/workplaces', { params }),
-        api.get('/sales/departments', { params }),
-        api.get('/sales/top-products', { params }),
       ]);
+      // Lazy tabs get refetched (if revisited) against the new filters/date
+      // range rather than showing stale data from before this reload.
+      setMargin(null); setTurnaround(null); setReturns(null);
+      setWorkplaces(null); setDepartments(null); setTopProducts(null);
+      setFilterVersion((v) => v + 1);
       // Best-effort — a failure here shouldn't block sales data from
       // showing, it just leaves empName() falling back to the raw code.
       try {
@@ -628,7 +659,7 @@ export default function SalesAnalytics() {
       } catch (e) {
         console.error('Не удалось загрузить имена сотрудников', e);
       }
-      setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setRetention(retentionRes.data); setMargin(marginRes.data); setTurnaround(turnaroundRes.data); setReturns(returnsRes.data); setWorkplaces(workplacesRes.data); setDepartments(departmentsRes.data); setTopProducts(topProductsRes.data); setLoaded(true);
+      setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setRetention(retentionRes.data); setLoaded(true);
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
     } finally { setLoading(false); }
@@ -914,12 +945,6 @@ export default function SalesAnalytics() {
             <MultiSelect options={salonOptions} selected={selectedSalons} onChange={setSelectedSalons} placeholder="Все салоны" />
           </div>
         </div>
-        {selectedSalons.size > 0 && (
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">
-            Фильтр по салону влияет на «Обзор», «Сотрудники», «Сводная», «Маржа», «Сроки», «Возвраты». Остальные вкладки (retention,
-            пропускная способность, салоны, товары) пока показывают все салоны.
-          </p>
-        )}
         <div className="flex flex-wrap gap-2">
           {[
             [hideZero, () => setHideZero((v) => !v), hideZero ? <EyeOff size={12}/> : <Eye size={12}/>, 'Скрыть нули'],
@@ -1220,7 +1245,9 @@ export default function SalesAnalytics() {
 
           {/* ══ MARGIN tab ══════════════════════════════════ */}
           {activeTab === 'margin' && (
-            filteredMargin && filteredMargin.total.revenue > 0 ? (
+            tabLoading ? (
+              <SkeletonTable rows={6} />
+            ) : filteredMargin && filteredMargin.total.revenue > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <KpiStat label="Выручка" value={fmtRub(filteredMargin.total.revenue)} accent="#6366f1" icon={<BarChart3 size={18} />} />
@@ -1291,7 +1318,9 @@ export default function SalesAnalytics() {
 
           {/* ══ TURNAROUND tab ══════════════════════════════ */}
           {activeTab === 'turnaround' && (
-            filteredTurnaround && filteredTurnaround.total.order_count > 0 ? (
+            tabLoading ? (
+              <SkeletonTable rows={6} />
+            ) : filteredTurnaround && filteredTurnaround.total.order_count > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                   <KpiStat label="Средний срок" value={`${filteredTurnaround.total.avg_days} дн.`} accent="#6366f1" icon={<Clock size={18} />} />
@@ -1335,7 +1364,9 @@ export default function SalesAnalytics() {
 
           {/* ══ RETURNS tab ═════════════════════════════════ */}
           {activeTab === 'returns' && (
-            filteredReturns ? (
+            tabLoading ? (
+              <SkeletonTable rows={6} />
+            ) : filteredReturns ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                   <KpiStat label="Возвратов" value={filteredReturns.total.return_count.toLocaleString('ru-RU')} accent="#ef4444" icon={<RotateCcw size={18} />} />
@@ -1383,7 +1414,9 @@ export default function SalesAnalytics() {
 
           {/* ══ WORKPLACES tab ══════════════════════════════ */}
           {activeTab === 'workplaces' && (
-            workplaces && workplaces.work_places.length > 0 ? (
+            tabLoading ? (
+              <SkeletonTable rows={6} />
+            ) : workplaces && workplaces.work_places.length > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <KpiStat label="Выручка через точки" value={fmtRub(workplaces.total_revenue)} accent="#6366f1" icon={<Gauge size={18} />} />
@@ -1421,7 +1454,9 @@ export default function SalesAnalytics() {
 
           {/* ══ DEPARTMENTS tab ═════════════════════════════ */}
           {activeTab === 'departments' && (
-            departments && departments.departments.length > 0 ? (
+            tabLoading ? (
+              <SkeletonTable rows={6} />
+            ) : departments && departments.departments.length > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <KpiStat label="Выручка по всем салонам" value={fmtRub(departments.total_revenue)} accent="#6366f1" icon={<Building2 size={18} />} />
@@ -1469,7 +1504,9 @@ export default function SalesAnalytics() {
 
           {/* ══ PRODUCTS tab ════════════════════════════════ */}
           {activeTab === 'products' && (
-            topProducts && topProducts.top.length > 0 ? (
+            tabLoading ? (
+              <SkeletonTable rows={6} />
+            ) : topProducts && topProducts.top.length > 0 ? (
               <div className="space-y-4">
                 <p className="text-xs text-[color:var(--color-muted-foreground)]">
                   Разбивка по конкретным товарам/услугам (не по категориям целиком). «vs пред. период» сравнивает с таким же по длине

@@ -60,6 +60,7 @@ def create_sales_router() -> APIRouter:
     async def get_client_retention(
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return new-vs-returning client counts for a date range."""
         from app.services.firebird_service import get_firebird_service
@@ -67,7 +68,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_client_retention, df, dt)
+            return await asyncio.to_thread(svc.get_client_retention, df, dt, _parse_salon_ids(salon_ids))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -154,6 +155,7 @@ def create_sales_router() -> APIRouter:
     async def get_workplace_summary(
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return revenue/volume throughput per work place (repair intake/dispatch checkpoints) for a date range."""
         from app.services.firebird_service import get_firebird_service
@@ -161,7 +163,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_workplace_summary, df, dt)
+            return await asyncio.to_thread(svc.get_workplace_summary, df, dt, _parse_salon_ids(salon_ids))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -169,6 +171,7 @@ def create_sales_router() -> APIRouter:
     async def get_department_comparison(
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return revenue/order comparison by salon for a date range."""
         from app.services.firebird_service import get_firebird_service
@@ -176,7 +179,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_department_comparison, df, dt)
+            return await asyncio.to_thread(svc.get_department_comparison, df, dt, _parse_salon_ids(salon_ids))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -185,6 +188,7 @@ def create_sales_router() -> APIRouter:
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return top/bottom-selling SKUs and biggest risers/fallers vs the preceding period."""
         from app.services.firebird_service import get_firebird_service
@@ -192,7 +196,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_top_products, df, dt, limit)
+            return await asyncio.to_thread(svc.get_top_products, df, dt, limit, _parse_salon_ids(salon_ids))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 

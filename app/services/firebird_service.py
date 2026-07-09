@@ -88,20 +88,25 @@ def _connect():
     )
 
 
-def _fetch_batched(cur, sql_template: str, ids: list, extra_params: tuple = ()) -> list:
+def _fetch_batched(cur, sql_template: str, ids: list, extra_params: tuple = (), batch: int = 1000) -> list:
     """Run `sql_template` (containing one `{ph}` IN-list placeholder) once
-    per <=1000-item chunk of `ids`.
+    per <=`batch`-item chunk of `ids`.
 
     Firebird rejects IN-lists over 1500 values outright, and a per-id
     correlated subquery is 20-30x slower than one batched IN query
     (measured on this DB: ~3s batched vs 60-100s correlated for a
     month/year of distinct ids) — so chunking, not correlating, is how
     every "look up N ids against a huge history table" query here works.
+    The default of 1000 is for short (int) ids; string ids like DOC_NUM
+    need a smaller batch since Firebird's request message block has a
+    fixed size limit and long placeholder values fill it faster (measured:
+    1000 string DOC_NUMs raised "block size exceeds implementation
+    restriction").
     """
     rows = []
     if not ids:
         return rows
-    BATCH = 1000
+    BATCH = batch
     for i in range(0, len(ids), BATCH):
         chunk = ids[i:i + BATCH]
         placeholders = ','.join(['?'] * len(chunk))
@@ -694,7 +699,7 @@ class FirebirdService:
         ]
 
 
-    def get_client_retention(self, date_from: date, date_to: date) -> dict:
+    def get_client_retention(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """New-vs-returning client breakdown for a date range.
 
         A client is "returning" if their first-ever order (across all
@@ -703,21 +708,24 @@ class FirebirdService:
         range) rather than one lookup per client — a per-client correlated
         subquery was measured at 60-100s for a month/year range because it
         re-executes the MIN(doc_date) query once per distinct client.
+
+        `salon_ids` restricts to orders resolved to one of those salons —
+        see get_daily_sales for the attribution rule and its caveats.
         """
         empty = {"total_clients": 0, "new_clients": 0, "returning_clients": 0, "repeat_rate": 0.0}
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty client retention")
             return empty
+        salon_filter = set(salon_ids) if salon_ids else None
 
         sql_active = """
-            SELECT d.contragent_id, COUNT(DISTINCT do.id) AS orders_in_period
+            SELECT d.contragent_id, do.id, d.doc_num, d.doc_date
             FROM docs d
                 INNER JOIN docs_order do ON (do.doc_id = d.doc_id)
             WHERE
                 d.doc_date >= ?
                 AND d.doc_date <= ?
                 AND d.contragent_id IS NOT NULL
-            GROUP BY d.contragent_id
         """
         sql_first_order = """
             SELECT d.contragent_id, MIN(d.doc_date)
@@ -732,8 +740,8 @@ class FirebirdService:
             try:
                 cur = con.cursor()
                 cur.execute(sql_active, (date_from, date_to))
-                active = cur.fetchall()
-                if not active:
+                active_rows = cur.fetchall()
+                if not active_rows:
                     return empty
 
                 cur.execute(sql_first_order)
@@ -744,9 +752,16 @@ class FirebirdService:
             logger.error(f"Error fetching client retention: {e}")
             return empty
 
-        total = len(active)
+        active_ids: set = set()
+        with _SalonResolver() as resolve_salon:
+            for contragent_id, _order_id, doc_num, doc_date in active_rows:
+                if salon_filter is not None and resolve_salon(doc_num, doc_date) not in salon_filter:
+                    continue
+                active_ids.add(contragent_id)
+
+        total = len(active_ids)
         returning = sum(
-            1 for contragent_id, _ in active
+            1 for contragent_id in active_ids
             if (first_order.get(contragent_id) or date_from) < date_from
         )
         new_clients = total - returning
@@ -1451,47 +1466,108 @@ class FirebirdService:
             "by_employee": by_employee,
         }
 
-    def _product_revenue_rows(self, date_from: date, date_to: date) -> dict[int, dict]:
+    def _product_revenue_rows(self, date_from: date, date_to: date,
+                               salon_ids: list[str] | None = None) -> dict[int, dict]:
         """Per-TOVAR_ID revenue/qty for a date range, merged across repair
         (DOC_ORDER_SERVICES) and cosmetics (DOC_ORDER_LINES). Shoes are
         excluded — SHOES_CODES are line items within a paired commission
         structure (see _parse_shoe_pairs), not standalone SKUs a "top
-        products" ranking would mean anything for."""
+        products" ranking would mean anything for.
+
+        `salon_ids` restricts to orders resolved to one of those salons —
+        see get_daily_sales for the attribution rule and its caveats. Unlike
+        the by-employee reports, this one does NOT add doc_num to the
+        GROUP BY to support that: doing so once measured 26-55s (vs <2s)
+        because a per-SKU aggregate that's normally a few hundred rows
+        exploded into one row per (SKU, order) — tens of thousands of rows
+        — even with no filter applied. Instead, when a filter is active, a
+        cheap separate pass resolves which DOC_NUMs qualify and the normal
+        tight per-SKU query is restricted to just those via a batched
+        IN-list (same technique as the cost lookup in get_margin_summary).
+        """
         repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
         cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
-
-        sql_repair = f"""
-            SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
-                   SUM(doc_order_services.kredit), SUM(doc_order_services.qty_kredit)
-            FROM docs_order
-                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
-                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
-                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
-            WHERE docs.doc_date >= ? AND docs.doc_date <= ?
-                AND tovars_tbl.folder_id IN ({repair_folders})
-            GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
-        """
-        sql_cosmetics = f"""
-            SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
-                   SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
-            FROM doc_order_lines
-                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
-                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
-                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
-            WHERE docs_order_history.status_id = 5
-                AND docs.doc_date >= ? AND docs.doc_date <= ?
-                AND tovars_tbl.folder_id IN ({cosmetics_folders})
-            GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
-        """
+        salon_filter = set(salon_ids) if salon_ids else None
 
         con = _connect()
         try:
             cur = con.cursor()
-            cur.execute(sql_repair, (date_from, date_to))
-            rows = list(cur.fetchall())
-            cur.execute(sql_cosmetics, (date_from, date_to))
-            rows += cur.fetchall()
+
+            doc_num_allowlist: list[str] | None = None
+            if salon_filter is not None:
+                cur.execute(
+                    "SELECT DISTINCT doc_num, doc_date FROM docs WHERE doc_date >= ? AND doc_date <= ?",
+                    (date_from, date_to),
+                )
+                order_rows = cur.fetchall()
+                doc_num_allowlist = []
+                with _SalonResolver() as resolve_salon:
+                    for doc_num, doc_date in order_rows:
+                        if resolve_salon(doc_num, doc_date) in salon_filter:
+                            doc_num_allowlist.append(str(doc_num))
+                if not doc_num_allowlist:
+                    return {}
+
+            if doc_num_allowlist is None:
+                sql_repair = f"""
+                    SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                           SUM(doc_order_services.kredit), SUM(doc_order_services.qty_kredit)
+                    FROM docs_order
+                        INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                        INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                        INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                    WHERE docs.doc_date >= ? AND docs.doc_date <= ?
+                        AND tovars_tbl.folder_id IN ({repair_folders})
+                    GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+                """
+                cur.execute(sql_repair, (date_from, date_to))
+                rows = list(cur.fetchall())
+
+                sql_cosmetics = f"""
+                    SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                           SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
+                    FROM doc_order_lines
+                        INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                        INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                        INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                        INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                    WHERE docs_order_history.status_id = 5
+                        AND docs.doc_date >= ? AND docs.doc_date <= ?
+                        AND tovars_tbl.folder_id IN ({cosmetics_folders})
+                    GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+                """
+                cur.execute(sql_cosmetics, (date_from, date_to))
+                rows += cur.fetchall()
+            else:
+                sql_repair_tpl = f"""
+                    SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                           SUM(doc_order_services.kredit), SUM(doc_order_services.qty_kredit)
+                    FROM docs_order
+                        INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                        INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                        INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                    WHERE docs.doc_num IN ({{ph}})
+                        AND docs.doc_date >= ? AND docs.doc_date <= ?
+                        AND tovars_tbl.folder_id IN ({repair_folders})
+                    GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+                """
+                rows = _fetch_batched(cur, sql_repair_tpl, doc_num_allowlist, (date_from, date_to), batch=200)
+
+                sql_cosmetics_tpl = f"""
+                    SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                           SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
+                    FROM doc_order_lines
+                        INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                        INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                        INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                        INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                    WHERE docs.doc_num IN ({{ph}})
+                        AND docs_order_history.status_id = 5
+                        AND docs.doc_date >= ? AND docs.doc_date <= ?
+                        AND tovars_tbl.folder_id IN ({cosmetics_folders})
+                    GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+                """
+                rows += _fetch_batched(cur, sql_cosmetics_tpl, doc_num_allowlist, (date_from, date_to), batch=200)
         finally:
             con.close()
 
@@ -1505,7 +1581,8 @@ class FirebirdService:
             p["qty"] += float(qty or 0)
         return products
 
-    def get_top_products(self, date_from: date, date_to: date, limit: int = 20) -> dict:
+    def get_top_products(self, date_from: date, date_to: date, limit: int = 20,
+                          salon_ids: list[str] | None = None) -> dict:
         """Top/bottom-selling SKUs and biggest risers/fallers vs the
         preceding period of equal length."""
         empty = {"top": [], "bottom": [], "rising": [], "falling": []}
@@ -1514,11 +1591,11 @@ class FirebirdService:
             return empty
 
         try:
-            current = self._product_revenue_rows(date_from, date_to)
+            current = self._product_revenue_rows(date_from, date_to, salon_ids)
             span = (date_to - date_from).days + 1
             prev_to = date_from - timedelta(days=1)
             prev_from = prev_to - timedelta(days=span - 1)
-            previous = self._product_revenue_rows(prev_from, prev_to)
+            previous = self._product_revenue_rows(prev_from, prev_to, salon_ids)
         except Exception as e:
             logger.error(f"Error fetching top products: {e}")
             return empty
@@ -1545,7 +1622,7 @@ class FirebirdService:
 
         return {"top": top, "bottom": bottom, "rising": rising, "falling": falling}
 
-    def get_workplace_summary(self, date_from: date, date_to: date) -> dict:
+    def get_workplace_summary(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """Throughput (revenue + operation count) per WORK_PLACE for a date range.
 
         This is NOT a per-hour productivity figure — that would need
@@ -1559,43 +1636,76 @@ class FirebirdService:
         intake/dispatch scan checkpoints per branch (e.g. "Ремонт ВХОД",
         "Ремонт ВЫХОД"), so this doubles as a per-branch repair-workflow
         throughput view.
+
+        `salon_ids` restricts to orders resolved to one of those salons —
+        see get_daily_sales for the attribution rule and its caveats. Note
+        this is somewhat redundant with the workplace name itself (which
+        already usually names the branch), but included for filter
+        consistency with the rest of this page.
+
+        Selecting per-row DOC_NUM/DOC_DATE (needed to resolve a salon)
+        means this can't be aggregated in SQL — one measurement showed 27s
+        for a range that returns ~50k raw USER_SESSION_ACTIONS rows, vs a
+        fraction of a second when only the (much smaller) per-workplace
+        aggregate is needed. So when no filter is given, skip the doc join
+        entirely and let SQL aggregate by workplace directly; only pull
+        (and resolve) raw per-order rows when a salon filter is active.
         """
         empty = {"total_revenue": 0.0, "total_operations": 0, "work_places": []}
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty workplace summary")
             return empty
+        salon_filter = set(salon_ids) if salon_ids else None
 
-        sql = """
-            SELECT wp.name, COUNT(*) AS op_count, SUM(dos.kredit) AS revenue
-            FROM user_session_actions usa
-                INNER JOIN doc_order_services dos ON (dos.id = usa.doc_order_services_id)
-                INNER JOIN work_places wp ON (wp.id = usa.work_place_id)
-            WHERE usa.date_beg >= ? AND usa.date_beg <= ?
-            GROUP BY wp.name
-            ORDER BY revenue DESC
-        """
-
+        by_name: dict[str, dict] = {}
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql, (date_from, date_to))
-                rows = cur.fetchall()
+                if salon_filter is None:
+                    sql = """
+                        SELECT wp.name, SUM(dos.kredit), COUNT(*)
+                        FROM user_session_actions usa
+                            INNER JOIN doc_order_services dos ON (dos.id = usa.doc_order_services_id)
+                            INNER JOIN work_places wp ON (wp.id = usa.work_place_id)
+                        WHERE usa.date_beg >= ? AND usa.date_beg <= ?
+                        GROUP BY wp.name
+                    """
+                    cur.execute(sql, (date_from, date_to))
+                    for name, revenue, op_count in cur.fetchall():
+                        name = (name or "").strip()
+                        entry = by_name.setdefault(name, {"name": name, "operation_count": 0, "revenue": 0.0})
+                        entry["operation_count"] += op_count
+                        entry["revenue"] += float(revenue or 0)
+                else:
+                    sql = """
+                        SELECT wp.name, dos.kredit, d.doc_num, d.doc_date
+                        FROM user_session_actions usa
+                            INNER JOIN doc_order_services dos ON (dos.id = usa.doc_order_services_id)
+                            INNER JOIN work_places wp ON (wp.id = usa.work_place_id)
+                            INNER JOIN docs_order do2 ON (do2.id = dos.doc_order_id)
+                            INNER JOIN docs d ON (d.doc_id = do2.doc_id)
+                        WHERE usa.date_beg >= ? AND usa.date_beg <= ?
+                    """
+                    cur.execute(sql, (date_from, date_to))
+                    rows = cur.fetchall()
+                    with _SalonResolver() as resolve_salon:
+                        for name, revenue, doc_num, doc_date in rows:
+                            if resolve_salon(doc_num, doc_date) not in salon_filter:
+                                continue
+                            name = (name or "").strip()
+                            entry = by_name.setdefault(name, {"name": name, "operation_count": 0, "revenue": 0.0})
+                            entry["operation_count"] += 1
+                            entry["revenue"] += float(revenue or 0)
             finally:
                 con.close()
         except Exception as e:
             logger.error(f"Error fetching workplace summary: {e}")
             return empty
 
-        work_places = [
-            {
-                "name": (name or "").strip(),
-                "operation_count": op_count,
-                "revenue": float(revenue or 0),
-                "avg_ticket": round(float(revenue or 0) / op_count, 2) if op_count else 0.0,
-            }
-            for name, op_count, revenue in rows
-        ]
+        work_places = sorted(by_name.values(), key=lambda w: w["revenue"], reverse=True)
+        for w in work_places:
+            w["avg_ticket"] = round(w["revenue"] / w["operation_count"], 2) if w["operation_count"] else 0.0
 
         return {
             "total_revenue": round(sum(w["revenue"] for w in work_places), 2),
@@ -1603,7 +1713,7 @@ class FirebirdService:
             "work_places": work_places,
         }
 
-    def get_department_comparison(self, date_from: date, date_to: date) -> dict:
+    def get_department_comparison(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """Revenue/order comparison by salon for a date range.
 
         Salon attribution reuses the exact mechanism payroll_service's
@@ -1611,6 +1721,10 @@ class FirebirdService:
         resolved via SalonRepository (time-aware for renamed/relocated
         points) — rather than DOCS.DEP_ID, so this can't silently disagree
         with that existing report over what counts as "salon X's revenue".
+
+        `salon_ids`, if given, just restricts the *output* to those salons
+        — the whole point of this endpoint is grouping by salon, so
+        "filtering" here is a plain post-filter, not a resolution change.
         """
         from app.data.salon_repository import get_salon_repository
 
@@ -1704,8 +1818,11 @@ class FirebirdService:
         finally:
             repo._load = original_load
 
+        salon_filter = set(salon_ids) if salon_ids else None
         departments = []
         for entry in totals.values():
+            if salon_filter is not None and entry["salon_id"] not in salon_filter:
+                continue
             order_count = len(entry["doc_nums"])
             departments.append({
                 "salon_id": entry["salon_id"],
