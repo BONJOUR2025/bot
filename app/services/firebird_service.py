@@ -156,6 +156,12 @@ COSMETICS_FOLDER_IDS = (
 
 _PAIR_STARTERS = {'0', '1'}
 
+# Registers to show in the "Остатки по кассам" card — see get_cash_balances.
+# KASSES has ~19 rows (legacy/test/franchise ones too); this is just the
+# working salon list.
+CASH_BALANCE_KASSA_IDS = (21057, 10969, 21067, 10564, 21066, 1172)
+CASH_BALANCE_NAME_OVERRIDES = {21066: "5_Гранд Палас"}
+
 
 def _parse_shoe_pairs(items: list[tuple]) -> list[float]:
     """Parse ordered (code, kredit) records of one order into per-pair kredit sums.
@@ -1994,14 +2000,20 @@ class FirebirdService:
         "Основная" (id 54) is the central register that everything gets
         инкассация'd into — its balance is a 13-year cumulative total,
         not physical cash sitting in a drawer, so don't read it the same
-        way as a branch's till float.
+        way as a branch's till float. KASSES has ~19 rows total (legacy/
+        test/franchise registers included), but only the working salon
+        registers are worth surfacing here — filtered down to CASH_BALANCE_
+        KASSA_IDS (with a display-name override for the one KASSES.NAME is
+        stale on: id 21066 is still labeled "5_Пассаж" in Agbis after that
+        location was renamed to Гранд Палас).
         """
         if not FIREBIRD_AVAILABLE:
             return []
-        sql = """
+        sql = f"""
             SELECT dk.kassa_id, k.name, SUM(dk.debet - dk.kredit) as balance
             FROM docs_kassa dk
                 INNER JOIN kasses k ON k.id = dk.kassa_id
+            WHERE dk.kassa_id IN ({','.join(str(x) for x in CASH_BALANCE_KASSA_IDS)})
             GROUP BY dk.kassa_id, k.name
             ORDER BY balance DESC
         """
@@ -2017,7 +2029,11 @@ class FirebirdService:
             logger.warning(f"get_cash_balances error: {e}")
             return []
         return [
-            {"kassa_id": kassa_id, "name": (name or "").strip(), "balance": round(float(balance or 0), 2)}
+            {
+                "kassa_id": kassa_id,
+                "name": CASH_BALANCE_NAME_OVERRIDES.get(kassa_id, (name or "").strip()),
+                "balance": round(float(balance or 0), 2),
+            }
             for kassa_id, name, balance in rows
         ]
 
