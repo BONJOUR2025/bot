@@ -1519,6 +1519,32 @@ export default function SalesAnalytics() {
                   <ProductRankTable title="Растущие позиции" items={topProducts.rising} showChange />
                   <ProductRankTable title="Падающие позиции" items={topProducts.falling} showChange />
                 </div>
+
+                {topProducts.dead_stock && topProducts.dead_stock.length > 0 && (
+                  <div className="app-card overflow-hidden">
+                    <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+                      <h3 className="font-semibold text-sm">Нулевые продажи (товар в наличии, но не продаётся)</h3>
+                      <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+                        Товары со складским остатком {'>'} 0, у которых за выбранный период не было ни одной продажи.
+                        Только косметика/товары — у ремонта нет физического остатка на складе.
+                      </p>
+                    </div>
+                    <div className="p-3">
+                      <ResponsiveTable
+                        data={topProducts.dead_stock}
+                        keyFn={(p) => p.tovar_id}
+                        emptyText="Нет данных"
+                        columns={[
+                          { label: 'Товар', primary: true, render: (p) => (
+                            <div className="max-w-[220px] sm:max-w-[280px] truncate" title={p.name}>{p.name || p.code}</div>
+                          )},
+                          { label: 'Код', render: (p) => <span className="text-[color:var(--color-muted-foreground)]">{p.code}</span> },
+                          { label: 'Остаток', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => p.stock_qty.toLocaleString('ru-RU') },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>

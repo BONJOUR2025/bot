@@ -1584,8 +1584,9 @@ class FirebirdService:
     def get_top_products(self, date_from: date, date_to: date, limit: int = 20,
                           salon_ids: list[str] | None = None) -> dict:
         """Top/bottom-selling SKUs and biggest risers/fallers vs the
-        preceding period of equal length."""
-        empty = {"top": [], "bottom": [], "rising": [], "falling": []}
+        preceding period of equal length, plus dead stock (see
+        get_dead_stock for what that means and why it's cosmetics-only)."""
+        empty = {"top": [], "bottom": [], "rising": [], "falling": [], "dead_stock": []}
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty top products")
             return empty
@@ -1620,7 +1621,83 @@ class FirebirdService:
         rising = sorted(swinging, key=lambda p: p["pct_change"], reverse=True)[:limit]
         falling = sorted(swinging, key=lambda p: p["pct_change"])[:limit]
 
-        return {"top": top, "bottom": bottom, "rising": rising, "falling": falling}
+        try:
+            dead_stock = self.get_dead_stock(date_from, date_to, limit=limit * 3)
+        except Exception as e:
+            logger.error(f"Error fetching dead stock: {e}")
+            dead_stock = []
+
+        return {"top": top, "bottom": bottom, "rising": rising, "falling": falling, "dead_stock": dead_stock}
+
+    def get_dead_stock(self, date_from: date, date_to: date, limit: int = 50) -> list[dict]:
+        """Cosmetics SKUs that are physically in stock (positive warehouse
+        remainder, computed as SUM(QTY_DEBET - QTY_KREDIT) over the whole
+        receipt/write-off ledger, not just this period) but had zero sales
+        in the given date range — likely overstocked or dead inventory.
+
+        Repair-folder items are excluded: they're services, not physical
+        goods, so "in stock" is meaningless for them (confirmed: 0 of the
+        ~2900 SKUs with positive DOC_SCLAD_LINES remainder belong to a
+        repair folder). Discontinued items (IS_NOT_USED) are excluded too
+        — they're already known to be out of rotation, not surprises.
+
+        Salon filtering isn't offered here: DOC_SCLAD_LINES tracks a single
+        shared warehouse ledger per SKU, not a per-order/per-salon split
+        like the sales tables, so there's no way to attribute "this SKU's
+        stock" to one salon the way orders attribute revenue.
+        """
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty dead stock")
+            return []
+
+        cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
+
+        sql_stock = f"""
+            SELECT s.tovar_id, t.name, t.code, s.remain
+            FROM (
+                SELECT tovar_id, SUM(qty_debet - qty_kredit) as remain
+                FROM doc_sclad_lines
+                GROUP BY tovar_id
+                HAVING SUM(qty_debet - qty_kredit) > 0
+            ) s
+            INNER JOIN tovars_tbl t ON t.tovar_id = s.tovar_id
+            WHERE t.folder_id IN ({cosmetics_folders})
+                AND (t.is_not_used IS NULL OR t.is_not_used = 0)
+        """
+        sql_sold = f"""
+            SELECT DISTINCT doc_order_lines.tovar_id
+            FROM doc_order_lines
+                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+            WHERE docs_order_history.status_id = 5
+                AND docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.folder_id IN ({cosmetics_folders})
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql_stock)
+                stock_rows = cur.fetchall()
+                cur.execute(sql_sold, (date_from, date_to))
+                sold_ids = {r[0] for r in cur.fetchall()}
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching dead stock: {e}")
+            return []
+
+        dead = [
+            {"tovar_id": tovar_id, "name": (name or "").strip(), "code": (code or "").strip(),
+             "stock_qty": float(remain or 0)}
+            for tovar_id, name, code, remain in stock_rows
+            if tovar_id not in sold_ids
+        ]
+        dead.sort(key=lambda p: p["stock_qty"], reverse=True)
+        return dead[:limit]
 
     def get_workplace_summary(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """Throughput (revenue + operation count) per WORK_PLACE for a date range.
