@@ -1209,6 +1209,75 @@ class FirebirdService:
             "orders": orders,
         }
 
+    def get_unclaimed_orders(self, days: int = 90) -> dict:
+        """Orders whose promised pickup date (DATE_OUT) has passed with no
+        actual pickup (DATE_OUT_FACT still null) — items sitting unclaimed.
+
+        `days` bounds how far back to look by DATE_OUT (not DOC_DATE): the
+        full unbounded history goes back to 2013 (~9,200 orders), mostly
+        long-dead and unactionable, so this defaults to a recent window
+        that's actually worth calling clients about. "Розница <салон>"
+        walk-in accounts are excluded — see search_clients docstring.
+        """
+        empty = {"total_count": 0, "total_amount": 0.0, "orders": []}
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty unclaimed orders")
+            return empty
+
+        # `days` is an internally-bounded int (FastAPI Query ge/le), not
+        # user-supplied text — inlined because fdb can't bind CURRENT_DATE
+        # - ? with an int parameter ("datetime.datetime or datetime.date
+        # expected"), only a literal.
+        sql = f"""
+            SELECT
+                d.doc_num, d.doc_date, do.date_out, do.kredit, c.name, c.teleph_cell
+            FROM docs_order do
+                INNER JOIN docs d ON (d.doc_id = do.doc_id)
+                LEFT JOIN contragents c ON (c.contr_id = d.contragent_id)
+            WHERE
+                do.date_out > CURRENT_DATE - {int(days)}
+                AND do.date_out < CURRENT_DATE
+                AND do.date_out_fact IS NULL
+                AND do.returned = 0
+                AND (c.name IS NULL OR UPPER(c.name) NOT STARTING WITH 'РОЗНИЦА')
+            ORDER BY do.date_out ASC
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql)
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching unclaimed orders: {e}")
+            return empty
+
+        today = date.today()
+        orders = []
+        total_amount = 0.0
+        for doc_num, doc_date, date_out, kredit, name, phone in rows:
+            amount = float(kredit or 0)
+            total_amount += amount
+            due_date = date_out.date() if hasattr(date_out, "date") else date_out
+            orders.append({
+                "doc_num": str(doc_num),
+                "order_date": doc_date.isoformat() if hasattr(doc_date, "isoformat") else str(doc_date),
+                "due_date": due_date.isoformat() if hasattr(due_date, "isoformat") else str(due_date),
+                "amount": round(amount, 2),
+                "client_name": (name or "").strip() or None,
+                "client_phone": (phone or "").strip() or None,
+                "days_overdue": (today - due_date).days if due_date else None,
+            })
+
+        return {
+            "total_count": len(orders),
+            "total_amount": round(total_amount, 2),
+            "orders": orders,
+        }
+
     def get_returns_summary(self, date_from: date, date_to: date) -> dict:
         """Returned-order counts/amounts by employee for a date range (DOCS_ORDER.RETURNED=1).
 
@@ -1291,6 +1360,100 @@ class FirebirdService:
             },
             "by_employee": by_employee,
         }
+
+    def _product_revenue_rows(self, date_from: date, date_to: date) -> dict[int, dict]:
+        """Per-TOVAR_ID revenue/qty for a date range, merged across repair
+        (DOC_ORDER_SERVICES) and cosmetics (DOC_ORDER_LINES). Shoes are
+        excluded — SHOES_CODES are line items within a paired commission
+        structure (see _parse_shoe_pairs), not standalone SKUs a "top
+        products" ranking would mean anything for."""
+        repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
+        cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
+
+        sql_repair = f"""
+            SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                   SUM(doc_order_services.kredit), SUM(doc_order_services.qty_kredit)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+            WHERE docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.folder_id IN ({repair_folders})
+            GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+        """
+        sql_cosmetics = f"""
+            SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                   SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
+            FROM doc_order_lines
+                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+            WHERE docs_order_history.status_id = 5
+                AND docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.folder_id IN ({cosmetics_folders})
+            GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+        """
+
+        con = _connect()
+        try:
+            cur = con.cursor()
+            cur.execute(sql_repair, (date_from, date_to))
+            rows = list(cur.fetchall())
+            cur.execute(sql_cosmetics, (date_from, date_to))
+            rows += cur.fetchall()
+        finally:
+            con.close()
+
+        products: dict[int, dict] = {}
+        for tovar_id, name, code, revenue, qty in rows:
+            p = products.setdefault(tovar_id, {
+                "tovar_id": tovar_id, "name": (name or "").strip(), "code": (code or "").strip(),
+                "revenue": 0.0, "qty": 0.0,
+            })
+            p["revenue"] += float(revenue or 0)
+            p["qty"] += float(qty or 0)
+        return products
+
+    def get_top_products(self, date_from: date, date_to: date, limit: int = 20) -> dict:
+        """Top/bottom-selling SKUs and biggest risers/fallers vs the
+        preceding period of equal length."""
+        empty = {"top": [], "bottom": [], "rising": [], "falling": []}
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning empty top products")
+            return empty
+
+        try:
+            current = self._product_revenue_rows(date_from, date_to)
+            span = (date_to - date_from).days + 1
+            prev_to = date_from - timedelta(days=1)
+            prev_from = prev_to - timedelta(days=span - 1)
+            previous = self._product_revenue_rows(prev_from, prev_to)
+        except Exception as e:
+            logger.error(f"Error fetching top products: {e}")
+            return empty
+
+        MIN_VOLUME = 1000.0  # ignore trivial amounts when ranking % swings — a
+        # SKU going from 10₽ to 100₽ is a meaningless "900% rise"
+
+        merged = []
+        for tovar_id, p in current.items():
+            prev_revenue = previous.get(tovar_id, {}).get("revenue", 0.0)
+            pct_change = (
+                round((p["revenue"] - prev_revenue) / prev_revenue * 100, 1)
+                if prev_revenue else None
+            )
+            merged.append({**p, "prev_revenue": round(prev_revenue, 2), "pct_change": pct_change,
+                            "revenue": round(p["revenue"], 2), "qty": round(p["qty"], 1)})
+
+        top = sorted(merged, key=lambda p: p["revenue"], reverse=True)[:limit]
+        bottom = sorted((p for p in merged if p["revenue"] > 0), key=lambda p: p["revenue"])[:limit]
+
+        swinging = [p for p in merged if p["pct_change"] is not None and max(p["revenue"], p["prev_revenue"]) >= MIN_VOLUME]
+        rising = sorted(swinging, key=lambda p: p["pct_change"], reverse=True)[:limit]
+        falling = sorted(swinging, key=lambda p: p["pct_change"])[:limit]
+
+        return {"top": top, "bottom": bottom, "rising": rising, "falling": falling}
 
     def get_workplace_summary(self, date_from: date, date_to: date) -> dict:
         """Throughput (revenue + operation count) per WORK_PLACE for a date range.

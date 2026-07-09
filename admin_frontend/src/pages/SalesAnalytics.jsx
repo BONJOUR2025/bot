@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   RefreshCw, Download, EyeOff, Eye, ChevronDown, Check,
   TrendingUp, TrendingDown, BarChart3, Trophy, Users, Target, Calendar,
-  Percent, Clock, RotateCcw, Gauge, Building2,
+  Percent, Clock, RotateCcw, Gauge, Building2, PackageX, Phone, Package,
 } from 'lucide-react';
 import {
   ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid,
@@ -414,6 +414,132 @@ function PlanGauges({ empSummary, planTotals }) {
   );
 }
 
+/* ── Product rank table (top/bottom/rising/falling SKUs) ── */
+function ProductRankTable({ title, items, showChange }) {
+  return (
+    <div className="app-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+        <h3 className="font-semibold text-sm">{title}</h3>
+      </div>
+      <div className="p-3">
+        <ResponsiveTable
+          data={items}
+          keyFn={(p) => p.tovar_id}
+          emptyText="Нет данных"
+          columns={[
+            { label: 'Товар/услуга', primary: true, render: (p) => (
+              <div className="max-w-[320px] truncate" title={p.name}>{p.name || p.code}</div>
+            )},
+            { label: 'Кол-во', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (p) => p.qty.toLocaleString('ru-RU') },
+            { label: 'Выручка', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => fmtRub(p.revenue) },
+            ...(showChange ? [{ label: 'vs пред. период', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => (
+              p.pct_change == null ? '—' : (
+                <span className={p.pct_change >= 0 ? 'text-emerald-600' : 'text-red-500'}>{p.pct_change >= 0 ? '+' : ''}{p.pct_change}%</span>
+              )
+            )}] : []),
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ── Unclaimed orders tab (self-contained: its own "days" window, not the page date range) ── */
+function UnclaimedTab() {
+  const [days, setDays] = useState(90);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function load() {
+    setLoading(true); setError(null);
+    try {
+      const res = await api.get('/sales/unclaimed', { params: { days } });
+      setData(res.data);
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
+    } finally { setLoading(false); }
+  }
+
+  function exportCsv() {
+    if (!data?.orders?.length) return;
+    const hdr = '№ заказа;Дата приёма;Обещанная выдача;Дней просрочки;Клиент;Телефон;Сумма';
+    const body = data.orders.map((o) => [o.doc_num, o.order_date, o.due_date, o.days_overdue, o.client_name || '', o.client_phone || '', o.amount].join(';')).join('\n');
+    const blob = new Blob(['﻿' + hdr + '\n' + body], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'unclaimed_orders.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="app-card p-4 space-y-3">
+        <p className="text-sm text-[color:var(--color-muted-foreground)]">
+          Заказы, у которых обещанная дата выдачи прошла, а фактической выдачи так и не было — вещи всё ещё лежат в приёмке/химчистке.
+          Полная история таких заказов уходит до 2013 года (~9 200 шт.) — почти всё это давно неактуально, поэтому окно ограничено.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Обещанная выдача — окно (дн.)</label>
+            <input type="number" className="input w-28" value={days} onChange={(e) => setDays(+e.target.value)} />
+          </div>
+          <button onClick={load} disabled={loading} className="btn btn--primary btn--sm flex items-center gap-1.5">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {data ? 'Обновить' : 'Загрузить'}
+          </button>
+          {data?.orders?.length > 0 && (
+            <button onClick={exportCsv} className="btn btn--secondary btn--sm">CSV</button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">{error}</div>
+      )}
+
+      {loading && <SkeletonTable rows={6} />}
+
+      {!loading && data && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <KpiStat label="Незабранных заказов" value={data.total_count.toLocaleString('ru-RU')} accent="#ef4444" icon={<PackageX size={18} />} />
+            <KpiStat label="Сумма" value={fmtRub(data.total_amount)} accent="#f59e0b" icon={<TrendingDown size={18} />} />
+          </div>
+
+          <div className="app-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between">
+              <h3 className="font-semibold">Список</h3>
+              <span className="text-sm text-[color:var(--color-muted-foreground)]">{data.orders.length}</span>
+            </div>
+            <div className="p-3">
+              <ResponsiveTable
+                data={data.orders}
+                keyFn={(o) => o.doc_num}
+                emptyText="Ничего не просрочено — хороший знак"
+                columns={[
+                  { label: '№ заказа', primary: true, render: (o) => (
+                    <div>
+                      <div className="font-medium">{o.doc_num}</div>
+                      <div className="text-xs text-[color:var(--color-muted-foreground)]">обещали {o.due_date}</div>
+                    </div>
+                  )},
+                  { label: 'Клиент', render: (o) => (
+                    <div>
+                      <div>{o.client_name || '—'}</div>
+                      {o.client_phone && <div className="text-xs text-[color:var(--color-muted-foreground)] flex items-center gap-1"><Phone size={10} /> {o.client_phone}</div>}
+                    </div>
+                  )},
+                  { label: 'Сумма', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (o) => fmtRub(o.amount) },
+                  { label: 'Просрочка', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold text-red-500', render: (o) => `${o.days_overdue} дн.` },
+                ]}
+              />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ── main component ──────────────────────────────────────── */
 export default function SalesAnalytics() {
   const now = new Date();
@@ -439,6 +565,7 @@ export default function SalesAnalytics() {
   const [returns,   setReturns]    = useState(null);
   const [workplaces, setWorkplaces] = useState(null);
   const [departments, setDepartments] = useState(null);
+  const [topProducts, setTopProducts] = useState(null);
   const [loading,   setLoading]   = useState(false);
   const [loaded,    setLoaded]    = useState(false);
   const [error,     setError]     = useState(null);
@@ -460,7 +587,7 @@ export default function SalesAnalytics() {
       const prevTo = new Date(d0); prevTo.setDate(prevTo.getDate() - 1);
       const prevFrom = new Date(+prevTo - (d1 - d0));
       const monthKeys = months.map(toMonthKey).join(',');
-      const [mainRes, prevRes, plansRes, retentionRes, marginRes, turnaroundRes, returnsRes, workplacesRes, departmentsRes] = await Promise.all([
+      const [mainRes, prevRes, plansRes, retentionRes, marginRes, turnaroundRes, returnsRes, workplacesRes, departmentsRes, topProductsRes] = await Promise.all([
         api.get('/sales/daily', { params }),
         api.get('/sales/daily', { params: { date_from: prevFrom.toISOString().slice(0,10), date_to: prevTo.toISOString().slice(0,10) } }),
         api.get('/sales/plans', { params: { month_keys: monthKeys } }),
@@ -470,6 +597,7 @@ export default function SalesAnalytics() {
         api.get('/sales/returns', { params }),
         api.get('/sales/workplaces', { params }),
         api.get('/sales/departments', { params }),
+        api.get('/sales/top-products', { params }),
       ]);
       // Best-effort — a failure here shouldn't block sales data from
       // showing, it just leaves empName() falling back to the raw code.
@@ -479,7 +607,7 @@ export default function SalesAnalytics() {
       } catch (e) {
         console.error('Не удалось загрузить имена сотрудников', e);
       }
-      setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setRetention(retentionRes.data); setMargin(marginRes.data); setTurnaround(turnaroundRes.data); setReturns(returnsRes.data); setWorkplaces(workplacesRes.data); setDepartments(departmentsRes.data); setLoaded(true);
+      setRows(mainRes.data); setPrevRows(prevRes.data); setPlans(plansRes.data); setRetention(retentionRes.data); setMargin(marginRes.data); setTurnaround(turnaroundRes.data); setReturns(returnsRes.data); setWorkplaces(workplacesRes.data); setDepartments(departmentsRes.data); setTopProducts(topProductsRes.data); setLoaded(true);
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
     } finally { setLoading(false); }
@@ -630,6 +758,8 @@ export default function SalesAnalytics() {
     { key: 'returns',    label: 'Возвраты',      icon: <RotateCcw size={15} /> },
     { key: 'workplaces', label: 'Пропускная способность', icon: <Gauge size={15} /> },
     { key: 'departments', label: 'Салоны',      icon: <Building2 size={15} /> },
+    { key: 'unclaimed',  label: 'Незабранные',  icon: <PackageX size={15} /> },
+    { key: 'products',   label: 'Товары',        icon: <Package size={15} /> },
   ];
 
   return (
@@ -1235,6 +1365,30 @@ export default function SalesAnalytics() {
                       );
                     })}
                   </div>
+                </div>
+              </div>
+            ) : (
+              <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>
+            )
+          )}
+
+          {/* ══ UNCLAIMED tab ═══════════════════════════════ */}
+          {activeTab === 'unclaimed' && <UnclaimedTab />}
+
+          {/* ══ PRODUCTS tab ════════════════════════════════ */}
+          {activeTab === 'products' && (
+            topProducts && topProducts.top.length > 0 ? (
+              <div className="space-y-4">
+                <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                  Разбивка по конкретным товарам/услугам (не по категориям целиком). «vs пред. период» сравнивает с таким же по длине
+                  периодом непосредственно перед выбранным; изменения по позициям дешевле {' '}{fmtRub(1000)}{' '} не показываются в
+                  «растущих/падающих» — на таких суммах % ничего не значит.
+                </p>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <ProductRankTable title="Топ по выручке" items={topProducts.top} />
+                  <ProductRankTable title="Меньше всего продаж" items={topProducts.bottom} />
+                  <ProductRankTable title="Растущие позиции" items={topProducts.rising} showChange />
+                  <ProductRankTable title="Падающие позиции" items={topProducts.falling} showChange />
                 </div>
               </div>
             ) : (

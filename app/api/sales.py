@@ -107,6 +107,22 @@ def create_sales_router() -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.get("/unclaimed")
+    async def get_unclaimed_orders(
+        days: int = Query(default=90, ge=1, le=1095),
+    ):
+        """Return orders past their promised pickup date with no actual pickup yet."""
+        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+
+        if not FIREBIRD_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
+
+        try:
+            svc = get_firebird_service()
+            return await asyncio.to_thread(svc.get_unclaimed_orders, days)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.get("/returns")
     async def get_returns_summary(
         date_from: Optional[date] = Query(default=None),
@@ -149,6 +165,22 @@ def create_sales_router() -> APIRouter:
         try:
             svc = get_firebird_service()
             return await asyncio.to_thread(svc.get_department_comparison, df, dt)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/top-products")
+    async def get_top_products(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+        limit: int = Query(default=20, ge=1, le=100),
+    ):
+        """Return top/bottom-selling SKUs and biggest risers/fallers vs the preceding period."""
+        from app.services.firebird_service import get_firebird_service
+
+        df, dt = _resolve_range(date_from, date_to)
+        try:
+            svc = get_firebird_service()
+            return await asyncio.to_thread(svc.get_top_products, df, dt, limit)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
