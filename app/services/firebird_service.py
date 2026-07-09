@@ -1973,6 +1973,53 @@ class FirebirdService:
             logger.warning(f"get_cash_moves error: {e}")
             return []
 
+    def get_cash_balances(self) -> list[dict]:
+        """Current cash-on-hand per register (KASSA), computed from
+        DOCS_KASSA — the full cash ledger (sales, refunds, prepayments,
+        salary payouts, инкассация, ...), unlike DOC_KASSA_MOVES above
+        which only covers transfers between registers. DEBET increases a
+        register's cash, KREDIT decreases it (confirmed against real
+        rows: "Реализация" sales post to DEBET, "Инкассация" posts KREDIT
+        at the source register and a matching DEBET at the receiving one)
+        — so balance = SUM(DEBET) - SUM(KREDIT), all-time (there's no
+        periodic "opening balance" reset row in this data; it's one
+        running total since 2013).
+
+        Deliberately skips the DOCS join for the date: this is "balance
+        right now", which needs every historical row regardless of date,
+        and DOCS_KASSA/KASSES alone answers that in <1s — adding DOCS to
+        get DOC_DATE (unneeded here) was measured at ~14s for the same
+        aggregate over ~290k rows.
+
+        "Основная" (id 54) is the central register that everything gets
+        инкассация'd into — its balance is a 13-year cumulative total,
+        not physical cash sitting in a drawer, so don't read it the same
+        way as a branch's till float.
+        """
+        if not FIREBIRD_AVAILABLE:
+            return []
+        sql = """
+            SELECT dk.kassa_id, k.name, SUM(dk.debet - dk.kredit) as balance
+            FROM docs_kassa dk
+                INNER JOIN kasses k ON k.id = dk.kassa_id
+            GROUP BY dk.kassa_id, k.name
+            ORDER BY balance DESC
+        """
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql)
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.warning(f"get_cash_balances error: {e}")
+            return []
+        return [
+            {"kassa_id": kassa_id, "name": (name or "").strip(), "balance": round(float(balance or 0), 2)}
+            for kassa_id, name, balance in rows
+        ]
 
     def get_cash_move_by_id(self, move_id: str) -> Optional[dict]:
         """Load a single cash movement by ID from DOC_KASSA_MOVES."""

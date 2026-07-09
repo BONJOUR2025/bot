@@ -599,6 +599,54 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
 
 // ── Visualization components ──────────────────────────────────────
 
+// Cash-on-hand per register, from DOCS_KASSA (the full ledger) — not the
+// same source as the "Движения" tab, which only covers DOC_KASSA_MOVES
+// transfers between registers. This is a live snapshot, not affected by
+// the page's date range.
+function CashBalancesCard() {
+  const [balances, setBalances] = useState(null);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(() => {
+    api.get('cash-moves/balances')
+      .then((r) => setBalances(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setBalances([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (!loading && (!balances || balances.length === 0)) return null;
+
+  return (
+    <div className="app-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Wallet size={15} className="text-[color:var(--color-primary)]" />
+          Остатки по кассам
+        </h3>
+        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+          Текущий остаток наличных, считается по всей истории кассовых операций (продажи, возвраты, инкассация и т.д.),
+          не только по перемещениям на этой странице. «Основная» — центральная касса, куда стекается инкассация со всех
+          точек, поэтому там накопленная за много лет сумма, а не остаток «в ящике».
+        </p>
+      </div>
+      <div className="p-3">
+        {loading ? <SkeletonTable rows={4} /> : (
+          <ResponsiveTable
+            data={balances}
+            keyFn={(b) => b.kassa_id}
+            emptyText="Нет данных"
+            columns={[
+              { label: 'Касса', primary: true, render: (b) => b.name || b.kassa_id },
+              { label: 'Остаток', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold',
+                render: (b) => <span className={b.balance < 0 ? 'text-red-500' : ''}>{fmtMoney(b.balance)}</span> },
+            ]}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function KpiCard({ label, value, sub, accent, icon: Icon }) {
   return (
     <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#6366f1'}` }}>
@@ -1083,6 +1131,8 @@ export default function CashMovements() {
             </div>
           ) : (
             <>
+              <CashBalancesCard />
+
               {/* Date presets row */}
               <div className="flex flex-wrap gap-2 items-center">
                 {DATE_PRESETS.map((p) => (

@@ -198,6 +198,19 @@ def create_cash_moves_router(
 
         return results
 
+    # ── Balances ─────────────────────────────────────────────────────
+
+    @router.get("/balances")
+    async def get_cash_balances(_=Depends(perm)):
+        """Current cash-on-hand per register — see
+        FirebirdService.get_cash_balances for how this differs from the
+        transfer-only DOC_KASSA_MOVES data the rest of this page uses."""
+        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+
+        if not FIREBIRD_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
+        return await asyncio.to_thread(get_firebird_service().get_cash_balances)
+
     # ── Records ──────────────────────────────────────────────────────
 
     @router.get("/by-id/{move_id}")
