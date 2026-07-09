@@ -428,11 +428,11 @@ function ProductRankTable({ title, items, showChange }) {
           emptyText="Нет данных"
           columns={[
             { label: 'Товар/услуга', primary: true, render: (p) => (
-              <div className="max-w-[320px] truncate" title={p.name}>{p.name || p.code}</div>
+              <div className="max-w-[180px] sm:max-w-[220px] truncate" title={p.name}>{p.name || p.code}</div>
             )},
             { label: 'Кол-во', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (p) => p.qty.toLocaleString('ru-RU') },
             { label: 'Выручка', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => fmtRub(p.revenue) },
-            ...(showChange ? [{ label: 'vs пред. период', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => (
+            ...(showChange ? [{ label: 'Δ период', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => (
               p.pct_change == null ? '—' : (
                 <span className={p.pct_change >= 0 ? 'text-emerald-600' : 'text-red-500'}>{p.pct_change >= 0 ? '+' : ''}{p.pct_change}%</span>
               )
@@ -554,7 +554,17 @@ export default function SalesAnalytics() {
   const [chartMode, setChartMode] = useState('area');
   const [selectedEmployees,  setSelectedEmployees]  = useState(new Set());
   const [selectedCategories, setSelectedCategories] = useState(new Set());
+  const [selectedSalons,     setSelectedSalons]     = useState(new Set());
+  const [salonOptions,       setSalonOptions]       = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Salon list is independent of the date range (used to build the filter's
+  // options), so it's fetched once on mount rather than inside load().
+  useEffect(() => {
+    api.get('/sales/salon-options').then((res) => {
+      setSalonOptions((res.data || []).map((s) => ({ value: s.id, label: s.name })));
+    }).catch((e) => console.error('Не удалось загрузить список салонов', e));
+  }, []);
 
   const [rows,      setRows]      = useState([]);
   const [prevRows,  setPrevRows]  = useState([]);
@@ -583,18 +593,29 @@ export default function SalesAnalytics() {
       const params = {};
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo)   params.date_to   = dateTo;
+      const salonIds = selectedSalons.size ? [...selectedSalons].join(',') : undefined;
+      // Only endpoints that actually resolve DOC_NUM -> salon server-side get
+      // salon_ids — sending it to the rest (retention/workplaces/departments/
+      // top-products) would silently no-op there, which is worse than not
+      // claiming to filter them at all.
+      const salonParams = salonIds ? { ...params, salon_ids: salonIds } : params;
       const d0 = new Date(dateFrom || TODAY), d1 = new Date(dateTo || TODAY);
       const prevTo = new Date(d0); prevTo.setDate(prevTo.getDate() - 1);
       const prevFrom = new Date(+prevTo - (d1 - d0));
+      const prevParams = {
+        date_from: prevFrom.toISOString().slice(0,10),
+        date_to: prevTo.toISOString().slice(0,10),
+        ...(salonIds ? { salon_ids: salonIds } : {}),
+      };
       const monthKeys = months.map(toMonthKey).join(',');
       const [mainRes, prevRes, plansRes, retentionRes, marginRes, turnaroundRes, returnsRes, workplacesRes, departmentsRes, topProductsRes] = await Promise.all([
-        api.get('/sales/daily', { params }),
-        api.get('/sales/daily', { params: { date_from: prevFrom.toISOString().slice(0,10), date_to: prevTo.toISOString().slice(0,10) } }),
+        api.get('/sales/daily', { params: salonParams }),
+        api.get('/sales/daily', { params: prevParams }),
         api.get('/sales/plans', { params: { month_keys: monthKeys } }),
         api.get('/sales/client-retention', { params }),
-        api.get('/sales/margin', { params }),
-        api.get('/sales/turnaround', { params }),
-        api.get('/sales/returns', { params }),
+        api.get('/sales/margin', { params: salonParams }),
+        api.get('/sales/turnaround', { params: salonParams }),
+        api.get('/sales/returns', { params: salonParams }),
         api.get('/sales/workplaces', { params }),
         api.get('/sales/departments', { params }),
         api.get('/sales/top-products', { params }),
@@ -737,6 +758,67 @@ export default function SalesAnalytics() {
     { name: 'Обувь',               value: kpi.shoes     || 0, color: '#f59e0b' },
   ].filter((d) => d.value > 0), [kpi]);
 
+  // Маржа/Сроки/Возвраты come back from the API already salon-filtered
+  // (server-side, see load()) but not employee-filtered — that's cheap to
+  // do here since each already carries a `code` per row, and re-deriving
+  // "total" from the filtered subset keeps the KPI row honest instead of
+  // showing an unfiltered total next to a filtered employee list.
+  const filteredMargin = useMemo(() => {
+    if (!margin) return null;
+    if (!selectedEmployees.size) return margin;
+    const byEmp = margin.by_employee.filter((e) => selectedEmployees.has(e.code));
+    const sum = (field) => byEmp.reduce((s, e) => s + (e[field] || 0), 0);
+    const categories = {};
+    for (const cat of ['repair', 'cosmetics']) {
+      const rev = sum(`${cat}_revenue`), cost = sum(`${cat}_cost`);
+      categories[cat] = { revenue: rev, cost, margin: rev - cost, margin_pct: rev ? Math.round((rev - cost) / rev * 1000) / 10 : 0 };
+    }
+    const totalRev = categories.repair.revenue + categories.cosmetics.revenue;
+    const totalCost = categories.repair.cost + categories.cosmetics.cost;
+    return {
+      categories,
+      total: { revenue: totalRev, cost: totalCost, margin: totalRev - totalCost,
+        margin_pct: totalRev ? Math.round((totalRev - totalCost) / totalRev * 1000) / 10 : 0 },
+      by_employee: byEmp,
+      unpriced_items: margin.unpriced_items,
+    };
+  }, [margin, selectedEmployees]);
+
+  const filteredTurnaround = useMemo(() => {
+    if (!turnaround) return null;
+    if (!selectedEmployees.size) return turnaround;
+    const byEmp = turnaround.by_employee.filter((e) => selectedEmployees.has(e.code));
+    const orderCount = byEmp.reduce((s, e) => s + e.order_count, 0);
+    const lateCount  = byEmp.reduce((s, e) => s + e.late_count, 0);
+    const daysWeighted = byEmp.reduce((s, e) => s + e.avg_days * e.order_count, 0);
+    return {
+      total: {
+        avg_days: orderCount ? Math.round(daysWeighted / orderCount * 10) / 10 : 0,
+        late_rate: orderCount ? Math.round(lateCount / orderCount * 1000) / 10 : 0,
+        order_count: orderCount,
+      },
+      by_employee: byEmp,
+    };
+  }, [turnaround, selectedEmployees]);
+
+  const filteredReturns = useMemo(() => {
+    if (!returns) return null;
+    if (!selectedEmployees.size) return returns;
+    const byEmp = returns.by_employee.filter((e) => selectedEmployees.has(e.code));
+    const returnCount  = byEmp.reduce((s, e) => s + e.return_count, 0);
+    const returnAmount = byEmp.reduce((s, e) => s + e.return_amount, 0);
+    const orderCount   = byEmp.reduce((s, e) => s + e.order_count, 0);
+    return {
+      total: {
+        return_count: returnCount,
+        return_amount: returnAmount,
+        order_count: orderCount,
+        return_rate: orderCount ? Math.round(returnCount / orderCount * 1000) / 10 : 0,
+      },
+      by_employee: byEmp,
+    };
+  }, [returns, selectedEmployees]);
+
   const periodLabel = gran === 'day' ? 'дн.' : gran === 'week' ? 'нед.' : 'мес.';
 
   function downloadCsv() {
@@ -799,7 +881,7 @@ export default function SalesAnalytics() {
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div className="col-span-2 sm:col-span-1">
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата от</label>
             <input type="date" className="input w-full" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
@@ -827,7 +909,17 @@ export default function SalesAnalytics() {
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Категории</label>
             <MultiSelect options={categoryOptions} selected={selectedCategories} onChange={setSelectedCategories} placeholder="Все категории" />
           </div>
+          <div>
+            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Салон</label>
+            <MultiSelect options={salonOptions} selected={selectedSalons} onChange={setSelectedSalons} placeholder="Все салоны" />
+          </div>
         </div>
+        {selectedSalons.size > 0 && (
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">
+            Фильтр по салону влияет на «Обзор», «Сотрудники», «Сводная», «Маржа», «Сроки», «Возвраты». Остальные вкладки (retention,
+            пропускная способность, салоны, товары) пока показывают все салоны.
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           {[
             [hideZero, () => setHideZero((v) => !v), hideZero ? <EyeOff size={12}/> : <Eye size={12}/>, 'Скрыть нули'],
@@ -1128,13 +1220,13 @@ export default function SalesAnalytics() {
 
           {/* ══ MARGIN tab ══════════════════════════════════ */}
           {activeTab === 'margin' && (
-            margin && margin.total.revenue > 0 ? (
+            filteredMargin && filteredMargin.total.revenue > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  <KpiStat label="Выручка" value={fmtRub(margin.total.revenue)} accent="#6366f1" icon={<BarChart3 size={18} />} />
-                  <KpiStat label="Себестоимость" value={fmtRub(margin.total.cost)} accent="#ef4444" icon={<Percent size={18} />} />
-                  <KpiStat label="Валовая прибыль" value={fmtRub(margin.total.margin)} accent="#22c55e" icon={<TrendingUp size={18} />} />
-                  <KpiStat label="Маржа" value={fmtPct(margin.total.margin_pct)} accent="#8b5cf6" icon={<Target size={18} />} />
+                  <KpiStat label="Выручка" value={fmtRub(filteredMargin.total.revenue)} accent="#6366f1" icon={<BarChart3 size={18} />} />
+                  <KpiStat label="Себестоимость" value={fmtRub(filteredMargin.total.cost)} accent="#ef4444" icon={<Percent size={18} />} />
+                  <KpiStat label="Валовая прибыль" value={fmtRub(filteredMargin.total.margin)} accent="#22c55e" icon={<TrendingUp size={18} />} />
+                  <KpiStat label="Маржа" value={fmtPct(filteredMargin.total.margin_pct)} accent="#8b5cf6" icon={<Target size={18} />} />
                 </div>
 
                 <div className="app-card overflow-hidden">
@@ -1143,7 +1235,7 @@ export default function SalesAnalytics() {
                   </div>
                   <div className="p-3">
                     <ResponsiveTable
-                      data={CATEGORIES.filter((c) => c.key !== 'shoes').map((c) => ({ ...c, ...margin.categories[c.key] }))}
+                      data={CATEGORIES.filter((c) => c.key !== 'shoes').map((c) => ({ ...c, ...filteredMargin.categories[c.key] }))}
                       keyFn={(c) => c.key}
                       emptyText="Нет данных"
                       columns={[
@@ -1163,7 +1255,7 @@ export default function SalesAnalytics() {
                   <div className="px-4 py-2.5 border-t border-[color:var(--color-border)] text-xs text-[color:var(--color-muted-foreground)]">
                     «Ремонт/химчистка» — это в основном услуги (труд), а не перепродаваемый товар: закупочная себестоимость по складским приходам
                     для них почти нулевая, поэтому маржа там близка к 100% — это ожидаемо, не ошибка расчёта. Себестоимость считается по последней
-                    цене прихода на складе на конец периода{margin.unpriced_items > 0 ? `; для ${margin.unpriced_items} позиций приход в базе не найден — их себестоимость взята как 0` : ''}.
+                    цене прихода на складе на конец периода{filteredMargin.unpriced_items > 0 ? `; для ${filteredMargin.unpriced_items} позиций приход в базе не найден — их себестоимость взята как 0` : ''}.
                   </div>
                 </div>
 
@@ -1173,13 +1265,13 @@ export default function SalesAnalytics() {
                   </div>
                   <div className="p-3">
                     <ResponsiveTable
-                      data={margin.by_employee}
+                      data={filteredMargin.by_employee}
                       keyFn={(e) => e.code}
                       emptyText="Нет данных"
                       columns={[
                         { label: 'Сотрудник', primary: true, render: (e) => (
                           <div className="flex items-center gap-2">
-                            <EmpAvatar name={empName(e.code)} color={CHART_COLORS[margin.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
+                            <EmpAvatar name={empName(e.code)} color={CHART_COLORS[filteredMargin.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
                             <span>{empName(e.code)}</span>
                           </div>
                         )},
@@ -1199,13 +1291,13 @@ export default function SalesAnalytics() {
 
           {/* ══ TURNAROUND tab ══════════════════════════════ */}
           {activeTab === 'turnaround' && (
-            turnaround && turnaround.total.order_count > 0 ? (
+            filteredTurnaround && filteredTurnaround.total.order_count > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                  <KpiStat label="Средний срок" value={`${turnaround.total.avg_days} дн.`} accent="#6366f1" icon={<Clock size={18} />} />
-                  <KpiStat label="Просрочено" value={fmtPct(turnaround.total.late_rate)} accent="#ef4444" icon={<TrendingDown size={18} />}
+                  <KpiStat label="Средний срок" value={`${filteredTurnaround.total.avg_days} дн.`} accent="#6366f1" icon={<Clock size={18} />} />
+                  <KpiStat label="Просрочено" value={fmtPct(filteredTurnaround.total.late_rate)} accent="#ef4444" icon={<TrendingDown size={18} />}
                     sub="факт позже обещанной даты" />
-                  <KpiStat label="Заказов с датой выдачи" value={turnaround.total.order_count.toLocaleString('ru-RU')} accent="#22c55e" icon={<Target size={18} />} />
+                  <KpiStat label="Заказов с датой выдачи" value={filteredTurnaround.total.order_count.toLocaleString('ru-RU')} accent="#22c55e" icon={<Target size={18} />} />
                 </div>
 
                 <div className="app-card overflow-hidden">
@@ -1215,13 +1307,13 @@ export default function SalesAnalytics() {
                   </div>
                   <div className="p-3">
                     <ResponsiveTable
-                      data={turnaround.by_employee}
+                      data={filteredTurnaround.by_employee}
                       keyFn={(e) => e.code}
                       emptyText="Нет данных"
                       columns={[
                         { label: 'Сотрудник', primary: true, render: (e) => (
                           <div className="flex items-center gap-2">
-                            <EmpAvatar name={empName(e.code)} color={CHART_COLORS[turnaround.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
+                            <EmpAvatar name={empName(e.code)} color={CHART_COLORS[filteredTurnaround.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
                             <span>{empName(e.code)}</span>
                           </div>
                         )},
@@ -1243,15 +1335,15 @@ export default function SalesAnalytics() {
 
           {/* ══ RETURNS tab ═════════════════════════════════ */}
           {activeTab === 'returns' && (
-            returns ? (
+            filteredReturns ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                  <KpiStat label="Возвратов" value={returns.total.return_count.toLocaleString('ru-RU')} accent="#ef4444" icon={<RotateCcw size={18} />} />
-                  <KpiStat label="% от заказов" value={fmtPct(returns.total.return_rate)} accent="#f59e0b" icon={<Target size={18} />} />
-                  <KpiStat label="Заказов всего" value={returns.total.order_count.toLocaleString('ru-RU')} accent="#6366f1" icon={<BarChart3 size={18} />} />
+                  <KpiStat label="Возвратов" value={filteredReturns.total.return_count.toLocaleString('ru-RU')} accent="#ef4444" icon={<RotateCcw size={18} />} />
+                  <KpiStat label="% от заказов" value={fmtPct(filteredReturns.total.return_rate)} accent="#f59e0b" icon={<Target size={18} />} />
+                  <KpiStat label="Заказов всего" value={filteredReturns.total.order_count.toLocaleString('ru-RU')} accent="#6366f1" icon={<BarChart3 size={18} />} />
                 </div>
 
-                {returns.by_employee.length > 0 ? (
+                {filteredReturns.by_employee.length > 0 ? (
                   <div className="app-card overflow-hidden">
                     <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
                       <h3 className="font-semibold">По сотрудникам</h3>
@@ -1261,13 +1353,13 @@ export default function SalesAnalytics() {
                     </div>
                     <div className="p-3">
                       <ResponsiveTable
-                        data={returns.by_employee}
+                        data={filteredReturns.by_employee}
                         keyFn={(e) => e.code}
                         emptyText="Нет возвратов за период"
                         columns={[
                           { label: 'Сотрудник', primary: true, render: (e) => (
                             <div className="flex items-center gap-2">
-                              <EmpAvatar name={empName(e.code)} color={CHART_COLORS[returns.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
+                              <EmpAvatar name={empName(e.code)} color={CHART_COLORS[filteredReturns.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
                               <span>{empName(e.code)}</span>
                             </div>
                           )},
@@ -1384,7 +1476,7 @@ export default function SalesAnalytics() {
                   периодом непосредственно перед выбранным; изменения по позициям дешевле {' '}{fmtRub(1000)}{' '} не показываются в
                   «растущих/падающих» — на таких суммах % ничего не значит.
                 </p>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                   <ProductRankTable title="Топ по выручке" items={topProducts.top} />
                   <ProductRankTable title="Меньше всего продаж" items={topProducts.bottom} />
                   <ProductRankTable title="Растущие позиции" items={topProducts.rising} showChange />

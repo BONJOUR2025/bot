@@ -39,6 +39,38 @@ def _order_salon_code(doc_num: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+class _SalonResolver:
+    """Resolves (doc_num, doc_date) -> salon_id for a batch of rows.
+
+    SalonRepository.get_by_order_code() re-reads salons.json from disk on
+    every call (by design, for the two-process HR/payroll setup) — fine
+    for occasional lookups, but for the thousands of order rows a
+    salon-filtered report processes it dominates runtime (measured:
+    ~4s/10k calls vs ~0.03s/10k with the reload suppressed). Use as:
+
+        with _SalonResolver() as resolve:
+            salon_id = resolve(doc_num, doc_date)
+    """
+
+    def __enter__(self):
+        from app.data.salon_repository import get_salon_repository
+        self._repo = get_salon_repository()
+        self._repo._load()
+        self._original_load = self._repo._load
+        self._repo._load = lambda: None
+        return self._resolve
+
+    def _resolve(self, doc_num, doc_date) -> str | None:
+        code = _order_salon_code(doc_num)
+        if not code or doc_date is None:
+            return None
+        salon = self._repo.get_by_order_code(code, doc_date.year, doc_date.month)
+        return salon.id if salon else None
+
+    def __exit__(self, *exc_info):
+        self._repo._load = self._original_load
+
+
 def _month_range(year: int, month: int) -> tuple[date, date]:
     """Return (start, exclusive_end) dates for a month."""
     if month == 12:
@@ -500,14 +532,21 @@ class FirebirdService:
         return result
 
 
-    def get_daily_sales(self, date_from: date, date_to: date) -> list[dict]:
+    def get_daily_sales(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> list[dict]:
         """
         Get daily repair + cosmetics sales by employee for a date range.
         Returns list of dicts: {date, code, description, repair, cosmetics, total}
+
+        `salon_ids` (Salon.id values, e.g. from GET /api/salons/) restricts
+        to orders resolved to one of those salons via the doc_num suffix
+        (same attribution as get_department_comparison / "ФОТ по салонам").
+        Orders that don't resolve to any salon are excluded when a filter
+        is active — we can't confirm they belong to the selected ones.
         """
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty daily sales")
             return []
+        salon_filter = set(salon_ids) if salon_ids else None
 
         repair_folder_ids = (
             215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
@@ -563,10 +602,14 @@ class FirebirdService:
                 }
             result[key][category] += float(amount or 0)
 
+        # doc_num is only selected/grouped-on so a salon filter can resolve
+        # it per row below — dropped again once resolved, same aggregation
+        # grain (date, employee) as before when no filter is active.
         sql_repair = f"""
             SELECT
                 docs.doc_date,
                 users.description,
+                docs.doc_num,
                 SUM(doc_order_services.kredit)
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
@@ -577,14 +620,14 @@ class FirebirdService:
                 docs.doc_date >= ?
                 AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({','.join(str(x) for x in repair_folder_ids)})
-            GROUP BY docs.doc_date, users.description
-            ORDER BY docs.doc_date, users.description
+            GROUP BY docs.doc_date, users.description, docs.doc_num
         """
 
         sql_cosmetics = f"""
             SELECT
                 docs.doc_date,
                 users.description,
+                docs.doc_num,
                 SUM(doc_order_lines.kredit)
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
@@ -597,14 +640,14 @@ class FirebirdService:
                 AND docs.doc_date >= ?
                 AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({','.join(str(x) for x in cosmetics_folder_ids)})
-            GROUP BY docs.doc_date, users.description
-            ORDER BY docs.doc_date, users.description
+            GROUP BY docs.doc_date, users.description, docs.doc_num
         """
 
         sql_shoes = f"""
             SELECT
                 CAST(docs.doc_date AS DATE),
                 users.description,
+                docs.doc_num,
                 SUM(doc_order_services.kredit)
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
@@ -615,24 +658,31 @@ class FirebirdService:
                 CAST(docs.doc_date AS DATE) >= ?
                 AND CAST(docs.doc_date AS DATE) <= ?
                 AND tovars_tbl.code IN ({shoes_placeholders})
-            GROUP BY CAST(docs.doc_date AS DATE), users.description
-            ORDER BY CAST(docs.doc_date AS DATE), users.description
+            GROUP BY CAST(docs.doc_date AS DATE), users.description, docs.doc_num
         """
 
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql_repair, (date_from, date_to))
-                for d, desc, s in cur.fetchall():
-                    _add(d, desc, s, "repair")
-                cur.execute(sql_cosmetics, (date_from, date_to))
-                for d, desc, s in cur.fetchall():
-                    _add(d, desc, s, "cosmetics")
-                cur.execute(sql_shoes, (date_from, date_to, *shoes_sales_codes))
-                for d, desc, s in cur.fetchall():
-                    if d is not None:
-                        _add(d, desc, s, "shoes")
+                with _SalonResolver() as resolve_salon:
+                    def _keep(doc_num, doc_date) -> bool:
+                        if salon_filter is None:
+                            return True
+                        return resolve_salon(doc_num, doc_date) in salon_filter
+
+                    cur.execute(sql_repair, (date_from, date_to))
+                    for d, desc, doc_num, s in cur.fetchall():
+                        if _keep(doc_num, d):
+                            _add(d, desc, s, "repair")
+                    cur.execute(sql_cosmetics, (date_from, date_to))
+                    for d, desc, doc_num, s in cur.fetchall():
+                        if _keep(doc_num, d):
+                            _add(d, desc, s, "cosmetics")
+                    cur.execute(sql_shoes, (date_from, date_to, *shoes_sales_codes))
+                    for d, desc, doc_num, s in cur.fetchall():
+                        if d is not None and _keep(doc_num, d):
+                            _add(d, desc, s, "shoes")
             finally:
                 con.close()
         except Exception as e:
@@ -936,7 +986,7 @@ class FirebirdService:
         result.sort(key=lambda c: c["total_spent"], reverse=True)
         return result[:limit]
 
-    def get_margin_summary(self, date_from: date, date_to: date) -> dict:
+    def get_margin_summary(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """Gross margin by category and by employee for a date range.
 
         Cost is the most recent warehouse-receipt price (DOC_SCLAD_LINES,
@@ -948,6 +998,9 @@ class FirebirdService:
         services) with no purchase record at all — those come back with
         cost=0, which is correct (their real cost is payroll, tracked
         elsewhere), not a data gap.
+
+        `salon_ids` restricts to orders resolved to one of those salons —
+        see get_daily_sales for the attribution rule and its caveats.
         """
         empty_cat = {"revenue": 0.0, "cost": 0.0, "margin": 0.0, "margin_pct": 0.0}
         empty = {
@@ -959,12 +1012,13 @@ class FirebirdService:
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty margin summary")
             return empty
+        salon_filter = set(salon_ids) if salon_ids else None
 
         repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
         cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
 
         sql_repair = f"""
-            SELECT users.description, tovars_tbl.tovar_id,
+            SELECT users.description, tovars_tbl.tovar_id, docs.doc_date, docs.doc_num,
                    SUM(doc_order_services.kredit), SUM(doc_order_services.qty_kredit)
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
@@ -974,10 +1028,10 @@ class FirebirdService:
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({repair_folders})
-            GROUP BY users.description, tovars_tbl.tovar_id
+            GROUP BY users.description, tovars_tbl.tovar_id, docs.doc_date, docs.doc_num
         """
         sql_cosmetics = f"""
-            SELECT users.description, tovars_tbl.tovar_id,
+            SELECT users.description, tovars_tbl.tovar_id, docs.doc_date, docs.doc_num,
                    SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
@@ -989,7 +1043,7 @@ class FirebirdService:
                 docs_order_history.status_id = 5
                 AND docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({cosmetics_folders})
-            GROUP BY users.description, tovars_tbl.tovar_id
+            GROUP BY users.description, tovars_tbl.tovar_id, docs.doc_date, docs.doc_num
         """
         sql_cost = """
             SELECT tovar_id, price, dl_date
@@ -1023,21 +1077,24 @@ class FirebirdService:
 
         by_emp: dict[str, dict] = {}
 
-        def _accumulate(rows, category: str) -> None:
-            for desc, tovar_id, revenue, qty in rows:
-                code = _code_from_description(desc)
-                if not code:
-                    continue
-                cost = float(qty or 0) * unit_cost.get(tovar_id, 0.0)
-                entry = by_emp.setdefault(code, {
-                    "code": code, "repair_revenue": 0.0, "repair_cost": 0.0,
-                    "cosmetics_revenue": 0.0, "cosmetics_cost": 0.0,
-                })
-                entry[f"{category}_revenue"] += float(revenue or 0)
-                entry[f"{category}_cost"] += cost
+        with _SalonResolver() as resolve_salon:
+            def _accumulate(rows, category: str) -> None:
+                for desc, tovar_id, doc_date, doc_num, revenue, qty in rows:
+                    if salon_filter is not None and resolve_salon(doc_num, doc_date) not in salon_filter:
+                        continue
+                    code = _code_from_description(desc)
+                    if not code:
+                        continue
+                    cost = float(qty or 0) * unit_cost.get(tovar_id, 0.0)
+                    entry = by_emp.setdefault(code, {
+                        "code": code, "repair_revenue": 0.0, "repair_cost": 0.0,
+                        "cosmetics_revenue": 0.0, "cosmetics_cost": 0.0,
+                    })
+                    entry[f"{category}_revenue"] += float(revenue or 0)
+                    entry[f"{category}_cost"] += cost
 
-        _accumulate(repair_rows, "repair")
-        _accumulate(cosmetics_rows, "cosmetics")
+            _accumulate(repair_rows, "repair")
+            _accumulate(cosmetics_rows, "cosmetics")
 
         categories = {"repair": dict(empty_cat), "cosmetics": dict(empty_cat)}
         for cat in ("repair", "cosmetics"):
@@ -1073,7 +1130,7 @@ class FirebirdService:
             "unpriced_items": unpriced_items,
         }
 
-    def get_turnaround_stats(self, date_from: date, date_to: date) -> dict:
+    def get_turnaround_stats(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """Order fulfillment time (order created → actually picked up) for a date range.
 
         Uses DOCS.DOC_DATE (order creation) vs DOCS_ORDER.DATE_OUT_FACT
@@ -1081,20 +1138,26 @@ class FirebirdService:
         business (~91% in a recent H1) than DATE_ORDER_START/EXECUTED
         (~10-15%). "Late" compares DATE_OUT_FACT against DATE_OUT, the
         date promised to the client.
+
+        `salon_ids` restricts to orders resolved to one of those salons —
+        see get_daily_sales for the attribution rule and its caveats. This
+        forces the per-employee aggregation (avg/count/late) into Python
+        instead of SQL GROUP BY, since a salon needs the individual doc_num
+        resolved before it can be counted.
         """
         empty = {"total": {"avg_days": 0.0, "late_rate": 0.0, "order_count": 0}, "by_employee": []}
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty turnaround stats")
             return empty
+        salon_filter = set(salon_ids) if salon_ids else None
 
         sql = """
             SELECT
-                users.description,
-                AVG(CAST(docs_order.date_out_fact AS TIMESTAMP) - CAST(docs.doc_date AS TIMESTAMP)) AS avg_days,
-                COUNT(*) AS order_count,
-                SUM(CASE WHEN docs_order.date_out > DATE '2000-01-01'
-                              AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs_order.date_out AS TIMESTAMP)
-                         THEN 1 ELSE 0 END) AS late_count
+                users.description, docs.doc_num, docs.doc_date,
+                CAST(docs_order.date_out_fact AS TIMESTAMP) - CAST(docs.doc_date AS TIMESTAMP) AS days,
+                CASE WHEN docs_order.date_out > DATE '2000-01-01'
+                          AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs_order.date_out AS TIMESTAMP)
+                     THEN 1 ELSE 0 END AS is_late
             FROM docs_order
                 INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
                 INNER JOIN users ON (users.user_id = docs_order.creater_id)
@@ -1102,7 +1165,6 @@ class FirebirdService:
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND docs_order.date_out_fact IS NOT NULL
                 AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs.doc_date AS TIMESTAMP)
-            GROUP BY users.description
         """
 
         try:
@@ -1117,17 +1179,29 @@ class FirebirdService:
             logger.error(f"Error fetching turnaround stats: {e}")
             return empty
 
+        by_emp: dict[str, dict] = {}
+        with _SalonResolver() as resolve_salon:
+            for desc, doc_num, doc_date, days, is_late in rows:
+                if salon_filter is not None and resolve_salon(doc_num, doc_date) not in salon_filter:
+                    continue
+                code = _code_from_description(desc)
+                if not code:
+                    continue
+                entry = by_emp.setdefault(code, {"code": code, "days_sum": 0.0, "order_count": 0, "late_count": 0})
+                entry["days_sum"] += float(days or 0)
+                entry["order_count"] += 1
+                entry["late_count"] += is_late
+
         by_employee = []
         total_orders = 0
         total_late = 0
         total_days_weighted = 0.0
-        for desc, avg_days, order_count, late_count in rows:
-            code = _code_from_description(desc)
-            if not code:
-                continue
-            avg_days = float(avg_days or 0)
+        for entry in by_emp.values():
+            order_count = entry["order_count"]
+            avg_days = entry["days_sum"] / order_count if order_count else 0.0
+            late_count = entry["late_count"]
             by_employee.append({
-                "code": code,
+                "code": entry["code"],
                 "avg_days": round(avg_days, 1),
                 "order_count": order_count,
                 "late_count": late_count,
@@ -1278,36 +1352,38 @@ class FirebirdService:
             "orders": orders,
         }
 
-    def get_returns_summary(self, date_from: date, date_to: date) -> dict:
+    def get_returns_summary(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """Returned-order counts/amounts by employee for a date range (DOCS_ORDER.RETURNED=1).
 
         Read-only report — deliberately not wired into payroll bonuses/
         penalties. Whether a return should cost an employee money is a
         case-by-case call for a human, not something to automate from a
         raw RETURNED flag.
+
+        `salon_ids` restricts to orders resolved to one of those salons —
+        see get_daily_sales for the attribution rule and its caveats.
         """
         empty = {"total": {"return_count": 0, "return_amount": 0.0, "order_count": 0, "return_rate": 0.0}, "by_employee": []}
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty returns summary")
             return empty
+        salon_filter = set(salon_ids) if salon_ids else None
 
         sql_returns = """
-            SELECT users.description, COUNT(*), SUM(docs_order.kredit)
+            SELECT users.description, docs.doc_num, docs.doc_date, docs_order.kredit
             FROM docs_order
                 INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
                 INNER JOIN users ON (users.user_id = docs_order.creater_id)
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND docs_order.returned = 1
-            GROUP BY users.description
         """
         sql_totals = """
-            SELECT users.description, COUNT(*)
+            SELECT users.description, docs.doc_num, docs.doc_date
             FROM docs_order
                 INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
                 INNER JOIN users ON (users.user_id = docs_order.creater_id)
             WHERE docs.doc_date >= ? AND docs.doc_date <= ?
-            GROUP BY users.description
         """
 
         try:
@@ -1324,29 +1400,43 @@ class FirebirdService:
             logger.error(f"Error fetching returns summary: {e}")
             return empty
 
-        order_counts: dict[str, int] = {}
-        for desc, cnt in total_rows:
-            code = _code_from_description(desc)
-            if code:
-                order_counts[code] = order_counts.get(code, 0) + cnt
+        with _SalonResolver() as resolve_salon:
+            def _in_filter(doc_num, doc_date) -> bool:
+                return salon_filter is None or resolve_salon(doc_num, doc_date) in salon_filter
 
-        by_employee = []
-        total_returns = 0
-        total_amount = 0.0
-        for desc, ret_cnt, ret_amt in return_rows:
-            code = _code_from_description(desc)
-            if not code:
-                continue
+            order_counts: dict[str, int] = {}
+            for desc, doc_num, doc_date in total_rows:
+                if not _in_filter(doc_num, doc_date):
+                    continue
+                code = _code_from_description(desc)
+                if code:
+                    order_counts[code] = order_counts.get(code, 0) + 1
+
+            by_employee = []
+            total_returns = 0
+            total_amount = 0.0
+            returns_by_code: dict[str, dict] = {}
+            for desc, doc_num, doc_date, ret_amt in return_rows:
+                if not _in_filter(doc_num, doc_date):
+                    continue
+                code = _code_from_description(desc)
+                if not code:
+                    continue
+                entry = returns_by_code.setdefault(code, {"return_count": 0, "return_amount": 0.0})
+                entry["return_count"] += 1
+                entry["return_amount"] += float(ret_amt or 0)
+
+        for code, entry in returns_by_code.items():
             order_count = order_counts.get(code, 0)
             by_employee.append({
                 "code": code,
-                "return_count": ret_cnt,
-                "return_amount": float(ret_amt or 0),
+                "return_count": entry["return_count"],
+                "return_amount": round(entry["return_amount"], 2),
                 "order_count": order_count,
-                "return_rate": round(ret_cnt / order_count * 100, 1) if order_count else 0.0,
+                "return_rate": round(entry["return_count"] / order_count * 100, 1) if order_count else 0.0,
             })
-            total_returns += ret_cnt
-            total_amount += float(ret_amt or 0)
+            total_returns += entry["return_count"]
+            total_amount += entry["return_amount"]
 
         by_employee.sort(key=lambda e: e["return_count"], reverse=True)
         total_orders = sum(order_counts.values())

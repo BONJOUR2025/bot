@@ -25,6 +25,14 @@ def _resolve_range(date_from: Optional[date], date_to: Optional[date]) -> tuple[
     return df, dt
 
 
+def _parse_salon_ids(salon_ids: Optional[str]) -> Optional[list[str]]:
+    """Comma-separated Salon.id list -> list, or None if empty/absent."""
+    if not salon_ids:
+        return None
+    ids = [s.strip() for s in salon_ids.split(',') if s.strip()]
+    return ids or None
+
+
 def create_sales_router() -> APIRouter:
     router = APIRouter(
         prefix="/sales",
@@ -36,6 +44,7 @@ def create_sales_router() -> APIRouter:
     async def get_daily_sales(
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return daily repair + cosmetics sales by employee for a date range."""
         from app.services.firebird_service import get_firebird_service
@@ -43,7 +52,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_daily_sales, df, dt)
+            return await asyncio.to_thread(svc.get_daily_sales, df, dt, _parse_salon_ids(salon_ids))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -66,6 +75,7 @@ def create_sales_router() -> APIRouter:
     async def get_margin_summary(
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return gross-margin breakdown (repair/cosmetics, by employee) for a date range."""
         from app.services.firebird_service import get_firebird_service
@@ -73,7 +83,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_margin_summary, df, dt)
+            return await asyncio.to_thread(svc.get_margin_summary, df, dt, _parse_salon_ids(salon_ids))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -81,6 +91,7 @@ def create_sales_router() -> APIRouter:
     async def get_turnaround_stats(
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return order fulfillment time (creation → pickup) and lateness rate by employee."""
         from app.services.firebird_service import get_firebird_service
@@ -88,7 +99,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_turnaround_stats, df, dt)
+            return await asyncio.to_thread(svc.get_turnaround_stats, df, dt, _parse_salon_ids(salon_ids))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -127,6 +138,7 @@ def create_sales_router() -> APIRouter:
     async def get_returns_summary(
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return returned-order counts/amounts by employee for a date range."""
         from app.services.firebird_service import get_firebird_service
@@ -134,7 +146,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_returns_summary, df, dt)
+            return await asyncio.to_thread(svc.get_returns_summary, df, dt, _parse_salon_ids(salon_ids))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -183,6 +195,20 @@ def create_sales_router() -> APIRouter:
             return await asyncio.to_thread(svc.get_top_products, df, dt, limit)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
+
+    @router.get("/salon-options")
+    async def get_salon_options():
+        """Return {id, name} for every salon — feeds the "Салон" filter's
+        options. A dedicated endpoint under /sales rather than reusing
+        GET /api/salons/, which requires the separate "salons" permission:
+        that would silently break the filter for anyone with "payroll" but
+        not "salons" access, since everything else on this page is gated
+        on "payroll" alone.
+        """
+        from app.data.salon_repository import get_salon_repository
+
+        repo = get_salon_repository()
+        return [{"id": s.id, "name": s.name} for s in repo.list_salons()]
 
     @router.get("/plans")
     async def get_plans(month_keys: Optional[str] = Query(default=None)):
