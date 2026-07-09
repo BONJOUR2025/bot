@@ -1467,15 +1467,18 @@ class FirebirdService:
         }
 
     def _product_revenue_rows(self, date_from: date, date_to: date,
-                               salon_ids: list[str] | None = None) -> dict[int, dict]:
-        """Per-TOVAR_ID revenue/qty for a date range, cosmetics/goods only
-        (DOC_ORDER_LINES). Repair-folder items are deliberately excluded —
-        they're services (labor), not physical SKUs, so they don't belong
-        in a "top selling products" ranking (this used to include them,
-        which meant services outranked actual products in "Топ по
-        выручке" whenever no salon filter narrowed things down). Shoes are
-        also excluded — SHOES_CODES are line items within a paired
-        commission structure (see _parse_shoe_pairs), not standalone SKUs.
+                               salon_ids: list[str] | None = None,
+                               categories: set[str] | None = None) -> dict[int, dict]:
+        """Per-TOVAR_ID revenue/qty for a date range — the data behind an
+        ABC-analysis, so it covers both repair services (DOC_ORDER_SERVICES)
+        and cosmetics/goods (DOC_ORDER_LINES): ABC-analysis is just as
+        applicable to a service lineup as to a goods lineup. `categories`
+        (subset of {"repair", "cosmetics"}; None/empty = both) controls
+        which of those two get queried — this is what the page's
+        "Категории" filter drives for this tab. Shoes are excluded
+        regardless of `categories` — SHOES_CODES are line items within a
+        paired commission structure (see _parse_shoe_pairs), not
+        standalone SKUs a per-item ranking would mean anything for.
 
         `salon_ids` restricts to orders resolved to one of those salons —
         see get_daily_sales for the attribution rule and its caveats. Unlike
@@ -1488,6 +1491,9 @@ class FirebirdService:
         tight per-SKU query is restricted to just those via a batched
         IN-list (same technique as the cost lookup in get_margin_summary).
         """
+        want_repair = not categories or 'repair' in categories
+        want_cosmetics = not categories or 'cosmetics' in categories
+        repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
         cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
         salon_filter = set(salon_ids) if salon_ids else None
 
@@ -1510,38 +1516,69 @@ class FirebirdService:
                 if not doc_num_allowlist:
                     return {}
 
+            rows: list = []
             if doc_num_allowlist is None:
-                sql_cosmetics = f"""
-                    SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
-                           SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
-                    FROM doc_order_lines
-                        INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                        INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
-                        INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
-                        INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
-                    WHERE docs_order_history.status_id = 5
-                        AND docs.doc_date >= ? AND docs.doc_date <= ?
-                        AND tovars_tbl.folder_id IN ({cosmetics_folders})
-                    GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
-                """
-                cur.execute(sql_cosmetics, (date_from, date_to))
-                rows = list(cur.fetchall())
+                if want_repair:
+                    sql_repair = f"""
+                        SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                               SUM(doc_order_services.kredit), SUM(doc_order_services.qty_kredit)
+                        FROM docs_order
+                            INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                            INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                            INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                        WHERE docs.doc_date >= ? AND docs.doc_date <= ?
+                            AND tovars_tbl.folder_id IN ({repair_folders})
+                        GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+                    """
+                    cur.execute(sql_repair, (date_from, date_to))
+                    rows += cur.fetchall()
+                if want_cosmetics:
+                    sql_cosmetics = f"""
+                        SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                               SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
+                        FROM doc_order_lines
+                            INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                            INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                            INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                            INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                        WHERE docs_order_history.status_id = 5
+                            AND docs.doc_date >= ? AND docs.doc_date <= ?
+                            AND tovars_tbl.folder_id IN ({cosmetics_folders})
+                        GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+                    """
+                    cur.execute(sql_cosmetics, (date_from, date_to))
+                    rows += cur.fetchall()
             else:
-                sql_cosmetics_tpl = f"""
-                    SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
-                           SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
-                    FROM doc_order_lines
-                        INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                        INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
-                        INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
-                        INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
-                    WHERE docs.doc_num IN ({{ph}})
-                        AND docs_order_history.status_id = 5
-                        AND docs.doc_date >= ? AND docs.doc_date <= ?
-                        AND tovars_tbl.folder_id IN ({cosmetics_folders})
-                    GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
-                """
-                rows = _fetch_batched(cur, sql_cosmetics_tpl, doc_num_allowlist, (date_from, date_to), batch=200)
+                if want_repair:
+                    sql_repair_tpl = f"""
+                        SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                               SUM(doc_order_services.kredit), SUM(doc_order_services.qty_kredit)
+                        FROM docs_order
+                            INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                            INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                            INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                        WHERE docs.doc_num IN ({{ph}})
+                            AND docs.doc_date >= ? AND docs.doc_date <= ?
+                            AND tovars_tbl.folder_id IN ({repair_folders})
+                        GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+                    """
+                    rows += _fetch_batched(cur, sql_repair_tpl, doc_num_allowlist, (date_from, date_to), batch=200)
+                if want_cosmetics:
+                    sql_cosmetics_tpl = f"""
+                        SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
+                               SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
+                        FROM doc_order_lines
+                            INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                            INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                            INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                            INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                        WHERE docs.doc_num IN ({{ph}})
+                            AND docs_order_history.status_id = 5
+                            AND docs.doc_date >= ? AND docs.doc_date <= ?
+                            AND tovars_tbl.folder_id IN ({cosmetics_folders})
+                        GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
+                    """
+                    rows += _fetch_batched(cur, sql_cosmetics_tpl, doc_num_allowlist, (date_from, date_to), batch=200)
         finally:
             con.close()
 
@@ -1556,21 +1593,28 @@ class FirebirdService:
         return products
 
     def get_top_products(self, date_from: date, date_to: date, limit: int = 20,
-                          salon_ids: list[str] | None = None) -> dict:
+                          salon_ids: list[str] | None = None,
+                          categories: list[str] | None = None) -> dict:
         """Top/bottom-selling SKUs and biggest risers/fallers vs the
         preceding period of equal length, plus dead stock (see
-        get_dead_stock for what that means and why it's cosmetics-only)."""
+        get_dead_stock — it's cosmetics-only regardless of `categories`
+        since repair has no physical warehouse stock to go dead).
+
+        `categories` (subset of "repair"/"cosmetics") is this tab's ABC
+        analysis scope — see _product_revenue_rows.
+        """
         empty = {"top": [], "bottom": [], "rising": [], "falling": [], "dead_stock": []}
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty top products")
             return empty
+        category_set = set(categories) if categories else None
 
         try:
-            current = self._product_revenue_rows(date_from, date_to, salon_ids)
+            current = self._product_revenue_rows(date_from, date_to, salon_ids, category_set)
             span = (date_to - date_from).days + 1
             prev_to = date_from - timedelta(days=1)
             prev_from = prev_to - timedelta(days=span - 1)
-            previous = self._product_revenue_rows(prev_from, prev_to, salon_ids)
+            previous = self._product_revenue_rows(prev_from, prev_to, salon_ids, category_set)
         except Exception as e:
             logger.error(f"Error fetching top products: {e}")
             return empty
@@ -1596,7 +1640,11 @@ class FirebirdService:
         falling = sorted(swinging, key=lambda p: p["pct_change"])[:limit]
 
         try:
-            dead_stock = self.get_dead_stock(date_from, date_to, limit=limit * 3)
+            dead_stock = (
+                self.get_dead_stock(date_from, date_to, limit=limit * 3)
+                if category_set is None or 'cosmetics' in category_set
+                else []
+            )
         except Exception as e:
             logger.error(f"Error fetching dead stock: {e}")
             dead_stock = []

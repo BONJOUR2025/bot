@@ -460,7 +460,7 @@ function ProductRankTable({ title, items, showChange }) {
           keyFn={(p) => p.tovar_id}
           emptyText="Нет данных"
           columns={[
-            { label: 'Товар', primary: true, render: (p) => (
+            { label: 'Товар/услуга', primary: true, render: (p) => (
               expanded ? (
                 <span title={p.name}>{p.name || p.code}</span>
               ) : (
@@ -635,7 +635,13 @@ export default function SalesAnalytics() {
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo)   params.date_to   = dateTo;
     const salonIds = selectedSalons.size ? [...selectedSalons].join(',') : undefined;
-    return salonIds ? { ...params, salon_ids: salonIds } : params;
+    if (salonIds) params.salon_ids = salonIds;
+    // Only /sales/top-products reads this — the other lazy endpoints just
+    // ignore an unused query param, so it's simplest to always include it
+    // here rather than special-case buildParams per tab.
+    const categories = selectedCategories.size ? [...selectedCategories].join(',') : undefined;
+    if (categories) params.categories = categories;
+    return params;
   }
 
   // Firebird-backed reports fired 8-10 at once on every load — each one is

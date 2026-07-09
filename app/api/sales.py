@@ -25,12 +25,16 @@ def _resolve_range(date_from: Optional[date], date_to: Optional[date]) -> tuple[
     return df, dt
 
 
-def _parse_salon_ids(salon_ids: Optional[str]) -> Optional[list[str]]:
-    """Comma-separated Salon.id list -> list, or None if empty/absent."""
-    if not salon_ids:
+def _parse_csv_list(value: Optional[str]) -> Optional[list[str]]:
+    """Comma-separated list -> list, or None if empty/absent. Used for both
+    Salon.id lists and category keys."""
+    if not value:
         return None
-    ids = [s.strip() for s in salon_ids.split(',') if s.strip()]
-    return ids or None
+    items = [s.strip() for s in value.split(',') if s.strip()]
+    return items or None
+
+
+_parse_salon_ids = _parse_csv_list
 
 
 def create_sales_router() -> APIRouter:
@@ -189,6 +193,7 @@ def create_sales_router() -> APIRouter:
         date_to: Optional[date] = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
+        categories: Optional[str] = Query(default=None, description="Comma-separated subset of repair,cosmetics"),
     ):
         """Return top/bottom-selling SKUs and biggest risers/fallers vs the preceding period."""
         from app.services.firebird_service import get_firebird_service
@@ -196,7 +201,9 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_top_products, df, dt, limit, _parse_salon_ids(salon_ids))
+            return await asyncio.to_thread(
+                svc.get_top_products, df, dt, limit, _parse_salon_ids(salon_ids), _parse_csv_list(categories),
+            )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
