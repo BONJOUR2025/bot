@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from typing import Optional
 
@@ -17,6 +18,7 @@ def create_smses_router() -> APIRouter:
         _=Depends(perm),
     ):
         from app.services.firebird_service import get_firebird_service
-        return get_firebird_service().get_smses(date_from=date_from, date_to=date_to)
+        svc = get_firebird_service()
+        return await asyncio.to_thread(svc.get_smses, date_from=date_from, date_to=date_to)
 
     return router

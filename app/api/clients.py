@@ -1,6 +1,7 @@
 """API endpoints for the client CRM view (Agbis contragents)."""
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,7 +26,7 @@ def create_clients_router() -> APIRouter:
 
         try:
             svc = get_firebird_service()
-            return svc.search_clients(q)
+            return await asyncio.to_thread(svc.search_clients, q)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -42,7 +43,7 @@ def create_clients_router() -> APIRouter:
 
         try:
             svc = get_firebird_service()
-            return svc.get_churning_clients(lookback_days=lookback_days, min_orders=min_orders)
+            return await asyncio.to_thread(svc.get_churning_clients, lookback_days, min_orders)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -56,7 +57,7 @@ def create_clients_router() -> APIRouter:
 
         try:
             svc = get_firebird_service()
-            profile = svc.get_client_profile(contragent_id)
+            profile = await asyncio.to_thread(svc.get_client_profile, contragent_id)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 

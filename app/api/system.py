@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import os
@@ -223,8 +224,10 @@ def create_system_router() -> APIRouter:
             if not FIREBIRD_AVAILABLE:
                 result["firebird"] = {"ok": False, "error": "Библиотека fdb не установлена"}
             else:
-                conn = _connect()
-                conn.close()
+                def _check():
+                    conn = _connect()
+                    conn.close()
+                await asyncio.to_thread(_check)
                 result["firebird"] = {"ok": True}
         except Exception as e:
             result["firebird"] = {"ok": False, "error": str(e)}

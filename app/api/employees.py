@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeOut, EmployeeSelfUpdate
@@ -39,7 +41,8 @@ def create_employee_router(
         current: ResolvedUser = Depends(get_current_user),
     ):
         from app.services.firebird_service import get_firebird_service
-        return get_firebird_service().get_users_list(search=search)
+        svc = get_firebird_service()
+        return await asyncio.to_thread(svc.get_users_list, search=search)
 
     @router.get("/{employee_id}", response_model=EmployeeOut)
     async def get_employee(

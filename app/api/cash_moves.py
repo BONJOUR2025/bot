@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from typing import List, Optional
 
@@ -152,7 +153,7 @@ def create_cash_moves_router(
         if not cash_payouts:
             return []
 
-        moves = get_firebird_service().get_cash_moves(date_from=date_from, date_to=date_to)
+        moves = await asyncio.to_thread(get_firebird_service().get_cash_moves, date_from=date_from, date_to=date_to)
 
         # Index moves: date_str → list of (move_id, amount)
         from collections import defaultdict
@@ -203,7 +204,7 @@ def create_cash_moves_router(
     async def get_cash_move(move_id: str, _=Depends(perm)):
         from app.services.firebird_service import get_firebird_service
         from app.services.users import get_external_code_to_name_map
-        row = get_firebird_service().get_cash_move_by_id(move_id)
+        row = await asyncio.to_thread(get_firebird_service().get_cash_move_by_id, move_id)
         if row is None:
             raise HTTPException(404, "not found")
         user_names = get_external_code_to_name_map()
@@ -221,7 +222,7 @@ def create_cash_moves_router(
         from app.services.firebird_service import get_firebird_service
         from app.data.payout_repository import PayoutRepository
         from app.services.users import get_external_code_to_name_map
-        rows = get_firebird_service().get_cash_moves(date_from=date_from, date_to=date_to)
+        rows = await asyncio.to_thread(get_firebird_service().get_cash_moves, date_from=date_from, date_to=date_to)
         assignments = repo.get_assignments()
         payout_repo = PayoutRepository()
         linked_ids = payout_repo.linked_cash_move_ids()

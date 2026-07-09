@@ -1,6 +1,7 @@
 """API endpoints for sales analytics dashboard."""
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 from typing import Optional
 
@@ -42,7 +43,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return svc.get_daily_sales(df, dt)
+            return await asyncio.to_thread(svc.get_daily_sales, df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -57,7 +58,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return svc.get_client_retention(df, dt)
+            return await asyncio.to_thread(svc.get_client_retention, df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -72,7 +73,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return svc.get_margin_summary(df, dt)
+            return await asyncio.to_thread(svc.get_margin_summary, df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -87,7 +88,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return svc.get_turnaround_stats(df, dt)
+            return await asyncio.to_thread(svc.get_turnaround_stats, df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -102,7 +103,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return svc.get_receivables(df, dt)
+            return await asyncio.to_thread(svc.get_receivables, df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -117,7 +118,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return svc.get_returns_summary(df, dt)
+            return await asyncio.to_thread(svc.get_returns_summary, df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -132,7 +133,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return svc.get_workplace_summary(df, dt)
+            return await asyncio.to_thread(svc.get_workplace_summary, df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -147,7 +148,7 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return svc.get_department_comparison(df, dt)
+            return await asyncio.to_thread(svc.get_department_comparison, df, dt)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 

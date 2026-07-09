@@ -1,6 +1,7 @@
 """API endpoints for master works dashboard."""
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from typing import Optional
 
@@ -31,7 +32,7 @@ def create_masters_router() -> APIRouter:
             )
 
         try:
-            result = fetch_works(date_from=date_from, date_to=date_to)
+            result = await asyncio.to_thread(fetch_works, date_from=date_from, date_to=date_to)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
