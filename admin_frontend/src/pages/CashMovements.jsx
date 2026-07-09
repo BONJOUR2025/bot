@@ -623,11 +623,6 @@ function CashBalancesCard() {
           <Wallet size={15} className="text-[color:var(--color-primary)]" />
           Остатки по кассам
         </h3>
-        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
-          Текущий остаток наличных, считается по всей истории кассовых операций (продажи, возвраты, инкассация и т.д.),
-          не только по перемещениям на этой странице. «Основная» — центральная касса, куда стекается инкассация со всех
-          точек, поэтому там накопленная за много лет сумма, а не остаток «в ящике».
-        </p>
       </div>
       <div className="p-3">
         {loading ? <SkeletonTable rows={4} /> : (
