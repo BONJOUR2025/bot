@@ -8,7 +8,7 @@ import {
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
   Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig, Truck,
   Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon, Monitor,
-  Landmark,
+  Landmark, UserSearch,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -45,6 +45,7 @@ const navStructure = [
       { to: '/admin/salons',           label: 'Салоны',               permission: 'salons',           icon: Store },
       { to: '/admin/visitor-counters', label: 'Счётчик посетителей',  permission: 'visitor-counters', icon: Users2 },
       { to: '/admin/sales',            label: 'Продажи',              permission: 'payroll',          icon: TrendingUp },
+      { to: '/admin/clients',          label: 'Клиенты',              permission: 'payroll',          icon: UserSearch },
       { to: '/admin/location-plans',   label: 'Планы продаж',         permission: 'payroll',          icon: MapPin },
       { to: '/admin/sale-transfers',   label: 'Перемещение продажи',  permission: 'payroll',          icon: Replace },
     ],

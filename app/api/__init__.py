@@ -375,6 +375,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Client CRM (Agbis contragents)
+    from .clients import create_clients_router
+
+    app.include_router(
+        create_clients_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Salons management
     from .salons import create_salons_router
     from ..data.salon_repository import get_salon_repository

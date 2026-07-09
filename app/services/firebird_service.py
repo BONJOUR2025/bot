@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Optional
 
 try:
@@ -707,6 +707,235 @@ class FirebirdService:
             "repeat_rate": round(returning / total * 100, 1) if total else 0.0,
         }
 
+    @staticmethod
+    def _order_revenue_rows(cur, date_from: date | None = None, date_to: date | None = None,
+                             contragent_id: int | None = None) -> list[tuple]:
+        """Shared repair+cosmetics+shoes order-level revenue query.
+
+        Returns merged (contragent_id, doc_num, doc_date, revenue) rows —
+        used by client-profile and churn detection, which both need
+        per-client order history rather than the per-employee/per-category
+        totals get_margin_summary/get_department_comparison compute.
+        """
+        conditions = []
+        params: list = []
+        if date_from is not None:
+            conditions.append("docs.doc_date >= ?")
+            params.append(date_from)
+        if date_to is not None:
+            conditions.append("docs.doc_date <= ?")
+            params.append(date_to)
+        if contragent_id is not None:
+            conditions.append("docs.contragent_id = ?")
+            params.append(contragent_id)
+        where_extra = (" AND " + " AND ".join(conditions)) if conditions else ""
+
+        repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
+        cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
+        shoes_sales_codes = tuple(c for c in SHOES_CODES if c not in ('0', '1'))
+        shoes_placeholders = ','.join(['?'] * len(shoes_sales_codes))
+
+        sql_repair = f"""
+            SELECT docs.contragent_id, docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+            WHERE tovars_tbl.folder_id IN ({repair_folders}){where_extra}
+            GROUP BY docs.contragent_id, docs.doc_num, docs.doc_date
+        """
+        sql_cosmetics = f"""
+            SELECT docs.contragent_id, docs.doc_num, docs.doc_date, SUM(doc_order_lines.kredit)
+            FROM doc_order_lines
+                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+            WHERE docs_order_history.status_id = 5
+                AND tovars_tbl.folder_id IN ({cosmetics_folders}){where_extra}
+            GROUP BY docs.contragent_id, docs.doc_num, docs.doc_date
+        """
+        sql_shoes = f"""
+            SELECT docs.contragent_id, docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+            WHERE tovars_tbl.code IN ({shoes_placeholders}){where_extra}
+            GROUP BY docs.contragent_id, docs.doc_num, docs.doc_date
+        """
+
+        cur.execute(sql_repair, tuple(params))
+        rows = list(cur.fetchall())
+        cur.execute(sql_cosmetics, tuple(params))
+        rows += cur.fetchall()
+        cur.execute(sql_shoes, (*shoes_sales_codes, *params))
+        rows += cur.fetchall()
+        return rows
+
+    def search_clients(self, query: str, limit: int = 20) -> list[dict]:
+        """Search CONTRAGENTS by name or phone.
+
+        Excludes "Розница <салон>" accounts — generic walk-in buckets used
+        when no specific client is registered (one such account can carry
+        thousands of anonymous orders), which would swamp real clients in
+        search results and make no sense in a client-level CRM.
+        """
+        if not FIREBIRD_AVAILABLE or not (query or "").strip():
+            return []
+        q = query.strip()
+        sql = """
+            SELECT FIRST ? contr_id, name, teleph_cell
+            FROM contragents
+            WHERE (UPPER(name) LIKE UPPER(?) OR teleph_cell LIKE ?)
+                AND UPPER(name) NOT STARTING WITH 'РОЗНИЦА'
+            ORDER BY name
+        """
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, (limit, f"%{q}%", f"%{q}%"))
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error searching clients: {e}")
+            return []
+
+        return [
+            {"contragent_id": cid, "name": (name or "").strip(), "phone": (phone or "").strip() or None}
+            for cid, name, phone in rows
+        ]
+
+    def get_client_profile(self, contragent_id: int) -> dict | None:
+        """Full order history + LTV/avg-check/last-visit for one client."""
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning no client profile")
+            return None
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(
+                    "SELECT contr_id, name, teleph_cell FROM contragents WHERE contr_id = ?",
+                    (contragent_id,),
+                )
+                contact = cur.fetchone()
+                if contact is None:
+                    return None
+                rows = self._order_revenue_rows(cur, contragent_id=contragent_id)
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching client profile: {e}")
+            return None
+
+        orders: dict[str, dict] = {}
+        for _cid, doc_num, doc_date, revenue in rows:
+            key = str(doc_num)
+            entry = orders.setdefault(key, {"doc_num": key, "date": doc_date, "amount": 0.0})
+            entry["amount"] += float(revenue or 0)
+
+        order_list = sorted(orders.values(), key=lambda o: o["date"])
+        total_spent = sum(o["amount"] for o in order_list)
+        order_count = len(order_list)
+
+        return {
+            "contragent_id": contragent_id,
+            "name": (contact[1] or "").strip(),
+            "phone": (contact[2] or "").strip() or None,
+            "order_count": order_count,
+            "total_spent": round(total_spent, 2),
+            "avg_check": round(total_spent / order_count, 2) if order_count else 0.0,
+            "first_order_date": order_list[0]["date"].isoformat() if order_list else None,
+            "last_order_date": order_list[-1]["date"].isoformat() if order_list else None,
+            "orders": [
+                {"doc_num": o["doc_num"], "date": o["date"].isoformat(), "amount": round(o["amount"], 2)}
+                for o in reversed(order_list)
+            ],
+        }
+
+    def get_churning_clients(self, lookback_days: int = 365, min_orders: int = 3, limit: int = 200) -> list[dict]:
+        """Clients who used to order regularly and have gone quiet.
+
+        "Regular" = at least `min_orders` orders in the trailing
+        `lookback_days`. "Gone quiet" = no order since at least
+        max(2 x their own average gap between orders, 45 days) — a
+        personalized threshold rather than one fixed cutoff for everyone,
+        since a client who used to order every 10 days going silent for
+        30 is a very different signal than one who always ordered every
+        60 days.
+
+        This is a reporting list only — no message is sent from here (no
+        SMS/Telegram send capability exists in this project yet).
+        """
+        empty: list[dict] = []
+        if not FIREBIRD_AVAILABLE:
+            logger.warning("fdb library not installed - returning no churning clients")
+            return empty
+
+        today = date.today()
+        lookback_start = today - timedelta(days=lookback_days)
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                rows = self._order_revenue_rows(cur, date_from=lookback_start, date_to=today)
+                if not rows:
+                    return empty
+
+                client_ids = sorted({cid for cid, *_ in rows if cid is not None})
+                sql_contacts = """
+                    SELECT contr_id, name, teleph_cell FROM contragents
+                    WHERE contr_id IN ({ph}) AND UPPER(name) NOT STARTING WITH 'РОЗНИЦА'
+                """
+                contact_rows = _fetch_batched(cur, sql_contacts, client_ids)
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching churning clients: {e}")
+            return empty
+
+        contacts = {cid: (name, phone) for cid, name, phone in contact_rows}
+
+        by_client: dict[int, dict] = {}
+        for cid, doc_num, doc_date, revenue in rows:
+            if cid not in contacts:  # excludes "Розница" buckets and orders with no linked client
+                continue
+            entry = by_client.setdefault(cid, {"dates": set(), "revenue": 0.0})
+            entry["dates"].add(doc_date)
+            entry["revenue"] += float(revenue or 0)
+
+        result = []
+        for cid, entry in by_client.items():
+            dates = sorted(entry["dates"])
+            order_count = len(dates)
+            if order_count < min_orders:
+                continue
+            span_days = (dates[-1] - dates[0]).days
+            avg_gap = span_days / (order_count - 1) if order_count > 1 else 0
+            days_since_last = (today - dates[-1]).days
+            overdue_threshold = max(avg_gap * 2, 45)
+            if days_since_last <= overdue_threshold:
+                continue
+            name, phone = contacts[cid]
+            result.append({
+                "contragent_id": cid,
+                "name": (name or "").strip(),
+                "phone": (phone or "").strip() or None,
+                "order_count": order_count,
+                "total_spent": round(entry["revenue"], 2),
+                "avg_gap_days": round(avg_gap, 1),
+                "last_order_date": dates[-1].isoformat(),
+                "days_since_last_order": days_since_last,
+            })
+
+        result.sort(key=lambda c: c["total_spent"], reverse=True)
+        return result[:limit]
+
     def get_margin_summary(self, date_from: date, date_to: date) -> dict:
         """Gross margin by category and by employee for a date range.
 
@@ -935,7 +1164,7 @@ class FirebirdService:
         sql = """
             SELECT
                 d.doc_num, d.doc_date, do.id, do.pay_status_id,
-                do.kredit, do.debet, c.name, c.telephone
+                do.kredit, do.debet, c.name, c.teleph_cell
             FROM docs_order do
                 INNER JOIN docs d ON (d.doc_id = do.doc_id)
                 LEFT JOIN contragents c ON (c.contr_id = d.contragent_id)
