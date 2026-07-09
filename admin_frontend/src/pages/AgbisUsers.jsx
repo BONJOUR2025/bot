@@ -1,10 +1,112 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Users, UserCheck, UserX, ShieldCheck, Download, RefreshCw } from 'lucide-react';
+import { Search, Users, UserCheck, UserX, ShieldCheck, Download, RefreshCw, History } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { StatCard } from '../components/ui/SalaryUI.jsx';
+import Modal from '../components/Modal.jsx';
+
+const isoToday = () => new Date().toISOString().slice(0, 10);
+
+// Groups DOCS_ORDER_HISTORY's free-text BASIS into the handful of action
+// kinds that actually show up, so the modal can lead with counts instead
+// of 100+ raw rows.
+function categorize(text) {
+  if (text.startsWith('Сохранение заказа при создании')) return 'Создание заказа';
+  if (text.startsWith('Сохранение заказа при изменении')) return 'Изменение заказа';
+  if (text.startsWith('Распечатан чек')) return 'Печать чека';
+  if (text.startsWith('Выдача заказа')) return 'Выдача заказа';
+  if (text.startsWith('Изменение текущего склада')) return 'Изменение склада';
+  if (/сумма/i.test(text)) return 'Изменение суммы услуги';
+  return 'Прочее';
+}
+
+function UserActionsModal({ user, onClose }) {
+  const [day, setDay] = useState(isoToday());
+  const [actions, setActions] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(day); }, []);
+
+  async function load(d) {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get(`agbis-users/${user.user_id}/actions`, { params: { day: d } });
+      setActions(Array.isArray(res.data) ? res.data : []);
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const counts = useMemo(() => {
+    if (!actions) return [];
+    const map = new Map();
+    actions.forEach((a) => {
+      const cat = categorize(a.text);
+      map.set(cat, (map.get(cat) || 0) + 1);
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [actions]);
+
+  return (
+    <Modal isOpen onClose={onClose}>
+      <div className="modal-card max-w-2xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
+        <div className="flex items-center justify-between mb-3 shrink-0">
+          <div>
+            <h3 className="text-base font-semibold flex items-center gap-2">
+              <History size={16} className="text-[color:var(--color-primary)]" />
+              Действия — {user.description}
+            </h3>
+          </div>
+          <button onClick={onClose} className="text-xl text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] leading-none">&times;</button>
+        </div>
+
+        <div className="flex items-center gap-2 mb-3 shrink-0">
+          <input type="date" className="input text-sm h-9" value={day} onChange={(e) => setDay(e.target.value)} />
+          <button onClick={() => load(day)} disabled={loading} className="btn btn--primary h-9 px-3 text-sm">
+            {loading ? 'Загрузка…' : 'Показать'}
+          </button>
+        </div>
+
+        {error && <div className="text-red-500 text-sm mb-2 shrink-0">{error}</div>}
+
+        <div className="overflow-y-auto flex-1 space-y-3">
+          {loading ? <SkeletonTable rows={5} /> : actions && actions.length > 0 ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {counts.map(([cat, n]) => (
+                  <span key={cat} className="text-xs px-2 py-1 rounded-full bg-[color:var(--color-muted)]/50 text-[color:var(--color-muted-foreground)]">
+                    {cat}: <span className="font-semibold text-[color:var(--color-foreground)]">{n}</span>
+                  </span>
+                ))}
+              </div>
+              <div className="divide-y divide-[color:var(--color-border)] rounded-lg border border-[color:var(--color-border)]">
+                {actions.map((a, i) => (
+                  <div key={i} className="px-3 py-2 text-sm flex items-start gap-3">
+                    <span className="text-[color:var(--color-muted-foreground)] tabular-nums shrink-0 whitespace-nowrap">
+                      {a.dttm.slice(11, 19)}
+                    </span>
+                    <span className="min-w-0">{a.text}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-10 text-[color:var(--color-muted-foreground)] text-sm">
+              Нет действий за выбранную дату
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 const STATUS_OPTIONS = [
   { key: 'all',      label: 'Все' },
@@ -30,6 +132,7 @@ export default function AgbisUsers() {
   const [status, setStatus]   = useState('active');
   const [roleFilter, setRoleFilter] = useState('');
   const [depFilter, setDepFilter]   = useState('');
+  const [actionsUser, setActionsUser] = useState(null);
 
   useEffect(() => { load(); }, []);
 
@@ -163,7 +266,14 @@ export default function AgbisUsers() {
               columns={[
                 { label: 'ID', render: (r) => <span className="text-[color:var(--color-muted-foreground)] tabular-nums">{r.user_id}</span> },
                 { label: 'ФИО', primary: true, render: (r) => (
-                  <div className="max-w-[220px] truncate" title={r.description}>{r.description || '—'}</div>
+                  <button
+                    type="button"
+                    onClick={() => setActionsUser(r)}
+                    className="max-w-[220px] truncate text-left hover:text-[color:var(--color-primary)] hover:underline"
+                    title={r.description}
+                  >
+                    {r.description || '—'}
+                  </button>
                 )},
                 { label: 'Статус', render: (r) => (
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.is_working ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]'}`}>
@@ -197,6 +307,8 @@ export default function AgbisUsers() {
           </div>
         </div>
       )}
+
+      {actionsUser && <UserActionsModal user={actionsUser} onClose={() => setActionsUser(null)} />}
     </div>
   );
 }

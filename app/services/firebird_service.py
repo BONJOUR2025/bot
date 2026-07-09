@@ -2119,6 +2119,44 @@ class FirebirdService:
                  is_cabinet_user, is_cabinet_admin, is_system) in rows
         ]
 
+    def get_agbis_user_actions(self, user_id: int, day: date) -> list[dict]:
+        """Per-order action log for one user on one day, from
+        DOCS_ORDER_HISTORY.BASIS — a free-text description Agbis itself
+        writes for every order create/edit/pickup/warehouse-move event
+        ("Сохранение заказа при создании", "Выдача заказа", ...).
+
+        Filters on DOH.USER_ID (the actor who made *this* history entry),
+        not CREATER_ID (the order's original creator) — a user's edits on
+        an order someone else created still show up, but someone else's
+        edits on an order *this* user created don't, which is what "what
+        did this person do" should mean. Note the free-text BASIS can
+        still occasionally name a different person (observed once: an
+        entry attributed to this USER_ID whose own text read "Пользователь
+        внесший изменения: <other name>") — Agbis's own quirk, not
+        something this query can resolve further.
+        """
+        if not FIREBIRD_AVAILABLE:
+            return []
+        sql = """
+            SELECT doh.dt, doh.basis
+            FROM docs_order_history doh
+            WHERE doh.user_id = ? AND doh.dt >= ? AND doh.dt < ?
+            ORDER BY doh.dt
+        """
+        next_day = day + timedelta(days=1)
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, (user_id, day, next_day))
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.warning(f"get_agbis_user_actions error: {e}")
+            return []
+        return [{"dttm": dt.isoformat(), "text": (basis or "").strip()} for dt, basis in rows]
+
     def get_users_list(self, search: str = "") -> list[dict]:
         """Load {user_id, description} list from USERS table for matching with bot employees."""
         if not FIREBIRD_AVAILABLE:
