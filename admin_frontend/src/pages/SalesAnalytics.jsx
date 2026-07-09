@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   RefreshCw, Download, EyeOff, Eye, ChevronDown, Check,
   TrendingUp, TrendingDown, BarChart3, Trophy, Users, Target, Calendar,
-  Percent, Clock, RotateCcw, Gauge, Building2, PackageX, Phone, Package,
+  Percent, Clock, RotateCcw, Gauge, Building2, PackageX, Phone, Package, Maximize2,
 } from 'lucide-react';
 import {
   ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid,
@@ -414,21 +414,58 @@ function PlanGauges({ empSummary, planTotals }) {
   );
 }
 
+/* ── Card that can expand into a fullscreen modal on click — used for
+   tables whose primary column truncates long names in the compact
+   layout, so a click gives the user room to read them in full ── */
+function ExpandableCard({ title, subtitle, children }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <div className="app-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-[color:var(--color-border)] flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm">{title}</h3>
+            {subtitle}
+          </div>
+          <button type="button" onClick={() => setExpanded(true)} title="Развернуть на весь экран"
+            className="shrink-0 p-1.5 rounded-lg hover:bg-[color:var(--color-muted)]/50 text-[color:var(--color-muted-foreground)]">
+            <Maximize2 size={15} />
+          </button>
+        </div>
+        <div className="p-3">{children(false)}</div>
+      </div>
+      {expanded && createPortal(
+        <div className="modal-backdrop" style={{ zIndex: 9999 }} onClick={(e) => e.target === e.currentTarget && setExpanded(false)}>
+          <div className="modal-card max-w-6xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '92vh' }}>
+            <div className="flex items-center justify-between mb-3 shrink-0">
+              <h3 className="text-base font-semibold">{title}</h3>
+              <button onClick={() => setExpanded(false)} className="text-xl text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] leading-none">&times;</button>
+            </div>
+            <div className="overflow-auto flex-1">{children(true)}</div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 /* ── Product rank table (top/bottom/rising/falling SKUs) ── */
 function ProductRankTable({ title, items, showChange }) {
   return (
-    <div className="app-card overflow-hidden">
-      <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
-        <h3 className="font-semibold text-sm">{title}</h3>
-      </div>
-      <div className="p-3">
+    <ExpandableCard title={title}>
+      {(expanded) => (
         <ResponsiveTable
           data={items}
           keyFn={(p) => p.tovar_id}
           emptyText="Нет данных"
           columns={[
-            { label: 'Товар/услуга', primary: true, render: (p) => (
-              <div className="max-w-[180px] sm:max-w-[220px] truncate" title={p.name}>{p.name || p.code}</div>
+            { label: 'Товар', primary: true, render: (p) => (
+              expanded ? (
+                <span title={p.name}>{p.name || p.code}</span>
+              ) : (
+                <div className="max-w-[180px] sm:max-w-[220px] truncate" title={p.name}>{p.name || p.code}</div>
+              )
             )},
             { label: 'Кол-во', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (p) => p.qty.toLocaleString('ru-RU') },
             { label: 'Выручка', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => fmtRub(p.revenue) },
@@ -439,8 +476,8 @@ function ProductRankTable({ title, items, showChange }) {
             )}] : []),
           ]}
         />
-      </div>
-    </div>
+      )}
+    </ExpandableCard>
   );
 }
 
@@ -1521,29 +1558,34 @@ export default function SalesAnalytics() {
                 </div>
 
                 {topProducts.dead_stock && topProducts.dead_stock.length > 0 && (
-                  <div className="app-card overflow-hidden">
-                    <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
-                      <h3 className="font-semibold text-sm">Нулевые продажи (товар в наличии, но не продаётся)</h3>
+                  <ExpandableCard
+                    title="Нулевые продажи (товар в наличии, но не продаётся)"
+                    subtitle={(
                       <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
                         Товары со складским остатком {'>'} 0, у которых за выбранный период не было ни одной продажи.
                         Только косметика/товары — у ремонта нет физического остатка на складе.
                       </p>
-                    </div>
-                    <div className="p-3">
+                    )}
+                  >
+                    {(expanded) => (
                       <ResponsiveTable
                         data={topProducts.dead_stock}
                         keyFn={(p) => p.tovar_id}
                         emptyText="Нет данных"
                         columns={[
                           { label: 'Товар', primary: true, render: (p) => (
-                            <div className="max-w-[220px] sm:max-w-[280px] truncate" title={p.name}>{p.name || p.code}</div>
+                            expanded ? (
+                              <span title={p.name}>{p.name || p.code}</span>
+                            ) : (
+                              <div className="max-w-[220px] sm:max-w-[280px] truncate" title={p.name}>{p.name || p.code}</div>
+                            )
                           )},
                           { label: 'Код', render: (p) => <span className="text-[color:var(--color-muted-foreground)]">{p.code}</span> },
                           { label: 'Остаток', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => p.stock_qty.toLocaleString('ru-RU') },
                         ]}
                       />
-                    </div>
-                  </div>
+                    )}
+                  </ExpandableCard>
                 )}
               </div>
             ) : (
