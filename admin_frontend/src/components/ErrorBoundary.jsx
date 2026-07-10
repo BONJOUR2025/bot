@@ -53,7 +53,7 @@ export default class ErrorBoundary extends Component {
             Обычно это происходит сразу после обновления приложения на сервере.
           </div>
           {!this.state.reloaded && (
-            <button className="btn btn-primary" onClick={() => window.location.reload()}>
+            <button className="btn btn--primary" onClick={() => window.location.reload()}>
               Обновить страницу
             </button>
           )}
