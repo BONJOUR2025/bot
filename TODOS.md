@@ -1,32 +1,11 @@
 # TODOS.md
 
-## Fix `btn-primary` typo repo-wide (single-hyphen vs `.btn--primary`)
+## ~~Fix `btn-primary` typo repo-wide~~ — DONE (2026-07-11)
 
-**What:** `globals.css` only defines `.btn--primary` (BEM double-hyphen). ~10 pre-existing files
-use `btn btn-primary` (single hyphen), which resolves to no matching rule — those buttons render
-as plain `.btn` (neutral gray) instead of the primary gradient/CTA style.
-
-**Why:** Primary action buttons should be the most visually prominent element on their screen.
-Right now they silently fall back to the same styling as secondary/cancel buttons, undermining
-visual hierarchy wherever it's used.
-
-**Files affected:** `admin_frontend/src/components/recruitment/AiCheckPanel.jsx`,
-`IntegrationsModal.jsx`, `KnowledgeBaseModal.jsx`, `StrategyModal.jsx`, `VacancyModal.jsx`,
-`admin_frontend/src/pages/Assets.jsx`, `Payouts.jsx`, `Recruitment.jsx`, `SaleTransfers.jsx`,
-`Salons.jsx`, `Schedule.jsx`, `Vacations.jsx`.
-
-**Pros:** One mechanical find-replace (`btn-primary` → `btn--primary`) fixes visual hierarchy
-across ~25 buttons app-wide. Low risk — purely a CSS class rename, no logic changes.
-
-**Cons:** Touches many files outside any single feature branch; needs a quick visual smoke-test
-after (some buttons that "look fine" today, because a neutral button happens to still be usable,
-will visibly change appearance).
-
-**Context:** Found during `/plan-design-review` of the `claude/init-wmebv3` branch, which
-introduced the same typo in a new file (`ErrorBoundary.jsx`, fixed directly in that branch).
-The other ~10 occurrences pre-date this branch and are out of its scope.
-
-**Depends on / blocked by:** None.
+Fixed in commit `6d2d211`: all 12 remaining files (`AiCheckPanel.jsx`, `IntegrationsModal.jsx`,
+`KnowledgeBaseModal.jsx`, `StrategyModal.jsx`, `VacancyModal.jsx`, `Assets.jsx`, `Payouts.jsx`,
+`Recruitment.jsx`, `SaleTransfers.jsx`, `Salons.jsx`, `Schedule.jsx`, `Vacations.jsx`) renamed
+`btn-primary` → `btn--primary`. Build verified clean (`npm run build`).
 
 ---
 
