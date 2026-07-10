@@ -28,6 +28,13 @@ def main() -> None:
         write_heartbeat("telegram_bot")
 
     app.job_queue.run_repeating(_heartbeat, interval=60, first=0)
+    # first=0 above looks like "run immediately" but isn't — PTB's own docs
+    # warn this doesn't work due to how APScheduler handles it, so the
+    # periodic job's first real run only lands ~60s in. Without this, the
+    # Diagnostics "process status" panel (and the restart-watcher waiting
+    # on it) would see this process as still offline for up to a minute
+    # after every start/restart.
+    write_heartbeat("telegram_bot")
     try:
         app.run_polling(
             bootstrap_retries=5,
