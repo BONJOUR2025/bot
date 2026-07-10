@@ -12,7 +12,12 @@ through python-telegram-bot's Application.
 Lives under app/ (not scripts/) so deploy.ps1's `robocopy app ...` step
 actually ships it — that script only mirrors app/ and admin_frontend/.
 
-Usage: python -m app.utils.restart_watcher <pm2_name> <heartbeat_name> <label>
+Usage: python -m app.utils.restart_watcher <pm2_name> <heartbeat_name> <label> <mode>
+
+mode is "heartbeat" (poll logs/processes/<heartbeat_name>.status.json,
+used for our own processes) or "pm2status" (poll `pm2 jlist` for a
+fresh pid — used for xtunnel, a compiled binary with no
+write_heartbeat() call we can add to it).
 """
 from __future__ import annotations
 
@@ -72,6 +77,49 @@ def send_telegram(text: str) -> None:
     print(f"[restart_watcher] Giving up on Telegram notification after {TELEGRAM_SEND_ATTEMPTS} attempts: {last_error}")
 
 
+def _pm2_status(pm2_name: str) -> tuple[str | None, int | None]:
+    """(status, pid) for one pm2 process, or (None, None) if it can't be read."""
+    try:
+        result = subprocess.run(
+            ["pm2", "jlist"], shell=True, capture_output=True,
+            encoding="utf-8", errors="replace", timeout=15,
+        )
+        procs = json.loads(result.stdout)
+        proc = next((p for p in procs if p.get("name") == pm2_name), None)
+        if proc is None:
+            return None, None
+        return (proc.get("pm2_env") or {}).get("status"), proc.get("pid")
+    except Exception:
+        return None, None
+
+
+def _wait_heartbeat(heartbeat_name: str, trigger_time: datetime) -> bool:
+    status_path = PROCESSES_LOG_DIR / f"{heartbeat_name}.status.json"
+    deadline = time.monotonic() + TIMEOUT_S
+    while time.monotonic() < deadline:
+        time.sleep(POLL_INTERVAL_S)
+        try:
+            data = json.loads(status_path.read_text(encoding="utf-8"))
+            last_seen = datetime.fromisoformat(data["last_seen"])
+        except Exception:
+            continue
+        if last_seen > trigger_time:
+            print(f"[restart_watcher] back online (heartbeat) at {last_seen.isoformat()}")
+            return True
+    return False
+
+
+def _wait_pm2status(pm2_name: str, old_pid: int | None) -> bool:
+    deadline = time.monotonic() + TIMEOUT_S
+    while time.monotonic() < deadline:
+        time.sleep(POLL_INTERVAL_S)
+        status, pid = _pm2_status(pm2_name)
+        if status == "online" and pid is not None and pid != old_pid:
+            print(f"[restart_watcher] back online (pm2 status) pid={pid} (was {old_pid})")
+            return True
+    return False
+
+
 def main() -> None:
     # stdout/stderr here are redirected to a log file by the parent process;
     # Python still picks their text encoding from the Windows console
@@ -80,9 +128,13 @@ def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-    pm2_name, heartbeat_name, label = sys.argv[1], sys.argv[2], sys.argv[3]
+    pm2_name, heartbeat_name, label, mode = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
     trigger_time = datetime.now()
-    print(f"[restart_watcher] Restarting {pm2_name} ({label}) at {trigger_time.isoformat()}")
+    print(f"[restart_watcher] Restarting {pm2_name} ({label}, mode={mode}) at {trigger_time.isoformat()}")
+
+    old_pid = None
+    if mode == "pm2status":
+        _, old_pid = _pm2_status(pm2_name)
 
     result = subprocess.run(
         ["pm2", "restart", pm2_name], shell=True, capture_output=True,
@@ -96,19 +148,13 @@ def main() -> None:
         )
         return
 
-    status_path = PROCESSES_LOG_DIR / f"{heartbeat_name}.status.json"
-    deadline = time.monotonic() + TIMEOUT_S
-    while time.monotonic() < deadline:
-        time.sleep(POLL_INTERVAL_S)
-        try:
-            data = json.loads(status_path.read_text(encoding="utf-8"))
-            last_seen = datetime.fromisoformat(data["last_seen"])
-        except Exception:
-            continue
-        if last_seen > trigger_time:
-            print(f"[restart_watcher] {pm2_name} back online at {last_seen.isoformat()}")
-            send_telegram(f"✅ Процесс «{label}» перезапущен (pm2 restart {pm2_name}) и снова онлайн.")
-            return
+    came_back = (
+        _wait_pm2status(pm2_name, old_pid) if mode == "pm2status"
+        else _wait_heartbeat(heartbeat_name, trigger_time)
+    )
+    if came_back:
+        send_telegram(f"✅ Процесс «{label}» перезапущен (pm2 restart {pm2_name}) и снова онлайн.")
+        return
 
     print(f"[restart_watcher] {pm2_name} did not come back within {TIMEOUT_S}s")
     send_telegram(

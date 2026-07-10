@@ -25,17 +25,23 @@ PROCESS_LABELS = {
     "telegram_bot": "Telegram-бот",
     "vk_bot": "VK-бот",
     "api_server": "Веб-сервер / админка",
+    "xtunnel": "Туннель (xtunnel)",
 }
 # Heartbeat name -> pm2 process name (see deploy.ps1 for the pm2 fleet).
 PROCESS_TO_PM2 = {
     "telegram_bot": "bot-main",
     "vk_bot": "bot-vk",
     "api_server": "bot-app",
+    "xtunnel": "xtunnel",
 }
+# xtunnel is a compiled binary, not one of our own processes — there's no
+# write_heartbeat() call we can add to it, so its status/restart-detection
+# comes from pm2's own view (pid/uptime/status) instead of a heartbeat file.
+PM2_STATUS_PROCESSES = {"xtunnel"}
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _launch_restart_watcher(pm2_name: str, heartbeat_name: str, label: str) -> None:
+def _launch_restart_watcher(pm2_name: str, heartbeat_name: str, label: str, mode: str) -> None:
     """Spawn app/utils/restart_watcher.py as a fully detached process.
     Must be detached (not an asyncio task in this process) since
     restarting "api_server" restarts the very process handling this
@@ -47,7 +53,7 @@ def _launch_restart_watcher(pm2_name: str, heartbeat_name: str, label: str) -> N
     log_path = PROCESSES_LOG_DIR / "restart_watcher.log"
     with open(log_path, "a", encoding="utf-8") as logf:
         subprocess.Popen(
-            [sys.executable, "-m", "app.utils.restart_watcher", pm2_name, heartbeat_name, label],
+            [sys.executable, "-m", "app.utils.restart_watcher", pm2_name, heartbeat_name, label, mode],
             cwd=str(REPO_ROOT),
             stdin=subprocess.DEVNULL,
             stdout=logf,
@@ -55,6 +61,47 @@ def _launch_restart_watcher(pm2_name: str, heartbeat_name: str, label: str) -> N
             creationflags=creationflags,
             close_fds=True,
         )
+
+
+def _pm2_process_status(name: str) -> dict:
+    """Status for a pm2-managed process with no heartbeat file (xtunnel) —
+    read straight from `pm2 jlist` instead."""
+    label = PROCESS_LABELS.get(name, name)
+    pm2_name = PROCESS_TO_PM2.get(name, name)
+    proc = None
+    try:
+        result = subprocess.run(
+            ["pm2", "jlist"], shell=True, capture_output=True,
+            encoding="utf-8", errors="replace", timeout=15,
+        )
+        procs = json.loads(result.stdout)
+        proc = next((p for p in procs if p.get("name") == pm2_name), None)
+    except Exception:
+        proc = None
+
+    if proc is None:
+        return {
+            "name": name, "label": label, "online": False, "kind": "pm2",
+            "last_seen": None, "age_s": None, "pid": None,
+            "cpu_pct": None, "memory_mb": None,
+        }
+
+    env = proc.get("pm2_env") or {}
+    online = env.get("status") == "online"
+    last_seen, age_s = None, None
+    pm_uptime_ms = env.get("pm_uptime")
+    if pm_uptime_ms:
+        started_at = datetime.fromtimestamp(pm_uptime_ms / 1000)
+        last_seen = started_at.isoformat(timespec="seconds")
+        age_s = (datetime.now() - started_at).total_seconds()
+    monit = proc.get("monit") or {}
+    memory = monit.get("memory")
+    return {
+        "name": name, "label": label, "online": online, "kind": "pm2",
+        "last_seen": last_seen, "age_s": age_s, "pid": proc.get("pid"),
+        "cpu_pct": monit.get("cpu"),
+        "memory_mb": round(memory / (1024 * 1024), 1) if memory else None,
+    }
 
 # JSON files that can be cleaned up by archiving old records.
 # Each entry: (filename, date_field_name)
@@ -184,10 +231,12 @@ def create_system_router() -> APIRouter:
         heartbeating too)."""
         now = datetime.now()
         items = []
-        seen = set()
+        seen = set(PM2_STATUS_PROCESSES)
         if PROCESSES_LOG_DIR.exists():
             for p in sorted(PROCESSES_LOG_DIR.glob("*.status.json")):
                 name = p.name.removesuffix(".status.json")
+                if name in PM2_STATUS_PROCESSES:
+                    continue
                 seen.add(name)
                 try:
                     data = json.loads(p.read_text(encoding="utf-8"))
@@ -213,26 +262,31 @@ def create_system_router() -> APIRouter:
         # heartbeat (never started, or started before this feature existed)
         # show up as "never seen" rather than silently missing from the list.
         for name, label in PROCESS_LABELS.items():
+            if name in PM2_STATUS_PROCESSES:
+                continue
             if name not in seen:
                 items.append({
                     "name": name, "label": label, "online": False,
                     "last_seen": None, "age_s": None, "pid": None,
                     "cpu_pct": None, "memory_mb": None,
                 })
+        for name in PM2_STATUS_PROCESSES:
+            items.append(await asyncio.to_thread(_pm2_process_status, name))
         return {"processes": sorted(items, key=lambda x: x["name"])}
 
     @router.post("/process-status/{name}/restart")
     async def restart_process(name: str, _=Depends(perm)):
         """Restart one process via `pm2 restart` and notify the admin on
-        Telegram once its heartbeat shows it's back online (see
-        scripts/restart_process_and_notify.py — runs detached from this
-        request so it survives even if `name` is this API server itself)."""
+        Telegram once it's back online (see app/utils/restart_watcher.py —
+        runs detached from this request so it survives even if `name` is
+        this API server itself)."""
         pm2_name = PROCESS_TO_PM2.get(name)
         if not pm2_name:
             raise HTTPException(status_code=404, detail=f"Неизвестный процесс: {name}")
+        mode = "pm2status" if name in PM2_STATUS_PROCESSES else "heartbeat"
         try:
             await asyncio.to_thread(
-                _launch_restart_watcher, pm2_name, name, PROCESS_LABELS.get(name, name)
+                _launch_restart_watcher, pm2_name, name, PROCESS_LABELS.get(name, name), mode
             )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Не удалось запустить рестарт: {exc}")

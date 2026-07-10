@@ -17,6 +17,16 @@ function formatAge(ageS) {
   return `${Math.round(ageS / 3600)} ч назад`;
 }
 
+// pm2-status processes (xtunnel) have no heartbeat — age_s there is process
+// uptime, not "time since last seen", so it reads as "работает X" (running
+// for X) rather than "X назад" (X ago), which would imply the opposite.
+function formatUptime(ageS) {
+  if (ageS == null) return 'нет данных';
+  if (ageS < 60) return `${Math.round(ageS)} сек`;
+  if (ageS < 3600) return `${Math.round(ageS / 60)} мин`;
+  return `${Math.round(ageS / 3600)} ч`;
+}
+
 // What each on-disk folder actually holds — see app/utils/logger.py and the
 // modules listed there for exactly which log writes where.
 const FOLDER_HINTS = {
@@ -95,7 +105,10 @@ function ProcessStatusPanel() {
               </button>
             </div>
             <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
-              {p.online ? 'онлайн' : 'офлайн'} · {formatAge(p.age_s)}
+              {p.online ? 'онлайн' : 'офлайн'} ·{' '}
+              {p.kind === 'pm2'
+                ? (p.online ? `работает ${formatUptime(p.age_s)}` : formatUptime(p.age_s))
+                : formatAge(p.age_s)}
               {p.pid ? ` · PID ${p.pid}` : ''}
             </p>
             {(p.cpu_pct != null || p.memory_mb != null) && (
