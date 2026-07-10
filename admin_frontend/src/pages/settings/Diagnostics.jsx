@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, FileText, Download, Folder, ChevronLeft, Circle } from 'lucide-react';
+import { RefreshCw, FileText, Download, Folder, ChevronLeft, Circle, Power } from 'lucide-react';
 import api from '../../api';
 import { useToast } from '../../providers/ToastProvider.jsx';
 import { Section } from './shared.jsx';
@@ -32,8 +32,10 @@ const FOLDER_HINTS = {
 };
 
 function ProcessStatusPanel() {
+  const { toast } = useToast();
   const [processes, setProcesses] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [restarting, setRestarting] = useState({});
 
   async function load() {
     setLoading(true);
@@ -53,6 +55,19 @@ function ProcessStatusPanel() {
     return () => clearInterval(id);
   }, []);
 
+  async function restart(p) {
+    if (!window.confirm(`Перезапустить процесс «${p.label}» (pm2 restart)?`)) return;
+    setRestarting((s) => ({ ...s, [p.name]: true }));
+    try {
+      await api.post(`system/process-status/${p.name}/restart`);
+      toast(`«${p.label}»: рестарт запущен, уведомление в Telegram придёт, когда процесс снова поднимется`, 'success');
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message || 'Не удалось запустить рестарт', 'error');
+    } finally {
+      setRestarting((s) => ({ ...s, [p.name]: false }));
+    }
+  }
+
   return (
     <Section title="Статус процессов">
       <div className="flex items-center justify-between mb-3">
@@ -64,9 +79,20 @@ function ProcessStatusPanel() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {processes.map((p) => (
           <div key={p.name} className="border border-[color:var(--color-border)] rounded-lg p-3">
-            <div className="flex items-center gap-2 font-medium">
-              <Circle size={10} className={p.online ? 'fill-green-500 text-green-500' : 'fill-red-500 text-red-500'} />
-              {p.label}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-medium min-w-0">
+                <Circle size={10} className={`shrink-0 ${p.online ? 'fill-green-500 text-green-500' : 'fill-red-500 text-red-500'}`} />
+                <span className="truncate">{p.label}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => restart(p)}
+                disabled={restarting[p.name]}
+                title="Перезапустить (pm2 restart)"
+                className="btn text-xs p-1.5 shrink-0 disabled:opacity-50"
+              >
+                <Power size={13} className={restarting[p.name] ? 'animate-pulse' : ''} />
+              </button>
             </div>
             <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
               {p.online ? 'онлайн' : 'офлайн'} · {formatAge(p.age_s)}

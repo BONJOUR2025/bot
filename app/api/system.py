@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import subprocess
 import sys
 import zipfile
 from datetime import date, datetime
@@ -25,6 +26,35 @@ PROCESS_LABELS = {
     "vk_bot": "VK-бот",
     "api_server": "Веб-сервер / админка",
 }
+# Heartbeat name -> pm2 process name (see deploy.ps1 for the pm2 fleet).
+PROCESS_TO_PM2 = {
+    "telegram_bot": "bot-main",
+    "vk_bot": "bot-vk",
+    "api_server": "bot-app",
+}
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _launch_restart_watcher(pm2_name: str, heartbeat_name: str, label: str) -> None:
+    """Spawn app/utils/restart_watcher.py as a fully detached process.
+    Must be detached (not an asyncio task in this process) since
+    restarting "api_server" restarts the very process handling this
+    request — an in-process task would die with it before it could notify
+    anyone."""
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    log_path = PROCESSES_LOG_DIR / "restart_watcher.log"
+    with open(log_path, "a", encoding="utf-8") as logf:
+        subprocess.Popen(
+            [sys.executable, "-m", "app.utils.restart_watcher", pm2_name, heartbeat_name, label],
+            cwd=str(REPO_ROOT),
+            stdin=subprocess.DEVNULL,
+            stdout=logf,
+            stderr=subprocess.STDOUT,
+            creationflags=creationflags,
+            close_fds=True,
+        )
 
 # JSON files that can be cleaned up by archiving old records.
 # Each entry: (filename, date_field_name)
@@ -190,6 +220,23 @@ def create_system_router() -> APIRouter:
                     "cpu_pct": None, "memory_mb": None,
                 })
         return {"processes": sorted(items, key=lambda x: x["name"])}
+
+    @router.post("/process-status/{name}/restart")
+    async def restart_process(name: str, _=Depends(perm)):
+        """Restart one process via `pm2 restart` and notify the admin on
+        Telegram once its heartbeat shows it's back online (see
+        scripts/restart_process_and_notify.py — runs detached from this
+        request so it survives even if `name` is this API server itself)."""
+        pm2_name = PROCESS_TO_PM2.get(name)
+        if not pm2_name:
+            raise HTTPException(status_code=404, detail=f"Неизвестный процесс: {name}")
+        try:
+            await asyncio.to_thread(
+                _launch_restart_watcher, pm2_name, name, PROCESS_LABELS.get(name, name)
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Не удалось запустить рестарт: {exc}")
+        return {"ok": True, "pm2_name": pm2_name}
 
     @router.get("/logs/content")
     async def log_content(
