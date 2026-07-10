@@ -43,11 +43,29 @@ _RECEIPT_DOC_NUM_RE = re.compile(r"Номер документа\s*:\s*(\S+?);?(
 _WAREHOUSE_INVOICE_RE = re.compile(r"накладной\s+ВнНомер(\S+)")
 
 
-def _humanize_order_action(basis: str) -> str:
+def _humanize_order_action(
+    basis: str,
+    *,
+    sclad_changed: bool = False,
+    sclad_from: str | None = None,
+    sclad_to: str | None = None,
+) -> str:
     """Translate one Agbis DOCS_ORDER_HISTORY.BASIS string into a short
     plain-language summary for the "Пользователи АГБИС" action log — the
     raw text is kept alongside (see get_agbis_user_actions) so nothing is
     lost if this misses a pattern, it just falls back to the raw text.
+
+    Every history row tied to a "накладная на перемещение" (BASIS starts
+    with "Изменение текущего склада") gets the same templated BASIS text
+    regardless of which step of the накладная it represents — Agbis writes
+    one such row per user who touches it (create/dispatch, then separately
+    accept), and only the row that actually flips CURRENT_SCLAD_ID is the
+    real physical move; the others (typically the accepting side marking
+    receipt, or a resave that doesn't progress the накладная) leave the
+    field untouched. `sclad_changed` (computed by the caller by diffing
+    CURRENT_SCLAD_ID against the previous history row for this order) is
+    what disambiguates them — the raw BASIS text has no field for it, only
+    the free-text "Дата приема: ..." substring hints at "accepted".
     """
     if basis.startswith('Сохранение заказа при создании'):
         return "Создали заказ"
@@ -58,7 +76,12 @@ def _humanize_order_action(basis: str) -> str:
         return "Выдали заказ клиенту"
     if basis.startswith('Изменение текущего склада'):
         m = _WAREHOUSE_INVOICE_RE.search(basis)
-        return f"Переместили заказ между складами (накладная №{m.group(1)})" if m else "Переместили заказ между складами"
+        invoice = f" (накладная №{m.group(1)})" if m else ""
+        if sclad_changed:
+            return f"Переместили заказ со склада «{sclad_from}» на склад «{sclad_to}»{invoice}"
+        if 'Дата приема' in basis:
+            return f"Приняли накладную на перемещение{invoice}"
+        return f"Пересохранили накладную на перемещение, склад не менялся{invoice}"
     if 'изменена сумма' in basis:
         return "Изменили сумму услуги"
     if basis.startswith('СМС сформированная для отправки'):
@@ -2229,6 +2252,9 @@ class FirebirdService:
                 delivery_status_id, debet, kredit, discount, date_out, current_sclad_id in history_rows:
             prev = prev_by_order.get(doc_order_id)
             changes: list[str] = []
+            sclad_changed = False
+            sclad_from: str | None = None
+            sclad_to: str | None = None
             if prev is not None:
                 (p_status, p_pay, p_delivery, p_debet, p_kredit, p_discount, p_date_out, p_sclad) = prev
                 if status_id != p_status:
@@ -2248,16 +2274,22 @@ class FirebirdService:
                 if discount != p_discount and (discount or 0) != (p_discount or 0):
                     changes.append(f"скидка: {p_discount or 0}% → {discount or 0}%")
                 if current_sclad_id != p_sclad:
-                    old_s = sclad_names.get(p_sclad, p_sclad)
-                    new_s = sclad_names.get(current_sclad_id, current_sclad_id)
-                    changes.append(f"склад: {old_s} → {new_s}")
+                    sclad_changed = True
+                    sclad_from = sclad_names.get(p_sclad, str(p_sclad))
+                    sclad_to = sclad_names.get(current_sclad_id, str(current_sclad_id))
+                    changes.append(f"склад: {sclad_from} → {sclad_to}")
             prev_by_order[doc_order_id] = (status_id, pay_status_id, delivery_status_id, debet, kredit, discount, date_out, current_sclad_id)
 
             if row_user_id == user_id and day <= dt.date() < next_day:
                 results.append({
                     "dttm": dt.isoformat(),
                     "order_num": order_num_by_id.get(doc_order_id, ""),
-                    "summary": _humanize_order_action((basis or "").strip()),
+                    "summary": _humanize_order_action(
+                        (basis or "").strip(),
+                        sclad_changed=sclad_changed,
+                        sclad_from=sclad_from,
+                        sclad_to=sclad_to,
+                    ),
                     "changes": changes,
                     "raw": (basis or "").strip(),
                 })
