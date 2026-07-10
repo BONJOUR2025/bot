@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Users, Phone, RefreshCw, TrendingDown, Calendar, Wallet, ShoppingBag } from 'lucide-react';
+import { Search, Users, Phone, RefreshCw, TrendingDown, Calendar, Wallet, ShoppingBag, Megaphone } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
@@ -50,6 +50,16 @@ function ClientCard({ profile }) {
         <KpiStat label="Средний чек" value={fmtRub(profile.avg_check)} accent="#22c55e" icon={<ShoppingBag size={18} />} />
         <KpiStat label="Заказов" value={profile.order_count.toLocaleString('ru-RU')} accent="#f59e0b" icon={<Calendar size={18} />} />
       </div>
+
+      {profile.acquisition_channel && (
+        <div className="app-card p-4 flex items-center gap-3" style={{ borderLeft: '3px solid #ec4899' }}>
+          <div className="shrink-0" style={{ color: '#ec4899' }}><Megaphone size={18} /></div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] font-medium">Откуда узнал о нас (опрос)</div>
+            <div className="text-sm font-semibold mt-0.5">{profile.acquisition_channel}</div>
+          </div>
+        </div>
+      )}
 
       <div className="app-card overflow-hidden">
         <div className="px-4 py-3 border-b border-[color:var(--color-border)]">

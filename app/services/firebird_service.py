@@ -934,7 +934,18 @@ class FirebirdService:
         ]
 
     def get_client_profile(self, contragent_id: int) -> dict | None:
-        """Full order history + LTV/avg-check/last-visit for one client."""
+        """Full order history + LTV/avg-check/last-visit for one client.
+
+        Also pulls the client's answer to the "Опрос" combo field on the
+        Agbis client card (ADDON_TYPES.ID=106253, DESCR='Опрос',
+        TABLE_NAME='CONTRAGENTS') — this is the acquisition-channel
+        dropdown ("проходил мимо" / "ЯНДЕКС поиск" / "рекомендация
+        знакомых" / ...), not the separate POLLS/FORM_POLL survey system
+        (that one turned out to be a near-dead legacy feature with a
+        couple dozen answers total). ADDON_CONTRAGS.LINE_ID is the
+        CONTRAGENTS.CONTR_ID, one row per client for this addon type;
+        VALUE_STR already carries the display text, no lookup needed.
+        """
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning no client profile")
             return None
@@ -951,6 +962,11 @@ class FirebirdService:
                 if contact is None:
                     return None
                 rows = self._order_revenue_rows(cur, contragent_id=contragent_id)
+                cur.execute(
+                    "SELECT value_str FROM addon_contrags WHERE line_id = ? AND addon_type_id = 106253",
+                    (contragent_id,),
+                )
+                acquisition = cur.fetchone()
             finally:
                 con.close()
         except Exception as e:
@@ -976,6 +992,7 @@ class FirebirdService:
             "avg_check": round(total_spent / order_count, 2) if order_count else 0.0,
             "first_order_date": order_list[0]["date"].isoformat() if order_list else None,
             "last_order_date": order_list[-1]["date"].isoformat() if order_list else None,
+            "acquisition_channel": (acquisition[0] or "").strip() if acquisition and acquisition[0] else None,
             "orders": [
                 {"doc_num": o["doc_num"], "date": o["date"].isoformat(), "amount": round(o["amount"], 2)}
                 for o in reversed(order_list)
