@@ -1,5 +1,15 @@
 # TODOS.md
 
+## ~~Fix `fmtMoney` decimal rounding in SalaryUI.jsx~~ — DONE (2026-07-11)
+
+Fixed in commit `cbfa264`: shared `fmtMoney` helper in
+`admin_frontend/src/components/ui/SalaryUI.jsx` didn't round before formatting, so summed
+backend values showed inconsistent, ugly decimals (e.g. "120 160,634 ₽" instead of
+"120 161 ₽"). Found via `/design-review` on the live ФОТ по салонам page. Deployed to
+production via `deploy.ps1` and verified live.
+
+---
+
 ## ~~Fix `btn-primary` typo repo-wide~~ — DONE (2026-07-11)
 
 Fixed in commit `6d2d211`: all 12 remaining files (`AiCheckPanel.jsx`, `IntegrationsModal.jsx`,
