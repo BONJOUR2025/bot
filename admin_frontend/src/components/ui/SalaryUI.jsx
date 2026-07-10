@@ -2,7 +2,7 @@
 // keeps the "hero + formula + tabs + stat cards" look consistent across pages whose
 // calculation logic differs.
 
-export const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Number(v).toLocaleString('ru-RU')} ₽`);
+export const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Math.round(Number(v)).toLocaleString('ru-RU')} ₽`);
 export const fmtPct = (v) => (v === null || v === undefined ? '—' : `${(Number(v) * 100).toFixed(1)}%`);
 
 export const TONE_VAR = {
