@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     firebird_host: str = Field("localhost", validation_alias="FIREBIRD_HOST")
     firebird_port: int = Field(3050, validation_alias="FIREBIRD_PORT")
     firebird_database: str = Field(
-        r"C:\Agbis\DB\ARM_13.fdb", validation_alias="FIREBIRD_DATABASE"
+        r"D:\Agbis\DB\ARM_21.fdb", validation_alias="FIREBIRD_DATABASE"
     )
     firebird_user: str = Field("SYSDBA", validation_alias="FIREBIRD_USER")
     firebird_password: str = Field("masterkey", validation_alias="FIREBIRD_PASSWORD")

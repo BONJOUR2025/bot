@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Users, UserCheck, UserX, ShieldCheck, Download, RefreshCw, History } from 'lucide-react';
+import { Search, Users, UserCheck, UserX, ShieldCheck, Download, RefreshCw, History, Eye, EyeOff, IdCard } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
@@ -9,7 +9,40 @@ import Modal from '../components/Modal.jsx';
 
 const isoToday = () => new Date().toISOString().slice(0, 10);
 
-function UserActionsModal({ user, onClose }) {
+function Field({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
+      <div className="text-sm font-medium truncate">{value || '—'}</div>
+    </div>
+  );
+}
+
+function PasswordField({ value }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Пароль</div>
+      {value ? (
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium font-mono">{visible ? value : '•'.repeat(Math.min(value.length, 12))}</span>
+          <button
+            type="button"
+            onClick={() => setVisible((v) => !v)}
+            title={visible ? 'Скрыть' : 'Показать'}
+            className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]"
+          >
+            {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+      ) : (
+        <div className="text-sm font-medium">—</div>
+      )}
+    </div>
+  );
+}
+
+function UserCardModal({ user, onClose }) {
   const [day, setDay] = useState(isoToday());
   const [actions, setActions] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -40,70 +73,113 @@ function UserActionsModal({ user, onClose }) {
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [actions]);
 
+  const activeFlags = FLAG_DEFS.filter((f) => user[f.key]);
+
   return (
     <Modal isOpen onClose={onClose}>
       <div className="modal-card max-w-2xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
         <div className="flex items-center justify-between mb-3 shrink-0">
           <div>
             <h3 className="text-base font-semibold flex items-center gap-2">
-              <History size={16} className="text-[color:var(--color-primary)]" />
-              Действия — {user.description}
+              <IdCard size={16} className="text-[color:var(--color-primary)]" />
+              {user.description}
             </h3>
           </div>
           <button onClick={onClose} className="text-xl text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] leading-none">&times;</button>
         </div>
 
-        <div className="flex items-center gap-2 mb-3 shrink-0">
-          <input type="date" className="input text-sm h-9" value={day} onChange={(e) => setDay(e.target.value)} />
-          <button onClick={() => load(day)} disabled={loading} className="btn btn--primary h-9 px-3 text-sm">
-            {loading ? 'Загрузка…' : 'Показать'}
-          </button>
-        </div>
+        <div className="overflow-y-auto flex-1 space-y-4">
+          <div className="rounded-lg border border-[color:var(--color-border)] p-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <Field label="ID" value={user.user_id} />
+            <Field label="Статус" value={user.is_working ? 'Активен' : 'Неактивен'} />
+            <Field label="Роль" value={user.role_name} />
+            <Field label="Подразделение" value={user.dep_name} />
+            <Field label="Телефон" value={user.phone} />
+            <Field label="Моб." value={user.mobile} />
+            <Field label="Email" value={user.email} />
+            <Field label="Штрихкод" value={user.barcode} />
+            <Field label="ИНН" value={user.inn} />
+            <PasswordField value={user.password} />
+          </div>
 
-        {error && <div className="text-red-500 text-sm mb-2 shrink-0">{error}</div>}
-
-        <div className="overflow-y-auto flex-1 space-y-3">
-          {loading ? <SkeletonTable rows={5} /> : actions && actions.length > 0 ? (
-            <>
-              <div className="flex flex-wrap gap-2">
-                {counts.map(([cat, n]) => (
-                  <span key={cat} className="text-xs px-2 py-1 rounded-full bg-[color:var(--color-muted)]/50 text-[color:var(--color-muted-foreground)]">
-                    {cat}: <span className="font-semibold text-[color:var(--color-foreground)]">{n}</span>
-                  </span>
-                ))}
-              </div>
-              <div className="divide-y divide-[color:var(--color-border)] rounded-lg border border-[color:var(--color-border)]">
-                {actions.map((a, i) => (
-                  <div key={i} className="px-3 py-2 text-sm flex items-start gap-3" title={a.raw}>
-                    <span className="text-[color:var(--color-muted-foreground)] tabular-nums shrink-0 whitespace-nowrap">
-                      {a.dttm.slice(11, 19)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span>{a.summary}</span>
-                        {a.order_num && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-[color:var(--color-muted)]/50 text-[color:var(--color-muted-foreground)] tabular-nums">
-                            №{a.order_num}
-                          </span>
-                        )}
-                      </div>
-                      {a.changes.length > 0 && (
-                        <ul className="mt-0.5 space-y-0.5">
-                          {a.changes.map((c, j) => (
-                            <li key={j} className="text-xs text-[color:var(--color-muted-foreground)]">— {c}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-10 text-[color:var(--color-muted-foreground)] text-sm">
-              Нет действий за выбранную дату
+          {user.comment && (
+            <div className="rounded-lg border border-[color:var(--color-border)] p-3">
+              <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Комментарий</div>
+              <div className="text-sm whitespace-pre-wrap">{user.comment}</div>
             </div>
           )}
+
+          {activeFlags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {activeFlags.map((f) => (
+                <span key={f.key} className="text-xs px-2 py-1 rounded-full bg-[color:var(--color-muted)]/50 text-[color:var(--color-muted-foreground)]">
+                  {f.label}
+                </span>
+              ))}
+              {user.is_admin_role && (
+                <span className="text-xs px-2 py-1 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] flex items-center gap-1">
+                  <ShieldCheck size={12} /> Админ-роль
+                </span>
+              )}
+            </div>
+          )}
+
+          <div>
+            <h4 className="text-sm font-semibold flex items-center gap-2 mb-2">
+              <History size={14} className="text-[color:var(--color-primary)]" />
+              Действия за день
+            </h4>
+            <div className="flex items-center gap-2 mb-3">
+              <input type="date" className="input text-sm h-9" value={day} onChange={(e) => setDay(e.target.value)} />
+              <button onClick={() => load(day)} disabled={loading} className="btn btn--primary h-9 px-3 text-sm">
+                {loading ? 'Загрузка…' : 'Показать'}
+              </button>
+            </div>
+
+            {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
+
+            {loading ? <SkeletonTable rows={5} /> : actions && actions.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {counts.map(([cat, n]) => (
+                    <span key={cat} className="text-xs px-2 py-1 rounded-full bg-[color:var(--color-muted)]/50 text-[color:var(--color-muted-foreground)]">
+                      {cat}: <span className="font-semibold text-[color:var(--color-foreground)]">{n}</span>
+                    </span>
+                  ))}
+                </div>
+                <div className="divide-y divide-[color:var(--color-border)] rounded-lg border border-[color:var(--color-border)]">
+                  {actions.map((a, i) => (
+                    <div key={i} className="px-3 py-2 text-sm flex items-start gap-3" title={a.raw}>
+                      <span className="text-[color:var(--color-muted-foreground)] tabular-nums shrink-0 whitespace-nowrap">
+                        {a.dttm.slice(11, 19)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{a.summary}</span>
+                          {a.order_num && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-[color:var(--color-muted)]/50 text-[color:var(--color-muted-foreground)] tabular-nums">
+                              №{a.order_num}
+                            </span>
+                          )}
+                        </div>
+                        {a.changes.length > 0 && (
+                          <ul className="mt-0.5 space-y-0.5">
+                            {a.changes.map((c, j) => (
+                              <li key={j} className="text-xs text-[color:var(--color-muted-foreground)]">— {c}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-10 text-[color:var(--color-muted-foreground)] text-sm">
+                Нет действий за выбранную дату
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </Modal>
@@ -134,7 +210,7 @@ export default function AgbisUsers() {
   const [status, setStatus]   = useState('active');
   const [roleFilter, setRoleFilter] = useState('');
   const [depFilter, setDepFilter]   = useState('');
-  const [actionsUser, setActionsUser] = useState(null);
+  const [cardUser, setCardUser] = useState(null);
 
   useEffect(() => { load(); }, []);
 
@@ -270,7 +346,7 @@ export default function AgbisUsers() {
                 { label: 'ФИО', primary: true, render: (r) => (
                   <button
                     type="button"
-                    onClick={() => setActionsUser(r)}
+                    onClick={() => setCardUser(r)}
                     className="max-w-[220px] truncate text-left hover:text-[color:var(--color-primary)] hover:underline"
                     title={r.description}
                   >
@@ -310,7 +386,7 @@ export default function AgbisUsers() {
         </div>
       )}
 
-      {actionsUser && <UserActionsModal user={actionsUser} onClose={() => setActionsUser(null)} />}
+      {cardUser && <UserCardModal user={cardUser} onClose={() => setCardUser(null)} />}
     </div>
   );
 }

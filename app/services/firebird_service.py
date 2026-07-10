@@ -2124,6 +2124,13 @@ class FirebirdService:
         itself exposes (курьер/инкассатор/технолог/бригадир/личный
         кабинет). USER_POSTS (должность) isn't joined: every row in this
         DB has a NULL name, so it's unused in this deployment.
+
+        Includes USER_PASSWORD, BARCODE and INN for the user detail card —
+        Agbis stores the login password in cleartext on this row (it's the
+        short PIN-style code used at the POS terminal, not a hashed web
+        password), so this is surfacing exactly what Agbis's own desktop
+        client already shows an admin editing a user, nothing new is
+        exposed. The route stays behind the existing "payroll" permission.
         """
         if not FIREBIRD_AVAILABLE:
             return []
@@ -2131,7 +2138,8 @@ class FirebirdService:
             SELECT u.user_id, u.description, u.is_working, r.name, r.is_admin,
                    d.name, u.phone, u.teleph_cell, u.email, u.comment,
                    u.is_courier, u.is_inkass, u.is_technologist, u.is_brigadier,
-                   u.is_cabinet_user, u.is_cabinet_admin, u.is_system
+                   u.is_cabinet_user, u.is_cabinet_admin, u.is_system,
+                   u.user_password, u.barcode, u.inn
             FROM users u
                 LEFT JOIN mst_roles r ON r.id = u.role_id
                 LEFT JOIN deps d ON d.dep_id = u.dep_id
@@ -2167,10 +2175,14 @@ class FirebirdService:
                 "is_cabinet_user": bool(is_cabinet_user),
                 "is_cabinet_admin": bool(is_cabinet_admin),
                 "is_system": bool(is_system),
+                "password": (password or "").strip() or None,
+                "barcode": (barcode or "").strip() or None,
+                "inn": (inn or "").strip() or None,
             }
             for (user_id, description, is_working, role_name, is_admin, dep_name, phone, mobile,
                  email, comment, is_courier, is_inkass, is_technologist, is_brigadier,
-                 is_cabinet_user, is_cabinet_admin, is_system) in rows
+                 is_cabinet_user, is_cabinet_admin, is_system,
+                 password, barcode, inn) in rows
         ]
 
     def get_agbis_user_actions(self, user_id: int, day: date) -> list[dict]:
