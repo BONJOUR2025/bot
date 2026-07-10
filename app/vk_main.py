@@ -173,6 +173,11 @@ def main() -> None:
         return
     log("🚀 VK bot started and waiting for messages...")
     log_connection("VK bot process started (long poll)")
+    # @interval(seconds=60) below sleeps *before* its first call (vkbottle's
+    # DelayedTask), not after — without this, the Diagnostics "process
+    # status" panel (and the restart-watcher waiting on it) would see this
+    # process as still offline for up to a minute after every start/restart.
+    write_heartbeat("vk_bot")
     bot.run()
 
 
