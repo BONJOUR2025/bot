@@ -166,7 +166,7 @@ export default function KnowledgeBaseModal({ scope, vacancyId, vacancyTitle, onC
           ))}
         </div>
         <div className="flex justify-end mt-4">
-          <button onClick={() => setForm('new')} className="btn btn-primary text-sm flex items-center gap-1.5">
+          <button onClick={() => setForm('new')} className="btn btn--primary text-sm flex items-center gap-1.5">
             <Plus size={15} /> Новая запись
           </button>
         </div>

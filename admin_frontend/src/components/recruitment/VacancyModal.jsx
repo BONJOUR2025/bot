@@ -128,7 +128,7 @@ function StepDealBreakers({ vacancyId, dealBreakers, setDealBreakers, onPatched 
         ))}
       </div>
 
-      <button onClick={save} disabled={saving} className="btn btn-primary text-sm">
+      <button onClick={save} disabled={saving} className="btn btn--primary text-sm">
         {saving ? 'Сохранение...' : 'Сохранить критерии'}
       </button>
     </div>
@@ -196,7 +196,7 @@ function StepAskQuestions({ vacancyId, questions, setQuestions, onPatched }) {
         <Plus size={13} /> Добавить вопрос
       </button>
 
-      <button onClick={save} disabled={saving} className="btn btn-primary text-sm">
+      <button onClick={save} disabled={saving} className="btn btn--primary text-sm">
         {saving ? 'Сохранение...' : 'Сохранить вопросы'}
       </button>
     </div>
@@ -272,7 +272,7 @@ function StepKbDocuments({ vacancyId, documentIds, setDocumentIds, onPatched }) 
         ))
       )}
 
-      <button onClick={save} disabled={saving} className="btn btn-primary text-sm">
+      <button onClick={save} disabled={saving} className="btn btn--primary text-sm">
         {saving ? 'Сохранение...' : 'Сохранить'}
       </button>
     </div>
@@ -766,15 +766,15 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
               </button>
             )}
             {step === 'basic' ? (
-              <button onClick={() => saveBasicAndStrategy(isEdit ? null : 'dealbreakers')} disabled={saving || !title.trim()} className="btn btn-primary text-sm flex items-center gap-1.5">
+              <button onClick={() => saveBasicAndStrategy(isEdit ? null : 'dealbreakers')} disabled={saving || !title.trim()} className="btn btn--primary text-sm flex items-center gap-1.5">
                 {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : <>Далее <ArrowRight size={14} /></>}
               </button>
             ) : stepIdx < WIZARD_STEPS.length - 1 ? (
-              <button onClick={() => setStep(WIZARD_STEPS[stepIdx + 1].key)} className="btn btn-primary text-sm flex items-center gap-1.5">
+              <button onClick={() => setStep(WIZARD_STEPS[stepIdx + 1].key)} className="btn btn--primary text-sm flex items-center gap-1.5">
                 Далее <ArrowRight size={14} />
               </button>
             ) : (
-              <button onClick={onClose} className="btn btn-primary text-sm">Готово</button>
+              <button onClick={onClose} className="btn btn--primary text-sm">Готово</button>
             )}
           </div>
         </div>

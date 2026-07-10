@@ -119,7 +119,7 @@ export default function Schedule() {
             <ChevronRight size={16} />
           </button>
           <button onClick={load} disabled={loading}
-            className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50">
+            className="btn btn--primary flex items-center gap-1.5 disabled:opacity-50">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>

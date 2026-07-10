@@ -54,7 +54,7 @@ export default function AiCheckPanel({ gate, text, scope, vacancyId, fieldLabel,
         type="button"
         onClick={onConfirm}
         disabled={!confirmable || confirming}
-        className="btn btn-primary text-xs disabled:opacity-40"
+        className="btn btn--primary text-xs disabled:opacity-40"
         title={!confirmable ? 'Сначала выполните проверку через ИИ (после любого изменения текста нужна повторная проверка)' : ''}
       >
         {confirming ? 'Сохранение...' : confirmLabel}

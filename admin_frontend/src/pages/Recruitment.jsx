@@ -141,7 +141,7 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="btn btn-secondary">Отмена</button>
-          <button onClick={save} disabled={saving || !form.name.trim()} className="btn btn-primary">
+          <button onClick={save} disabled={saving || !form.name.trim()} className="btn btn--primary">
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
@@ -290,7 +290,7 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="btn btn-secondary">Отмена</button>
-          <button onClick={save} disabled={saving} className="btn btn-primary">
+          <button onClick={save} disabled={saving} className="btn btn--primary">
             {saving ? 'Сохранение...' : 'Назначить'}
           </button>
         </div>
@@ -797,7 +797,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                           <input readOnly value={tgDeepLink}
                             className="input flex-1 text-xs font-mono truncate" />
                           <button onClick={() => navigator.clipboard.writeText(tgDeepLink)}
-                            className="btn btn-primary text-xs px-3 shrink-0">Копировать</button>
+                            className="btn btn--primary text-xs px-3 shrink-0">Копировать</button>
                         </div>
                       </>
                     ) : (
@@ -832,7 +832,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                     onKeyDown={e => e.key === 'Enter' && saveChatId()}
                   />
                   <button onClick={saveChatId} disabled={savingChatId || !manualChatId.trim()}
-                    className="btn btn-primary text-sm disabled:opacity-50">
+                    className="btn btn--primary text-sm disabled:opacity-50">
                     {savingChatId ? <Loader2 size={13} className="animate-spin" /> : 'Сохранить'}
                   </button>
                 </div>
@@ -1003,7 +1003,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
         {/* ── Footer ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-6 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10">
           <button onClick={() => { onClose(); onEdit(candidate); }}
-            className="order-1 sm:order-2 w-full sm:w-auto btn btn-primary text-sm flex items-center justify-center gap-1.5">
+            className="order-1 sm:order-2 w-full sm:w-auto btn btn--primary text-sm flex items-center justify-center gap-1.5">
             <Pencil size={14} /> Редактировать
           </button>
           <div className="order-2 sm:order-1 flex items-center gap-2 flex-wrap">
@@ -1759,7 +1759,7 @@ export default function Recruitment() {
               <Calendar size={13} /> Собеседования
             </button>
           </div>
-          <button onClick={() => setVacancyModal('new')} className="btn btn-primary text-sm flex items-center gap-1.5">
+          <button onClick={() => setVacancyModal('new')} className="btn btn--primary text-sm flex items-center gap-1.5">
             <Plus size={15} /> Вакансия
           </button>
         </div>
@@ -1933,7 +1933,7 @@ export default function Recruitment() {
                 {!selectionMode && (
                   <button
                     onClick={() => setCandModal({ stage: 'отклик' })}
-                    className="btn btn-primary text-sm flex items-center gap-1.5"
+                    className="btn btn--primary text-sm flex items-center gap-1.5"
                   >
                     <Plus size={15} /> Кандидат
                   </button>

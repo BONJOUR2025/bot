@@ -327,7 +327,7 @@ function SalonModal({ salon, employees, onSave, onClose }) {
         {/* Footer */}
         <div className="flex justify-end gap-2 pt-4 border-t border-[color:var(--color-border)]">
           <button onClick={onClose} className="btn btn-secondary">Отмена</button>
-          <button onClick={handleSave} disabled={saving || !form.name.trim()} className="btn btn-primary">
+          <button onClick={handleSave} disabled={saving || !form.name.trim()} className="btn btn--primary">
             {saving ? 'Сохранение...' : (isNew ? 'Создать' : 'Сохранить')}
           </button>
         </div>
@@ -657,7 +657,7 @@ export default function Salons() {
           <h1 className="text-2xl font-bold">Управление салонами</h1>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Сеть точек продаж и обслуживания</p>
         </div>
-        <button onClick={() => setModal('new')} className="btn btn-primary">+ Добавить салон</button>
+        <button onClick={() => setModal('new')} className="btn btn--primary">+ Добавить салон</button>
       </div>
 
       {/* Stats row — click a card to filter the list by status */}
@@ -726,7 +726,7 @@ export default function Salons() {
               </div>
               <div className="px-4 py-2 border-t flex justify-end gap-3">
                 <button className="btn btn-secondary text-sm" onClick={e => { e.stopPropagation(); setDrawer(s); }}>Подробнее</button>
-                <button className="btn btn-primary text-sm" onClick={e => { e.stopPropagation(); setDrawer(null); setModal(s); }}>Изменить</button>
+                <button className="btn btn--primary text-sm" onClick={e => { e.stopPropagation(); setDrawer(null); setModal(s); }}>Изменить</button>
               </div>
             </div>
           ))}

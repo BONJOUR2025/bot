@@ -201,7 +201,7 @@ export default function SaleTransfers() {
             placeholder="например, 123456"
           />
           <button onClick={lookup} disabled={looking || !docNum.trim()}
-            className="btn btn-primary flex items-center gap-2 disabled:opacity-50">
+            className="btn btn--primary flex items-center gap-2 disabled:opacity-50">
             <Search size={16} className={looking ? 'animate-pulse' : ''} />
             {looking ? 'Поиск…' : 'Найти'}
           </button>
@@ -261,7 +261,7 @@ export default function SaleTransfers() {
                       <button
                         onClick={() => transfer(key)}
                         disabled={submitting || !row.toCode}
-                        className="btn btn-primary text-sm disabled:opacity-50 w-full sm:w-auto"
+                        className="btn btn--primary text-sm disabled:opacity-50 w-full sm:w-auto"
                       >
                         Перенести
                       </button>

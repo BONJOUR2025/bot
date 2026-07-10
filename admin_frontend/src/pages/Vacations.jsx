@@ -199,7 +199,7 @@ export default function Vacations() {
           value={filters.query}
           onChange={(e) => setFilters({ ...filters, query: e.target.value })}
         />
-        <button className="btn btn-primary ml-auto" onClick={startCreate}>
+        <button className="btn btn--primary ml-auto" onClick={startCreate}>
           <Plus size={16} /> Добавить запись
         </button>
       </div>

@@ -204,7 +204,7 @@ function StrategyForm({ strategy, onClose, onSaved, zIndex }) {
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="btn btn-secondary">Отмена</button>
-          <button onClick={save} disabled={saving || !form.name.trim() || !form.stages} className="btn btn-primary">
+          <button onClick={save} disabled={saving || !form.name.trim() || !form.stages} className="btn btn--primary">
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
@@ -307,7 +307,7 @@ export default function StrategyModal({ onClose, onChanged, zIndex }) {
           ))}
         </div>
         <div className="flex justify-end mt-4">
-          <button onClick={() => setForm('new')} className="btn btn-primary text-sm flex items-center gap-1.5">
+          <button onClick={() => setForm('new')} className="btn btn--primary text-sm flex items-center gap-1.5">
             <Plus size={15} /> Новая стратегия
           </button>
         </div>

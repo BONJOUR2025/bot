@@ -79,7 +79,7 @@ function VacancyLinkRow({ internalVacancy, source, externalVacancies, existingLi
             <button
               onClick={handleLink}
               disabled={saving || !selected}
-              className="btn btn-primary text-xs px-3 py-1.5 flex items-center gap-1"
+              className="btn btn--primary text-xs px-3 py-1.5 flex items-center gap-1"
             >
               <Link2 size={12} /> Привязать
             </button>
@@ -195,7 +195,7 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
               <button
                 onClick={startOAuth}
                 disabled={connecting}
-                className="btn btn-primary w-full flex items-center justify-center gap-2"
+                className="btn btn--primary w-full flex items-center justify-center gap-2"
               >
                 {connecting
                   ? <><RefreshCw size={14} className="animate-spin" /> Перенаправляем на hh.ru...</>
@@ -326,7 +326,7 @@ function AvitoVacancyLinkRow({ internalVacancy, existingLink, onLink, onUnlink }
             <button
               onClick={handleLink}
               disabled={saving || !vacancyId.trim()}
-              className="btn btn-primary text-xs px-3 py-1.5 flex items-center gap-1"
+              className="btn btn--primary text-xs px-3 py-1.5 flex items-center gap-1"
             >
               <Link2 size={12} /> Привязать
             </button>
@@ -431,7 +431,7 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
             </select>
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
-          <button onClick={connect} disabled={connecting || !clientId.trim() || !clientSecret.trim()} className="btn btn-primary w-full">
+          <button onClick={connect} disabled={connecting || !clientId.trim() || !clientSecret.trim()} className="btn btn--primary w-full">
             {connecting ? 'Подключаем...' : 'Подключить Авито'}
           </button>
         </>

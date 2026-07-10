@@ -1375,7 +1375,7 @@ export default function Payouts() {
         <button className="btn btn-secondary" onClick={resetFilters}>
           Сбросить
         </button>
-        <button className="btn btn-primary ml-auto" onClick={openCreate}>
+        <button className="btn btn--primary ml-auto" onClick={openCreate}>
           ➕ Новая
         </button>
       </div>

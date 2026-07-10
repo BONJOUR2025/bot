@@ -313,7 +313,7 @@ export default function Assets() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <h2 className="text-2xl font-semibold">Имущество сотрудников</h2>
-        <button className="btn btn-primary flex items-center gap-2 sm:ml-auto w-fit" onClick={openCreate}>
+        <button className="btn btn--primary flex items-center gap-2 sm:ml-auto w-fit" onClick={openCreate}>
           <Plus size={16} /> Добавить
         </button>
       </div>
@@ -651,7 +651,7 @@ export default function Assets() {
 
           <div className="flex justify-end gap-2 pt-4">
             <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Отмена</button>
-            <button className="btn btn-primary" onClick={saveForm}>
+            <button className="btn btn--primary" onClick={saveForm}>
               {editId !== null
                 ? 'Сохранить'
                 : `Выдать ${formItems.length > 1 ? `${formItems.length} предмета` : 'предмет'}`}
