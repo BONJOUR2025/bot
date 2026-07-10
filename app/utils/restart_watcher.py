@@ -36,6 +36,11 @@ POLL_INTERVAL_S = 5
 TIMEOUT_S = 240
 
 
+TELEGRAM_SEND_ATTEMPTS = 3
+TELEGRAM_SEND_TIMEOUT_S = 30
+TELEGRAM_RETRY_DELAY_S = 5
+
+
 def send_telegram(text: str) -> None:
     """Plain HTTP call (not python-telegram-bot's Bot/Application) — this
     process is intentionally standalone. Uses httpx (already a hard
@@ -43,16 +48,28 @@ def send_telegram(text: str) -> None:
     which on this box fails TLS verification against api.telegram.org —
     it builds the cert chain from the Windows system store, which is
     missing an intermediate; httpx bundles certifi's own CA list instead
-    and doesn't hit the same gap."""
+    and doesn't hit the same gap.
+
+    Retries a few times: observed one real handshake taking >15s on this
+    box (freshly-spawned process, first outbound connection) — a single
+    short-timeout attempt would silently drop the one notification this
+    whole script exists to deliver."""
     if not TOKEN or TOKEN == "dummy" or not ADMIN_CHAT_ID:
         print(f"[restart_watcher] Telegram not configured, would have sent: {text}")
         return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    try:
-        resp = httpx.post(url, data={"chat_id": ADMIN_CHAT_ID, "text": text}, timeout=15)
-        resp.raise_for_status()
-    except Exception as exc:
-        print(f"[restart_watcher] Failed to send Telegram notification: {exc}")
+    last_error: Exception | None = None
+    for attempt in range(1, TELEGRAM_SEND_ATTEMPTS + 1):
+        try:
+            resp = httpx.post(url, data={"chat_id": ADMIN_CHAT_ID, "text": text}, timeout=TELEGRAM_SEND_TIMEOUT_S)
+            resp.raise_for_status()
+            return
+        except Exception as exc:
+            last_error = exc
+            print(f"[restart_watcher] Telegram send attempt {attempt}/{TELEGRAM_SEND_ATTEMPTS} failed: {exc}")
+            if attempt < TELEGRAM_SEND_ATTEMPTS:
+                time.sleep(TELEGRAM_RETRY_DELAY_S)
+    print(f"[restart_watcher] Giving up on Telegram notification after {TELEGRAM_SEND_ATTEMPTS} attempts: {last_error}")
 
 
 def main() -> None:
