@@ -899,39 +899,58 @@ class FirebirdService:
         return rows
 
     def search_clients(self, query: str, limit: int = 20) -> list[dict]:
-        """Search CONTRAGENTS by name or phone.
+        """Search CONTRAGENTS by name, phone, or order number (DOCS.DOC_NUM).
 
         Excludes "Розница <салон>" accounts — generic walk-in buckets used
         when no specific client is registered (one such account can carry
         thousands of anonymous orders), which would swamp real clients in
         search results and make no sense in a client-level CRM.
+
+        The order-number branch only runs when the query has digits in it
+        (order numbers are numeric, e.g. "34247" or "34247-7") — skipping
+        it for pure-name queries avoids a pointless extra table scan.
         """
         if not FIREBIRD_AVAILABLE or not (query or "").strip():
             return []
         q = query.strip()
-        sql = """
+        sql_name = """
             SELECT FIRST ? contr_id, name, teleph_cell
             FROM contragents
             WHERE (UPPER(name) LIKE UPPER(?) OR teleph_cell LIKE ?)
                 AND UPPER(name) NOT STARTING WITH 'РОЗНИЦА'
             ORDER BY name
         """
+        sql_order = """
+            SELECT FIRST ? c.contr_id, c.name, c.teleph_cell
+            FROM docs d
+                INNER JOIN contragents c ON c.contr_id = d.contragent_id
+            WHERE d.doc_num LIKE ?
+                AND UPPER(c.name) NOT STARTING WITH 'РОЗНИЦА'
+            ORDER BY d.doc_date DESC
+        """
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql, (limit, f"%{q}%", f"%{q}%"))
-                rows = cur.fetchall()
+                cur.execute(sql_name, (limit, f"%{q}%", f"%{q}%"))
+                rows = list(cur.fetchall())
+                if any(ch.isdigit() for ch in q):
+                    cur.execute(sql_order, (limit, f"%{q}%"))
+                    rows += cur.fetchall()
             finally:
                 con.close()
         except Exception as e:
             logger.error(f"Error searching clients: {e}")
             return []
 
-        return [
-            {"contragent_id": cid, "name": (name or "").strip(), "phone": (phone or "").strip() or None}
-            for cid, name, phone in rows
-        ]
+        seen: set[int] = set()
+        results: list[dict] = []
+        for cid, name, phone in rows:
+            if cid in seen:
+                continue
+            seen.add(cid)
+            results.append({"contragent_id": cid, "name": (name or "").strip(), "phone": (phone or "").strip() or None})
+        return results[:limit]
 
     def get_client_profile(self, contragent_id: int) -> dict | None:
         """Full order history + LTV/avg-check/last-visit for one client.
@@ -998,6 +1017,58 @@ class FirebirdService:
                 for o in reversed(order_list)
             ],
         }
+
+    def get_order_items(self, contragent_id: int, doc_num: str) -> list[dict]:
+        """Line items (services + goods) inside one client order.
+
+        Mirrors the two item tables _order_revenue_rows sums over —
+        DOC_ORDER_SERVICES (repair/shoes services) and DOC_ORDER_LINES
+        (cosmetics/retail goods) — but here without the folder_id/code
+        filters, since this is "what's actually in this order" rather
+        than the category-scoped revenue rollup. DOC_ORDER_LINES has its
+        own free-text TOVAR_DESCRIPT (used when a line isn't tied to a
+        catalog item), hence the COALESCE with TOVARS_TBL.NAME.
+        """
+        if not FIREBIRD_AVAILABLE:
+            return []
+        sql = """
+            SELECT tv.name, dos.qty_kredit, dos.kredit, 'service'
+            FROM docs d
+                INNER JOIN docs_order dor ON dor.doc_id = d.doc_id
+                INNER JOIN doc_order_services dos ON dos.doc_order_id = dor.id
+                INNER JOIN tovars_tbl tv ON tv.tovar_id = dos.tovar_id
+            WHERE d.contragent_id = ? AND d.doc_num = ?
+
+            UNION ALL
+
+            SELECT COALESCE(tv.name, dol.tovar_descript), dol.qty_kredit, dol.kredit, 'good'
+            FROM docs d
+                INNER JOIN docs_order dor ON dor.doc_id = d.doc_id
+                INNER JOIN doc_order_lines dol ON dol.doc_order_id = dor.id
+                LEFT JOIN tovars_tbl tv ON tv.tovar_id = dol.tovar_id
+            WHERE d.contragent_id = ? AND d.doc_num = ?
+        """
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, (contragent_id, doc_num, contragent_id, doc_num))
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching order items: {e}")
+            return []
+
+        return [
+            {
+                "name": (name or "").strip() or "—",
+                "qty": float(qty) if qty is not None else None,
+                "amount": round(float(amount or 0), 2),
+                "kind": kind,
+            }
+            for name, qty, amount, kind in rows
+        ]
 
     def get_churning_clients(self, lookback_days: int = 365, min_orders: int = 3, limit: int = 200) -> list[dict]:
         """Clients who used to order regularly and have gone quiet.

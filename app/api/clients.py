@@ -47,6 +47,20 @@ def create_clients_router() -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.get("/{contragent_id}/orders/{doc_num}/items")
+    async def get_order_items(contragent_id: int, doc_num: str):
+        """Return the services/goods inside one client order."""
+        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+
+        if not FIREBIRD_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
+
+        try:
+            svc = get_firebird_service()
+            return await asyncio.to_thread(svc.get_order_items, contragent_id, doc_num)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.get("/{contragent_id}")
     async def get_client_profile(contragent_id: int):
         """Return one client's full order history, LTV, average check, last visit."""

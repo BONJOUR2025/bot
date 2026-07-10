@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Users, Phone, RefreshCw, TrendingDown, Calendar, Wallet, ShoppingBag, Megaphone } from 'lucide-react';
+import { Search, Users, Phone, RefreshCw, TrendingDown, Calendar, Wallet, ShoppingBag, Megaphone, ChevronDown, ChevronRight } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
@@ -27,6 +27,65 @@ function KpiStat({ label, value, accent, icon }) {
   );
 }
 
+function OrderRow({ contragentId, order }) {
+  const [expanded, setExpanded] = useState(false);
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function toggle() {
+    if (expanded) { setExpanded(false); return; }
+    setExpanded(true);
+    if (items || loading) return;
+    setLoading(true); setError(null);
+    try {
+      const res = await api.get(`/clients/${contragentId}/orders/${encodeURIComponent(order.doc_num)}/items`);
+      setItems(res.data || []);
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || 'Ошибка загрузки состава');
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-[color:var(--color-muted)]/30 transition-colors text-left"
+      >
+        <div className="min-w-0 flex items-start gap-1.5">
+          {expanded ? <ChevronDown size={14} className="mt-1 shrink-0 text-[color:var(--color-muted-foreground)]" /> : <ChevronRight size={14} className="mt-1 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+          <div className="min-w-0">
+            <div className="font-medium">{order.doc_num}</div>
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">{fmtDate(order.date)}</div>
+          </div>
+        </div>
+        <div className="font-semibold tabular-nums shrink-0">{fmtRub(order.amount)}</div>
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-3 pl-9">
+          {loading && <div className="text-xs text-[color:var(--color-muted-foreground)]">Загрузка…</div>}
+          {error && <div className="text-xs text-red-500">{error}</div>}
+          {!loading && !error && items?.length === 0 && (
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">Нет данных о составе заказа</div>
+          )}
+          {!loading && items?.length > 0 && (
+            <ul className="space-y-1">
+              {items.map((it, i) => (
+                <li key={i} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">{it.name}{it.qty != null && it.qty !== 1 ? ` × ${it.qty}` : ''}</span>
+                  <span className="tabular-nums text-[color:var(--color-muted-foreground)] shrink-0">{fmtRub(it.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClientCard({ profile }) {
   return (
     <div className="space-y-4">
@@ -49,38 +108,24 @@ function ClientCard({ profile }) {
         <KpiStat label="LTV (всего потрачено)" value={fmtRub(profile.total_spent)} accent="#6366f1" icon={<Wallet size={18} />} />
         <KpiStat label="Средний чек" value={fmtRub(profile.avg_check)} accent="#22c55e" icon={<ShoppingBag size={18} />} />
         <KpiStat label="Заказов" value={profile.order_count.toLocaleString('ru-RU')} accent="#f59e0b" icon={<Calendar size={18} />} />
+        {profile.acquisition_channel && (
+          <KpiStat label="Канал" value={profile.acquisition_channel} accent="#ec4899" icon={<Megaphone size={18} />} />
+        )}
       </div>
-
-      {profile.acquisition_channel && (
-        <div className="app-card p-4 flex items-center gap-3" style={{ borderLeft: '3px solid #ec4899' }}>
-          <div className="shrink-0" style={{ color: '#ec4899' }}><Megaphone size={18} /></div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] font-medium">Откуда узнал о нас (опрос)</div>
-            <div className="text-sm font-semibold mt-0.5">{profile.acquisition_channel}</div>
-          </div>
-        </div>
-      )}
 
       <div className="app-card overflow-hidden">
         <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
           <h3 className="font-semibold">История заказов</h3>
         </div>
-        <div className="p-3">
-          <ResponsiveTable
-            data={profile.orders}
-            keyFn={(o) => o.doc_num}
-            emptyText="Нет заказов"
-            columns={[
-              { label: '№ заказа', primary: true, render: (o) => (
-                <div>
-                  <div className="font-medium">{o.doc_num}</div>
-                  <div className="text-xs text-[color:var(--color-muted-foreground)]">{fmtDate(o.date)}</div>
-                </div>
-              )},
-              { label: 'Сумма', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (o) => fmtRub(o.amount) },
-            ]}
-          />
-        </div>
+        {profile.orders.length === 0 ? (
+          <div className="py-6 text-center text-[color:var(--color-muted-foreground)] text-sm">Нет заказов</div>
+        ) : (
+          <div className="divide-y divide-[color:var(--color-border)]">
+            {profile.orders.map((o) => (
+              <OrderRow key={o.doc_num} contragentId={profile.contragent_id} order={o} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -237,7 +282,7 @@ export default function Clients() {
           <form onSubmit={doSearch} className="app-card p-4 flex gap-2">
             <input
               className="input flex-1"
-              placeholder="Имя или телефон клиента…"
+              placeholder="Имя, телефон или номер заказа…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
