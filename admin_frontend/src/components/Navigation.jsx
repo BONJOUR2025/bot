@@ -195,7 +195,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
                     onClick={handleNavigate}
                     title={isCollapsed ? item.label : undefined}
                     className={`flex items-center rounded-xl border border-transparent transition-all duration-150 ${
-                      isCollapsed ? 'justify-center h-10 w-10 mx-auto' : 'gap-3 px-4 py-2'
+                      isCollapsed ? 'justify-center h-10 w-10 mx-auto' : isMobile ? 'gap-3 px-4 py-3' : 'gap-3 px-4 py-2'
                     } ${activeClasses}`}
                   >
                     {Icon && <Icon size={isCollapsed ? 18 : 16} className="flex-shrink-0" />}
