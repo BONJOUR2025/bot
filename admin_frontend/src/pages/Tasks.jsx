@@ -337,7 +337,7 @@ export default function Tasks() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 [&>:last-child]:col-span-2 md:[&>:last-child]:col-span-1">
         {[
           { l: 'Всего',      v: stats.total         || 0, c: '' },
           { l: 'К выполн.',  v: stats.todo          || 0, c: 'text-[color:var(--color-text-faint)]' },
@@ -424,7 +424,12 @@ export default function Tasks() {
                 </div>
                 <div className="space-y-3">
                   {col.map(t => <TaskCard key={t.id} task={t} draggable />)}
-                  {col.length === 0 && <div className="text-center text-[color:var(--color-text-muted)] py-8">Нет задач</div>}
+                  {col.length === 0 && (
+                    <div className="flex flex-col items-center gap-2 text-center text-[color:var(--color-text-muted)] py-8">
+                      <Icon size={22} className="opacity-40" />
+                      <span className="text-sm">Нет задач</span>
+                    </div>
+                  )}
                 </div>
               </div>
             );
