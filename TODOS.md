@@ -1,5 +1,35 @@
 # TODOS.md
 
+## `/admin/payroll-summary` hangs forever at 75% — amoCRM metrics requests never resolve
+
+**What:** The "Сводный отчёт по ФОТ" (payroll summary) page always gets stuck at "3 из 4
+категорий готово" (75%), permanently showing "Менеджеры: Загружаю…". Reproduced 3x across
+fresh page loads (immediate, 5s wait, 20s wait) — always the exact same stuck state.
+
+**Root cause (confirmed via network inspection):** 4 requests to
+`/api/manager-salary/metrics?date_from=...&date_to=...&amo_user_id=...` (one per manager ×
+per period) sit in `pending` state and never complete — no error, no timeout, just hangs.
+This endpoint calls out to amoCRM (`app/services/...`, see CLAUDE.md: "amoCRM (manager
+salary)"). Likely an expired/invalid amoCRM token (CLAUDE.md notes amoCRM tokens
+auto-refresh and get written back to `.env`) or amoCRM itself not responding — the backend
+call has no apparent timeout, so the frontend waits forever with no error state.
+
+**Why it matters:** Whoever needs this report (payroll/finance) currently cannot ever
+generate it — not a slow report, a permanently broken one, with no error message telling
+them why.
+
+**Files:** `app/services/` (amoCRM client + manager-salary metrics), backend only —
+no frontend/CSS fix applies here.
+
+**Context:** Found via full-site `/design-review` visual sweep (`/admin/payroll-summary`),
+2026-07-11. Out of scope for a visual-only pass — needs backend investigation (amoCRM
+token/timeout) as a separate task.
+
+**Depends on / blocked by:** None, but needs someone who can check/refresh amoCRM
+credentials.
+
+---
+
 ## ~~Fix `fmtMoney` decimal rounding in SalaryUI.jsx~~ — DONE (2026-07-11)
 
 Fixed in commit `cbfa264`: shared `fmtMoney` helper in
