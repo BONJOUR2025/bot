@@ -142,8 +142,13 @@ function TaskRow({ icon: Icon, label, count, tone }) {
 
 // ── EmptyState ────────────────────────────────────────────────────────────────
 
-function Empty({ text = 'Нет данных' }) {
-  return <p className="py-2 text-sm text-[color:var(--color-text-muted)]">{text}</p>;
+function Empty({ text = 'Нет данных', icon: Icon }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-6 text-center text-[color:var(--color-text-muted)]">
+      {Icon && <Icon size={22} className="opacity-40" />}
+      <p className="text-sm">{text}</p>
+    </div>
+  );
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -311,7 +316,7 @@ export default function Dashboard() {
           actions={<SectionLink to="/admin/payouts" />}
         >
           {pending.length === 0 ? (
-            <Empty text="Нет запросов на выплату" />
+            <Empty text="Нет запросов на выплату" icon={Wallet} />
           ) : (
             <div className="divide-y divide-[color:var(--color-border)]">
               {pending.slice(0, 7).map((p) => (
@@ -348,7 +353,7 @@ export default function Dashboard() {
           actions={<SectionLink to="/admin/tasks" />}
         >
           {!taskStats ? (
-            <Empty />
+            <Empty text="Нет данных по задачам" icon={ListTodo} />
           ) : (
             <div className="divide-y divide-[color:var(--color-border)]">
               <TaskRow icon={AlertTriangle} label="Просрочено"  count={taskStats.overdue}       tone="danger" />
@@ -373,7 +378,7 @@ export default function Dashboard() {
           actions={<SectionLink to="/admin/vacations" />}
         >
           {vacations.length === 0 ? (
-            <Empty text="Никто не в отпуске" />
+            <Empty text="Никто не в отпуске" icon={Palmtree} />
           ) : (
             <div className="divide-y divide-[color:var(--color-border)]">
               {vacations.map((v) => {
@@ -403,7 +408,7 @@ export default function Dashboard() {
           actions={<SectionLink to="/admin/birthdays" />}
         >
           {birthdays.length === 0 ? (
-            <Empty text="Нет дней рождения в ближайшие 30 дней" />
+            <Empty text="Нет дней рождения в ближайшие 30 дней" icon={CalendarDays} />
           ) : (
             <div className="divide-y divide-[color:var(--color-border)]">
               {birthdays.slice(0, 7).map((b) => {
@@ -442,7 +447,7 @@ export default function Dashboard() {
           actions={<SectionLink to="/admin/sales" label="Подробнее" />}
         >
           {!sales.length ? (
-            <Empty text="Нет данных по продажам за сегодня" />
+            <Empty text="Нет данных по продажам за сегодня" icon={Scissors} />
           ) : (() => {
             // aggregate by employee (description)
             const byEmp = {};
@@ -462,8 +467,9 @@ export default function Dashboard() {
             const totCosmetics = rows.reduce((s, r) => s + r.cosmetics, 0);
             const totShoes     = rows.reduce((s, r) => s + r.shoes, 0);
             const totTotal     = totRepair + totCosmetics + totShoes;
+            const hiddenSalesCount = Math.max(0, rows.length - 5);
             const salesRows = [
-              ...rows,
+              ...rows.slice(0, 5),
               { description: 'Итого', repair: totRepair, cosmetics: totCosmetics, shoes: totShoes, isTotal: true },
             ];
             const salesDonut = [
@@ -558,6 +564,11 @@ export default function Dashboard() {
                   },
                 ]}
               />
+              {hiddenSalesCount > 0 && (
+                <p className="pt-2.5 text-xs text-[color:var(--color-text-muted)]">
+                  + ещё {hiddenSalesCount} — все продажи в разделе «Подробнее» выше
+                </p>
+              )}
               </>
             );
           })()}
@@ -571,15 +582,17 @@ export default function Dashboard() {
           actions={<SectionLink to="/admin/masters" label="Подробнее" />}
         >
           {!masters.salary_summary?.length ? (
-            <Empty text="Нет данных по мастерам за сегодня" />
+            <Empty text="Нет данных по мастерам за сегодня" icon={Trophy} />
           ) : (() => {
             const rows = masters.salary_summary;
             const totKredit = rows.reduce((s, r) => s + (r.total_kredit ?? 0), 0);
             const totSalary = rows.reduce((s, r) => s + (r.total_salary ?? 0), 0);
             const totDone   = rows.reduce((s, r) => s + (r.services_done ?? 0), 0);
             const totWarn   = rows.reduce((s, r) => s + (r.warnings_count ?? 0), 0);
+            const topMasters = [...rows].sort((a, b) => (b.total_kredit ?? 0) - (a.total_kredit ?? 0)).slice(0, 5);
+            const hiddenMastersCount = Math.max(0, rows.length - 5);
             const masterRows = [
-              ...rows,
+              ...topMasters,
               {
                 master: 'Итого',
                 services_done: totDone,
@@ -589,7 +602,6 @@ export default function Dashboard() {
                 isTotal: true,
               },
             ];
-            const topMasters = [...rows].sort((a, b) => (b.total_kredit ?? 0) - (a.total_kredit ?? 0)).slice(0, 5);
             const maxKredit = Math.max(1, ...topMasters.map((m) => m.total_kredit ?? 0));
             return (
               <>
@@ -670,6 +682,11 @@ export default function Dashboard() {
                   },
                 ]}
               />
+              {hiddenMastersCount > 0 && (
+                <p className="pt-2.5 text-xs text-[color:var(--color-text-muted)]">
+                  + ещё {hiddenMastersCount} — все мастера в разделе «Подробнее» выше
+                </p>
+              )}
               </>
             );
           })()}
