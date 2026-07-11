@@ -989,7 +989,9 @@ export default function Payroll() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
-          <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
+          {/* overflow-visible: global `table { overflow: hidden }` (globals.css) clips the
+              sticky ФИО column once horizontal scroll moves it away from its natural position. */}
+          <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)] overflow-visible">
             <thead>
               <tr className="bg-[color:var(--color-table-header)]">
                 <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide w-10"></th>

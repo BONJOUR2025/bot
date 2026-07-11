@@ -68,7 +68,11 @@ export default function ResponsiveTable({
 
   return (
     <div className="overflow-auto border border-[color:var(--color-border)] rounded-xl shadow bg-[color:var(--color-table-bg)]">
-      <table className="min-w-max w-full text-sm text-[color:var(--color-table-text)]">
+      {/* overflow-visible: global `table { overflow: hidden }` (globals.css) clips any sticky
+          column a caller adds via headerClass/cellClass once horizontal scroll moves it away
+          from its natural position. The wrapping div's overflow-auto still clips to the
+          rounded corners, so this doesn't affect the visual rounding. */}
+      <table className="min-w-max w-full text-sm text-[color:var(--color-table-text)] overflow-visible">
         <thead className="bg-[color:var(--color-table-header)]">
           <tr>
             {columns.map((col, ci) => (

@@ -308,7 +308,9 @@ export default function Vacations() {
           </div>
         ) : (
           <div className="overflow-x-auto border rounded shadow bg-[color:var(--color-surface)]">
-            <table className="min-w-[900px] text-xs">
+            {/* overflow-visible: global `table { overflow: hidden }` (globals.css) clips the
+                sticky Сотрудник column once horizontal scroll moves it away from its natural position. */}
+            <table className="min-w-[900px] text-xs overflow-visible">
               <thead className="bg-[color:var(--color-bg-subtle)]">
                 <tr>
                   <th className="p-1 text-left sticky left-0 bg-[color:var(--color-bg-subtle)] z-10">Сотрудник</th>
