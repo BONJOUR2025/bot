@@ -227,7 +227,11 @@ export default function Schedule() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="border-collapse text-xs">
+              {/* overflow-visible: the global `table { overflow: hidden }` rounded-corner
+                  rule (globals.css) clips `position: sticky` descendants — the employee-name
+                  column would render blank once the horizontal scroll brings a later day into
+                  view. The scroll container (div.overflow-x-auto above) still clips normally. */}
+              <table className="border-collapse text-xs overflow-visible">
                 <thead>
                   {/* Строка: дни */}
                   <tr>
