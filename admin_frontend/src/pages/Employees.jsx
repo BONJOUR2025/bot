@@ -87,7 +87,7 @@ function ShareDonut({ data, total, title, icon: Icon, colorOf, activeName, onSel
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="flex-1 space-y-2 min-w-0">
+        <div className="flex-1 w-full space-y-2 min-w-0">
           {data.map((d, i) => {
             const pct = total > 0 ? (d.value / total) * 100 : 0;
             const color = colorOf ? colorOf(d.name, i) : CHART_COLORS[i % CHART_COLORS.length];
