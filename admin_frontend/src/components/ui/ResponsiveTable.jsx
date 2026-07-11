@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { useViewport } from '../../providers/ViewportProvider.jsx';
 
 /**
@@ -23,7 +24,10 @@ export default function ResponsiveTable({
   if (isMobile) {
     if (data.length === 0) {
       return (
-        <div className="py-6 text-center text-[color:var(--color-muted-foreground)] text-sm">{emptyText}</div>
+        <div className="flex flex-col items-center gap-2 py-8 text-center text-[color:var(--color-muted-foreground)] text-sm">
+          <Inbox size={22} className="opacity-40" />
+          {emptyText}
+        </div>
       );
     }
 
@@ -94,8 +98,11 @@ export default function ResponsiveTable({
           ))}
           {data.length === 0 && (
             <tr>
-              <td colSpan={columns.length} className="p-4 text-center text-[color:var(--color-muted-foreground)]">
-                {emptyText}
+              <td colSpan={columns.length} className="p-6 text-center text-[color:var(--color-muted-foreground)]">
+                <div className="flex flex-col items-center gap-2">
+                  <Inbox size={22} className="opacity-40" />
+                  {emptyText}
+                </div>
               </td>
             </tr>
           )}
