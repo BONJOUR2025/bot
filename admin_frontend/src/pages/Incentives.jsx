@@ -277,7 +277,9 @@ export default function Incentives() {
       if (!r.date) continue;
       const d = new Date(r.date);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (!map[key]) map[key] = { key, label: `${MONTHS_RU[d.getMonth()]}`, bonuses: 0, penalties: 0 };
+      // Include a 2-digit year: the 12-month window (below) can span a year boundary,
+      // and without it two bars both labeled "Июл" (a year apart) look identical.
+      if (!map[key]) map[key] = { key, label: `${MONTHS_RU[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`, bonuses: 0, penalties: 0 };
       const amt = Number(r.amount) || 0;
       if (r.type === 'bonus') map[key].bonuses += amt;
       else map[key].penalties += amt;
