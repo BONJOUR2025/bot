@@ -1,6 +1,6 @@
 {
   "appId": "pw.bonjour.app",
-  "appName": "Центр управления",
+  "appName": "Управление B",
   "webDir": "dist",
   "backgroundColor": "#f8fafc",
   "server": {
@@ -14,7 +14,7 @@
   "plugins": {
     "SplashScreen": {
       "launchAutoHide": false,
-      "backgroundColor": "#6366f1",
+      "backgroundColor": "#0A0A0A",
       "androidScaleType": "CENTER_CROP"
     }
   }
