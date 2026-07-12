@@ -132,7 +132,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
   const isCollapsed = !isMobile && collapsed;
 
   return (
-    <nav className={`flex h-full min-h-screen flex-col bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] shadow-xl transition-all duration-200 ${isMobile ? 'w-full' : isCollapsed ? 'w-[64px]' : 'w-[280px]'}`}>
+    <nav className={`flex h-full min-h-screen flex-col bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] shadow-[var(--shadow-xl)] transition-all duration-200 ${isMobile ? 'w-full' : isCollapsed ? 'w-[64px]' : 'w-[280px]'}`}>
 
       {/* Logo — on the mobile drawer this row's background bleeds under the
           status bar/notch on purpose, but the logo/title/close button
@@ -141,7 +141,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
         className={`flex pb-5 pt-7 ${isCollapsed ? 'flex-col items-center gap-2 px-0' : 'items-center gap-4 px-6'}`}
         style={isMobile ? { paddingTop: 'calc(1.75rem + env(safe-area-inset-top, 0px))' } : undefined}
       >
-        <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[0_10px_30px_rgba(0,0,0,0.12)] text-sm font-bold">
+        <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-[var(--ui-radius-btn)] bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[var(--ui-shadow-card)] text-sm font-bold">
           ЦУ
         </div>
         {!isCollapsed && (
@@ -153,7 +153,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
         {isMobile && (
           <button
             type="button"
-            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--color-sidebar-border)] bg-transparent transition hover:bg-[color:var(--color-sidebar-accent)]"
+            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-[var(--ui-radius-badge)] border border-[color:var(--color-sidebar-border)] bg-transparent transition hover:bg-[color:var(--color-sidebar-accent)]"
             onClick={() => typeof onNavigate === 'function' && onNavigate()}
           >
             <X size={18} />
@@ -164,7 +164,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
             type="button"
             onClick={onToggleCollapse}
             title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-            className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)] transition-colors ${isCollapsed ? '' : 'ml-auto'}`}
+            className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)] transition-colors ${isCollapsed ? '' : 'ml-auto'}`}
           >
             {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
@@ -185,7 +185,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
               {category.items.map((item) => {
                 const Icon = item.icon;
                 const activeClasses = item.active
-                  ? 'bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]'
+                  ? 'bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[var(--ui-shadow-card)]'
                   : 'text-[color:var(--color-sidebar-foreground)] opacity-70 hover:bg-[color:var(--color-sidebar-accent)] hover:opacity-100';
 
                 return (
@@ -194,7 +194,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
                     to={item.to}
                     onClick={handleNavigate}
                     title={isCollapsed ? item.label : undefined}
-                    className={`flex items-center rounded-xl border border-transparent transition-all duration-150 ${
+                    className={`flex items-center rounded-[var(--ui-radius-btn)] border border-transparent transition-all duration-150 ${
                       isCollapsed ? 'justify-center h-10 w-10 mx-auto' : isMobile ? 'gap-3 px-4 py-3' : 'gap-3 px-4 py-2'
                     } ${activeClasses}`}
                   >
@@ -211,7 +211,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
       {/* Theme toggle — all three modes shown at once, active one highlighted,
           rather than one button whose label describes a hidden next state. */}
       <div className={`pb-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-        <div className={`flex items-center gap-1 rounded-xl bg-[color:var(--color-sidebar-accent)] p-1 ${isCollapsed ? 'flex-col mx-auto w-10' : ''}`}>
+        <div className={`flex items-center gap-1 rounded-[var(--ui-radius-btn)] bg-[color:var(--color-sidebar-accent)] p-1 ${isCollapsed ? 'flex-col mx-auto w-10' : ''}`}>
           {THEME_MODES.map(({ key, icon: Icon, label }) => (
             <button
               key={key}
@@ -220,7 +220,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
               title={label}
               aria-label={label}
               aria-pressed={mode === key}
-              className={`flex flex-1 items-center justify-center rounded-lg py-1.5 transition-colors ${
+              className={`flex flex-1 items-center justify-center rounded-[var(--radius-sm)] py-1.5 transition-colors ${
                 mode === key
                   ? 'bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)]'
                   : 'text-[color:var(--color-sidebar-foreground)] opacity-60 hover:opacity-100 hover:bg-[color:var(--color-sidebar-accent-foreground)]/10'
@@ -244,7 +244,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
             type="button"
             onClick={onToggleCollapse}
             title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)] transition-colors"
           >
             {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>

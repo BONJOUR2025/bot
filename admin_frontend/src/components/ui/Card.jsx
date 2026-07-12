@@ -1,7 +1,7 @@
 export default function Card({ title, description, actions, children, className = '', style, ...rest }) {
   return (
     <section
-      className={`rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-sm backdrop-blur-sm transition-shadow duration-200 hover:shadow-md ${className}`.trim()}
+      className={`rounded-[var(--ui-radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-[var(--ui-shadow-card)] backdrop-blur-[var(--ui-blur)] transition-shadow duration-200 hover:shadow-[var(--ui-shadow-card-hover)] ${className}`.trim()}
       style={style}
       {...rest}
     >

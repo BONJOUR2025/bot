@@ -150,6 +150,18 @@
   /* ── Convenience borders ────────────────────────────────────── */
   --border-soft:   1px solid var(--color-border);
   --border-strong: 1px solid var(--color-border-strong);
+
+  /* ── UI chrome (component-level, referenced via Tailwind arbitrary
+     values e.g. rounded-[var(--ui-radius-card)] so shared components
+     can be reskinned from tokens alone, no JSX edits) ──────────── */
+  --ui-radius-card:   var(--radius-lg);
+  --ui-radius-btn:    var(--radius-md);
+  --ui-radius-badge:  var(--radius-full);
+  --ui-radius-avatar: 50%;
+  --ui-shadow-card:   var(--shadow-sm);
+  --ui-shadow-card-hover: var(--shadow-md);
+  --ui-shadow-table:  var(--shadow-sm);
+  --ui-blur:          8px;
 }
 
 /* ================================================================
@@ -221,4 +233,160 @@
   --shadow-glow-primary: 0 8px 32px rgba(79, 70, 229, 0.12);
   --shadow-glow-success: 0 8px 32px rgba(5, 150, 105, 0.10);
   --shadow-glow-danger:  0 8px 32px rgba(220, 38, 38, 0.10);
+}
+
+/* ================================================================
+   Industrial Brutalism / Tactical Telemetry theme
+   ================================================================
+   Gated behind VITE_VISUAL_REFRESH=1 (ThemeProvider adds/removes
+   .visual-refresh on <html> — see providers/ThemeProvider.jsx). Off by
+   default: production keeps today's look until this is explicitly
+   turned on. Same variable names as :root/.theme-light above, so every
+   page/component already consuming var(--color-*) etc. picks this up
+   with zero per-page changes.
+
+   Archetype: Tactical Telemetry & CRT Terminal (dark, default) +
+   Swiss Industrial Print (.theme-light). Semantic colors (success/
+   warning/danger/info) are kept distinct rather than collapsed to a
+   single accent — real status meaning across 42 data-dense pages
+   needs it — but desaturated toward the utilitarian palette instead
+   of the old indigo-SaaS hues.
+   ================================================================ */
+.visual-refresh {
+  --color-bg:             #0a0a0a;
+  --color-bg-alt:         #121212;
+  --color-bg-subtle:      #161616;
+  --color-surface:        #121212;
+  --color-surface-raised: #161616;
+  --color-panel:          #101010;
+
+  --color-primary:        #e61919;
+  --color-primary-hover:  #ff2a2a;
+  --color-primary-strong: #b31212;
+  --color-primary-muted:  rgba(230, 25, 25, 0.12);
+  --color-primary-glow:   rgba(230, 25, 25, 0.12);
+
+  --color-accent:         #4af626;
+  --color-accent-strong:  #37c418;
+  --color-accent-muted:   rgba(74, 246, 38, 0.10);
+
+  --color-success:        #4af626;
+  --color-success-muted:  rgba(74, 246, 38, 0.10);
+  --color-warning:        #ffb347;
+  --color-warning-muted:  rgba(255, 179, 71, 0.10);
+  --color-danger:         #e61919;
+  --color-danger-muted:   rgba(230, 25, 25, 0.12);
+  --color-info:           #6fb8ff;
+  --color-info-muted:     rgba(111, 184, 255, 0.10);
+
+  --color-text:           #eaeaea;
+  --color-text-muted:     #9a9a9a;
+  --color-text-faint:     #6b6b6b;
+
+  --color-border:         rgba(234, 234, 234, 0.18);
+  --color-border-strong:  rgba(230, 25, 25, 0.45);
+  --color-border-hover:   rgba(234, 234, 234, 0.32);
+
+  --color-table-bg:          #121212;
+  --color-table-header-bg:   #161616;
+  --color-table-border:      rgba(234, 234, 234, 0.18);
+  --color-table-text:        #eaeaea;
+  --color-table-header-text: #9a9a9a;
+  --color-table-stripe:      rgba(234, 234, 234, 0.02);
+  --color-table-hover:       rgba(234, 234, 234, 0.05);
+
+  --color-control-bg:            rgba(234, 234, 234, 0.04);
+  --color-control-bg-hover:      rgba(234, 234, 234, 0.08);
+  --color-control-border:        rgba(234, 234, 234, 0.22);
+  --color-control-border-strong: var(--color-primary);
+  --color-control-placeholder:   rgba(154, 154, 154, 0.7);
+
+  --color-modal-bg:       #101010;
+  --color-modal-backdrop: rgba(0, 0, 0, 0.6);
+
+  --ring-color: rgba(230, 25, 25, 0.4);
+
+  /* Hard offset shadows, zero blur — no glow, no soft drop shadow. */
+  --shadow-xs: 2px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-sm: 2px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 3px 3px 0 rgba(0, 0, 0, 0.5);
+  --shadow-lg: 4px 4px 0 rgba(0, 0, 0, 0.5);
+  --shadow-xl: 6px 6px 0 rgba(0, 0, 0, 0.5);
+  --shadow-glow-primary: none;
+  --shadow-glow-success: none;
+  --shadow-glow-danger:  none;
+
+  /* Every corner exactly 90 degrees. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-full: 0px;
+
+  --ui-radius-avatar: 0px;
+  --ui-blur: 0px;
+
+  --font-mono-ui: 'IBM Plex Mono', 'Space Mono', ui-monospace, monospace;
+}
+
+.visual-refresh.theme-light {
+  --color-bg:             #f4f4f0;
+  --color-bg-alt:         #eae8e3;
+  --color-bg-subtle:      #ebe9e4;
+  --color-surface:        #f4f4f0;
+  --color-surface-raised: #eae8e3;
+  --color-panel:          #eeece7;
+
+  --color-primary:        #d11515;
+  --color-primary-hover:  #e61919;
+  --color-primary-strong: #a51010;
+  --color-primary-muted:  rgba(209, 21, 21, 0.08);
+  --color-primary-glow:   rgba(209, 21, 21, 0.08);
+
+  --color-accent:         #1c7a4d;
+  --color-accent-strong:  #145c3a;
+  --color-accent-muted:   rgba(28, 122, 77, 0.08);
+
+  --color-success:        #1c7a4d;
+  --color-success-muted:  rgba(28, 122, 77, 0.08);
+  --color-warning:        #a9660a;
+  --color-warning-muted:  rgba(169, 102, 10, 0.08);
+  --color-danger:         #b23a2c;
+  --color-danger-muted:   rgba(178, 58, 44, 0.08);
+  --color-info:           #1e5f8c;
+  --color-info-muted:     rgba(30, 95, 140, 0.08);
+
+  --color-text:           #111111;
+  --color-text-muted:     #4a4a4a;
+  --color-text-faint:     #7a7a7a;
+
+  --color-border:         rgba(17, 17, 17, 0.22);
+  --color-border-strong:  rgba(209, 21, 21, 0.4);
+  --color-border-hover:   rgba(17, 17, 17, 0.36);
+
+  --color-table-bg:          #f4f4f0;
+  --color-table-header-bg:   #eae8e3;
+  --color-table-border:      rgba(17, 17, 17, 0.22);
+  --color-table-text:        #111111;
+  --color-table-header-text: #4a4a4a;
+  --color-table-stripe:      rgba(17, 17, 17, 0.02);
+  --color-table-hover:       rgba(17, 17, 17, 0.05);
+
+  --color-control-bg:            rgba(17, 17, 17, 0.03);
+  --color-control-bg-hover:      rgba(17, 17, 17, 0.06);
+  --color-control-border:        rgba(17, 17, 17, 0.28);
+  --color-control-placeholder:   rgba(74, 74, 74, 0.7);
+
+  --color-modal-bg:       #f4f4f0;
+  --color-modal-backdrop: rgba(17, 17, 17, 0.3);
+
+  --ring-color: rgba(209, 21, 21, 0.35);
+
+  --shadow-xs: 2px 2px 0 rgba(17, 17, 17, 0.12);
+  --shadow-sm: 2px 2px 0 rgba(17, 17, 17, 0.12);
+  --shadow-md: 3px 3px 0 rgba(17, 17, 17, 0.12);
+  --shadow-lg: 4px 4px 0 rgba(17, 17, 17, 0.12);
+  --shadow-xl: 6px 6px 0 rgba(17, 17, 17, 0.12);
 }

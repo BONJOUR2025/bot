@@ -12,7 +12,7 @@ export default function Badge({ children, tone = 'neutral', className = '', styl
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wide ${cls} ${className}`.trim()}
+      className={`inline-flex items-center gap-1 rounded-[var(--ui-radius-badge)] px-2.5 py-0.5 text-xs font-semibold tracking-wide ${cls} ${className}`.trim()}
       style={style}
     >
       {children}

@@ -41,7 +41,7 @@ export default function ResponsiveTable({
           return (
             <div
               key={keyFn(row)}
-              className={`border border-[color:var(--color-border)] rounded-xl bg-[color:var(--color-table-bg)] shadow-sm overflow-hidden ${rowClass?.(row) || ''}`}
+              className={`border border-[color:var(--color-border)] rounded-[var(--ui-radius-card)] bg-[color:var(--color-table-bg)] shadow-[var(--ui-shadow-table)] overflow-hidden ${rowClass?.(row) || ''}`}
             >
               {primaryCol && (
                 <div className="px-4 py-3 border-b border-[color:var(--color-border)] bg-[color:var(--color-table-header)] font-medium text-sm text-[color:var(--color-text-primary)]">
@@ -71,7 +71,7 @@ export default function ResponsiveTable({
   }
 
   return (
-    <div className="overflow-auto border border-[color:var(--color-border)] rounded-xl shadow bg-[color:var(--color-table-bg)]">
+    <div className="overflow-auto border border-[color:var(--color-border)] rounded-[var(--ui-radius-card)] shadow-[var(--ui-shadow-table)] bg-[color:var(--color-table-bg)]">
       {/* overflow-visible: global `table { overflow: hidden }` (globals.css) clips any sticky
           column a caller adds via headerClass/cellClass once horizontal scroll moves it away
           from its natural position. The wrapping div's overflow-auto still clips to the

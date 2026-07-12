@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+const VISUAL_REFRESH = import.meta.env.VITE_VISUAL_REFRESH === '1';
+
 export function TopProgressBar({ active }) {
   const [pct, setPct] = useState(0);
   const [mounted, setMounted] = useState(false);
@@ -47,27 +49,31 @@ export function TopProgressBar({ active }) {
         style={{
           height: '100%',
           width: `${pct}%`,
-          background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)',
-          boxShadow: '0 0 14px rgba(99,102,241,0.75), 0 0 4px rgba(99,102,241,0.95)',
-          borderRadius: '0 2px 2px 0',
+          background: VISUAL_REFRESH ? 'var(--color-primary)' : 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)',
+          boxShadow: VISUAL_REFRESH ? 'none' : '0 0 14px rgba(99,102,241,0.75), 0 0 4px rgba(99,102,241,0.95)',
+          borderRadius: VISUAL_REFRESH ? 0 : '0 2px 2px 0',
           transition: active
             ? 'width 1.5s cubic-bezier(0.08, 0.65, 0.12, 1)'
             : 'width 0.28s ease-out',
           position: 'relative',
         }}
       >
-        {/* Travelling shine */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            right: -24,
-            width: 48,
-            height: '100%',
-            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.65) 50%, transparent 100%)',
-            animation: active ? 'pb-shine 1.8s ease-in-out infinite' : 'none',
-          }}
-        />
+        {/* Travelling shine — a glossy sweep reads as soft/modern, not
+            brutalist, so it's skipped entirely under visual-refresh
+            rather than just recolored. */}
+        {!VISUAL_REFRESH && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: -24,
+              width: 48,
+              height: '100%',
+              background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.65) 50%, transparent 100%)',
+              animation: active ? 'pb-shine 1.8s ease-in-out infinite' : 'none',
+            }}
+          />
+        )}
       </div>
       <style>{`
         @keyframes pb-shine {

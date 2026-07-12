@@ -65,9 +65,9 @@ export function MetricBar({ label, note, plan, fact, ratio, contribution, fmt = 
         <span className="text-sm font-medium">{label}</span>
         <span className="text-sm font-semibold tabular-nums">{fmtMoney(contribution)}</span>
       </div>
-      <div className="mt-2 relative h-2 rounded-full bg-[color:var(--color-bg-secondary)] overflow-visible">
-        <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${fill}%`, background: TONE_VAR[tone] }} />
-        <div className="absolute -top-1 -bottom-1 w-0.5 rounded bg-[color:var(--color-muted-foreground)] opacity-50" style={{ left: '79%' }} title="Порог 79%" />
+      <div className="mt-2 relative h-2 rounded-[var(--ui-radius-badge)] bg-[color:var(--color-bg-secondary)] overflow-visible">
+        <div className="absolute inset-y-0 left-0 rounded-[var(--ui-radius-badge)] transition-all" style={{ width: `${fill}%`, background: TONE_VAR[tone] }} />
+        <div className="absolute -top-1 -bottom-1 w-0.5 rounded-[var(--ui-radius-badge)] bg-[color:var(--color-muted-foreground)] opacity-50" style={{ left: '79%' }} title="Порог 79%" />
       </div>
       <div className="mt-1.5 flex items-center justify-between text-xs text-[color:var(--color-muted-foreground)]">
         <span>план {fmt(plan)} · факт <span className="text-[color:var(--color-text)] font-medium">{fmt(fact)}</span></span>
@@ -80,16 +80,16 @@ export function MetricBar({ label, note, plan, fact, ratio, contribution, fmt = 
 
 export function Tabs({ tabs, active, onChange }) {
   return (
-    <div className="flex gap-1 p-1 rounded-xl bg-[color:var(--color-bg-secondary)] overflow-x-auto">
+    <div className="flex gap-1 p-1 rounded-[var(--ui-radius-btn)] bg-[color:var(--color-bg-secondary)] overflow-x-auto">
       {tabs.map((t) => (
         <button key={t.key} type="button" onClick={() => onChange(t.key)}
-          className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5
+          className={`px-3 py-2 rounded-[var(--ui-radius-btn)] text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5
             ${active === t.key
-              ? 'bg-[color:var(--color-surface)] text-[color:var(--color-text)] shadow-sm'
+              ? 'bg-[color:var(--color-surface)] text-[color:var(--color-text)] shadow-[var(--ui-shadow-card)]'
               : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}>
           {t.icon}{t.label}
           {t.badge != null && t.badge !== 0 && (
-            <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold bg-[color:var(--color-bg)] text-[color:var(--color-muted-foreground)]">{t.badge}</span>
+            <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-[var(--ui-radius-badge)] text-[10px] font-semibold bg-[color:var(--color-bg)] text-[color:var(--color-muted-foreground)]">{t.badge}</span>
           )}
         </button>
       ))}
