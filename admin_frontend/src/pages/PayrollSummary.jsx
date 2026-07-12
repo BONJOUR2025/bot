@@ -364,8 +364,8 @@ function PayrollProgress({ status }) {
           height: '100%',
           width: `${barPct}%`,
           borderRadius: '9999px',
-          background: 'linear-gradient(90deg, #e61919 0%, #9a9a9a 55%, #ff6b5e 100%)',
-          boxShadow: '0 0 12px rgba(99,102,241,0.5)',
+          background: 'var(--color-primary)',
+          boxShadow: 'none',
           transition: 'width 0.45s cubic-bezier(0.4, 0, 0.2, 1)',
         }} />
       </div>
@@ -382,8 +382,8 @@ function PayrollProgress({ status }) {
             <div key={cat.key}
               className="rounded-xl p-3.5 flex items-center gap-2.5 transition-all duration-300"
               style={{
-                background: isLoading ? 'var(--color-primary-muted)' : isDone ? 'rgba(16,185,129,0.08)' : 'var(--color-surface)',
-                border: `1px solid ${isLoading ? 'rgba(99,102,241,0.5)' : isDone ? 'rgba(16,185,129,0.3)' : isError ? 'rgba(239,68,68,0.3)' : 'var(--color-border)'}`,
+                background: isLoading ? 'var(--color-primary-muted)' : isDone ? 'var(--color-success-muted)' : 'var(--color-surface)',
+                border: `1px solid ${isLoading ? 'var(--color-primary)' : isDone ? 'var(--color-success)' : isError ? 'var(--color-danger)' : 'var(--color-border)'}`,
               }}>
               {isLoading
                 ? <RefreshCw size={15} className="animate-spin shrink-0" style={{ color: 'var(--color-primary)' }} />
@@ -755,9 +755,9 @@ export default function PayrollSummary() {
               {/* Reset the app's global dark table styling inside the report */}
               <style>{`.fot-report table,.fot-report thead,.fot-report tbody,.fot-report tfoot,.fot-report tr,.fot-report td,.fot-report th{background:transparent;border:0;color:inherit;box-shadow:none;}`}</style>
 
-              {/* Header — always purple gradient */}
+              {/* Header — flat brand color (was a purple gradient) */}
               <div className="px-10 pt-9 pb-8 text-white flex items-end justify-between"
-                style={{ background: 'linear-gradient(110deg,#e61919 0%,#ffb347 55%,#c9502a 100%)' }}>
+                style={{ background: '#e61919' }}>
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">Сводный отчёт</div>
                   <div className="mt-1 text-[30px] font-extrabold leading-tight">Фонд оплаты труда</div>

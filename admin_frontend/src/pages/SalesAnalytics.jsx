@@ -353,9 +353,7 @@ function DayHeatmap({ data }) {
                 <div className="w-full rounded-t-md transition-all group-hover:opacity-70"
                   style={{
                     height: `${h}%`,
-                    background: wkd
-                      ? 'linear-gradient(to top, #ffb347, #ffb347)'
-                      : 'linear-gradient(to top, #e61919, #e61919)',
+                    background: wkd ? '#ffb347' : '#e61919',
                   }}
                 />
               </div>
@@ -368,8 +366,8 @@ function DayHeatmap({ data }) {
         })}
       </div>
       <div className="flex gap-3 mt-3 text-[10px] text-[color:var(--color-muted-foreground)]">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'linear-gradient(to top,#e61919,#e61919)'}} /> Будни</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'linear-gradient(to top,#ffb347,#ffb347)'}} /> Выходные</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#e61919'}} /> Будни</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#ffb347'}} /> Выходные</span>
       </div>
     </div>
   );

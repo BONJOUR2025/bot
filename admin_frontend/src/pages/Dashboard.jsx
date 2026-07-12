@@ -8,7 +8,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 
-const SALES_COLORS = { repair: '#e61919', cosmetics: '#4af626', shoes: '#ffb347' };
+const SALES_COLORS = { repair: '#818cf8', cosmetics: '#34d399', shoes: '#fbbf24' };
 const SALES_LABELS = { repair: 'Ремонт', cosmetics: 'Косметика', shoes: 'Обувь' };
 const FONT_LINK_ID = 'dashboard-v2-fonts';
 const DISPLAY_FONT = "'Space Grotesk', 'Plus Jakarta Sans', sans-serif";
@@ -71,7 +71,7 @@ function greeting() {
   return 'Добрый вечер';
 }
 
-const VACATION_TONE = { Отпуск: '#6fb8ff', Больничный: '#ffb347', Командировка: 'rgba(255,255,255,0.4)' };
+const VACATION_TONE = { Отпуск: '#38bdf8', Больничный: '#fbbf24', Командировка: 'rgba(255,255,255,0.4)' };
 
 // ── one-time font injection (scoped to this page only) ──────────────────────
 
@@ -212,11 +212,11 @@ function IslandButton({ onClick, disabled, spinning, children }) {
 function StatOrb({ icon: Icon, label, value, sub, tone = 'primary', to, big = false, delay = 0 }) {
   const navigate = useNavigate();
   const toneColor = {
-    primary: '#e61919',
-    warning: '#ffb347',
-    danger: '#c9502a',
-    success: '#4af626',
-    info: '#6fb8ff',
+    primary: '#a5b4fc',
+    warning: '#fbbf24',
+    danger: '#f87171',
+    success: '#34d399',
+    info: '#38bdf8',
     neutral: 'rgba(255,255,255,0.55)',
   }[tone];
 
@@ -269,9 +269,9 @@ function StatOrb({ icon: Icon, label, value, sub, tone = 'primary', to, big = fa
 
 function TaskRow({ icon: Icon, label, count, tone }) {
   const color = {
-    danger: '#c9502a',
-    warning: '#ffb347',
-    info: '#6fb8ff',
+    danger: '#f87171',
+    warning: '#fbbf24',
+    info: '#38bdf8',
     neutral: 'rgba(255,255,255,0.45)',
   }[tone];
   return (
@@ -755,7 +755,7 @@ export default function Dashboard() {
                               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                                 <div
                                   className="h-full rounded-full transition-[width] duration-700 ease-[cubic-bezier(0.32,0.72,0,1)]"
-                                  style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#e61919,#ff6b5e)' }}
+                                  style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#818cf8,#a78bfa)' }}
                                 />
                               </div>
                               <span className="w-20 shrink-0 text-right text-xs font-semibold text-white/85">{fmt(m.total_kredit)} ₽</span>
@@ -772,7 +772,7 @@ export default function Dashboard() {
                           <div className="flex shrink-0 items-center gap-4 text-xs text-white/35">
                             <span>{m.services_done} усл.</span>
                             <span className="font-semibold text-white/70">{fmt(m.total_kredit)} ₽</span>
-                            <span className="font-semibold" style={{ color: '#4af626' }}>{fmt(m.total_salary)} ₽</span>
+                            <span className="font-semibold" style={{ color: '#34d399' }}>{fmt(m.total_salary)} ₽</span>
                             {m.warnings_count > 0 && (
                               <span className="rounded-full bg-red-400/10 px-2 py-0.5 font-semibold text-red-400">{m.warnings_count}</span>
                             )}
@@ -781,7 +781,7 @@ export default function Dashboard() {
                       ))}
                       <div className="flex items-center justify-between rounded-2xl bg-white/[0.05] px-4 py-3 ring-1 ring-white/10">
                         <span className="text-sm font-semibold text-white/85">Итого · {mastersTotals.done} усл.</span>
-                        <span className="text-sm font-semibold" style={{ color: '#4af626' }}>{fmt(mastersTotals.salary)} ₽</span>
+                        <span className="text-sm font-semibold" style={{ color: '#34d399' }}>{fmt(mastersTotals.salary)} ₽</span>
                       </div>
                     </div>
                     {hiddenMastersCount > 0 && (

@@ -455,7 +455,7 @@ export default function CashSummary() {
 
                 {/* Header */}
                 <div className="px-10 pt-9 pb-8 text-white flex items-end justify-between"
-                  style={{ background: 'linear-gradient(110deg,#e61919 0%,#ffb347 55%,#c9502a 100%)' }}>
+                  style={{ background: '#e61919' }}>
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">Сводный отчёт</div>
                     <div className="mt-1 text-[30px] font-extrabold leading-tight">Кассовые перемещения</div>
