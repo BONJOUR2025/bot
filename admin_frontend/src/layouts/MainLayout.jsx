@@ -50,7 +50,6 @@ export default function MainLayout() {
             </button>
           )}
           <div className="app-shell__brand">
-            <span className="app-shell__brand-accent" />
             Центр управления
           </div>
           <div className="app-shell__user">

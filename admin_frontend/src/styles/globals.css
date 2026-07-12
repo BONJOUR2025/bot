@@ -223,13 +223,6 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
   font-size: 1rem;
 }
-.app-shell__brand-accent {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--color-primary) 0%, #a78bfa 100%);
-  box-shadow: var(--shadow-glow-primary);
-}
 
 .app-shell__user {
   margin-left: auto;
@@ -1229,7 +1222,6 @@ tbody tr:last-child td { border-bottom: none; }
   filter: none;
   background: var(--color-primary-hover);
 }
-.visual-refresh .app-shell__brand-accent,
 .visual-refresh .sidebar__badge,
 .visual-refresh .auth-card__logo,
 .visual-refresh .emp-header__logo {
