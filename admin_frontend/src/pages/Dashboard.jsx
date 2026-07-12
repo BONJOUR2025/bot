@@ -4,6 +4,7 @@ import {
   Wallet, CheckCircle, Umbrella, Warning, ArrowUpRight,
   CalendarBlank, Clock, ListChecks, PlayCircle, ArrowsClockwise,
   Scissors, UserPlus, ChatCircle, PaperPlaneTilt, Trophy,
+  Timer, Airplane, Users, Receipt,
 } from '@phosphor-icons/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
@@ -264,13 +265,21 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [recruitNotifs, setRecruitNotifs] = useState(null);
+  const [shiftCheckins, setShiftCheckins] = useState(null); // null = unavailable
+  const [leaveRequests, setLeaveRequests] = useState(null);
+  const [cashBalances, setCashBalances] = useState(null);
+  const [visitorSummary, setVisitorSummary] = useState(null);
+  const [receivables, setReceivables] = useState(null);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [pendRes, vacRes, taskRes, bdRes, mastersRes, salesRes, notifRes] = await Promise.allSettled([
+      const [
+        pendRes, vacRes, taskRes, bdRes, mastersRes, salesRes, notifRes,
+        shiftRes, leaveRes, cashRes, visitorRes, receivablesRes,
+      ] = await Promise.allSettled([
         api.get('payouts/active'),
         api.get('vacations/active'),
         api.get('tasks/stats'),
@@ -278,6 +287,11 @@ export default function Dashboard() {
         api.get('masters/works', { params: { date_from: today, date_to: today } }),
         api.get('sales/daily', { params: { date_from: today, date_to: today } }),
         api.get('recruitment/notifications'),
+        api.get('shift-checkins/', { params: { date_from: today, date_to: today } }),
+        api.get('leave-requests/'),
+        api.get('cash-moves/balances'),
+        api.get('visitor-events/summary', { params: { date_from: today, date_to: today } }),
+        api.get('sales/receivables'),
       ]);
       if (pendRes.status === 'fulfilled') {
         const all = pendRes.value.data ?? [];
@@ -290,6 +304,11 @@ export default function Dashboard() {
       if (mastersRes.status === 'fulfilled') setMasters(mastersRes.value.data ?? null);
       if (salesRes.status === 'fulfilled') setSales(salesRes.value.data ?? null);
       if (notifRes.status === 'fulfilled') setRecruitNotifs(notifRes.value.data ?? null);
+      if (shiftRes.status === 'fulfilled') setShiftCheckins(shiftRes.value.data ?? []);
+      if (leaveRes.status === 'fulfilled') setLeaveRequests(leaveRes.value.data ?? []);
+      if (cashRes.status === 'fulfilled') setCashBalances(cashRes.value.data ?? []);
+      if (visitorRes.status === 'fulfilled') setVisitorSummary(visitorRes.value.data ?? []);
+      if (receivablesRes.status === 'fulfilled') setReceivables(receivablesRes.value.data ?? null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -361,6 +380,134 @@ export default function Dashboard() {
     labelStyle: { color: 'var(--color-text-muted)' },
   };
 
+  // ── extra operational metrics (attendance, leave requests, cash, footfall, receivables) ──
+  const lateCheckins = shiftCheckins ? shiftCheckins.filter((c) => (c.delay_minutes ?? 0) > 0) : null;
+  const pendingLeave = leaveRequests ? leaveRequests.filter((r) => r.status === 'Ожидает') : null;
+  const cashTotal = cashBalances ? Math.round(cashBalances.reduce((s, c) => s + (c.balance || 0), 0)) : null;
+  const topCashRegister = cashBalances && cashBalances.length ? cashBalances[0] : null;
+  const visitorsToday = visitorSummary ? visitorSummary.reduce((s, v) => s + (v.in_count || 0), 0) : null;
+
+  // ── KPI priority ranking — the metric that most needs attention right now
+  // leads as the hero cell, instead of a fixed "pending payouts" slot that
+  // stays prominent even when it's zero. Base priorities (no urgency) keep a
+  // sensible fallback order: overdue tasks > payout approvals > money owed > staff absence.
+  const statDefs = [
+    {
+      key: 'overdue',
+      icon: Warning,
+      label: 'Просрочено задач',
+      value: taskStats?.overdue ?? '—',
+      sub: taskStats?.due_today ? `Сегодня: ${taskStats.due_today}` : undefined,
+      tone: taskStats?.overdue > 0 ? 'danger' : 'neutral',
+      to: '/admin/tasks',
+      priority: taskStats?.overdue > 0 ? 100 : 40,
+    },
+    {
+      key: 'pending',
+      icon: Wallet,
+      label: 'Ожидают одобрения выплаты',
+      value: pending.length,
+      sub: pending.length ? `${fmt(pendingTotal)} ₽ к согласованию` : 'Пусто — можно выдохнуть',
+      tone: 'warning',
+      to: '/admin/payouts',
+      priority: pending.length > 0 ? 90 : 35,
+    },
+    {
+      key: 'approved',
+      icon: CheckCircle,
+      label: 'Одобрено, к выплате',
+      value: approved.length,
+      sub: approved.length ? `${fmt(approvedTotal)} ₽` : undefined,
+      tone: 'success',
+      to: '/admin/payouts',
+      priority: approved.length > 0 ? 85 : 30,
+    },
+    {
+      key: 'lateCheckins',
+      icon: Timer,
+      label: 'Опоздания сегодня',
+      value: lateCheckins ? lateCheckins.length : '—',
+      sub: lateCheckins ? `Явок всего: ${shiftCheckins.length}` : undefined,
+      tone: lateCheckins && lateCheckins.length > 0 ? 'danger' : 'neutral',
+      to: '/admin/shift-checkins',
+      priority: lateCheckins && lateCheckins.length > 0 ? 95 : 38,
+    },
+    {
+      key: 'pendingLeave',
+      icon: Airplane,
+      label: 'Заявки на отпуск',
+      value: pendingLeave ? pendingLeave.length : '—',
+      sub: pendingLeave && pendingLeave.length ? 'Ожидают решения' : undefined,
+      tone: pendingLeave && pendingLeave.length > 0 ? 'warning' : 'neutral',
+      to: '/admin/leave-requests',
+      priority: pendingLeave && pendingLeave.length > 0 ? 70 : 25,
+    },
+    {
+      key: 'vacations',
+      icon: Umbrella,
+      label: 'Сейчас отсутствуют',
+      value: vacations.length,
+      tone: 'info',
+      to: '/admin/vacations',
+      priority: 20,
+    },
+  ];
+  const [heroStat, ...secondaryStats] = [...statDefs].sort((a, b) => b.priority - a.priority);
+
+  // same idea for the payouts-list vs tasks-list panels below: whichever
+  // needs action more right now takes the wider, leading position.
+  const financeUrgency = Math.max(pending.length > 0 ? 90 : 35, approved.length > 0 ? 85 : 30);
+  const tasksUrgency = taskStats?.overdue > 0 ? 100 : 40;
+  const financeFirst = financeUrgency >= tasksUrgency;
+
+  const renderFinancePanel = (delay) => (
+    <BentoCard eyebrow="Финансы" title="Ожидают выплаты" action={<GhostLink to="/admin/payouts" />} delay={delay}>
+      {pending.length === 0 ? (
+        <Empty text="Нет запросов на выплату" icon={Wallet} />
+      ) : (
+        <div>
+          {pending.slice(0, 7).map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2.5 last:border-0">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-[color:var(--color-text)]">{p.name}</div>
+                <div className="flex flex-wrap items-center gap-x-2 text-xs text-[color:var(--color-text-faint)]">
+                  <span>{p.payout_type}</span>
+                  <span>·</span>
+                  <span>{p.method}</span>
+                  <span>·</span>
+                  <span>{fmtTs(p.timestamp)}</span>
+                </div>
+              </div>
+              <span className="shrink-0 text-sm font-semibold text-[color:var(--color-text)]">{fmt(p.amount)} ₽</span>
+            </div>
+          ))}
+          {pending.length > 7 && (
+            <p className="pt-2.5 text-xs text-[color:var(--color-text-faint)]">+ ещё {pending.length - 7}</p>
+          )}
+        </div>
+      )}
+    </BentoCard>
+  );
+
+  const renderTasksPanel = (delay) => (
+    <BentoCard eyebrow="Коммуникации" title="Задачи" action={<GhostLink to="/admin/tasks" />} delay={delay}>
+      {!taskStats ? (
+        <Empty text="Нет данных по задачам" icon={ListChecks} />
+      ) : (
+        <div>
+          <TaskRow icon={Warning} label="Просрочено" count={taskStats.overdue} tone="danger" />
+          <TaskRow icon={Clock} label="Сегодня" count={taskStats.due_today} tone="warning" />
+          <TaskRow icon={PlayCircle} label="В работе" count={taskStats.in_progress} tone="info" />
+          <TaskRow icon={ListChecks} label="В очереди" count={taskStats.todo} tone="neutral" />
+          <div className="flex items-center justify-between pt-2.5 text-xs text-[color:var(--color-text-faint)]">
+            <span>Всего активных</span>
+            <span className="font-medium text-[color:var(--color-text-muted)]">{(taskStats.todo ?? 0) + (taskStats.in_progress ?? 0)}</span>
+          </div>
+        </div>
+      )}
+    </BentoCard>
+  );
+
   return (
     <div className="space-y-5">
       {/* header */}
@@ -393,46 +540,15 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {/* KPI bento: one hero cell + three secondary */}
+          {/* KPI bento: hero + secondary cells, ranked by what needs attention now */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-12">
             <div className="col-span-2 lg:col-span-5">
-              <StatOrb
-                icon={Wallet}
-                label="Ожидают одобрения выплаты"
-                value={pending.length}
-                sub={pending.length ? `${fmt(pendingTotal)} ₽ к согласованию` : 'Пусто — можно выдохнуть'}
-                tone="warning"
-                to="/admin/payouts"
-                big
-              />
+              <StatOrb {...heroStat} big />
             </div>
             <div className="col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:col-span-7">
-              <StatOrb
-                icon={CheckCircle}
-                label="Одобрено, к выплате"
-                value={approved.length}
-                sub={approved.length ? `${fmt(approvedTotal)} ₽` : undefined}
-                tone="success"
-                to="/admin/payouts"
-                delay={60}
-              />
-              <StatOrb
-                icon={Umbrella}
-                label="Сейчас отсутствуют"
-                value={vacations.length}
-                tone="info"
-                to="/admin/vacations"
-                delay={120}
-              />
-              <StatOrb
-                icon={Warning}
-                label="Просрочено задач"
-                value={taskStats?.overdue ?? '—'}
-                sub={taskStats?.due_today ? `Сегодня: ${taskStats.due_today}` : undefined}
-                tone={taskStats?.overdue > 0 ? 'danger' : 'neutral'}
-                to="/admin/tasks"
-                delay={180}
-              />
+              {secondaryStats.map((s, i) => (
+                <StatOrb key={s.key} {...s} delay={60 * (i + 1)} />
+              ))}
             </div>
           </div>
 
@@ -475,55 +591,61 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* payouts + tasks */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <div className="lg:col-span-7">
-              <BentoCard eyebrow="Финансы" title="Ожидают выплаты" action={<GhostLink to="/admin/payouts" />}>
-                {pending.length === 0 ? (
-                  <Empty text="Нет запросов на выплату" icon={Wallet} />
-                ) : (
-                  <div>
-                    {pending.slice(0, 7).map((p) => (
-                      <div key={p.id} className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2.5 last:border-0">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-[color:var(--color-text)]">{p.name}</div>
-                          <div className="flex flex-wrap items-center gap-x-2 text-xs text-[color:var(--color-text-faint)]">
-                            <span>{p.payout_type}</span>
-                            <span>·</span>
-                            <span>{p.method}</span>
-                            <span>·</span>
-                            <span>{fmtTs(p.timestamp)}</span>
-                          </div>
-                        </div>
-                        <span className="shrink-0 text-sm font-semibold text-[color:var(--color-text)]">{fmt(p.amount)} ₽</span>
-                      </div>
-                    ))}
-                    {pending.length > 7 && (
-                      <p className="pt-2.5 text-xs text-[color:var(--color-text-faint)]">+ ещё {pending.length - 7}</p>
-                    )}
-                  </div>
+          {/* business snapshot: cash on hand, today's footfall, outstanding receivables */}
+          {(cashBalances || visitorSummary || receivables) && (
+            <div className="space-y-3">
+              <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
+                // Обзор бизнеса
+              </div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {cashBalances && (
+                  <StatOrb
+                    icon={Wallet}
+                    label="Касса, ₽"
+                    value={fmt(cashTotal)}
+                    sub={topCashRegister ? `${topCashRegister.name}: ${fmt(Math.round(topCashRegister.balance))} ₽` : undefined}
+                    tone="neutral"
+                    to="/admin/cash-summary"
+                  />
                 )}
-              </BentoCard>
+                {visitorSummary && (
+                  <StatOrb
+                    icon={Users}
+                    label="Посетители сегодня"
+                    value={fmt(visitorsToday)}
+                    tone="info"
+                    to="/admin/visitor-counters"
+                    delay={60}
+                  />
+                )}
+                {receivables && (
+                  <StatOrb
+                    icon={Receipt}
+                    label="Дебиторская задолженность, ₽"
+                    value={fmt(receivables.total_amount)}
+                    sub={`${receivables.total_count} заказов · 30 дн.`}
+                    tone={receivables.total_count > 0 ? 'warning' : 'neutral'}
+                    to="/admin/receivables"
+                    delay={120}
+                  />
+                )}
+              </div>
             </div>
+          )}
 
-            <div className="lg:col-span-5">
-              <BentoCard eyebrow="Коммуникации" title="Задачи" action={<GhostLink to="/admin/tasks" />} delay={80}>
-                {!taskStats ? (
-                  <Empty text="Нет данных по задачам" icon={ListChecks} />
-                ) : (
-                  <div>
-                    <TaskRow icon={Warning} label="Просрочено" count={taskStats.overdue} tone="danger" />
-                    <TaskRow icon={Clock} label="Сегодня" count={taskStats.due_today} tone="warning" />
-                    <TaskRow icon={PlayCircle} label="В работе" count={taskStats.in_progress} tone="info" />
-                    <TaskRow icon={ListChecks} label="В очереди" count={taskStats.todo} tone="neutral" />
-                    <div className="flex items-center justify-between pt-2.5 text-xs text-[color:var(--color-text-faint)]">
-                      <span>Всего активных</span>
-                      <span className="font-medium text-[color:var(--color-text-muted)]">{(taskStats.todo ?? 0) + (taskStats.in_progress ?? 0)}</span>
-                    </div>
-                  </div>
-                )}
-              </BentoCard>
-            </div>
+          {/* payouts + tasks: whichever needs action more right now leads */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            {financeFirst ? (
+              <>
+                <div className="lg:col-span-7">{renderFinancePanel(0)}</div>
+                <div className="lg:col-span-5">{renderTasksPanel(80)}</div>
+              </>
+            ) : (
+              <>
+                <div className="lg:col-span-7">{renderTasksPanel(0)}</div>
+                <div className="lg:col-span-5">{renderFinancePanel(80)}</div>
+              </>
+            )}
           </div>
 
           {/* vacations + birthdays */}
