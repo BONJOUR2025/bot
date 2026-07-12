@@ -21,22 +21,22 @@ const WARNING_SEVERITY = {
 };
 
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
-const CHART_COLORS = { high: '#ef4444', medium: '#f59e0b', low: '#6366f1' };
+const CHART_COLORS = { high: '#c9502a', medium: '#ffb347', low: '#e61919' };
 
 const fmtMoney = (v) => `${Math.round(Number(v) || 0).toLocaleString('ru-RU')} ₽`;
 
 function KpiCard({ label, value, sub, accent, icon: Icon }) {
   return (
-    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#6366f1'}` }}>
+    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#e61919'}` }}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
-          <div className="text-xl font-bold truncate" style={{ color: accent || '#6366f1' }}>{value}</div>
+          <div className="text-xl font-bold truncate" style={{ color: accent || '#e61919' }}>{value}</div>
           {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
         </div>
         {Icon && (
-          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#6366f118' }}>
-            <Icon size={20} style={{ color: accent || '#6366f1' }} />
+          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#e6191918' }}>
+            <Icon size={20} style={{ color: accent || '#e61919' }} />
           </div>
         )}
       </div>
@@ -111,7 +111,7 @@ function WarningBreakdown({ data, activeWarning, onSelect }) {
         {data.map((d) => {
           const pct = max > 0 ? (d.count / max) * 100 : 0;
           const isActive = activeWarning === d.key;
-          const color = CHART_COLORS[WARNING_SEVERITY[d.key]] || '#6366f1';
+          const color = CHART_COLORS[WARNING_SEVERITY[d.key]] || '#e61919';
           return (
             <button key={d.key} type="button" onClick={() => onSelect?.(d.key)}
               className={`w-full text-left rounded-lg -mx-1 px-1 py-1 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
@@ -249,10 +249,10 @@ export default function PayoutsControl() {
       {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Всего заявок" value={String(stats.total)} sub={fmtMoney(stats.totalAmount)} accent="#6366f1" icon={ListChecks} />
-            <KpiCard label="С предупреждениями" value={String(stats.flagged)} sub={fmtMoney(stats.flaggedAmount)} accent="#ef4444" icon={AlertTriangle} />
-            <KpiCard label="Без замечаний" value={String(stats.clean)} sub={stats.total ? `${Math.round((stats.clean / stats.total) * 100)}% от всех` : ''} accent="#10b981" icon={ShieldAlert} />
-            <KpiCard label="Высокий риск" value={String(stats.sevCount['Высокий риск'])} sub="требуют проверки в первую очередь" accent="#ef4444" icon={AlertTriangle} />
+            <KpiCard label="Всего заявок" value={String(stats.total)} sub={fmtMoney(stats.totalAmount)} accent="#e61919" icon={ListChecks} />
+            <KpiCard label="С предупреждениями" value={String(stats.flagged)} sub={fmtMoney(stats.flaggedAmount)} accent="#c9502a" icon={AlertTriangle} />
+            <KpiCard label="Без замечаний" value={String(stats.clean)} sub={stats.total ? `${Math.round((stats.clean / stats.total) * 100)}% от всех` : ''} accent="#4af626" icon={ShieldAlert} />
+            <KpiCard label="Высокий риск" value={String(stats.sevCount['Высокий риск'])} sub="требуют проверки в первую очередь" accent="#c9502a" icon={AlertTriangle} />
           </div>
 
           <div className="grid lg:grid-cols-2 gap-4">

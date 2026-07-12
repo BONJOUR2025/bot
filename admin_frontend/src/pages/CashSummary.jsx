@@ -14,7 +14,7 @@ const HIDDEN_CATS_KEY = 'cashSummary.hiddenCategories';
 const NO_CATEGORY = '__NONE__';
 const NO_CATEGORY_LABEL = 'Без категории';
 
-const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899'];
+const CHART_COLORS = ['#e61919', '#4af626', '#ffb347', '#c9502a', '#9a9a9a', '#6fb8ff', '#ff8c42', '#ff6b5e'];
 const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
 // Same scale-to-fit trick as PayrollSummary: the report DOM stays at full
@@ -71,7 +71,7 @@ const DARK = {
   bg: 'var(--color-surface)', bg2: 'var(--color-table-header-bg)', bg3: 'var(--color-control-bg)',
   ink: 'var(--color-text)', muted: 'var(--color-text-muted)', line: 'var(--color-border)',
 };
-const BRAND = '#6366f1';
+const BRAND = '#e61919';
 const RTC = createContext(DARK);
 
 function loadHiddenCats() {
@@ -455,7 +455,7 @@ export default function CashSummary() {
 
                 {/* Header */}
                 <div className="px-10 pt-9 pb-8 text-white flex items-end justify-between"
-                  style={{ background: 'linear-gradient(110deg,#4f46e5 0%,#7c3aed 55%,#9333ea 100%)' }}>
+                  style={{ background: 'linear-gradient(110deg,#e61919 0%,#ffb347 55%,#c9502a 100%)' }}>
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">Сводный отчёт</div>
                     <div className="mt-1 text-[30px] font-extrabold leading-tight">Кассовые перемещения</div>
@@ -474,7 +474,7 @@ export default function CashSummary() {
                     <KpiCard icon={Wallet} label="Итого по отчёту" value={fmtMoney(totalSum)} sub={`${visibleRows.length} из ${totalRows} записей`} color={BRAND} />
                     <KpiCard icon={Tag} label="Категорий показано" value={String(catBreakdown.length)} sub={`из ${categories.length + (hasUncategorized ? 1 : 0)} всего`} />
                     <KpiCard icon={Building2} label="Филиалов" value={String(branchBreakdown.length)} sub="с движениями за период" />
-                    <KpiCard icon={SlidersHorizontal} label="Скрыто настройкой" value={fmtMoney(hiddenSum)} sub={`${hiddenCount} записей исключено`} color={hiddenCount ? '#ef4444' : undefined} />
+                    <KpiCard icon={SlidersHorizontal} label="Скрыто настройкой" value={fmtMoney(hiddenSum)} sub={`${hiddenCount} записей исключено`} color={hiddenCount ? '#c9502a' : undefined} />
                   </div>
 
                   {/* Trend */}
@@ -517,7 +517,7 @@ export default function CashSummary() {
                   <Section title="Активность по дням недели" icon={ArrowUpDown}>
                     <div className="space-y-2.5">
                       {dayData.map((d) => (
-                        <BarRow key={d.day} label={d.day} value={d.sum} max={maxDay} color={(d.day === 'Вс' || d.day === 'Сб') ? '#f59e0b' : BRAND} right={fmtMoney(d.sum)} />
+                        <BarRow key={d.day} label={d.day} value={d.sum} max={maxDay} color={(d.day === 'Вс' || d.day === 'Сб') ? '#ffb347' : BRAND} right={fmtMoney(d.sum)} />
                       ))}
                     </div>
                   </Section>

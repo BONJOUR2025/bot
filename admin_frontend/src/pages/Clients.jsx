@@ -105,11 +105,11 @@ function ClientCard({ profile }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <KpiStat label="LTV (всего потрачено)" value={fmtRub(profile.total_spent)} accent="#6366f1" icon={<Wallet size={18} />} />
-        <KpiStat label="Средний чек" value={fmtRub(profile.avg_check)} accent="#22c55e" icon={<ShoppingBag size={18} />} />
-        <KpiStat label="Заказов" value={profile.order_count.toLocaleString('ru-RU')} accent="#f59e0b" icon={<Calendar size={18} />} />
+        <KpiStat label="LTV (всего потрачено)" value={fmtRub(profile.total_spent)} accent="#e61919" icon={<Wallet size={18} />} />
+        <KpiStat label="Средний чек" value={fmtRub(profile.avg_check)} accent="#4af626" icon={<ShoppingBag size={18} />} />
+        <KpiStat label="Заказов" value={profile.order_count.toLocaleString('ru-RU')} accent="#ffb347" icon={<Calendar size={18} />} />
         {profile.acquisition_channel && (
-          <KpiStat label="Канал" value={profile.acquisition_channel} accent="#ec4899" icon={<Megaphone size={18} />} />
+          <KpiStat label="Канал" value={profile.acquisition_channel} accent="#ff6b5e" icon={<Megaphone size={18} />} />
         )}
       </div>
 

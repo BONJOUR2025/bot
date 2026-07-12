@@ -122,8 +122,8 @@ export default function Receivables() {
       {loaded && !loading && data && (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <KpiStat label="Не погашено всего" value={fmtRub(data.total_amount)} accent="#ef4444" icon={<AlertTriangle size={18} />} />
-            <KpiStat label="Заказов с долгом" value={data.total_count.toLocaleString('ru-RU')} accent="#f59e0b" icon={<Landmark size={18} />} />
+            <KpiStat label="Не погашено всего" value={fmtRub(data.total_amount)} accent="#c9502a" icon={<AlertTriangle size={18} />} />
+            <KpiStat label="Заказов с долгом" value={data.total_count.toLocaleString('ru-RU')} accent="#ffb347" icon={<Landmark size={18} />} />
           </div>
 
           <div className="app-card overflow-hidden">

@@ -13,9 +13,9 @@ import { useToast } from '../providers/ToastProvider.jsx';
 // ── Constants ────────────────────────────────────────────────────
 const PRIORITIES = [
   { value: 'low',    label: 'Низкий',  dot: '#6b7280' },
-  { value: 'medium', label: 'Средний', dot: '#3b82f6' },
-  { value: 'high',   label: 'Высокий', dot: '#f97316' },
-  { value: 'urgent', label: 'Срочный', dot: '#ef4444' },
+  { value: 'medium', label: 'Средний', dot: '#6fb8ff' },
+  { value: 'high',   label: 'Высокий', dot: '#ff8c42' },
+  { value: 'urgent', label: 'Срочный', dot: '#c9502a' },
 ];
 
 const STATUSES = [
@@ -28,8 +28,8 @@ const DAY_NAMES   = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTH_NAMES = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
 const DEFAULT_CAT_COLORS = [
-  '#6366f1','#8b5cf6','#ec4899','#ef4444','#f97316',
-  '#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6',
+  '#e61919','#9a9a9a','#ff6b5e','#c9502a','#ff8c42',
+  '#ffb347','#4af626','#37c418','#22b8b8','#6fb8ff',
 ];
 const DEFAULT_CAT_ICONS = ['📋','💼','🏠','🎯','🚀','💡','📚','🔧','💰','🎮'];
 
@@ -55,7 +55,7 @@ export default function Tasks() {
     id: null, title: '', description: '', due_date: '', due_time: '',
     priority: 'medium', status: 'todo', category: '', tags: [], reminder_minutes: null,
   };
-  const emptyCatForm = { id: null, name: '', color: '#6366f1', icon: '📋' };
+  const emptyCatForm = { id: null, name: '', color: '#e61919', icon: '📋' };
 
   const [tasks, setTasks]           = useState([]);
   const [stats, setStats]           = useState({});
@@ -248,7 +248,7 @@ export default function Tasks() {
     const cat = getCat(task.category);
     const over = isOverdue(task);
     const tod  = isToday(task);
-    const leftColor = cat?.color || (over ? '#ef4444' : tod ? '#eab308' : null);
+    const leftColor = cat?.color || (over ? '#c9502a' : tod ? '#ffb347' : null);
 
     return (
       <div className={`bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-colors ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}

@@ -1133,6 +1133,75 @@ tbody tr:last-child td { border-bottom: none; }
   );
 }
 
+/* Every corner exactly 90 degrees, app-wide — catches the ~38 page
+   files that hardcode Tailwind rounded-* utility classes directly
+   (bypassing the Card/Badge/Button/ResponsiveTable components already
+   fixed at the token level) without editing each one individually.
+   Substring attribute matching: "rounded-2xl" and "rounded-xl" don't
+   collide (the former never contains the literal substring
+   "rounded-xl"), so no ordering dependency between rules. */
+.visual-refresh [class*="rounded-"] { border-radius: 0 !important; }
+
+/* Same trick for box-shadow — collapse every shadow-* utility to the
+   hard-offset tokens instead of Tailwind's blurred defaults. Kept in
+   three tiers (not one) so pages that intentionally used a bigger
+   shadow for more emphasis don't all flatten to one identical size. */
+.visual-refresh [class*="shadow-2xl"],
+.visual-refresh [class*="shadow-xl"] { box-shadow: var(--shadow-lg) !important; }
+.visual-refresh [class*="shadow-lg"] { box-shadow: var(--shadow-md) !important; }
+.visual-refresh [class*="shadow-md"],
+.visual-refresh [class*="shadow-sm"] { box-shadow: var(--shadow-xs) !important; }
+
+/* backdrop-blur-* utilities used directly in page JSX (not just the
+   handful of named globals.css classes already covered above). */
+.visual-refresh [class*="backdrop-blur"] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+/* Tailwind gradient utilities (bg-gradient-to-*, from-color, via-color, to-color) —
+   collapse to the "from" stop's color so text/contrast on top still
+   works, rather than leaving a two-tone gradient in a flat-color
+   design language. Pages don't set arbitrary --tw-gradient-from
+   values often enough to need per-hue overrides here; this mainly
+   catches the primary/danger/success brand gradients already themed
+   via var(--color-*) elsewhere in these same components. */
+.visual-refresh [class*="bg-gradient-to"] { background-image: none !important; }
+
+/* Catch-all for raw Tailwind color utilities at shades the manual
+   bg/text/border table above doesn't enumerate (that table only lists
+   the 50, 100, 200, 300, 400, 700, 800 shades actually seen when it
+   was written — a fresh text-blue-600 or bg-emerald-900 anywhere in
+   the other 41 pages would otherwise fall straight through to raw
+   Tailwind color, breaking the flat utilitarian palette). Substring
+   family match plus !important beats the table above when both match
+   the same element, which is fine — same target token either way. */
+.visual-refresh [class*="text-red-"],   .visual-refresh [class*="text-rose-"]    { color: var(--color-danger) !important; }
+.visual-refresh [class*="text-green-"], .visual-refresh [class*="text-emerald-"]{ color: var(--color-success) !important; }
+.visual-refresh [class*="text-yellow-"],.visual-refresh [class*="text-amber-"], .visual-refresh [class*="text-orange-"] { color: var(--color-warning) !important; }
+.visual-refresh [class*="text-blue-"],  .visual-refresh [class*="text-sky-"],   .visual-refresh [class*="text-cyan-"],
+.visual-refresh [class*="text-teal-"]                                          { color: var(--color-info) !important; }
+.visual-refresh [class*="text-indigo-"],.visual-refresh [class*="text-purple-"],.visual-refresh [class*="text-violet-"],
+.visual-refresh [class*="text-fuchsia-"]                                       { color: var(--color-primary) !important; }
+.visual-refresh [class*="text-gray-"],  .visual-refresh [class*="text-slate-"], .visual-refresh [class*="text-zinc-"],
+.visual-refresh [class*="text-neutral-"],.visual-refresh [class*="text-stone-"]{ color: var(--color-text-muted) !important; }
+
+.visual-refresh [class*="bg-red-"],   .visual-refresh [class*="bg-rose-"]     { background-color: var(--color-danger-muted) !important; }
+.visual-refresh [class*="bg-green-"], .visual-refresh [class*="bg-emerald-"] { background-color: var(--color-success-muted) !important; }
+.visual-refresh [class*="bg-yellow-"],.visual-refresh [class*="bg-amber-"],  .visual-refresh [class*="bg-orange-"] { background-color: var(--color-warning-muted) !important; }
+.visual-refresh [class*="bg-blue-"],  .visual-refresh [class*="bg-sky-"],    .visual-refresh [class*="bg-cyan-"],
+.visual-refresh [class*="bg-teal-"]                                         { background-color: var(--color-info-muted) !important; }
+.visual-refresh [class*="bg-indigo-"],.visual-refresh [class*="bg-purple-"], .visual-refresh [class*="bg-violet-"],
+.visual-refresh [class*="bg-fuchsia-"]                                      { background-color: var(--color-primary-muted) !important; }
+.visual-refresh [class*="bg-gray-"],  .visual-refresh [class*="bg-slate-"],  .visual-refresh [class*="bg-zinc-"],
+.visual-refresh [class*="bg-neutral-"],.visual-refresh [class*="bg-stone-"] { background-color: var(--color-control-bg) !important; }
+
+.visual-refresh [class*="border-red-"],   .visual-refresh [class*="border-rose-"]     { border-color: var(--color-danger) !important; }
+.visual-refresh [class*="border-green-"], .visual-refresh [class*="border-emerald-"]  { border-color: var(--color-success) !important; }
+.visual-refresh [class*="border-yellow-"],.visual-refresh [class*="border-amber-"],
+.visual-refresh [class*="border-orange-"]                                            { border-color: var(--color-warning) !important; }
+.visual-refresh [class*="border-blue-"],  .visual-refresh [class*="border-sky-"],
+.visual-refresh [class*="border-cyan-"],  .visual-refresh [class*="border-teal-"]     { border-color: var(--color-info) !important; }
+.visual-refresh [class*="border-indigo-"],.visual-refresh [class*="border-purple-"],
+.visual-refresh [class*="border-violet-"],.visual-refresh [class*="border-fuchsia-"]  { border-color: var(--color-primary) !important; }
+
 /* No translucency anywhere — flatten every backdrop-filter to a solid
    surface (already opaque via tokens.css .visual-refresh colors above). */
 .visual-refresh .app-shell__sidebar,

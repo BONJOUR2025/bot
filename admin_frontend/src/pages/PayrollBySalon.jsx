@@ -14,7 +14,7 @@ const fmtRub = (v) => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU')
 
 // Fixed hue order — never reassigned by value/rank, so a component keeps
 // its color regardless of how big it is this month.
-const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
+const CHART_COLORS = ['#e61919', '#4af626', '#ffb347', '#9a9a9a', '#6fb8ff'];
 const UNALLOCATED_COLOR = '#94a3b8';
 
 const BREAKDOWN_FIELDS = [

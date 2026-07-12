@@ -11,23 +11,23 @@ import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 
-const CHART_COLORS = ['#10b981', '#ef4444', '#6366f1', '#f59e0b'];
+const CHART_COLORS = ['#4af626', '#c9502a', '#e61919', '#ffb347'];
 const MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 
 const fmtMoney = (v) => `${Math.round(Number(v) || 0).toLocaleString('ru-RU')} ₽`;
 
 function KpiCard({ label, value, sub, accent, icon: Icon }) {
   return (
-    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#6366f1'}` }}>
+    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#e61919'}` }}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
-          <div className="text-xl font-bold truncate" style={{ color: accent || '#6366f1' }}>{value}</div>
+          <div className="text-xl font-bold truncate" style={{ color: accent || '#e61919' }}>{value}</div>
           {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
         </div>
         {Icon && (
-          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#6366f118' }}>
-            <Icon size={20} style={{ color: accent || '#6366f1' }} />
+          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#e6191918' }}>
+            <Icon size={20} style={{ color: accent || '#e61919' }} />
           </div>
         )}
       </div>
@@ -115,8 +115,8 @@ function EmployeeLeaderboard({ data, activeName, onSelect }) {
                 </div>
               </div>
               <div className="flex gap-1 h-1.5 rounded-full overflow-hidden bg-[color:var(--color-bg-secondary)]">
-                {r.bonuses > 0 && <div style={{ width: `${(r.bonuses / (r.bonuses + r.penalties || 1)) * 100}%`, background: '#10b981' }} />}
-                {r.penalties > 0 && <div style={{ width: `${(r.penalties / (r.bonuses + r.penalties || 1)) * 100}%`, background: '#ef4444' }} />}
+                {r.bonuses > 0 && <div style={{ width: `${(r.bonuses / (r.bonuses + r.penalties || 1)) * 100}%`, background: '#4af626' }} />}
+                {r.penalties > 0 && <div style={{ width: `${(r.penalties / (r.bonuses + r.penalties || 1)) * 100}%`, background: '#c9502a' }} />}
               </div>
             </button>
           );
@@ -319,10 +319,10 @@ export default function Incentives() {
       {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Премии" value={fmtMoney(totals.bonuses)} sub={`${totals.bonusCount} записей`} accent="#10b981" icon={TrendingUp} />
-            <KpiCard label="Штрафы" value={fmtMoney(totals.penalties)} sub={`${totals.penaltyCount} записей`} accent="#ef4444" icon={TrendingDown} />
-            <KpiCard label="Чистый итог" value={`${totals.net >= 0 ? '+' : ''}${fmtMoney(totals.net)}`} sub="премии − штрафы" accent={totals.net >= 0 ? '#10b981' : '#ef4444'} icon={Coins} />
-            <KpiCard label="Сотрудников" value={String(totals.employees)} sub="затронуто записями" accent="#6366f1" icon={Users} />
+            <KpiCard label="Премии" value={fmtMoney(totals.bonuses)} sub={`${totals.bonusCount} записей`} accent="#4af626" icon={TrendingUp} />
+            <KpiCard label="Штрафы" value={fmtMoney(totals.penalties)} sub={`${totals.penaltyCount} записей`} accent="#c9502a" icon={TrendingDown} />
+            <KpiCard label="Чистый итог" value={`${totals.net >= 0 ? '+' : ''}${fmtMoney(totals.net)}`} sub="премии − штрафы" accent={totals.net >= 0 ? '#4af626' : '#c9502a'} icon={Coins} />
+            <KpiCard label="Сотрудников" value={String(totals.employees)} sub="затронуто записями" accent="#e61919" icon={Users} />
           </div>
 
           <div className="grid lg:grid-cols-2 gap-4">
@@ -342,8 +342,8 @@ export default function Incentives() {
                   <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--color-bg-secondary)' }} />
-                  <Bar dataKey="bonuses" name="Премии" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="penalties" name="Штрафы" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="bonuses" name="Премии" fill="#4af626" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="penalties" name="Штрафы" fill="#c9502a" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

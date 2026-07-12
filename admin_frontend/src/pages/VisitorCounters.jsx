@@ -251,9 +251,9 @@ export default function VisitorCounters() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <KpiCard label="Вошло за период" value={totals.in} accent="#10b981" icon={LogIn} />
-        <KpiCard label="Вышло за период" value={totals.out} accent="#f59e0b" icon={LogOut} />
-        <KpiCard label="Сейчас в зале" value={Math.max(0, totals.in - totals.out)} accent="#6366f1" icon={UsersRound} />
+        <KpiCard label="Вошло за период" value={totals.in} accent="#4af626" icon={LogIn} />
+        <KpiCard label="Вышло за период" value={totals.out} accent="#ffb347" icon={LogOut} />
+        <KpiCard label="Сейчас в зале" value={Math.max(0, totals.in - totals.out)} accent="#e61919" icon={UsersRound} />
       </div>
 
       {tab === 'table' && (
@@ -319,7 +319,7 @@ function VisitorAnalytics({ summary, loading }) {
             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} width={40} />
             <Tooltip />
-            <Bar dataKey="visits" name="Посещений" fill="#6366f1" isAnimationActive={false} />
+            <Bar dataKey="visits" name="Посещений" fill="#e61919" isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -332,7 +332,7 @@ function VisitorAnalytics({ summary, loading }) {
             <XAxis type="number" tick={{ fontSize: 11 }} />
             <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
             <Tooltip />
-            <Bar dataKey="visits" name="Посещений" fill="#6366f1" isAnimationActive={false} />
+            <Bar dataKey="visits" name="Посещений" fill="#e61919" isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>

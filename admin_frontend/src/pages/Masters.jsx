@@ -14,7 +14,7 @@ import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { fmtMoney, Term, StatCard, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
 
-const CHART_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899'];
+const CHART_COLORS = ['#e61919','#4af626','#ffb347','#c9502a','#9a9a9a','#6fb8ff','#ff8c42','#ff6b5e'];
 const DAY_NAMES    = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 
 const fmt    = (v) => (v == null ? '—' : v);
@@ -423,7 +423,7 @@ function ServiceDayHeatmap({ data, activeDay, onSelect }) {
               <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
                 <div
                   className="h-full rounded-lg transition-all duration-500"
-                  style={{ width: `${pct}%`, background: isWeekend ? '#f59e0b' : '#6366f1', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
+                  style={{ width: `${pct}%`, background: isWeekend ? '#ffb347' : '#e61919', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
                 />
               </div>
               <div className="text-xs font-medium w-16 text-right shrink-0">{d.count} усл.</div>
@@ -432,8 +432,8 @@ function ServiceDayHeatmap({ data, activeDay, onSelect }) {
         })}
       </div>
       <div className="flex gap-4 mt-4 text-xs text-[color:var(--color-muted-foreground)]">
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#6366f1' }} />Будни</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#f59e0b' }} />Выходные</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#e61919' }} />Будни</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#ffb347' }} />Выходные</span>
       </div>
     </div>
   );
@@ -623,7 +623,7 @@ export default function Masters() {
   }, [filtered]);
 
   const statusDonutData = useMemo(() => {
-    const colors = { 'Выполнено': '#10b981', 'В работе': '#f59e0b', 'Прочее': '#94a3b8' };
+    const colors = { 'Выполнено': '#4af626', 'В работе': '#ffb347', 'Прочее': '#94a3b8' };
     const counts = {};
     filtered.forEach((r) => {
       const s = r.status || 'Прочее';

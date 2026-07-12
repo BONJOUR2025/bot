@@ -230,14 +230,14 @@ async function loadCouriers(dateFrom, dateTo) {
 }
 
 const CATS = [
-  { key: 'admins', title: 'Администраторы', icon: Calculator, color: '#6366f1', load: loadAdmins },
-  { key: 'masters', title: 'Мастера', icon: Hammer, color: '#f59e0b', load: loadMasters },
-  { key: 'managers', title: 'Менеджеры', icon: Users, color: '#10b981', load: loadManagers },
-  { key: 'couriers', title: 'Курьеры', icon: Truck, color: '#ec4899', load: loadCouriers },
+  { key: 'admins', title: 'Администраторы', icon: Calculator, color: '#e61919', load: loadAdmins },
+  { key: 'masters', title: 'Мастера', icon: Hammer, color: '#ffb347', load: loadMasters },
+  { key: 'managers', title: 'Менеджеры', icon: Users, color: '#4af626', load: loadManagers },
+  { key: 'couriers', title: 'Курьеры', icon: Truck, color: '#ff6b5e', load: loadCouriers },
 ];
 
 // Accent colors — fixed, look good in both themes
-const BRAND = '#6366f1', DANGER = '#ef4444';
+const BRAND = '#e61919', DANGER = '#c9502a';
 
 // Light theme for PNG export
 const LIGHT = {
@@ -364,7 +364,7 @@ function PayrollProgress({ status }) {
           height: '100%',
           width: `${barPct}%`,
           borderRadius: '9999px',
-          background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)',
+          background: 'linear-gradient(90deg, #e61919 0%, #9a9a9a 55%, #ff6b5e 100%)',
           boxShadow: '0 0 12px rgba(99,102,241,0.5)',
           transition: 'width 0.45s cubic-bezier(0.4, 0, 0.2, 1)',
         }} />
@@ -387,12 +387,12 @@ function PayrollProgress({ status }) {
               }}>
               {isLoading
                 ? <RefreshCw size={15} className="animate-spin shrink-0" style={{ color: 'var(--color-primary)' }} />
-                : <Icon size={15} style={{ color: isDone ? '#10b981' : isError ? '#ef4444' : cat.color, flexShrink: 0 }} />
+                : <Icon size={15} style={{ color: isDone ? '#4af626' : isError ? '#c9502a' : cat.color, flexShrink: 0 }} />
               }
               <div className="min-w-0">
                 <div className="text-xs font-semibold truncate text-[color:var(--color-text)]">{cat.title}</div>
                 <div className="text-[10px] mt-0.5" style={{
-                  color: isDone ? '#10b981' : isError ? '#ef4444' : isLoading ? 'var(--color-primary)' : 'var(--color-text-faint)',
+                  color: isDone ? '#4af626' : isError ? '#c9502a' : isLoading ? 'var(--color-primary)' : 'var(--color-text-faint)',
                 }}>
                   {isDone ? '✓ Готово' : isError ? '✗ Ошибка' : isLoading ? 'Загружаю…' : 'Ожидание'}
                 </div>
@@ -646,9 +646,9 @@ export default function PayrollSummary() {
   const maxCat = Math.max(1, ...cats.map((c) => c.totals.gross));
   const maxTop = Math.max(1, ...topEarners.map((r) => r.to_pay));
   const comp = [
-    { label: 'Оклад', value: grand.oklad, color: '#6366f1' },
-    { label: 'Комиссия / KPI', value: grand.commission, color: '#10b981' },
-    { label: 'Премии', value: grand.bonuses, color: '#f59e0b' },
+    { label: 'Оклад', value: grand.oklad, color: '#e61919' },
+    { label: 'Комиссия / KPI', value: grand.commission, color: '#4af626' },
+    { label: 'Премии', value: grand.bonuses, color: '#ffb347' },
   ].filter((s) => s.value > 0);
   // "Кратко" = salary breakdown (oklad/KPI/premии/штрафы-if-any) minus авансы,
   // not just two totals — advances is the one column considered sensitive
@@ -757,7 +757,7 @@ export default function PayrollSummary() {
 
               {/* Header — always purple gradient */}
               <div className="px-10 pt-9 pb-8 text-white flex items-end justify-between"
-                style={{ background: 'linear-gradient(110deg,#4f46e5 0%,#7c3aed 55%,#9333ea 100%)' }}>
+                style={{ background: 'linear-gradient(110deg,#e61919 0%,#ffb347 55%,#c9502a 100%)' }}>
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">Сводный отчёт</div>
                   <div className="mt-1 text-[30px] font-extrabold leading-tight">Фонд оплаты труда</div>
@@ -774,7 +774,7 @@ export default function PayrollSummary() {
                 {/* KPI cards */}
                 <div className="grid grid-cols-4 gap-4">
                   <KpiCard icon={<Wallet size={13} />} label="ФОТ за период" value={fmtMoney(grand.gross)} sub={`средняя ${fmtMoney(headcount ? grand.gross / headcount : 0)} / чел.`} color={BRAND} />
-                  <KpiCard icon={<Wallet size={13} />} label="К выплате" value={fmtMoney(grand.to_pay)} sub={`${pct(grand.to_pay, grand.gross)}% от начисленного`} color="#10b981" />
+                  <KpiCard icon={<Wallet size={13} />} label="К выплате" value={fmtMoney(grand.to_pay)} sub={`${pct(grand.to_pay, grand.gross)}% от начисленного`} color="#4af626" />
                   <KpiCard icon={<UserRound size={13} />} label="Сотрудников" value={String(headcount)} sub={cats.map((c) => `${c.title.slice(0, 4).toLowerCase()}. ${c.rows.length}`).join(' · ') || '—'} />
                   <KpiCard icon={<TrendingDown size={13} />} label="Удержания" value={fmtMoney(withholdings)} sub={`авансы ${fmtMoney(grand.advances)} · штрафы ${fmtMoney(grand.penalties)}`} color={DANGER} />
                 </div>
@@ -841,7 +841,7 @@ export default function PayrollSummary() {
                       <span style={{ color: T.muted }}>− удержания</span>
                       <span className="font-semibold tabular-nums" style={{ color: DANGER }}>{fmtMoney(withholdings)}</span>
                       <span style={{ color: T.muted }}>= к выплате</span>
-                      <span className="font-bold tabular-nums" style={{ color: '#10b981' }}>{fmtMoney(grand.to_pay)}</span>
+                      <span className="font-bold tabular-nums" style={{ color: '#4af626' }}>{fmtMoney(grand.to_pay)}</span>
                     </div>
                   </div>
                 </Section>

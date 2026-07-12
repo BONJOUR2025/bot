@@ -138,7 +138,7 @@ function SummaryBar({ rows }) {
 }
 
 // ── Composition donut + top earners (click-to-filter by name) ─────
-const COMP_COLORS = ['#6366f1', '#10b981', '#f59e0b'];
+const COMP_COLORS = ['#e61919', '#4af626', '#ffb347'];
 
 function CompositionAndLeaders({ rows, query, onSelectEmployee }) {
   const totalSalary     = rows.reduce((s, r) => s + (r.base_salary || 0), 0);
