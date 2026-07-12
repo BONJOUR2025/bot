@@ -90,7 +90,7 @@ function ObjectsSelect({ value, onChange, salons }) {
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="min-h-[38px] w-full border rounded-lg px-2 py-1.5 text-sm flex flex-wrap gap-1 cursor-text focus-within:ring-2 focus-within:ring-blue-500 bg-[color:var(--color-surface)]"
+      <div className="min-h-[38px] w-full border rounded-lg px-2 py-1.5 text-sm flex flex-wrap gap-1 cursor-text focus-within:ring-2 focus-within:ring-[color:var(--color-primary)] bg-[color:var(--color-surface)]"
         onClick={() => setOpen(true)}>
         {selected.map(v => (
           <span key={v} className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
