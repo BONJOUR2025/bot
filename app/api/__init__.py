@@ -375,6 +375,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Agbis local settings (per-computer options comparison)
+    from .agbis_settings import create_agbis_settings_router
+
+    app.include_router(
+        create_agbis_settings_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Sales analytics
     from .sales import create_sales_router
 
