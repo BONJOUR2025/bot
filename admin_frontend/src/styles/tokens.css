@@ -340,12 +340,15 @@
 }
 
 .visual-refresh.theme-light {
-  --color-bg:             #f4f4f0;
-  --color-bg-alt:         #eae8e3;
-  --color-bg-subtle:      #ebe9e4;
-  --color-surface:        #f4f4f0;
-  --color-surface-raised: #eae8e3;
-  --color-panel:          #eeece7;
+  /* Cool neutral gray, not warm cream — cream read as an off-tone clash
+     against the cold blue-gray chrome of most browsers/OSes. Same
+     lightness range, zero warmth (pure gray, no yellow/red tint). */
+  --color-bg:             #f2f3f5;
+  --color-bg-alt:         #ffffff;
+  --color-bg-subtle:      #e9ebee;
+  --color-surface:        #f2f3f5;
+  --color-surface-raised: #ffffff;
+  --color-panel:          #eef0f2;
 
   --color-primary:        #d11515;
   --color-primary-hover:  #e61919;
@@ -374,8 +377,8 @@
   --color-border-strong:  rgba(209, 21, 21, 0.4);
   --color-border-hover:   rgba(17, 17, 17, 0.36);
 
-  --color-table-bg:          #f4f4f0;
-  --color-table-header-bg:   #eae8e3;
+  --color-table-bg:          #ffffff;
+  --color-table-header-bg:   #eef0f2;
   --color-table-border:      rgba(17, 17, 17, 0.22);
   --color-table-text:        #111111;
   --color-table-header-text: #4a4a4a;
@@ -387,7 +390,7 @@
   --color-control-border:        rgba(17, 17, 17, 0.28);
   --color-control-placeholder:   rgba(74, 74, 74, 0.7);
 
-  --color-modal-bg:       #f4f4f0;
+  --color-modal-bg:       #ffffff;
   --color-modal-backdrop: rgba(17, 17, 17, 0.3);
 
   --ring-color: rgba(209, 21, 21, 0.35);

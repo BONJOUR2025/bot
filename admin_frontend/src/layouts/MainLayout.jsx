@@ -43,6 +43,12 @@ export default function MainLayout() {
       {isMobile && sidebarOpen && <div className="app-shell__backdrop" onClick={() => setSidebarOpen(false)} />}
 
       <div className="app-shell__main">
+        {!isMobile && (
+          <div className="fui-topline app-shell__topline">
+            <span className="fui-topline__dot" />
+            СИСТЕМА АКТИВНА <span className="fui-topline__sep">/</span> {userLabel} <span className="fui-topline__sep">/</span> {new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </div>
+        )}
         <header className="app-shell__header">
           {isMobile && (
             <button type="button" className="icon-button" onClick={() => setSidebarOpen(o => !o)} aria-label="Открыть меню">
