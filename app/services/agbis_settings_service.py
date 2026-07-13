@@ -53,8 +53,7 @@ _COMMS_GROUPS = {"SMS", "SMTP", "IMAP", "INTERNET", "FreeSwitch"}
 _EXTRA_MODULE_GROUPS = {"Hotel", "JTRIPS", "UDS"}
 
 CATEGORY_ORDER = [
-    "Выдача заказов",
-    "Оформление и изменение заказов",
+    "Заказы",
     "Накладные в пути (логистика между складами)",
     "Склады и кассы",
     "Печать чеков и бирок",
@@ -77,12 +76,33 @@ _DEBUG_OPTION_NAMES = {
 _EQ_OPTION_NAMES = {"OPERATOR", "HALLID", "AutoDelEQ", "DelCountEQ", "EnableEQ"}
 _CAMERA_TABLET_NAMES_SUBSTR = ("Camera", "Photo", "Tablet", "AgbisBarcodeScanner", "AgbisSign")
 
+# Ground truth, not a guess: every option on Agbis's own "Настройки модуля →
+# Основные → Заказы" screen (user-provided screenshot of the real desktop
+# app), regardless of what GROUP_OPTION_NAME/keyword matching would
+# otherwise infer. Two of these (Overhead, CreateAutoDocInWayAnScladTo) were
+# previously misclassified into "Накладные в пути" / "Склады и кассы" by
+# the keyword rules below — Agbis itself puts them under Заказы because
+# they're triggered from the order-save flow, not the накладная screen.
+_ORDERS_TAB_OPTIONS = {
+    "UseOwnerOrder", "AllowNotFullPay", "AlwaysAskWhoOut", "OnlyReestr",
+    "AllowChangeKassaSclad", "UseLastSclad", "UseLastDateOut",
+    "AllowChangeOrderDate", "CorrectDiscountInOrder", "AllowChangeSclad",
+    "AllowChangeKassa", "DontControlStatusOut", "DefOrderScladNum", "ZakazWP",
+    "AllowChangePriceList", "AnyBSO", "OrderServsFontSize",
+    "DontShowZakazItogs", "DontShowOtherPP", "NotPrintLabelAutomatically",
+    "EditingDefaultBarCode", "SaleGoods", "ClearFilterLocalSclad",
+    "Overhead", "CreateAutoDocInWayAnScladTo",
+    "AwayOrders", "ForbidHimOrders", "OrderConfirmUse",
+}
+
 
 def _classify(group: str | None, option_name: str, short_descr: str) -> str:
     g = (group or "").strip()
     name = option_name or ""
     descr = (short_descr or "").lower()
 
+    if name in _ORDERS_TAB_OPTIONS:
+        return "Заказы"
     if g == "ARMHim":
         return "Мобильное приложение (АРМ)"
     if g == "WorkPlaces":
@@ -106,10 +126,10 @@ def _classify(group: str | None, option_name: str, short_descr: str) -> str:
         return "Электронная очередь"
     if name in _DEBUG_OPTION_NAMES:
         return "Отладка и логирование"
-    if name.startswith(("DocInWay", "InWay", "Overhead")):
+    if name.startswith(("DocInWay", "InWay")):
         return "Накладные в пути (логистика между складами)"
     if "Out" in name or "выдач" in descr or "выдав" in descr:
-        return "Выдача заказов"
+        return "Заказы"
     if name.startswith("Print_") or "печат" in descr or "чек" in descr:
         return "Печать чеков и бирок"
     if "Laundry" in name or "Aeroflot" in name:
@@ -117,7 +137,7 @@ def _classify(group: str | None, option_name: str, short_descr: str) -> str:
     if any(k in name for k in ("Sclad", "Kassa")):
         return "Склады и кассы"
     if "Zakaz" in name or "заказ" in descr:
-        return "Оформление и изменение заказов"
+        return "Заказы"
     if any(k in name for k in _CAMERA_TABLET_NAMES_SUBSTR):
         return "Оборудование (сканеры/весы/фото/прочее)"
     return "Прочие настройки"
