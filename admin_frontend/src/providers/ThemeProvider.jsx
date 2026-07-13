@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-const VISUAL_FLAG = import.meta.env.VITE_VISUAL_REFRESH === "1";
+// Default ON — the Tactical Telemetry redesign is now the standard look.
+// VITE_VISUAL_REFRESH=0 is the escape hatch to fall back to the old
+// indigo-SaaS theme if something's found broken post-rollout.
+const VISUAL_FLAG = import.meta.env.VITE_VISUAL_REFRESH !== "0";
 const STORAGE_KEY = "theme";
 const VALID_MODES = new Set(["light", "dark", "auto"]);
 

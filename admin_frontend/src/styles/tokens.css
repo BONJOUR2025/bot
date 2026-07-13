@@ -328,7 +328,15 @@
   --ui-radius-avatar: 0px;
   --ui-blur: 0px;
 
-  --font-mono-ui: 'IBM Plex Mono', 'Space Mono', ui-monospace, monospace;
+  /* Self-hosted via @fontsource (see index.css) — no runtime dependency
+     on the system having these installed, unlike the previous fallback
+     chain which silently degraded to generic ui-monospace/sans-serif on
+     most machines. Micro (labels, body, data) stays monospace per the
+     Tactical Telemetry spec; Macro (page titles, hero numbers) gets a
+     heavy grotesk instead, per the skill's own macro/micro split — see
+     .visual-refresh h1 below. */
+  --font-mono-ui: 'JetBrains Mono', 'IBM Plex Mono', 'Space Mono', ui-monospace, monospace;
+  --font-display:  'Space Grotesk', var(--font-mono-ui);
 }
 
 .visual-refresh.theme-light {

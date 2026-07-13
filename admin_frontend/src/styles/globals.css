@@ -1086,6 +1086,16 @@ tbody tr:last-child td { border-bottom: none; }
   letter-spacing: 0.01em;
   font-weight: 700;
 }
+/* Macro-typography: page titles (h1, and the h2.text-2xl pattern every
+   page header actually uses instead of a real h1) get the heavy display
+   grotesk with tight negative tracking, per the archetype's macro/micro
+   split — everything else (h2-h4 section headers, body, labels) stays
+   monospace for the micro/technical read. */
+.visual-refresh h1,
+.visual-refresh h2.text-2xl {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
 
 /* Replace the soft indigo radial-gradient mesh with a flat scene —
    no ambient glow in this archetype. */
@@ -1231,6 +1241,69 @@ tbody tr:last-child td { border-bottom: none; }
 .visual-refresh .sidebar__link.is-active {
   background: var(--color-primary);
   box-shadow: none;
+  position: relative;
+}
+/* Glowing edge on the active nav item — the one soft accent this theme
+   allows itself (everything else is flat/hard), so "where am I" reads
+   at a glance in a 40+ page nav tree. */
+.visual-refresh .sidebar__link.is-active::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; right: 0;
+  width: 3px;
+  background: var(--color-primary-hover);
+  box-shadow: 0 0 8px 1px var(--color-primary-hover);
+}
+
+/* ── FUI corner brackets ─────────────────────────────────────────
+   Small registration-mark brackets on every .app-card — the one
+   recurring "instrument panel" motif tying the whole app back to the
+   Tactical Telemetry archetype, applied once here instead of per page. */
+.visual-refresh .app-card {
+  position: relative;
+}
+.visual-refresh .app-card::before,
+.visual-refresh .app-card::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+.visual-refresh .app-card::before {
+  top: -1px; left: -1px;
+  border-top: 2px solid var(--color-primary);
+  border-left: 2px solid var(--color-primary);
+}
+.visual-refresh .app-card::after {
+  bottom: -1px; right: -1px;
+  border-bottom: 2px solid var(--color-primary);
+  border-right: 2px solid var(--color-primary);
+}
+
+/* ── FUI status topline ──────────────────────────────────────────
+   Opt-in via className="fui-topline" — a small monospace system-status
+   strip, used at the top of the app shell header. */
+.visual-refresh .fui-topline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono-ui);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.visual-refresh .fui-topline__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success);
+}
+.visual-refresh .fui-topline__sep {
+  opacity: 0.4;
 }
 .visual-refresh .bg-green-600,
 .visual-refresh .hover\:bg-green-600:hover,
