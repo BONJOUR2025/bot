@@ -223,7 +223,7 @@ def get_agbis_settings_matrix() -> dict:
             cur = con.cursor()
 
             cur.execute("""
-                SELECT ID, NAME, DEP_ID, DB_NAME
+                SELECT ID, NAME, IP, DEP_ID, DB_NAME
                 FROM LOCAL_COMPUTERS_LIST
                 WHERE PROJECT_NAME = 'Him.exe'
                 ORDER BY DB_NAME
@@ -260,16 +260,31 @@ def get_agbis_settings_matrix() -> dict:
         return empty
 
     computers = []
-    for comp_id, name, dep_id, db_name in computer_rows:
+    for comp_id, name, ip, dep_id, db_name in computer_rows:
         db_name = _decode(db_name)
         dep_number = _computer_dep_number(db_name, dep_id)
+        hostname = _decode(name)
         computers.append({
             "id": comp_id,
             "label": _computer_label(db_name, dep_number, dep_names),
+            "hostname": hostname.strip() if hostname else None,
+            "ip": _decode(ip).strip() if ip else None,
             "db_name": db_name.strip() if db_name else None,
             "dep_id": dep_number,
         })
     computers.sort(key=lambda c: (c["label"] or "").lower())
+
+    # Multiple physical terminals can share one department (e.g. two POS
+    # registers at the same salon) — same label otherwise, so append the
+    # hostname (falling back to IP) to just the colliding ones.
+    label_counts: dict[str, int] = {}
+    for c in computers:
+        label_counts[c["label"]] = label_counts.get(c["label"], 0) + 1
+    for c in computers:
+        if label_counts.get(c["label"], 0) > 1:
+            suffix = c["hostname"] or c["ip"]
+            if suffix:
+                c["label"] = f"{c['label']} · {suffix}"
 
     categories: dict[str, list[dict]] = {c: [] for c in CATEGORY_ORDER}
     for opt_id, group, option_name, short_descr, long_descr, d_bool, d_int, d_str, d_float in option_rows:

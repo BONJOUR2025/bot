@@ -114,7 +114,11 @@ function CategorySection({ category, computers, open, onToggle }) {
                   Настройка
                 </th>
                 {computers.map((c) => (
-                  <th key={c.id} className="px-3 py-2 text-xs font-medium text-center whitespace-nowrap" title={c.db_name || ''}>
+                  <th
+                    key={c.id}
+                    className="px-3 py-2 text-xs font-medium text-center whitespace-nowrap"
+                    title={[c.db_name, c.hostname, c.ip].filter(Boolean).join(' · ')}
+                  >
                     {c.label}
                   </th>
                 ))}
