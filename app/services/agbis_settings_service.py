@@ -22,6 +22,23 @@ logger = logging.getLogger(__name__)
 
 _DB_NAME_RE = re.compile(r"ARM_(\w+?)\.fdb$", re.IGNORECASE)
 
+
+def _decode(v):
+    """A handful of these columns are BLOB SUB_TYPE TEXT (LOCAL_COMPUTERS_LIST.NAME,
+    some VALUE_STR/DEFAULT_STR rows) that fdb hands back as raw `bytes` instead of
+    `str` even with charset=UTF8 on the connection — the blob's own declared
+    charset wins over the connection charset for those. The bytes are legacy
+    Windows-1251 (same as the rest of this Delphi app's data), and passing raw
+    bytes into FastAPI's jsonable_encoder crashes with UnicodeDecodeError since
+    it assumes UTF-8.
+    """
+    if isinstance(v, bytes):
+        try:
+            return v.decode("utf-8")
+        except UnicodeDecodeError:
+            return v.decode("cp1251", errors="replace")
+    return v
+
 _FISCAL_BANK_GROUPS = {
     "AlphaBank", "Arcus", "Bankomsvyaz", "CashaLotFR", "CheckBoxFR", "Chek",
     "Chon", "DatecsFP", "EHDM", "FiskAtol", "FiskFR", "FiskFR2", "FiskFR_kz",
@@ -195,8 +212,8 @@ def get_agbis_settings_matrix() -> dict:
     computers = [
         {
             "id": comp_id,
-            "label": _computer_label(db_name, name),
-            "db_name": (db_name or "").strip() or None,
+            "label": _computer_label(_decode(db_name), _decode(name)),
+            "db_name": _decode(db_name).strip() if db_name else None,
             "dep_id": dep_id,
         }
         for comp_id, name, dep_id, db_name in computer_rows
@@ -204,12 +221,17 @@ def get_agbis_settings_matrix() -> dict:
 
     categories: dict[str, list[dict]] = {c: [] for c in CATEGORY_ORDER}
     for opt_id, group, option_name, short_descr, d_bool, d_int, d_str, d_float in option_rows:
+        group = _decode(group)
+        option_name = _decode(option_name)
+        short_descr = _decode(short_descr)
+        d_str = _decode(d_str)
         cat = _classify(group, option_name, short_descr)
         values = {}
         for comp_id in computer_ids:
             v_bool, v_int, v_str, v_flt = values_by_key.get((opt_id, comp_id), (None, None, None, None))
+            v_str = _decode(v_str)
             value, source = _effective_value(v_bool, v_int, v_str, v_flt, d_bool, d_int, d_str, d_float)
-            values[str(comp_id)] = {"value": value, "source": source}
+            values[str(comp_id)] = {"value": _decode(value), "source": source}
         categories.setdefault(cat, []).append({
             "id": opt_id,
             "option_name": option_name,
