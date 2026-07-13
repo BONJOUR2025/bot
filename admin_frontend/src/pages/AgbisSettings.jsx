@@ -44,11 +44,11 @@ function OptionRow({ option, computers }) {
 
   return (
     <tr className={diff ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}>
-      <td className="sticky left-0 z-10 bg-[color:var(--color-card)] px-3 py-2 border-r border-[color:var(--color-border)] min-w-[260px] max-w-[320px]">
-        <div className="text-sm font-medium truncate" title={option.short_descr || option.option_name}>
+      <td className="sticky left-0 z-10 bg-[color:var(--color-card)] px-3 py-2 border-r border-[color:var(--color-border)] min-w-[280px] max-w-[420px] align-top">
+        <div className="text-sm font-medium break-words">
           {option.short_descr || option.option_name}
         </div>
-        <div className="text-[10px] text-[color:var(--color-muted-foreground)] font-mono truncate">
+        <div className="text-[10px] text-[color:var(--color-muted-foreground)] font-mono break-words">
           {option.option_name}
           {!option.short_descr && option.group && <span className="font-sans"> · {option.group}</span>}
         </div>
@@ -110,7 +110,7 @@ function CategorySection({ category, computers, open, onToggle }) {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-[color:var(--color-muted)]/30">
-                <th className="sticky left-0 z-10 bg-[color:var(--color-card)] px-3 py-2 text-left text-xs font-medium border-r border-[color:var(--color-border)] min-w-[260px]">
+                <th className="sticky left-0 z-10 bg-[color:var(--color-card)] px-3 py-2 text-left text-xs font-medium border-r border-[color:var(--color-border)] min-w-[280px] max-w-[420px]">
                   Настройка
                 </th>
                 {computers.map((c) => (

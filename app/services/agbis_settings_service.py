@@ -184,14 +184,27 @@ def _best_description(option_name: str, short_descr: str | None, long_descr: str
     return None
 
 
-def _computer_label(db_name: str | None, name: str | None) -> str:
+def _computer_dep_number(db_name: str | None, dep_id_col: int | None) -> int | None:
+    """The department a computer belongs to. LOCAL_COMPUTERS_LIST.DEP_ID
+    itself is unreliable for computers whose DB_NAME already encodes the
+    number (our own ARM_21 row has DEP_ID=0, clearly stale) — DB_NAME wins
+    whenever it parses as a number. DEP_ID is only trusted as a fallback for
+    the handful of departments named non-numerically in DB_NAME (ARM_Akad,
+    ARM_ozerki, ARM_NEW), where it checks out against DEPS.
+    """
     m = _DB_NAME_RE.search(db_name or "")
     suffix = m.group(1) if m else None
     if suffix and suffix.isdigit():
-        return f"ПК {suffix}"
-    if suffix:
-        return suffix
-    return (name or db_name or "?").strip()
+        return int(suffix)
+    return dep_id_col or None
+
+
+def _computer_label(db_name: str | None, dep_number: int | None, dep_names: dict[int, str]) -> str:
+    if dep_number is not None and dep_number in dep_names:
+        return dep_names[dep_number]
+    m = _DB_NAME_RE.search(db_name or "")
+    suffix = m.group(1) if m else None
+    return suffix or db_name or "?"
 
 
 def get_agbis_settings_matrix() -> dict:
@@ -218,6 +231,9 @@ def get_agbis_settings_matrix() -> dict:
             computer_rows = cur.fetchall()
             computer_ids = [r[0] for r in computer_rows]
 
+            cur.execute("SELECT DEP_ID, NAME FROM DEPS")
+            dep_names = {dep_id: _decode(dep_name) for dep_id, dep_name in cur.fetchall()}
+
             cur.execute("""
                 SELECT ID, GROUP_OPTION_NAME, OPTION_NAME, SHORT_DESCR, LONG_DESCR,
                        DEFAULT_BOOL, DEFAULT_INT, DEFAULT_STR, DEFAULT_FLOAT
@@ -243,15 +259,17 @@ def get_agbis_settings_matrix() -> dict:
         logger.error(f"get_agbis_settings_matrix error: {e}")
         return empty
 
-    computers = [
-        {
+    computers = []
+    for comp_id, name, dep_id, db_name in computer_rows:
+        db_name = _decode(db_name)
+        dep_number = _computer_dep_number(db_name, dep_id)
+        computers.append({
             "id": comp_id,
-            "label": _computer_label(_decode(db_name), _decode(name)),
-            "db_name": _decode(db_name).strip() if db_name else None,
-            "dep_id": dep_id,
-        }
-        for comp_id, name, dep_id, db_name in computer_rows
-    ]
+            "label": _computer_label(db_name, dep_number, dep_names),
+            "db_name": db_name.strip() if db_name else None,
+            "dep_id": dep_number,
+        })
+    computers.sort(key=lambda c: (c["label"] or "").lower())
 
     categories: dict[str, list[dict]] = {c: [] for c in CATEGORY_ORDER}
     for opt_id, group, option_name, short_descr, long_descr, d_bool, d_int, d_str, d_float in option_rows:
