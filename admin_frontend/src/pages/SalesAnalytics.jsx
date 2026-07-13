@@ -468,8 +468,10 @@ function ProductRankTable({ title, items, showChange }) {
             { label: 'Кол-во', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (p) => p.qty.toLocaleString('ru-RU') },
             { label: 'Выручка', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => fmtRub(p.revenue) },
             ...(showChange ? [{ label: 'Δ период', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (p) => (
-              p.pct_change == null ? '—' : (
-                <span className={p.pct_change >= 0 ? 'text-emerald-600' : 'text-red-500'}>{p.pct_change >= 0 ? '+' : ''}{p.pct_change}%</span>
+              p.is_new ? (
+                <span className="text-emerald-600">новинка</span>
+              ) : p.pct_change == null ? '—' : (
+                <span className={p.pct_change >= 0 ? 'text-emerald-600' : 'text-red-500'}>{p.pct_change >= 0 ? '+' : ''}{p.pct_change}%{p.pct_change === -100 ? ' (продажи остановились)' : ''}</span>
               )
             )}] : []),
           ]}

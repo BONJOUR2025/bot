@@ -1770,21 +1770,43 @@ class FirebirdService:
         MIN_VOLUME = 1000.0  # ignore trivial amounts when ranking % swings — a
         # SKU going from 10₽ to 100₽ is a meaningless "900% rise"
 
+        # Union of both periods' keys, not just current's — a SKU with
+        # revenue in `previous` but none in `current` (stopped selling
+        # entirely) must still surface as a -100% "falling" entry instead
+        # of silently vanishing from the report just because it has no row
+        # in the current period.
         merged = []
-        for tovar_id, p in current.items():
-            prev_revenue = previous.get(tovar_id, {}).get("revenue", 0.0)
+        for tovar_id in set(current) | set(previous):
+            cur = current.get(tovar_id)
+            prev = previous.get(tovar_id)
+            meta = cur or prev
+            revenue = cur["revenue"] if cur else 0.0
+            qty = cur["qty"] if cur else 0.0
+            prev_revenue = prev["revenue"] if prev else 0.0
+            is_new = revenue > 0 and not prev_revenue
             pct_change = (
-                round((p["revenue"] - prev_revenue) / prev_revenue * 100, 1)
-                if prev_revenue else None
+                round((revenue - prev_revenue) / prev_revenue * 100, 1)
+                if prev_revenue else None  # no baseline — flagged via is_new instead
             )
-            merged.append({**p, "prev_revenue": round(prev_revenue, 2), "pct_change": pct_change,
-                            "revenue": round(p["revenue"], 2), "qty": round(p["qty"], 1)})
+            merged.append({
+                "tovar_id": tovar_id, "name": meta["name"], "code": meta["code"],
+                "revenue": round(revenue, 2), "qty": round(qty, 1),
+                "prev_revenue": round(prev_revenue, 2), "pct_change": pct_change,
+                "is_new": is_new,
+            })
 
-        top = sorted(merged, key=lambda p: p["revenue"], reverse=True)[:limit]
+        top = sorted((p for p in merged if p["revenue"] > 0), key=lambda p: p["revenue"], reverse=True)[:limit]
         bottom = sorted((p for p in merged if p["revenue"] > 0), key=lambda p: p["revenue"])[:limit]
 
+        # New/reactivated SKUs (no prior-period baseline) have no defined
+        # % change but are definitionally the biggest possible risers —
+        # they lead the list, ranked by revenue, ahead of the numeric swings.
+        new_entrants = sorted(
+            (p for p in merged if p["is_new"] and p["revenue"] >= MIN_VOLUME),
+            key=lambda p: p["revenue"], reverse=True,
+        )
         swinging = [p for p in merged if p["pct_change"] is not None and max(p["revenue"], p["prev_revenue"]) >= MIN_VOLUME]
-        rising = sorted(swinging, key=lambda p: p["pct_change"], reverse=True)[:limit]
+        rising = (new_entrants + sorted(swinging, key=lambda p: p["pct_change"], reverse=True))[:limit]
         falling = sorted(swinging, key=lambda p: p["pct_change"])[:limit]
 
         try:
