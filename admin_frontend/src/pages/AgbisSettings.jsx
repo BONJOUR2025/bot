@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, RefreshCw, SlidersHorizontal, GitCompareArrows, Monitor, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, RefreshCw, SlidersHorizontal, GitCompareArrows, Monitor, ChevronDown, ChevronRight, LayoutGrid, Rows3 } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
@@ -13,7 +13,7 @@ function formatValue(value) {
 }
 
 // Whether an option's effective value actually differs across computers —
-// drives both the "только различающиеся" filter and the per-row accent.
+// drives the "только различающиеся" filter and the diff accents in both views.
 function hasDiff(values, computerIds) {
   const seen = new Set();
   for (const id of computerIds) {
@@ -38,40 +38,97 @@ function majorityValue(values, computerIds) {
   return best;
 }
 
-function OptionRow({ option, computers }) {
-  const majority = useMemo(() => majorityValue(option.values, computers.map((c) => c.id)), [option, computers]);
-  const diff = useMemo(() => hasDiff(option.values, computers.map((c) => c.id)), [option, computers]);
+function ValueTag({ value, source }) {
+  const label = formatValue(value);
+  const title = source === 'override' ? 'Переопределено на этом ПК' : source === 'default' ? 'Значение по умолчанию' : '';
+  if (label === null) return <span className="text-xs text-[color:var(--color-muted-foreground)]" title={title}>—</span>;
+  if (label === 'Да') return <span className="badge badge--success" title={title}>Да</span>;
+  if (label === 'Нет') return <span className="text-xs text-[color:var(--color-muted-foreground)]" title={title}>Нет</span>;
+  return <span className="text-sm font-mono text-[color:var(--color-text-primary)]" title={title}>{label}</span>;
+}
+
+function OptionLabel({ option }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-sm font-medium break-words">{option.short_descr || option.option_name}</div>
+      <div className="text-[11px] text-[color:var(--color-muted-foreground)] font-mono break-words">
+        {option.option_name}
+        {!option.short_descr && option.group && <span className="font-sans"> · {option.group}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── Режим «По компьютеру»: читается как обычный список настроек, а не таблица ──
+
+function ByComputerCategory({ category, computerId, allComputerIds, open, onToggle }) {
+  const diffCount = useMemo(
+    () => category.options.filter((o) => hasDiff(o.values, allComputerIds)).length,
+    [category, allComputerIds]
+  );
 
   return (
-    <tr className={diff ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}>
+    <div className="app-card overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-[color:var(--color-muted)]/30"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {open ? <ChevronDown size={16} className="shrink-0 text-[color:var(--color-muted-foreground)]" /> : <ChevronRight size={16} className="shrink-0 text-[color:var(--color-muted-foreground)]" />}
+          <h3 className="text-sm font-semibold truncate">{category.name}</h3>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 text-xs text-[color:var(--color-muted-foreground)]">
+          <span>{category.options.length}</span>
+          {diffCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-medium">
+              {diffCount} отличаются у кого-то
+            </span>
+          )}
+        </div>
+      </button>
+      {open && (
+        <div className="divide-y divide-[color:var(--color-border)] border-t border-[color:var(--color-border)]">
+          {category.options.map((o) => {
+            const cell = o.values[computerId] || {};
+            const diff = hasDiff(o.values, allComputerIds);
+            return (
+              <div key={o.id} className={`flex items-center justify-between gap-4 px-4 py-2.5 ${diff ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}>
+                <OptionLabel option={o} />
+                <div className="shrink-0 flex items-center gap-2">
+                  {diff && <GitCompareArrows size={12} className="text-amber-500" title="Значение отличается хотя бы на одном ПК" />}
+                  <ValueTag value={cell.value} source={cell.source} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Режим «Сравнение»: таблица настройка × ПК, для поиска расхождений ──
+
+function CompareRow({ option, computers }) {
+  const ids = useMemo(() => computers.map((c) => c.id), [computers]);
+  const majority = useMemo(() => majorityValue(option.values, ids), [option, ids]);
+  const diff = useMemo(() => hasDiff(option.values, ids), [option, ids]);
+
+  return (
+    <tr className={diff ? 'bg-amber-50/40 dark:bg-amber-900/10' : ''}>
       <td className="sticky left-0 z-10 bg-[color:var(--color-card)] px-3 py-2 border-r border-[color:var(--color-border)] min-w-[280px] max-w-[420px] align-top">
-        <div className="text-sm font-medium break-words">
-          {option.short_descr || option.option_name}
-        </div>
-        <div className="text-[10px] text-[color:var(--color-muted-foreground)] font-mono break-words">
-          {option.option_name}
-          {!option.short_descr && option.group && <span className="font-sans"> · {option.group}</span>}
-        </div>
+        <OptionLabel option={option} />
       </td>
       {computers.map((c) => {
         const cell = option.values[c.id] || {};
-        const label = formatValue(cell.value);
         const isOutlier = diff && JSON.stringify(cell.value ?? null) !== majority;
         return (
           <td
             key={c.id}
-            className={`px-3 py-2 text-xs text-center whitespace-nowrap ${isOutlier ? 'bg-amber-100 dark:bg-amber-900/30 font-semibold' : ''}`}
-            title={cell.source === 'override' ? 'Переопределено на этом ПК' : cell.source === 'default' ? 'Значение по умолчанию' : ''}
+            className={`px-3 py-2 text-xs text-center whitespace-nowrap ${isOutlier ? 'bg-amber-100 dark:bg-amber-900/30 font-semibold rounded' : ''}`}
           >
-            {label === null ? (
-              <span className="text-[color:var(--color-muted-foreground)]">—</span>
-            ) : label === 'Да' ? (
-              <span className="text-green-700 dark:text-green-400">{label}</span>
-            ) : label === 'Нет' ? (
-              <span className="text-[color:var(--color-muted-foreground)]">{label}</span>
-            ) : (
-              label
-            )}
+            <ValueTag value={cell.value} source={cell.source} />
           </td>
         );
       })}
@@ -79,10 +136,11 @@ function OptionRow({ option, computers }) {
   );
 }
 
-function CategorySection({ category, computers, open, onToggle }) {
+function CompareCategory({ category, computers, open, onToggle }) {
+  const ids = useMemo(() => computers.map((c) => c.id), [computers]);
   const diffCount = useMemo(
-    () => category.options.filter((o) => hasDiff(o.values, computers.map((c) => c.id))).length,
-    [category, computers]
+    () => category.options.filter((o) => hasDiff(o.values, ids)).length,
+    [category, ids]
   );
 
   return (
@@ -126,7 +184,7 @@ function CategorySection({ category, computers, open, onToggle }) {
             </thead>
             <tbody className="divide-y divide-[color:var(--color-border)]">
               {category.options.map((o) => (
-                <OptionRow key={o.id} option={o} computers={computers} />
+                <CompareRow key={o.id} option={o} computers={computers} />
               ))}
             </tbody>
           </table>
@@ -136,6 +194,11 @@ function CategorySection({ category, computers, open, onToggle }) {
   );
 }
 
+const MODES = [
+  { key: 'byComputer', label: 'По компьютеру', icon: Rows3 },
+  { key: 'compare',    label: 'Сравнение всех ПК', icon: LayoutGrid },
+];
+
 export default function AgbisSettings() {
   const [data, setData]       = useState({ computers: [], categories: [] });
   const [loading, setLoading] = useState(true);
@@ -143,6 +206,8 @@ export default function AgbisSettings() {
   const [query, setQuery]     = useState('');
   const [onlyDiff, setOnlyDiff] = useState(false);
   const [openCats, setOpenCats] = useState(() => new Set());
+  const [mode, setMode] = useState('byComputer');
+  const [computerId, setComputerId] = useState(null);
 
   useEffect(() => { load(); }, []);
 
@@ -151,7 +216,9 @@ export default function AgbisSettings() {
     setError(null);
     try {
       const res = await api.get('agbis-settings/');
-      setData(res.data && Array.isArray(res.data.categories) ? res.data : { computers: [], categories: [] });
+      const d = res.data && Array.isArray(res.data.categories) ? res.data : { computers: [], categories: [] };
+      setData(d);
+      if (d.computers.length > 0) setComputerId((prev) => prev ?? d.computers[0].id);
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
     } finally {
@@ -160,10 +227,11 @@ export default function AgbisSettings() {
   }
 
   const computers = data.computers;
+  const computerIds = useMemo(() => computers.map((c) => c.id), [computers]);
+  const selectedComputer = computers.find((c) => c.id === computerId) || null;
 
   const filteredCategories = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const ids = computers.map((c) => c.id);
     return data.categories
       .map((cat) => {
         let options = cat.options;
@@ -174,18 +242,18 @@ export default function AgbisSettings() {
           );
         }
         if (onlyDiff) {
-          options = options.filter((o) => hasDiff(o.values, ids));
+          options = options.filter((o) => hasDiff(o.values, computerIds));
         }
         return { ...cat, options };
       })
       .filter((cat) => cat.options.length > 0);
-  }, [data.categories, computers, query, onlyDiff]);
+  }, [data.categories, computerIds, query, onlyDiff]);
 
   const totalOptions = data.categories.reduce((sum, c) => sum + c.options.length, 0);
-  const totalDiffs = useMemo(() => {
-    const ids = computers.map((c) => c.id);
-    return data.categories.reduce((sum, c) => sum + c.options.filter((o) => hasDiff(o.values, ids)).length, 0);
-  }, [data.categories, computers]);
+  const totalDiffs = useMemo(
+    () => data.categories.reduce((sum, c) => sum + c.options.filter((o) => hasDiff(o.values, computerIds)).length, 0),
+    [data.categories, computerIds]
+  );
 
   function toggleCat(name) {
     setOpenCats((prev) => {
@@ -193,6 +261,11 @@ export default function AgbisSettings() {
       if (next.has(name)) next.delete(name); else next.add(name);
       return next;
     });
+  }
+
+  function jumpToDiffs() {
+    setMode('compare');
+    setOnlyDiff(true);
   }
 
   return (
@@ -210,10 +283,32 @@ export default function AgbisSettings() {
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <StatCard icon={<Monitor size={18} />} label="Компьютеров" value={computers.length} />
         <StatCard icon={<SlidersHorizontal size={18} />} label="Всего настроек" value={totalOptions} />
-        <StatCard icon={<GitCompareArrows size={18} />} label="Различаются между ПК" value={totalDiffs} onClick={() => setOnlyDiff(true)} active={onlyDiff} />
+        <StatCard icon={<GitCompareArrows size={18} />} label="Различаются между ПК" value={totalDiffs} onClick={jumpToDiffs} active={mode === 'compare' && onlyDiff} />
       </div>
 
       <div className="app-card p-4 flex flex-wrap gap-3 items-center">
+        <div className="flex gap-1 rounded-lg border border-[color:var(--color-border)] p-0.5 shrink-0">
+          {MODES.map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${mode === m.key ? 'bg-[color:var(--color-primary)] text-white' : 'hover:bg-[color:var(--color-muted)]/50'}`}
+            >
+              <m.icon size={13} /> {m.label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'byComputer' && (
+          <select
+            className="input text-sm py-1.5 h-9 min-w-[220px]"
+            value={computerId ?? ''}
+            onChange={(e) => setComputerId(Number(e.target.value))}
+          >
+            {computers.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        )}
+
         <div className="relative flex-1 min-w-[220px]">
           <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
           <input
@@ -229,18 +324,37 @@ export default function AgbisSettings() {
         </label>
       </div>
 
+      {mode === 'byComputer' && selectedComputer && (
+        <div className="text-xs text-[color:var(--color-muted-foreground)] -mt-2 px-1">
+          {[selectedComputer.db_name, selectedComputer.hostname, selectedComputer.ip].filter(Boolean).join(' · ')}
+        </div>
+      )}
+
       {loading ? <SkeletonTable rows={8} /> : filteredCategories.length === 0 ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)] text-sm">
           Ничего не найдено
         </div>
+      ) : mode === 'byComputer' ? (
+        <div className="space-y-3">
+          {filteredCategories.map((cat) => (
+            <ByComputerCategory
+              key={cat.name}
+              category={cat}
+              computerId={computerId}
+              allComputerIds={computerIds}
+              open={openCats.has(cat.name) || query.trim().length > 0}
+              onToggle={() => toggleCat(cat.name)}
+            />
+          ))}
+        </div>
       ) : (
         <div className="space-y-3">
           {filteredCategories.map((cat) => (
-            <CategorySection
+            <CompareCategory
               key={cat.name}
               category={cat}
               computers={computers}
-              open={openCats.has(cat.name) || (query.trim().length > 0)}
+              open={openCats.has(cat.name) || query.trim().length > 0}
               onToggle={() => toggleCat(cat.name)}
             />
           ))}
