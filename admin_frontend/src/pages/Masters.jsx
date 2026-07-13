@@ -977,7 +977,6 @@ export default function Masters() {
                     {
                       key: 'doc_num',
                       label: sortLabel('doc_num', 'Заказ'),
-                      mobileHide: true,
                       cellClass: 'text-[color:var(--color-muted-foreground)]',
                       render: (r) => fmt(r.doc_num),
                     },
