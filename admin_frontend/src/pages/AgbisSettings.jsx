@@ -48,7 +48,10 @@ function OptionRow({ option, computers }) {
         <div className="text-sm font-medium truncate" title={option.short_descr || option.option_name}>
           {option.short_descr || option.option_name}
         </div>
-        <div className="text-[10px] text-[color:var(--color-muted-foreground)] font-mono truncate">{option.option_name}</div>
+        <div className="text-[10px] text-[color:var(--color-muted-foreground)] font-mono truncate">
+          {option.option_name}
+          {!option.short_descr && option.group && <span className="font-sans"> · {option.group}</span>}
+        </div>
       </td>
       {computers.map((c) => {
         const cell = option.values[c.id] || {};

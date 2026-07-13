@@ -150,6 +150,20 @@ def _effective_value(value_bool, value_int, value_str, value_flt,
     return None, "none"
 
 
+def _best_description(option_name: str, short_descr: str | None, long_descr: str | None) -> str | None:
+    """SHORT_DESCR is usually the better (shorter) human text, but about a
+    tenth of Agbis's options leave it blank or equal to OPTION_NAME while
+    LONG_DESCR actually has real Russian text (e.g. ConvARMBAM) — fall back
+    to it. If both are blank/equal to the option name, there's genuinely no
+    human description anywhere in the DB for that option.
+    """
+    for candidate in (short_descr, long_descr):
+        c = (candidate or "").strip()
+        if c and c != option_name:
+            return c
+    return None
+
+
 def _computer_label(db_name: str | None, name: str | None) -> str:
     m = _DB_NAME_RE.search(db_name or "")
     suffix = m.group(1) if m else None
@@ -185,7 +199,7 @@ def get_agbis_settings_matrix() -> dict:
             computer_ids = [r[0] for r in computer_rows]
 
             cur.execute("""
-                SELECT ID, GROUP_OPTION_NAME, OPTION_NAME, SHORT_DESCR,
+                SELECT ID, GROUP_OPTION_NAME, OPTION_NAME, SHORT_DESCR, LONG_DESCR,
                        DEFAULT_BOOL, DEFAULT_INT, DEFAULT_STR, DEFAULT_FLOAT
                 FROM LOCAL_OPTIONS
                 ORDER BY GROUP_OPTION_NAME, ORDER_NUM, OPTION_NAME
@@ -220,12 +234,14 @@ def get_agbis_settings_matrix() -> dict:
     ]
 
     categories: dict[str, list[dict]] = {c: [] for c in CATEGORY_ORDER}
-    for opt_id, group, option_name, short_descr, d_bool, d_int, d_str, d_float in option_rows:
+    for opt_id, group, option_name, short_descr, long_descr, d_bool, d_int, d_str, d_float in option_rows:
         group = _decode(group)
         option_name = _decode(option_name)
         short_descr = _decode(short_descr)
+        long_descr = _decode(long_descr)
         d_str = _decode(d_str)
-        cat = _classify(group, option_name, short_descr)
+        descr = _best_description(option_name, short_descr, long_descr)
+        cat = _classify(group, option_name, descr or "")
         values = {}
         for comp_id in computer_ids:
             v_bool, v_int, v_str, v_flt = values_by_key.get((opt_id, comp_id), (None, None, None, None))
@@ -235,7 +251,7 @@ def get_agbis_settings_matrix() -> dict:
         categories.setdefault(cat, []).append({
             "id": opt_id,
             "option_name": option_name,
-            "short_descr": (short_descr or "").strip() or None,
+            "short_descr": descr,
             "group": group,
             "values": values,
         })
