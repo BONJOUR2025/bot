@@ -1256,14 +1256,21 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 /* ── FUI corner brackets ─────────────────────────────────────────
-   Small registration-mark brackets on every .app-card — the one
-   recurring "instrument panel" motif tying the whole app back to the
-   Tactical Telemetry archetype, applied once here instead of per page. */
-.visual-refresh .app-card {
+   Small registration-mark brackets — the one recurring "instrument
+   panel" motif tying the whole app back to the Tactical Telemetry
+   archetype. Purely decorative (position + ::before/::after only, no
+   display/padding/background opinions) so it's safe to opt any card-like
+   container into via className="fui-corners", not just .app-card —
+   several pages (Dashboard's Panel/BentoCard, notably) roll their own
+   bordered box with raw Tailwind instead of the shared .app-card class. */
+.visual-refresh .app-card,
+.visual-refresh .fui-corners {
   position: relative;
 }
 .visual-refresh .app-card::before,
-.visual-refresh .app-card::after {
+.visual-refresh .app-card::after,
+.visual-refresh .fui-corners::before,
+.visual-refresh .fui-corners::after {
   content: '';
   position: absolute;
   width: 10px;
@@ -1271,12 +1278,14 @@ tbody tr:last-child td { border-bottom: none; }
   pointer-events: none;
   opacity: 0.7;
 }
-.visual-refresh .app-card::before {
+.visual-refresh .app-card::before,
+.visual-refresh .fui-corners::before {
   top: -1px; left: -1px;
   border-top: 2px solid var(--color-primary);
   border-left: 2px solid var(--color-primary);
 }
-.visual-refresh .app-card::after {
+.visual-refresh .app-card::after,
+.visual-refresh .fui-corners::after {
   bottom: -1px; right: -1px;
   border-bottom: 2px solid var(--color-primary);
   border-right: 2px solid var(--color-primary);

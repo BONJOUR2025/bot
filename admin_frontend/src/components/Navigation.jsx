@@ -121,9 +121,16 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
             .filter((item) => !item.permission || allowed.has(item.permission))
             .map((item) => ({
               ...item,
+              // Prefix match lets a parent route (e.g. "/admin/settings")
+              // stay highlighted on its sub-pages, but "/admin" itself is
+              // the dashboard's own exact route, not a parent of every
+              // other page — without this exclusion its prefix matched
+              // literally everything (every route starts with "/admin/"),
+              // so Дашборд stayed lit up alongside whatever page you were
+              // actually on.
               active:
                 location.pathname === item.to ||
-                location.pathname.startsWith(`${item.to}/`),
+                (item.to !== '/admin' && location.pathname.startsWith(`${item.to}/`)),
             })),
         }))
         .filter((category) => category.items.length > 0),

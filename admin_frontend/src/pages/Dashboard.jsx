@@ -111,7 +111,7 @@ function Reveal({ className = '', delay = 0, children }) {
 
 function Panel({ className = '', children }) {
   return (
-    <div className={`border border-[color:var(--color-border)] bg-[color:var(--color-surface)] ${className}`}>
+    <div className={`fui-corners border border-[color:var(--color-border)] bg-[color:var(--color-surface)] ${className}`}>
       {children}
     </div>
   );
