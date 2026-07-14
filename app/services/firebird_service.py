@@ -1315,10 +1315,11 @@ class FirebirdService:
 
         Uses DOCS.DOC_DATE (order creation) vs the earliest
         DOCS_ORDER_HISTORY row for that order with STATUS_ID=4. "Late"
-        still compares DOCS_ORDER.DATE_OUT_FACT (actual pickup) against
-        DATE_OUT (date promised to the client) — a separate, client-facing
-        signal that stays meaningful regardless of when production itself
-        finished.
+        compares that SAME STATUS_ID=4 timestamp against DATE_OUT (date
+        promised to the client) — deliberately NOT DATE_OUT_FACT (actual
+        pickup): a client picking up a ready order a few days late isn't
+        the business being late, it's the client's schedule, so pickup
+        timing must not count as "просрочка" here.
 
         Grouped by salon rather than by employee: DOCS_ORDER.CREATER_ID is
         whoever created the order at the register, not whoever did the
@@ -1347,11 +1348,7 @@ class FirebirdService:
         # filter). Deliberately does NOT join DOCS_ORDER_HISTORY here.
         sql = """
             SELECT
-                docs_order.id, docs.doc_num, docs.doc_date,
-                CASE WHEN docs_order.date_out > DATE '2000-01-01'
-                          AND docs_order.date_out_fact IS NOT NULL
-                          AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs_order.date_out AS TIMESTAMP)
-                     THEN 1 ELSE 0 END AS is_late
+                docs_order.id, docs.doc_num, docs.doc_date, docs_order.date_out
             FROM docs_order
                 INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
             WHERE
@@ -1414,11 +1411,12 @@ class FirebirdService:
         repo._load = lambda: None
         try:
             by_salon: dict[str, dict] = {}
-            for order_id, doc_num, doc_date, is_late in order_rows:
+            for order_id, doc_num, doc_date, date_out in order_rows:
                 h4_dt = h4_map.get(order_id)
                 if h4_dt is None:
                     continue  # never reached "Исполненный" — excluded, same as before
                 days = (h4_dt - datetime.combine(doc_date, datetime.min.time())).total_seconds() / 86400.0
+                is_late = 1 if (date_out and date_out > datetime(2000, 1, 1) and h4_dt > date_out) else 0
 
                 code = _order_salon_code(doc_num)
                 salon = repo.get_by_order_code(code, doc_date.year, doc_date.month) if code else None

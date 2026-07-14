@@ -1390,14 +1390,14 @@ export default function SalesAnalytics() {
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                     <KpiStat label="Средний срок" value={`${filteredTurnaround.total.avg_days} дн.`} accent="#e61919" icon={<Clock size={18} />} />
                     <KpiStat label="Просрочено" value={fmtPct(filteredTurnaround.total.late_rate)} accent="#c9502a" icon={<TrendingDown size={18} />}
-                      sub="факт. выдача позже обещанной даты" />
+                      sub="работа завершена позже обещанной даты" />
                     <KpiStat label="Заказов исполнено" value={filteredTurnaround.total.order_count.toLocaleString('ru-RU')} accent="#4af626" icon={<Target size={18} />} />
                   </div>
 
                   <div className="app-card overflow-hidden">
                     <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
                       <h3 className="font-semibold">По салонам</h3>
-                      <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">Срок — от приёма до статуса «Исполненный». Просрочка — фактическая выдача клиенту позже обещанной даты.</p>
+                      <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">Срок — от приёма до статуса «Исполненный». Просрочка — работа завершена (статус «Исполненный») позже обещанной клиенту даты выдачи; когда клиент фактически забрал заказ, не учитывается — это его график, а не вина бизнеса.</p>
                     </div>
                     <div className="p-3">
                       <ResponsiveTable
