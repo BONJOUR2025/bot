@@ -258,7 +258,7 @@ function MastersSummaryTable({ rows, onMasterClick }) {
 
 // ── Visualization components ──────────────────────────────────────
 
-function TopMastersChart({ data, activeName, onSelect }) {
+function TopMastersChart({ data, activeNames, onSelect }) {
   if (!data.length) return null;
   return (
     <div className="app-card p-5">
@@ -273,7 +273,7 @@ function TopMastersChart({ data, activeName, onSelect }) {
           <YAxis type="category" dataKey="master" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={120} />
           <Tooltip formatter={(v) => [fmtRub(v), 'Зарплата']} />
           <Bar dataKey="total_salary" radius={[0, 4, 4, 0]} onClick={(entry) => onSelect?.(entry.master)} cursor={onSelect ? 'pointer' : 'default'}>
-            {data.map((d, i) => <Cell key={d.master} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={activeName && activeName !== d.master ? 0.35 : 1} />)}
+            {data.map((d, i) => <Cell key={d.master} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={activeNames?.size && !activeNames.has(d.master) ? 0.35 : 1} />)}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -451,7 +451,8 @@ export default function Masters() {
   const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo, setDateTo]     = useState(today);
   const [statusFilter, setStatusFilter]     = useState(new Set());
-  const [masterSearch, setMasterSearch]     = useState('');
+  const [masterFilter, setMasterFilter]     = useState(new Set());
+  const [masterSearchText, setMasterSearchText] = useState('');
   const [nameSearch, setNameSearch]         = useState('');
   const [codeSearch, setCodeSearch]         = useState('');
   const [docSearch, setDocSearch]           = useState('');
@@ -481,6 +482,11 @@ export default function Masters() {
     [rows],
   );
 
+  const visibleMasterNames = useMemo(
+    () => (masterSearchText ? masterNames.filter((n) => n.toLowerCase().includes(masterSearchText.toLowerCase())) : masterNames),
+    [masterNames, masterSearchText],
+  );
+
   function toggleStatus(status) {
     setStatusFilter((prev) => {
       const next = new Set(prev);
@@ -495,6 +501,15 @@ export default function Masters() {
       const next = new Set(prev);
       if (next.has(cat)) next.delete(cat);
       else next.add(cat);
+      return next;
+    });
+  }
+
+  function toggleMaster(name) {
+    setMasterFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
       return next;
     });
   }
@@ -548,7 +563,7 @@ export default function Masters() {
     if (warningsOnly) r = r.filter((x) => x.warnings?.length > 0);
     if (warningTypeFilter.size > 0) r = r.filter((x) => [...warningTypeFilter].some((k) => x[k]));
     if (categoryFilter.size > 0) r = r.filter((x) => x.top_parent_name && categoryFilter.has(x.top_parent_name));
-    if (masterSearch) r = r.filter((x) => (x.description || '') === masterSearch);
+    if (masterFilter.size > 0) r = r.filter((x) => masterFilter.has(x.description));
     if (nameSearch)   r = r.filter((x) => (x.name || '').toLowerCase().includes(nameSearch.toLowerCase()));
     if (docSearch)    r = r.filter((x) => (x.doc_num || '').toLowerCase().includes(docSearch.toLowerCase()));
     if (codeSearch) {
@@ -570,7 +585,7 @@ export default function Masters() {
       });
     }
     return r;
-  }, [rows, statusFilter, warningsOnly, warningTypeFilter, categoryFilter, masterSearch, nameSearch, docSearch, codeSearch, durationFilter, dayFilter]);
+  }, [rows, statusFilter, warningsOnly, warningTypeFilter, categoryFilter, masterFilter, nameSearch, docSearch, codeSearch, durationFilter, dayFilter]);
 
   const sorted = useMemo(() => {
     if (!sortCol) return filtered;
@@ -785,7 +800,7 @@ export default function Masters() {
               {(topMastersChart.length > 0 || statusDonutData.length > 0) && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   <div className="lg:col-span-2">
-                    <TopMastersChart data={topMastersChart} activeName={masterSearch || null} onSelect={(name) => { setMasterSearch((prev) => (prev === name ? '' : name)); setTab('services'); }} />
+                    <TopMastersChart data={topMastersChart} activeNames={masterFilter} onSelect={(name) => { toggleMaster(name); setTab('services'); }} />
                   </div>
                   <StatusDonut data={statusDonutData} total={kpi.total} activeNames={statusFilter} onSelect={(name) => { toggleStatus(name); setTab('services'); }} />
                 </div>
@@ -798,7 +813,36 @@ export default function Masters() {
                 </div>
               )}
 
-              <MastersSummaryTable rows={filtered} onMasterClick={(name) => { setMasterSearch(name); setTab('services'); }} />
+              {(nameSearch || masterFilter.size > 0 || masterSearchText || categoryFilter.size > 0) && (
+                <div className="app-card p-3 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-[color:var(--color-muted-foreground)]">Медиана ниже посчитана с учётом активных фильтров:</span>
+                  {nameSearch && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+                      Услуга: «{nameSearch}»
+                      <button onClick={() => setNameSearch('')} className="hover:opacity-70"><X size={11} /></button>
+                    </span>
+                  )}
+                  {masterFilter.size > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+                      Мастеров выбрано: {masterFilter.size}
+                      <button onClick={() => setMasterFilter(new Set())} className="hover:opacity-70"><X size={11} /></button>
+                    </span>
+                  )}
+                  {masterSearchText && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+                      Мастер: «{masterSearchText}»
+                      <button onClick={() => setMasterSearchText('')} className="hover:opacity-70"><X size={11} /></button>
+                    </span>
+                  )}
+                  {categoryFilter.size > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-muted)] text-[color:var(--color-primary)] font-medium">
+                      Категорий: {categoryFilter.size}
+                      <button onClick={() => setCategoryFilter(new Set())} className="hover:opacity-70"><X size={11} /></button>
+                    </span>
+                  )}
+                </div>
+              )}
+              <MastersSummaryTable rows={filtered} onMasterClick={(name) => toggleMaster(name)} />
             </div>
           )}
 
@@ -843,31 +887,13 @@ export default function Masters() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Мастер</label>
-                    {masterNames.length > 0 ? (
-                      <select className="input w-full" value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)}>
-                        <option value="">Все мастера</option>
-                        {masterNames.map((n) => (
-                          <option key={n} value={n}>{n}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className="relative">
-                        <Search size={14} style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} className="text-[color:var(--color-muted-foreground)]" />
-                        <input className="input w-full" style={{ paddingLeft:'2rem' }} placeholder="Поиск..." value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Услуга</label>
-                    <input className="input w-full" placeholder="Название..." value={nameSearch} onChange={(e) => setNameSearch(e.target.value)} />
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Услуга (влияет на медиану в «Обзоре»)</label>
+                    <input className="input w-full" placeholder="напр. набойки" value={nameSearch} onChange={(e) => setNameSearch(e.target.value)} />
                   </div>
                   <div>
                     <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Заказ</label>
                     <input className="input w-full" placeholder="Номер заказа..." value={docSearch} onChange={(e) => setDocSearch(e.target.value)} />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div>
                     <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Код (через запятую, или с точкой)</label>
                     <input className="input w-full" placeholder="2.17, 3." value={codeSearch} onChange={(e) => setCodeSearch(e.target.value)} />
@@ -881,6 +907,43 @@ export default function Masters() {
                     </select>
                   </div>
                 </div>
+                {masterNames.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
+                      Мастера (мультивыбор)
+                      {masterFilter.size > 0 && (
+                        <button onClick={() => setMasterFilter(new Set())} className="ml-2 text-[color:var(--color-primary)] hover:underline">
+                          сбросить ({masterFilter.size})
+                        </button>
+                      )}
+                    </label>
+                    {masterNames.length > 8 && (
+                      <div className="relative mb-1.5">
+                        <Search size={14} style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} className="text-[color:var(--color-muted-foreground)]" />
+                        <input className="input w-full" style={{ paddingLeft:'2rem' }} placeholder="Найти мастера в списке..." value={masterSearchText} onChange={(e) => setMasterSearchText(e.target.value)} />
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {visibleMasterNames.map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => toggleMaster(n)}
+                          className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                            masterFilter.has(n)
+                              ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                              : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      {visibleMasterNames.length === 0 && (
+                        <span className="text-xs text-[color:var(--color-muted-foreground)]">Ничего не найдено</span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {categoryOptions.length > 0 && (
                   <div>
                     <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
