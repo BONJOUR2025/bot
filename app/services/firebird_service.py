@@ -176,17 +176,6 @@ SHOES_CODES = (
     '147.15', '147.16', '147.17', '147.18', '147.19', '147.20', '147.21', '147.22',
 )
 
-# folder_id 210406 = "004. Индивидуальный пошив" (custom shoe/slipper/leather-
-# goods making — "Пошив обуви", "Изготовление тапочек", "Индивидуальный пошив
-# кожгалантереи", etc.) — the business counts this as shoes revenue, but its
-# items use plain single-digit codes ('0'..'8'), NOT the 147.x sub-item
-# scheme SHOES_CODES/_parse_shoe_pairs relies on. Safe to OR into plain
-# SUM(kredit) revenue queries (get_daily_sales, get_department_comparison,
-# _order_revenue_rows) — NEVER add these codes to SHOES_CODES itself or feed
-# this folder into get_shoes_data/get_order_breakdown's pair parsing, since
-# '0'..'1' there would be misread as pair-starters and corrupt commission.
-SHOES_EXTRA_FOLDER_IDS = (210406,)
-
 REPAIR_FOLDER_IDS = (
     215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
     108401, 108402, 110409, 110410, 110411,
@@ -746,7 +735,7 @@ class FirebirdService:
             WHERE
                 CAST(docs.doc_date AS DATE) >= ?
                 AND CAST(docs.doc_date AS DATE) <= ?
-                AND (tovars_tbl.code IN ({shoes_placeholders}) OR tovars_tbl.folder_id IN ({','.join(str(x) for x in SHOES_EXTRA_FOLDER_IDS)}))
+                AND tovars_tbl.code IN ({shoes_placeholders})
             GROUP BY CAST(docs.doc_date AS DATE), users.description, docs.doc_num
         """
 
@@ -910,7 +899,7 @@ class FirebirdService:
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
-            WHERE (tovars_tbl.code IN ({shoes_placeholders}) OR tovars_tbl.folder_id IN ({','.join(str(x) for x in SHOES_EXTRA_FOLDER_IDS)})){where_extra}
+            WHERE tovars_tbl.code IN ({shoes_placeholders}){where_extra}
             GROUP BY docs.contragent_id, docs.doc_num, docs.doc_date
         """
 
@@ -2134,7 +2123,7 @@ class FirebirdService:
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
-                AND (tovars_tbl.code IN ({shoes_placeholders}) OR tovars_tbl.folder_id IN ({','.join(str(x) for x in SHOES_EXTRA_FOLDER_IDS)}))
+                AND tovars_tbl.code IN ({shoes_placeholders})
             GROUP BY docs.doc_num, docs.doc_date
         """
 
