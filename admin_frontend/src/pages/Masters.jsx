@@ -78,7 +78,10 @@ function MastersSummaryTable({ rows, onMasterClick }) {
       map[name].total++;
       if (r.status === 'Выполнено') {
         map[name].done++;
-        if (r.duration_min != null) map[name].durations.push(r.duration_min);
+        // Услуги короче 15 минут не учитываются в медиане — почти всегда
+        // это артефакт сканирования (пакетное сканирование, повторный скан
+        // и т.п.), а не реальное время работы, и тянет медиану вниз.
+        if (r.duration_min != null && r.duration_min >= 15) map[name].durations.push(r.duration_min);
       }
       if (r.status === 'В работе') map[name].inWork++;
       if (r.warnings?.length > 0) map[name].warnings++;
@@ -135,7 +138,7 @@ function MastersSummaryTable({ rows, onMasterClick }) {
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Всего</span><span>{m.total}</span></div>
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Выполнено</span><span className="text-green-600">{m.done}</span></div>
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">В работе</span><span className="text-yellow-600">{m.inWork}</span></div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Медиана</span><span>{fmtMin(median(m.durations))}</span></div>
+                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]" title="Услуги короче 15 минут не учитываются">Медиана</span><span>{fmtMin(median(m.durations))}</span></div>
                   <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Нарушений</span><span>{m.warnings > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
                 </div>
               </div>
@@ -149,7 +152,7 @@ function MastersSummaryTable({ rows, onMasterClick }) {
                 <th className="px-4 py-2 text-right">Всего</th>
                 <th className="px-4 py-2 text-right">Выполнено</th>
                 <th className="px-4 py-2 text-right">В работе</th>
-                <th className="px-4 py-2 text-right">Медиана</th>
+                <th className="px-4 py-2 text-right" title="Услуги короче 15 минут не учитываются">Медиана</th>
                 <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
               </tr>
             </thead>
