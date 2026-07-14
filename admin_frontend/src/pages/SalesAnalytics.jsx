@@ -592,6 +592,10 @@ export default function SalesAnalytics() {
   const [selectedEmployees,  setSelectedEmployees]  = useState(new Set());
   const [selectedCategories, setSelectedCategories] = useState(new Set());
   const [selectedSalons,     setSelectedSalons]     = useState(new Set());
+  // Only /sales/turnaround reads this (isolates "срок выполнения" to orders
+  // containing a matching service/goods line, e.g. "набойки") — same
+  // always-include-and-let-others-ignore-it approach as `categories` below.
+  const [serviceSearch, setServiceSearch] = useState('');
   const [salonOptions,       setSalonOptions]       = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -641,6 +645,7 @@ export default function SalesAnalytics() {
     // here rather than special-case buildParams per tab.
     const categories = selectedCategories.size ? [...selectedCategories].join(',') : undefined;
     if (categories) params.categories = categories;
+    if (serviceSearch.trim()) params.service_search = serviceSearch.trim();
     return params;
   }
 
@@ -1361,48 +1366,78 @@ export default function SalesAnalytics() {
 
           {/* ══ TURNAROUND tab ══════════════════════════════ */}
           {activeTab === 'turnaround' && (
-            tabLoading ? (
-              <SkeletonTable rows={6} />
-            ) : filteredTurnaround && filteredTurnaround.total.order_count > 0 ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                  <KpiStat label="Средний срок" value={`${filteredTurnaround.total.avg_days} дн.`} accent="#e61919" icon={<Clock size={18} />} />
-                  <KpiStat label="Просрочено" value={fmtPct(filteredTurnaround.total.late_rate)} accent="#c9502a" icon={<TrendingDown size={18} />}
-                    sub="факт позже обещанной даты" />
-                  <KpiStat label="Заказов с датой выдачи" value={filteredTurnaround.total.order_count.toLocaleString('ru-RU')} accent="#4af626" icon={<Target size={18} />} />
+            <div className="space-y-4">
+              <div className="app-card p-3 flex flex-wrap items-end gap-2">
+                <div className="flex-1 min-w-[220px]">
+                  <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Услуга/товар (по названию)</label>
+                  <input
+                    type="text"
+                    className="input w-full"
+                    placeholder="напр. набойки"
+                    value={serviceSearch}
+                    onChange={(e) => setServiceSearch(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setFilterVersion((v) => v + 1); }}
+                  />
                 </div>
-
-                <div className="app-card overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
-                    <h3 className="font-semibold">По сотрудникам</h3>
-                    <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">Срок — от создания заказа до фактической выдачи. Просрочка — выдали позже даты, обещанной клиенту.</p>
-                  </div>
-                  <div className="p-3">
-                    <ResponsiveTable
-                      data={filteredTurnaround.by_employee}
-                      keyFn={(e) => e.code}
-                      emptyText="Нет данных"
-                      columns={[
-                        { label: 'Сотрудник', primary: true, render: (e) => (
-                          <div className="flex items-center gap-2">
-                            <EmpAvatar name={empName(e.code)} color={CHART_COLORS[filteredTurnaround.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
-                            <span>{empName(e.code)}</span>
-                          </div>
-                        )},
-                        { label: 'Заказов', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => e.order_count.toLocaleString('ru-RU') },
-                        { label: 'Ср. срок', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => `${e.avg_days} дн.` },
-                        { label: 'Просрочено', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => `${e.late_count}` },
-                        { label: '% просрочки', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => (
-                          <span className={e.late_rate >= 50 ? 'text-red-500' : e.late_rate >= 25 ? 'text-amber-500' : 'text-emerald-600'}>{fmtPct(e.late_rate)}</span>
-                        )},
-                      ]}
-                    />
-                  </div>
-                </div>
+                <button onClick={() => setFilterVersion((v) => v + 1)} className="btn btn--primary btn--sm flex items-center gap-1.5">
+                  <RefreshCw size={14} className={tabLoading ? 'animate-spin' : ''} /> Применить
+                </button>
+                {serviceSearch.trim() && (
+                  <button onClick={() => { setServiceSearch(''); setFilterVersion((v) => v + 1); }} className="btn btn--secondary btn--sm">
+                    Сбросить
+                  </button>
+                )}
               </div>
-            ) : (
-              <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>
-            )
+              <p className="text-xs text-[color:var(--color-muted-foreground)] -mt-2">
+                {serviceSearch.trim()
+                  ? <>Срок считается только по заказам с позицией, содержащей «{serviceSearch.trim()}» в названии — сотрудники ниже уже отфильтрованы под неё. «Сотрудники» в общем фильтре выше сужают список мастеров дальше.</>
+                  : 'Срок считается по всем заказам за период. Укажите название услуги/товара выше, чтобы измерить срок только по ней (например «набойки»), и/или сузьте по мастерам через фильтр «Сотрудники» вверху страницы.'}
+              </p>
+              {tabLoading ? (
+                <SkeletonTable rows={6} />
+              ) : filteredTurnaround && filteredTurnaround.total.order_count > 0 ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                    <KpiStat label="Средний срок" value={`${filteredTurnaround.total.avg_days} дн.`} accent="#e61919" icon={<Clock size={18} />} />
+                    <KpiStat label="Просрочено" value={fmtPct(filteredTurnaround.total.late_rate)} accent="#c9502a" icon={<TrendingDown size={18} />}
+                      sub="факт позже обещанной даты" />
+                    <KpiStat label="Заказов с датой выдачи" value={filteredTurnaround.total.order_count.toLocaleString('ru-RU')} accent="#4af626" icon={<Target size={18} />} />
+                  </div>
+
+                  <div className="app-card overflow-hidden">
+                    <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+                      <h3 className="font-semibold">По сотрудникам</h3>
+                      <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">Срок — от создания заказа до фактической выдачи. Просрочка — выдали позже даты, обещанной клиенту.</p>
+                    </div>
+                    <div className="p-3">
+                      <ResponsiveTable
+                        data={filteredTurnaround.by_employee}
+                        keyFn={(e) => e.code}
+                        emptyText="Нет данных"
+                        columns={[
+                          { label: 'Сотрудник', primary: true, render: (e) => (
+                            <div className="flex items-center gap-2">
+                              <EmpAvatar name={empName(e.code)} color={CHART_COLORS[filteredTurnaround.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
+                              <span>{empName(e.code)}</span>
+                            </div>
+                          )},
+                          { label: 'Заказов', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => e.order_count.toLocaleString('ru-RU') },
+                          { label: 'Ср. срок', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => `${e.avg_days} дн.` },
+                          { label: 'Просрочено', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => `${e.late_count}` },
+                          { label: '% просрочки', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => (
+                            <span className={e.late_rate >= 50 ? 'text-red-500' : e.late_rate >= 25 ? 'text-amber-500' : 'text-emerald-600'}>{fmtPct(e.late_rate)}</span>
+                          )},
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">
+                  {serviceSearch.trim() ? `Нет заказов с «${serviceSearch.trim()}» за выбранный период` : 'Нет данных за выбранный период'}
+                </div>
+              )}
+            </div>
           )}
 
           {/* ══ RETURNS tab ═════════════════════════════════ */}

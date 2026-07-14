@@ -97,6 +97,7 @@ def create_sales_router() -> APIRouter:
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
+        service_search: Optional[str] = Query(default=None, description="Substring match on service/goods name"),
     ):
         """Return order fulfillment time (creation → pickup) and lateness rate by employee."""
         from app.services.firebird_service import get_firebird_service
@@ -104,7 +105,9 @@ def create_sales_router() -> APIRouter:
         df, dt = _resolve_range(date_from, date_to)
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_turnaround_stats, df, dt, _parse_salon_ids(salon_ids))
+            return await asyncio.to_thread(
+                svc.get_turnaround_stats, df, dt, _parse_salon_ids(salon_ids), service_search,
+            )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 

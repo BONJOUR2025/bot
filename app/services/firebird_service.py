@@ -1293,7 +1293,8 @@ class FirebirdService:
             "unpriced_items": unpriced_items,
         }
 
-    def get_turnaround_stats(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
+    def get_turnaround_stats(self, date_from: date, date_to: date, salon_ids: list[str] | None = None,
+                              service_search: str | None = None) -> dict:
         """Order fulfillment time (order created → actually picked up) for a date range.
 
         Uses DOCS.DOC_DATE (order creation) vs DOCS_ORDER.DATE_OUT_FACT
@@ -1307,6 +1308,13 @@ class FirebirdService:
         forces the per-employee aggregation (avg/count/late) into Python
         instead of SQL GROUP BY, since a salon needs the individual doc_num
         resolved before it can be counted.
+
+        `service_search` restricts to orders containing at least one
+        service (DOC_ORDER_SERVICES) or goods (DOC_ORDER_LINES) line whose
+        name contains this substring — e.g. "набойки" isolates turnaround
+        for heel-tap repairs specifically instead of every order type an
+        employee touches, so a slow category doesn't get diluted by (or
+        credited from) everything else they did that day.
         """
         empty = {"total": {"avg_days": 0.0, "late_rate": 0.0, "order_count": 0}, "by_employee": []}
         if not FIREBIRD_AVAILABLE:
@@ -1329,12 +1337,30 @@ class FirebirdService:
                 AND docs_order.date_out_fact IS NOT NULL
                 AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs.doc_date AS TIMESTAMP)
         """
+        params: list = [date_from, date_to]
+        if service_search:
+            sql += """
+                AND (
+                    EXISTS (
+                        SELECT 1 FROM doc_order_services dos
+                            INNER JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id
+                        WHERE dos.doc_order_id = docs_order.id AND UPPER(t.name) LIKE UPPER(?)
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM doc_order_lines dol
+                            INNER JOIN tovars_tbl t2 ON t2.tovar_id = dol.tovar_id
+                        WHERE dol.doc_order_id = docs_order.id AND UPPER(t2.name) LIKE UPPER(?)
+                    )
+                )
+            """
+            needle = f"%{service_search}%"
+            params += [needle, needle]
 
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql, (date_from, date_to))
+                cur.execute(sql, params)
                 rows = cur.fetchall()
             finally:
                 con.close()
