@@ -863,22 +863,10 @@ export default function SalesAnalytics() {
     };
   }, [margin, selectedEmployees]);
 
-  const filteredTurnaround = useMemo(() => {
-    if (!turnaround) return null;
-    if (!selectedEmployees.size) return turnaround;
-    const byEmp = turnaround.by_employee.filter((e) => selectedEmployees.has(e.code));
-    const orderCount = byEmp.reduce((s, e) => s + e.order_count, 0);
-    const lateCount  = byEmp.reduce((s, e) => s + e.late_count, 0);
-    const daysWeighted = byEmp.reduce((s, e) => s + e.avg_days * e.order_count, 0);
-    return {
-      total: {
-        avg_days: orderCount ? Math.round(daysWeighted / orderCount * 10) / 10 : 0,
-        late_rate: orderCount ? Math.round(lateCount / orderCount * 1000) / 10 : 0,
-        order_count: orderCount,
-      },
-      by_employee: byEmp,
-    };
-  }, [turnaround, selectedEmployees]);
+  // Grouped by salon server-side already (salon_ids round-trips via
+  // buildParams like every other lazy tab), so no client-side re-filter
+  // is needed here the way the old per-employee version required.
+  const filteredTurnaround = turnaround;
 
   const filteredReturns = useMemo(() => {
     if (!returns) return null;
@@ -1389,9 +1377,11 @@ export default function SalesAnalytics() {
                 )}
               </div>
               <p className="text-xs text-[color:var(--color-muted-foreground)] -mt-2">
+                Срок — от приёма заказа до перевода в статус «Исполненный» (когда работа фактически закончена, не когда клиент забрал).
                 {serviceSearch.trim()
-                  ? <>Срок считается только по заказам с позицией, содержащей «{serviceSearch.trim()}» в названии — сотрудники ниже уже отфильтрованы под неё. «Сотрудники» в общем фильтре выше сужают список мастеров дальше.</>
-                  : 'Срок считается по всем заказам за период. Укажите название услуги/товара выше, чтобы измерить срок только по ней (например «набойки»), и/или сузьте по мастерам через фильтр «Сотрудники» вверху страницы.'}
+                  ? <> Считается только по заказам с позицией, содержащей «{serviceSearch.trim()}» в названии.</>
+                  : <> Укажите название услуги/товара выше, чтобы измерить срок только по ней (например «набойки»).</>}
+                {' '}Сузить по салонам можно фильтром «Салон» вверху страницы.
               </p>
               {tabLoading ? (
                 <SkeletonTable rows={6} />
@@ -1400,32 +1390,32 @@ export default function SalesAnalytics() {
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                     <KpiStat label="Средний срок" value={`${filteredTurnaround.total.avg_days} дн.`} accent="#e61919" icon={<Clock size={18} />} />
                     <KpiStat label="Просрочено" value={fmtPct(filteredTurnaround.total.late_rate)} accent="#c9502a" icon={<TrendingDown size={18} />}
-                      sub="факт позже обещанной даты" />
-                    <KpiStat label="Заказов с датой выдачи" value={filteredTurnaround.total.order_count.toLocaleString('ru-RU')} accent="#4af626" icon={<Target size={18} />} />
+                      sub="факт. выдача позже обещанной даты" />
+                    <KpiStat label="Заказов исполнено" value={filteredTurnaround.total.order_count.toLocaleString('ru-RU')} accent="#4af626" icon={<Target size={18} />} />
                   </div>
 
                   <div className="app-card overflow-hidden">
                     <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
-                      <h3 className="font-semibold">По сотрудникам</h3>
-                      <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">Срок — от создания заказа до фактической выдачи. Просрочка — выдали позже даты, обещанной клиенту.</p>
+                      <h3 className="font-semibold">По салонам</h3>
+                      <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">Срок — от приёма до статуса «Исполненный». Просрочка — фактическая выдача клиенту позже обещанной даты.</p>
                     </div>
                     <div className="p-3">
                       <ResponsiveTable
-                        data={filteredTurnaround.by_employee}
-                        keyFn={(e) => e.code}
+                        data={filteredTurnaround.by_salon}
+                        keyFn={(s) => s.salon_id}
                         emptyText="Нет данных"
                         columns={[
-                          { label: 'Сотрудник', primary: true, render: (e) => (
+                          { label: 'Салон', primary: true, render: (s) => (
                             <div className="flex items-center gap-2">
-                              <EmpAvatar name={empName(e.code)} color={CHART_COLORS[filteredTurnaround.by_employee.indexOf(e) % CHART_COLORS.length]} size={26} />
-                              <span>{empName(e.code)}</span>
+                              <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[filteredTurnaround.by_salon.indexOf(s) % CHART_COLORS.length] }} />
+                              <span>{s.salon_name}</span>
                             </div>
                           )},
-                          { label: 'Заказов', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => e.order_count.toLocaleString('ru-RU') },
-                          { label: 'Ср. срок', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => `${e.avg_days} дн.` },
-                          { label: 'Просрочено', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (e) => `${e.late_count}` },
-                          { label: '% просрочки', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (e) => (
-                            <span className={e.late_rate >= 50 ? 'text-red-500' : e.late_rate >= 25 ? 'text-amber-500' : 'text-emerald-600'}>{fmtPct(e.late_rate)}</span>
+                          { label: 'Заказов', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (s) => s.order_count.toLocaleString('ru-RU') },
+                          { label: 'Ср. срок', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (s) => `${s.avg_days} дн.` },
+                          { label: 'Просрочено', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (s) => `${s.late_count}` },
+                          { label: '% просрочки', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (s) => (
+                            <span className={s.late_rate >= 50 ? 'text-red-500' : s.late_rate >= 25 ? 'text-amber-500' : 'text-emerald-600'}>{fmtPct(s.late_rate)}</span>
                           )},
                         ]}
                       />

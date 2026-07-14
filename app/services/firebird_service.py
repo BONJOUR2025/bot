@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 try:
@@ -1295,47 +1295,54 @@ class FirebirdService:
 
     def get_turnaround_stats(self, date_from: date, date_to: date, salon_ids: list[str] | None = None,
                               service_search: str | None = None) -> dict:
-        """Order fulfillment time (order created → actually picked up) for a date range.
+        """Order fulfillment time (order accepted → moved to STATUS_ID=4,
+        "Исполненный" per the real ORDER_STATUSES lookup table — i.e. work
+        actually finished, not STATUS_ID=5 "Выданный" which is when the
+        client picks it up) grouped by salon.
 
-        Uses DOCS.DOC_DATE (order creation) vs DOCS_ORDER.DATE_OUT_FACT
-        (actual pickup) — these have a much better fill rate for this
-        business (~91% in a recent H1) than DATE_ORDER_START/EXECUTED
-        (~10-15%). "Late" compares DATE_OUT_FACT against DATE_OUT, the
-        date promised to the client.
+        Uses DOCS.DOC_DATE (order creation) vs the earliest
+        DOCS_ORDER_HISTORY row for that order with STATUS_ID=4. "Late"
+        still compares DOCS_ORDER.DATE_OUT_FACT (actual pickup) against
+        DATE_OUT (date promised to the client) — a separate, client-facing
+        signal that stays meaningful regardless of when production itself
+        finished.
 
-        `salon_ids` restricts to orders resolved to one of those salons —
-        see get_daily_sales for the attribution rule and its caveats. This
-        forces the per-employee aggregation (avg/count/late) into Python
-        instead of SQL GROUP BY, since a salon needs the individual doc_num
-        resolved before it can be counted.
+        Grouped by salon rather than by employee: DOCS_ORDER.CREATER_ID is
+        whoever created the order at the register, not whoever did the
+        work, so "per employee" here didn't actually identify a
+        responsible party — salon attribution reuses the same mechanism as
+        get_department_comparison (order-code suffix resolved via
+        SalonRepository), and `salon_ids` is a plain post-filter on the
+        output for the same reason documented there.
 
         `service_search` restricts to orders containing at least one
         service (DOC_ORDER_SERVICES) or goods (DOC_ORDER_LINES) line whose
         name contains this substring — e.g. "набойки" isolates turnaround
-        for heel-tap repairs specifically instead of every order type an
-        employee touches, so a slow category doesn't get diluted by (or
-        credited from) everything else they did that day.
+        for heel-tap repairs specifically instead of every order type.
         """
-        empty = {"total": {"avg_days": 0.0, "late_rate": 0.0, "order_count": 0}, "by_employee": []}
+        from app.data.salon_repository import get_salon_repository
+
+        UNALLOC_ID = "unallocated"
+        UNALLOC_NAME = "Не определено"
+
+        empty = {"total": {"avg_days": 0.0, "late_rate": 0.0, "order_count": 0}, "by_salon": []}
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty turnaround stats")
             return empty
-        salon_filter = set(salon_ids) if salon_ids else None
 
+        # Phase 1: orders in range (cheap — DOCS.DOC_DATE is the selective
+        # filter). Deliberately does NOT join DOCS_ORDER_HISTORY here.
         sql = """
             SELECT
-                users.description, docs.doc_num, docs.doc_date,
-                CAST(docs_order.date_out_fact AS TIMESTAMP) - CAST(docs.doc_date AS TIMESTAMP) AS days,
+                docs_order.id, docs.doc_num, docs.doc_date,
                 CASE WHEN docs_order.date_out > DATE '2000-01-01'
+                          AND docs_order.date_out_fact IS NOT NULL
                           AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs_order.date_out AS TIMESTAMP)
                      THEN 1 ELSE 0 END AS is_late
             FROM docs_order
                 INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
-                INNER JOIN users ON (users.user_id = docs_order.creater_id)
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
-                AND docs_order.date_out_fact IS NOT NULL
-                AND CAST(docs_order.date_out_fact AS TIMESTAMP) > CAST(docs.doc_date AS TIMESTAMP)
         """
         params: list = [date_from, date_to]
         if service_search:
@@ -1356,41 +1363,78 @@ class FirebirdService:
             needle = f"%{service_search}%"
             params += [needle, needle]
 
+        # Phase 2: earliest STATUS_ID=4 ("Исполненный") history row per
+        # order, batched against just this range's order ids instead of
+        # aggregating the whole (multi-million-row) history table — the
+        # latter measured as effectively hanging (>2min, killed) since
+        # DOCS_ORDER_HISTORY has no per-row date filter cheap enough to
+        # apply before the GROUP BY. Same batching technique as
+        # _fetch_batched's other callers (e.g. _product_revenue_rows).
+        sql_h4 = """
+            SELECT doc_order_id, MIN(dt) AS mn
+            FROM docs_order_history
+            WHERE status_id = 4 AND doc_order_id IN ({ph})
+            GROUP BY doc_order_id
+        """
+
         try:
             con = _connect()
             try:
                 cur = con.cursor()
                 cur.execute(sql, params)
-                rows = cur.fetchall()
+                order_rows = cur.fetchall()
+                order_ids = [r[0] for r in order_rows]
+                h4_map = {oid: mn for oid, mn in _fetch_batched(cur, sql_h4, order_ids, batch=1000)}
             finally:
                 con.close()
         except Exception as e:
             logger.error(f"Error fetching turnaround stats: {e}")
             return empty
 
-        by_emp: dict[str, dict] = {}
-        with _SalonResolver() as resolve_salon:
-            for desc, doc_num, doc_date, days, is_late in rows:
-                if salon_filter is not None and resolve_salon(doc_num, doc_date) not in salon_filter:
-                    continue
-                code = _code_from_description(desc)
-                if not code:
-                    continue
-                entry = by_emp.setdefault(code, {"code": code, "days_sum": 0.0, "order_count": 0, "late_count": 0})
-                entry["days_sum"] += float(days or 0)
+        # SalonRepository.get_by_order_code() re-reads salons.json on every
+        # call by design — fine occasionally, but dominates runtime over
+        # thousands of rows, so load once and suppress the reload (same
+        # technique as get_department_comparison).
+        repo = get_salon_repository()
+        repo._load()
+        original_load = repo._load
+        repo._load = lambda: None
+        try:
+            by_salon: dict[str, dict] = {}
+            for order_id, doc_num, doc_date, is_late in order_rows:
+                h4_dt = h4_map.get(order_id)
+                if h4_dt is None:
+                    continue  # never reached "Исполненный" — excluded, same as before
+                days = (h4_dt - datetime.combine(doc_date, datetime.min.time())).total_seconds() / 86400.0
+
+                code = _order_salon_code(doc_num)
+                salon = repo.get_by_order_code(code, doc_date.year, doc_date.month) if code else None
+                salon_id = salon.id if salon else UNALLOC_ID
+                salon_name = salon.name if salon else UNALLOC_NAME
+                entry = by_salon.setdefault(salon_id, {
+                    "salon_id": salon_id, "salon_name": salon_name,
+                    "days_sum": 0.0, "order_count": 0, "late_count": 0,
+                })
+                entry["days_sum"] += days
                 entry["order_count"] += 1
                 entry["late_count"] += is_late
+        finally:
+            repo._load = original_load
 
-        by_employee = []
+        salon_filter = set(salon_ids) if salon_ids else None
+        by_salon_list = []
         total_orders = 0
         total_late = 0
         total_days_weighted = 0.0
-        for entry in by_emp.values():
+        for entry in by_salon.values():
+            if salon_filter is not None and entry["salon_id"] not in salon_filter:
+                continue
             order_count = entry["order_count"]
             avg_days = entry["days_sum"] / order_count if order_count else 0.0
             late_count = entry["late_count"]
-            by_employee.append({
-                "code": entry["code"],
+            by_salon_list.append({
+                "salon_id": entry["salon_id"],
+                "salon_name": entry["salon_name"],
                 "avg_days": round(avg_days, 1),
                 "order_count": order_count,
                 "late_count": late_count,
@@ -1400,7 +1444,7 @@ class FirebirdService:
             total_late += late_count
             total_days_weighted += avg_days * order_count
 
-        by_employee.sort(key=lambda e: e["avg_days"], reverse=True)
+        by_salon_list.sort(key=lambda e: e["avg_days"], reverse=True)
 
         return {
             "total": {
@@ -1408,7 +1452,7 @@ class FirebirdService:
                 "late_rate": round(total_late / total_orders * 100, 1) if total_orders else 0.0,
                 "order_count": total_orders,
             },
-            "by_employee": by_employee,
+            "by_salon": by_salon_list,
         }
 
     def get_receivables(self, date_from: date, date_to: date) -> dict:

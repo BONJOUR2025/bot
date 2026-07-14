@@ -99,7 +99,7 @@ def create_sales_router() -> APIRouter:
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
         service_search: Optional[str] = Query(default=None, description="Substring match on service/goods name"),
     ):
-        """Return order fulfillment time (creation → pickup) and lateness rate by employee."""
+        """Return order fulfillment time (accepted → "Исполненный") and lateness rate by salon."""
         from app.services.firebird_service import get_firebird_service
 
         df, dt = _resolve_range(date_from, date_to)
