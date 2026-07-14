@@ -217,6 +217,19 @@ CASH_BALANCE_KASSA_IDS = (21057, 10969, 21067, 10564, 21066, 1172)
 CASH_BALANCE_NAME_OVERRIDES = {21066: "5_Гранд Палас"}
 
 
+def _kassa_display_name(kassa_id, raw_name) -> str | None:
+    """KASSES.name resolved for a KASSA_KREDIT/KASSA_DEBET id, applying
+    the same stale-name override as get_cash_balances (id 21066 is still
+    labeled "5_Пассаж" in Agbis after that location was renamed)."""
+    if kassa_id is None:
+        return None
+    try:
+        kassa_id = int(kassa_id)
+    except (TypeError, ValueError):
+        return (raw_name or "").strip() or None
+    return CASH_BALANCE_NAME_OVERRIDES.get(kassa_id, (raw_name or "").strip() or None)
+
+
 def _parse_shoe_pairs(items: list[tuple]) -> list[float]:
     """Parse ordered (code, kredit) records of one order into per-pair kredit sums.
 
@@ -2178,23 +2191,42 @@ class FirebirdService:
         }
 
     def get_cash_moves(self, date_from: date | None = None, date_to: date | None = None) -> list[dict]:
-        """Load cash movements from DOC_KASSA_MOVES."""
+        """Load cash movements from DOC_KASSA_MOVES.
+
+        Also resolves KASSA_KREDIT/KASSA_DEBET (the actual source/
+        destination register — confirmed against real "Выравнивание
+        кассы"/"Возврат инкасации" rows: KASSA_KREDIT=54 "Основная",
+        KASSA_DEBET=a salon's register) with their KASSES.name. DEP_SRC_ID
+        is a *different*, admin-assigned id space (see
+        CashConfigRepository/DEFAULT_BRANCHES) that tracks which
+        department filed the document — for a normal инкассация out of a
+        salon it happens to match that salon's register, but for a
+        reverse transfer (Основная → salon, e.g. to top up/balance a
+        till) it does not reliably identify either side of the move, so
+        filtering by DEP_SRC_ID alone silently misses those — callers
+        that need "did this move touch register X" should match against
+        KASSA_KREDIT/KASSA_DEBET instead.
+        """
         if not FIREBIRD_AVAILABLE:
             return []
-        conditions = ["DK_DATE > DATE '2023-12-31'"]
+        conditions = ["dkm.DK_DATE > DATE '2023-12-31'"]
         params: list = []
         if date_from:
-            conditions.append("DK_DATE >= ?")
+            conditions.append("dkm.DK_DATE >= ?")
             params.append(date_from)
         if date_to:
-            conditions.append("DK_DATE <= ?")
+            conditions.append("dkm.DK_DATE <= ?")
             params.append(date_to)
         where = " AND ".join(conditions)
         sql = f"""
-            SELECT ID_KASSES_MOVE, DK_DATE, SUMM, BASIS, OWN_USR_ID, DEP_SRC_ID
-            FROM DOC_KASSA_MOVES
+            SELECT dkm.ID_KASSES_MOVE, dkm.DK_DATE, dkm.SUMM, dkm.BASIS, dkm.OWN_USR_ID, dkm.DEP_SRC_ID,
+                   dkm.KASSA_KREDIT, k1.name AS KASSA_KREDIT_NAME,
+                   dkm.KASSA_DEBET, k2.name AS KASSA_DEBET_NAME
+            FROM DOC_KASSA_MOVES dkm
+                LEFT JOIN KASSES k1 ON k1.id = dkm.KASSA_KREDIT
+                LEFT JOIN KASSES k2 ON k2.id = dkm.KASSA_DEBET
             WHERE {where}
-            ORDER BY DK_DATE DESC
+            ORDER BY dkm.DK_DATE DESC
         """
         try:
             conn = _connect()
@@ -2206,6 +2238,8 @@ class FirebirdService:
                 row = dict(zip(cols, r))
                 if isinstance(row.get("DK_DATE"), date):
                     row["DK_DATE"] = row["DK_DATE"].isoformat()
+                row["KASSA_KREDIT_NAME"] = _kassa_display_name(row.get("KASSA_KREDIT"), row.get("KASSA_KREDIT_NAME"))
+                row["KASSA_DEBET_NAME"] = _kassa_display_name(row.get("KASSA_DEBET"), row.get("KASSA_DEBET_NAME"))
                 rows.append(row)
             conn.close()
             return rows
@@ -2272,13 +2306,19 @@ class FirebirdService:
         ]
 
     def get_cash_move_by_id(self, move_id: str) -> Optional[dict]:
-        """Load a single cash movement by ID from DOC_KASSA_MOVES."""
+        """Load a single cash movement by ID from DOC_KASSA_MOVES. See
+        get_cash_moves for why KASSA_KREDIT/KASSA_DEBET (not DEP_SRC_ID)
+        are the fields that reliably identify the two registers."""
         if not FIREBIRD_AVAILABLE:
             return None
         sql = """
-            SELECT ID_KASSES_MOVE, DK_DATE, SUMM, BASIS, OWN_USR_ID, DEP_SRC_ID
-            FROM DOC_KASSA_MOVES
-            WHERE ID_KASSES_MOVE = ?
+            SELECT dkm.ID_KASSES_MOVE, dkm.DK_DATE, dkm.SUMM, dkm.BASIS, dkm.OWN_USR_ID, dkm.DEP_SRC_ID,
+                   dkm.KASSA_KREDIT, k1.name AS KASSA_KREDIT_NAME,
+                   dkm.KASSA_DEBET, k2.name AS KASSA_DEBET_NAME
+            FROM DOC_KASSA_MOVES dkm
+                LEFT JOIN KASSES k1 ON k1.id = dkm.KASSA_KREDIT
+                LEFT JOIN KASSES k2 ON k2.id = dkm.KASSA_DEBET
+            WHERE dkm.ID_KASSES_MOVE = ?
         """
         try:
             conn = _connect()
@@ -2292,6 +2332,8 @@ class FirebirdService:
             result = dict(zip(cols, row))
             if isinstance(result.get("DK_DATE"), date):
                 result["DK_DATE"] = result["DK_DATE"].isoformat()
+            result["KASSA_KREDIT_NAME"] = _kassa_display_name(result.get("KASSA_KREDIT"), result.get("KASSA_KREDIT_NAME"))
+            result["KASSA_DEBET_NAME"] = _kassa_display_name(result.get("KASSA_DEBET"), result.get("KASSA_DEBET_NAME"))
             return result
         except Exception as e:
             logger.warning(f"get_cash_move_by_id error: {e}")

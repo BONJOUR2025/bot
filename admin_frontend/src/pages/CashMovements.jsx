@@ -853,6 +853,7 @@ export default function CashMovements() {
   const [query, setQuery]         = useState('');
   const [searchOr, setSearchOr]   = useState(false);
   const [selDeps, setSelDeps]     = useState([]);
+  const [selKassas, setSelKassas] = useState([]);
   const [selUsers, setSelUsers]   = useState([]);
   const [selCatFilters, setSelCatFilters] = useState([]);
   const [invalidOnly, setInvalidOnly]    = useState(false);
@@ -948,9 +949,9 @@ export default function CashMovements() {
   }
 
   function exportCsv() {
-    const header = ['Дата','Филиал','Создатель','Категория','Основание','Сумма','Ручное назначение'];
+    const header = ['Дата','Филиал','Откуда','Куда','Создатель','Категория','Основание','Сумма','Ручное назначение'];
     const csvRows = filtered.map((r) => [
-      fmtDate(r.DK_DATE), r.dep_name, r.user_name,
+      fmtDate(r.DK_DATE), r.dep_name, r.KASSA_KREDIT_NAME || '', r.KASSA_DEBET_NAME || '', r.user_name,
       r.category || '', r.BASIS || '', r.SUMM || 0, r.manually_assigned ? 'Да' : 'Нет',
     ]);
     const csv = [header, ...csvRows].map((row) => row.map((v) => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -970,6 +971,20 @@ export default function CashMovements() {
     return [...seen.entries()].map(([id, name]) => ({ id, name: name || id })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
   }, [safeRows]);
 
+  // Built from BOTH KASSA_KREDIT (source) and KASSA_DEBET (destination) —
+  // "Филиал"/DEP_SRC_ID above only reliably tracks the salon side of a
+  // normal инкассация out of a till; a reverse transfer (Основная →
+  // salon, e.g. to top up/balance a till) doesn't show up there at all,
+  // so this filter matches either side of the real register pair instead.
+  const kassaOptions = useMemo(() => {
+    const seen = new Map();
+    safeRows.forEach((r) => {
+      if (r.KASSA_KREDIT != null) seen.set(String(r.KASSA_KREDIT), r.KASSA_KREDIT_NAME);
+      if (r.KASSA_DEBET != null) seen.set(String(r.KASSA_DEBET), r.KASSA_DEBET_NAME);
+    });
+    return [...seen.entries()].map(([id, name]) => ({ id, name: name || id })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
+  }, [safeRows]);
+
   const userOptions = useMemo(() => {
     const seen = new Map();
     safeRows.forEach((r) => { const k = String(r.OWN_USR_ID ?? ''); if (!seen.has(k)) seen.set(k, r.user_name); });
@@ -979,6 +994,7 @@ export default function CashMovements() {
   const filtered = useMemo(() => {
     let out = safeRows;
     if (selDeps.length)       out = out.filter((r) => selDeps.includes(String(r.DEP_SRC_ID ?? '')));
+    if (selKassas.length)     out = out.filter((r) => selKassas.includes(String(r.KASSA_KREDIT ?? '')) || selKassas.includes(String(r.KASSA_DEBET ?? '')));
     if (selUsers.length)      out = out.filter((r) => selUsers.includes(String(r.OWN_USR_ID ?? '')));
     if (selCatFilters.length) out = out.filter((r) => selCatFilters.includes(r.category ?? '__invalid__'));
     if (invalidOnly)          out = out.filter((r) => !r.prefix_ok);
@@ -998,7 +1014,7 @@ export default function CashMovements() {
       if (sort.field === 'category')  return mult * (a.category  || '').localeCompare(b.category  || '', 'ru');
       return 0;
     });
-  }, [safeRows, selDeps, selUsers, selCatFilters, invalidOnly, noPayoutOnly, dayFilter, query, searchOr, sort]);
+  }, [safeRows, selDeps, selKassas, selUsers, selCatFilters, invalidOnly, noPayoutOnly, dayFilter, query, searchOr, sort]);
 
   const filteredIds = useMemo(() => filtered.map((r) => r.ID_KASSES_MOVE), [filtered]);
   const allChecked  = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
@@ -1347,6 +1363,29 @@ export default function CashMovements() {
                   </div>
                 </div>
               )}
+              {kassaOptions.length > 0 && (
+                <div>
+                  <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
+                    Касса
+                    {selKassas.length > 0 && (
+                      <button onClick={() => setSelKassas([])}
+                        className="ml-2 text-[color:var(--color-primary)] hover:underline">
+                        сбросить
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {kassaOptions.map(({ id, name }) => (
+                      <button key={id} onClick={() => toggleArr(setSelKassas, id)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          selKassas.includes(id)
+                            ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                            : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]'
+                        }`}>{name}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {userOptions.length > 0 && (
                 <div>
                   <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">Создатель</div>
@@ -1406,6 +1445,10 @@ export default function CashMovements() {
                     <div className="flex justify-between gap-2">
                       <span className="text-[color:var(--color-muted-foreground)] shrink-0">Филиал</span>
                       <span className="text-right font-medium">{row.dep_name || '—'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-[color:var(--color-muted-foreground)] shrink-0">Касса</span>
+                      <span className="text-right font-medium">{row.KASSA_KREDIT_NAME || '—'} → {row.KASSA_DEBET_NAME || '—'}</span>
                     </div>
                     <div className="flex justify-between gap-2">
                       <span className="text-[color:var(--color-muted-foreground)] shrink-0">Создатель</span>
@@ -1481,6 +1524,7 @@ export default function CashMovements() {
                     <th className={`${thCls} text-left`} onClick={() => toggleSort('dep_name')}>
                       <span className="inline-flex items-center gap-1">Филиал <SortIcon field="dep_name" sort={sort} /></span>
                     </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Касса</th>
                     <th className={`${thCls} text-left`} onClick={() => toggleSort('user_name')}>
                       <span className="inline-flex items-center gap-1">Создатель <SortIcon field="user_name" sort={sort} /></span>
                     </th>
@@ -1536,6 +1580,7 @@ export default function CashMovements() {
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">{fmtDate(row.DK_DATE)}</td>
                         <td className="px-3 py-2.5 whitespace-nowrap">{row.dep_name}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap text-xs">{row.KASSA_KREDIT_NAME || '—'} → {row.KASSA_DEBET_NAME || '—'}</td>
                         <td className="px-3 py-2.5 whitespace-nowrap">{row.user_name}</td>
                         <td className="px-3 py-2.5">
                           {row.category ? (
@@ -1560,7 +1605,7 @@ export default function CashMovements() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-[color:var(--color-table-header)] font-semibold">
-                    <td className="px-3 py-2.5" colSpan={8}>Итого: {filtered.length} записей</td>
+                    <td className="px-3 py-2.5" colSpan={9}>Итого: {filtered.length} записей</td>
                     <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">{fmtMoney(totalSum)}</td>
                     <td className="px-3 py-2.5"></td>
                   </tr>
