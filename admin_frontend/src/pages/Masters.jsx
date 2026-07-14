@@ -446,6 +446,32 @@ function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// A single /masters/works request for a multi-month range can take a
+// minute+ server-side (unbounded SQL + pandas over the whole span) and,
+// worse, ride through xtunnel for that whole time — which has documented
+// relay-side instability with long-lived connections (see
+// xtunnel_healthcheck.py). One request per calendar month keeps each
+// call in the range this endpoint is actually fast at (~8-16s/month,
+// measured), and is safe to concatenate: the backend's date filter
+// matches each service to exactly one month by its OUT event (or IN
+// event if still "в работе"), so chunk boundaries can't split, drop, or
+// duplicate a service.
+function splitIntoMonthlyRanges(fromStr, toStr) {
+  if (!fromStr || !toStr) return [[fromStr, toStr]];
+  const from = new Date(`${fromStr}T00:00:00`);
+  const to = new Date(`${toStr}T00:00:00`);
+  if (isNaN(from) || isNaN(to) || from > to) return [[fromStr, toStr]];
+  const ranges = [];
+  let cursor = from;
+  while (cursor <= to) {
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const chunkEnd = monthEnd < to ? monthEnd : to;
+    ranges.push([toLocalDateStr(cursor), toLocalDateStr(chunkEnd)]);
+    cursor = new Date(chunkEnd.getFullYear(), chunkEnd.getMonth(), chunkEnd.getDate() + 1);
+  }
+  return ranges;
+}
+
 export default function Masters() {
   const now = new Date();
   const today = toLocalDateStr(now);
@@ -470,6 +496,7 @@ export default function Masters() {
   const [rows, setRows]                   = useState([]);
   const [salarySummary, setSalarySummary] = useState([]);
   const [loading, setLoading]             = useState(false);
+  const [loadProgress, setLoadProgress]   = useState(null);
   const [error, setError]                 = useState(null);
   const [loaded, setLoaded]               = useState(false);
   const [warningsOnly, setWarningsOnly]   = useState(false);
@@ -526,28 +553,50 @@ export default function Masters() {
     });
   }
 
+  async function fetchOneRange(f, t) {
+    const params = {};
+    if (f) params.date_from = f;
+    if (t) params.date_to   = t;
+    const res = await api.get('/masters/works', { params });
+    const data = res.data;
+    // Support both old (array) and new (object) response shape
+    return Array.isArray(data) ? { services: data, salary_summary: [] } : {
+      services: data.services || [], salary_summary: data.salary_summary || [],
+    };
+  }
+
   async function load() {
     setLoading(true);
     setError(null);
+    setLoadProgress(null);
     try {
-      const params = {};
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo)   params.date_to   = dateTo;
-      const res = await api.get('/masters/works', { params });
-      const data = res.data;
-      // Support both old (array) and new (object) response shape
-      if (Array.isArray(data)) {
-        setRows(data);
-        setSalarySummary([]);
+      const ranges = splitIntoMonthlyRanges(dateFrom, dateTo);
+      if (ranges.length <= 1) {
+        const { services, salary_summary } = await fetchOneRange(dateFrom, dateTo);
+        setRows(services);
+        setSalarySummary(salary_summary);
       } else {
-        setRows(data.services || []);
-        setSalarySummary(data.salary_summary || []);
+        let allServices = [];
+        for (let i = 0; i < ranges.length; i++) {
+          const [f, t] = ranges[i];
+          setLoadProgress({ done: i, total: ranges.length, label: f.slice(0, 7) });
+          try {
+            const { services } = await fetchOneRange(f, t);
+            allServices = allServices.concat(services);
+          } catch (e) {
+            const detail = e.response?.data?.detail || e.message || 'Ошибка загрузки';
+            throw new Error(`${f.slice(0, 7)}: ${detail}`);
+          }
+        }
+        setRows(allServices);
+        setSalarySummary([]); // not rendered anywhere — see MastersSummaryTable, which re-aggregates from rows
       }
       setLoaded(true);
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
     } finally {
       setLoading(false);
+      setLoadProgress(null);
     }
   }
 
@@ -745,6 +794,21 @@ export default function Masters() {
         </div>
       )}
 
+      {loading && loadProgress && (
+        <div className="app-card p-3 flex items-center gap-3 text-sm">
+          <RefreshCw size={14} className="animate-spin shrink-0" />
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <span>Большой период — загружаю по месяцам: {loadProgress.label}</span>
+              <span className="text-[color:var(--color-muted-foreground)]">{loadProgress.done}/{loadProgress.total}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[color:var(--color-bg-secondary)] overflow-hidden">
+              <div className="h-full rounded-full bg-[color:var(--color-primary)] transition-all duration-300"
+                style={{ width: `${(loadProgress.done / loadProgress.total) * 100}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
       {loading && <SkeletonTable rows={8} />}
 
       {loaded && !loading && (

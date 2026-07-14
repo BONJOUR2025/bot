@@ -32,7 +32,24 @@ def create_masters_router() -> APIRouter:
             )
 
         try:
-            result = await asyncio.to_thread(fetch_works, date_from=date_from, date_to=date_to)
+            # fetch_works is unbounded (no SQL row cap, no per-request
+            # deadline) and this endpoint sits behind xtunnel, which has
+            # documented relay-side instability with long-lived connections
+            # (see xtunnel_healthcheck.py) — a request left to hang
+            # indefinitely surfaces to the browser as a bare "Network
+            # Error" with no explanation. Bounding it here at least turns
+            # that into an actionable message; the thread itself can't be
+            # killed (Python threads aren't cancellable), it just keeps
+            # running server-side after the response goes out.
+            result = await asyncio.wait_for(
+                asyncio.to_thread(fetch_works, date_from=date_from, date_to=date_to),
+                timeout=55,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail="Запрос выполняется слишком долго. Выберите период покороче (например, один месяц) и попробуйте снова.",
+            )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
