@@ -641,17 +641,49 @@ class FirebirdService:
                 return v.decode("cp1251", errors="replace")
         return v or ""
 
+    def _sclad_names(self, cur) -> dict[int, str]:
+        """id -> decoded NAME for every row in SCLADS (Agbis warehouse list).
+
+        Used to give a readable label to orders whose doc_num doesn't
+        resolve to a registered salon, via DOCS_ORDER.SCLAD_KREDIT_ID.
+        """
+        cur.execute("SELECT id, name FROM sclads")
+        return {sid: self._decode_text(name).strip() for sid, name in cur.fetchall()}
+
+    def get_sclads_list(self) -> list[dict]:
+        """All Agbis SCLADS (id, name) for the Salons-page binding dropdown."""
+        if not FIREBIRD_AVAILABLE:
+            return []
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                names = self._sclad_names(cur)
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching sclads list: {e}")
+            return []
+        return sorted(
+            [{"id": sid, "name": name} for sid, name in names.items() if name],
+            key=lambda s: s["name"],
+        )
+
     def _extra_category_rows(self, cur, date_from: date, date_to: date) -> list[tuple]:
         """Revenue outside repair/cosmetics/(147.x)shoes that used to be
         invisible on the Sales Analytics page entirely — see the folder-id
         constants above. Every rule here was confirmed against real order
         data with the business, not guessed from folder names.
 
-        Returns (doc_date, description, doc_num, category, kredit) tuples,
-        category in {"shoes", "insoles", "slippers", "leather_goods",
-        "certificates", "delivery", "keys"} — same shape as the
-        sql_repair/sql_cosmetics/sql_shoes rows get_daily_sales already
-        loops over, so callers can reuse their existing per-row handling.
+        Returns (doc_date, description, doc_num, category, kredit,
+        sclad_kredit_id) tuples, category in {"shoes", "insoles",
+        "slippers", "leather_goods", "certificates", "delivery", "keys"}
+        — same shape as the sql_repair/sql_cosmetics/sql_shoes rows
+        get_daily_sales already loops over, so callers can reuse their
+        existing per-row handling. `sclad_kredit_id` is DOCS_ORDER's
+        "Склад приёма" (reception warehouse) — used by
+        get_department_comparison to label orders whose doc_num doesn't
+        resolve to a registered salon.
         """
         out: list[tuple] = []
 
@@ -662,7 +694,8 @@ class FirebirdService:
         # standalone "Стельки" sale.
         cur.execute("""
             SELECT docs.doc_date, docs.doc_num, users.description, tovars_tbl.code,
-                   doc_order_services.kredit, doc_order_services.doc_order_id, doc_order_services.id
+                   doc_order_services.kredit, doc_order_services.doc_order_id, doc_order_services.id,
+                   docs_order.sclad_kredit_id
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
@@ -672,8 +705,8 @@ class FirebirdService:
             ORDER BY doc_order_services.doc_order_id, doc_order_services.id
         """, (date_from, date_to, CUSTOM_WORK_FOLDER_ID))
         by_order: dict = {}
-        for doc_date, doc_num, desc, code, kredit, order_id, _svc_id in cur.fetchall():
-            entry = by_order.setdefault(order_id, {"doc_date": doc_date, "doc_num": doc_num, "desc": desc, "items": []})
+        for doc_date, doc_num, desc, code, kredit, order_id, _svc_id, sclad_id in cur.fetchall():
+            entry = by_order.setdefault(order_id, {"doc_date": doc_date, "doc_num": doc_num, "desc": desc, "sclad_id": sclad_id, "items": []})
             entry["items"].append((self._decode_text(code).strip(), float(kredit or 0)))
         for order in by_order.values():
             in_shoe_context = False
@@ -681,44 +714,44 @@ class FirebirdService:
                 if code in _CUSTOM_WORK_SHOE_MARKERS:
                     in_shoe_context = True
                     if kredit:
-                        out.append((order["doc_date"], order["desc"], order["doc_num"], "shoes", kredit))
+                        out.append((order["doc_date"], order["desc"], order["doc_num"], "shoes", kredit, order["sclad_id"]))
                 elif code == _CUSTOM_WORK_INSOLE_CODE:
                     cat = "shoes" if in_shoe_context else "insoles"
-                    out.append((order["doc_date"], order["desc"], order["doc_num"], cat, kredit))
+                    out.append((order["doc_date"], order["desc"], order["doc_num"], cat, kredit, order["sclad_id"]))
                 elif code in _CUSTOM_WORK_SLIPPER_CODES:
-                    out.append((order["doc_date"], order["desc"], order["doc_num"], "slippers", kredit))
+                    out.append((order["doc_date"], order["desc"], order["doc_num"], "slippers", kredit, order["sclad_id"]))
                 elif code in _CUSTOM_WORK_LEATHER_CODES:
-                    out.append((order["doc_date"], order["desc"], order["doc_num"], "leather_goods", kredit))
+                    out.append((order["doc_date"], order["desc"], order["doc_num"], "leather_goods", kredit, order["sclad_id"]))
                 # code '4' — see module-level comment, deliberately skipped.
 
         # -- DELIVERY_FOLDER_ID: plain services-side sum --
         cur.execute("""
-            SELECT docs.doc_date, docs.doc_num, users.description, SUM(doc_order_services.kredit)
+            SELECT docs.doc_date, docs.doc_num, users.description, SUM(doc_order_services.kredit), docs_order.sclad_kredit_id
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
-            GROUP BY docs.doc_date, docs.doc_num, users.description
+            GROUP BY docs.doc_date, docs.doc_num, users.description, docs_order.sclad_kredit_id
         """, (date_from, date_to, DELIVERY_FOLDER_ID))
-        for d, doc_num, desc, s in cur.fetchall():
-            out.append((d, desc, doc_num, "delivery", float(s or 0)))
+        for d, doc_num, desc, s, sclad_id in cur.fetchall():
+            out.append((d, desc, doc_num, "delivery", float(s or 0), sclad_id))
 
         # -- plain goods-side (DOC_ORDER_LINES) folder sums --
         def _lines_folder_sum(folder_id: int, category: str) -> None:
             cur.execute("""
-                SELECT docs.doc_date, docs.doc_num, users.description, SUM(doc_order_lines.kredit)
+                SELECT docs.doc_date, docs.doc_num, users.description, SUM(doc_order_lines.kredit), docs_order.sclad_kredit_id
                 FROM doc_order_lines
                     INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
                     INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                     INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
                     INNER JOIN users ON (docs_order.creater_id = users.user_id)
                 WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
-                GROUP BY docs.doc_date, docs.doc_num, users.description
+                GROUP BY docs.doc_date, docs.doc_num, users.description, docs_order.sclad_kredit_id
             """, (date_from, date_to, folder_id))
-            for d, doc_num, desc, s in cur.fetchall():
-                out.append((d, desc, doc_num, category, float(s or 0)))
+            for d, doc_num, desc, s, sclad_id in cur.fetchall():
+                out.append((d, desc, doc_num, category, float(s or 0), sclad_id))
 
         _lines_folder_sum(LEATHER_GOODS_FOLDER_ID, "leather_goods")
         _lines_folder_sum(CERTIFICATES_FOLDER_ID, "certificates")
@@ -728,7 +761,7 @@ class FirebirdService:
         # -- TAPOCHKI_MIXED_FOLDER_ID: mixes "Стельки..." and "Тапочки..."
         # item names in the same folder — split by name prefix.
         cur.execute("""
-            SELECT docs.doc_date, docs.doc_num, users.description, tovars_tbl.name, doc_order_lines.kredit
+            SELECT docs.doc_date, docs.doc_num, users.description, tovars_tbl.name, doc_order_lines.kredit, docs_order.sclad_kredit_id
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
@@ -736,13 +769,13 @@ class FirebirdService:
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
         """, (date_from, date_to, TAPOCHKI_MIXED_FOLDER_ID))
-        for d, doc_num, desc, name, kredit in cur.fetchall():
+        for d, doc_num, desc, name, kredit, sclad_id in cur.fetchall():
             cat = "insoles" if self._decode_text(name).strip().lower().startswith("стельк") else "slippers"
-            out.append((d, desc, doc_num, cat, float(kredit or 0)))
+            out.append((d, desc, doc_num, cat, float(kredit or 0), sclad_id))
 
         # -- CUSTOM_MAKING_FOLDER_ID: code ИНД=shoes, ИНДР=leather goods --
         cur.execute("""
-            SELECT docs.doc_date, docs.doc_num, users.description, tovars_tbl.code, doc_order_lines.kredit
+            SELECT docs.doc_date, docs.doc_num, users.description, tovars_tbl.code, doc_order_lines.kredit, docs_order.sclad_kredit_id
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
@@ -750,9 +783,9 @@ class FirebirdService:
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
         """, (date_from, date_to, CUSTOM_MAKING_FOLDER_ID))
-        for d, doc_num, desc, code, kredit in cur.fetchall():
+        for d, doc_num, desc, code, kredit, sclad_id in cur.fetchall():
             cat = "leather_goods" if self._decode_text(code).strip().upper() == "ИНДР" else "shoes"
-            out.append((d, desc, doc_num, cat, float(kredit or 0)))
+            out.append((d, desc, doc_num, cat, float(kredit or 0), sclad_id))
 
         return out
 
@@ -814,16 +847,22 @@ class FirebirdService:
         result: dict[tuple, dict] = {}
 
         def _add(date_val, desc: str, amount, category: str) -> None:
-            code = _code_from_description(desc)
-            if not code:
-                return
+            label = (desc or "").strip()
+            # Some order creators in Agbis (sales-department/marketing
+            # accounts, e.g. "Карина Т.") never got the trailing 4-digit
+            # code regular masters have — their revenue used to be silently
+            # dropped here instead of just not resolving to a payroll
+            # employee. Fall back to the raw Agbis name as the row's key;
+            # empName() on the frontend already renders an unknown "code"
+            # as-is, so this surfaces correctly with no frontend change.
+            code = _code_from_description(desc) or label or "—"
             date_str = date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val)
             key = (date_str, code)
             if key not in result:
                 result[key] = {
                     "date": date_str,
                     "code": code,
-                    "description": (desc or "").strip(),
+                    "description": label,
                     "repair": 0.0,
                     "cosmetics": 0.0,
                     "shoes": 0.0,
@@ -917,7 +956,7 @@ class FirebirdService:
                     for d, desc, doc_num, s in cur.fetchall():
                         if d is not None and _keep(doc_num, d):
                             _add(d, desc, s, "shoes")
-                    for d, desc, doc_num, category, s in self._extra_category_rows(cur, date_from, date_to):
+                    for d, desc, doc_num, category, s, _sclad_id in self._extra_category_rows(cur, date_from, date_to):
                         if d is not None and _keep(doc_num, d):
                             _add(d, desc, s, category)
             finally:
@@ -2252,7 +2291,7 @@ class FirebirdService:
         shoes_placeholders = ','.join(['?'] * len(shoes_sales_codes))
 
         sql_repair = f"""
-            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit)
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit), docs_order.sclad_kredit_id
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
@@ -2260,10 +2299,10 @@ class FirebirdService:
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({repair_folders})
-            GROUP BY docs.doc_num, docs.doc_date
+            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id
         """
         sql_cosmetics = f"""
-            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_lines.kredit)
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_lines.kredit), docs_order.sclad_kredit_id
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
                 INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
@@ -2273,10 +2312,10 @@ class FirebirdService:
                 docs_order_history.status_id = 5
                 AND docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({cosmetics_folders})
-            GROUP BY docs.doc_num, docs.doc_date
+            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id
         """
         sql_shoes = f"""
-            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit)
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit), docs_order.sclad_kredit_id
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
@@ -2284,7 +2323,7 @@ class FirebirdService:
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.code IN ({shoes_placeholders})
-            GROUP BY docs.doc_num, docs.doc_date
+            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id
         """
 
         try:
@@ -2302,9 +2341,10 @@ class FirebirdService:
                 # no per-category breakdown needed here, just folded into
                 # each salon's total like everything else.
                 rows += [
-                    (doc_num, doc_date, kredit)
-                    for doc_date, _desc, doc_num, _category, kredit in self._extra_category_rows(cur, date_from, date_to)
+                    (doc_num, doc_date, kredit, sclad_id)
+                    for doc_date, _desc, doc_num, _category, kredit, sclad_id in self._extra_category_rows(cur, date_from, date_to)
                 ]
+                sclad_names = self._sclad_names(cur)
             finally:
                 con.close()
         except Exception as e:
@@ -2322,11 +2362,27 @@ class FirebirdService:
         repo._load = lambda: None
         try:
             totals: dict[str, dict] = {}
-            for doc_num, doc_date, revenue in rows:
+            for doc_num, doc_date, revenue, sclad_id in rows:
                 code = _order_salon_code(doc_num)
                 salon = repo.get_by_order_code(code, doc_date.year, doc_date.month) if code else None
-                salon_id = salon.id if salon else UNALLOC_ID
-                salon_name = salon.name if salon else UNALLOC_NAME
+                if salon:
+                    salon_id, salon_name = salon.id, salon.name
+                else:
+                    # Not resolved via the doc_num suffix (e.g. orders
+                    # created by corporate/marketing accounts). Fall back
+                    # to the order's "Склад приёма" (reception warehouse,
+                    # DOCS_ORDER.SCLAD_KREDIT_ID) — first checking whether
+                    # an admin has bound that SCLAD to a registered salon
+                    # on the Salons page, then the raw Agbis SCLAD name,
+                    # so this reads as something meaningful instead of a
+                    # generic "Не определено" bucket.
+                    bound_salon = repo.get_by_sclad_id(sclad_id) if sclad_id is not None else None
+                    if bound_salon:
+                        salon_id, salon_name = bound_salon.id, bound_salon.name
+                    elif sclad_id is not None and sclad_id in sclad_names:
+                        salon_id, salon_name = f"sclad:{sclad_id}", sclad_names[sclad_id]
+                    else:
+                        salon_id, salon_name = UNALLOC_ID, UNALLOC_NAME
                 entry = totals.setdefault(salon_id, {
                     "salon_id": salon_id, "salon_name": salon_name,
                     "revenue": 0.0, "doc_nums": set(),

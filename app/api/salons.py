@@ -25,6 +25,14 @@ def create_salons_router(repo: SalonRepository) -> APIRouter:
     ):
         return repo.list_salons(status=status)
 
+    @router.get("/sclads")
+    async def list_sclads(
+        current=Depends(require_permission("salons")),
+    ):
+        from app.services.firebird_service import get_firebird_service
+
+        return get_firebird_service().get_sclads_list()
+
     @router.get("/{salon_id}", response_model=Salon)
     async def get_salon(
         salon_id: str,

@@ -101,6 +101,14 @@ class SalonRepository:
             return None
         return eligible[-1]
 
+    def get_by_sclad_id(self, sclad_id: int) -> Salon | None:
+        """Look up a salon by an Agbis SCLADS.ID bound via the Salons page."""
+        self._load()  # always fresh from disk (two-process setup)
+        for salon in self._salons.values():
+            if sclad_id in (salon.sclad_ids or []):
+                return salon
+        return None
+
     def create(self, data: SalonCreate) -> Salon:
         self._load()  # sync with disk before mutating
         salon = new_salon(data)

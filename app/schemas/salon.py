@@ -20,6 +20,12 @@ class SalonCreate(BaseModel):
     # this is the 1-2 digit salon id that appears after the dash in Firebird
     # order numbers ("12345-6"), used to attribute KPI commission per salon.
     order_code: str = ""
+    # Agbis SCLADS.ID values ("Склад приёма" = DOCS_ORDER.SCLAD_KREDIT_ID)
+    # bound to this salon — fallback attribution for orders whose doc_num
+    # has no matching order_code (e.g. corporate/internal-department sales
+    # routed through a salon's physical warehouse). A salon can have more
+    # than one (e.g. a чистомат sub-point sharing the same location).
+    sclad_ids: list[int] = Field(default_factory=list)
     address: str = ""
     phone: str = ""
     status: str = "active"          # active | renovation | closed
@@ -51,6 +57,7 @@ class SalonUpdate(BaseModel):
     name: Optional[str] = None
     code: Optional[str] = None
     order_code: Optional[str] = None
+    sclad_ids: Optional[list[int]] = None
     address: Optional[str] = None
     phone: Optional[str] = None
     status: Optional[str] = None
@@ -86,6 +93,7 @@ class Salon(SalonCreate):
             name=data.get("name", ""),
             code=data.get("code", ""),
             order_code=data.get("order_code", ""),
+            sclad_ids=[int(x) for x in (data.get("sclad_ids") or [])],
             address=data.get("address", ""),
             phone=data.get("phone", ""),
             status=data.get("status", "active"),
@@ -112,6 +120,7 @@ class Salon(SalonCreate):
             "name": self.name,
             "code": self.code,
             "order_code": self.order_code,
+            "sclad_ids": self.sclad_ids,
             "address": self.address,
             "phone": self.phone,
             "status": self.status,

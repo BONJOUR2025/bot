@@ -87,7 +87,7 @@ function SelectField({ label, name, value, onChange, options }) {
 // ── Empty form state ─────────────────────────────────────────────
 function emptyForm() {
   return {
-    name: '', code: '', order_code: '', address: '', phone: '',
+    name: '', code: '', order_code: '', sclad_ids: [], address: '', phone: '',
     status: 'active', point_type: 'ТЦ',
     area_sqm: '', opening_date: '',
     work_hours_weekday: '', work_hours_weekend: '',
@@ -104,6 +104,7 @@ function salonToForm(s) {
     name: s.name ?? '',
     code: s.code ?? '',
     order_code: s.order_code ?? '',
+    sclad_ids: s.sclad_ids ?? [],
     address: s.address ?? '',
     phone: s.phone ?? '',
     status: s.status ?? 'active',
@@ -141,8 +142,53 @@ function ContactRow({ contact, index, onChange, onRemove }) {
   );
 }
 
+// ── SCLAD (Agbis warehouse) multi-select ────────────────────────────
+// Used as fallback attribution when an order's doc_num suffix doesn't
+// resolve to a registered salon — see FirebirdService.get_department_comparison.
+function ScladPicker({ sclads, selected, onToggle }) {
+  const [q, setQ] = useState('');
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return sclads;
+    return sclads.filter(s => s.name.toLowerCase().includes(query));
+  }, [sclads, q]);
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">
+        Привязанные склады Agbis (SCLADS)
+      </label>
+      <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2">
+        Если заказ не удаётся определить по коду точки продаж, он будет отнесён к этому салону по складу приёма заказа.
+      </p>
+      <input
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        placeholder="Поиск по названию склада..."
+        className="input w-full text-sm mb-2"
+      />
+      <div className="space-y-1 max-h-52 overflow-y-auto pr-1 rounded-lg border border-[color:var(--color-border)] p-2">
+        {filtered.map(s => (
+          <label key={s.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-[color:var(--color-muted)]/50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selected.includes(s.id)}
+              onChange={() => onToggle(s.id)}
+              className="accent-[color:var(--color-primary)] h-4 w-4"
+            />
+            <span className="text-sm">{s.name}</span>
+          </label>
+        ))}
+        {filtered.length === 0 && (
+          <p className="text-sm text-[color:var(--color-muted-foreground)] italic py-2 text-center">Ничего не найдено</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Modal / Drawer ────────────────────────────────────────────────
-function SalonModal({ salon, employees, onSave, onClose }) {
+function SalonModal({ salon, employees, sclads, onSave, onClose }) {
   const isNew = !salon;
   const [form, setForm] = useState(isNew ? emptyForm() : salonToForm(salon));
   const [tab, setTab] = useState('main');
@@ -151,6 +197,14 @@ function SalonModal({ salon, employees, onSave, onClose }) {
   function handleChange(e) {
     const { name, value } = e.target;
     setForm(f => ({ ...f, [name]: value }));
+  }
+
+  function handleScladToggle(id) {
+    setForm(f => {
+      const next = new Set(f.sclad_ids);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return { ...f, sclad_ids: [...next] };
+    });
   }
 
   function handleEmployeeToggle(code) {
@@ -236,6 +290,7 @@ function SalonModal({ salon, employees, onSave, onClose }) {
                 <InputField label="Код точки" name="code" value={form.code} onChange={handleChange} placeholder="П" />
               </div>
               <InputField label="Код точки продаж (Firebird)" name="order_code" value={form.order_code} onChange={handleChange} placeholder="7" />
+              <ScladPicker sclads={sclads || []} selected={form.sclad_ids} onToggle={handleScladToggle} />
               <InputField label="Адрес" name="address" value={form.address} onChange={handleChange} placeholder="Лиговский пр., 30" />
               <div className="grid grid-cols-2 gap-3">
                 <InputField label="Телефон" name="phone" value={form.phone} onChange={handleChange} placeholder="+7 (812) 000-00-00" />
@@ -588,6 +643,7 @@ export default function Salons() {
   const { isMobile } = useViewport();
   const [salons, setSalons]       = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [sclads, setSclads]       = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
 
@@ -600,9 +656,11 @@ export default function Salons() {
     Promise.all([
       api.get('/salons/'),
       api.get('/employees/'),
-    ]).then(([s, e]) => {
+      api.get('/salons/sclads'),
+    ]).then(([s, e, sc]) => {
       setSalons(s.data);
       setEmployees(e.data);
+      setSclads(sc.data);
     }).catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
@@ -749,6 +807,7 @@ export default function Salons() {
         <SalonModal
           salon={modal === 'new' ? null : modal}
           employees={employees}
+          sclads={sclads}
           onSave={handleSave}
           onClose={() => setModal(null)}
         />
