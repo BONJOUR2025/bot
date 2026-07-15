@@ -47,32 +47,24 @@ class SalonRepository:
                 return salon
         return None
 
-    def get_by_order_code(
-        self, order_code: str, year: int | None = None, month: int | None = None
+    @staticmethod
+    def _disambiguate_by_opening_date(
+        candidates: list[Salon], year: int | None, month: int | None
     ) -> Salon | None:
-        """Look up a salon by its Firebird order-number suffix code.
+        """Pick the one candidate whose opening_date fits a target month.
 
-        No status filter — a closed/renovation salon must still resolve so
-        historical payroll-by-salon reports keep attributing correctly.
-
-        A physical point can be renamed/moved (e.g. "Пассаж" -> "Гранд
-        Палас") while keeping the same Firebird order-number suffix, which
-        means two `Salon` records can legitimately share one `order_code`.
-        When that happens and a target month is given, disambiguate by
-        `opening_date`: pick the record whose opening_date is the most
-        recent one that had already passed by the target month (a record
-        with no opening_date is treated as "always open", i.e. the oldest
-        possible start). If nothing resolves that way (or no month was
-        given), fall back to the first match for backward compatibility.
+        Shared by get_by_order_code and get_by_sclad_id: a physical point
+        can be renamed/moved (e.g. "Пассаж" -> "Гранд Палас") while keeping
+        the same Firebird order-number suffix AND the same Agbis SCLAD, so
+        two `Salon` records can legitimately share one order_code or
+        sclad_id. When that happens and a target month is given,
+        disambiguate by `opening_date`: pick the record whose opening_date
+        is the most recent one that had already passed by the target month
+        (a record with no opening_date is treated as "always open", i.e.
+        the oldest possible start). If nothing resolves that way (or no
+        month was given), fall back to the first match for backward
+        compatibility.
         """
-        self._load()  # always fresh from disk (two-process setup)
-        order_code = (order_code or "").strip()
-        if not order_code:
-            return None
-        candidates = [
-            s for s in self._salons.values()
-            if (s.order_code or "").strip() == order_code
-        ]
         if not candidates:
             return None
         if len(candidates) == 1 or year is None or month is None:
@@ -101,13 +93,39 @@ class SalonRepository:
             return None
         return eligible[-1]
 
-    def get_by_sclad_id(self, sclad_id: int) -> Salon | None:
-        """Look up a salon by an Agbis SCLADS.ID bound via the Salons page."""
+    def get_by_order_code(
+        self, order_code: str, year: int | None = None, month: int | None = None
+    ) -> Salon | None:
+        """Look up a salon by its Firebird order-number suffix code.
+
+        No status filter — a closed/renovation salon must still resolve so
+        historical payroll-by-salon reports keep attributing correctly.
+        See _disambiguate_by_opening_date for the same-code tie-break.
+        """
         self._load()  # always fresh from disk (two-process setup)
-        for salon in self._salons.values():
-            if sclad_id in (salon.sclad_ids or []):
-                return salon
-        return None
+        order_code = (order_code or "").strip()
+        if not order_code:
+            return None
+        candidates = [
+            s for s in self._salons.values()
+            if (s.order_code or "").strip() == order_code
+        ]
+        return self._disambiguate_by_opening_date(candidates, year, month)
+
+    def get_by_sclad_id(
+        self, sclad_id: int, year: int | None = None, month: int | None = None
+    ) -> Salon | None:
+        """Look up a salon by an Agbis SCLADS.ID bound via the Salons page.
+
+        See _disambiguate_by_opening_date for the same-sclad tie-break
+        (e.g. "Пассаж" and "Гранд Палас" share one physical SCLAD).
+        """
+        self._load()  # always fresh from disk (two-process setup)
+        candidates = [
+            s for s in self._salons.values()
+            if sclad_id in (s.sclad_ids or [])
+        ]
+        return self._disambiguate_by_opening_date(candidates, year, month)
 
     def create(self, data: SalonCreate) -> Salon:
         self._load()  # sync with disk before mutating

@@ -202,6 +202,7 @@ _CUSTOM_WORK_LEATHER_CODES = {'2', '3'}        # пошив ремня / кож�
 REPAIR_FOLDER_IDS = (
     215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
     108401, 108402, 110409, 110410, 110411,
+    210260,  # shoe-repair-adjacent items (Босоножки/Мокасины/Кроссовки) — found missing via reconciliation against an authoritative export
     210266, 210267, 210268, 210269, 210270, 210271, 210272, 210273, 210274, 210275,
     210276, 210277, 210278, 210279, 210280, 210281, 210282, 210283, 210284, 210285,
     210286, 210287, 210288, 210289, 210290, 210291, 210292, 210293, 210294, 210295,
@@ -809,36 +810,13 @@ class FirebirdService:
             return []
         salon_filter = set(salon_ids) if salon_ids else None
 
-        repair_folder_ids = (
-            215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
-            108401, 108402, 110409, 110410, 110411,
-            210266, 210267, 210268, 210269, 210270, 210271, 210272, 210273, 210274, 210275,
-            210276, 210277, 210278, 210279, 210280, 210281, 210282, 210283, 210284, 210285,
-            210286, 210287, 210288, 210289, 210290, 210291, 210292, 210293, 210294, 210295,
-            210296, 210297, 210298, 210299, 210300, 210301, 210302, 210303, 210304, 210305,
-            210306, 210307, 210308, 210309, 210310, 210311, 210312, 210313, 210314, 210315,
-            210316, 210317, 210318, 210319, 210320, 210321, 210322, 210323, 210324, 210325,
-            210326, 210327, 210328, 210329, 210330, 210331, 210332, 210333, 210334, 210335,
-            210336, 210337, 210338, 210339, 210340, 210341, 210342, 210343, 210344, 210345,
-            210346, 210347, 210348, 210349, 210350, 210351, 210352, 210353, 210355, 210356,
-            210357, 210358, 210359, 210360, 210361, 210363, 210364, 210365, 210366,
-            210377, 210378, 210379, 210380, 210381, 210382, 210383, 210384, 210385,
-            210386, 210387, 210388, 210389, 210390, 210391, 210392, 210393, 210394,
-            210395, 210396, 210397, 210399,
-        )
-        cosmetics_folder_ids = (
-            107, 108, 109, 110, 111, 113, 114, 115, 116, 117, 118, 119, 120,
-            121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133,
-            134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146,
-            147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 159, 161,
-            162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174,
-            175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187,
-            188, 189, 190, 192, 193, 194, 195, 196, 198, 199, 200, 201, 202,
-            203, 204, 206, 207, 208, 209, 220, 222, 223, 229, 230, 232, 233,
-            109407, 110413, 210234, 210235, 210236, 210237, 210241, 210243,
-            210244, 210248, 210249, 210250, 210254, 210255, 210258, 210265,
-            210398,
-        )
+        # Was a hardcoded duplicate of the module-level REPAIR_FOLDER_IDS /
+        # COSMETICS_FOLDER_IDS — drifted out of sync with them once already
+        # (see 210260 below), which silently reintroduces the exact
+        # Обзор≠Салоны mismatch bug fixed earlier. Reference the module
+        # constants instead so there's only one list to update.
+        repair_folder_ids = REPAIR_FOLDER_IDS
+        cosmetics_folder_ids = COSMETICS_FOLDER_IDS
 
         shoes_sales_codes = tuple(c for c in SHOES_CODES if c not in ('0', '1'))
         shoes_placeholders = ','.join(['?'] * len(shoes_sales_codes))
@@ -2265,11 +2243,14 @@ class FirebirdService:
     def get_department_comparison(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """Revenue/order comparison by salon for a date range.
 
-        Salon attribution reuses the exact mechanism payroll_service's
-        payroll-by-salon report uses — the -N suffix on DOCS.DOC_NUM,
-        resolved via SalonRepository (time-aware for renamed/relocated
-        points) — rather than DOCS.DEP_ID, so this can't silently disagree
-        with that existing report over what counts as "salon X's revenue".
+        Salon attribution is primarily by "Склад приёма" (reception
+        warehouse, DOCS_ORDER.SCLAD_KREDIT_ID) resolved against
+        Salon.sclad_ids (bound on the Salons page) — this matches the
+        authoritative "Суммы заказов по приемным пунктам" report exactly,
+        confirmed against a real export covering 180 days. The -N suffix
+        on DOCS.DOC_NUM (same mechanism payroll_service's payroll-by-salon
+        report uses, time-aware for renamed/relocated points) is only a
+        fallback for the rare order whose SCLAD_KREDIT_ID is NULL/unbound.
 
         `salon_ids`, if given, just restricts the *output* to those salons
         — the whole point of this endpoint is grouping by salon, so
@@ -2362,24 +2343,26 @@ class FirebirdService:
         try:
             totals: dict[str, dict] = {}
             for doc_num, doc_date, revenue, sclad_id in rows:
-                code = _order_salon_code(doc_num)
-                salon = repo.get_by_order_code(code, doc_date.year, doc_date.month) if code else None
+                # Primary: "Склад приёма" (reception warehouse,
+                # DOCS_ORDER.SCLAD_KREDIT_ID) — matches the authoritative
+                # "Суммы заказов по приемным пунктам" report exactly (spot
+                # checked against a real export: every one of the 7
+                # physical salons matched to the RUB either exactly or
+                # within a handful of RUB on all but 2 dates out of 180).
+                # Bound via the Salons page (Salon.sclad_ids); falls back
+                # to the raw Agbis SCLAD name if no salon claims it.
+                salon = repo.get_by_sclad_id(sclad_id, doc_date.year, doc_date.month) if sclad_id is not None else None
                 if salon:
                     salon_id, salon_name = salon.id, salon.name
+                elif sclad_id is not None and sclad_id in sclad_names:
+                    salon_id, salon_name = f"sclad:{sclad_id}", sclad_names[sclad_id]
                 else:
-                    # Not resolved via the doc_num suffix (e.g. orders
-                    # created by corporate/marketing accounts). Fall back
-                    # to the order's "Склад приёма" (reception warehouse,
-                    # DOCS_ORDER.SCLAD_KREDIT_ID) — first checking whether
-                    # an admin has bound that SCLAD to a registered salon
-                    # on the Salons page, then the raw Agbis SCLAD name,
-                    # so this reads as something meaningful instead of a
-                    # generic "Не определено" bucket.
-                    bound_salon = repo.get_by_sclad_id(sclad_id) if sclad_id is not None else None
-                    if bound_salon:
-                        salon_id, salon_name = bound_salon.id, bound_salon.name
-                    elif sclad_id is not None and sclad_id in sclad_names:
-                        salon_id, salon_name = f"sclad:{sclad_id}", sclad_names[sclad_id]
+                    # SCLAD_KREDIT_ID itself is NULL/unresolvable (rare) —
+                    # fall back to the doc_num suffix, the older mechanism.
+                    code = _order_salon_code(doc_num)
+                    fallback_salon = repo.get_by_order_code(code, doc_date.year, doc_date.month) if code else None
+                    if fallback_salon:
+                        salon_id, salon_name = fallback_salon.id, fallback_salon.name
                     else:
                         salon_id, salon_name = UNALLOC_ID, UNALLOC_NAME
                 entry = totals.setdefault(salon_id, {
