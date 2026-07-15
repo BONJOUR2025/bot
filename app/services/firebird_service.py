@@ -1969,7 +1969,8 @@ class FirebirdService:
 
     def _product_revenue_rows(self, date_from: date, date_to: date,
                                salon_ids: list[str] | None = None,
-                               categories: set[str] | None = None) -> dict[int, dict]:
+                               categories: set[str] | None = None,
+                               employee_codes: list[str] | None = None) -> dict[int, dict]:
         """Per-TOVAR_ID revenue/qty for a date range — the data behind an
         ABC-analysis, so it covers both repair services (DOC_ORDER_SERVICES)
         and cosmetics/goods (DOC_ORDER_LINES): ABC-analysis is just as
@@ -1982,38 +1983,47 @@ class FirebirdService:
         standalone SKUs a per-item ranking would mean anything for.
 
         `salon_ids` restricts to orders resolved to one of those salons —
-        see get_daily_sales for the attribution rule and its caveats. Unlike
-        the by-employee reports, this one does NOT add doc_num to the
-        GROUP BY to support that: doing so once measured 26-55s (vs <2s)
-        because a per-SKU aggregate that's normally a few hundred rows
-        exploded into one row per (SKU, order) — tens of thousands of rows
-        — even with no filter applied. Instead, when a filter is active, a
-        cheap separate pass resolves which DOC_NUMs qualify and the normal
-        tight per-SKU query is restricted to just those via a batched
-        IN-list (same technique as the cost lookup in get_margin_summary).
+        see get_daily_sales for the attribution rule and its caveats.
+        `employee_codes` restricts to orders created by those employees,
+        same convention. Unlike the by-employee reports, this one does NOT
+        add doc_num to the GROUP BY to support that: doing so once measured
+        26-55s (vs <2s) because a per-SKU aggregate that's normally a few
+        hundred rows exploded into one row per (SKU, order) — tens of
+        thousands of rows — even with no filter applied. Instead, when
+        either filter is active, a cheap separate pass resolves which
+        DOC_NUMs qualify and the normal tight per-SKU query is restricted
+        to just those via a batched IN-list (same technique as the cost
+        lookup in get_margin_summary).
         """
         want_repair = not categories or 'repair' in categories
         want_cosmetics = not categories or 'cosmetics' in categories
         repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
         cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
         salon_filter = set(salon_ids) if salon_ids else None
+        emp_filter = set(employee_codes) if employee_codes else None
 
         con = _connect()
         try:
             cur = con.cursor()
 
             doc_num_allowlist: list[str] | None = None
-            if salon_filter is not None:
+            if salon_filter is not None or emp_filter is not None:
                 cur.execute(
-                    "SELECT DISTINCT doc_num, doc_date FROM docs WHERE doc_date >= ? AND doc_date <= ?",
+                    "SELECT DISTINCT docs.doc_num, docs.doc_date, users.description FROM docs"
+                    " INNER JOIN docs_order ON (docs_order.doc_id = docs.doc_id)"
+                    " INNER JOIN users ON (users.user_id = docs_order.creater_id)"
+                    " WHERE docs.doc_date >= ? AND docs.doc_date <= ?",
                     (date_from, date_to),
                 )
                 order_rows = cur.fetchall()
                 doc_num_allowlist = []
                 with _SalonResolver() as resolve_salon:
-                    for doc_num, doc_date in order_rows:
-                        if resolve_salon(doc_num, doc_date) in salon_filter:
-                            doc_num_allowlist.append(str(doc_num))
+                    for doc_num, doc_date, desc in order_rows:
+                        if salon_filter is not None and resolve_salon(doc_num, doc_date) not in salon_filter:
+                            continue
+                        if emp_filter is not None and _code_from_description(desc) not in emp_filter:
+                            continue
+                        doc_num_allowlist.append(str(doc_num))
                 if not doc_num_allowlist:
                     return {}
 
@@ -2093,14 +2103,17 @@ class FirebirdService:
 
     def get_top_products(self, date_from: date, date_to: date, limit: int = 20,
                           salon_ids: list[str] | None = None,
-                          categories: list[str] | None = None) -> dict:
+                          categories: list[str] | None = None,
+                          employee_codes: list[str] | None = None) -> dict:
         """Top/bottom-selling SKUs and biggest risers/fallers vs the
         preceding period of equal length, plus dead stock (see
         get_dead_stock — it's cosmetics-only regardless of `categories`
         since repair has no physical warehouse stock to go dead).
 
         `categories` (subset of "repair"/"cosmetics") is this tab's ABC
-        analysis scope — see _product_revenue_rows.
+        analysis scope — see _product_revenue_rows. `employee_codes`
+        restricts to orders created by those employees, same convention
+        used everywhere else revenue is per-employee.
         """
         empty = {"top": [], "bottom": [], "rising": [], "falling": [], "dead_stock": []}
         if not FIREBIRD_AVAILABLE:
@@ -2109,11 +2122,11 @@ class FirebirdService:
         category_set = set(categories) if categories else None
 
         try:
-            current = self._product_revenue_rows(date_from, date_to, salon_ids, category_set)
+            current = self._product_revenue_rows(date_from, date_to, salon_ids, category_set, employee_codes)
             span = (date_to - date_from).days + 1
             prev_to = date_from - timedelta(days=1)
             prev_from = prev_to - timedelta(days=span - 1)
-            previous = self._product_revenue_rows(prev_from, prev_to, salon_ids, category_set)
+            previous = self._product_revenue_rows(prev_from, prev_to, salon_ids, category_set, employee_codes)
         except Exception as e:
             logger.error(f"Error fetching top products: {e}")
             return empty

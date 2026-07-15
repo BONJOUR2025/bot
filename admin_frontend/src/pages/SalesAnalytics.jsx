@@ -852,15 +852,20 @@ export default function SalesAnalytics() {
   // (server-side, see load()) but not employee-filtered — that's cheap to
   // do here since each already carries a `code` per row, and re-deriving
   // "total" from the filtered subset keeps the KPI row honest instead of
-  // showing an unfiltered total next to a filtered employee list.
+  // showing an unfiltered total next to a filtered employee list. Маржа
+  // additionally applies the "Категории" filter client-side too — see
+  // the function body for why that one never needs the backend at all.
   const filteredMargin = useMemo(() => {
     if (!margin) return null;
-    if (!selectedEmployees.size) return margin;
-    const byEmp = margin.by_employee.filter((e) => selectedEmployees.has(e.code));
+    const wantRepair    = !selectedCategories.size || selectedCategories.has('repair');
+    const wantCosmetics = !selectedCategories.size || selectedCategories.has('cosmetics');
+    if (!selectedEmployees.size && wantRepair && wantCosmetics) return margin;
+    const byEmp = selectedEmployees.size ? margin.by_employee.filter((e) => selectedEmployees.has(e.code)) : margin.by_employee;
     const sum = (field) => byEmp.reduce((s, e) => s + (e[field] || 0), 0);
     const categories = {};
     for (const cat of ['repair', 'cosmetics']) {
-      const rev = sum(`${cat}_revenue`), cost = sum(`${cat}_cost`);
+      const included = cat === 'repair' ? wantRepair : wantCosmetics;
+      const rev = included ? sum(`${cat}_revenue`) : 0, cost = included ? sum(`${cat}_cost`) : 0;
       categories[cat] = { revenue: rev, cost, margin: rev - cost, margin_pct: rev ? Math.round((rev - cost) / rev * 1000) / 10 : 0 };
     }
     const totalRev = categories.repair.revenue + categories.cosmetics.revenue;
@@ -872,7 +877,7 @@ export default function SalesAnalytics() {
       by_employee: byEmp,
       unpriced_items: margin.unpriced_items,
     };
-  }, [margin, selectedEmployees]);
+  }, [margin, selectedEmployees, selectedCategories]);
 
   // Grouped by salon server-side already (salon_ids round-trips via
   // buildParams like every other lazy tab), so no client-side re-filter

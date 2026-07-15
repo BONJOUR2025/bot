@@ -206,6 +206,7 @@ def create_sales_router() -> APIRouter:
         limit: int = Query(default=20, ge=1, le=100),
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
         categories: Optional[str] = Query(default=None, description="Comma-separated subset of repair,cosmetics"),
+        employee_codes: Optional[str] = Query(default=None, description="Comma-separated employee codes"),
     ):
         """Return top/bottom-selling SKUs and biggest risers/fallers vs the preceding period."""
         from app.services.firebird_service import get_firebird_service
@@ -214,7 +215,8 @@ def create_sales_router() -> APIRouter:
         try:
             svc = get_firebird_service()
             return await asyncio.to_thread(
-                svc.get_top_products, df, dt, limit, _parse_salon_ids(salon_ids), _parse_csv_list(categories),
+                svc.get_top_products, df, dt, limit, _parse_salon_ids(salon_ids),
+                _parse_csv_list(categories), _parse_csv_list(employee_codes),
             )
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
