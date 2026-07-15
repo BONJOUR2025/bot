@@ -410,6 +410,10 @@ input[type='time'],
 input[type='month'],
 input[type='week'] {
   min-width: 150px;
+  /* WebKit centers the native date/time text by default (iOS Safari),
+     while every other .input on this page is left-aligned — forcing the
+     mismatch to match. */
+  text-align: left;
 }
 
 /* Select arrow */
