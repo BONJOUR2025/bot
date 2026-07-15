@@ -652,6 +652,8 @@ export default function SalesAnalytics() {
     // here rather than special-case buildParams per tab.
     const categories = selectedCategories.size ? [...selectedCategories].join(',') : undefined;
     if (categories) params.categories = categories;
+    const employeeCodes = selectedEmployees.size ? [...selectedEmployees].join(',') : undefined;
+    if (employeeCodes) params.employee_codes = employeeCodes;
     if (serviceSearch.trim()) params.service_search = serviceSearch.trim();
     return params;
   }

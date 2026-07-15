@@ -232,6 +232,77 @@ COSMETICS_FOLDER_IDS = (
     210398,
 )
 
+# Coarse "does this order touch category X at all" folder mapping — used
+# by get_turnaround_stats/get_returns_summary to restrict which orders
+# count, where (unlike _extra_category_rows/get_daily_sales) revenue
+# doesn't need to be split per category, just a yes/no per order. Some
+# categories share a folder (e.g. insoles/slippers both partly live in
+# CUSTOM_WORK_FOLDER_ID and TAPOCHKI_MIXED_FOLDER_ID) so this is
+# deliberately a little over-inclusive rather than replicating the exact
+# sequence-parsing/name-matching _extra_category_rows does.
+CATEGORY_FOLDER_IDS: dict[str, tuple[int, ...]] = {
+    'repair': REPAIR_FOLDER_IDS,
+    'cosmetics': COSMETICS_FOLDER_IDS,
+    'shoes': (CUSTOM_WORK_FOLDER_ID, CUSTOM_MAKING_FOLDER_ID),
+    'insoles': (CUSTOM_WORK_FOLDER_ID, TAPOCHKI_MIXED_FOLDER_ID),
+    'slippers': (CUSTOM_WORK_FOLDER_ID, TAPOCHKI_MIXED_FOLDER_ID, ARIZONA_SLIPPERS_FOLDER_ID),
+    'leather_goods': (CUSTOM_WORK_FOLDER_ID, LEATHER_GOODS_FOLDER_ID, CUSTOM_MAKING_FOLDER_ID),
+    'certificates': (CERTIFICATES_FOLDER_ID,),
+    'delivery': (DELIVERY_FOLDER_ID,),
+    'keys': (KEYS_FOLDER_ID,),
+}
+# 'shoes' additionally lives in the 147.x tovar-code scheme (folder 210405,
+# not folder-listed above since it's identified by code, not folder_id).
+CATEGORY_TOVAR_CODES: dict[str, tuple[str, ...]] = {
+    'shoes': SHOES_CODES,
+}
+
+
+def _category_exists_sql(categories: set[str], order_id_col: str = 'docs_order.id') -> tuple[str, tuple]:
+    """Build an `EXISTS (...)` SQL fragment matching CATEGORY_FOLDER_IDS/
+    CATEGORY_TOVAR_CODES for the given category keys (unknown keys are
+    ignored). Checks both DOC_ORDER_SERVICES and DOC_ORDER_LINES since a
+    category can show up as either a service or a goods line. Returns
+    ("" , ()) if `categories` is empty/None (caller should skip adding
+    the clause entirely in that case — matching everything is the
+    no-filter case, not an always-false EXISTS).
+    """
+    folder_ids: set[int] = set()
+    tovar_codes: set[str] = set()
+    for cat in categories:
+        folder_ids.update(CATEGORY_FOLDER_IDS.get(cat, ()))
+        tovar_codes.update(CATEGORY_TOVAR_CODES.get(cat, ()))
+    if not folder_ids and not tovar_codes:
+        return "", ()
+
+    conditions = []
+    params: list = []
+    if folder_ids:
+        ph = ','.join(str(x) for x in folder_ids)
+        conditions.append(f"t.folder_id IN ({ph})")
+    if tovar_codes:
+        ph = ','.join(['?'] * len(tovar_codes))
+        conditions.append(f"t.code IN ({ph})")
+        params.extend(tovar_codes)
+    tovar_where = " OR ".join(conditions)
+
+    sql = f"""
+        (
+            EXISTS (
+                SELECT 1 FROM doc_order_services svc_x
+                    INNER JOIN tovars_tbl t ON t.tovar_id = svc_x.tovar_id
+                WHERE svc_x.doc_order_id = {order_id_col} AND ({tovar_where})
+            )
+            OR EXISTS (
+                SELECT 1 FROM doc_order_lines lin_x
+                    INNER JOIN tovars_tbl t ON t.tovar_id = lin_x.tovar_id
+                WHERE lin_x.doc_order_id = {order_id_col} AND ({tovar_where})
+            )
+        )
+    """
+    return sql, tuple(params) * 2
+
+
 _PAIR_STARTERS = {'0', '1'}
 
 # Registers to show in the "Остатки по кассам" card — see get_cash_balances.
@@ -1486,7 +1557,7 @@ class FirebirdService:
         }
 
     def get_turnaround_stats(self, date_from: date, date_to: date, salon_ids: list[str] | None = None,
-                              service_search: str | None = None) -> dict:
+                              service_search: str | None = None, categories: list[str] | None = None) -> dict:
         """Order fulfillment time (order accepted → moved to STATUS_ID=4,
         "Исполненный" per the real ORDER_STATUSES lookup table — i.e. work
         actually finished, not STATUS_ID=5 "Выданный" which is when the
@@ -1512,6 +1583,11 @@ class FirebirdService:
         service (DOC_ORDER_SERVICES) or goods (DOC_ORDER_LINES) line whose
         name contains this substring — e.g. "набойки" isolates turnaround
         for heel-tap repairs specifically instead of every order type.
+
+        `categories` restricts to orders touching at least one of those
+        categories (see _category_exists_sql) — coarser than the exact
+        per-category revenue split get_daily_sales does, since this only
+        needs a yes/no per order, not a revenue amount.
         """
         from app.data.salon_repository import get_salon_repository
 
@@ -1551,6 +1627,12 @@ class FirebirdService:
             """
             needle = f"%{service_search}%"
             params += [needle, needle]
+
+        if categories:
+            cat_sql, cat_params = _category_exists_sql(set(categories))
+            if cat_sql:
+                sql += f" AND {cat_sql}"
+                params += list(cat_params)
 
         # Phase 2: earliest STATUS_ID=4 ("Исполненный") history row per
         # order, batched against just this range's order ids instead of
@@ -1775,7 +1857,8 @@ class FirebirdService:
             "orders": orders,
         }
 
-    def get_returns_summary(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
+    def get_returns_summary(self, date_from: date, date_to: date, salon_ids: list[str] | None = None,
+                             categories: list[str] | None = None) -> dict:
         """Returned-order counts/amounts by employee for a date range (DOCS_ORDER.RETURNED=1).
 
         Read-only report — deliberately not wired into payroll bonuses/
@@ -1785,6 +1868,11 @@ class FirebirdService:
 
         `salon_ids` restricts to orders resolved to one of those salons —
         see get_daily_sales for the attribution rule and its caveats.
+
+        `categories` restricts both the return count AND the order-count
+        denominator to orders touching those categories (see
+        _category_exists_sql) — so return_rate stays a rate over the same
+        population, not returns-of-X over all orders.
         """
         empty = {"total": {"return_count": 0, "return_amount": 0.0, "order_count": 0, "return_rate": 0.0}, "by_employee": []}
         if not FIREBIRD_AVAILABLE:
@@ -1792,7 +1880,10 @@ class FirebirdService:
             return empty
         salon_filter = set(salon_ids) if salon_ids else None
 
-        sql_returns = """
+        cat_sql, cat_params = _category_exists_sql(set(categories)) if categories else ("", ())
+        cat_clause = f" AND {cat_sql}" if cat_sql else ""
+
+        sql_returns = f"""
             SELECT users.description, docs.doc_num, docs.doc_date, docs_order.kredit
             FROM docs_order
                 INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
@@ -1800,22 +1891,24 @@ class FirebirdService:
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND docs_order.returned = 1
+                {cat_clause}
         """
-        sql_totals = """
+        sql_totals = f"""
             SELECT users.description, docs.doc_num, docs.doc_date
             FROM docs_order
                 INNER JOIN docs ON (docs.doc_id = docs_order.doc_id)
                 INNER JOIN users ON (users.user_id = docs_order.creater_id)
             WHERE docs.doc_date >= ? AND docs.doc_date <= ?
+                {cat_clause}
         """
 
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql_returns, (date_from, date_to))
+                cur.execute(sql_returns, (date_from, date_to, *cat_params))
                 return_rows = cur.fetchall()
-                cur.execute(sql_totals, (date_from, date_to))
+                cur.execute(sql_totals, (date_from, date_to, *cat_params))
                 total_rows = cur.fetchall()
             finally:
                 con.close()
@@ -2240,7 +2333,8 @@ class FirebirdService:
             "work_places": work_places,
         }
 
-    def get_department_comparison(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
+    def get_department_comparison(self, date_from: date, date_to: date, salon_ids: list[str] | None = None,
+                                   categories: list[str] | None = None, employee_codes: list[str] | None = None) -> dict:
         """Revenue/order comparison by salon for a date range.
 
         Salon attribution is primarily by "Склад приёма" (reception
@@ -2255,6 +2349,13 @@ class FirebirdService:
         `salon_ids`, if given, just restricts the *output* to those salons
         — the whole point of this endpoint is grouping by salon, so
         "filtering" here is a plain post-filter, not a resolution change.
+
+        `categories` (subset of get_daily_sales' category keys; None/empty
+        = all) restricts which category's rows get counted at all, same
+        semantics as the "Обзор" tab's category filter. `employee_codes`
+        restricts to orders created by those employees (Обзор's exact
+        attribution — see get_daily_sales), same convention this app uses
+        everywhere revenue is attributed to "an employee".
         """
         from app.data.salon_repository import get_salon_repository
 
@@ -2266,63 +2367,80 @@ class FirebirdService:
             logger.warning("fdb library not installed - returning empty department comparison")
             return empty
 
+        cat_filter = set(categories) if categories else None
+        want_repair = cat_filter is None or 'repair' in cat_filter
+        want_cosmetics = cat_filter is None or 'cosmetics' in cat_filter
+        want_shoes = cat_filter is None or 'shoes' in cat_filter
+        emp_filter = set(employee_codes) if employee_codes else None
+
         repair_folders = ','.join(str(x) for x in REPAIR_FOLDER_IDS)
         cosmetics_folders = ','.join(str(x) for x in COSMETICS_FOLDER_IDS)
         shoes_sales_codes = tuple(c for c in SHOES_CODES if c not in ('0', '1'))
         shoes_placeholders = ','.join(['?'] * len(shoes_sales_codes))
 
+        # users.description is only needed to support employee_codes — same
+        # join get_daily_sales already uses for the same purpose.
         sql_repair = f"""
-            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit), docs_order.sclad_kredit_id
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit), docs_order.sclad_kredit_id, users.description
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({repair_folders})
-            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id
+            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id, users.description
         """
         # No status_id filter — see get_daily_sales' sql_cosmetics comment.
         sql_cosmetics = f"""
-            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_lines.kredit), docs_order.sclad_kredit_id
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_lines.kredit), docs_order.sclad_kredit_id, users.description
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({cosmetics_folders})
-            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id
+            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id, users.description
         """
         sql_shoes = f"""
-            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit), docs_order.sclad_kredit_id
+            SELECT docs.doc_num, docs.doc_date, SUM(doc_order_services.kredit), docs_order.sclad_kredit_id, users.description
             FROM docs_order
                 INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
                 INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE
                 docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.code IN ({shoes_placeholders})
-            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id
+            GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id, users.description
         """
 
         try:
             con = _connect()
             try:
                 cur = con.cursor()
-                cur.execute(sql_repair, (date_from, date_to))
-                rows = list(cur.fetchall())
-                cur.execute(sql_cosmetics, (date_from, date_to))
-                rows += cur.fetchall()
-                cur.execute(sql_shoes, (date_from, date_to, *shoes_sales_codes))
-                rows += cur.fetchall()
+                rows = []
+                if want_repair:
+                    cur.execute(sql_repair, (date_from, date_to))
+                    rows += cur.fetchall()
+                if want_cosmetics:
+                    cur.execute(sql_cosmetics, (date_from, date_to))
+                    rows += cur.fetchall()
+                if want_shoes:
+                    cur.execute(sql_shoes, (date_from, date_to, *shoes_sales_codes))
+                    rows += cur.fetchall()
                 # Same previously-uncounted revenue get_daily_sales now
                 # covers (certificates, keys, custom leather goods, etc.) —
                 # no per-category breakdown needed here, just folded into
-                # each salon's total like everything else.
+                # each salon's total like everything else, unless a
+                # category filter narrows it down.
                 rows += [
-                    (doc_num, doc_date, kredit, sclad_id)
-                    for doc_date, _desc, doc_num, _category, kredit, sclad_id in self._extra_category_rows(cur, date_from, date_to)
+                    (doc_num, doc_date, kredit, sclad_id, desc)
+                    for doc_date, desc, doc_num, category, kredit, sclad_id in self._extra_category_rows(cur, date_from, date_to)
+                    if cat_filter is None or category in cat_filter
                 ]
                 sclad_names = self._sclad_names(cur)
             finally:
@@ -2342,7 +2460,9 @@ class FirebirdService:
         repo._load = lambda: None
         try:
             totals: dict[str, dict] = {}
-            for doc_num, doc_date, revenue, sclad_id in rows:
+            for doc_num, doc_date, revenue, sclad_id, desc in rows:
+                if emp_filter is not None and _code_from_description(desc) not in emp_filter:
+                    continue
                 # Primary: "Склад приёма" (reception warehouse,
                 # DOCS_ORDER.SCLAD_KREDIT_ID) — matches the authoritative
                 # "Суммы заказов по приемным пунктам" report exactly (spot
