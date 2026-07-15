@@ -470,8 +470,8 @@ function SalonCard({ salon, employees, onClick }) {
   );
 }
 
-// ── Detail Drawer ────────────────────────────────────────────────
-function SalonDrawer({ salon, employees, onEdit, onDelete, onClose }) {
+// ── Detail Modal ──────────────────────────────────────────────────
+function SalonDetailModal({ salon, employees, onEdit, onDelete, onClose }) {
   const [tab, setTab] = useState('main');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -484,14 +484,10 @@ function SalonDrawer({ salon, employees, onEdit, onDelete, onClose }) {
   const assignedEmps = (salon.employees || []).map(id => empMap[id]).filter(Boolean);
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex justify-end backdrop-blur-sm"
-      style={{ background: 'var(--color-modal-backdrop)' }}
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-lg bg-[color:var(--color-modal-bg)] shadow-2xl flex flex-col h-full overflow-hidden border-l border-[color:var(--color-border)]">
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-card max-w-2xl w-full flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-[color:var(--color-border)]">
+        <div className="flex items-center justify-between pb-4 border-b border-[color:var(--color-border)]">
           <div className="flex items-center gap-3 min-w-0">
             {salon.code && (
               <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] font-bold text-base flex items-center justify-center">
@@ -499,18 +495,18 @@ function SalonDrawer({ salon, employees, onEdit, onDelete, onClose }) {
               </span>
             )}
             <div className="min-w-0">
-              <h2 className="font-bold text-lg truncate">{salon.name}</h2>
+              <h3 className="font-bold text-lg truncate">{salon.name}</h3>
               <Badge status={salon.status} />
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={onEdit} className="btn btn-secondary text-sm">Изменить</button>
-            <button onClick={onClose} className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] text-xl">&times;</button>
+            <button onClick={onClose} className="text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] text-xl leading-none">&times;</button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-6 py-3 border-b border-[color:var(--color-border)] overflow-x-auto">
+        <div className="flex gap-1 pt-4 pb-2 border-b border-[color:var(--color-border)] overflow-x-auto">
           {TABS.map(t => (
             <button
               key={t.key}
@@ -527,7 +523,7 @@ function SalonDrawer({ salon, employees, onEdit, onDelete, onClose }) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto py-4">
 
           {tab === 'main' && (
             <div className="space-y-5">
@@ -622,7 +618,7 @@ function SalonDrawer({ salon, employees, onEdit, onDelete, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-[color:var(--color-border)]">
+        <div className="pt-4 border-t border-[color:var(--color-border)]">
           {!confirmDelete ? (
             <button onClick={() => setConfirmDelete(true)} className="text-sm text-red-500 hover:text-red-700">Удалить салон</button>
           ) : (
@@ -813,9 +809,9 @@ export default function Salons() {
         />
       )}
 
-      {/* Detail drawer */}
+      {/* Detail modal */}
       {drawer && (
-        <SalonDrawer
+        <SalonDetailModal
           salon={drawer}
           employees={employees}
           onEdit={() => { setModal(drawer); setDrawer(null); }}
