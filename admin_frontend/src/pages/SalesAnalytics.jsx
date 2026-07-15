@@ -58,6 +58,15 @@ const CATEGORIES = [
 const NO_MARGIN_CATEGORY_KEYS = new Set(['shoes', 'insoles', 'slippers', 'leather_goods', 'certificates', 'delivery', 'keys']);
 const LABEL_TO_KEY = Object.fromEntries(CATEGORIES.map((c) => [c.label, c.key]));
 
+// Tabs where "Категории"/"Сотрудники" genuinely don't apply to the
+// underlying data (not just "not wired up yet") — greyed out there
+// instead of silently doing nothing when picked. See backend docstrings
+// (get_workplace_summary, get_turnaround_stats) for why.
+const CATEGORIES_INAPPLICABLE_TABS = new Set(['workplaces', 'unclaimed']);
+const EMPLOYEES_INAPPLICABLE_TABS = new Set(['turnaround', 'workplaces', 'unclaimed']);
+const CATEGORIES_DISABLED_HINT = 'На этой вкладке нет разбивки по категориям';
+const EMPLOYEES_DISABLED_HINT = 'На этой вкладке нет привязки к сотруднику';
+
 function toggleSet(setter, key) {
   setter((prev) => {
     const next = new Set(prev);
@@ -128,14 +137,14 @@ function quickRange(key) {
 // the card, so a *later* sibling card (e.g. the KPI row right below the
 // filters card) paints over it in DOM order regardless of z-index. A portal
 // sidesteps the whole stacking-context tree instead of trying to out-rank it.
-function MultiSelect({ options, selected, onChange, placeholder = 'Все' }) {
+function MultiSelect({ options, selected, onChange, placeholder = 'Все', disabled = false, disabledHint }) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState(null);
   const btnRef = useRef(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || disabled) return;
     const updatePosition = () => {
       const r = btnRef.current?.getBoundingClientRect();
       if (!r) return;
@@ -165,12 +174,13 @@ function MultiSelect({ options, selected, onChange, placeholder = 'Все' }) {
   const label = allSelected ? placeholder : options.filter((o) => selected.has(o.value)).map((o) => o.label).join(', ');
   return (
     <div className="relative">
-      <button ref={btnRef} type="button" onClick={() => setOpen((v) => !v)}
-        className="input w-full text-left flex items-center justify-between gap-2 text-sm">
-        <span className="truncate">{label}</span>
+      <button ref={btnRef} type="button" disabled={disabled} onClick={() => setOpen((v) => !v)}
+        title={disabled ? disabledHint : undefined}
+        className={`input w-full text-left flex items-center justify-between gap-2 text-sm ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+        <span className="truncate">{disabled ? '—' : label}</span>
         <ChevronDown size={14} className={`flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && menuStyle && createPortal(
+      {open && !disabled && menuStyle && createPortal(
         <div ref={menuRef} style={menuStyle}
           className="min-w-[180px] rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] shadow-xl overflow-hidden max-h-64 overflow-y-auto">
           <button type="button" onClick={() => onChange(new Set())}
@@ -956,6 +966,11 @@ export default function SalesAnalytics() {
 
       {/* ── Filters ───────────────────────────────────────── */}
       <div className="app-card p-4 space-y-3">
+        {activeTab === 'unclaimed' && (
+          <div className="text-xs text-[color:var(--color-muted-foreground)] rounded-lg border border-[color:var(--color-border)] px-3 py-2">
+            Эта вкладка не использует фильтры ниже — у неё своё окно "дней" внутри.
+          </div>
+        )}
         <div className="flex flex-wrap gap-1.5">
           {[['month','Этот месяц'],['prev','Прошлый мес.'],['q','Квартал'],['year','Год']].map(([k, l]) => (
             <button key={k} onClick={() => { const [f,t] = quickRange(k); setDateFrom(f); setDateTo(t); }}
@@ -986,11 +1001,13 @@ export default function SalesAnalytics() {
           </div>
           <div>
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Сотрудники</label>
-            <MultiSelect options={employeeOptions} selected={selectedEmployees} onChange={setSelectedEmployees} placeholder="Все сотрудники" />
+            <MultiSelect options={employeeOptions} selected={selectedEmployees} onChange={setSelectedEmployees} placeholder="Все сотрудники"
+              disabled={EMPLOYEES_INAPPLICABLE_TABS.has(activeTab)} disabledHint={EMPLOYEES_DISABLED_HINT} />
           </div>
           <div>
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Категории</label>
-            <MultiSelect options={categoryOptions} selected={selectedCategories} onChange={setSelectedCategories} placeholder="Все категории" />
+            <MultiSelect options={categoryOptions} selected={selectedCategories} onChange={setSelectedCategories} placeholder="Все категории"
+              disabled={CATEGORIES_INAPPLICABLE_TABS.has(activeTab)} disabledHint={CATEGORIES_DISABLED_HINT} />
           </div>
           <div>
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Салон</label>
