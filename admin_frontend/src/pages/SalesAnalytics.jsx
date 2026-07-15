@@ -949,10 +949,10 @@ export default function SalesAnalytics() {
 
       {/* ── Filters ───────────────────────────────────────── */}
       <div className="app-card p-4 space-y-3">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
           {[['month','Этот месяц'],['prev','Прошлый мес.'],['q','Квартал'],['year','Год']].map(([k, l]) => (
             <button key={k} onClick={() => { const [f,t] = quickRange(k); setDateFrom(f); setDateTo(t); }}
-              className="px-3 py-1 rounded-full text-xs border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
+              className="px-3 py-1 rounded-full text-xs text-center border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
               {l}
             </button>
           ))}
@@ -990,7 +990,7 @@ export default function SalesAnalytics() {
             <MultiSelect options={salonOptions} selected={selectedSalons} onChange={setSelectedSalons} placeholder="Все салоны" />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           {[
             [hideZero, () => setHideZero((v) => !v), hideZero ? <EyeOff size={12}/> : <Eye size={12}/>, 'Скрыть нули'],
             [showMA,   () => setShowMA((v)   => !v), null, 'MA7'],
@@ -999,7 +999,7 @@ export default function SalesAnalytics() {
               chartMode === 'area' ? '▲ Область' : chartMode === 'bar' ? '▬ Столбцы' : '— Линии'],
           ].map(([active, fn, icon, lbl], i) => (
             <button key={i} onClick={fn}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${active
+              className={`flex items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${active
                 ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
                 : 'border-[color:var(--color-border)] hover:bg-[color:var(--color-muted)]'}`}>
               {icon}{lbl}
