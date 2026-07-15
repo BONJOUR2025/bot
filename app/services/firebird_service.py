@@ -896,6 +896,11 @@ class FirebirdService:
             GROUP BY docs.doc_date, users.description, docs.doc_num
         """
 
+        # No status_id filter here — analytics counts revenue as soon as
+        # it's on the order, same as repair/shoes, not just once it reaches
+        # "Исполнен". (Also avoids the docs_order_history JOIN fan-out: an
+        # order can pass through status 5 more than once — e.g. reopened
+        # and re-completed — which used to multiply-count its lines.)
         sql_cosmetics = f"""
             SELECT
                 docs.doc_date,
@@ -904,13 +909,11 @@ class FirebirdService:
                 SUM(doc_order_lines.kredit)
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN users ON (docs_order.creater_id = users.user_id)
             WHERE
-                docs_order_history.status_id = 5
-                AND docs.doc_date >= ?
+                docs.doc_date >= ?
                 AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({','.join(str(x) for x in cosmetics_folder_ids)})
             GROUP BY docs.doc_date, users.description, docs.doc_num
@@ -1405,18 +1408,17 @@ class FirebirdService:
                 AND tovars_tbl.folder_id IN ({repair_folders})
             GROUP BY users.description, tovars_tbl.tovar_id, docs.doc_date, docs.doc_num
         """
+        # No status_id filter — see get_daily_sales' sql_cosmetics comment.
         sql_cosmetics = f"""
             SELECT users.description, tovars_tbl.tovar_id, docs.doc_date, docs.doc_num,
                    SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
                 INNER JOIN users ON docs_order.creater_id = users.user_id
             WHERE
-                docs_order_history.status_id = 5
-                AND docs.doc_date >= ? AND docs.doc_date <= ?
+                docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({cosmetics_folders})
             GROUP BY users.description, tovars_tbl.tovar_id, docs.doc_date, docs.doc_num
         """
@@ -1961,16 +1963,15 @@ class FirebirdService:
                     cur.execute(sql_repair, (date_from, date_to))
                     rows += cur.fetchall()
                 if want_cosmetics:
+                    # No status_id filter — see get_daily_sales' sql_cosmetics comment.
                     sql_cosmetics = f"""
                         SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
                                SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
                         FROM doc_order_lines
                             INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                            INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
                             INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                             INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
-                        WHERE docs_order_history.status_id = 5
-                            AND docs.doc_date >= ? AND docs.doc_date <= ?
+                        WHERE docs.doc_date >= ? AND docs.doc_date <= ?
                             AND tovars_tbl.folder_id IN ({cosmetics_folders})
                         GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
                     """
@@ -1992,16 +1993,15 @@ class FirebirdService:
                     """
                     rows += _fetch_batched(cur, sql_repair_tpl, doc_num_allowlist, (date_from, date_to), batch=200)
                 if want_cosmetics:
+                    # No status_id filter — see get_daily_sales' sql_cosmetics comment.
                     sql_cosmetics_tpl = f"""
                         SELECT tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code,
                                SUM(doc_order_lines.kredit), SUM(doc_order_lines.qty_kredit)
                         FROM doc_order_lines
                             INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                            INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
                             INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                             INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
                         WHERE docs.doc_num IN ({{ph}})
-                            AND docs_order_history.status_id = 5
                             AND docs.doc_date >= ? AND docs.doc_date <= ?
                             AND tovars_tbl.folder_id IN ({cosmetics_folders})
                         GROUP BY tovars_tbl.tovar_id, tovars_tbl.name, tovars_tbl.code
@@ -2301,16 +2301,15 @@ class FirebirdService:
                 AND tovars_tbl.folder_id IN ({repair_folders})
             GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id
         """
+        # No status_id filter — see get_daily_sales' sql_cosmetics comment.
         sql_cosmetics = f"""
             SELECT docs.doc_num, docs.doc_date, SUM(doc_order_lines.kredit), docs_order.sclad_kredit_id
             FROM doc_order_lines
                 INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
-                INNER JOIN docs_order_history ON (docs_order.id = docs_order_history.doc_order_id)
                 INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
                 INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
             WHERE
-                docs_order_history.status_id = 5
-                AND docs.doc_date >= ? AND docs.doc_date <= ?
+                docs.doc_date >= ? AND docs.doc_date <= ?
                 AND tovars_tbl.folder_id IN ({cosmetics_folders})
             GROUP BY docs.doc_num, docs.doc_date, docs_order.sclad_kredit_id
         """
