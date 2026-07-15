@@ -176,6 +176,29 @@ SHOES_CODES = (
     '147.15', '147.16', '147.17', '147.18', '147.19', '147.20', '147.21', '147.22',
 )
 
+# "Extra" revenue categories — see FirebirdService._extra_category_rows.
+# Confirmed against real order data with the business (not guessed):
+CUSTOM_WORK_FOLDER_ID = 210406      # "004. Индивидуальный пошив" — sequence-parsed, see below
+LEATHER_GOODS_FOLDER_ID = 210256    # "Кожгалантерея" — bags/wallets/belts sold as goods
+CERTIFICATES_FOLDER_ID = 110412     # "Сертификаты"
+DELIVERY_FOLDER_ID = 210257         # "07. Доставка"
+KEYS_FOLDER_ID = 210                # "Ключи"
+TAPOCHKI_MIXED_FOLDER_ID = 106236   # "Тапочки" — actually mixes стельки + тапочки items, split by name
+ARIZONA_SLIPPERS_FOLDER_ID = 109412 # "ARIZONA ЖЕНСКИЕ" — a slippers product line
+CUSTOM_MAKING_FOLDER_ID = 107249    # "Индивидуальное изготовление" — code ИНД=shoes, ИНДР=leather goods
+
+# Within CUSTOM_WORK_FOLDER_ID, codes '0'/'1' ("Пошив обуви"/"Индивидуальный
+# пошив обуви") mark the start of a shoe-tailoring job in an order — mirrors
+# SHOES_CODES/_parse_shoe_pairs' 0/1 markers, but this is a separate scheme
+# (plain codes, not paired with 147.x) so it's kept as its own set rather
+# than merged into _PAIR_STARTERS.
+_CUSTOM_WORK_SHOE_MARKERS = {'0', '1'}
+_CUSTOM_WORK_INSOLE_CODE = '6'        # "Изготовление стельки"
+_CUSTOM_WORK_SLIPPER_CODES = {'5', '7', '8'}   # тапочки (индив./анатомич./BK)
+_CUSTOM_WORK_LEATHER_CODES = {'2', '3'}        # пошив ремня / кожгалантереи
+# code '4' ("Изготовление индивидуального изделия") is deliberately
+# unhandled — no clear category and zero real-world occurrences so far.
+
 REPAIR_FOLDER_IDS = (
     215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
     108401, 108402, 110409, 110410, 110411,
@@ -609,11 +632,138 @@ class FirebirdService:
         )
         return result
 
+    @staticmethod
+    def _decode_text(v) -> str:
+        if isinstance(v, bytes):
+            try:
+                return v.decode("utf-8")
+            except UnicodeDecodeError:
+                return v.decode("cp1251", errors="replace")
+        return v or ""
+
+    def _extra_category_rows(self, cur, date_from: date, date_to: date) -> list[tuple]:
+        """Revenue outside repair/cosmetics/(147.x)shoes that used to be
+        invisible on the Sales Analytics page entirely — see the folder-id
+        constants above. Every rule here was confirmed against real order
+        data with the business, not guessed from folder names.
+
+        Returns (doc_date, description, doc_num, category, kredit) tuples,
+        category in {"shoes", "insoles", "slippers", "leather_goods",
+        "certificates", "delivery", "keys"} — same shape as the
+        sql_repair/sql_cosmetics/sql_shoes rows get_daily_sales already
+        loops over, so callers can reuse their existing per-row handling.
+        """
+        out: list[tuple] = []
+
+        # -- CUSTOM_WORK_FOLDER_ID: sequence-parsed per order, like
+        # _parse_shoe_pairs but for this folder's own 0/1 marker scheme.
+        # "Изготовление стельки" only counts as shoes revenue if it comes
+        # after a "Пошив обуви" marker in the SAME order; otherwise it's a
+        # standalone "Стельки" sale.
+        cur.execute("""
+            SELECT docs.doc_date, docs.doc_num, users.description, tovars_tbl.code,
+                   doc_order_services.kredit, doc_order_services.doc_order_id, doc_order_services.id
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
+            ORDER BY doc_order_services.doc_order_id, doc_order_services.id
+        """, (date_from, date_to, CUSTOM_WORK_FOLDER_ID))
+        by_order: dict = {}
+        for doc_date, doc_num, desc, code, kredit, order_id, _svc_id in cur.fetchall():
+            entry = by_order.setdefault(order_id, {"doc_date": doc_date, "doc_num": doc_num, "desc": desc, "items": []})
+            entry["items"].append((self._decode_text(code).strip(), float(kredit or 0)))
+        for order in by_order.values():
+            in_shoe_context = False
+            for code, kredit in order["items"]:
+                if code in _CUSTOM_WORK_SHOE_MARKERS:
+                    in_shoe_context = True
+                    if kredit:
+                        out.append((order["doc_date"], order["desc"], order["doc_num"], "shoes", kredit))
+                elif code == _CUSTOM_WORK_INSOLE_CODE:
+                    cat = "shoes" if in_shoe_context else "insoles"
+                    out.append((order["doc_date"], order["desc"], order["doc_num"], cat, kredit))
+                elif code in _CUSTOM_WORK_SLIPPER_CODES:
+                    out.append((order["doc_date"], order["desc"], order["doc_num"], "slippers", kredit))
+                elif code in _CUSTOM_WORK_LEATHER_CODES:
+                    out.append((order["doc_date"], order["desc"], order["doc_num"], "leather_goods", kredit))
+                # code '4' — see module-level comment, deliberately skipped.
+
+        # -- DELIVERY_FOLDER_ID: plain services-side sum --
+        cur.execute("""
+            SELECT docs.doc_date, docs.doc_num, users.description, SUM(doc_order_services.kredit)
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
+            GROUP BY docs.doc_date, docs.doc_num, users.description
+        """, (date_from, date_to, DELIVERY_FOLDER_ID))
+        for d, doc_num, desc, s in cur.fetchall():
+            out.append((d, desc, doc_num, "delivery", float(s or 0)))
+
+        # -- plain goods-side (DOC_ORDER_LINES) folder sums --
+        def _lines_folder_sum(folder_id: int, category: str) -> None:
+            cur.execute("""
+                SELECT docs.doc_date, docs.doc_num, users.description, SUM(doc_order_lines.kredit)
+                FROM doc_order_lines
+                    INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                    INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                    INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                    INNER JOIN users ON (docs_order.creater_id = users.user_id)
+                WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
+                GROUP BY docs.doc_date, docs.doc_num, users.description
+            """, (date_from, date_to, folder_id))
+            for d, doc_num, desc, s in cur.fetchall():
+                out.append((d, desc, doc_num, category, float(s or 0)))
+
+        _lines_folder_sum(LEATHER_GOODS_FOLDER_ID, "leather_goods")
+        _lines_folder_sum(CERTIFICATES_FOLDER_ID, "certificates")
+        _lines_folder_sum(KEYS_FOLDER_ID, "keys")
+        _lines_folder_sum(ARIZONA_SLIPPERS_FOLDER_ID, "slippers")
+
+        # -- TAPOCHKI_MIXED_FOLDER_ID: mixes "Стельки..." and "Тапочки..."
+        # item names in the same folder — split by name prefix.
+        cur.execute("""
+            SELECT docs.doc_date, docs.doc_num, users.description, tovars_tbl.name, doc_order_lines.kredit
+            FROM doc_order_lines
+                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
+        """, (date_from, date_to, TAPOCHKI_MIXED_FOLDER_ID))
+        for d, doc_num, desc, name, kredit in cur.fetchall():
+            cat = "insoles" if self._decode_text(name).strip().lower().startswith("стельк") else "slippers"
+            out.append((d, desc, doc_num, cat, float(kredit or 0)))
+
+        # -- CUSTOM_MAKING_FOLDER_ID: code ИНД=shoes, ИНДР=leather goods --
+        cur.execute("""
+            SELECT docs.doc_date, docs.doc_num, users.description, tovars_tbl.code, doc_order_lines.kredit
+            FROM doc_order_lines
+                INNER JOIN docs_order ON (doc_order_lines.doc_order_id = docs_order.id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN tovars_tbl ON (doc_order_lines.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE docs.doc_date >= ? AND docs.doc_date <= ? AND tovars_tbl.folder_id = ?
+        """, (date_from, date_to, CUSTOM_MAKING_FOLDER_ID))
+        for d, doc_num, desc, code, kredit in cur.fetchall():
+            cat = "leather_goods" if self._decode_text(code).strip().upper() == "ИНДР" else "shoes"
+            out.append((d, desc, doc_num, cat, float(kredit or 0)))
+
+        return out
 
     def get_daily_sales(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> list[dict]:
         """
-        Get daily repair + cosmetics sales by employee for a date range.
-        Returns list of dicts: {date, code, description, repair, cosmetics, total}
+        Get daily sales by employee for a date range, broken out by
+        category. Returns list of dicts: {date, code, description, repair,
+        cosmetics, shoes, insoles, slippers, leather_goods, certificates,
+        delivery, keys, total} — see _extra_category_rows for what feeds
+        the categories past "shoes" (all previously invisible on this
+        page; rules confirmed with the business, not guessed).
 
         `salon_ids` (Salon.id values, e.g. from GET /api/salons/) restricts
         to orders resolved to one of those salons via the doc_num suffix
@@ -677,6 +827,12 @@ class FirebirdService:
                     "repair": 0.0,
                     "cosmetics": 0.0,
                     "shoes": 0.0,
+                    "insoles": 0.0,
+                    "slippers": 0.0,
+                    "leather_goods": 0.0,
+                    "certificates": 0.0,
+                    "delivery": 0.0,
+                    "keys": 0.0,
                 }
             result[key][category] += float(amount or 0)
 
@@ -761,13 +917,17 @@ class FirebirdService:
                     for d, desc, doc_num, s in cur.fetchall():
                         if d is not None and _keep(doc_num, d):
                             _add(d, desc, s, "shoes")
+                    for d, desc, doc_num, category, s in self._extra_category_rows(cur, date_from, date_to):
+                        if d is not None and _keep(doc_num, d):
+                            _add(d, desc, s, category)
             finally:
                 con.close()
         except Exception as e:
             logger.error(f"Error fetching daily sales: {e}")
 
+        extra_keys = ("insoles", "slippers", "leather_goods", "certificates", "delivery", "keys")
         return [
-            {**v, "total": v["repair"] + v["cosmetics"] + v["shoes"]}
+            {**v, "total": v["repair"] + v["cosmetics"] + v["shoes"] + sum(v[k] for k in extra_keys)}
             for v in sorted(result.values(), key=lambda x: (x["date"], x["code"]))
         ]
 
@@ -2137,6 +2297,14 @@ class FirebirdService:
                 rows += cur.fetchall()
                 cur.execute(sql_shoes, (date_from, date_to, *shoes_sales_codes))
                 rows += cur.fetchall()
+                # Same previously-uncounted revenue get_daily_sales now
+                # covers (certificates, keys, custom leather goods, etc.) —
+                # no per-category breakdown needed here, just folded into
+                # each salon's total like everything else.
+                rows += [
+                    (doc_num, doc_date, kredit)
+                    for doc_date, _desc, doc_num, _category, kredit in self._extra_category_rows(cur, date_from, date_to)
+                ]
             finally:
                 con.close()
         except Exception as e:

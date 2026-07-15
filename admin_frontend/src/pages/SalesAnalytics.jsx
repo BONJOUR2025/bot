@@ -43,10 +43,19 @@ function buildCodeNameMap(employees) {
 }
 
 const CATEGORIES = [
-  { key:'repair',    label:'Ремонт / Химчистка', color:'#e61919' },
-  { key:'cosmetics', label:'Косметика',           color:'#4af626' },
-  { key:'shoes',     label:'Обувь',               color:'#ffb347' },
+  { key:'repair',        label:'Ремонт / Химчистка',   color:'#e61919' },
+  { key:'cosmetics',     label:'Косметика',             color:'#4af626' },
+  { key:'shoes',         label:'Обувь',                 color:'#ffb347' },
+  { key:'insoles',       label:'Стельки',               color:'#6fb8ff' },
+  { key:'slippers',      label:'Тапочки',               color:'#9a9a9a' },
+  { key:'leather_goods', label:'Кожгалантерея на заказ', color:'#c9502a' },
+  { key:'certificates',  label:'Сертификаты',           color:'#d4d44a' },
+  { key:'delivery',      label:'Доставка',              color:'#37c418' },
+  { key:'keys',          label:'Ключи',                 color:'#ff6b5e' },
 ];
+// Categories with no cost-of-goods concept for get_margin_summary (see its
+// docstring) — excluded from the "Маржа" tab's per-category breakdown.
+const NO_MARGIN_CATEGORY_KEYS = new Set(['shoes', 'insoles', 'slippers', 'leather_goods', 'certificates', 'delivery', 'keys']);
 const LABEL_TO_KEY = Object.fromEntries(CATEGORIES.map((c) => [c.label, c.key]));
 
 function toggleSet(setter, key) {
@@ -263,14 +272,12 @@ function EmpAvatar({ name, color, size = 32 }) {
 }
 
 /* ── 3-color category breakdown bar ─────────────────────── */
-function CatBar({ repair, cosmetics, shoes }) {
-  const total = (repair||0) + (cosmetics||0) + (shoes||0);
-  if (total === 0) return <div className="h-1.5 rounded-full bg-[color:var(--color-border)] w-full" />;
+function CatBar({ row }) {
+  const parts = CATEGORIES.map(({ key, color }) => ({ key, color, value: row[key] || 0 })).filter((p) => p.value > 0);
+  if (parts.length === 0) return <div className="h-1.5 rounded-full bg-[color:var(--color-border)] w-full" />;
   return (
     <div className="flex h-1.5 rounded-full overflow-hidden w-full gap-px">
-      {repair    > 0 && <div style={{ flex: repair,    background: '#e61919' }} />}
-      {cosmetics > 0 && <div style={{ flex: cosmetics, background: '#4af626' }} />}
-      {shoes     > 0 && <div style={{ flex: shoes,     background: '#ffb347' }} />}
+      {parts.map((p) => <div key={p.key} style={{ flex: p.value, background: p.color }} />)}
     </div>
   );
 }
@@ -313,7 +320,7 @@ function Leaderboard({ empSummary, planTotals, activeCodes, onSelect }) {
                   <div className="h-full rounded-full" style={{ width: `${share * 100}%`, background: color }} />
                 </div>
                 <div className="flex items-center gap-2 mt-1">
-                  <CatBar repair={e.repair} cosmetics={e.cosmetics} shoes={e.shoes} />
+                  <CatBar row={e} />
                   {pct != null && (
                     <span className={`text-[10px] font-semibold shrink-0 ${pct >= 100 ? 'text-emerald-600' : pct >= 75 ? 'text-amber-500' : 'text-red-500'}`}>
                       {pct.toFixed(0)}% пл.
@@ -762,11 +769,13 @@ export default function SalesAnalytics() {
 
   const empSummary = useMemo(() => {
     const map = {};
+    const allKeys = CATEGORIES.map((c) => c.key);
     filteredRows.forEach((r) => {
-      if (!map[r.code]) map[r.code] = { code: r.code, repair: 0, cosmetics: 0, shoes: 0, total: 0, activeDays: 0 };
-      map[r.code].repair    += r.repair    || 0;
-      map[r.code].cosmetics += r.cosmetics || 0;
-      map[r.code].shoes     += r.shoes     || 0;
+      if (!map[r.code]) {
+        map[r.code] = { code: r.code, total: 0, activeDays: 0 };
+        allKeys.forEach((k) => { map[r.code][k] = 0; });
+      }
+      allKeys.forEach((k) => { map[r.code][k] += r[k] || 0; });
       const catVal = activeCats.reduce((s, k) => s + (r[k] || 0), 0);
       map[r.code].total += catVal;
       if (catVal > 0) map[r.code].activeDays++;
@@ -890,8 +899,8 @@ export default function SalesAnalytics() {
 
   function downloadCsv() {
     if (!filteredRows.length) return;
-    const hdr  = 'Дата;Код;Имя;Ремонт/Химчистка;Косметика;Обувь;Итого';
-    const body = filteredRows.map((r) => [r.date, r.code, r.description, r.repair, r.cosmetics, r.shoes||0, r.total].join(';')).join('\n');
+    const hdr  = ['Дата', 'Код', 'Имя', ...CATEGORIES.map((c) => c.label), 'Итого'].join(';');
+    const body = filteredRows.map((r) => [r.date, r.code, r.description, ...CATEGORIES.map((c) => r[c.key] || 0), r.total].join(';')).join('\n');
     const blob = new Blob(['﻿' + hdr + '\n' + body], { type:'text/csv;charset=utf-8' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a'); a.href = url; a.download = 'sales.csv'; a.click();
@@ -1298,7 +1307,7 @@ export default function SalesAnalytics() {
                   </div>
                   <div className="p-3">
                     <ResponsiveTable
-                      data={CATEGORIES.filter((c) => c.key !== 'shoes').map((c) => ({ ...c, ...filteredMargin.categories[c.key] }))}
+                      data={CATEGORIES.filter((c) => !NO_MARGIN_CATEGORY_KEYS.has(c.key)).map((c) => ({ ...c, ...filteredMargin.categories[c.key] }))}
                       keyFn={(c) => c.key}
                       emptyText="Нет данных"
                       columns={[
