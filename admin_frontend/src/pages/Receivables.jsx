@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { RefreshCw, Landmark, AlertTriangle, Phone } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -26,6 +26,23 @@ const PAY_STATUS_LABELS = {
   2: { label: 'Оплачен частично', className: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' },
   3: { label: 'Оплачен (расхождение)', className: 'bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]' },
 };
+const STATUS_OPTIONS = [
+  { value: '', label: 'Все статусы' },
+  { value: '1', label: PAY_STATUS_LABELS[1].label },
+  { value: '2', label: PAY_STATUS_LABELS[2].label },
+  { value: '3', label: PAY_STATUS_LABELS[3].label },
+];
+
+// Просрочка here is order age (days since creation), not a due-date
+// comparison — see get_receivables docstring. Buckets just make it
+// scannable instead of eyeballing a raw day count per row.
+const OVERDUE_BUCKETS = [
+  { value: '', label: 'Любая просрочка', test: () => true },
+  { value: 'w1', label: 'До 7 дн.', test: (d) => d <= 7 },
+  { value: 'w2', label: '8–15 дн.', test: (d) => d >= 8 && d <= 15 },
+  { value: 'm1', label: '16–30 дн.', test: (d) => d >= 16 && d <= 30 },
+  { value: 'm1p', label: '30+ дн.', test: (d) => d > 30 },
+];
 
 function KpiStat({ label, value, accent, icon }) {
   return (
@@ -51,6 +68,22 @@ export default function Receivables() {
   const [loading,  setLoading]  = useState(false);
   const [loaded,   setLoaded]   = useState(false);
   const [error,    setError]    = useState(null);
+  const [statusFilter,  setStatusFilter]  = useState('');
+  const [overdueFilter, setOverdueFilter] = useState('');
+
+  const filteredOrders = useMemo(() => {
+    if (!data) return [];
+    const bucket = OVERDUE_BUCKETS.find((b) => b.value === overdueFilter) || OVERDUE_BUCKETS[0];
+    return data.orders.filter((o) =>
+      (!statusFilter || String(o.pay_status_id) === statusFilter) &&
+      bucket.test(o.days_overdue)
+    );
+  }, [data, statusFilter, overdueFilter]);
+
+  const filteredTotalAmount = useMemo(
+    () => filteredOrders.reduce((s, o) => s + (o.amount || 0), 0),
+    [filteredOrders]
+  );
 
   async function load() {
     setLoading(true); setError(null);
@@ -103,6 +136,18 @@ export default function Receivables() {
             <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Дата до</label>
             <input type="date" className="input w-full" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
+          <div>
+            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Статус заказа</label>
+            <select className="input w-full" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Просрочка</label>
+            <select className="input w-full" value={overdueFilter} onChange={(e) => setOverdueFilter(e.target.value)}>
+              {OVERDUE_BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -122,8 +167,8 @@ export default function Receivables() {
       {loaded && !loading && data && (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <KpiStat label="Не погашено всего" value={fmtRub(data.total_amount)} accent="#c9502a" icon={<AlertTriangle size={18} />} />
-            <KpiStat label="Заказов с долгом" value={data.total_count.toLocaleString('ru-RU')} accent="#ffb347" icon={<Landmark size={18} />} />
+            <KpiStat label="Не погашено всего" value={fmtRub(filteredTotalAmount)} accent="#c9502a" icon={<AlertTriangle size={18} />} />
+            <KpiStat label="Заказов с долгом" value={filteredOrders.length.toLocaleString('ru-RU')} accent="#ffb347" icon={<Landmark size={18} />} />
           </div>
 
           <div className="app-card overflow-hidden">
@@ -133,7 +178,7 @@ export default function Receivables() {
             </div>
             <div className="p-3">
               <ResponsiveTable
-                data={data.orders}
+                data={filteredOrders}
                 keyFn={(o) => o.order_id}
                 emptyText="Долгов за выбранный период нет"
                 columns={[
@@ -155,7 +200,17 @@ export default function Receivables() {
                   )},
                   { label: 'Статус', render: (o) => {
                     const s = PAY_STATUS_LABELS[o.pay_status_id] || PAY_STATUS_LABELS[1];
-                    return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${s.className}`}>{s.label}</span>;
+                    return (
+                      <div>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${s.className}`}>{s.label}</span>
+                        {/* Раскрывает, что скрывается за статусом — особенно за
+                            "расхождение" (Агбис считает заказ оплаченным
+                            полностью, но kredit/debet говорят об обратном). */}
+                        <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+                          Ожидалось {fmtRub(o.expected_amount)} · Оплачено {fmtRub(o.paid_amount)}
+                        </div>
+                      </div>
+                    );
                   }},
                   { label: 'Просрочка', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (o) => `${o.days_overdue} дн.` },
                   { label: 'Долг', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold text-red-500', render: (o) => fmtRub(o.amount) },

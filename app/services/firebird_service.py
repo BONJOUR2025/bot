@@ -1769,7 +1769,9 @@ class FirebirdService:
         orders = []
         total_amount = 0.0
         for doc_num, doc_date, order_id, pay_status_id, kredit, debet, name, phone in rows:
-            amount = float(kredit or 0) - float(debet or 0)
+            expected_amount = float(kredit or 0)
+            paid_amount = float(debet or 0)
+            amount = expected_amount - paid_amount
             total_amount += amount
             orders.append({
                 "doc_num": str(doc_num),
@@ -1777,6 +1779,12 @@ class FirebirdService:
                 "order_id": order_id,
                 "pay_status_id": pay_status_id,
                 "amount": round(amount, 2),
+                # Raw kredit/debet — the "discrepancy" status (3) means
+                # Agbis's own status flag says "paid in full" while these
+                # two disagree; showing both lets the reader see the gap
+                # instead of just a vague "расхождение" label.
+                "expected_amount": round(expected_amount, 2),
+                "paid_amount": round(paid_amount, 2),
                 "client_name": (name or "").strip() or None,
                 "client_phone": (phone or "").strip() or None,
                 "days_overdue": (today - doc_date).days if hasattr(doc_date, "isoformat") else None,
