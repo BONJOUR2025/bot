@@ -418,6 +418,19 @@ input[type='week'] {
      makes it draw only what we declare, matching the other fields. */
   -webkit-appearance: none;
   appearance: none;
+  /* Resetting appearance also drops the native control's built-in
+     single-line layout for the day/month/year text — without this it
+     wraps onto a second line as soon as a 2-digit day makes it a
+     character longer than a 1-digit day did, making the box randomly
+     taller than its neighbor depending on which date is picked. */
+  white-space: nowrap;
+}
+input[type='date']::-webkit-date-and-time-value,
+input[type='datetime-local']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value,
+input[type='month']::-webkit-date-and-time-value,
+input[type='week']::-webkit-date-and-time-value {
+  white-space: nowrap;
 }
 
 /* Select arrow */
