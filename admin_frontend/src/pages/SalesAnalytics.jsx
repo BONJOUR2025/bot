@@ -122,6 +122,7 @@ function getMonthsInRange(from, to) {
 
 function quickRange(key) {
   const n = new Date(); const y = n.getFullYear(), m = n.getMonth();
+  if (key === 'today') return [TODAY, TODAY];
   if (key === 'month') return [toLocalDateStr(new Date(y, m, 1)), TODAY];
   if (key === 'prev')  return [toLocalDateStr(new Date(y, m-1, 1)), toLocalDateStr(new Date(y, m, 0))];
   if (key === 'q')     return [toLocalDateStr(new Date(y, Math.floor(m/3)*3, 1)), TODAY];
@@ -596,10 +597,7 @@ function UnclaimedTab() {
 
 /* ── main component ──────────────────────────────────────── */
 export default function SalesAnalytics() {
-  const now = new Date();
-  const monthStart = toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
-
-  const [dateFrom, setDateFrom] = useState(monthStart);
+  const [dateFrom, setDateFrom] = useState(TODAY);
   const [dateTo,   setDateTo]   = useState(TODAY);
   const [gran,     setGran]     = useState('day');
   const [hideZero, setHideZero] = useState(false);
@@ -972,7 +970,7 @@ export default function SalesAnalytics() {
           </div>
         )}
         <div className="flex flex-wrap gap-1.5">
-          {[['month','Этот месяц'],['prev','Прошлый мес.'],['q','Квартал'],['year','Год']].map(([k, l]) => (
+          {[['today','Сегодня'],['month','Этот месяц'],['prev','Прошлый мес.'],['q','Квартал'],['year','Год']].map(([k, l]) => (
             <button key={k} onClick={() => { const [f,t] = quickRange(k); setDateFrom(f); setDateTo(t); }}
               className="px-3 py-1 rounded-full text-xs border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
               {l}
