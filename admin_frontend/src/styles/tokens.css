@@ -90,7 +90,13 @@
      they reference var(--color-*), they auto-adapt to the light theme too. */
   --color-muted-foreground: var(--color-text-muted);
   --muted-foreground:       var(--color-text-muted);
-  --color-muted:            var(--color-text-muted);
+  /* --color-muted is the shadcn-style *background* half of this pair (used
+     as bg-[color:var(--color-muted)] for hover states and neutral badges,
+     e.g. Receivables' "Оплачен (расхождение)" status) — it was aliased to
+     the same value as --color-muted-foreground (the *text* color meant to
+     sit on top of it), making any text using both invisible against its
+     own background. --color-bg-subtle is the actual subtle-surface token. */
+  --color-muted:            var(--color-bg-subtle);
   --color-text-primary:     var(--color-text);
   --color-foreground:       var(--color-text);
   --foreground:             var(--color-text);
