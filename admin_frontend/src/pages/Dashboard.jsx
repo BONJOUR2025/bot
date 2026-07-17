@@ -540,173 +540,6 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          {/* KPI bento: hero + secondary cells, ranked by what needs attention now */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-12">
-            <div className="col-span-2 lg:col-span-5">
-              <StatOrb {...heroStat} big />
-            </div>
-            <div className="col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:col-span-7">
-              {secondaryStats.map((s, i) => (
-                <StatOrb key={s.key} {...s} delay={60 * (i + 1)} />
-              ))}
-            </div>
-          </div>
-
-          {/* recruitment notifications */}
-          {recruitNotifs && (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatOrb
-                icon={UserPlus}
-                label="Новые отклики (24ч)"
-                value={recruitNotifs.new_candidates}
-                tone={recruitNotifs.new_candidates > 0 ? 'info' : 'neutral'}
-                to="/admin/recruitment"
-              />
-              <StatOrb
-                icon={ChatCircle}
-                label="Сообщения hh.ru"
-                value={recruitNotifs.unread_hh}
-                tone={recruitNotifs.unread_hh > 0 ? 'warning' : 'neutral'}
-                to="/admin/recruitment"
-                delay={60}
-              />
-              <StatOrb
-                icon={PaperPlaneTilt}
-                label="Сообщения Telegram"
-                value={recruitNotifs.unread_tg}
-                tone={recruitNotifs.unread_tg > 0 ? 'warning' : 'neutral'}
-                to="/admin/recruitment"
-                delay={120}
-              />
-              {recruitNotifs.pending_tg_24h > 0 && (
-                <StatOrb
-                  icon={Clock}
-                  label="Ждут TG-привязки >24ч"
-                  value={recruitNotifs.pending_tg_24h}
-                  tone="danger"
-                  to="/admin/recruitment"
-                  delay={180}
-                />
-              )}
-            </div>
-          )}
-
-          {/* business snapshot: cash on hand, today's footfall, outstanding receivables */}
-          {(cashBalances || visitorSummary || receivables) && (
-            <div className="space-y-3">
-              <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
-                // Обзор бизнеса
-              </div>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {cashBalances && (
-                  <StatOrb
-                    icon={Wallet}
-                    label="Касса, ₽"
-                    value={fmt(cashTotal)}
-                    sub={topCashRegister ? `${topCashRegister.name}: ${fmt(Math.round(topCashRegister.balance))} ₽` : undefined}
-                    tone="neutral"
-                    to="/admin/cash-summary"
-                  />
-                )}
-                {visitorSummary && (
-                  <StatOrb
-                    icon={Users}
-                    label="Посетители сегодня"
-                    value={fmt(visitorsToday)}
-                    tone="info"
-                    to="/admin/visitor-counters"
-                    delay={60}
-                  />
-                )}
-                {receivables && (
-                  <StatOrb
-                    icon={Receipt}
-                    label="Дебиторская задолженность, ₽"
-                    value={fmt(receivables.total_amount)}
-                    sub={`${receivables.total_count} заказов · 30 дн.`}
-                    tone={receivables.total_count > 0 ? 'warning' : 'neutral'}
-                    to="/admin/receivables"
-                    delay={120}
-                  />
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* payouts + tasks: whichever needs action more right now leads */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            {financeFirst ? (
-              <>
-                <div className="lg:col-span-7">{renderFinancePanel(0)}</div>
-                <div className="lg:col-span-5">{renderTasksPanel(80)}</div>
-              </>
-            ) : (
-              <>
-                <div className="lg:col-span-7">{renderTasksPanel(0)}</div>
-                <div className="lg:col-span-5">{renderFinancePanel(80)}</div>
-              </>
-            )}
-          </div>
-
-          {/* vacations + birthdays */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <BentoCard eyebrow="Персонал" title="Кто сейчас отсутствует" action={<GhostLink to="/admin/vacations" />}>
-              {vacations.length === 0 ? (
-                <Empty text="Никто не в отпуске" icon={Umbrella} />
-              ) : (
-                <div>
-                  {vacations.map((v) => {
-                    const left = daysLeft(v.end_date);
-                    return (
-                      <div key={v.id} className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2.5 last:border-0">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-[color:var(--color-text)]">{v.name}</div>
-                          <div className="text-xs text-[color:var(--color-text-faint)]">
-                            до {fmtDate(v.end_date)}
-                            {left != null && left >= 0 && ` · ещё ${left} дн.`}
-                          </div>
-                        </div>
-                        <span
-                          className="shrink-0 border px-2 py-0.5 text-[11px] font-medium"
-                          style={{ borderColor: VACATION_TONE[v.type] ?? 'var(--color-border)', color: VACATION_TONE[v.type] ?? 'var(--color-text-muted)' }}
-                        >
-                          {v.type}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </BentoCard>
-
-            <BentoCard eyebrow="Персонал" title="Дни рождения (30 дней)" action={<GhostLink to="/admin/birthdays" />} delay={80}>
-              {birthdays.length === 0 ? (
-                <Empty text="Нет дней рождения в ближайшие 30 дней" icon={CalendarBlank} />
-              ) : (
-                <div>
-                  {birthdays.slice(0, 7).map((b) => {
-                    const days = daysUntilBirthday(b.birthdate);
-                    return (
-                      <div key={b.user_id ?? b.full_name} className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2.5 last:border-0">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <CalendarBlank size={15} weight="bold" className="shrink-0 text-[color:var(--color-text-faint)]" />
-                          <span className="truncate text-sm text-[color:var(--color-text)]">{b.full_name}</span>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <div className="text-xs font-medium text-[color:var(--color-text-muted)]">{fmtDate(nextBirthdayDate(b.birthdate))}</div>
-                          {days != null && (
-                            <div className="text-xs text-[color:var(--color-text-faint)]">{days === 0 ? 'сегодня!' : `через ${days} дн.`}</div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {birthdays.length > 7 && <p className="pt-2.5 text-xs text-[color:var(--color-text-faint)]">+ ещё {birthdays.length - 7}</p>}
-                </div>
-              )}
-            </BentoCard>
-          </div>
-
           {/* sales today */}
           {sales !== null && (
             <BentoCard eyebrow="Продажи" title="Продажи сегодня" action={<GhostLink to="/admin/sales" label="Подробнее" />}>
@@ -824,6 +657,176 @@ export default function Dashboard() {
               )}
             </BentoCard>
           )}
+
+          {/* business snapshot: cash on hand, outstanding receivables */}
+          {(cashBalances || receivables) && (
+            <div className="space-y-3">
+              <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
+                // Обзор бизнеса
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {cashBalances && (
+                  <StatOrb
+                    icon={Wallet}
+                    label="Касса, ₽"
+                    value={fmt(cashTotal)}
+                    sub={topCashRegister ? `${topCashRegister.name}: ${fmt(Math.round(topCashRegister.balance))} ₽` : undefined}
+                    tone="neutral"
+                    to="/admin/cash-summary"
+                  />
+                )}
+                {receivables && (
+                  <StatOrb
+                    icon={Receipt}
+                    label="Дебиторская задолженность, ₽"
+                    value={fmt(receivables.total_amount)}
+                    sub={`${receivables.total_count} заказов · 30 дн.`}
+                    tone={receivables.total_count > 0 ? 'warning' : 'neutral'}
+                    to="/admin/receivables"
+                    delay={60}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* KPI bento: hero + secondary cells, ranked by what needs attention now */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-12">
+            <div className="col-span-2 lg:col-span-5">
+              <StatOrb {...heroStat} big />
+            </div>
+            <div className="col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:col-span-7">
+              {secondaryStats.map((s, i) => (
+                <StatOrb key={s.key} {...s} delay={60 * (i + 1)} />
+              ))}
+            </div>
+          </div>
+
+          {/* recruitment notifications */}
+          {recruitNotifs && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <StatOrb
+                icon={UserPlus}
+                label="Новые отклики (24ч)"
+                value={recruitNotifs.new_candidates}
+                tone={recruitNotifs.new_candidates > 0 ? 'info' : 'neutral'}
+                to="/admin/recruitment"
+              />
+              <StatOrb
+                icon={ChatCircle}
+                label="Сообщения hh.ru"
+                value={recruitNotifs.unread_hh}
+                tone={recruitNotifs.unread_hh > 0 ? 'warning' : 'neutral'}
+                to="/admin/recruitment"
+                delay={60}
+              />
+              <StatOrb
+                icon={PaperPlaneTilt}
+                label="Сообщения Telegram"
+                value={recruitNotifs.unread_tg}
+                tone={recruitNotifs.unread_tg > 0 ? 'warning' : 'neutral'}
+                to="/admin/recruitment"
+                delay={120}
+              />
+              {recruitNotifs.pending_tg_24h > 0 && (
+                <StatOrb
+                  icon={Clock}
+                  label="Ждут TG-привязки >24ч"
+                  value={recruitNotifs.pending_tg_24h}
+                  tone="danger"
+                  to="/admin/recruitment"
+                  delay={180}
+                />
+              )}
+            </div>
+          )}
+
+          {/* footfall */}
+          {visitorSummary && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <StatOrb
+                icon={Users}
+                label="Посетители сегодня"
+                value={fmt(visitorsToday)}
+                tone="info"
+                to="/admin/visitor-counters"
+              />
+            </div>
+          )}
+
+          {/* payouts + tasks: whichever needs action more right now leads */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            {financeFirst ? (
+              <>
+                <div className="lg:col-span-7">{renderFinancePanel(0)}</div>
+                <div className="lg:col-span-5">{renderTasksPanel(80)}</div>
+              </>
+            ) : (
+              <>
+                <div className="lg:col-span-7">{renderTasksPanel(0)}</div>
+                <div className="lg:col-span-5">{renderFinancePanel(80)}</div>
+              </>
+            )}
+          </div>
+
+          {/* vacations + birthdays */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <BentoCard eyebrow="Персонал" title="Кто сейчас отсутствует" action={<GhostLink to="/admin/vacations" />}>
+              {vacations.length === 0 ? (
+                <Empty text="Никто не в отпуске" icon={Umbrella} />
+              ) : (
+                <div>
+                  {vacations.map((v) => {
+                    const left = daysLeft(v.end_date);
+                    return (
+                      <div key={v.id} className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2.5 last:border-0">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-[color:var(--color-text)]">{v.name}</div>
+                          <div className="text-xs text-[color:var(--color-text-faint)]">
+                            до {fmtDate(v.end_date)}
+                            {left != null && left >= 0 && ` · ещё ${left} дн.`}
+                          </div>
+                        </div>
+                        <span
+                          className="shrink-0 border px-2 py-0.5 text-[11px] font-medium"
+                          style={{ borderColor: VACATION_TONE[v.type] ?? 'var(--color-border)', color: VACATION_TONE[v.type] ?? 'var(--color-text-muted)' }}
+                        >
+                          {v.type}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </BentoCard>
+
+            <BentoCard eyebrow="Персонал" title="Дни рождения (30 дней)" action={<GhostLink to="/admin/birthdays" />} delay={80}>
+              {birthdays.length === 0 ? (
+                <Empty text="Нет дней рождения в ближайшие 30 дней" icon={CalendarBlank} />
+              ) : (
+                <div>
+                  {birthdays.slice(0, 7).map((b) => {
+                    const days = daysUntilBirthday(b.birthdate);
+                    return (
+                      <div key={b.user_id ?? b.full_name} className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2.5 last:border-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <CalendarBlank size={15} weight="bold" className="shrink-0 text-[color:var(--color-text-faint)]" />
+                          <span className="truncate text-sm text-[color:var(--color-text)]">{b.full_name}</span>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-xs font-medium text-[color:var(--color-text-muted)]">{fmtDate(nextBirthdayDate(b.birthdate))}</div>
+                          {days != null && (
+                            <div className="text-xs text-[color:var(--color-text-faint)]">{days === 0 ? 'сегодня!' : `через ${days} дн.`}</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {birthdays.length > 7 && <p className="pt-2.5 text-xs text-[color:var(--color-text-faint)]">+ ещё {birthdays.length - 7}</p>}
+                </div>
+              )}
+            </BentoCard>
+          </div>
         </>
       )}
     </div>
