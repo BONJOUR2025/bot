@@ -50,7 +50,13 @@ async def open_salon_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def open_salon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receive the opening-shift receipt photo and record the check-in."""
     message = update.message
-    if not message.photo:
+    if message.photo:
+        photo_source = message.photo[-1]
+        extension = ".jpg"
+    elif message.document and (message.document.mime_type or "").startswith("image/"):
+        photo_source = message.document
+        extension = Path(message.document.file_name or "").suffix or ".jpg"
+    else:
         await message.reply_text("❌ Пожалуйста, отправьте фото чека.")
         return ShiftCheckinStates.AWAITING_PHOTO
 
@@ -67,12 +73,12 @@ async def open_salon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     sent_at = message.date.astimezone(MOSCOW_TZ)
 
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"{sent_at.strftime('%Y%m%d_%H%M%S')}_{user_id}.jpg"
+    filename = f"{sent_at.strftime('%Y%m%d_%H%M%S')}_{user_id}{extension}"
     filepath = MEDIA_DIR / filename
     last_error: Exception | None = None
     for attempt in range(3):
         try:
-            tg_file = await message.photo[-1].get_file()
+            tg_file = await photo_source.get_file()
             await tg_file.download_to_drive(filepath, read_timeout=60.0, connect_timeout=60.0)
             last_error = None
             break

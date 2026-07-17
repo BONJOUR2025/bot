@@ -239,7 +239,7 @@ def build_shift_checkin_conversation():
         ],
         states={
             ShiftCheckinStates.AWAITING_PHOTO: [
-                MessageHandler(filters.PHOTO, open_salon_photo),
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, open_salon_photo),
                 MessageHandler(filters.Regex(r"^🏠 Домой$"), open_salon_cancel),
             ],
         },
