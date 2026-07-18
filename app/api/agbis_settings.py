@@ -19,12 +19,14 @@ def create_agbis_settings_router() -> APIRouter:
     async def get_settings_matrix():
         """Every Agbis LOCAL_OPTION, grouped and compared across all POS computers."""
         from app.services.agbis_settings_service import get_agbis_settings_matrix
-        from app.services.firebird_service import FIREBIRD_AVAILABLE
+        from app.services.firebird_service import run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
         try:
-            return await asyncio.to_thread(get_agbis_settings_matrix)
+            return await run_with_timeout(get_agbis_settings_matrix)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 

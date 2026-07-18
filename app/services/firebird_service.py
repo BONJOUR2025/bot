@@ -1,8 +1,10 @@
 """Firebird database connection service for sales data."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+from contextvars import ContextVar
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
@@ -16,6 +18,14 @@ except ImportError:
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# Set by run_with_timeout() before it dispatches a blocking call to a worker
+# thread; _connect() fills in "attachment_id" as soon as it has one, so
+# run_with_timeout can kill that specific attachment if the call overruns
+# its deadline. asyncio.to_thread() copies the current context into the
+# worker thread, so the ContextVar's value (the dict object itself, not a
+# copy of its contents) is shared between both sides.
+_attachment_holder_var: ContextVar[Optional[dict]] = ContextVar("_firebird_attachment_holder", default=None)
 
 CODE_RE = re.compile(r"(\d{4})$")
 ORDER_SALON_CODE_RE = re.compile(r"-(\d{1,2})$")
@@ -134,12 +144,77 @@ def _month_range(year: int, month: int) -> tuple[date, date]:
 
 def _connect():
     """Create Firebird connection using dsn format host/port:path."""
-    return fdb.connect(
+    con = fdb.connect(
         dsn=f"{settings.firebird_host}/{settings.firebird_port}:{settings.firebird_database}",
         user=settings.firebird_user or "SYSDBA",
         password=settings.firebird_password or "masterkey",
         charset=settings.firebird_charset,
     )
+    holder = _attachment_holder_var.get()
+    if holder is not None:
+        try:
+            cur = con.cursor()
+            cur.execute("SELECT CURRENT_CONNECTION FROM RDB$DATABASE")
+            holder["attachment_id"] = cur.fetchone()[0]
+        except Exception:
+            pass
+    return con
+
+
+def _kill_attachment(attachment_id: int) -> None:
+    """Force-disconnect a stuck Firebird attachment.
+
+    Python threads can't be cancelled, so a blocking call left running past
+    run_with_timeout()'s deadline just keeps executing (and holding its
+    Firebird transaction/connection open) forever — every retry piles
+    another leaked attachment on top of the last, degrading the whole
+    server (this is what caused the 2026-07-18 dashboard outage: 10 stuck
+    attachments accumulated in ~4 minutes from repeated /masters/works
+    retries). Disconnecting the attachment from here makes Firebird raise
+    inside the stuck thread's cursor call, so it unblocks and exits instead
+    of leaking.
+    """
+    try:
+        con = fdb.connect(
+            dsn=f"{settings.firebird_host}/{settings.firebird_port}:{settings.firebird_database}",
+            user=settings.firebird_user or "SYSDBA",
+            password=settings.firebird_password or "masterkey",
+            charset=settings.firebird_charset,
+        )
+        try:
+            cur = con.cursor()
+            cur.execute("DELETE FROM MON$ATTACHMENTS WHERE MON$ATTACHMENT_ID = ?", (attachment_id,))
+            con.commit()
+        finally:
+            con.close()
+    except Exception as e:
+        logger.warning(f"Failed to kill stuck Firebird attachment {attachment_id}: {e}")
+
+
+async def run_with_timeout(func, *args, timeout: float = 55, **kwargs):
+    """Run a blocking Firebird-backed call in a worker thread, bounded by
+    `timeout` seconds. On timeout, also kills the call's own Firebird
+    attachment (see _kill_attachment) instead of just abandoning it — a
+    bare asyncio.wait_for(asyncio.to_thread(...)) only bounds the HTTP
+    response, not the leaked thread/connection behind it.
+
+    Raises asyncio.TimeoutError on timeout — callers should catch that and
+    return an HTTPException(504, ...) with an actionable message.
+    """
+    holder: dict = {}
+    token = _attachment_holder_var.set(holder)
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(func, *args, **kwargs), timeout=timeout)
+    except asyncio.TimeoutError:
+        attachment_id = holder.get("attachment_id")
+        if attachment_id is not None:
+            try:
+                await asyncio.wait_for(asyncio.to_thread(_kill_attachment, attachment_id), timeout=10)
+            except Exception:
+                pass
+        raise
+    finally:
+        _attachment_holder_var.reset(token)
 
 
 def _fetch_batched(cur, sql_template: str, ids: list, extra_params: tuple = (), batch: int = 1000) -> list:

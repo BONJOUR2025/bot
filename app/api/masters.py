@@ -23,6 +23,7 @@ def create_masters_router() -> APIRouter:
         date_to: Optional[date] = Query(default=None),
     ):
         """Return aggregated service works with warnings and salary summary."""
+        from app.services.firebird_service import run_with_timeout
         from app.services.masters_service import fetch_works, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
@@ -32,19 +33,12 @@ def create_masters_router() -> APIRouter:
             )
 
         try:
-            # fetch_works is unbounded (no SQL row cap, no per-request
-            # deadline) and this endpoint sits behind xtunnel, which has
-            # documented relay-side instability with long-lived connections
-            # (see xtunnel_healthcheck.py) — a request left to hang
-            # indefinitely surfaces to the browser as a bare "Network
-            # Error" with no explanation. Bounding it here at least turns
-            # that into an actionable message; the thread itself can't be
-            # killed (Python threads aren't cancellable), it just keeps
-            # running server-side after the response goes out.
-            result = await asyncio.wait_for(
-                asyncio.to_thread(fetch_works, date_from=date_from, date_to=date_to),
-                timeout=55,
-            )
+            # fetch_works is unbounded (no SQL row cap) — run_with_timeout
+            # bounds it at 55s and, on timeout, kills the query's own
+            # Firebird attachment so it can't leak past the deadline (see
+            # firebird_service.run_with_timeout for why a bare
+            # asyncio.wait_for isn't enough here).
+            result = await run_with_timeout(fetch_works, date_from=date_from, date_to=date_to, timeout=55)
         except asyncio.TimeoutError:
             raise HTTPException(
                 status_code=504,

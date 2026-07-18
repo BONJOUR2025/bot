@@ -19,14 +19,16 @@ def create_clients_router() -> APIRouter:
     @router.get("/search")
     async def search_clients(q: str = Query(..., min_length=2)):
         """Search Agbis clients by name or phone."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
 
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.search_clients, q)
+            return await run_with_timeout(svc.search_clients, q)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -36,42 +38,48 @@ def create_clients_router() -> APIRouter:
         min_orders: int = Query(default=3, ge=2, le=50),
     ):
         """Return clients who used to order regularly and have gone quiet."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
 
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_churning_clients, lookback_days, min_orders)
+            return await run_with_timeout(svc.get_churning_clients, lookback_days, min_orders)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
     @router.get("/{contragent_id}/orders/{doc_num}/items")
     async def get_order_items(contragent_id: int, doc_num: str):
         """Return the services/goods inside one client order."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
 
         try:
             svc = get_firebird_service()
-            return await asyncio.to_thread(svc.get_order_items, contragent_id, doc_num)
+            return await run_with_timeout(svc.get_order_items, contragent_id, doc_num)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
     @router.get("/{contragent_id}")
     async def get_client_profile(contragent_id: int):
         """Return one client's full order history, LTV, average check, last visit."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
 
         try:
             svc = get_firebird_service()
-            profile = await asyncio.to_thread(svc.get_client_profile, contragent_id)
+            profile = await run_with_timeout(svc.get_client_profile, contragent_id)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 

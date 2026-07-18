@@ -19,24 +19,28 @@ def create_agbis_users_router() -> APIRouter:
     @router.get("/")
     async def list_agbis_users():
         """Return all Agbis USERS rows with role/department info."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
         try:
-            return await asyncio.to_thread(get_firebird_service().get_agbis_users)
+            return await run_with_timeout(get_firebird_service().get_agbis_users)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
     @router.get("/{user_id}/actions")
     async def get_user_actions(user_id: int, day: date = Query(...)):
         """Return this user's order-history action log for one day."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
         try:
-            return await asyncio.to_thread(get_firebird_service().get_agbis_user_actions, user_id, day)
+            return await run_with_timeout(get_firebird_service().get_agbis_user_actions, user_id, day)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 

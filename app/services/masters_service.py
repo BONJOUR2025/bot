@@ -7,13 +7,11 @@ from typing import Optional
 import pandas as pd
 
 try:
-    import fdb
+    import fdb  # noqa: F401 -- import-availability probe only, see FIREBIRD_AVAILABLE
     FIREBIRD_AVAILABLE = True
 except ImportError:
     fdb = None
     FIREBIRD_AVAILABLE = False
-
-from app.settings import settings
 
 BASE_SQL = """
 select
@@ -366,14 +364,9 @@ def fetch_works(
      ))
   )"""
 
-    con = fdb.connect(
-        host=settings.firebird_host,
-        port=settings.firebird_port,
-        database=settings.firebird_database,
-        user=settings.firebird_user,
-        password=settings.firebird_password,
-        charset=settings.firebird_charset,
-    )
+    from .firebird_service import _connect
+
+    con = _connect()
     try:
         cur = con.cursor()
         cur.execute(sql, params)

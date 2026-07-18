@@ -19,7 +19,7 @@ from app.data.sales_plans_repository import SalesPlansRepository, get_sales_plan
 from app.data.payroll_settlement_repository import PayrollSettlementRepository, get_payroll_settlement_repository
 from app.data.location_repository import LocationRepository, get_location_repository
 from app.data.salon_repository import SalonRepository, get_salon_repository
-from app.services.firebird_service import FirebirdService, get_firebird_service
+from app.services.firebird_service import FirebirdService, get_firebird_service, run_with_timeout
 from app.config import EXCEL_FILE
 
 logger = logging.getLogger(__name__)
@@ -629,7 +629,7 @@ class PayrollService:
             return [], [], {}
 
         try:
-            sales_data = await asyncio.to_thread(self.firebird.get_all_sales, year, month_num)
+            sales_data = await run_with_timeout(self.firebird.get_all_sales, year, month_num, timeout=90)
         except Exception as e:
             logger.error(f"Firebird error: {e}")
             sales_data = {}

@@ -137,7 +137,7 @@ def create_cash_moves_router(
         Explicit cash_move_id links take priority over fuzzy matching.
         """
         from datetime import timedelta
-        from app.services.firebird_service import get_firebird_service
+        from app.services.firebird_service import get_firebird_service, run_with_timeout
         from app.data.payout_repository import PayoutRepository
 
         payout_repo = PayoutRepository()
@@ -153,7 +153,10 @@ def create_cash_moves_router(
         if not cash_payouts:
             return []
 
-        moves = await asyncio.to_thread(get_firebird_service().get_cash_moves, date_from=date_from, date_to=date_to)
+        try:
+            moves = await run_with_timeout(get_firebird_service().get_cash_moves, date_from=date_from, date_to=date_to)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
 
         # Index moves: date_str → list of (move_id, amount)
         from collections import defaultdict
@@ -205,19 +208,25 @@ def create_cash_moves_router(
         """Current cash-on-hand per register — see
         FirebirdService.get_cash_balances for how this differs from the
         transfer-only DOC_KASSA_MOVES data the rest of this page uses."""
-        from app.services.firebird_service import get_firebird_service, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
-        return await asyncio.to_thread(get_firebird_service().get_cash_balances)
+        try:
+            return await run_with_timeout(get_firebird_service().get_cash_balances)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова чуть позже.")
 
     # ── Records ──────────────────────────────────────────────────────
 
     @router.get("/by-id/{move_id}")
     async def get_cash_move(move_id: str, _=Depends(perm)):
-        from app.services.firebird_service import get_firebird_service
+        from app.services.firebird_service import get_firebird_service, run_with_timeout
         from app.services.users import get_external_code_to_name_map
-        row = await asyncio.to_thread(get_firebird_service().get_cash_move_by_id, move_id)
+        try:
+            row = await run_with_timeout(get_firebird_service().get_cash_move_by_id, move_id)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова чуть позже.")
         if row is None:
             raise HTTPException(404, "not found")
         user_names = get_external_code_to_name_map()
@@ -232,10 +241,13 @@ def create_cash_moves_router(
         date_to: Optional[date] = Query(None),
         _=Depends(perm),
     ):
-        from app.services.firebird_service import get_firebird_service
+        from app.services.firebird_service import get_firebird_service, run_with_timeout
         from app.data.payout_repository import PayoutRepository
         from app.services.users import get_external_code_to_name_map
-        rows = await asyncio.to_thread(get_firebird_service().get_cash_moves, date_from=date_from, date_to=date_to)
+        try:
+            rows = await run_with_timeout(get_firebird_service().get_cash_moves, date_from=date_from, date_to=date_to)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
         assignments = repo.get_assignments()
         payout_repo = PayoutRepository()
         linked_ids = payout_repo.linked_cash_move_ids()

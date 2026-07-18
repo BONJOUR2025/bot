@@ -40,9 +40,12 @@ def create_employee_router(
         search: str = "",
         current: ResolvedUser = Depends(get_current_user),
     ):
-        from app.services.firebird_service import get_firebird_service
+        from app.services.firebird_service import get_firebird_service, run_with_timeout
         svc = get_firebird_service()
-        return await asyncio.to_thread(svc.get_users_list, search=search)
+        try:
+            return await run_with_timeout(svc.get_users_list, search=search)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
 
     @router.get("/{employee_id}", response_model=EmployeeOut)
     async def get_employee(
