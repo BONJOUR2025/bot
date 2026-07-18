@@ -4,9 +4,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import threading
+import time
 from contextvars import ContextVar
 from datetime import date, datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 try:
     import fdb
@@ -26,6 +28,61 @@ logger = logging.getLogger(__name__)
 # worker thread, so the ContextVar's value (the dict object itself, not a
 # copy of its contents) is shared between both sides.
 _attachment_holder_var: ContextVar[Optional[dict]] = ContextVar("_firebird_attachment_holder", default=None)
+
+
+class TTLCache:
+    """Thread-safe TTL cache with single-flight de-duplication for slow,
+    thread-executed Firebird queries.
+
+    The 2026-07-18 dashboard outage (see run_with_timeout / _kill_attachment)
+    happened because every retry of a slow endpoint fired its own fresh
+    Firebird query on top of the ones still running — the response time
+    for these read-only reports/search queries is dominated by contention
+    on the shared Agbis Firebird server (confirmed by timing the same
+    query back-to-back: sub-second one run, 15-100s the next, with no
+    code change), so piling on more concurrent identical queries only
+    makes it worse. Caching the result for `ttl` seconds and making
+    concurrent callers for the same key wait on one in-flight computation
+    instead of starting their own turns a burst of identical
+    dashboard/search requests into a single Firebird round trip.
+    """
+
+    def __init__(self, ttl: float):
+        self._ttl = ttl
+        self._lock = threading.Lock()
+        self._entries: dict[Any, tuple[float, Any]] = {}
+        self._inflight: dict[Any, threading.Lock] = {}
+
+    def get_or_compute(self, key: Any, compute: Callable[[], Any]) -> Any:
+        now = time.monotonic()
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is not None and entry[0] > now:
+                return entry[1]
+            lock = self._inflight.get(key)
+            owner = lock is None
+            if owner:
+                lock = threading.Lock()
+                lock.acquire()
+                self._inflight[key] = lock
+
+        if not owner:
+            with lock:
+                pass
+            with self._lock:
+                entry = self._entries.get(key)
+            return entry[1] if entry is not None else compute()
+
+        try:
+            result = compute()
+            with self._lock:
+                self._entries[key] = (time.monotonic() + self._ttl, result)
+            return result
+        finally:
+            lock.release()
+            with self._lock:
+                self._inflight.pop(key, None)
+
 
 CODE_RE = re.compile(r"(\d{4})$")
 ORDER_SALON_CODE_RE = re.compile(r"-(\d{1,2})$")
@@ -421,6 +478,17 @@ def _parse_shoe_pairs(items: list[tuple]) -> list[float]:
     if in_pair:
         pairs.append(current_kredit)
     return pairs
+
+
+# Read-only report/search endpoints that chronically hit run_with_timeout's
+# 55s deadline under Firebird server contention (see TTLCache) rather than
+# from being genuinely unbounded — cached briefly so retries/polling during
+# a slow period reuse one in-flight query instead of piling on more.
+_SEARCH_CLIENTS_CACHE_TTL = 45
+_DAILY_SALES_CACHE_TTL = 45
+
+_search_clients_cache = TTLCache(ttl=_SEARCH_CLIENTS_CACHE_TTL)
+_daily_sales_cache = TTLCache(ttl=_DAILY_SALES_CACHE_TTL)
 
 
 class FirebirdService:
@@ -950,10 +1018,21 @@ class FirebirdService:
         (same attribution as get_department_comparison / "ФОТ по салонам").
         Orders that don't resolve to any salon are excluded when a filter
         is active — we can't confirm they belong to the selected ones.
+
+        Cached for _DAILY_SALES_CACHE_TTL — see TTLCache's docstring for
+        why (this endpoint was one of the two chronically hitting the 55s
+        Firebird timeout under load).
         """
         if not FIREBIRD_AVAILABLE:
             logger.warning("fdb library not installed - returning empty daily sales")
             return []
+        salon_key = tuple(sorted(salon_ids)) if salon_ids else None
+        return _daily_sales_cache.get_or_compute(
+            (date_from, date_to, salon_key),
+            lambda: self._get_daily_sales_uncached(date_from, date_to, salon_ids),
+        )
+
+    def _get_daily_sales_uncached(self, date_from: date, date_to: date, salon_ids: list[str] | None) -> list[dict]:
         salon_filter = set(salon_ids) if salon_ids else None
 
         # Was a hardcoded duplicate of the module-level REPAIR_FOLDER_IDS /
@@ -1248,10 +1327,19 @@ class FirebirdService:
         The order-number branch only runs when the query has digits in it
         (order numbers are numeric, e.g. "34247" or "34247-7") — skipping
         it for pure-name queries avoids a pointless extra table scan.
+
+        Cached for _SEARCH_CLIENTS_CACHE_TTL — see TTLCache's docstring for
+        why (this endpoint was one of the two chronically hitting the 55s
+        Firebird timeout under load).
         """
         if not FIREBIRD_AVAILABLE or not (query or "").strip():
             return []
         q = query.strip()
+        return _search_clients_cache.get_or_compute(
+            (q, limit), lambda: self._search_clients_uncached(q, limit)
+        )
+
+    def _search_clients_uncached(self, q: str, limit: int) -> list[dict]:
         sql_name = """
             SELECT FIRST ? contr_id, name, teleph_cell
             FROM contragents

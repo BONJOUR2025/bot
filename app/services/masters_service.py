@@ -292,14 +292,44 @@ def _build_salary_summary(service_df: pd.DataFrame) -> list[dict]:
     return summary.sort_values("total_salary", ascending=False).to_dict(orient="records")
 
 
+_FETCH_WORKS_CACHE_TTL = 45
+_fetch_works_cache = None
+
+
+def _get_fetch_works_cache():
+    # Lazy import/instantiate — avoids importing firebird_service (and its
+    # fdb import attempt) at module load time just for the cache class.
+    global _fetch_works_cache
+    if _fetch_works_cache is None:
+        from .firebird_service import TTLCache
+        _fetch_works_cache = TTLCache(ttl=_FETCH_WORKS_CACHE_TTL)
+    return _fetch_works_cache
+
+
 def fetch_works(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
 ) -> dict:
-    """Query Firebird and return services with warnings/salary and salary summary."""
+    """Query Firebird and return services with warnings/salary and salary summary.
+
+    Cached for _FETCH_WORKS_CACHE_TTL — this endpoint's response time is
+    dominated by contention on the shared Agbis Firebird server (same query,
+    same range, timed at both 100s and 4.8s minutes apart with no code
+    change), and it's the one that caused the 2026-07-18 dashboard outage
+    when retries piled on more concurrent queries instead of reusing one
+    (see firebird_service.TTLCache / run_with_timeout).
+    """
     if not FIREBIRD_AVAILABLE:
         return {"services": [], "salary_summary": []}
+    return _get_fetch_works_cache().get_or_compute(
+        (date_from, date_to), lambda: _fetch_works_uncached(date_from, date_to)
+    )
 
+
+def _fetch_works_uncached(
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+) -> dict:
     sql = BASE_SQL
     params: list = []
 
