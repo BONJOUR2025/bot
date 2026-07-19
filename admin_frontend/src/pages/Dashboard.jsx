@@ -302,7 +302,9 @@ export default function Dashboard() {
       if (taskRes.status === 'fulfilled') setTaskStats(taskRes.value.data ?? null);
       if (bdRes.status === 'fulfilled') setBirthdays(bdRes.value.data ?? []);
       if (mastersRes.status === 'fulfilled') setMasters(mastersRes.value.data ?? null);
+      else retryMasters(today);
       if (salesRes.status === 'fulfilled') setSales(salesRes.value.data ?? null);
+      else retrySales(today);
       if (notifRes.status === 'fulfilled') setRecruitNotifs(notifRes.value.data ?? null);
       if (shiftRes.status === 'fulfilled') setShiftCheckins(shiftRes.value.data ?? []);
       if (leaveRes.status === 'fulfilled') setLeaveRequests(leaveRes.value.data ?? []);
@@ -313,6 +315,24 @@ export default function Dashboard() {
       setLoading(false);
       setRefreshing(false);
     }
+  }
+
+  // masters/works and sales/daily are the two Firebird-heavy dashboard
+  // queries — they're the ones most likely to miss load()'s window on the
+  // very first hit of the day/after a restart, when Firebird's page cache
+  // for them is still cold (a manual "Обновить" click moments later reads
+  // the same, now-warm, pages and succeeds). Retried independently of
+  // load()'s own Promise.allSettled so a slow retry doesn't hold up
+  // rendering the rest of the dashboard.
+  function retryMasters(today) {
+    api.get('masters/works', { params: { date_from: today, date_to: today } })
+      .then((res) => setMasters(res.data ?? null))
+      .catch(() => {});
+  }
+  function retrySales(today) {
+    api.get('sales/daily', { params: { date_from: today, date_to: today } })
+      .then((res) => setSales(res.data ?? null))
+      .catch(() => {});
   }
 
   useEffect(() => {
