@@ -115,6 +115,25 @@ def create_app() -> FastAPI:
 
         asyncio.create_task(_loop())
 
+    @app.on_event("startup")
+    async def _widen_thread_pool():
+        # Every asyncio.to_thread call in this process (all Firebird
+        # queries included) shares one event-loop-wide executor, sized by
+        # default to min(32, cpu_count + 4) — on a small VM that can be as
+        # few as 6-8 workers, comfortably less than the 12 concurrent
+        # requests a single dashboard page load fires. firebird_service's
+        # TTLCache makes non-owner callers block their worker thread
+        # waiting on whichever call is already computing the same key,
+        # rather than yielding it back to the pool — so a burst of
+        # same-key dashboard/search requests can tie up several workers
+        # just waiting. Widen the pool so that headroom doesn't come out
+        # of every other asyncio.to_thread caller in the app.
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=40, thread_name_prefix="api-worker"))
+
     if telegram_app is not None:
 
         @app.on_event("startup")

@@ -71,7 +71,19 @@ class TTLCache:
                 pass
             with self._lock:
                 entry = self._entries.get(key)
-            return entry[1] if entry is not None else compute()
+            if entry is not None:
+                return entry[1]
+            # The owner we waited on finished without caching anything —
+            # its compute() raised (see _search_clients_uncached /
+            # _get_daily_sales_uncached). Re-enter get_or_compute() rather
+            # than calling compute() directly: calling it directly here
+            # means every one of N waiters fires its own Firebird query in
+            # parallel the moment the owner fails — the exact pile-up this
+            # cache exists to prevent, and it happens precisely when
+            # Firebird is already struggling. Recursing lets one of the
+            # waiters become the new owner and the rest queue behind it
+            # again, same as on first entry.
+            return self.get_or_compute(key, compute)
 
         try:
             result = compute()
@@ -1169,6 +1181,14 @@ class FirebirdService:
                 con.close()
         except Exception as e:
             logger.error(f"Error fetching daily sales: {e}")
+            # Re-raise instead of falling through to the return below with
+            # whatever partial `result` was accumulated — see the matching
+            # comment in _search_clients_uncached for why: this function is
+            # cached by _daily_sales_cache.get_or_compute(), and a swallowed
+            # error here would get cached as a "successful" (empty/partial)
+            # result for _DAILY_SALES_CACHE_TTL seconds instead of letting
+            # the next caller retry fresh.
+            raise
 
         extra_keys = ("insoles", "slippers", "leather_goods", "certificates", "delivery", "keys")
         return [
@@ -1368,7 +1388,16 @@ class FirebirdService:
                 con.close()
         except Exception as e:
             logger.error(f"Error searching clients: {e}")
-            return []
+            # Re-raise instead of returning [] — this function is called
+            # through _search_clients_cache.get_or_compute(); swallowing the
+            # error here would make compute() "succeed" with an empty list,
+            # which TTLCache would then cache as a legitimate result for
+            # _SEARCH_CLIENTS_CACHE_TTL seconds. That's exactly backwards
+            # for the run_with_timeout+_kill_attachment case this cache was
+            # built to survive: a killed attachment raises here, and an
+            # empty-but-cached "no results" would be served to every other
+            # caller for the rest of the TTL instead of a fresh retry.
+            raise
 
         seen: set[int] = set()
         results: list[dict] = []
