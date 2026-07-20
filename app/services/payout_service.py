@@ -143,7 +143,15 @@ class PayoutService:
             return None
         if "кассы" not in (payout.get("method") or "").lower():
             return None
-        move_id = self._fuzzy_find_cash_move(payout)
+        # _fuzzy_find_cash_move does a blocking Firebird round trip (fdb.connect
+        # + cursor.execute/fetchall — no asyncio.to_thread of its own). Called
+        # directly like this, it runs on the event loop thread and freezes the
+        # entire API for every user while it's in flight — including from
+        # cash_move_auto_linker's background scan, which calls this every 5
+        # minutes for every pending "Из кассы" payout, one at a time. Offload
+        # it to a worker thread so a slow/contended Firebird moment only stalls
+        # this one lookup, not the whole process.
+        move_id = await asyncio.to_thread(self._fuzzy_find_cash_move, payout)
         if move_id:
             self._repo.update(str(payout_id), {"cash_move_id": move_id, "status": "Выплачено"})
             logger.info(f"🔗 Выплата {payout_id} привязана к движению {move_id}, статус → Выплачено")
@@ -176,9 +184,12 @@ class PayoutService:
         timestamp_value = data.timestamp or datetime.now()
         payout_dict["timestamp"] = self._serialize_timestamp(timestamp_value)
 
-        # Auto-link to cash movement for "Из кассы" payouts
+        # Auto-link to cash movement for "Из кассы" payouts — see the
+        # matching comment in find_cash_move_for_payout for why this needs
+        # asyncio.to_thread: a blocking Firebird call here would otherwise
+        # freeze the whole API for every user while a payout is being created.
         if not payout_dict["cash_move_id"] and "кассы" in (data.method or "").lower():
-            move_id = self._fuzzy_find_cash_move(payout_dict)
+            move_id = await asyncio.to_thread(self._fuzzy_find_cash_move, payout_dict)
             if move_id:
                 payout_dict["cash_move_id"] = move_id
                 payout_dict["status"] = "Выплачено"
