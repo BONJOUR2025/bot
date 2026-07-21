@@ -37,7 +37,7 @@ function FootCard({ foot, index, onOpenImage }) {
       <h3 className="font-semibold flex items-center gap-2">
         <Ruler size={16} /> Стопа {index + 1}
       </h3>
-      <div className="grid grid-cols-3 gap-3 text-center">
+      <div className="grid grid-cols-4 gap-3 text-center">
         <div>
           <div className="text-xl font-bold">{foot.length_mm}</div>
           <div className="text-xs text-[color:var(--color-text-muted)]">длина, мм</div>
@@ -50,9 +50,14 @@ function FootCard({ foot, index, onOpenImage }) {
           <div className="text-xl font-bold">{foot.height_mm}</div>
           <div className="text-xs text-[color:var(--color-text-muted)]">высота, мм</div>
         </div>
+        <div>
+          <div className="text-xl font-bold">{foot.ball_girth_mm ?? '—'}</div>
+          <div className="text-xs text-[color:var(--color-text-muted)]">пучки, мм</div>
+        </div>
       </div>
       <div className="text-xs text-[color:var(--color-text-muted)]">
         {foot.point_count.toLocaleString('ru-RU')} точек облака
+        {foot.ball_girth_mm != null && ' · «Пучки» — геометрическая оценка (±2-5 мм), не заменяет замер лентой'}
       </div>
       <div className="grid grid-cols-3 gap-2">
         <ViewThumb src={foot.views.top} alt={`Стопа ${index + 1} — вид сверху`} label="сверху" onOpen={onOpenImage} />
