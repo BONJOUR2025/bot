@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Scan, Upload, User, Phone, Calendar, Clock, Ruler } from 'lucide-react';
+import { Scan, Upload, User, Phone, Calendar, Clock, Ruler, X } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
+import Modal from '../components/Modal.jsx';
 
 function MetaRow({ icon: Icon, label, value }) {
   if (!value) return null;
@@ -14,7 +15,23 @@ function MetaRow({ icon: Icon, label, value }) {
   );
 }
 
-function FootCard({ foot, index }) {
+function ViewThumb({ src, alt, label, onOpen }) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => onOpen(src, alt)}
+        className="block w-full cursor-zoom-in"
+        title="Открыть в полном размере"
+      >
+        <img src={src} alt={alt} className="w-full rounded border border-[color:var(--color-border)] hover:opacity-80 transition-opacity" />
+      </button>
+      <div className="text-center text-xs text-[color:var(--color-text-muted)] mt-1">{label}</div>
+    </div>
+  );
+}
+
+function FootCard({ foot, index, onOpenImage }) {
   return (
     <div className="app-card p-4 space-y-3">
       <h3 className="font-semibold flex items-center gap-2">
@@ -38,18 +55,9 @@ function FootCard({ foot, index }) {
         {foot.point_count.toLocaleString('ru-RU')} точек облака
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <div>
-          <img src={foot.views.top} alt="Вид сверху" className="w-full rounded border border-[color:var(--color-border)]" />
-          <div className="text-center text-xs text-[color:var(--color-text-muted)] mt-1">сверху</div>
-        </div>
-        <div>
-          <img src={foot.views.side} alt="Вид сбоку" className="w-full rounded border border-[color:var(--color-border)]" />
-          <div className="text-center text-xs text-[color:var(--color-text-muted)] mt-1">сбоку</div>
-        </div>
-        <div>
-          <img src={foot.views.front} alt="Вид спереди" className="w-full rounded border border-[color:var(--color-border)]" />
-          <div className="text-center text-xs text-[color:var(--color-text-muted)] mt-1">спереди</div>
-        </div>
+        <ViewThumb src={foot.views.top} alt={`Стопа ${index + 1} — вид сверху`} label="сверху" onOpen={onOpenImage} />
+        <ViewThumb src={foot.views.side} alt={`Стопа ${index + 1} — вид сбоку`} label="сбоку" onOpen={onOpenImage} />
+        <ViewThumb src={foot.views.front} alt={`Стопа ${index + 1} — вид спереди`} label="спереди" onOpen={onOpenImage} />
       </div>
     </div>
   );
@@ -60,6 +68,7 @@ export default function Scanner3D() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [lightbox, setLightbox] = useState(null); // { src, alt } | null
 
   async function handleFile(file) {
     if (!file) return;
@@ -150,12 +159,23 @@ export default function Scanner3D() {
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {result.feet.map((foot, i) => (
-                <FootCard key={i} foot={foot} index={i} />
+                <FootCard key={i} foot={foot} index={i} onOpenImage={(src, alt) => setLightbox({ src, alt })} />
               ))}
             </div>
           )}
         </div>
       )}
+
+      <Modal isOpen={!!lightbox} onClose={() => setLightbox(null)}>
+        <div className="modal-card w-full max-w-4xl sm:mx-4 p-3">
+          <div className="flex justify-end mb-1">
+            <button type="button" className="btn" onClick={() => setLightbox(null)}>
+              <X size={16} />
+            </button>
+          </div>
+          {lightbox && <img src={lightbox.src} alt={lightbox.alt} className="w-full rounded" />}
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -23,6 +23,7 @@ reportlab>=4.0.0
 
 # Images
 Pillow>=10.3.0
+matplotlib>=3.8.0
 
 # Validation & settings
 pydantic>=2.7.0

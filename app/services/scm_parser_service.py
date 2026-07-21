@@ -22,12 +22,10 @@ from __future__ import annotations
 
 import io
 import re
-import struct
 import zipfile
 from dataclasses import dataclass, field
 
 import numpy as np
-from PIL import Image
 
 # -- metadata extraction -----------------------------------------------
 
@@ -204,64 +202,64 @@ def find_foot_blocks(data: bytes) -> list[FootBlock]:
 
 
 # -- visualization ---------------------------------------------------------
+#
+# Uses matplotlib's object-oriented API (Figure + FigureCanvasAgg) directly
+# rather than pyplot's plt.figure()/plt.show() — pyplot keeps a global
+# "current figure" stack that isn't safe to touch from multiple threads at
+# once, and this is called via asyncio.to_thread, so concurrent requests
+# really can land in different worker threads simultaneously.
 
-def _rasterize(u: np.ndarray, v: np.ndarray, width: int = 420, height: int = 560,
-               margin: int = 20, invert_v: bool = False) -> Image.Image:
-    """Render a 2D point scatter (u, v in mm) to a PIL image, point density
-    as grayscale (darker = more points at that pixel — cheap way to get an
-    anti-aliased-looking silhouette without per-point draw calls)."""
-    u_range = max(u.max() - u.min(), 1.0)
-    v_range = max(v.max() - v.min(), 1.0)
-    scale = min((width - 2 * margin) / u_range, (height - 2 * margin) / v_range)
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 
-    px = ((u - u.min()) * scale + margin).astype(np.int32)
-    py = ((v - v.min()) * scale + margin).astype(np.int32)
-    if invert_v:
-        py = height - py
-    px = np.clip(px, 0, width - 1)
-    py = np.clip(py, 0, height - 1)
 
-    canvas = np.zeros((height, width), dtype=np.int32)
-    # Splat each point onto a 2x2 neighborhood, not a single pixel — a
-    # scan has tens of thousands of points but a few hundred px of canvas,
-    # so single-pixel dots left visible gaps between samples that made the
-    # silhouette look washed out. 2x2 closes those gaps without needing a
-    # slower proper circular brush.
-    for dy in (0, 1):
-        for dx in (0, 1):
-            yy = np.clip(py + dy, 0, height - 1)
-            xx = np.clip(px + dx, 0, width - 1)
-            np.add.at(canvas, (yy, xx), 1)
-    # This is a surface projection, not a curve — most touched pixels get
-    # hit only a handful of times (points spread over the whole silhouette
-    # area, not piled onto a thin outline), so scaling darkness purely by
-    # hit count made the whole shape pale gray instead of a solid-looking
-    # silhouette. Give every touched pixel a dark floor (~55%) regardless
-    # of count, then let count only push the darkest areas the rest of
-    # the way to black — reads as a clean solid outline instead of haze.
-    hit = canvas > 0
-    darkness = np.zeros(canvas.shape, dtype=np.float64)
-    if hit.any():
-        log_density = np.log1p(canvas[hit].astype(np.float64))
-        normalized = log_density / log_density.max() if log_density.max() > 0 else log_density
-        darkness[hit] = 0.55 + 0.45 * normalized
-    gray = (255 - (darkness * 255)).astype(np.uint8)
-    return Image.fromarray(gray, mode="L").convert("RGB")
+def _scatter_view(u: np.ndarray, v: np.ndarray, depth: np.ndarray, *,
+                   u_label: str, v_label: str, title: str,
+                   invert_y: bool = False, figsize: tuple[float, float] = (5.0, 6.5)) -> bytes:
+    """Render one 2D projection (u, v in mm) as a PNG, points colored by the
+    third (unshown) axis for a cheap sense of depth. Real-world "up" (v
+    increasing) is always plotted upward — matplotlib's default axis
+    orientation already does this, so height (Z) views come out right-side
+    up without any manual flip; `invert_y` is only for the top-down
+    footprint view, where there's no physical up/down and toes-at-top just
+    reads better."""
+    fig = Figure(figsize=figsize, dpi=110)
+    canvas = FigureCanvasAgg(fig)
+    ax = fig.add_subplot(111)
+    ax.scatter(u, v, c=depth, cmap="viridis", s=1.5, alpha=0.5, linewidths=0, rasterized=True)
+    ax.set_xlabel(f"{u_label}, мм")
+    ax.set_ylabel(f"{v_label}, мм")
+    ax.set_title(title, fontsize=10)
+    ax.set_aspect("equal")
+    ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.6)
+    if invert_y:
+        ax.invert_yaxis()
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    canvas.print_png(buf)
+    return buf.getvalue()
 
 
 def render_foot_views(block: FootBlock) -> dict[str, bytes]:
     """Render top/side/front projections as PNG bytes."""
-    views = {
-        "top": _rasterize(block.x, block.y, invert_v=True),      # footprint: width x length
-        "side": _rasterize(block.y, block.z, width=560, height=280),   # length x height
-        "front": _rasterize(block.x, block.z, width=280, height=280),  # width x height
+    return {
+        "top": _scatter_view(
+            block.x, block.y, block.z,
+            u_label="ширина", v_label="длина", title="Вид сверху (footprint)",
+            invert_y=True, figsize=(5.0, 6.5),
+        ),
+        "side": _scatter_view(
+            block.y, block.z, block.x,
+            u_label="длина", v_label="высота", title="Вид сбоку",
+            figsize=(7.0, 4.0),
+        ),
+        "front": _scatter_view(
+            block.x, block.z, block.y,
+            u_label="ширина", v_label="высота", title="Вид спереди/сзади",
+            figsize=(4.5, 4.5),
+        ),
     }
-    out = {}
-    for name, img in views.items():
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        out[name] = buf.getvalue()
-    return out
 
 
 # -- top-level entry point --------------------------------------------------
