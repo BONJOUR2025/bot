@@ -153,22 +153,27 @@ class FootBlock:
 
 
 def _strip_outlier_points(x: np.ndarray, y: np.ndarray, z: np.ndarray,
-                           pctl_lo: float = 0.5, pctl_hi: float = 99.5,
-                           margin_frac: float = 0.15) -> np.ndarray:
-    """Boolean mask rejecting stray noise points (bad depth readings, sensor
-    artifacts) that would otherwise blow out the bounding box.
+                           pctl_lo: float = 0.1, pctl_hi: float = 99.9,
+                           margin_frac: float = 0.10) -> np.ndarray:
+    """Boolean mask rejecting points outside the scanner's own physical
+    reference frame, plus a light backstop for anything else stray.
 
-    Some scans carry a small fraction (well under 1%) of wildly-off points —
-    seen in the wild up to ~-1150mm on an otherwise normal ~280mm-long foot.
-    A single such point makes a plain min/max bounding box anatomically
-    implausible and gets the whole block rejected below, even though the
-    other ~99.9% of points are a perfectly good foot. Percentile bounds with
-    a margin are robust to that without needing to identify a specific
-    sentinel value (there wasn't one — the observed outliers were scattered,
-    not one fixed constant)."""
-    keep = np.ones(len(x), dtype=bool)
+    Y and Z are anchored by construction: on every scan seen so far, y=0 is
+    the heel-back plane and z=0 is the sole/ground plane (both consistently
+    ~0.00, never meaningfully negative, on clean scans). One scan turned up
+    ~2% of its points below both — not scattered noise but a real, dense
+    surface (repeated coordinates, i.e. an actual scanned surface, not
+    garbage floats) extending past the heel and below the sole, almost
+    certainly the scan platform/support the foot stood on. A plain
+    percentile trim didn't reliably clear that (2% exceeds a tight
+    percentile's tail), but points behind the heel or below the ground plane
+    are unambiguously not the foot, so they're dropped outright. A looser
+    percentile+margin pass on top catches any other stray extreme values
+    (seen elsewhere up to ~-1150mm on an otherwise normal foot) without
+    needing to identify a specific sentinel value — there wasn't one."""
+    keep = (y >= -0.5) & (z >= -0.5)
     for coord in (x, y, z):
-        p_lo, p_hi = np.percentile(coord, [pctl_lo, pctl_hi])
+        p_lo, p_hi = np.percentile(coord[keep], [pctl_lo, pctl_hi])
         margin = margin_frac * (p_hi - p_lo)
         keep &= (coord >= p_lo - margin) & (coord <= p_hi + margin)
     return keep
