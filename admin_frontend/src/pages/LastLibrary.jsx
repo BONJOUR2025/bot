@@ -3,7 +3,7 @@ import { Upload, Trash2, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
-import { FootCard, ViewThumb, SIDE_LABEL } from './Scanner3D.jsx';
+import { FootCard, SIDE_LABEL } from '../components/FootScanCard.jsx';
 
 const BLOCK_SIDE_LABEL = { ...SIDE_LABEL, null: 'Колодка' };
 
