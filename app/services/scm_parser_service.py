@@ -152,6 +152,28 @@ class FootBlock:
         return _ball_girth(self.x, self.y, self.z)
 
 
+def _strip_outlier_points(x: np.ndarray, y: np.ndarray, z: np.ndarray,
+                           pctl_lo: float = 0.5, pctl_hi: float = 99.5,
+                           margin_frac: float = 0.15) -> np.ndarray:
+    """Boolean mask rejecting stray noise points (bad depth readings, sensor
+    artifacts) that would otherwise blow out the bounding box.
+
+    Some scans carry a small fraction (well under 1%) of wildly-off points —
+    seen in the wild up to ~-1150mm on an otherwise normal ~280mm-long foot.
+    A single such point makes a plain min/max bounding box anatomically
+    implausible and gets the whole block rejected below, even though the
+    other ~99.9% of points are a perfectly good foot. Percentile bounds with
+    a margin are robust to that without needing to identify a specific
+    sentinel value (there wasn't one — the observed outliers were scattered,
+    not one fixed constant)."""
+    keep = np.ones(len(x), dtype=bool)
+    for coord in (x, y, z):
+        p_lo, p_hi = np.percentile(coord, [pctl_lo, pctl_hi])
+        margin = margin_frac * (p_hi - p_lo)
+        keep &= (coord >= p_lo - margin) & (coord <= p_hi + margin)
+    return keep
+
+
 def find_foot_blocks(data: bytes) -> list[FootBlock]:
     """Scan the whole file for aligned float32 XYZ point-cloud blocks.
 
@@ -187,6 +209,10 @@ def find_foot_blocks(data: bytes) -> list[FootBlock]:
         flat = np.frombuffer(span[:usable_bytes], dtype="<f4")
         xyz = flat.reshape(-1, 3)
         x, y, z = xyz[:, 0], xyz[:, 1], xyz[:, 2]
+        keep = _strip_outlier_points(x, y, z)
+        if keep.sum() < MIN_RUN_FLOATS // 3:  # would-be point count too low to trust
+            continue
+        x, y, z = x[keep], y[keep], z[keep]
         width = float(x.max() - x.min())
         length = float(y.max() - y.min())
         height = float(z.max() - z.min())
