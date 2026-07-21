@@ -8,7 +8,7 @@ import {
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
   Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig, Truck,
   Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon, Monitor,
-  Landmark, UserSearch, UserCog, SlidersHorizontal,
+  Landmark, UserSearch, UserCog, SlidersHorizontal, Scan,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -48,6 +48,7 @@ const navStructure = [
       { to: '/admin/clients',          label: 'Клиенты',              permission: 'payroll',          icon: UserSearch },
       { to: '/admin/location-plans',   label: 'Планы продаж',         permission: 'payroll',          icon: MapPin },
       { to: '/admin/sale-transfers',   label: 'Перемещение продажи',  permission: 'payroll',          icon: Replace },
+      { to: '/admin/scanner-3d',       label: '3D сканер',            permission: '3d-scanner',       icon: Scan },
     ],
   },
   {

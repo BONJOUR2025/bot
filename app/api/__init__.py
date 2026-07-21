@@ -460,6 +460,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # 3D foot scanner (.scm file parsing -> metadata + measurements + views)
+    from .scanner import create_scanner_router
+
+    app.include_router(
+        create_scanner_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Bot users (Telegram users who have started the bot, linkable to employees)
     from .bot_users import create_bot_users_router
     from ..data.bot_user_repository import get_bot_user_repository

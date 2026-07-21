@@ -71,6 +71,7 @@ const Receivables = lazy(() => import("./pages/Receivables"));
 const Clients = lazy(() => import("./pages/Clients"));
 const Recruitment = lazy(() => import("./pages/Recruitment"));
 const VisitorCounters = lazy(() => import("./pages/VisitorCounters"));
+const Scanner3D = lazy(() => import("./pages/Scanner3D"));
 
 function RouteFallback() {
   return (
@@ -141,6 +142,7 @@ export default function App() {
                 <Route path="salons" element={<Salons />} />
                 <Route path="shift-checkins" element={<ShiftCheckins />} />
                 <Route path="visitor-counters" element={<VisitorCounters />} />
+                <Route path="scanner-3d" element={<Scanner3D />} />
                 <Route path="location-plans" element={<LocationPlans />} />
                 <Route path="sale-transfers" element={<SaleTransfers />} />
                 <Route path="cash-moves" element={<CashMovements />} />
