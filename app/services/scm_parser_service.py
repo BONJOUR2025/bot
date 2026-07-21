@@ -396,15 +396,23 @@ def parse_scm(raw_bytes: bytes) -> dict:
 
     metadata = extract_metadata(data)
     blocks = find_foot_blocks(data)
-    # largest blocks first — the real foot/leg scans dwarf any incidental
-    # smaller plausible-looking stretch that might slip through.
-    blocks.sort(key=lambda b: b.point_count, reverse=True)
+    # Byte position in the file, not point count, carries the left/right
+    # identity: on both reference scans used to validate this parser, the
+    # scanner wrote the left foot's point cloud before the right foot's,
+    # consistently, regardless of which one ended up with more points.
+    # (Point-count ordering was tried first and shuffled L/R at random
+    # between scans — same file structure, no reliable meaning.)
+    blocks.sort(key=lambda b: b.byte_start)
 
     feet = []
-    for block in blocks:
+    for i, block in enumerate(blocks):
         views = render_foot_views(block)
         ball_girth = block.ball_girth_mm
+        side = None
+        if len(blocks) == 2:
+            side = "left" if i == 0 else "right"
         feet.append({
+            "side": side,
             "byte_range": [block.byte_start, block.byte_end],
             "point_count": block.point_count,
             "length_mm": round(block.length_mm, 1),

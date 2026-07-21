@@ -41,6 +41,7 @@ def create_scanner_router() -> APIRouter:
                 for name, png in foot["views_png"].items()
             }
             feet_out.append({
+                "side": foot["side"],
                 "point_count": foot["point_count"],
                 "length_mm": foot["length_mm"],
                 "width_mm": foot["width_mm"],
