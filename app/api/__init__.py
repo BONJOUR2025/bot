@@ -469,6 +469,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Shoe-last (колодка) library + foot-scan matching
+    from .lasts import create_lasts_router
+
+    app.include_router(
+        create_lasts_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Bot users (Telegram users who have started the bot, linkable to employees)
     from .bot_users import create_bot_users_router
     from ..data.bot_user_repository import get_bot_user_repository

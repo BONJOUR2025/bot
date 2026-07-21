@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Scan, Upload, User, Phone, Calendar, Clock, Ruler, X } from 'lucide-react';
+import { Scan, Upload, User, Phone, Calendar, Clock, Ruler, X, Library } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
+import { Tabs } from '../components/ui/SalaryUI.jsx';
+import LastLibrary from './LastLibrary.jsx';
 
 function MetaRow({ icon: Icon, label, value }) {
   if (!value) return null;
@@ -15,7 +17,7 @@ function MetaRow({ icon: Icon, label, value }) {
   );
 }
 
-function ViewThumb({ src, alt, label, onOpen }) {
+export function ViewThumb({ src, alt, label, onOpen }) {
   return (
     <div>
       <button
@@ -31,9 +33,9 @@ function ViewThumb({ src, alt, label, onOpen }) {
   );
 }
 
-const SIDE_LABEL = { left: 'Левая стопа', right: 'Правая стопа' };
+export const SIDE_LABEL = { left: 'Левая стопа', right: 'Правая стопа' };
 
-function FootCard({ foot, index, onOpenImage }) {
+export function FootCard({ foot, index, onOpenImage }) {
   const label = SIDE_LABEL[foot.side] || `Стопа ${index + 1}`;
   return (
     <div className="app-card p-4 space-y-3">
@@ -62,16 +64,18 @@ function FootCard({ foot, index, onOpenImage }) {
         {foot.point_count.toLocaleString('ru-RU')} точек облака
         {foot.ball_girth_mm != null && ' · «Пучки» — геометрическая оценка (±2-5 мм), не заменяет замер лентой'}
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <ViewThumb src={foot.views.top} alt={`${label} — вид сверху`} label="сверху" onOpen={onOpenImage} />
-        <ViewThumb src={foot.views.side} alt={`${label} — вид сбоку`} label="сбоку" onOpen={onOpenImage} />
-        <ViewThumb src={foot.views.front} alt={`${label} — вид спереди`} label="спереди" onOpen={onOpenImage} />
-      </div>
+      {foot.views && (
+        <div className="grid grid-cols-3 gap-2">
+          <ViewThumb src={foot.views.top} alt={`${label} — вид сверху`} label="сверху" onOpen={onOpenImage} />
+          <ViewThumb src={foot.views.side} alt={`${label} — вид сбоку`} label="сбоку" onOpen={onOpenImage} />
+          <ViewThumb src={foot.views.front} alt={`${label} — вид спереди`} label="спереди" onOpen={onOpenImage} />
+        </div>
+      )}
     </div>
   );
 }
 
-export default function Scanner3D() {
+function ScanTab() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -108,9 +112,6 @@ export default function Scanner3D() {
 
   return (
     <div className="space-y-6">
-      <h2 className="flex items-center gap-2 text-2xl font-semibold">
-        <Scan size={24} /> 3D сканер
-      </h2>
       <p className="text-sm text-[color:var(--color-text-muted)]">
         Загрузите файл скана стопы (.scm) — покажем метаданные скана, замеры (длина/ширина/высота) и визуализацию.
         Формат не документирован производителем сканера, поэтому данные извлекаются эвристически — сверяйте
@@ -199,6 +200,26 @@ export default function Scanner3D() {
           )}
         </div>
       </Modal>
+    </div>
+  );
+}
+
+export default function Scanner3D() {
+  const [tab, setTab] = useState('scan');
+  return (
+    <div className="space-y-6">
+      <h2 className="flex items-center gap-2 text-2xl font-semibold">
+        <Scan size={24} /> 3D сканер
+      </h2>
+      <Tabs
+        tabs={[
+          { key: 'scan', label: 'Сканер', icon: <Scan size={14} /> },
+          { key: 'library', label: 'Библиотека колодок', icon: <Library size={14} /> },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+      {tab === 'scan' ? <ScanTab /> : <LastLibrary />}
     </div>
   );
 }
