@@ -223,7 +223,7 @@ def _scatter_view(u: np.ndarray, v: np.ndarray, depth: np.ndarray, *,
     up without any manual flip; `invert_y` is only for the top-down
     footprint view, where there's no physical up/down and toes-at-top just
     reads better."""
-    fig = Figure(figsize=figsize, dpi=110)
+    fig = Figure(figsize=figsize, dpi=150)
     canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
     ax.scatter(u, v, c=depth, cmap="viridis", s=1.5, alpha=0.5, linewidths=0, rasterized=True)

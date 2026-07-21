@@ -167,13 +167,28 @@ export default function Scanner3D() {
       )}
 
       <Modal isOpen={!!lightbox} onClose={() => setLightbox(null)}>
-        <div className="modal-card w-full max-w-4xl sm:mx-4 p-3">
+        {/* w-fit + max-w-[95vw]: size the card to the image's own aspect
+            ratio instead of forcing it to a fixed wide box — these renders
+            are portrait for "top" and landscape for "side"/"front", and a
+            forced w-full on the <img> below previously stretched images
+            *up* past their natural size to fill a fixed-width card, which
+            could push the display height past modal-card's max-height and
+            get silently clipped by its overflow-y:auto (no visible
+            scrollbar in a screenshot) — max-h-[80vh] + max-w-full on the
+            img itself means it only ever shrinks to fit, never stretches. */}
+        <div className="modal-card w-fit max-w-[95vw] sm:mx-4 p-3">
           <div className="flex justify-end mb-1">
             <button type="button" className="btn" onClick={() => setLightbox(null)}>
               <X size={16} />
             </button>
           </div>
-          {lightbox && <img src={lightbox.src} alt={lightbox.alt} className="w-full rounded" />}
+          {lightbox && (
+            <img
+              src={lightbox.src}
+              alt={lightbox.alt}
+              className="block max-w-full max-h-[80vh] mx-auto rounded"
+            />
+          )}
         </div>
       </Modal>
     </div>
