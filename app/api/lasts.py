@@ -50,10 +50,18 @@ def create_lasts_router() -> APIRouter:
         model: str = Form(""),
         material: str = Form(""),
         note: str = Form(""),
+        side: str | None = Form(None),  # "left"/"right" override — used when
+                                         # the scan's own metadata doesn't say
+                                         # (some scans just don't have the
+                                         # "левая/правая колодка" text), since
+                                         # an unknown side silently disables
+                                         # mirroring for whichever foot needs it
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
         if not file.filename or not file.filename.lower().endswith(".scm"):
             raise HTTPException(status_code=400, detail="expected_scm_file")
+        if side not in (None, "", "left", "right"):
+            raise HTTPException(status_code=400, detail="invalid_side")
         raw = await file.read()
         try:
             result = await asyncio.to_thread(parse_scm, raw)
@@ -69,7 +77,7 @@ def create_lasts_router() -> APIRouter:
         record = repo.create({
             "article": article, "size": size, "model": model,
             "material": material, "note": note,
-            "side": block.get("side"),
+            "side": (side or None) or block.get("side"),
             "length_mm": block["length_mm"],
             "width_mm": block["width_mm"],
             "height_mm": block["height_mm"],

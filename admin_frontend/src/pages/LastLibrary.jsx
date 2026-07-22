@@ -151,7 +151,7 @@ export default function LastLibrary() {
   const [loadingList, setLoadingList] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ article: '', size: '', model: '', material: '', note: '' });
+  const [form, setForm] = useState({ article: '', size: '', model: '', material: '', note: '', side: '' });
   const [addFile, setAddFile] = useState(null);
 
   const [matching, setMatching] = useState(false);
@@ -186,7 +186,7 @@ export default function LastLibrary() {
       await api.post('lasts', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       toast('Колодка добавлена', 'success');
       setAddOpen(false);
-      setForm({ article: '', size: '', model: '', material: '', note: '' });
+      setForm({ article: '', size: '', model: '', material: '', note: '', side: '' });
       setAddFile(null);
       loadLasts();
     } catch (err) {
@@ -330,6 +330,19 @@ export default function LastLibrary() {
                 onChange={(e) => setForm(f => ({ ...f, [field]: e.target.value }))} />
             </label>
           ))}
+          <label className="block text-sm">
+            Сторона колодки
+            <select className="input w-full mt-1" value={form.side}
+              onChange={(e) => setForm(f => ({ ...f, side: e.target.value }))}>
+              <option value="">Определить автоматически</option>
+              <option value="left">Левая</option>
+              <option value="right">Правая</option>
+            </select>
+            <span className="block text-xs text-[color:var(--color-text-muted)] mt-1">
+              Обычно определяется из скана сам; если в сканах колодок этого сканера сторона не пишется в метаданных —
+              укажите вручную, иначе подбор может сравнивать не с той стороной.
+            </span>
+          </label>
           <label className="block text-sm">
             Заметка
             <textarea className="input w-full mt-1" rows={2} value={form.note}

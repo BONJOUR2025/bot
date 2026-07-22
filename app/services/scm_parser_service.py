@@ -185,7 +185,54 @@ def _strip_outlier_points(x: np.ndarray, y: np.ndarray, z: np.ndarray,
         p_lo, p_hi = np.percentile(coord[keep], [pctl_lo, pctl_hi])
         margin = margin_frac * (p_hi - p_lo)
         keep &= (coord >= p_lo - margin) & (coord <= p_hi + margin)
+
+    # The percentile+margin pass above is tuned for a *dense* contaminated
+    # region (the platform/leg-post case it was built for — a repeated
+    # surface, not a handful of points) and its margin is generous enough
+    # that a single truly isolated spike point can still slip through: seen
+    # on a real scan where one lone point sat 24mm past the toe tip (everything
+    # else within 0.1mm of its neighbour) and inflated length_mm by 24mm.
+    # A real scanned surface is densely and near-continuously sampled
+    # everywhere — a multi-mm gap at the very edge of the data along any axis
+    # means "isolated stray point(s)", never real geometry, regardless of
+    # what percentile it falls in. Trim those from each end of each axis.
+    for coord in (x, y, z):
+        keep &= _trim_isolated_tail(coord, keep)
     return keep
+
+
+def _trim_isolated_tail(coord: np.ndarray, keep: np.ndarray,
+                         gap_mm: float = 3.0, max_trim_frac: float = 0.01) -> np.ndarray:
+    """Extend `keep` to drop points isolated from the main cluster by an
+    unusually large gap at either extreme of `coord` (checked only among
+    already-kept points). Caps how much it will ever trim as a safety net —
+    if a real dense cluster somehow has an edge that sparse, this backs off
+    rather than eating real data."""
+    idx = np.where(keep)[0]
+    if idx.size < 20:
+        return np.ones_like(coord, dtype=bool)
+    order = idx[np.argsort(coord[idx])]
+    vals = coord[order]
+    n = len(vals)
+    limit = max(1, int(n * max_trim_frac))
+
+    hi_cut = n
+    for i in range(n - 1, n - 1 - limit, -1):
+        if vals[i] - vals[i - 1] > gap_mm:
+            hi_cut = i
+        else:
+            break
+    lo_cut = 0
+    for i in range(0, limit):
+        if vals[i + 1] - vals[i] > gap_mm:
+            lo_cut = i + 1
+        else:
+            break
+
+    result = np.ones_like(coord, dtype=bool)
+    result[order[hi_cut:]] = False
+    result[order[:lo_cut]] = False
+    return result
 
 
 def find_foot_blocks(data: bytes) -> list[FootBlock]:
