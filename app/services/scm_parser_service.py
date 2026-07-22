@@ -276,7 +276,19 @@ def find_foot_blocks(data: bytes) -> list[FootBlock]:
 
 _BALL_ZONE_PCT = (50.0, 80.0)  # search window for landmarks, % of foot length from heel
 _BALL_LANDMARK_PERCENTILE = 98.0  # robust "extreme" point per length-bin (vs single-point max/min)
-_BALL_SLAB_FRAC = 0.002  # slab half-thickness as a fraction of foot length
+# Slab half-thickness as a fraction of foot length. Validated against a real
+# scan whose vendor software exported the exact MT/MF landmark coordinates +
+# a true triangulated mesh: cutting that mesh with a plane through the exact
+# landmarks gives 233.42mm vs the vendor's own reported 233.4mm (ball girth) —
+# confirming the geometric approach (2 landmarks, vertical plane, cut
+# perimeter) is correct. Re-running that same cut on our raw point cloud (not
+# the mesh) at different slab thicknesses, still using the *exact* landmarks,
+# showed the thickness alone swings the result from +10.6mm (8mm slab) down
+# to +0.05mm (0.4mm slab) — thinner is unambiguously more accurate as long as
+# enough points remain for a stable hull. 0.001 was the best mean/max error
+# across all 3 reference scans we have ball-girth ground truth for, using our
+# own (imperfect) landmark detector.
+_BALL_SLAB_FRAC = 0.001
 
 
 def _convex_hull_2d(points: np.ndarray) -> np.ndarray:
