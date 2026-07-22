@@ -40,9 +40,24 @@ Known limitation: a last has its own heel height and toe spring (the sole
 curves up at the toe), so a technically correct comparison first re-poses the
 flat-scanned foot into that posture before aligning it to the last (see
 Leng & Du 2006; Chertenko et al. 2023). This service doesn't do that yet — both
-the foot and the (currently synthetic, untested-on-a-real-last) last profile
-are compared heel-anchored and flat. Revisit once a real last scan is
-available to see whether that pose difference is large enough to matter here.
+the foot and the last profile are compared heel-anchored and flat. Revisit if
+a real last scan shows that pose difference is large enough to matter.
+
+A second, since-corrected limitation: equal ball girth (last == foot) is NOT
+"ideal" — it used to be treated that way here. A last's girth is measured on
+its *outer* surface; the finished shoe's *interior* girth is always smaller,
+because the upper leather, lining, interlining and seams all sit between the
+last's surface and the foot (a rough rule of thumb: interior girth loses
+roughly 2π × combined-material-thickness — a 1-2mm leather+lining stack alone
+costs ~6-13mm of girth). So `last girth == foot girth` means the *finished
+shoe* is almost certainly tighter than the foot, not equal to it. The per-zone
+bands below for ball girth follow the working table from that source directly:
+< −5mm too tight (insufficient volume), −5..0mm tight/high risk, 0..+5mm
+borderline (needs a fitting), +5..+10mm the actual comfortable band, > +10mm
+excess/poor heel lock. Other zones (instep/waist/heel) don't have an
+equally-sourced table; their bands are shifted by the same qualitative
+principle (don't call raw equality "ideal") but are a rougher extrapolation —
+worth tightening once we have fitting feedback for those zones specifically.
 
 Width (bounding box) is used only for the visual overlay, not for the numeric
 girth verdict — see scm_parser_service's module docstring on why the raw
@@ -64,14 +79,17 @@ LENGTH_TIGHT = 8.0
 LENGTH_IDEAL_MAX = 15.0  # ГОСТ/bespoke toe allowance upper edge (12-15 mm)
 LENGTH_LOOSE = 22.0
 
-# Minimum ease before a girth deficit is "real" rather than measurement noise
-# (Grau & Barisch-Fritz 2018: practically-significant step is ~2.5 mm for
-# girth). Below zero is unambiguous physical interference.
-ZONE_GIRTH_MIN = {"ball": -1.0, "instep": -1.0, "waist": -2.5, "heel": -2.5}
-# Upper edge of the comfortable band (Au 2008: ≤12.1 mm ball / ≤10.7 mm waist
-# rated comfortable in >80% of trials — treated as where "comfortable" ends
-# and "loose" begins, not as a hard target).
-ZONE_GIRTH_LOOSE = {"ball": 12.0, "instep": 13.0, "waist": 11.0, "heel": 9.0}
+# Girth ease (last − foot) bands, per zone. Below TOO_TIGHT = tight/high risk
+# — note this includes 0 (raw last==foot girth is NOT a safe margin: the
+# finished shoe's interior is smaller than the last's outer surface once
+# upper + lining are added). TOO_TIGHT..IDEAL_MIN = borderline, needs a
+# fitting. IDEAL_MIN..IDEAL_MAX = the actual comfortable band. Above
+# IDEAL_MAX = excess volume / poor lock. "ball" is sourced directly (see
+# module docstring); other zones are shifted by the same principle but not
+# independently validated.
+ZONE_GIRTH_TOO_TIGHT = {"ball": 0.0, "instep": 0.0, "waist": -1.0, "heel": -1.0}
+ZONE_GIRTH_IDEAL_MIN = {"ball": 5.0, "instep": 5.0, "waist": 4.0, "heel": 3.0}
+ZONE_GIRTH_IDEAL_MAX = {"ball": 10.0, "instep": 11.0, "waist": 9.0, "heel": 7.0}
 
 # A foot edge poking out this far (mm) past the last outline is a hard clash,
 # not noise. There's no calibrated u_model for this scanner/pipeline yet (see
@@ -190,6 +208,25 @@ _ZONE_TIGHT_HEIGHT = {
     "ball": "Колодка ниже стопы в пучках — верх обуви будет давить сверху на "
             "плюсну и пальцы, даже если по обхвату колодка не уже.",
 }
+# Girth ease is 0..+borderline mm: raw last-vs-foot girth looks equal or only
+# slightly bigger. Not a fault, but not a confirmed margin either — the
+# finished shoe's interior will be smaller than the last (upper + lining sit
+# between them), so this needs an actual fitting rather than a "yes" from the
+# numbers alone.
+_ZONE_BORDERLINE = {
+    "heel": "Обхват пятки у колодки примерно равен стопе — прямого запаса нет. "
+            "С учётом материалов задника посадка может оказаться плотной, "
+            "нужна примерка.",
+    "waist": "Обхват в своде примерно равен стопе — запаса по факту может не "
+             "остаться после материалов верха, нужна примерка.",
+    "instep": "Обхват подъёма примерно равен стопе — это не гарантия запаса: "
+              "верх и подкладка отнимут часть объёма, посадка может оказаться "
+              "плотной, особенно к вечеру. Нужна примерка.",
+    "ball": "Обхват пучков колодки примерно равен обхвату стопы — это "
+            "пограничный случай, а не подтверждённый запас: между стопой и "
+            "колодкой в готовой обуви будут материалы верха и подкладки, "
+            "отнимающие часть объёма. Посадка вероятно плотная, нужна примерка.",
+}
 _ZONE_LOOSE = {
     "heel": "В пятке колодка свободнее стопы — пятка не фиксируется и будет "
             "выскакивать при каждом шаге, обувь «хлопает».",
@@ -254,11 +291,15 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
         if key == "toe":
             verdict, text = len_verdict, len_text  # toe room ~ length verdict
         else:
-            gmin_thr = ZONE_GIRTH_MIN[key]
-            gloose_thr = ZONE_GIRTH_LOOSE[key]
-            tight_by_girth = gmin is not None and gmin < gmin_thr
+            tight_thr = ZONE_GIRTH_TOO_TIGHT[key]
+            ideal_min = ZONE_GIRTH_IDEAL_MIN[key]
+            ideal_max = ZONE_GIRTH_IDEAL_MAX[key]
+            tight_by_girth = gmin is not None and gmin < tight_thr
+            borderline_by_girth = gmin is not None and tight_thr <= gmin < ideal_min
+            loose_by_girth = gmean is not None and gmean > ideal_max
             tight_by_width = worst_protr_w > PROTRUSION_MM
             tight_by_height = ZONE_HEIGHT_MATTERS[key] and worst_protr_h > PROTRUSION_MM
+
             if tight_by_width or tight_by_height or tight_by_girth:
                 verdict = "too_tight"
                 parts = []
@@ -266,10 +307,12 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
                     parts.append(_ZONE_TIGHT_HEIGHT[key])
                 if tight_by_width:
                     parts.append(_ZONE_TIGHT_WIDTH[key])
-                if not parts:  # girth deficit without a located width/height clash
-                    parts.append(_ZONE_TIGHT_WIDTH[key])
+                if not parts:  # tight on raw girth alone, no located width/height clash
+                    parts.append(_ZONE_BORDERLINE[key])
                 text = " ".join(parts)
-            elif gmean is not None and gmean > gloose_thr:
+            elif borderline_by_girth:
+                verdict, text = "tight_ok", _ZONE_BORDERLINE[key]
+            elif loose_by_girth:
                 verdict, text = "too_loose", _ZONE_LOOSE[key]
             else:
                 verdict, text = "ideal", "Посадка в норме — колодка повторяет стопу с комфортным запасом."
