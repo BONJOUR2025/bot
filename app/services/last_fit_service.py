@@ -88,6 +88,17 @@ ZONES = [
     ("toe", 0.78, 1.00, "Носок (пальцы)"),
 ]
 
+# Whether a height deficit (foot taller than last) counts as "presses down" in
+# a given zone. In heel/waist it does NOT: our foot scans include the ankle
+# and part of the lower leg (up to ~125 mm — confirmed on a real last test,
+# where a foot scan showed z up to 127 mm at 5-30% of length while the last
+# itself tops out under 100 mm total). A last only models the shoe's own
+# topline height there, and most closed shoes (anything but tall boots) don't
+# enclose the ankle at all — the foot simply rises above an open collar, which
+# isn't pressure. In instep/ball the upper genuinely wraps over the top of the
+# foot, so a height deficit there is real and meaningful.
+ZONE_HEIGHT_MATTERS = {"heel": False, "waist": False, "instep": True, "ball": True}
+
 # Instep is reported at several sections (40-60% of length), not just 50% —
 # published systems disagree on where exactly "the" instep section is (IEEE SA
 # 2021 terminology review lists 40/45/50/55%), so the worst section in this
@@ -247,7 +258,7 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
             gloose_thr = ZONE_GIRTH_LOOSE[key]
             tight_by_girth = gmin is not None and gmin < gmin_thr
             tight_by_width = worst_protr_w > PROTRUSION_MM
-            tight_by_height = worst_protr_h > PROTRUSION_MM
+            tight_by_height = ZONE_HEIGHT_MATTERS[key] and worst_protr_h > PROTRUSION_MM
             if tight_by_width or tight_by_height or tight_by_girth:
                 verdict = "too_tight"
                 parts = []
