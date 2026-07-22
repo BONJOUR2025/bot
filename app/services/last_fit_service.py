@@ -117,6 +117,19 @@ ZONES = [
 # foot, so a height deficit there is real and meaningful.
 ZONE_HEIGHT_MATTERS = {"heel": False, "waist": False, "instep": True, "ball": True}
 
+# Same contamination, different measurement: "girth" per section is the
+# perimeter of the full vertical (x, z) slice on purpose (a tape measured
+# girth legitimately wraps around whatever height variation exists — see
+# FOOTPRINT_HEIGHT_MM's docstring in scm_parser_service for why width is
+# capped but girth isn't). But in heel/waist that same full-height slice
+# includes the ankle/calf column, so the foot's "girth" there is essentially
+# a lower-leg circumference (confirmed on a real last test: girth ease of
+# roughly −100 to −110 mm, which is not a real shoe-fit deficit, just a
+# last having no leg above it at all). Girth-based tight/loose verdicts are
+# only meaningful where the last and the foot are actually comparable —
+# instep and ball. Heel/waist still get a verdict from width protrusion.
+ZONE_GIRTH_MATTERS = {"heel": False, "waist": False, "instep": True, "ball": True}
+
 # Instep is reported at several sections (40-60% of length), not just 50% —
 # published systems disagree on where exactly "the" instep section is (IEEE SA
 # 2021 terminology review lists 40/45/50/55%), so the worst section in this
@@ -294,9 +307,10 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
             tight_thr = ZONE_GIRTH_TOO_TIGHT[key]
             ideal_min = ZONE_GIRTH_IDEAL_MIN[key]
             ideal_max = ZONE_GIRTH_IDEAL_MAX[key]
-            tight_by_girth = gmin is not None and gmin < tight_thr
-            borderline_by_girth = gmin is not None and tight_thr <= gmin < ideal_min
-            loose_by_girth = gmean is not None and gmean > ideal_max
+            girth_matters = ZONE_GIRTH_MATTERS[key]
+            tight_by_girth = girth_matters and gmin is not None and gmin < tight_thr
+            borderline_by_girth = girth_matters and gmin is not None and tight_thr <= gmin < ideal_min
+            loose_by_girth = girth_matters and gmean is not None and gmean > ideal_max
             tight_by_width = worst_protr_w > PROTRUSION_MM
             tight_by_height = ZONE_HEIGHT_MATTERS[key] and worst_protr_h > PROTRUSION_MM
 
@@ -316,13 +330,18 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
                 verdict, text = "too_loose", _ZONE_LOOSE[key]
             else:
                 verdict, text = "ideal", "Посадка в норме — колодка повторяет стопу с комфортным запасом."
+        girth_relevant = key != "toe" and ZONE_GIRTH_MATTERS.get(key, True)
         zones.append({
             "zone": key,
             "label": label,
             "verdict": verdict,
             "explanation": text,
-            "girth_ease_min_mm": round(gmin, 1) if gmin is not None else None,
-            "girth_ease_mean_mm": round(gmean, 1) if gmean is not None else None,
+            # Null, not just unused, where girth is contaminated by the
+            # ankle/calf column and isn't part of the verdict (see
+            # ZONE_GIRTH_MATTERS) — a raw number here would look like a
+            # real ~100mm+ deficit and isn't one.
+            "girth_ease_min_mm": round(gmin, 1) if (gmin is not None and girth_relevant) else None,
+            "girth_ease_mean_mm": round(gmean, 1) if (gmean is not None and girth_relevant) else None,
             "max_protrusion_mm": round(worst_protr, 1),
             "max_protrusion_width_mm": round(worst_protr_w, 1),
             "max_protrusion_height_mm": round(worst_protr_h, 1),

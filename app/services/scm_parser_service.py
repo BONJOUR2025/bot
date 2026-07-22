@@ -365,6 +365,20 @@ def _ball_girth(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float | None:
 PROFILE_SECTIONS = 70
 INSTEP_LENGTH_PCT = 50.0  # instep girth is reported at ~50% of foot length
 
+# medial/lateral (used for the top-down footprint outline and width-based fit
+# checks) are read only from points at or below this height. Taking the
+# widest x at ANY height in a cross-section looks straight down at the whole
+# 3D volume, which around 20-27% of length picks up the ankle bone complex
+# (medial malleolus etc.) bulging out a few mm past the actual tread/footprint
+# — real on a live foot, but not something a last's rigid lower shape is
+# meant to match (soft upper leather accommodates a bone bump; the last's
+# base shape doesn't need to). Confirmed on a real scan: restricting to the
+# tread band removes a spurious ~2-5mm width bulge at 20-27% length while
+# leaving the ball/midfoot region (35-85%, matches with or without the cap)
+# unchanged. Girth still uses the full height range on purpose — a tape
+# measured girth legitimately wraps around whatever height variation exists.
+FOOTPRINT_HEIGHT_MM = 30.0
+
 
 def _heel_centered(block: "FootBlock") -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     x, y, z = block.x, block.y, block.z
@@ -392,8 +406,10 @@ def extract_profile(block: "FootBlock") -> dict:
             medial.append(None); lateral.append(None); top.append(None); girth.append(None)
             continue
         xs, zs = x[m], z[m]
-        medial.append(round(float(np.percentile(xs, 98)), 1))
-        lateral.append(round(float(np.percentile(xs, 2)), 1))
+        tread = zs <= FOOTPRINT_HEIGHT_MM
+        xs_tread = xs[tread] if tread.sum() >= 8 else xs
+        medial.append(round(float(np.percentile(xs_tread, 98)), 1))
+        lateral.append(round(float(np.percentile(xs_tread, 2)), 1))
         top.append(round(float(np.percentile(zs, 99)), 1))
         g = _hull_perimeter(np.column_stack([xs, zs]))
         girth.append(round(g, 1) if g is not None else None)
