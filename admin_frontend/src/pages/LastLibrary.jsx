@@ -33,13 +33,14 @@ function LastCard({ last, onDelete }) {
 const VERDICT_STYLE = {
   good: { label: 'Хорошо подойдёт', cls: 'bg-green-100 text-green-800 border-green-300' },
   ok: { label: 'Подойдёт с минимальным запасом', cls: 'bg-blue-100 text-blue-800 border-blue-300' },
+  uncertain: { label: 'Неопределённо — нужна примерка', cls: 'bg-gray-100 text-gray-700 border-gray-300' },
   loose: { label: 'Подойдёт, но свободна', cls: 'bg-amber-100 text-amber-800 border-amber-300' },
   not_fit: { label: 'Не подойдёт', cls: 'bg-red-100 text-red-800 border-red-300' },
 };
 
 const ZONE_DOT = {
   too_tight: 'bg-red-500', tight_ok: 'bg-amber-500', ideal: 'bg-green-500',
-  loose_ok: 'bg-amber-400', too_loose: 'bg-amber-500',
+  loose_ok: 'bg-amber-400', too_loose: 'bg-amber-500', uncertain: 'bg-gray-400',
 };
 
 function FitBadge({ overall }) {
@@ -69,6 +70,15 @@ function FootFit({ pf, onOpenImage }) {
       </div>
       <p className="text-sm">{fit.overall_text}</p>
 
+      {fit.hard_fail_reasons?.length > 0 && (
+        <div className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-800">
+          <div className="font-medium mb-1">Жёсткие критерии отказа (не усредняются с другими зонами):</div>
+          <ul className="list-disc list-inside space-y-0.5">
+            {fit.hard_fail_reasons.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2">
         {fit.images?.top && (
           <button type="button" className="cursor-zoom-in" onClick={() => onOpenImage(fit.images.top, 'Стопа в колодке — вид сверху')}>
@@ -89,6 +99,17 @@ function FootFit({ pf, onOpenImage }) {
         <GirthRow label="Длина" pair={fit.length && { foot_mm: fit.length.foot_mm, last_mm: fit.length.last_mm, ease_mm: fit.length.ease_mm }} />
         <GirthRow label="Обхват пучков" pair={fit.girths?.ball} />
         <GirthRow label="Обхват подъёма" pair={fit.girths?.instep} />
+        {fit.ball_line && (
+          <div className={`flex justify-between text-xs ${fit.ball_line.flagged ? 'text-amber-700 font-medium' : ''}`}>
+            <span className={fit.ball_line.flagged ? '' : 'text-[color:var(--color-text-muted)]'}>
+              Линия сгиба (пучки){fit.ball_line.flagged ? ' ⚠️' : ''}
+            </span>
+            <span>
+              стопа {fit.ball_line.foot_mm} мм → колодка {fit.ball_line.last_mm} мм от пятки
+              (смещение {fit.ball_line.diff_mm > 0 ? '+' : ''}{fit.ball_line.diff_mm} мм)
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="space-y-1.5">

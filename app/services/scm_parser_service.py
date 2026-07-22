@@ -420,6 +420,20 @@ def _ball_girth(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float | None:
     return _hull_perimeter(np.column_stack([u, v]))
 
 
+def _ball_line_mm(x: np.ndarray, y: np.ndarray) -> float | None:
+    """Where the ball line (MT/MF landmarks) sits along the length, in mm
+    from the heel. Used to check whether a last's flex line lines up with
+    where the foot's own metatarsal joints actually are — a last can have
+    the right cross-sectional shape at the ball yet still be positioned
+    wrong lengthwise, so the shoe creases over a bone instead of a joint."""
+    ymin, ymax = float(y.min()), float(y.max())
+    landmarks = _find_ball_landmarks(x, y, ymin, ymax)
+    if landmarks is None:
+        return None
+    p_medial, p_lateral = landmarks
+    return float((p_medial[1] + p_lateral[1]) / 2 - ymin)
+
+
 # -- shape profile (used for last-vs-foot comparison) -----------------------
 #
 # A compact "shape signature": the foot/last is anchored at the heel (y=0),
@@ -592,6 +606,7 @@ def parse_scm(raw_bytes: bytes) -> dict:
         views = render_foot_views(block)
         ball_girth = block.ball_girth_mm
         instep_girth = _instep_girth(block)
+        ball_line = _ball_line_mm(block.x, block.y)
         side = None
         if len(blocks) == 2:
             side = "left" if i == 0 else "right"
@@ -610,6 +625,7 @@ def parse_scm(raw_bytes: bytes) -> dict:
             "height_mm": round(block.height_mm, 1),
             "ball_girth_mm": round(ball_girth, 1) if ball_girth is not None else None,
             "instep_girth_mm": round(instep_girth, 1) if instep_girth is not None else None,
+            "ball_line_mm": round(ball_line, 1) if ball_line is not None else None,
             "profile": extract_profile(block),
             "views_png": {k: v for k, v in views.items()},
         })

@@ -26,6 +26,7 @@ def _foot_profile(foot: dict) -> dict:
         **foot["profile"],
         "ball_girth_mm": foot.get("ball_girth_mm"),
         "instep_girth_mm": foot.get("instep_girth_mm"),
+        "ball_line_mm": foot.get("ball_line_mm"),
     }
 
 
@@ -83,6 +84,7 @@ def create_lasts_router() -> APIRouter:
             "height_mm": block["height_mm"],
             "ball_girth_mm": block["ball_girth_mm"],
             "instep_girth_mm": block.get("instep_girth_mm"),
+            "ball_line_mm": block.get("ball_line_mm"),
             "profile": block["profile"],
         })
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -154,7 +156,8 @@ def create_lasts_router() -> APIRouter:
 
         last_profiles = {
             l["id"]: {**l["profile"], "ball_girth_mm": l.get("ball_girth_mm"),
-                      "instep_girth_mm": l.get("instep_girth_mm"), "length_mm": l["length_mm"]}
+                      "instep_girth_mm": l.get("instep_girth_mm"),
+                      "ball_line_mm": l.get("ball_line_mm"), "length_mm": l["length_mm"]}
             for l in targets
         }
 
@@ -171,7 +174,7 @@ def create_lasts_router() -> APIRouter:
                         foot_side=foot.get("side"), last_side=last.get("side"),
                     )
                     per_foot.append({"foot_side": foot["side"], "fit": fit})
-                rank = {"good": 0, "ok": 1, "loose": 2, "not_fit": 3}
+                rank = {"good": 0, "ok": 1, "uncertain": 1, "loose": 2, "not_fit": 3}
                 worst = max(rank[pf["fit"]["overall"]] for pf in per_foot)
                 score = -min(pf["fit"]["overlap_pct"] for pf in per_foot)
                 out.append({"last": _last_summary(last), "per_foot": per_foot,

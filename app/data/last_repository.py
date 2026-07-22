@@ -57,6 +57,7 @@ class LastRepository:
             "height_mm": data.get("height_mm"),
             "ball_girth_mm": data.get("ball_girth_mm"),
             "instep_girth_mm": data.get("instep_girth_mm"),
+            "ball_line_mm": data.get("ball_line_mm"),
             "profile": data["profile"],
             "created_at": datetime.now().isoformat(),
         }

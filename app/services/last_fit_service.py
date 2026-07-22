@@ -62,6 +62,32 @@ worth tightening once we have fitting feedback for those zones specifically.
 Width (bounding box) is used only for the visual overlay, not for the numeric
 girth verdict — see scm_parser_service's module docstring on why the raw
 bounding box isn't a calibrated measurement.
+
+Three additions from a technical review of Oxford/Derby fit modelling
+(digital_foot_last_fit_oxford_derby_technical.md, July 2026):
+
+1. An explicit "uncertain" verdict. A girth difference smaller than the
+   scanner/pipeline's own measurement noise (the review's own worked example:
+   ball girth −0.6mm, well inside the ~±3-5mm noise band it cites for 3D-vs-
+   manual girth comparisons) was previously classified as confidently "too
+   tight" or "borderline" — a false precision. GIRTH_UNCERTAINTY_MM gates
+   this: a girth-only classification within that band of a threshold reports
+   "uncertain, needs a fitting" instead of a confident verdict. This does NOT
+   apply to width/height protrusion — those come from directly overlaying the
+   two shapes, not from subtracting two independently-noisy scalars, so they
+   keep their existing (already fairly tight) PROTRUSION_MM cutoff.
+2. Ball-line position check (`ball_line_mm`, §14.3 in the review). Two lasts
+   can have the *same cross-sectional shape* at the ball yet crease the shoe
+   in the wrong place lengthwise if their MT/MF landmark sits at a different
+   distance from the heel than the foot's own joints — the fold then lands on
+   bone, not the joint. Flagged past BALL_LINE_WARN_MM, called out as a hard
+   failure past BALL_LINE_HARD_FAIL_MM.
+3. Explicit hard-fail reasons as a layer above the usual zone scoring. A
+   protrusion beyond HARD_FAIL_PROTRUSION_MM (the review's own suggested
+   6mm) is reported as a named, non-negotiable failure reason rather than
+   just tipping a zone to "too_tight" — the point being that a bad reason
+   shouldn't read as just one more zone that happened to score low, and
+   can't be averaged away by good scores elsewhere.
 """
 from __future__ import annotations
 
@@ -135,6 +161,22 @@ ZONE_GIRTH_MATTERS = {"heel": False, "waist": False, "instep": True, "ball": Tru
 # 2021 terminology review lists 40/45/50/55%), so the worst section in this
 # range is used for the verdict instead of a single arbitrary cut.
 INSTEP_SECTION_FRACS = (0.40, 0.45, 0.50, 0.55, 0.60)
+
+# A girth-only classification within this many mm of a tight/loose boundary
+# is reported as "uncertain" rather than a confident verdict — smaller than
+# the ~3-5mm noise band cited for 3D-vs-manual girth comparisons.
+GIRTH_UNCERTAINTY_MM = 4.0
+
+# How far the ball line (MT/MF landmark position along the length) can be
+# off between foot and last before the crease is landing somewhere other
+# than the foot's own joints. WARN = worth a manual look; HARD_FAIL = the
+# fold is unambiguously in the wrong place.
+BALL_LINE_WARN_MM = 4.0
+BALL_LINE_HARD_FAIL_MM = 10.0
+
+# A protrusion (width or height) beyond this is reported as an explicit,
+# named hard-fail reason rather than just another zone that scored "tight".
+HARD_FAIL_PROTRUSION_MM = 6.0
 
 
 # -- profile helpers --------------------------------------------------------
@@ -240,6 +282,14 @@ _ZONE_BORDERLINE = {
             "колодкой в готовой обуви будут материалы верха и подкладки, "
             "отнимающие часть объёма. Посадка вероятно плотная, нужна примерка.",
 }
+def _uncertain_text(label: str, diff_mm: float) -> str:
+    return (
+        f"Разница по обхвату в зоне «{label}» ({diff_mm:+.1f} мм) меньше ожидаемой точности "
+        f"измерения (~±{GIRTH_UNCERTAINTY_MM:.0f} мм) — по этому параметру нельзя уверенно "
+        f"сказать, жмёт колодка или нет. Нужна примерка."
+    )
+
+
 _ZONE_LOOSE = {
     "heel": "В пятке колодка свободнее стопы — пятка не фиксируется и будет "
             "выскакивать при каждом шаге, обувь «хлопает».",
@@ -332,20 +382,33 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
             tight_by_width = worst_protr_w > PROTRUSION_MM
             tight_by_height = ZONE_HEIGHT_MATTERS[key] and worst_protr_h > PROTRUSION_MM
 
-            if tight_by_width or tight_by_height or tight_by_girth:
+            if tight_by_width or tight_by_height:
                 verdict = "too_tight"
                 parts = []
                 if tight_by_height:
                     parts.append(_ZONE_TIGHT_HEIGHT[key])
                 if tight_by_width:
                     parts.append(_ZONE_TIGHT_WIDTH[key])
-                if not parts:  # tight on raw girth alone, no located width/height clash
-                    parts.append(_ZONE_BORDERLINE[key])
                 text = " ".join(parts)
+            elif tight_by_girth:
+                # A geometric (width/height) clash is a direct shape overlay,
+                # not a subtraction of two noisy scalars — trust it outright.
+                # A tight verdict from girth ALONE is different: it's the
+                # difference of two independently-measured numbers, so a
+                # small deficit can be measurement noise rather than a real
+                # conflict. Only call it confidently "tight" once the deficit
+                # clears the expected noise band.
+                if (tight_thr - gmin) < GIRTH_UNCERTAINTY_MM:
+                    verdict, text = "uncertain", _uncertain_text(label, gmin - tight_thr)
+                else:
+                    verdict, text = "too_tight", _ZONE_BORDERLINE[key]
             elif borderline_by_girth:
                 verdict, text = "tight_ok", _ZONE_BORDERLINE[key]
             elif loose_by_girth:
-                verdict, text = "too_loose", _ZONE_LOOSE[key]
+                if (gmean - ideal_max) < GIRTH_UNCERTAINTY_MM:
+                    verdict, text = "uncertain", _uncertain_text(label, gmean - ideal_max)
+                else:
+                    verdict, text = "too_loose", _ZONE_LOOSE[key]
             else:
                 verdict, text = "ideal", "Посадка в норме — колодка повторяет стопу с комфортным запасом."
         girth_relevant = key != "toe" and ZONE_GIRTH_MATTERS.get(key, True)
@@ -381,11 +444,59 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
             "girth_ease_mm": round(float(girth_ease[idx]), 1),
         })
 
-    ranks = {"too_tight": 3, "tight_ok": 2, "too_loose": 1, "loose_ok": 1, "ideal": 0}
+    # Ball-line position: does the last's flex-line landmark sit at the same
+    # distance from the heel as the foot's own MTH1/5 joints? A last can pass
+    # every cross-sectional check above and still crease over a bone.
+    ball_line = None
+    fbl, lbl = foot.get("ball_line_mm"), last.get("ball_line_mm")
+    if fbl is not None and lbl is not None:
+        bl_diff = lbl - fbl
+        ball_line = {
+            "foot_mm": round(fbl, 1),
+            "last_mm": round(lbl, 1),
+            "diff_mm": round(bl_diff, 1),
+            "flagged": abs(bl_diff) > BALL_LINE_WARN_MM,
+        }
+
+    # Hard-fail reasons: named, non-negotiable problems that shouldn't be
+    # averaged away by decent scores in other zones (see module docstring).
+    # Must use the same *verdict-relevant* protrusion the zone loop used —
+    # not the raw max_protrusion_mm field, which still includes the height
+    # component even in heel/waist where ZONE_HEIGHT_MATTERS says that's
+    # ankle/calf contamination, not a real conflict (a bug caught by exactly
+    # that: heel/waist showed 35-44mm "conflicts" here before this fix).
+    hard_fail_reasons = []
+    for z in zones:
+        if z["zone"] == "toe":
+            continue
+        relevant_protr = z["max_protrusion_width_mm"]
+        if ZONE_HEIGHT_MATTERS.get(z["zone"], True):
+            relevant_protr = max(relevant_protr, z["max_protrusion_height_mm"])
+        if relevant_protr > HARD_FAIL_PROTRUSION_MM:
+            hard_fail_reasons.append(
+                f"{z['label']}: локальный конфликт {relevant_protr:.1f} мм — "
+                "прямое геометрическое несоответствие, а не пограничный случай"
+            )
+    if length_ease < 0:
+        hard_fail_reasons.append(f"длина: колодка короче стопы на {abs(length_ease):.1f} мм")
+    if ball_line and abs(ball_line["diff_mm"]) > BALL_LINE_HARD_FAIL_MM:
+        hard_fail_reasons.append(
+            f"линия сгиба пучков смещена на {ball_line['diff_mm']:+.1f} мм — сгиб обуви "
+            "попадёт на кость, а не на сустав"
+        )
+
+    ranks = {"too_tight": 3, "tight_ok": 2, "too_loose": 1, "loose_ok": 1, "uncertain": 1, "ideal": 0}
     worst = max((ranks.get(z["verdict"], 0) for z in zones), default=0)
     tight_zones = [z["label"] for z in zones if z["verdict"] == "too_tight"]
     loose_zones = [z["label"] for z in zones if z["verdict"] == "too_loose"]
-    if worst >= 3:
+    uncertain_zones = [z["label"] for z in zones if z["verdict"] == "uncertain"]
+
+    if hard_fail_reasons:
+        overall = "not_fit"
+        overall_text = ("Колодка не подойдёт — жёсткий критерий отказа: " + "; ".join(hard_fail_reasons) +
+                        ". Это не оценка по сумме баллов — такое несоответствие не компенсируется "
+                        "хорошими показателями в других зонах.")
+    elif worst >= 3:
         overall = "not_fit"
         overall_text = ("Колодка не подойдёт: тесно в зонах — " + ", ".join(tight_zones) +
                         ". В этих местах обувь будет давить и натирать.")
@@ -395,10 +506,22 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
                         " — обувь будет великовата, стопа хуже фиксируется.")
     elif worst == 2:
         overall = "ok"
-        overall_text = "Подойдёт, но с минимальным запасом — комфортно для лёгкой/летней обуви."
+        if uncertain_zones and not tight_zones:
+            overall = "uncertain"
+            overall_text = ("По зонам (" + ", ".join(uncertain_zones) + ") разница меньше точности "
+                            "измерения — нельзя однозначно сказать, подойдёт колодка или нет. "
+                            "Нужна примерка.")
+        else:
+            overall_text = "Подойдёт, но с минимальным запасом — комфортно для лёгкой/летней обуви."
     else:
         overall = "good"
         overall_text = "Хорошо подойдёт — стопа помещается в колодку с комфортным запасом по всей длине."
+
+    if ball_line and ball_line["flagged"] and overall in ("good", "ok"):
+        overall_text += (
+            f" Отдельно: линия сгиба пучков смещена на {ball_line['diff_mm']:+.1f} мм "
+            "относительно суставов стопы — стоит проверить при примерке, куда придётся залом."
+        )
 
     images = _render_overlays(f, l, y, foot_len, last_len, protrusion)
 
@@ -406,6 +529,8 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
         "overall": overall,
         "overall_text": overall_text,
         "overlap_pct": overlap_pct,
+        "hard_fail_reasons": hard_fail_reasons,
+        "ball_line": ball_line,
         "length": {
             "foot_mm": round(foot_len, 1),
             "last_mm": round(last_len, 1),
