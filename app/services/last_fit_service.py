@@ -88,6 +88,17 @@ Three additions from a technical review of Oxford/Derby fit modelling
    just tipping a zone to "too_tight" — the point being that a bad reason
    shouldn't read as just one more zone that happened to score low, and
    can't be averaged away by good scores elsewhere.
+
+A fourth addition, from a follow-up review specifically on detecting
+excessively loose lasts (izlishne_svobodnaya_kolodka_3d_fit_technical.md,
+July 2026): excess width/height is now caught geometrically, not just via
+girth. Girth is a 1D summary of a 2D cross-section, so a last can be
+excessively wide or tall in one zone while its total girth still looks
+unremarkable (the width gain and height gain of the *foot* balance out in
+the girth sum even though the *last* doesn't match that split). This mirrors
+the existing width/height *tightness* check (direct shape overlay, no
+measurement-noise uncertainty gate) rather than the girth-based looseness
+check — see ZONE_WIDTH_LOOSE_MM / ZONE_HEIGHT_LOOSE_MM.
 """
 from __future__ import annotations
 
@@ -166,6 +177,20 @@ INSTEP_SECTION_FRACS = (0.40, 0.45, 0.50, 0.55, 0.60)
 # is reported as "uncertain" rather than a confident verdict — smaller than
 # the ~3-5mm noise band cited for 3D-vs-manual girth comparisons.
 GIRTH_UNCERTAINTY_MM = 4.0
+
+# Excess width/height (last roomier than foot on BOTH the medial and lateral
+# side at once, or taller on top) reported as "too loose" directly from the
+# shape overlay — the mirror image of the width/height *tightness* check
+# above. Until now only girth caught looseness, which misses the case a
+# review of Oxford/Derby fit flagged explicitly: a last can be excessively
+# wide/tall in one zone while its total girth still looks unremarkable,
+# because girth is a 1D summary of a 2D shape. Heel is intentionally
+# stricter — slack there is the single biggest driver of heel slip, per that
+# same review ("для пятки пороги должны быть строже").
+ZONE_WIDTH_LOOSE_MM = {"heel": 4.0, "waist": 6.0, "instep": 6.0, "ball": 6.0}
+# Only in zones where height is even meaningful (see ZONE_HEIGHT_MATTERS) —
+# heel/waist height is ankle/calf, not a real dorsal-volume signal either way.
+ZONE_HEIGHT_LOOSE_MM = {"instep": 6.0, "ball": 6.0}
 
 # How far the ball line (MT/MF landmark position along the length) can be
 # off between foot and last before the crease is landing somewhere other
@@ -263,6 +288,29 @@ _ZONE_TIGHT_HEIGHT = {
     "ball": "Колодка ниже стопы в пучках — верх обуви будет давить сверху на "
             "плюсну и пальцы, даже если по обхвату колодка не уже.",
 }
+# Mirror image of the two dicts above: excess room on BOTH sides at once
+# (not just one side, which would be a misalignment, not real width slack) or
+# excess height. Girth alone can hide this — a wide-but-not-tall zone and a
+# not-wide-but-tall zone can report the same total girth.
+_ZONE_LOOSE_WIDTH = {
+    "heel": "Пятка колодки заметно шире пятки стопы с обеих сторон — пятка не "
+            "фиксируется, будет гулять из стороны в сторону и быстрее натирать; "
+            "самая частая геометрическая причина, когда «пятка выскакивает».",
+    "waist": "В своде много места по бокам с обеих сторон — стопа слабо "
+             "зафиксирована по центру, может смещаться вбок при ходьбе.",
+    "instep": "В подъёме много места по бокам с обеих сторон — стопа может "
+              "смещаться вбок, и не факт что шнуровка вообще способна выбрать "
+              "такой запас.",
+    "ball": "В пучках колодка заметно шире стопы с обеих сторон — стопа гуляет "
+            "вбок при перекате, снижается устойчивость шага.",
+}
+_ZONE_LOOSE_HEIGHT = {
+    "instep": "Над подъёмом стопы много лишнего места сверху — верх и шнуровка "
+              "не дотягиваются, чтобы плотно прижать стопу; шнуровка быстро "
+              "исчерпает запас стягивания, а стопа продолжит двигаться внутри.",
+    "ball": "Над пучками много лишнего места сверху — обувь ощущается пустой в "
+            "этом месте, могут образовываться глубокие заломы союзки.",
+}
 # Girth ease is 0..+borderline mm: raw last-vs-foot girth looks equal or only
 # slightly bigger. Not a fault, but not a confirmed margin either — the
 # finished shoe's interior will be smaller than the last (upper + lining sit
@@ -328,6 +376,12 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
     protr_height = np.fmax(-top_ease, 0.0)
     protrusion = np.fmax(protr_width, protr_height)
 
+    # excess (mirror of protrusion): last roomier than the foot on BOTH sides
+    # at once — one-sided slack alone is a lengthwise/lateral misalignment,
+    # not genuine width excess, so this takes the smaller of the two sides.
+    excess_width = np.fmax(np.fmin(medial_ease, lateral_ease), 0.0)
+    excess_height = np.fmax(top_ease, 0.0)
+
     inside = np.nan_to_num(protrusion, nan=0.0) <= PROTRUSION_MM
     valid = ~np.isnan(protrusion)
     overlap_pct = round(100.0 * inside[valid].sum() / max(valid.sum(), 1), 1)
@@ -368,6 +422,11 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
         worst_protr = float(np.nanpercentile(protrusion[sel], 90))
         worst_protr_w = float(np.nanpercentile(protr_width[sel], 90))
         worst_protr_h = float(np.nanpercentile(protr_height[sel], 90))
+        # 10th percentile: "even the tightest point in this zone still has
+        # this much room" — the same robust-worst-case read used elsewhere,
+        # just from the loose end instead of the tight end.
+        least_excess_w = float(np.nanpercentile(excess_width[sel], 10))
+        least_excess_h = float(np.nanpercentile(excess_height[sel], 10))
 
         if key == "toe":
             verdict, text = len_verdict, len_text  # toe room ~ length verdict
@@ -381,6 +440,13 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
             loose_by_girth = girth_matters and gmean is not None and gmean > ideal_max
             tight_by_width = worst_protr_w > PROTRUSION_MM
             tight_by_height = ZONE_HEIGHT_MATTERS[key] and worst_protr_h > PROTRUSION_MM
+            loose_width_thr = ZONE_WIDTH_LOOSE_MM.get(key)
+            loose_height_thr = ZONE_HEIGHT_LOOSE_MM.get(key)
+            loose_by_width = loose_width_thr is not None and least_excess_w > loose_width_thr
+            loose_by_height = (
+                ZONE_HEIGHT_MATTERS[key] and loose_height_thr is not None
+                and least_excess_h > loose_height_thr
+            )
 
             if tight_by_width or tight_by_height:
                 verdict = "too_tight"
@@ -389,6 +455,16 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
                     parts.append(_ZONE_TIGHT_HEIGHT[key])
                 if tight_by_width:
                     parts.append(_ZONE_TIGHT_WIDTH[key])
+                text = " ".join(parts)
+            elif loose_by_width or loose_by_height:
+                # Same direct shape-overlay logic as tight_by_width/height —
+                # trusted outright, no uncertainty gate (unlike girth).
+                verdict = "too_loose"
+                parts = []
+                if loose_by_height:
+                    parts.append(_ZONE_LOOSE_HEIGHT[key])
+                if loose_by_width:
+                    parts.append(_ZONE_LOOSE_WIDTH[key])
                 text = " ".join(parts)
             elif tight_by_girth:
                 # A geometric (width/height) clash is a direct shape overlay,
@@ -426,6 +502,8 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
             "max_protrusion_mm": round(worst_protr, 1),
             "max_protrusion_width_mm": round(worst_protr_w, 1),
             "max_protrusion_height_mm": round(worst_protr_h, 1),
+            "excess_width_mm": round(least_excess_w, 1),
+            "excess_height_mm": round(least_excess_h, 1),
         })
 
     # I40-I60: sample the instep at several candidate sections rather than a
