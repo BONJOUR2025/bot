@@ -285,18 +285,36 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
     length_ease = last_len - foot_len
     len_verdict, len_text = _length_consequence(length_ease)
 
+    # Ball and instep already have a precise, landmark-based girth (the
+    # oblique MT/MF cut for ball; the fixed I50 section for instep) — shown
+    # to the user as "Обхват пучков"/"Обхват подъёма". The per-section
+    # profile's own "girth" curve, used below for the other zones, is a much
+    # cruder plain-perpendicular estimate averaged over a whole zone, and the
+    # two can disagree (one call it borderline, the other loose) — exactly
+    # the confusing mismatch a user spotted between the summary numbers and
+    # the zone verdict. Zone verdicts for these two zones use the precise
+    # scalar instead of recomputing their own from the profile.
+    precise_girth_ease = {}
+    for gkey in ("ball", "instep"):
+        fg, lg = foot.get(f"{gkey}_girth_mm"), last.get(f"{gkey}_girth_mm")
+        if fg is not None and lg is not None:
+            precise_girth_ease[gkey] = lg - fg
+
     zones = []
     frac = y / foot_len
     for key, lo, hi, label in ZONES:
         sel = (frac >= lo) & (frac < hi) & valid
         if not sel.any():
             continue
-        zg = girth_ease[sel]
-        # Robust "worst typical" reading (10th/90th percentile) instead of a
-        # bare min/max — a single noisy point in the scan shouldn't decide a
-        # whole zone's verdict (see module docstring).
-        gmin = float(np.nanpercentile(zg, 10)) if np.isfinite(zg).any() else None
-        gmean = float(np.nanmean(zg)) if np.isfinite(zg).any() else None
+        if key in precise_girth_ease:
+            gmin = gmean = precise_girth_ease[key]
+        else:
+            zg = girth_ease[sel]
+            # Robust "worst typical" reading (10th/90th percentile) instead of
+            # a bare min/max — a single noisy point in the scan shouldn't
+            # decide a whole zone's verdict (see module docstring).
+            gmin = float(np.nanpercentile(zg, 10)) if np.isfinite(zg).any() else None
+            gmean = float(np.nanmean(zg)) if np.isfinite(zg).any() else None
         worst_protr = float(np.nanpercentile(protrusion[sel], 90))
         worst_protr_w = float(np.nanpercentile(protr_width[sel], 90))
         worst_protr_h = float(np.nanpercentile(protr_height[sel], 90))
