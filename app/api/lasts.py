@@ -1,5 +1,5 @@
 """API for the shoe-last (колодка) library: upload/list/delete lasts, and
-match a foot scan against one or all lasts in the library."""
+match a foot scan against one or all lasts, section-by-section, explaining fit."""
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.data.last_repository import LastRepository
 from app.services.access_control_service import ResolvedUser
-from app.services.last_fit_service import evaluate_fit
+from app.services.last_fit_service import compare_profiles
 from app.services.scm_parser_service import parse_scm
 
 from .dependencies import require_permission
@@ -19,29 +19,19 @@ from .scanner import SCANNER_PERMISSION
 UPLOAD_DIR = Path("static/uploads/lasts")
 
 
-def _blocks_from_parsed(result: dict) -> list[dict]:
-    return [
-        {
-            "side": foot["side"],
-            "point_count": foot["point_count"],
-            "length_mm": foot["length_mm"],
-            "width_mm": foot["width_mm"],
-            "height_mm": foot["height_mm"],
-            "ball_girth_mm": foot["ball_girth_mm"],
-        }
-        for foot in result["feet"]
-    ]
+def _foot_profile(foot: dict) -> dict:
+    """Merge the per-section profile with the named girths into one dict, the
+    shape last_fit_service.compare_profiles expects."""
+    return {
+        **foot["profile"],
+        "ball_girth_mm": foot.get("ball_girth_mm"),
+        "instep_girth_mm": foot.get("instep_girth_mm"),
+    }
 
 
-def _pick_last_block(last: dict, foot_side: str | None) -> dict | None:
-    blocks = last["blocks"]
-    if not blocks:
-        return None
-    if foot_side:
-        for b in blocks:
-            if b["side"] == foot_side:
-                return b
-    return blocks[0]
+def _last_summary(last: dict) -> dict:
+    """Last record without the bulky profile array — for list/match responses."""
+    return {k: v for k, v in last.items() if k != "profile"}
 
 
 def create_lasts_router() -> APIRouter:
@@ -50,7 +40,7 @@ def create_lasts_router() -> APIRouter:
 
     @router.get("")
     async def list_lasts(current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION))):
-        return {"lasts": repo.list()}
+        return {"lasts": [_last_summary(l) for l in repo.list()]}
 
     @router.post("")
     async def create_last(
@@ -70,30 +60,36 @@ def create_lasts_router() -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
 
-        blocks = _blocks_from_parsed(result)
-        if not blocks:
+        feet = result["feet"]
+        if not feet:
             raise HTTPException(status_code=422, detail="no_last_geometry_found")
 
+        # A last is one shape (both sides are mirror-identical) — take one block.
+        block = feet[0]
         record = repo.create({
             "article": article, "size": size, "model": model,
             "material": material, "note": note,
-            "blocks": blocks,
+            "side": block.get("side"),
+            "length_mm": block["length_mm"],
+            "width_mm": block["width_mm"],
+            "height_mm": block["height_mm"],
+            "ball_girth_mm": block["ball_girth_mm"],
+            "instep_girth_mm": block.get("instep_girth_mm"),
+            "profile": block["profile"],
         })
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        dest = UPLOAD_DIR / f"{record['id']}.scm"
-        dest.write_bytes(raw)
+        (UPLOAD_DIR / f"{record['id']}.scm").write_bytes(raw)
         url = f"/static/uploads/lasts/{record['id']}.scm"
         repo.set_scan_file_url(record["id"], url)
         record["scan_file_url"] = url
-        return record
+        return _last_summary(record)
 
     @router.delete("/{last_id}")
     async def delete_last(last_id: str, current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION))):
         record = repo.delete(last_id)
         if record is None:
             raise HTTPException(status_code=404, detail="not_found")
-        scan_path = UPLOAD_DIR / f"{last_id}.scm"
-        scan_path.unlink(missing_ok=True)
+        (UPLOAD_DIR / f"{last_id}.scm").unlink(missing_ok=True)
         return {"ok": True}
 
     @router.post("/match")
@@ -120,9 +116,6 @@ def create_lasts_router() -> APIRouter:
                 name: "data:image/png;base64," + base64.b64encode(png).decode("ascii")
                 for name, png in foot["views_png"].items()
             }
-            # whitelist fields (not a blind copy) — byte_range holds numpy
-            # int64s from the block-finding scan, which FastAPI/pydantic
-            # can't serialize.
             feet_out.append({
                 "side": foot["side"],
                 "point_count": foot["point_count"],
@@ -130,6 +123,7 @@ def create_lasts_router() -> APIRouter:
                 "width_mm": foot["width_mm"],
                 "height_mm": foot["height_mm"],
                 "ball_girth_mm": foot["ball_girth_mm"],
+                "instep_girth_mm": foot.get("instep_girth_mm"),
                 "views": views_b64,
             })
 
@@ -141,37 +135,36 @@ def create_lasts_router() -> APIRouter:
         else:
             targets = repo.list()
 
-        matches = []
-        for last in targets:
-            per_foot = []
-            for foot in feet:
-                last_block = _pick_last_block(last, foot["side"])
-                if last_block is None:
-                    continue
-                per_foot.append({
-                    "foot_side": foot["side"],
-                    "fit": evaluate_fit(foot, last_block),
-                })
-            if not per_foot:
-                continue
-            worst_rank = max(
-                {"good": 0, "ok": 1, "loose": 2, "not_fit": 3}[pf["fit"]["overall"]]
-                for pf in per_foot
-            )
-            score = sum(
-                abs(m["delta_mm"]) for pf in per_foot for m in pf["fit"]["metrics"]
-            )
-            matches.append({
-                "last": last,
-                "per_foot": per_foot,
-                "_worst_rank": worst_rank,
-                "_score": score,
-            })
-        matches.sort(key=lambda m: (m["_worst_rank"], m["_score"]))
-        for m in matches:
-            del m["_worst_rank"]
-            del m["_score"]
+        last_profiles = {
+            l["id"]: {**l["profile"], "ball_girth_mm": l.get("ball_girth_mm"),
+                      "instep_girth_mm": l.get("instep_girth_mm"), "length_mm": l["length_mm"]}
+            for l in targets
+        }
 
+        # Comparison is CPU-bound (section resampling + 2 matplotlib renders per
+        # foot per last) — keep it off the event loop.
+        def _run_matches():
+            out = []
+            for last in targets:
+                lp = last_profiles[last["id"]]
+                per_foot = []
+                for foot in feet:
+                    fit = compare_profiles(
+                        _foot_profile(foot), lp,
+                        foot_side=foot.get("side"), last_side=last.get("side"),
+                    )
+                    per_foot.append({"foot_side": foot["side"], "fit": fit})
+                rank = {"good": 0, "ok": 1, "loose": 2, "not_fit": 3}
+                worst = max(rank[pf["fit"]["overall"]] for pf in per_foot)
+                score = -min(pf["fit"]["overlap_pct"] for pf in per_foot)
+                out.append({"last": _last_summary(last), "per_foot": per_foot,
+                            "_worst": worst, "_score": score})
+            out.sort(key=lambda m: (m["_worst"], m["_score"]))
+            for m in out:
+                del m["_worst"]; del m["_score"]
+            return out
+
+        matches = await asyncio.to_thread(_run_matches)
         return {"feet": feet_out, "matches": matches}
 
     return router

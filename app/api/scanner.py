@@ -47,6 +47,7 @@ def create_scanner_router() -> APIRouter:
                 "width_mm": foot["width_mm"],
                 "height_mm": foot["height_mm"],
                 "ball_girth_mm": foot["ball_girth_mm"],
+                "instep_girth_mm": foot.get("instep_girth_mm"),
                 "views": views_b64,
             })
 

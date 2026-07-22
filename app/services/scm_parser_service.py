@@ -352,6 +352,74 @@ def _ball_girth(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float | None:
     return _hull_perimeter(np.column_stack([u, v]))
 
 
+# -- shape profile (used for last-vs-foot comparison) -----------------------
+#
+# A compact "shape signature": the foot/last is anchored at the heel (y=0),
+# the sole (z=0) and centred on the heel's medial-lateral midline (x=0), then
+# sliced into N cross-sections along its length. For each section we store the
+# medial edge (max x), lateral edge (min x), top (max z) and girth (section
+# perimeter). This is enough both to compare a foot to a last section-by-
+# section AND to draw the footprint / side overlays, without keeping the whole
+# multi-megabyte point cloud around.
+
+PROFILE_SECTIONS = 70
+INSTEP_LENGTH_PCT = 50.0  # instep girth is reported at ~50% of foot length
+
+
+def _heel_centered(block: "FootBlock") -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    x, y, z = block.x, block.y, block.z
+    ymin = float(y.min())
+    length = float(y.max() - ymin)
+    y = y - ymin
+    z = z - float(z.min())
+    heel = y < length * 0.15
+    hx = float(x[heel].mean()) if heel.any() else float(x.mean())
+    return x - hx, y, z, length
+
+
+def extract_profile(block: "FootBlock") -> dict:
+    """Section-by-section shape signature in heel-anchored coordinates."""
+    x, y, z, length = _heel_centered(block)
+    ys = np.linspace(0.0, length, PROFILE_SECTIONS)
+    band = max(length / PROFILE_SECTIONS * 1.2, 1.5)
+    medial: list[float | None] = []
+    lateral: list[float | None] = []
+    top: list[float | None] = []
+    girth: list[float | None] = []
+    for yc in ys:
+        m = np.abs(y - yc) < band
+        if m.sum() < 8:
+            medial.append(None); lateral.append(None); top.append(None); girth.append(None)
+            continue
+        xs, zs = x[m], z[m]
+        medial.append(round(float(np.percentile(xs, 98)), 1))
+        lateral.append(round(float(np.percentile(xs, 2)), 1))
+        top.append(round(float(np.percentile(zs, 99)), 1))
+        g = _hull_perimeter(np.column_stack([xs, zs]))
+        girth.append(round(g, 1) if g is not None else None)
+    return {
+        "length_mm": round(length, 1),
+        "n": PROFILE_SECTIONS,
+        "y": [round(float(v), 1) for v in ys],
+        "medial": medial,
+        "lateral": lateral,
+        "top": top,
+        "girth": girth,
+    }
+
+
+def _instep_girth(block: "FootBlock") -> float | None:
+    """Girth over the instep (~50% of foot length) — perpendicular section.
+    Less precisely defined than ball girth (the tape runs diagonally over the
+    dorsal arch in the scanner's own method); reported as an approximation."""
+    x, y, z, length = _heel_centered(block)
+    yc = length * INSTEP_LENGTH_PCT / 100.0
+    m = np.abs(y - yc) < length * 0.012
+    if m.sum() < 15:
+        return None
+    return _hull_perimeter(np.column_stack([x[m], z[m]]))
+
+
 # -- visualization ---------------------------------------------------------
 #
 # Uses matplotlib's object-oriented API (Figure + FigureCanvasAgg) directly
@@ -439,6 +507,7 @@ def parse_scm(raw_bytes: bytes) -> dict:
     for i, block in enumerate(blocks):
         views = render_foot_views(block)
         ball_girth = block.ball_girth_mm
+        instep_girth = _instep_girth(block)
         side = None
         if len(blocks) == 2:
             side = "left" if i == 0 else "right"
@@ -450,6 +519,8 @@ def parse_scm(raw_bytes: bytes) -> dict:
             "width_mm": round(block.width_mm, 1),
             "height_mm": round(block.height_mm, 1),
             "ball_girth_mm": round(ball_girth, 1) if ball_girth is not None else None,
+            "instep_girth_mm": round(instep_girth, 1) if instep_girth is not None else None,
+            "profile": extract_profile(block),
             "views_png": {k: v for k, v in views.items()},
         })
 

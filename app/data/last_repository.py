@@ -40,6 +40,9 @@ class LastRepository:
         return None
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        # One last = one canonical shape (a left last and a right last are
+        # mirror-identical), so we store a single profile + summary, not both
+        # feet; matching mirrors it to the foot's side when needed.
         record = {
             "id": uuid.uuid4().hex,
             "article": data.get("article", ""),
@@ -48,7 +51,13 @@ class LastRepository:
             "material": data.get("material", ""),
             "note": data.get("note", ""),
             "scan_file_url": data.get("scan_file_url", ""),
-            "blocks": data["blocks"],  # list of {side, point_count, length_mm, width_mm, height_mm, ball_girth_mm}
+            "side": data.get("side"),
+            "length_mm": data.get("length_mm"),
+            "width_mm": data.get("width_mm"),
+            "height_mm": data.get("height_mm"),
+            "ball_girth_mm": data.get("ball_girth_mm"),
+            "instep_girth_mm": data.get("instep_girth_mm"),
+            "profile": data["profile"],
             "created_at": datetime.now().isoformat(),
         }
         self._data.append(record)
