@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Upload, Trash2, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, Trash2, Plus, X, ChevronDown, ChevronUp, ArrowLeftRight } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
@@ -156,6 +156,8 @@ export default function LastLibrary() {
 
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] = useState(null);
+  const [matchFile, setMatchFile] = useState(null);
+  const [swapSides, setSwapSides] = useState(false);
   const [lightbox, setLightbox] = useState(null);
 
   async function loadLasts() {
@@ -206,14 +208,14 @@ export default function LastLibrary() {
     }
   }
 
-  async function handleMatchFile(file) {
+  async function runMatch(file, swap) {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.scm')) { toast('Ожидается файл .scm', 'error'); return; }
     setMatching(true);
     setMatchResult(null);
     try {
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('swap_sides', swap ? 'true' : 'false');
       const res = await api.post('lasts/match', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setMatchResult(res.data);
       if (!res.data.matches.length) {
@@ -225,6 +227,20 @@ export default function LastLibrary() {
     } finally {
       setMatching(false);
     }
+  }
+
+  function handleMatchFile(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.scm')) { toast('Ожидается файл .scm', 'error'); return; }
+    setMatchFile(file);
+    setSwapSides(false);
+    runMatch(file, false);
+  }
+
+  function handleSwapSides() {
+    const next = !swapSides;
+    setSwapSides(next);
+    runMatch(matchFile, next);
   }
 
   return (
@@ -265,6 +281,19 @@ export default function LastLibrary() {
 
         {matchResult && (
           <div className="space-y-6">
+            {matchResult.feet.length === 2 && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="btn flex items-center gap-1.5 text-sm"
+                  disabled={matching}
+                  title="Если стороны определились неверно"
+                  onClick={handleSwapSides}
+                >
+                  <ArrowLeftRight size={14} /> Поменять стороны местами
+                </button>
+              </div>
+            )}
             <div className="grid gap-4 lg:grid-cols-2">
               {matchResult.feet.map((foot, i) => (
                 <FootCard key={i} foot={foot} index={i} onOpenImage={(src, alt) => setLightbox({ src, alt })} />

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Scan, Upload, User, Phone, Calendar, Clock, X, Library } from 'lucide-react';
+import { Scan, Upload, User, Phone, Calendar, Clock, X, Library, ArrowLeftRight } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
@@ -109,10 +109,30 @@ function ScanTab() {
               Геометрия стопы не найдена в файле — либо формат отличается от ожидаемого, либо в файле нет данных скана.
             </div>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {result.feet.map((foot, i) => (
-                <FootCard key={i} foot={foot} index={i} onOpenImage={(src, alt) => setLightbox({ src, alt })} />
-              ))}
+            <div className="space-y-2">
+              {result.feet.length === 2 && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="btn flex items-center gap-1.5 text-sm"
+                    title="Если стороны определились неверно"
+                    onClick={() => setResult(r => ({
+                      ...r,
+                      feet: [
+                        { ...r.feet[0], side: r.feet[1].side },
+                        { ...r.feet[1], side: r.feet[0].side },
+                      ],
+                    }))}
+                  >
+                    <ArrowLeftRight size={14} /> Поменять стороны местами
+                  </button>
+                </div>
+              )}
+              <div className="grid gap-4 lg:grid-cols-2">
+                {result.feet.map((foot, i) => (
+                  <FootCard key={i} foot={foot} index={i} onOpenImage={(src, alt) => setLightbox({ src, alt })} />
+                ))}
+              </div>
             </div>
           )}
         </div>

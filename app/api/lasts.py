@@ -96,6 +96,7 @@ def create_lasts_router() -> APIRouter:
     async def match_foot(
         file: UploadFile = File(...),
         last_id: str | None = Form(None),
+        swap_sides: bool = Form(False),
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
         if not file.filename or not file.filename.lower().endswith(".scm"):
@@ -109,6 +110,14 @@ def create_lasts_router() -> APIRouter:
         feet = result["feet"]
         if not feet:
             raise HTTPException(status_code=422, detail="no_foot_geometry_found")
+        if swap_sides and len(feet) == 2:
+            # The two blocks' geometry is unchanged — only which one is
+            # "left" vs "right" was guessed wrong (byte order isn't a
+            # guarantee, just the pattern seen on every reference scan so
+            # far). Swapping the label is the whole fix: it corrects both
+            # the displayed side and which last gets mirrored against which
+            # foot in the comparison below.
+            feet[0]["side"], feet[1]["side"] = feet[1]["side"], feet[0]["side"]
 
         feet_out = []
         for foot in feet:
