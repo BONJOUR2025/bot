@@ -13,9 +13,36 @@ the last and how much room (ease) there is. The result is:
     the last and the problem zones highlighted in red.
 
 Allowances (how much bigger than the foot a last should be) are not invented —
-they come from ГОСТ 3927-88 ("Колодки обувные", min 5-10 mm length allowance)
-and bespoke-lastmaking sources (3DShoemaker / PodoHub: ~13 mm typical length,
-~10-12 mm ball-girth ease, comfortable up to ~12 mm at the ball).
+they come from ГОСТ 3927-88 ("Колодки обувные", min 5-10 mm length allowance),
+bespoke-lastmaking sources (3DShoemaker / PodoHub: ~13 mm typical length
+allowance, 12-15 mm toe allowance more generally), Au's 2008 HKUST fit-
+psychophysics thesis (allowance ≤6.4 mm at foot width / ≤12.1 mm at ball girth /
+≤10.7 mm at waist girth was rated comfortable in >80% of trials — used here as
+the upper edge of the "ideal" band, not a minimum), and Grau & Barisch-Fritz
+2018 (practically-significant thresholds of ~2.5 mm girth / ~1 mm width, used
+as the minimum ease below which a deficit counts as "tight" rather than noise).
+
+Per-zone verdicts use a robust 10th/90th-percentile read of the ease values in
+that zone rather than the raw min/max — a single noisy point in the point
+cloud (this project has already hit scans with a handful of stray points, see
+scm_parser_service) shouldn't flip a whole zone's verdict. This mirrors the
+"P05 instead of d_min" principle from published foot/last distance-map studies
+(Leng & Du 2006; Sambhav/Tandon/Dhande 2011).
+
+The single most useful diagnostic from that literature: a last can have
+ΔGirth ≥ 0 (looks fine on paper) while still being ΔHeight < 0 (too low) —
+girth is redistributed into width instead of height, and the shoe still
+presses on top of the foot. This service checks width-deficit and
+height-deficit *separately* per zone and names whichever one is actually at
+fault, instead of only reporting a combined "too tight".
+
+Known limitation: a last has its own heel height and toe spring (the sole
+curves up at the toe), so a technically correct comparison first re-poses the
+flat-scanned foot into that posture before aligning it to the last (see
+Leng & Du 2006; Chertenko et al. 2023). This service doesn't do that yet — both
+the foot and the (currently synthetic, untested-on-a-real-last) last profile
+are compared heel-anchored and flat. Revisit once a real last scan is
+available to see whether that pose difference is large enough to matter here.
 
 Width (bounding box) is used only for the visual overlay, not for the numeric
 girth verdict — see scm_parser_service's module docstring on why the raw
@@ -32,16 +59,24 @@ from matplotlib.figure import Figure
 
 # -- allowances / thresholds (mm) ------------------------------------------
 
-LENGTH_MIN = 5.0        # below this the toe has nowhere to go
+LENGTH_MIN = 5.0        # below this the toe has nowhere to go (ГОСТ 3927-88 floor)
 LENGTH_TIGHT = 8.0
-LENGTH_IDEAL_MAX = 15.0
+LENGTH_IDEAL_MAX = 15.0  # ГОСТ/bespoke toe allowance upper edge (12-15 mm)
 LENGTH_LOOSE = 22.0
 
-# per-zone minimum comfortable girth ease (last girth − foot girth)
-ZONE_GIRTH_MIN = {"ball": 6.0, "instep": 5.0, "waist": 2.0, "heel": -2.0}
-ZONE_GIRTH_LOOSE = {"ball": 16.0, "instep": 16.0, "waist": 18.0, "heel": 12.0}
+# Minimum ease before a girth deficit is "real" rather than measurement noise
+# (Grau & Barisch-Fritz 2018: practically-significant step is ~2.5 mm for
+# girth). Below zero is unambiguous physical interference.
+ZONE_GIRTH_MIN = {"ball": -1.0, "instep": -1.0, "waist": -2.5, "heel": -2.5}
+# Upper edge of the comfortable band (Au 2008: ≤12.1 mm ball / ≤10.7 mm waist
+# rated comfortable in >80% of trials — treated as where "comfortable" ends
+# and "loose" begins, not as a hard target).
+ZONE_GIRTH_LOOSE = {"ball": 12.0, "instep": 13.0, "waist": 11.0, "heel": 9.0}
 
-# a foot edge poking this far (mm) past the last outline counts as a hard clash
+# A foot edge poking out this far (mm) past the last outline is a hard clash,
+# not noise. There's no calibrated u_model for this scanner/pipeline yet (see
+# module docstring §5.4 in the source material) — 2 mm is a placeholder
+# in line with the ~1-2 mm combined-error examples in that literature.
 PROTRUSION_MM = 2.0
 
 # zones as fractions of FOOT length, heel = 0
@@ -52,6 +87,12 @@ ZONES = [
     ("ball", 0.60, 0.78, "Пучки (широкая часть)"),
     ("toe", 0.78, 1.00, "Носок (пальцы)"),
 ]
+
+# Instep is reported at several sections (40-60% of length), not just 50% —
+# published systems disagree on where exactly "the" instep section is (IEEE SA
+# 2021 terminology review lists 40/45/50/55%), so the worst section in this
+# range is used for the verdict instead of a single arbitrary cut.
+INSTEP_SECTION_FRACS = (0.40, 0.45, 0.50, 0.55, 0.60)
 
 
 # -- profile helpers --------------------------------------------------------
@@ -110,19 +151,33 @@ def _length_consequence(ease: float) -> tuple[str, str]:
     )
 
 
-_ZONE_TIGHT = {
-    "heel": "В пятке колодка уже стопы — задник будет давить и натирать пятку, "
-            "возможны мозоли по краю пятки.",
-    "waist": "В своде колодка поджимает — обувь будет давить по центру стопы, "
-             "ощущение сжатия, особенно у людей с высоким сводом.",
+# Split by cause (narrow vs low) rather than one generic "tight" sentence per
+# zone — a last can have plenty of girth but still press from above if that
+# girth is redistributed into width instead of height (ΔG≥0, ΔW>0, ΔH<0 is a
+# well-documented trap: girth alone says "fits", but the foot's top surface
+# still pokes through the last).
+_ZONE_TIGHT_WIDTH = {
+    "heel": "Пятка колодки уже пятки стопы по бокам — задник будет сдавливать и "
+            "натирать пятку с боков, возможны мозоли.",
+    "waist": "В своде колодка узкая по бокам — обувь будет сжимать стопу по "
+             "центру с боков.",
+    "instep": "Подъём колодки узкий по бокам — обувь будет сдавливать стопу с "
+              "боков в районе подъёма.",
+    "ball": "В пучках (самое широкое место) колодка уже стопы по бокам — будет "
+            "сдавливать косточки у основания большого пальца и мизинца, "
+            "натирать, вызывать онемение пальцев; частая причина «жмёт в носке».",
+}
+_ZONE_TIGHT_HEIGHT = {
+    "heel": "Колодка ниже пятки стопы — задник будет давить на пятку сверху.",
+    "waist": "Свод колодки ниже свода стопы — будет давить сверху по центру "
+             "стопы, ощущение сжатия, особенно у людей с высоким сводом.",
     "instep": "Подъём колодки ниже подъёма стопы — верх обуви и шнуровка будут "
-              "врезаться в подъём, давить на сухожилия и сосуды, нога быстро "
-              "устаёт и немеет.",
-    "ball": "В пучках (самое широкое место) колодка уже стопы — будет сдавливать "
-            "косточки у основания большого пальца и мизинца, натирать, вызывать "
-            "онемение пальцев; частая причина «жмёт в носке».",
-    "toe": "В носке колодке не хватает объёма — пальцам тесно сверху и по бокам, "
-           "они поджимаются, риск натоптышей и вросшего ногтя.",
+              "врезаться в подъём сверху, давить на сухожилия и сосуды, нога "
+              "быстро устаёт и немеет. Часто это не видно по обхвату: колодка "
+              "может быть даже шире стопы, но при этом ниже — обхват "
+              "совпадает или больше, а давит всё равно сверху.",
+    "ball": "Колодка ниже стопы в пучках — верх обуви будет давить сверху на "
+            "плюсну и пальцы, даже если по обхвату колодка не уже.",
 }
 _ZONE_LOOSE = {
     "heel": "В пятке колодка свободнее стопы — пятка не фиксируется и будет "
@@ -176,16 +231,33 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
         if not sel.any():
             continue
         zg = girth_ease[sel]
-        gmin = float(np.nanmin(zg)) if np.isfinite(zg).any() else None
+        # Robust "worst typical" reading (10th/90th percentile) instead of a
+        # bare min/max — a single noisy point in the scan shouldn't decide a
+        # whole zone's verdict (see module docstring).
+        gmin = float(np.nanpercentile(zg, 10)) if np.isfinite(zg).any() else None
         gmean = float(np.nanmean(zg)) if np.isfinite(zg).any() else None
-        worst_protr = float(np.nanmax(protrusion[sel]))
+        worst_protr = float(np.nanpercentile(protrusion[sel], 90))
+        worst_protr_w = float(np.nanpercentile(protr_width[sel], 90))
+        worst_protr_h = float(np.nanpercentile(protr_height[sel], 90))
+
         if key == "toe":
             verdict, text = len_verdict, len_text  # toe room ~ length verdict
         else:
             gmin_thr = ZONE_GIRTH_MIN[key]
             gloose_thr = ZONE_GIRTH_LOOSE[key]
-            if worst_protr > PROTRUSION_MM or (gmin is not None and gmin < gmin_thr):
-                verdict, text = "too_tight", _ZONE_TIGHT[key]
+            tight_by_girth = gmin is not None and gmin < gmin_thr
+            tight_by_width = worst_protr_w > PROTRUSION_MM
+            tight_by_height = worst_protr_h > PROTRUSION_MM
+            if tight_by_width or tight_by_height or tight_by_girth:
+                verdict = "too_tight"
+                parts = []
+                if tight_by_height:
+                    parts.append(_ZONE_TIGHT_HEIGHT[key])
+                if tight_by_width:
+                    parts.append(_ZONE_TIGHT_WIDTH[key])
+                if not parts:  # girth deficit without a located width/height clash
+                    parts.append(_ZONE_TIGHT_WIDTH[key])
+                text = " ".join(parts)
             elif gmean is not None and gmean > gloose_thr:
                 verdict, text = "too_loose", _ZONE_LOOSE[key]
             else:
@@ -198,6 +270,24 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
             "girth_ease_min_mm": round(gmin, 1) if gmin is not None else None,
             "girth_ease_mean_mm": round(gmean, 1) if gmean is not None else None,
             "max_protrusion_mm": round(worst_protr, 1),
+            "max_protrusion_width_mm": round(worst_protr_w, 1),
+            "max_protrusion_height_mm": round(worst_protr_h, 1),
+        })
+
+    # I40-I60: sample the instep at several candidate sections rather than a
+    # single fixed 50% cut — published systems don't agree on where "the"
+    # instep section is (40/45/50/55%), so report height/girth ease at each
+    # and let the worst one drive attention, not just I50.
+    instep_sections = []
+    for pct in INSTEP_SECTION_FRACS:
+        yc = pct * foot_len
+        idx = int(np.argmin(np.abs(y - yc)))
+        if not valid[idx]:
+            continue
+        instep_sections.append({
+            "pct": int(round(pct * 100)),
+            "height_ease_mm": round(float(top_ease[idx]), 1),
+            "girth_ease_mm": round(float(girth_ease[idx]), 1),
         })
 
     ranks = {"too_tight": 3, "tight_ok": 2, "too_loose": 1, "loose_ok": 1, "ideal": 0}
@@ -235,6 +325,7 @@ def compare_profiles(foot: dict, last: dict, *, foot_side: str | None = None,
             "ball": _girth_pair(foot, last, "ball_girth_mm"),
             "instep": _girth_pair(foot, last, "instep_girth_mm"),
         },
+        "instep_sections": instep_sections,
         "zones": zones,
         "images": images,
     }

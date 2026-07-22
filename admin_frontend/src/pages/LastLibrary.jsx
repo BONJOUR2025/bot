@@ -102,6 +102,21 @@ function FootFit({ pf, onOpenImage }) {
           </div>
         ))}
       </div>
+
+      {fit.instep_sections?.length > 0 && (
+        <div className="text-[11px] text-[color:var(--color-text-muted)]">
+          <div className="mb-1">
+            Запас в подъёме по сечениям (% длины стопы от пятки) — по высоте / по обхвату, мм:
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {fit.instep_sections.map((s) => (
+              <span key={s.pct} className={s.height_ease_mm < 0 ? 'text-red-600 font-medium' : ''}>
+                I{s.pct}: {s.height_ease_mm > 0 ? '+' : ''}{s.height_ease_mm} / {s.girth_ease_mm > 0 ? '+' : ''}{s.girth_ease_mm}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
