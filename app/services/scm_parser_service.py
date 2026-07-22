@@ -66,8 +66,17 @@ def extract_metadata(data: bytes) -> dict:
         "scan_date": None,
         "scan_time": None,
         "birth_date": None,
+        "side_hint": None,  # "left"/"right" — a last scan's header spells this
+                            # out ("левая колодка"/"правая колодка"), unlike a
+                            # foot scan where side comes from block byte order.
         "raw_strings": [s for _, s in strings],
     }
+    for _, s in strings:
+        low = s.lower()
+        if "лев" in low or "left" in low:
+            meta["side_hint"] = "left"
+        elif "прав" in low or "right" in low:
+            meta["side_hint"] = "right"
     date_re = re.compile(r"^\d{4}/\d{2}/\d{2}$")
     dob_re = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
     time_re = re.compile(r"^\d{2}:\d{2}:\d{2}$")
@@ -527,6 +536,12 @@ def parse_scm(raw_bytes: bytes) -> dict:
         side = None
         if len(blocks) == 2:
             side = "left" if i == 0 else "right"
+        elif len(blocks) == 1:
+            # A single-block scan is a last (a foot always comes as a pair) —
+            # its side isn't in the byte order (nothing to order), but the
+            # scanner's own header spells it out ("левая колодка"/"правая
+            # колодка"), unlike a foot scan.
+            side = metadata.get("side_hint")
         feet.append({
             "side": side,
             "byte_range": [block.byte_start, block.byte_end],
