@@ -12,11 +12,13 @@ from app.data.last_repository import LastRepository
 from app.services.access_control_service import ResolvedUser
 from app.services.last_fit_service import compare_profiles
 from app.services.scm_parser_service import parse_scm
+from app.services.stl_parser_service import parse_stl
 
 from .dependencies import require_permission
 from .scanner import SCANNER_PERMISSION
 
 UPLOAD_DIR = Path("static/uploads/lasts")
+SCAN_EXTENSIONS = (".scm", ".stl")
 
 
 def _foot_profile(foot: dict) -> dict:
@@ -59,25 +61,33 @@ def create_lasts_router() -> APIRouter:
                                          # mirroring for whichever foot needs it
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
-        if not file.filename or not file.filename.lower().endswith(".scm"):
-            raise HTTPException(status_code=400, detail="expected_scm_file")
+        ext = Path(file.filename or "").suffix.lower()
+        if ext not in SCAN_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="expected_scm_or_stl_file")
         if side not in (None, "", "left", "right"):
             raise HTTPException(status_code=400, detail="invalid_side")
         raw = await file.read()
         try:
-            result = await asyncio.to_thread(parse_scm, raw)
+            if ext == ".scm":
+                result = await asyncio.to_thread(parse_scm, raw)
+                feet = result["feet"]
+                if not feet:
+                    raise HTTPException(status_code=422, detail="no_last_geometry_found")
+                # A last is one shape (both sides are mirror-identical) — take one block.
+                block = feet[0]
+            else:
+                block = await asyncio.to_thread(parse_stl, raw)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
 
-        feet = result["feet"]
-        if not feet:
-            raise HTTPException(status_code=422, detail="no_last_geometry_found")
-
-        # A last is one shape (both sides are mirror-identical) — take one block.
-        block = feet[0]
         record = repo.create({
             "article": article, "size": size, "model": model,
             "material": material, "note": note,
+            # .stl has no side hint in the file itself (unlike .scm's
+            # "левая/правая колодка" header text) — the form field is the
+            # only source there.
             "side": (side or None) or block.get("side"),
             "length_mm": block["length_mm"],
             "width_mm": block["width_mm"],
@@ -88,36 +98,62 @@ def create_lasts_router() -> APIRouter:
             "profile": block["profile"],
         })
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        (UPLOAD_DIR / f"{record['id']}.scm").write_bytes(raw)
-        url = f"/static/uploads/lasts/{record['id']}.scm"
+        (UPLOAD_DIR / f"{record['id']}{ext}").write_bytes(raw)
+        url = f"/static/uploads/lasts/{record['id']}{ext}"
         repo.set_scan_file_url(record["id"], url)
         record["scan_file_url"] = url
         return _last_summary(record)
 
     @router.delete("/{last_id}")
     async def delete_last(last_id: str, current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION))):
+        existing = repo.get(last_id)
         record = repo.delete(last_id)
         if record is None:
             raise HTTPException(status_code=404, detail="not_found")
-        (UPLOAD_DIR / f"{last_id}.scm").unlink(missing_ok=True)
+        ext = Path(existing["scan_file_url"]).suffix if existing and existing.get("scan_file_url") else ".scm"
+        (UPLOAD_DIR / f"{last_id}{ext}").unlink(missing_ok=True)
         return {"ok": True}
 
     @router.post("/match")
     async def match_foot(
-        file: UploadFile = File(...),
+        file: UploadFile | None = File(None),
+        file_left: UploadFile | None = File(None),
+        file_right: UploadFile | None = File(None),
         last_id: str | None = Form(None),
         swap_sides: bool = Form(False),
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
-        if not file.filename or not file.filename.lower().endswith(".scm"):
-            raise HTTPException(status_code=400, detail="expected_scm_file")
-        raw = await file.read()
-        try:
-            result = await asyncio.to_thread(parse_scm, raw)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
+        # Two upload shapes: one .scm file with both feet inside (legacy), or
+        # one/two .stl files — the scanner's .stl export is one foot per
+        # file, so a full pair needs two separate uploads, each tagged with
+        # its side explicitly (an .stl has no side hint to read, unlike
+        # .scm's header text).
+        if file is not None:
+            if not file.filename or not file.filename.lower().endswith(".scm"):
+                raise HTTPException(status_code=400, detail="expected_scm_file")
+            raw = await file.read()
+            try:
+                result = await asyncio.to_thread(parse_scm, raw)
+            except Exception as exc:
+                raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
+            feet = result["feet"]
+        elif file_left is not None or file_right is not None:
+            feet = []
+            for side, upload in (("left", file_left), ("right", file_right)):
+                if upload is None:
+                    continue
+                if not upload.filename or not upload.filename.lower().endswith(".stl"):
+                    raise HTTPException(status_code=400, detail="expected_stl_file")
+                raw = await upload.read()
+                try:
+                    block = await asyncio.to_thread(parse_stl, raw)
+                except Exception as exc:
+                    raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
+                block["side"] = side
+                feet.append(block)
+        else:
+            raise HTTPException(status_code=400, detail="expected_scm_or_stl_file")
 
-        feet = result["feet"]
         if not feet:
             raise HTTPException(status_code=422, detail="no_foot_geometry_found")
         if swap_sides and len(feet) == 2:

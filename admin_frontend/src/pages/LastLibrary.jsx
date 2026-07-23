@@ -178,6 +178,8 @@ export default function LastLibrary() {
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] = useState(null);
   const [matchFile, setMatchFile] = useState(null);
+  const [matchFileLeft, setMatchFileLeft] = useState(null);
+  const [matchFileRight, setMatchFileRight] = useState(null);
   const [swapSides, setSwapSides] = useState(false);
   const [lightbox, setLightbox] = useState(null);
 
@@ -198,7 +200,7 @@ export default function LastLibrary() {
 
   async function handleAddSubmit(e) {
     e.preventDefault();
-    if (!addFile) { toast('Выберите файл .scm колодки', 'error'); return; }
+    if (!addFile) { toast('Выберите файл .scm или .stl колодки', 'error'); return; }
     setSaving(true);
     try {
       const fd = new FormData();
@@ -254,14 +256,51 @@ export default function LastLibrary() {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.scm')) { toast('Ожидается файл .scm', 'error'); return; }
     setMatchFile(file);
+    setMatchFileLeft(null);
+    setMatchFileRight(null);
     setSwapSides(false);
     runMatch(file, false);
+  }
+
+  async function runMatchStl(left, right, swap) {
+    if (!left && !right) return;
+    setMatching(true);
+    setMatchResult(null);
+    try {
+      const fd = new FormData();
+      if (left) fd.append('file_left', left);
+      if (right) fd.append('file_right', right);
+      fd.append('swap_sides', swap ? 'true' : 'false');
+      const res = await api.post('lasts/match', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setMatchResult(res.data);
+      if (!res.data.matches.length) {
+        toast(lasts.length ? 'Не удалось сопоставить с колодками' : 'Библиотека колодок пуста', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast(err.response?.data?.detail || 'Не удалось разобрать файл стопы', 'error');
+    } finally {
+      setMatching(false);
+    }
+  }
+
+  function handleMatchStlFile(side, file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.stl')) { toast('Ожидается файл .stl', 'error'); return; }
+    setMatchFile(null);
+    const left = side === 'left' ? file : matchFileLeft;
+    const right = side === 'right' ? file : matchFileRight;
+    setMatchFileLeft(left);
+    setMatchFileRight(right);
+    setSwapSides(false);
+    runMatchStl(left, right, false);
   }
 
   function handleSwapSides() {
     const next = !swapSides;
     setSwapSides(next);
-    runMatch(matchFile, next);
+    if (matchFile) runMatch(matchFile, next);
+    else runMatchStl(matchFileLeft, matchFileRight, next);
   }
 
   return (
@@ -297,6 +336,22 @@ export default function LastLibrary() {
           <div className="font-medium">Загрузить скан стопы (.scm)</div>
           <input type="file" accept=".scm" className="hidden" onChange={(e) => handleMatchFile(e.target.files?.[0])} />
         </label>
+
+        <div className="app-card p-4 space-y-3">
+          <div className="font-medium text-sm">Или загрузите .stl — отдельно левая и правая стопа</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-[color:var(--color-border)] rounded p-4 text-center cursor-pointer text-sm">
+              <Upload size={18} className="text-[color:var(--color-text-muted)]" />
+              <span className="truncate max-w-full">{matchFileLeft ? matchFileLeft.name : 'Левая стопа (.stl)'}</span>
+              <input type="file" accept=".stl" className="hidden" onChange={(e) => handleMatchStlFile('left', e.target.files?.[0])} />
+            </label>
+            <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-[color:var(--color-border)] rounded p-4 text-center cursor-pointer text-sm">
+              <Upload size={18} className="text-[color:var(--color-text-muted)]" />
+              <span className="truncate max-w-full">{matchFileRight ? matchFileRight.name : 'Правая стопа (.stl)'}</span>
+              <input type="file" accept=".stl" className="hidden" onChange={(e) => handleMatchStlFile('right', e.target.files?.[0])} />
+            </label>
+          </div>
+        </div>
 
         {matching && <p className="text-sm text-[color:var(--color-text-muted)]">Сравниваю с библиотекой…</p>}
 
@@ -340,8 +395,8 @@ export default function LastLibrary() {
             Достаточно одного скана колодки — левая и правая зеркально одинаковы, система сама развернёт под нужную стопу.
           </p>
           <label className="block text-sm">
-            Файл скана (.scm)
-            <input type="file" accept=".scm" required className="block w-full mt-1"
+            Файл скана (.scm или .stl)
+            <input type="file" accept=".scm,.stl" required className="block w-full mt-1"
               onChange={(e) => setAddFile(e.target.files?.[0] || null)} />
           </label>
           {['article', 'model', 'size', 'material'].map((field) => (
