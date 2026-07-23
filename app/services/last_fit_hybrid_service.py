@@ -48,8 +48,10 @@ import trimesh
 from app.services.last_pose_service import apply_pose
 from app.services.last_registration_service import register_foot_to_cavity
 from app.services.mesh3d_service import (
+    CRITICAL_SECTION_FRACTIONS,
     bidirectional_surface_distance,
     distance_aggregates,
+    exact_section,
     mesh_quality_report,
     repair_small_holes,
 )
@@ -85,6 +87,24 @@ MEDIAL_CONFLICT_DORSAL_VOID = "MEDIAL_CONFLICT_DORSAL_VOID"
 BALL_TIGHT_INSTEP_LOOSE = "BALL_TIGHT_INSTEP_LOOSE"
 HEEL_VOID_MIDFOOT_TIGHT = "HEEL_VOID_MIDFOOT_TIGHT"
 GENERAL_OVERSIZE = "GENERAL_OVERSIZE"
+MISALLOCATED_VOLUME = "MISALLOCATED_VOLUME"
+FOREFOOT_TAPER_TOO_FAST = "FOREFOOT_TAPER_TOO_FAST"
+
+# Independently verified against a real foot+last pair
+# (nikita_prada43_comfort_evaluation_code_spec.md, cross-checked by
+# reproducing every one of its exact-section numbers from scratch): a
+# cross-section can look "fine" by area alone while width and dorsal-top ease
+# point opposite ways -- area near-equal is not evidence of a good fit, just
+# evidence that volume moved from width into height. AREA_NEAR_EQUAL_MM2 is an
+# engineering starting point (same status as last_fit_service.py's own
+# unvalidated thresholds), not independently calibrated.
+AREA_NEAR_EQUAL_MM2 = 150.0
+
+# How much worse width_ease has to get between two consecutive forefoot
+# sections (fraction >= 0.67) to call it "the last's toe narrows faster than
+# the foot's" rather than normal noise between adjacent cuts.
+FOREFOOT_TAPER_DELTA_MM = 4.0
+FOREFOOT_ZONE_MIN_FRACTION = 0.67
 
 
 def _zone_directional_summary(points: np.ndarray, normals: np.ndarray, distances: np.ndarray,
@@ -206,6 +226,47 @@ def _risk_scores(width_ease: dict[str, float | None]) -> tuple[float, float]:
     return tightness, looseness
 
 
+def _critical_sections(final_foot: trimesh.Trimesh, cavity_aligned: trimesh.Trimesh) -> list[dict]:
+    """Exact cross-sections at fixed length fractions — the precise
+    complement to the sampled, zone-averaged directional summary above (see
+    mesh3d_service.exact_section's docstring for why zone-averaging alone
+    can hide a fraction-specific peak deficit)."""
+    sections = []
+    for frac in CRITICAL_SECTION_FRACTIONS:
+        foot_sec = exact_section(final_foot, frac)
+        cavity_sec = exact_section(cavity_aligned, frac)
+        if foot_sec is None or cavity_sec is None:
+            sections.append({"fraction": frac, "not_evaluable": True})
+            continue
+        width_ease = cavity_sec.width_mm - foot_sec.width_mm
+        dorsal_top_ease = cavity_sec.zmax - foot_sec.zmax
+        girth_ease = cavity_sec.perimeter_mm - foot_sec.perimeter_mm
+        area_ease = cavity_sec.area_mm2 - foot_sec.area_mm2
+        entry = {
+            "fraction": frac,
+            "width_ease_mm": round(width_ease, 2),
+            "dorsal_top_ease_mm": round(dorsal_top_ease, 2),
+            "girth_ease_mm": round(girth_ease, 2),
+            "area_ease_mm2": round(area_ease, 1),
+        }
+        if abs(area_ease) <= AREA_NEAR_EQUAL_MM2 and width_ease < 0 < dorsal_top_ease:
+            entry["pattern"] = MISALLOCATED_VOLUME
+        sections.append(entry)
+    return sections
+
+
+def _forefoot_taper_too_fast(critical_sections: list[dict]) -> bool:
+    forefoot = sorted(
+        (s for s in critical_sections
+         if not s.get("not_evaluable") and s["fraction"] >= FOREFOOT_ZONE_MIN_FRACTION),
+        key=lambda s: s["fraction"],
+    )
+    return any(
+        b["width_ease_mm"] - a["width_ease_mm"] <= -FOREFOOT_TAPER_DELTA_MM
+        for a, b in zip(forefoot, forefoot[1:])
+    )
+
+
 def _retention_risk(heel_directional: dict | None, registration_confidence: float) -> float:
     if heel_directional is None:
         return 0.0
@@ -270,7 +331,15 @@ def compare_hybrid(
     width_ease = {key: _zone_width_ease(zone_directional[key]) for key, _lo, _hi, _label in ZONES}
     cross_patterns = [{"zone": None, "label": None, "pattern": p}
                        for p in _cross_zone_patterns(width_ease)]
-    all_patterns = zone_patterns + cross_patterns
+
+    critical_sections = _critical_sections(final_foot, cavity_aligned)
+    section_patterns = []
+    if any(s.get("pattern") == MISALLOCATED_VOLUME for s in critical_sections):
+        section_patterns.append({"zone": None, "label": None, "pattern": MISALLOCATED_VOLUME})
+    if _forefoot_taper_too_fast(critical_sections):
+        section_patterns.append({"zone": None, "label": None, "pattern": FOREFOOT_TAPER_TOO_FAST})
+
+    all_patterns = zone_patterns + cross_patterns + section_patterns
     dominant_pattern = all_patterns[0]["pattern"] if all_patterns else None
 
     tightness_risk, looseness_risk = _risk_scores(width_ease)
@@ -295,6 +364,7 @@ def compare_hybrid(
             }
             for key, _lo, _hi, label in ZONES
         },
+        "critical_sections": critical_sections,
         "patterns": all_patterns,
         "dominant_pattern": dominant_pattern,
         "risks": {
@@ -302,4 +372,54 @@ def compare_hybrid(
             "looseness_risk": round(looseness_risk, 3),
             "retention_risk": round(retention_risk, 3),
         },
+    }
+
+
+# -- bilateral (left+right) combination --------------------------------------
+#
+# Everything above compares one foot against one last. A last is chosen for a
+# *pair* of feet, though, and the two sides are rarely equally constrained —
+# per the reference analysis this whole batch of additions is modeled on
+# (nikita_prada43_comfort_evaluation_code_spec.md §2.1/§17.1): "правая стопа
+# является определяющей, поскольку она шире". Averaging L/R risk would dilute
+# exactly the side that should drive a fullness/size decision.
+
+RIGHT_FOOT_DOMINANT = "RIGHT_FOOT_DOMINANT"
+LEFT_FOOT_DOMINANT = "LEFT_FOOT_DOMINANT"
+BILATERAL_LAST_MISMATCH = "BILATERAL_LAST_MISMATCH"
+
+# A side counts as having a genuine fit problem (for BILATERAL_LAST_MISMATCH)
+# above this tightness_risk — same 0..1 heuristic scale as _risk_scores,
+# equally an engineering starting point rather than a calibrated cutoff.
+_BILATERAL_PROBLEM_THRESHOLD = 0.3
+
+
+def combine_bilateral(left: dict | None, right: dict | None) -> dict | None:
+    """Combine two independent compare_hybrid() results (same last, mirrored
+    for whichever side needs it inside register_foot_to_cavity) into which
+    side should govern a sizing/fullness decision. Returns None if either
+    side's surface_result is missing (e.g. only one foot was uploaded, or one
+    side's hybrid_v2 computation failed) — there's nothing to combine then."""
+    if left is None or right is None or left.get("error") or right.get("error"):
+        return None
+
+    left_score = left["risks"]["tightness_risk"] + left["risks"]["looseness_risk"]
+    right_score = right["risks"]["tightness_risk"] + right["risks"]["looseness_risk"]
+    limiting_side = "right" if right_score >= left_score else "left"
+
+    patterns = [RIGHT_FOOT_DOMINANT if limiting_side == "right" else LEFT_FOOT_DOMINANT]
+    left_bad = left["risks"]["tightness_risk"] >= _BILATERAL_PROBLEM_THRESHOLD
+    right_bad = right["risks"]["tightness_risk"] >= _BILATERAL_PROBLEM_THRESHOLD
+    if left_bad and right_bad:
+        # Both feet independently struggle with the same last -> points at
+        # the last's own shape, not one foot's asymmetry (per the reference
+        # analysis: "проблема относится к форме колодки, а не только к
+        # асимметрии одной стопы").
+        patterns.append(BILATERAL_LAST_MISMATCH)
+
+    return {
+        "limiting_side": limiting_side,
+        "left_score": round(left_score, 3),
+        "right_score": round(right_score, 3),
+        "patterns": patterns,
     }

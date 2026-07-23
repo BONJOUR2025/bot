@@ -6,14 +6,26 @@ import trimesh
 import pytest
 
 from app.services.last_fit_hybrid_service import (
+    BILATERAL_LAST_MISMATCH,
+    FOREFOOT_TAPER_TOO_FAST,
+    LEFT_FOOT_DOMINANT,
+    MISALLOCATED_VOLUME,
     NARROW_HIGH,
+    RIGHT_FOOT_DOMINANT,
     WIDE_LOW,
     _classify_zone_pattern,
+    _critical_sections,
     _cross_zone_patterns,
+    _forefoot_taper_too_fast,
     _risk_scores,
     _zone_directional_summary,
+    combine_bilateral,
     compare_hybrid,
 )
+
+
+def _risks(tightness=0.0, looseness=0.0):
+    return {"risks": {"tightness_risk": tightness, "looseness_risk": looseness, "retention_risk": 0.0}}
 
 
 def _points_with_normals(n=40, y=150.0):
@@ -140,3 +152,93 @@ def test_compare_hybrid_no_pose_when_last_metadata_missing():
     cavity = _dense_box(width=95, length=282, height=65)
     result = compare_hybrid(foot, "left", cavity, "left", heel_height_mm=None, toe_spring_mm=None)
     assert result["pose_confidence"] is None
+
+
+def test_forefoot_taper_too_fast_detected():
+    sections = [
+        {"fraction": 0.67, "width_ease_mm": -2.0},
+        {"fraction": 0.75, "width_ease_mm": -7.0},  # drop of -5, exceeds -4 threshold
+        {"fraction": 0.80, "width_ease_mm": -8.0},
+    ]
+    assert _forefoot_taper_too_fast(sections) is True
+
+
+def test_forefoot_taper_not_triggered_for_gentle_taper():
+    sections = [
+        {"fraction": 0.67, "width_ease_mm": -2.0},
+        {"fraction": 0.75, "width_ease_mm": -3.0},
+        {"fraction": 0.80, "width_ease_mm": -3.5},
+    ]
+    assert _forefoot_taper_too_fast(sections) is False
+
+
+def test_forefoot_taper_ignores_not_evaluable_sections():
+    sections = [
+        {"fraction": 0.67, "not_evaluable": True},
+        {"fraction": 0.75, "width_ease_mm": -7.0},
+        {"fraction": 0.80, "width_ease_mm": -8.0},
+    ]
+    assert _forefoot_taper_too_fast(sections) is False  # only one gap left (-1), under threshold
+
+
+def test_critical_sections_detects_misallocated_volume():
+    # foot 90x60, cavity narrower (82) but taller enough that area stays ~equal:
+    # 82 * 65.85 ~= 90 * 60 -- classic "volume present, wrong shape" case.
+    foot = _dense_box(width=90, length=270, height=60)
+    cavity = _dense_box(width=82, length=270, height=65.85)
+    sections = _critical_sections(foot, cavity)
+    patterns = {s["fraction"]: s.get("pattern") for s in sections}
+    assert any(p == MISALLOCATED_VOLUME for p in patterns.values())
+    # sanity: the triggering section really is width-tight + dorsal-loose + area~equal
+    flagged = next(s for s in sections if s.get("pattern") == MISALLOCATED_VOLUME)
+    assert flagged["width_ease_mm"] < 0
+    assert flagged["dorsal_top_ease_mm"] > 0
+    assert abs(flagged["area_ease_mm2"]) < 150.0
+
+
+def test_compare_hybrid_end_to_end_includes_critical_sections():
+    foot = _dense_box(width=90, length=270, height=60)
+    cavity = _dense_box(width=95, length=282, height=65)
+    result = compare_hybrid(foot, "left", cavity, "left")
+    assert len(result["critical_sections"]) == 6
+    fractions = [s["fraction"] for s in result["critical_sections"]]
+    assert fractions == [0.45, 0.50, 0.55, 0.67, 0.75, 0.80]
+
+
+def test_combine_bilateral_picks_worse_side_as_limiting():
+    left = _risks(tightness=0.2, looseness=0.0)
+    right = _risks(tightness=0.7, looseness=0.1)
+    result = combine_bilateral(left, right)
+    assert result["limiting_side"] == "right"
+    assert RIGHT_FOOT_DOMINANT in result["patterns"]
+
+
+def test_combine_bilateral_left_dominant():
+    left = _risks(tightness=0.6, looseness=0.0)
+    right = _risks(tightness=0.1, looseness=0.0)
+    result = combine_bilateral(left, right)
+    assert result["limiting_side"] == "left"
+    assert LEFT_FOOT_DOMINANT in result["patterns"]
+
+
+def test_combine_bilateral_flags_last_mismatch_when_both_sides_bad():
+    left = _risks(tightness=0.5, looseness=0.0)
+    right = _risks(tightness=0.6, looseness=0.0)
+    result = combine_bilateral(left, right)
+    assert BILATERAL_LAST_MISMATCH in result["patterns"]
+
+
+def test_combine_bilateral_no_mismatch_flag_when_only_one_side_bad():
+    left = _risks(tightness=0.05, looseness=0.0)
+    right = _risks(tightness=0.6, looseness=0.0)
+    result = combine_bilateral(left, right)
+    assert BILATERAL_LAST_MISMATCH not in result["patterns"]
+
+
+def test_combine_bilateral_none_when_a_side_missing():
+    assert combine_bilateral(_risks(0.5), None) is None
+    assert combine_bilateral(None, _risks(0.5)) is None
+
+
+def test_combine_bilateral_none_when_a_side_errored():
+    assert combine_bilateral({"error": "boom"}, _risks(0.5)) is None

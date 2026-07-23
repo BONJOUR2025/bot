@@ -29,6 +29,7 @@ matplotlib>=3.8.0
 trimesh>=4.12.0
 scipy>=1.17.0       # trimesh: vertex normals, connected-components graph
 networkx>=3.6.0     # trimesh.repair.fill_holes (hole cycle detection)
+shapely>=2.1.0      # trimesh mesh.section() -> polygon area (exact cross-sections)
 
 # Validation & settings
 pydantic>=2.7.0

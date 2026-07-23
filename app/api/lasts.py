@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.data.last_repository import LastRepository
 from app.services.access_control_service import ResolvedUser
-from app.services.last_fit_hybrid_service import compare_hybrid
+from app.services.last_fit_hybrid_service import combine_bilateral, compare_hybrid
 from app.services.last_fit_service import compare_profiles
 from app.services.scm_parser_service import parse_scm
 from app.services.stl_parser_service import load_stl_mesh, parse_stl
@@ -269,6 +269,15 @@ def create_lasts_router() -> APIRouter:
                             )
                         except Exception as exc:
                             pf["surface_result"] = {"engine": "hybrid_v2", "error": str(exc)}
+
+                    # A last is chosen for a *pair* of feet — if both sides
+                    # got a surface_result against this same last, report
+                    # which one should actually govern a sizing/fullness
+                    # decision (see last_fit_hybrid_service.combine_bilateral).
+                    by_side = {pf["foot_side"]: pf.get("surface_result") for pf in match["per_foot"]}
+                    bilateral = combine_bilateral(by_side.get("left"), by_side.get("right"))
+                    if bilateral is not None:
+                        match["bilateral"] = bilateral
 
             await asyncio.to_thread(_run_hybrid)
             response_engine = "hybrid_v2"

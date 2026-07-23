@@ -266,3 +266,81 @@ def distance_aggregates(distances: np.ndarray, total_area_mm2: float | None = No
         "negative_area_mm2": negative_area,
         "contact_area_mm2": contact_area,
     }
+
+
+# -- exact mesh-plane sections -----------------------------------------------
+#
+# Everything above (extract_profile in scm_parser_service, and this module's
+# own sampled surface_distance) measures width/height at a *zone* — a whole
+# span of length averaged together (last_fit_service.ZONES: heel 0-25%,
+# instep 42-60%, etc). Independently checked against a real foot+last pair
+# (nikita_prada43_comfort_evaluation_code_spec.md) with a fixed-fraction exact
+# method: the deficit at a single specific fraction of length can be much
+# worse than the zone average that contains it — e.g. that reference case
+# showed an instep-zone width deficit averaging ~3-4mm across 42-60% length,
+# while the exact cross-section at 45% alone was -8.5mm. Zone-averaging had
+# hidden the actual peak. This computes an exact closed cross-section via
+# `trimesh.Trimesh.section()` (a real triangle/plane intersection, not a
+# scattered point sample) at one specific fraction of length — needs
+# `shapely` for the resulting 2D polygon's area (trimesh's `to_2D()` +
+# `polygons_full`).
+
+CRITICAL_SECTION_FRACTIONS = (0.45, 0.50, 0.55, 0.67, 0.75, 0.80)
+
+
+@dataclass
+class ExactSection:
+    fraction: float
+    y_mm: float
+    xmin: float
+    xmax: float
+    width_mm: float
+    zmin: float
+    zmax: float
+    height_mm: float
+    perimeter_mm: float
+    area_mm2: float
+
+    def as_dict(self) -> dict:
+        return {
+            "fraction": self.fraction, "y_mm": round(self.y_mm, 2),
+            "width_mm": round(self.width_mm, 2), "height_mm": round(self.height_mm, 2),
+            "top_z_mm": round(self.zmax, 2), "bottom_z_mm": round(self.zmin, 2),
+            "perimeter_mm": round(self.perimeter_mm, 2), "area_mm2": round(self.area_mm2, 1),
+        }
+
+
+def exact_section(mesh: trimesh.Trimesh, fraction: float) -> ExactSection | None:
+    """Exact cross-section at `fraction` of the mesh's own Y-extent (0=heel,
+    1=front-most point), matching the convention already used everywhere else
+    in this codebase (Y=length from heel). Returns None if the plane doesn't
+    intersect the mesh in a closed polygon (e.g. fraction outside [0,1], or a
+    degenerate/open mesh) — the caller should treat that section as
+    not_evaluable, not silently skip it."""
+    y_min = mesh.bounds[0, 1]
+    length = mesh.extents[1]
+    y = y_min + fraction * length
+    section = mesh.section(plane_origin=[0.0, y, 0.0], plane_normal=[0.0, 1.0, 0.0])
+    if section is None:
+        return None
+    try:
+        planar, _transform = section.to_2D()
+        polygons = planar.polygons_full
+    except Exception:
+        return None
+    if not polygons:
+        return None
+    # Several disjoint contours can appear (mesh artifacts, or a genuinely
+    # multi-part cross-section) -- the migration plan and the reference
+    # analysis both warn against summing them blindly. The largest-area
+    # contour is the real anatomical cross-section; anything else this small
+    # is treated as noise, not added to it.
+    polygon = max(polygons, key=lambda p: p.area)
+    points = section.vertices
+    x, z = points[:, 0], points[:, 2]
+    return ExactSection(
+        fraction=fraction, y_mm=float(y),
+        xmin=float(x.min()), xmax=float(x.max()), width_mm=float(x.max() - x.min()),
+        zmin=float(z.min()), zmax=float(z.max()), height_mm=float(z.max() - z.min()),
+        perimeter_mm=float(section.length), area_mm2=float(polygon.area),
+    )

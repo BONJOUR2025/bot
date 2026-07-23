@@ -9,6 +9,7 @@ from app.services.mesh3d_service import (
     MAX_AUTO_REPAIR_BOUNDARY_MM,
     bidirectional_surface_distance,
     distance_aggregates,
+    exact_section,
     mesh_quality_report,
     repair_small_holes,
     surface_distance,
@@ -155,3 +156,48 @@ def test_distance_aggregates_empty_input():
     agg = distance_aggregates(np.array([]), total_area_mm2=100.0)
     assert agg["min"] is None
     assert agg["negative_area_mm2"] is None
+
+
+def _y_aligned_cone(radius=50.0, height=200.0):
+    """A cone whose axis runs along Y (this codebase's length axis), apex at
+    y=0, base (radius=`radius`) at y=`height` -- linear taper makes width at
+    any fraction analytically predictable (width = 2*radius*fraction),
+    letting exact_section's numbers be checked against a formula, not just
+    "some plausible-looking value"."""
+    cone = trimesh.creation.cone(radius=radius, height=height, sections=64)
+    rot = trimesh.transformations.rotation_matrix(np.pi / 2, [1, 0, 0])
+    cone.apply_transform(rot)
+    cone.apply_translation([0.0, -cone.bounds[0, 1], -cone.bounds[0, 2]])
+    return cone
+
+
+def test_exact_section_box_matches_known_dimensions():
+    mesh = _box(extents=(100, 200, 80))
+    for frac in (0.1, 0.5, 0.9):
+        s = exact_section(mesh, frac)
+        assert s is not None
+        assert s.width_mm == pytest.approx(100.0, abs=1e-6)
+        assert s.height_mm == pytest.approx(80.0, abs=1e-6)
+        assert s.perimeter_mm == pytest.approx(2 * (100 + 80), abs=1e-6)
+        assert s.area_mm2 == pytest.approx(100 * 80, abs=1e-6)
+
+
+def test_exact_section_tracks_linear_taper():
+    mesh = _y_aligned_cone(radius=50.0, height=200.0)
+    for frac in (0.1, 0.5, 0.9):
+        s = exact_section(mesh, frac)
+        assert s is not None
+        expected_width = 2 * 50.0 * frac
+        expected_area = np.pi * (50.0 * frac) ** 2
+        # polygon approximation of a circle (64 sides) -- small tolerance
+        assert s.width_mm == pytest.approx(expected_width, abs=0.5)
+        assert s.area_mm2 == pytest.approx(expected_area, rel=0.02)
+    narrow = exact_section(mesh, 0.1)
+    wide = exact_section(mesh, 0.9)
+    assert narrow.width_mm < wide.width_mm
+
+
+def test_exact_section_none_at_degenerate_fraction():
+    mesh = _y_aligned_cone()
+    assert exact_section(mesh, 0.0) is None  # exact apex point, no polygon
+    assert exact_section(mesh, 1.0) is None  # exact base edge
