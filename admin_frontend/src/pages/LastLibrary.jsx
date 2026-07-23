@@ -43,6 +43,53 @@ const ZONE_DOT = {
   loose_ok: 'bg-amber-400', too_loose: 'bg-amber-500', uncertain: 'bg-gray-400',
 };
 
+const PATTERN_LABEL = {
+  NARROW_HIGH: 'Узкая и высокая — сдавливает с боков, свободно сверху',
+  WIDE_LOW: 'Широкая и низкая — давит сверху, свободно по бокам',
+  MEDIAL_CONFLICT_DORSAL_VOID: 'Конфликт с внутренней стороны при свободном верхе',
+  BALL_TIGHT_INSTEP_LOOSE: 'Тесно в пучках, свободно в подъёме',
+  HEEL_VOID_MIDFOOT_TIGHT: 'Свободно в пятке, тесно в своде',
+  GENERAL_OVERSIZE: 'В целом свободнее стопы по всей длине',
+};
+
+function pct(v) {
+  return v == null ? '—' : `${Math.round(v * 100)}%`;
+}
+
+function SurfaceResult({ sr }) {
+  if (!sr) return null;
+  if (sr.error) {
+    return (
+      <div className="rounded border border-[color:var(--color-border)] p-2 text-xs text-[color:var(--color-text-muted)]">
+        3D-анализ по сетке (hybrid_v2, экспериментально): не удалось посчитать — {sr.error}
+      </div>
+    );
+  }
+  const reg = sr.registration;
+  return (
+    <div className="rounded border border-[color:var(--color-border)] p-2 space-y-1.5 text-xs">
+      <div className="font-medium">3D-анализ по сетке (hybrid_v2, экспериментально)</div>
+      <div>
+        Паттерн: {sr.dominant_pattern ? (PATTERN_LABEL[sr.dominant_pattern] || sr.dominant_pattern) : 'не выявлен'}
+      </div>
+      <div className="flex flex-wrap gap-x-3 text-[color:var(--color-text-muted)]">
+        <span>Теснота: {pct(sr.risks?.tightness_risk)}</span>
+        <span>Свобода: {pct(sr.risks?.looseness_risk)}</span>
+        <span>Риск фиксации пятки: {pct(sr.risks?.retention_risk)}</span>
+      </div>
+      <div className="text-[color:var(--color-text-muted)]">
+        Совмещение стопы с колодкой: уверенность {pct(reg?.registration_confidence)}
+        {reg && ` (коррекция ${reg.translation_mm} мм / ${reg.rotation_deg}°)`}
+      </div>
+      {sr.pose_confidence == null && (
+        <div className="text-[color:var(--color-text-muted)]">
+          Поза не учтена — у колодки не заданы высота каблука и носочный подъём.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FitBadge({ overall }) {
   const s = VERDICT_STYLE[overall] || VERDICT_STYLE.ok;
   return <span className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${s.cls}`}>{s.label}</span>;
@@ -138,6 +185,8 @@ function FootFit({ pf, onOpenImage }) {
           </div>
         </div>
       )}
+
+      <SurfaceResult sr={pf.surface_result} />
     </div>
   );
 }
@@ -184,6 +233,7 @@ export default function LastLibrary() {
   const [matchFileLeft, setMatchFileLeft] = useState(null);
   const [matchFileRight, setMatchFileRight] = useState(null);
   const [swapSides, setSwapSides] = useState(false);
+  const [useHybrid, setUseHybrid] = useState(false);
   const [lightbox, setLightbox] = useState(null);
 
   async function loadLasts() {
@@ -274,7 +324,7 @@ export default function LastLibrary() {
     runMatch(file, false);
   }
 
-  async function runMatchStl(left, right, swap) {
+  async function runMatchStl(left, right, swap, hybrid) {
     if (!left && !right) return;
     setMatching(true);
     setMatchResult(null);
@@ -283,6 +333,7 @@ export default function LastLibrary() {
       if (left) fd.append('file_left', left);
       if (right) fd.append('file_right', right);
       fd.append('swap_sides', swap ? 'true' : 'false');
+      fd.append('engine', hybrid ? 'hybrid_v2' : 'slice_v1');
       const res = await api.post('lasts/match', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setMatchResult(res.data);
       if (!res.data.matches.length) {
@@ -305,14 +356,19 @@ export default function LastLibrary() {
     setMatchFileLeft(left);
     setMatchFileRight(right);
     setSwapSides(false);
-    runMatchStl(left, right, false);
+    runMatchStl(left, right, false, useHybrid);
+  }
+
+  function handleToggleHybrid(checked) {
+    setUseHybrid(checked);
+    if (matchFileLeft || matchFileRight) runMatchStl(matchFileLeft, matchFileRight, swapSides, checked);
   }
 
   function handleSwapSides() {
     const next = !swapSides;
     setSwapSides(next);
     if (matchFile) runMatch(matchFile, next);
-    else runMatchStl(matchFileLeft, matchFileRight, next);
+    else runMatchStl(matchFileLeft, matchFileRight, next, useHybrid);
   }
 
   return (
@@ -363,6 +419,11 @@ export default function LastLibrary() {
               <input type="file" accept=".stl" className="hidden" onChange={(e) => handleMatchStlFile('right', e.target.files?.[0])} />
             </label>
           </div>
+          <label className="flex items-center gap-2 text-xs text-[color:var(--color-text-muted)] cursor-pointer">
+            <input type="checkbox" checked={useHybrid} onChange={(e) => handleToggleHybrid(e.target.checked)} />
+            Добавить 3D-анализ по сетке (hybrid_v2, экспериментально) — работает только если и стопа, и
+            колодка загружены как .stl, и колодка тоже сохранена из .stl
+          </label>
         </div>
 
         {matching && <p className="text-sm text-[color:var(--color-text-muted)]">Сравниваю с библиотекой…</p>}
@@ -388,7 +449,14 @@ export default function LastLibrary() {
               ))}
             </div>
             <div className="space-y-3">
-              <h4 className="font-medium text-sm text-[color:var(--color-text-muted)]">Результат подбора (лучшее сверху)</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="font-medium text-sm text-[color:var(--color-text-muted)]">Результат подбора (лучшее сверху)</h4>
+                {useHybrid && matchResult.engine !== 'hybrid_v2' && (
+                  <span className="text-xs text-amber-700" title="Возможные причины: скан стопы загружен как .scm, или ни у одной колодки в подборке нет .stl-файла">
+                    3D-анализ не подключился — используется только базовый расчёт
+                  </span>
+                )}
+              </div>
               {matchResult.matches.map((m) => (
                 <MatchCard key={m.last.id} match={m} onOpenImage={(src, alt) => setLightbox({ src, alt })} />
               ))}
