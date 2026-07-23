@@ -51,6 +51,7 @@ class LastRepository:
             "material": data.get("material", ""),
             "note": data.get("note", ""),
             "scan_file_url": data.get("scan_file_url", ""),
+            "engine": data.get("engine", "slice_v1"),
             "side": data.get("side"),
             "length_mm": data.get("length_mm"),
             "width_mm": data.get("width_mm"),
@@ -58,6 +59,11 @@ class LastRepository:
             "ball_girth_mm": data.get("ball_girth_mm"),
             "instep_girth_mm": data.get("instep_girth_mm"),
             "ball_line_mm": data.get("ball_line_mm"),
+            # Pose metadata for the hybrid_v2 pose model (stage 5 of the
+            # slice_v1 -> hybrid_v2 migration) — optional; a foot isn't
+            # re-posed at all unless both are set (see last_pose_service.py).
+            "heel_height_mm": data.get("heel_height_mm"),
+            "toe_spring_mm": data.get("toe_spring_mm"),
             "profile": data["profile"],
             "created_at": datetime.now().isoformat(),
         }

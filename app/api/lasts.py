@@ -10,9 +10,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.data.last_repository import LastRepository
 from app.services.access_control_service import ResolvedUser
+from app.services.last_fit_hybrid_service import compare_hybrid
 from app.services.last_fit_service import compare_profiles
 from app.services.scm_parser_service import parse_scm
-from app.services.stl_parser_service import parse_stl
+from app.services.stl_parser_service import load_stl_mesh, parse_stl
 
 from .dependencies import require_permission
 from .scanner import SCANNER_PERMISSION
@@ -59,6 +60,10 @@ def create_lasts_router() -> APIRouter:
                                          # "левая/правая колодка" text), since
                                          # an unknown side silently disables
                                          # mirroring for whichever foot needs it
+        heel_height_mm: float | None = Form(None),  # hybrid_v2 pose model
+        toe_spring_mm: float | None = Form(None),   # (last_pose_service.py) —
+                                                     # both optional, no pose
+                                                     # applied unless both are set
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
         ext = Path(file.filename or "").suffix.lower()
@@ -85,10 +90,13 @@ def create_lasts_router() -> APIRouter:
         record = repo.create({
             "article": article, "size": size, "model": model,
             "material": material, "note": note,
+            "engine": "slice_v1",  # which pipeline computed "profile" below
             # .stl has no side hint in the file itself (unlike .scm's
             # "левая/правая колодка" header text) — the form field is the
             # only source there.
             "side": (side or None) or block.get("side"),
+            "heel_height_mm": heel_height_mm,
+            "toe_spring_mm": toe_spring_mm,
             "length_mm": block["length_mm"],
             "width_mm": block["width_mm"],
             "height_mm": block["height_mm"],
@@ -121,6 +129,16 @@ def create_lasts_router() -> APIRouter:
         file_right: UploadFile | None = File(None),
         last_id: str | None = Form(None),
         swap_sides: bool = Form(False),
+        # "slice_v1" (default) is the frozen cross-sectional pipeline above;
+        # "hybrid_v2" additionally attaches a mesh-based surface_result per
+        # last_fit_hybrid_service.compare_hybrid — only possible when both the
+        # foot and the target last(s) are .stl-sourced (a real mesh, not just
+        # a point cloud). Requesting hybrid_v2 with a .scm foot silently gets
+        # slice_v1 only; hybrid_v2 is noticeably slower per foot/last pair
+        # (mesh validation + registration + surface distance, a few seconds
+        # each) — fine for a single last_id, potentially slow against the
+        # whole library.
+        engine: str = Form("slice_v1"),
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
         # Two upload shapes: one .scm file with both feet inside (legacy), or
@@ -128,6 +146,7 @@ def create_lasts_router() -> APIRouter:
         # file, so a full pair needs two separate uploads, each tagged with
         # its side explicitly (an .stl has no side hint to read, unlike
         # .scm's header text).
+        foot_raw_by_side: dict[str, bytes] = {}
         if file is not None:
             if not file.filename or not file.filename.lower().endswith(".scm"):
                 raise HTTPException(status_code=400, detail="expected_scm_file")
@@ -151,6 +170,7 @@ def create_lasts_router() -> APIRouter:
                     raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
                 block["side"] = side
                 feet.append(block)
+                foot_raw_by_side[side] = raw
         else:
             raise HTTPException(status_code=400, detail="expected_scm_or_stl_file")
 
@@ -221,6 +241,45 @@ def create_lasts_router() -> APIRouter:
             return out
 
         matches = await asyncio.to_thread(_run_matches)
-        return {"feet": feet_out, "matches": matches}
+
+        response_engine = "slice_v1"
+        if engine == "hybrid_v2" and foot_raw_by_side:
+            targets_by_id = {t["id"]: t for t in targets}
+
+            def _run_hybrid():
+                for match in matches:
+                    last = targets_by_id[match["last"]["id"]]
+                    url = last.get("scan_file_url") or ""
+                    if not url.lower().endswith(".stl"):
+                        continue  # .scm last has no mesh to compare a surface against
+                    last_path = Path(url.lstrip("/"))
+                    if not last_path.exists():
+                        continue
+                    cavity_mesh = load_stl_mesh(last_path.read_bytes())
+                    for pf in match["per_foot"]:
+                        raw = foot_raw_by_side.get(pf["foot_side"])
+                        if raw is None:
+                            continue
+                        foot_mesh = load_stl_mesh(raw)
+                        try:
+                            pf["surface_result"] = compare_hybrid(
+                                foot_mesh, pf["foot_side"], cavity_mesh, last.get("side"),
+                                heel_height_mm=last.get("heel_height_mm"),
+                                toe_spring_mm=last.get("toe_spring_mm"),
+                            )
+                        except Exception as exc:
+                            pf["surface_result"] = {"engine": "hybrid_v2", "error": str(exc)}
+
+            await asyncio.to_thread(_run_hybrid)
+            response_engine = "hybrid_v2"
+
+        # "engine" marks which comparison pipeline produced this response —
+        # slice_v1 (the cross-sectional pipeline that's been here since the
+        # start) always runs and is never altered by requesting hybrid_v2;
+        # hybrid_v2 only adds a "surface_result" per per_foot entry above.
+        # Frozen as of the slice_v1 → hybrid_v2 migration: legacy_slice_v1
+        # response shape/numbers must not silently change (see
+        # tests/test_last_fit_regression.py).
+        return {"engine": response_engine, "feet": feet_out, "matches": matches}
 
     return router

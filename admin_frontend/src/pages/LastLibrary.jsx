@@ -172,7 +172,10 @@ export default function LastLibrary() {
   const [loadingList, setLoadingList] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ article: '', size: '', model: '', material: '', note: '', side: '' });
+  const [form, setForm] = useState({
+    article: '', size: '', model: '', material: '', note: '', side: '',
+    heel_height_mm: '', toe_spring_mm: '',
+  });
   const [addFile, setAddFile] = useState(null);
 
   const [matching, setMatching] = useState(false);
@@ -205,11 +208,20 @@ export default function LastLibrary() {
     try {
       const fd = new FormData();
       fd.append('file', addFile);
-      Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+      Object.entries(form).forEach(([k, v]) => {
+        // heel_height_mm/toe_spring_mm are optional float fields on the
+        // backend (Form(None)) -- an empty string fails float parsing there,
+        // so only send them when actually filled in.
+        if ((k === 'heel_height_mm' || k === 'toe_spring_mm') && v === '') return;
+        fd.append(k, v);
+      });
       await api.post('lasts', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       toast('Колодка добавлена', 'success');
       setAddOpen(false);
-      setForm({ article: '', size: '', model: '', material: '', note: '', side: '' });
+      setForm({
+        article: '', size: '', model: '', material: '', note: '', side: '',
+        heel_height_mm: '', toe_spring_mm: '',
+      });
       setAddFile(null);
       loadLasts();
     } catch (err) {
@@ -419,6 +431,22 @@ export default function LastLibrary() {
               укажите вручную, иначе подбор может сравнивать не с той стороной.
             </span>
           </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              Высота каблука, мм
+              <input type="number" step="0.1" className="input w-full mt-1" value={form.heel_height_mm}
+                onChange={(e) => setForm(f => ({ ...f, heel_height_mm: e.target.value }))} />
+            </label>
+            <label className="block text-sm">
+              Носочный подъём, мм
+              <input type="number" step="0.1" className="input w-full mt-1" value={form.toe_spring_mm}
+                onChange={(e) => setForm(f => ({ ...f, toe_spring_mm: e.target.value }))} />
+            </label>
+          </div>
+          <span className="block text-xs text-[color:var(--color-text-muted)] -mt-2">
+            Необязательно — заполните оба, чтобы сравнение учитывало позу стопы под эту колодку
+            (иначе стопа и колодка сравниваются в плоском положении, как сейчас).
+          </span>
           <label className="block text-sm">
             Заметка
             <textarea className="input w-full mt-1" rows={2} value={form.note}

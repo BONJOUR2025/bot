@@ -14,12 +14,24 @@ side only (a left/right pair comes as two separate files), not both feet in
 one container. So this module returns a single measurement dict (one block),
 and it's the caller's job to attach which side ("left"/"right") the file
 represents — there's no side hint in the file itself to read.
+
+Mesh loading uses `trimesh` (binary + ASCII STL, degenerate-face removal,
+vertex welding with a real index remap — not a bare `np.unique` on
+coordinates, which would desync faces from vertices; see
+`docs/last_fit_system_overview.md`'s note on this and the slice_v1 ->
+hybrid_v2 migration plan, stage 1). `load_stl_mesh()` is the entry point for
+the emerging mesh-based (hybrid_v2) pipeline — it keeps faces and normals.
+`parse_stl()`, used by the existing slice_v1 pipeline, still reduces the mesh
+to a bare point cloud on purpose: slice_v1's measurements (extract_profile,
+girths) only ever needed vertex positions, never face connectivity, and
+freezing that behavior is the whole point of stage 0 of the migration — this
+function's output shape and numbers must not change.
 """
 from __future__ import annotations
 
-import struct
+import io
 
-import numpy as np
+import trimesh
 
 from app.services.scm_parser_service import (
     FootBlock,
@@ -38,52 +50,24 @@ _MIN_LENGTH_MM, _MAX_LENGTH_MM = 100.0, 400.0
 _MIN_WIDTH_MM, _MAX_WIDTH_MM = 30.0, 200.0
 _MIN_HEIGHT_MM, _MAX_HEIGHT_MM = 15.0, 300.0
 
-_BINARY_TRIANGLE_DTYPE = np.dtype([
-    ("normal", "<f4", 3),
-    ("v1", "<f4", 3),
-    ("v2", "<f4", 3),
-    ("v3", "<f4", 3),
-    ("attr", "<u2"),
-])
+_MIN_VERTICES = 30
 
 
-def _read_binary_stl(data: bytes) -> np.ndarray | None:
-    """Binary STL: 80-byte header, uint32 triangle count, then 50 bytes per
-    triangle (normal + 3 vertices as float32, + a 2-byte attribute count).
-    The byte-count check below (rather than sniffing the header) is what
-    actually confirms this is binary — an ASCII STL's header also happens to
-    be 80+ bytes, so only the header alone can't tell the two apart."""
-    if len(data) < 84:
-        return None
-    ntri = struct.unpack_from("<I", data, 80)[0]
-    if 84 + ntri * 50 != len(data):
-        return None
-    tri = np.frombuffer(data, dtype=_BINARY_TRIANGLE_DTYPE, count=ntri, offset=84)
-    return np.vstack([tri["v1"], tri["v2"], tri["v3"]])
+def load_stl_mesh(raw_bytes: bytes) -> trimesh.Trimesh:
+    """Load a .stl file as a real triangle mesh (faces + normals kept).
 
-
-def _read_ascii_stl(data: bytes) -> np.ndarray | None:
-    """Fallback for ASCII STL (`solid ... facet normal ... vertex x y z ...`),
-    in case some future export uses it instead of binary."""
+    `trimesh.load(..., file_type="stl")` handles both binary and ASCII STL,
+    and on unparseable input returns an empty `Scene` rather than raising —
+    checked for explicitly below so callers get a clear ValueError instead of
+    a confusing empty-scene object three calls later.
+    """
     try:
-        text = data.decode("ascii", errors="ignore")
-    except Exception:
-        return None
-    verts: list[list[float]] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line.startswith("vertex"):
-            continue
-        parts = line.split()
-        if len(parts) != 4:
-            continue
-        try:
-            verts.append([float(parts[1]), float(parts[2]), float(parts[3])])
-        except ValueError:
-            continue
-    if not verts:
-        return None
-    return np.array(verts, dtype=np.float32)
+        result = trimesh.load(io.BytesIO(raw_bytes), file_type="stl", process=True)
+    except Exception as exc:
+        raise ValueError(f"unrecognized_stl: {exc}") from exc
+    if not isinstance(result, trimesh.Trimesh) or len(result.vertices) < _MIN_VERTICES:
+        raise ValueError("unrecognized_stl")
+    return result
 
 
 def parse_stl(raw_bytes: bytes) -> dict:
@@ -92,13 +76,8 @@ def parse_stl(raw_bytes: bytes) -> dict:
     which the caller attaches based on which upload slot the file came from.
 
     Synchronous/CPU-bound, like parse_scm — run via asyncio.to_thread."""
-    vertices = _read_binary_stl(raw_bytes)
-    if vertices is None:
-        vertices = _read_ascii_stl(raw_bytes)
-    if vertices is None or len(vertices) < 30:
-        raise ValueError("unrecognized_stl")
-
-    vertices = np.unique(vertices, axis=0)
+    mesh = load_stl_mesh(raw_bytes)
+    vertices = mesh.vertices
     x = vertices[:, 0].astype(float)
     y = vertices[:, 1].astype(float)
     z = vertices[:, 2].astype(float)
