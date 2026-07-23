@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Upload, Trash2, Plus, X, ChevronDown, ChevronUp, ArrowLeftRight } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
 import { FootCard, SIDE_LABEL } from '../components/FootScanCard.jsx';
+
+// three.js + fiber + drei are a large bundle (~270kB gzipped) that most
+// visits to this page never need (the 3D scene is an opt-in checkbox) --
+// code-split so it only downloads when a user actually requests it.
+const Viewer3D = lazy(() => import('../components/Viewer3D.jsx'));
 
 function LastCard({ last, onDelete }) {
   const title = last.article || last.model || 'Без названия';
@@ -187,13 +192,23 @@ function FootFit({ pf, onOpenImage }) {
       )}
 
       <SurfaceResult sr={pf.surface_result} />
+      {pf.surface_result?.visualization && (
+        <Suspense fallback={<p className="text-xs text-[color:var(--color-text-muted)]">Загружаю 3D-просмотрщик…</p>}>
+          <Viewer3D
+            geometry={pf.surface_result.visualization}
+            title={`3D-сцена — ${SIDE_LABEL[foot_side] || 'стопа'}`}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
 
+const LIMITING_SIDE_LABEL = { left: 'левая', right: 'правая' };
+
 function MatchCard({ match, onOpenImage }) {
   const [open, setOpen] = useState(true);
-  const { last, per_foot } = match;
+  const { last, per_foot, bilateral } = match;
   return (
     <div className="app-card p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -202,6 +217,14 @@ function MatchCard({ match, onOpenImage }) {
           <div className="text-xs text-[color:var(--color-text-muted)]">
             {[last.model, last.size && `размер ${last.size}`, last.material].filter(Boolean).join(' · ') || '—'}
           </div>
+          {bilateral && (
+            <div className="text-xs text-[color:var(--color-text-muted)] mt-1">
+              Ограничивающая сторона: <span className="font-medium">{LIMITING_SIDE_LABEL[bilateral.limiting_side] || bilateral.limiting_side}</span>
+              {bilateral.patterns?.includes('BILATERAL_LAST_MISMATCH') && (
+                <span className="text-amber-700"> · обе стопы тесны — вероятно, дело в форме колодки, а не в асимметрии</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {per_foot.map((pf, i) => <FitBadge key={i} overall={pf.fit.overall} />)}
@@ -234,6 +257,7 @@ export default function LastLibrary() {
   const [matchFileRight, setMatchFileRight] = useState(null);
   const [swapSides, setSwapSides] = useState(false);
   const [useHybrid, setUseHybrid] = useState(false);
+  const [useGeometry, setUseGeometry] = useState(false);
   const [lightbox, setLightbox] = useState(null);
 
   async function loadLasts() {
@@ -324,7 +348,7 @@ export default function LastLibrary() {
     runMatch(file, false);
   }
 
-  async function runMatchStl(left, right, swap, hybrid) {
+  async function runMatchStl(left, right, swap, hybrid, geometry) {
     if (!left && !right) return;
     setMatching(true);
     setMatchResult(null);
@@ -334,6 +358,7 @@ export default function LastLibrary() {
       if (right) fd.append('file_right', right);
       fd.append('swap_sides', swap ? 'true' : 'false');
       fd.append('engine', hybrid ? 'hybrid_v2' : 'slice_v1');
+      fd.append('include_geometry', hybrid && geometry ? 'true' : 'false');
       const res = await api.post('lasts/match', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setMatchResult(res.data);
       if (!res.data.matches.length) {
@@ -356,19 +381,25 @@ export default function LastLibrary() {
     setMatchFileLeft(left);
     setMatchFileRight(right);
     setSwapSides(false);
-    runMatchStl(left, right, false, useHybrid);
+    runMatchStl(left, right, false, useHybrid, useGeometry);
   }
 
   function handleToggleHybrid(checked) {
     setUseHybrid(checked);
-    if (matchFileLeft || matchFileRight) runMatchStl(matchFileLeft, matchFileRight, swapSides, checked);
+    if (!checked) setUseGeometry(false);
+    if (matchFileLeft || matchFileRight) runMatchStl(matchFileLeft, matchFileRight, swapSides, checked, checked && useGeometry);
+  }
+
+  function handleToggleGeometry(checked) {
+    setUseGeometry(checked);
+    if (matchFileLeft || matchFileRight) runMatchStl(matchFileLeft, matchFileRight, swapSides, useHybrid, checked);
   }
 
   function handleSwapSides() {
     const next = !swapSides;
     setSwapSides(next);
     if (matchFile) runMatch(matchFile, next);
-    else runMatchStl(matchFileLeft, matchFileRight, next, useHybrid);
+    else runMatchStl(matchFileLeft, matchFileRight, next, useHybrid, useGeometry);
   }
 
   return (
@@ -424,6 +455,12 @@ export default function LastLibrary() {
             Добавить 3D-анализ по сетке (hybrid_v2, экспериментально) — работает только если и стопа, и
             колодка загружены как .stl, и колодка тоже сохранена из .stl
           </label>
+          {useHybrid && (
+            <label className="flex items-center gap-2 text-xs text-[color:var(--color-text-muted)] cursor-pointer pl-5">
+              <input type="checkbox" checked={useGeometry} onChange={(e) => handleToggleGeometry(e.target.checked)} />
+              Показать интерактивную 3D-сцену (тяжелее и медленнее — грузит полную геометрию)
+            </label>
+          )}
         </div>
 
         {matching && <p className="text-sm text-[color:var(--color-text-muted)]">Сравниваю с библиотекой…</p>}

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from app.data.last_repository import LastRepository
 from app.services.access_control_service import ResolvedUser
 from app.services.last_fit_hybrid_service import combine_bilateral, compare_hybrid
+from app.services.mesh_visualization_service import build_visualization_payload
 from app.services.last_fit_service import compare_profiles
 from app.services.scm_parser_service import parse_scm
 from app.services.stl_parser_service import load_stl_mesh, parse_stl
@@ -139,6 +140,10 @@ def create_lasts_router() -> APIRouter:
         # each) — fine for a single last_id, potentially slow against the
         # whole library.
         engine: str = Form("slice_v1"),
+        # Heavy (base64 GLB meshes + problem-patch submeshes) — only built
+        # when explicitly asked and only alongside engine=hybrid_v2, since
+        # slice_v1 has no mesh to visualize with.
+        include_geometry: bool = Form(False),
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
         # Two upload shapes: one .scm file with both feet inside (legacy), or
@@ -269,6 +274,18 @@ def create_lasts_router() -> APIRouter:
                             )
                         except Exception as exc:
                             pf["surface_result"] = {"engine": "hybrid_v2", "error": str(exc)}
+                            continue
+
+                        if include_geometry:
+                            try:
+                                pf["surface_result"]["visualization"] = build_visualization_payload(
+                                    foot_mesh, pf["foot_side"], cavity_mesh, last.get("side"),
+                                    pf["surface_result"],
+                                    heel_height_mm=last.get("heel_height_mm"),
+                                    toe_spring_mm=last.get("toe_spring_mm"),
+                                )
+                            except Exception as exc:
+                                pf["surface_result"]["visualization_error"] = str(exc)
 
                     # A last is chosen for a *pair* of feet — if both sides
                     # got a surface_result against this same last, report
