@@ -1384,3 +1384,22 @@ tbody tr:last-child td { border-bottom: none; }
   outline: 1px solid var(--color-primary);
   outline-offset: 2px;
 }
+
+/* ================================================================
+   Viewer3D fullscreen (CSS fallback path)
+   ================================================================ */
+/* While the 3D viewer's fullscreen overlay is active without the native
+   Fullscreen API (older iPhones, iframes without allowfullscreen), its
+   root relies on position: fixed. But the viewer lives inside a
+   `.app-card`, and that card's backdrop-filter makes the card the
+   containing block for fixed-position descendants (CSS filter-effects
+   spec) -- the "fullscreen" overlay then only stretched to the card,
+   with the app's panels still visible around it. Stripping those
+   properties for the duration restores the viewport as the containing
+   block; visually free, since the overlay covers the cards anyway. */
+body.viewer3d-fs-active .app-card {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  transform: none !important;
+  filter: none !important;
+}

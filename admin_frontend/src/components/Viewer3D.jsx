@@ -262,25 +262,80 @@ export default function Viewer3D({ geometry, title }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsRef = useRef();
   const canvasWrapperRef = useRef();
+  const rootRef = useRef();
   const { isMobile } = useViewport();
 
-  // Fullscreen toggles CSS on this same wrapper (fixed, full-viewport)
-  // rather than portalling/remounting the canvas elsewhere -- moving the
-  // <Canvas> to a different DOM parent would tear down and recreate its
-  // WebGL context, re-parsing the GLB meshes from scratch on every toggle.
+  // Fullscreen strategy, in order of preference:
+  //
+  // 1. The native Fullscreen API on this component's root element. It
+  //    promotes the element into the browser's top layer -- genuinely the
+  //    whole screen (browser chrome hidden too), and immune to the CSS
+  //    containing-block problem below.
+  // 2. CSS-only fallback (position: fixed + inset 0) when the API is
+  //    unavailable or rejects (older iPhones; iframes without the
+  //    allowfullscreen permission). This is what shipped first, and it had
+  //    a real bug: this viewer sits inside a `.app-card`, whose
+  //    `backdrop-filter` makes that card the containing block for
+  //    position:fixed descendants (per the CSS filter-effects spec) -- so
+  //    "fullscreen" only stretched to the card, leaving the app's panels
+  //    visible around it. While fullscreen is active we therefore add
+  //    `viewer3d-fs-active` to <body>; a rule in globals.css strips
+  //    backdrop-filter/transform/filter off `.app-card` for the duration,
+  //    restoring the viewport as the containing block. Visually free: the
+  //    overlay covers those cards anyway.
+  //
+  // Both paths keep the canvas in its DOM position -- portalling/remounting
+  // it elsewhere would tear down the WebGL context and re-parse the GLB
+  // meshes from scratch on every toggle.
+  const exitFullscreen = useCallback(() => {
+    const fsElement = document.fullscreenElement || document.webkitFullscreenElement;
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fsElement && exit) exit.call(document);
+    setIsFullscreen(false);
+  }, []);
+
+  const enterFullscreen = useCallback(() => {
+    setIsFullscreen(true);
+    const el = rootRef.current;
+    const request = el && (el.requestFullscreen || el.webkitRequestFullscreen);
+    if (request) {
+      // Older WebKit returns undefined instead of a promise; a rejection
+      // just means we stay on the CSS fallback, which is already active.
+      Promise.resolve(request.call(el)).catch(() => {});
+    }
+  }, []);
+
+  // The browser can leave native fullscreen on its own (Esc, system
+  // gestures, tab switch) -- follow the document's actual fullscreen
+  // element instead of assuming our button is the only exit.
+  useEffect(() => {
+    const handleChange = () => {
+      const fsElement = document.fullscreenElement || document.webkitFullscreenElement;
+      if (!fsElement) setIsFullscreen(false);
+    };
+    document.addEventListener('fullscreenchange', handleChange);
+    document.addEventListener('webkitfullscreenchange', handleChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleChange);
+      document.removeEventListener('webkitfullscreenchange', handleChange);
+    };
+  }, []);
+
   useEffect(() => {
     if (!isFullscreen) return undefined;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    document.body.classList.add('viewer3d-fs-active');
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') setIsFullscreen(false);
+      if (e.key === 'Escape') exitFullscreen();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.style.overflow = prevOverflow;
+      document.body.classList.remove('viewer3d-fs-active');
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, exitFullscreen]);
 
   const target = useMemo(() => {
     if (!bounds) return null;
@@ -334,6 +389,7 @@ export default function Viewer3D({ geometry, title }) {
 
   return (
     <div
+      ref={rootRef}
       className={
         isFullscreen
           ? 'fixed inset-0 z-[9999] flex flex-col gap-2 p-3 bg-[color:var(--color-modal-bg)]'
@@ -393,7 +449,7 @@ export default function Viewer3D({ geometry, title }) {
             type="button"
             className="btn text-xs"
             title={isFullscreen ? 'Свернуть' : 'На весь экран'}
-            onClick={() => setIsFullscreen((v) => !v)}
+            onClick={() => (isFullscreen ? exitFullscreen() : enterFullscreen())}
           >
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
@@ -408,7 +464,7 @@ export default function Viewer3D({ geometry, title }) {
         {isMobile && !isFullscreen && (
           <button
             type="button"
-            onClick={() => setIsFullscreen(true)}
+            onClick={enterFullscreen}
             title="Развернуть на весь экран"
             className="absolute bottom-2 right-2 z-10 rounded-full bg-black/60 text-white p-2 leading-none"
           >
