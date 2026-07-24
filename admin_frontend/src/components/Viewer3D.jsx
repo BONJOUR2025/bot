@@ -3,7 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { Environment, Lightformer, OrbitControls, Html } from '@react-three/drei';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
-import { Download, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
+import { Download, Maximize2, Minimize2, RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 
 // Geometry arrives as base64-encoded GLB (see app/services/mesh_visualization_service.py —
@@ -260,6 +260,11 @@ export default function Viewer3D({ geometry, title }) {
   const [resetKey, setResetKey] = useState(0);
   const [bounds, setBounds] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Fullscreen means the model gets the whole screen: the toolbar and legend
+  // are hidden behind a floating button rather than permanently occupying a
+  // third of the viewport (on a phone in landscape they squeezed the scene
+  // into a thin letterbox strip).
+  const [showControls, setShowControls] = useState(false);
   const controlsRef = useRef();
   const canvasWrapperRef = useRef();
   const rootRef = useRef();
@@ -296,6 +301,7 @@ export default function Viewer3D({ geometry, title }) {
 
   const enterFullscreen = useCallback(() => {
     setIsFullscreen(true);
+    setShowControls(false);
     const el = rootRef.current;
     const request = el && (el.requestFullscreen || el.webkitRequestFullscreen);
     if (request) {
@@ -387,18 +393,30 @@ export default function Viewer3D({ geometry, title }) {
   const bottomCurve = dataLayers.last_bottom_curve;
   const measurementLines = dataLayers.pose_measurements;
 
+  // Every branch below only swaps classNames -- the element order stays
+  // identical between normal and fullscreen so React reconciles in place
+  // instead of unmounting the <Canvas> (which would drop the WebGL context
+  // and re-parse the GLB meshes on each toggle).
+  const fsPanelHidden = isFullscreen && !showControls;
+
   return (
     <div
       ref={rootRef}
       className={
         isFullscreen
-          ? 'fixed inset-0 z-[9999] flex flex-col gap-2 p-3 bg-[color:var(--color-modal-bg)]'
+          ? 'fixed inset-0 z-[9999] bg-[#0a0f1e] overflow-hidden'
           : 'app-card p-3 flex flex-col gap-2'
       }
     >
-      {title && <div className="font-medium text-sm">{title}</div>}
+      {title && <div className={isFullscreen ? 'hidden' : 'font-medium text-sm'}>{title}</div>}
 
-      <div className="flex flex-wrap items-center gap-3 text-xs">
+      <div
+        className={
+          isFullscreen
+            ? `viewer3d-fs-panel viewer3d-fs-panel--top absolute inset-x-0 top-0 z-20 flex flex-wrap items-center gap-3 text-xs ${fsPanelHidden ? 'hidden' : ''}`
+            : 'flex flex-wrap items-center gap-3 text-xs'
+        }
+      >
         {Object.entries(LAYER_LABELS).map(([key, label]) => {
           if ((key === 'last_bottom_curve' && !bottomCurve?.length)
             || (key === 'pose_measurements' && !measurementLines?.length)) return null;
@@ -458,7 +476,11 @@ export default function Viewer3D({ geometry, title }) {
 
       <div
         ref={canvasWrapperRef}
-        className={`relative rounded border border-[color:var(--color-border)] overflow-hidden ${isFullscreen ? 'flex-1 min-h-0' : ''}`}
+        className={
+          isFullscreen
+            ? 'absolute inset-0 z-0'
+            : 'relative rounded border border-[color:var(--color-border)] overflow-hidden'
+        }
         style={isFullscreen ? undefined : { height: 420 }}
       >
         {isMobile && !isFullscreen && (
@@ -508,7 +530,13 @@ export default function Viewer3D({ geometry, title }) {
         </Canvas>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--color-text-muted)]">
+      <div
+        className={
+          isFullscreen
+            ? `viewer3d-fs-panel viewer3d-fs-panel--bottom absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-center gap-3 text-[11px] ${fsPanelHidden ? 'hidden' : ''}`
+            : 'flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--color-text-muted)]'
+        }
+      >
         <LegendDot color={legend.last} label="Колодка" />
         {heatmap && (
           <span className="flex items-center gap-1.5">
@@ -522,6 +550,29 @@ export default function Viewer3D({ geometry, title }) {
         <LegendDot color={legend.misallocated_volume} label="Объём не туда" />
         <LegendDot color={legend.forefoot_taper_too_fast} label="Носок сужается быстро" />
       </div>
+
+      {/* Floating controls -- the only chrome left over the scene in
+          fullscreen, so exiting never depends on the (hidden) toolbar. */}
+      {isFullscreen && (
+        <div className="viewer3d-fs-fabs">
+          <button
+            type="button"
+            className="viewer3d-fs-fab"
+            title={showControls ? 'Скрыть инструменты' : 'Показать инструменты'}
+            onClick={() => setShowControls((v) => !v)}
+          >
+            {showControls ? <X size={20} /> : <SlidersHorizontal size={20} />}
+          </button>
+          <button
+            type="button"
+            className="viewer3d-fs-fab"
+            title="Выйти из полноэкранного режима"
+            onClick={exitFullscreen}
+          >
+            <Minimize2 size={20} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
