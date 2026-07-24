@@ -14,7 +14,7 @@ what the analysis concluded, not a fixed template regardless of the result.
 
 Meshes are re-posed and re-registered here rather than reusing
 `compare_hybrid`'s internal state (it doesn't expose the aligned meshes,
-only computed numbers) — `apply_pose`/`register_foot_to_cavity` are
+only computed numbers) — `resolve_foot_pose`/`register_foot_to_cavity` are
 deterministic given the same inputs, so this reproduces the exact same
 alignment the analysis used, at the cost of repeating that one step
 (a few seconds) rather than the whole distance computation.
@@ -51,8 +51,9 @@ from app.services.last_fit_hybrid_service import (
     WIDE_LOW,
     ZONES,
 )
-from app.services.last_pose_service import apply_pose
-from app.services.last_registration_service import register_foot_to_cavity
+from app.services.foot_pose_deformation import resolve_foot_pose
+from app.services.last_bottom_profile import extract_bottom_profile
+from app.services.last_registration_service import initial_align, register_foot_to_cavity
 
 # Explicit, documented palette (the source spec insists on this being config,
 # not hardcoded scattered literals — it still lives in one place, just here).
@@ -184,6 +185,47 @@ def _labels_for_patches(patches: list[dict], final_foot: trimesh.Trimesh) -> lis
     return labels
 
 
+def _last_bottom_curve(cavity_aligned: trimesh.Trimesh) -> list[list[float]]:
+    """Polyline of the last's own sole curve (X=0, centerline) in the same
+    frame `geometries.last` is exported in -- the Этап 4 "профиль следа
+    колодки" layer, read straight off the already-aligned cavity mesh rather
+    than recomputing anything last_pose_measurements.py hasn't already
+    figured out how to read."""
+    profile = extract_bottom_profile(cavity_aligned)
+    return [[0.0, p["y"], p["z"]] for p in profile]
+
+
+def _pose_measurement_lines(pose_details: dict | None, cavity_aligned: trimesh.Trimesh) -> list[dict]:
+    """Two dimension lines (heel height, toe spring) anchored at the last's
+    own heel/toe Y -- the Этап 4 "размерные линии" layer. Deliberately not a
+    morph slider / displacement vectors / deformation heatmap (out of scope
+    per the approved plan) -- just enough to show what number the pose used
+    and where it was measured, for either the manual or automatic path."""
+    if not pose_details:
+        return []
+    heel_height = pose_details.get("heel_height_mm")
+    toe_spring = pose_details.get("toe_spring_mm", pose_details.get("toe_spring_tip_mm"))
+    if heel_height is None and toe_spring is None:
+        return []
+
+    y = cavity_aligned.vertices[:, 1]
+    y_min, y_max = float(y.min()), float(y.max())
+    lines = []
+    if heel_height is not None:
+        lines.append({
+            "label": f"Каблук: {heel_height:.1f} мм",
+            "points": [[0.0, y_min, 0.0], [0.0, y_min, float(heel_height)]],
+            "color": "#FF8C00",
+        })
+    if toe_spring is not None:
+        lines.append({
+            "label": f"Носочный подъём: {toe_spring:.1f} мм",
+            "points": [[0.0, y_max, 0.0], [0.0, y_max, float(toe_spring)]],
+            "color": "#00CED1",
+        })
+    return lines
+
+
 def build_visualization_payload(
     foot_mesh: trimesh.Trimesh, foot_side: str | None,
     last_mesh: trimesh.Trimesh, last_side: str | None,
@@ -194,12 +236,22 @@ def build_visualization_payload(
     `hybrid_result` is the dict `last_fit_hybrid_service.compare_hybrid`
     already produced for this same foot/last pair — reused for which
     zones/sections to highlight rather than recomputed."""
-    posed_foot, _pose_confidence = apply_pose(foot_mesh, heel_height_mm, toe_spring_mm)
+    posed_foot, _pose_confidence, pose_details = resolve_foot_pose(
+        foot_mesh, foot_side, last_mesh, last_side, heel_height_mm, toe_spring_mm,
+    )
     registration, foot_aligned, cavity_aligned = register_foot_to_cavity(
         posed_foot, foot_side, last_mesh, last_side,
     )
     final_foot = foot_aligned.copy()
     final_foot.vertices = registration.aligned_foot_vertices
+
+    # The same undeformed foot, placed in the identical final frame via the
+    # same registration transform -- so the flat/posed toggle in the viewer
+    # is a straight geometry swap, not a camera jump or a re-registration
+    # that could land differently.
+    foot_flat_aligned = initial_align(foot_mesh)
+    foot_flat_final = foot_flat_aligned.copy()
+    foot_flat_final.vertices = trimesh.transform_points(foot_flat_aligned.vertices, registration.transform)
 
     patches = _build_patches(final_foot, hybrid_result)
     labels = _labels_for_patches(patches, final_foot)
@@ -207,11 +259,14 @@ def build_visualization_payload(
     return {
         "geometries": {
             "foot": {"format": "glb_base64", "data": _mesh_to_glb_base64(final_foot)},
+            "foot_flat": {"format": "glb_base64", "data": _mesh_to_glb_base64(foot_flat_final)},
             "last": {"format": "glb_base64", "data": _mesh_to_glb_base64(cavity_aligned)},
         },
         "layers": {
             "problem_patches": patches,
             "labels": labels,
+            "last_bottom_curve": _last_bottom_curve(cavity_aligned),
+            "pose_measurements": _pose_measurement_lines(pose_details, cavity_aligned),
         },
         "legend": {
             "last": COLORS["last_surface"],

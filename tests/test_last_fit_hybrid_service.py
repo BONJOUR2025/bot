@@ -147,11 +147,19 @@ def test_compare_hybrid_end_to_end_detects_wide_low():
     assert WIDE_LOW in patterns_found
 
 
-def test_compare_hybrid_no_pose_when_last_metadata_missing():
+def test_compare_hybrid_applies_automatic_pose_when_last_metadata_missing():
+    # Since foot_pose_deformation.resolve_foot_pose was wired in, the absence
+    # of manual heel_height_mm/toe_spring_mm no longer means "no pose" -- it
+    # means "measure the last's own geometry automatically" (this synthetic
+    # box last has a flat sole, so the measured heel_height/toe_spring are
+    # both 0 and the deformation is a no-op, but it's still the automatic
+    # method that ran, not a manual override or a skipped pose).
     foot = _dense_box(width=90, length=270, height=60)
     cavity = _dense_box(width=95, length=282, height=65)
     result = compare_hybrid(foot, "left", cavity, "left", heel_height_mm=None, toe_spring_mm=None)
-    assert result["pose_confidence"] is None
+    assert result["pose_confidence"] is not None
+    assert result["pose_details"]["method"] == "local_frames_v1"
+    assert result["pose_details"]["heel_height_mm"] == pytest.approx(0.0, abs=0.5)
 
 
 def test_forefoot_taper_too_fast_detected():

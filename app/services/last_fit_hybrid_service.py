@@ -45,7 +45,7 @@ from __future__ import annotations
 import numpy as np
 import trimesh
 
-from app.services.last_pose_service import apply_pose
+from app.services.foot_pose_deformation import resolve_foot_pose
 from app.services.last_registration_service import register_foot_to_cavity
 from app.services.mesh3d_service import (
     CRITICAL_SECTION_FRACTIONS,
@@ -299,7 +299,9 @@ def compare_hybrid(
     if cavity_was_repaired:
         cavity_quality = mesh_quality_report(cavity_repaired)
 
-    posed_foot, pose_confidence = apply_pose(foot_repaired, heel_height_mm, toe_spring_mm)
+    posed_foot, pose_confidence, pose_details = resolve_foot_pose(
+        foot_repaired, foot_side, cavity_repaired, last_side, heel_height_mm, toe_spring_mm,
+    )
 
     registration, foot_aligned, cavity_aligned = register_foot_to_cavity(
         posed_foot, foot_side, cavity_repaired, last_side,
@@ -356,6 +358,7 @@ def compare_hybrid(
         },
         "registration": registration.as_dict(),
         "pose_confidence": pose_confidence,
+        "pose_details": pose_details,
         "zones": {
             key: {
                 "label": label,

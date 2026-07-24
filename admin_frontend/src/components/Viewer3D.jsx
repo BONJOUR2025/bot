@@ -91,6 +91,46 @@ function LabelLayer({ label }) {
   );
 }
 
+// last_bottom_curve: a thin polyline along the last's own sole profile —
+// rendered as a tube (drei-less, plain three.js) so it stays visible at
+// typical camera distances instead of a 1px Line.
+function BottomCurveLayer({ points, color }) {
+  const geometry = useMemo(() => {
+    if (!points || points.length < 2) return null;
+    const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
+    return new THREE.TubeGeometry(curve, Math.max(points.length, 2), 1.2, 6, false);
+  }, [points]);
+  if (!geometry) return null;
+  return (
+    <mesh geometry={geometry}>
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+// pose_measurements: a heel-height / toe-spring dimension line (two points)
+// with an mm label at the midpoint.
+function MeasurementLineLayer({ line }) {
+  const geometry = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    const pts = line.points.map((p) => new THREE.Vector3(...p));
+    g.setFromPoints(pts);
+    return g;
+  }, [line]);
+  const mid = useMemo(() => {
+    const [a, b] = line.points;
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  }, [line]);
+  return (
+    <>
+      <line geometry={geometry}>
+        <lineBasicMaterial color={line.color} linewidth={2} />
+      </line>
+      <LabelLayer label={{ text: line.label, position: mid, color: line.color }} />
+    </>
+  );
+}
+
 // Directions only -- CameraRig scales these by the scene's own bounding
 // radius (computed from the loaded meshes), so this works for a last
 // visualization) regardless of the specific foot/last size.
@@ -124,7 +164,10 @@ function CameraRig({ target, controlsRef, preset, resetKey }) {
   return null;
 }
 
-const LAYER_LABELS = { foot: 'Стопа', last: 'Колодка', patches: 'Проблемные зоны', labels: 'Подписи' };
+const LAYER_LABELS = {
+  foot: 'Стопа', last: 'Колодка', patches: 'Проблемные зоны', labels: 'Подписи',
+  last_bottom_curve: 'Профиль следа колодки', pose_measurements: 'Размерные линии',
+};
 const PRESET_LABELS = { iso: 'Изо', top: 'Сверху', side: 'Сбоку', front: 'Спереди', back: 'Сзади' };
 
 /** Interactive 3D overlay of a foot vs a last, with problem-zone patches —
@@ -133,7 +176,11 @@ const PRESET_LABELS = { iso: 'Изо', top: 'Сверху', side: 'Сбоку', 
  * include_geometry=true). See app/services/mesh_visualization_service.py
  * for the payload shape. */
 export default function Viewer3D({ geometry, title }) {
-  const [layers, setLayers] = useState({ foot: true, last: true, patches: true, labels: true });
+  const [layers, setLayers] = useState({
+    foot: true, last: true, patches: true, labels: true,
+    last_bottom_curve: false, pose_measurements: false,
+  });
+  const [footPose, setFootPose] = useState('posed'); // 'posed' | 'flat'
   const [preset, setPreset] = useState('iso');
   const [resetKey, setResetKey] = useState(0);
   const [bounds, setBounds] = useState(null);
@@ -174,18 +221,46 @@ export default function Viewer3D({ geometry, title }) {
 
   if (!geometry) return null;
   const { geometries, layers: dataLayers, legend } = geometry;
+  const hasFlatFoot = Boolean(geometries.foot_flat);
+  const footGlb = footPose === 'flat' && hasFlatFoot ? geometries.foot_flat.data : geometries.foot.data;
+  const bottomCurve = dataLayers.last_bottom_curve;
+  const measurementLines = dataLayers.pose_measurements;
 
   return (
     <div className="app-card p-3 space-y-2">
       {title && <div className="font-medium text-sm">{title}</div>}
 
       <div className="flex flex-wrap items-center gap-3 text-xs">
-        {Object.entries(LAYER_LABELS).map(([key, label]) => (
-          <label key={key} className="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" checked={layers[key]} onChange={() => toggleLayer(key)} />
-            {label}
-          </label>
-        ))}
+        {Object.entries(LAYER_LABELS).map(([key, label]) => {
+          if ((key === 'last_bottom_curve' && !bottomCurve?.length)
+            || (key === 'pose_measurements' && !measurementLines?.length)) return null;
+          return (
+            <label key={key} className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={layers[key]} onChange={() => toggleLayer(key)} />
+              {label}
+            </label>
+          );
+        })}
+        {hasFlatFoot && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className={`btn text-xs ${footPose === 'posed' ? 'btn-primary' : ''}`}
+              onClick={() => setFootPose('posed')}
+              title="Стопа в позе колодки (каблук/носочный подъём применены)"
+            >
+              В позе колодки
+            </button>
+            <button
+              type="button"
+              className={`btn text-xs ${footPose === 'flat' ? 'btn-primary' : ''}`}
+              onClick={() => setFootPose('flat')}
+              title="Исходная (плоская) стопа, без деформации"
+            >
+              Исходная стопа
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-1 ml-auto">
           {Object.keys(CAMERA_DIRECTIONS).map((p) => (
             <button
@@ -213,13 +288,19 @@ export default function Viewer3D({ geometry, title }) {
             <SurfaceLayer base64={geometries.last.data} color={legend.last} opacity={0.35} onBounds={handleBounds} />
           )}
           {layers.foot && (
-            <SurfaceLayer base64={geometries.foot.data} color={legend.foot} opacity={0.45} onBounds={handleBounds} />
+            <SurfaceLayer base64={footGlb} color={legend.foot} opacity={0.45} onBounds={handleBounds} />
           )}
           {layers.patches && dataLayers.problem_patches.map((patch, i) => (
             <PatchLayer key={i} patch={patch} />
           ))}
           {layers.labels && dataLayers.labels.map((label, i) => (
             <LabelLayer key={i} label={label} />
+          ))}
+          {layers.last_bottom_curve && bottomCurve?.length > 1 && (
+            <BottomCurveLayer points={bottomCurve} color={legend.last} />
+          )}
+          {layers.pose_measurements && measurementLines?.map((line, i) => (
+            <MeasurementLineLayer key={i} line={line} />
           ))}
           <OrbitControls ref={controlsRef} makeDefault />
           <CameraRig target={target} controlsRef={controlsRef} preset={preset} resetKey={resetKey} />

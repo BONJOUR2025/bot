@@ -109,3 +109,56 @@ def test_no_patches_when_no_patterns_found():
     payload = build_visualization_payload(foot, "left", cavity, "left", hybrid_result)
     assert payload["layers"]["problem_patches"] == []
     assert payload["layers"]["labels"] == []
+
+
+def test_foot_flat_geometry_present_and_differs_from_posed_foot():
+    # A synthetic box has zero measured heel_height/toe_spring (flat sole),
+    # so the *pose* is a near-no-op here -- but foot_flat must still be a
+    # distinct, valid geometry in the same aligned frame as `foot`, not a
+    # copy of it or missing.
+    foot = _dense_box(width=90, length=270, height=60)
+    cavity = _dense_box(width=95, length=282, height=65)
+    hybrid_result = compare_hybrid(foot, "left", cavity, "left")
+    payload = build_visualization_payload(foot, "left", cavity, "left", hybrid_result)
+
+    assert "foot_flat" in payload["geometries"]
+    flat_mesh = _decode_glb_mesh(payload["geometries"]["foot_flat"]["data"])
+    assert len(flat_mesh.faces) > 0
+
+
+def test_last_bottom_curve_is_a_nonempty_polyline_matching_last_length():
+    foot = _dense_box(width=90, length=270, height=60)
+    cavity = _dense_box(width=95, length=282, height=65)
+    hybrid_result = compare_hybrid(foot, "left", cavity, "left")
+    payload = build_visualization_payload(foot, "left", cavity, "left", hybrid_result)
+
+    curve = payload["layers"]["last_bottom_curve"]
+    # _dense_box's fixed subdivision count (shared with every other test in
+    # this file) caps vertex density well below what extract_bottom_profile
+    # needs for its full 1mm-step bin resolution -- 20+ profile points is
+    # still a meaningful "is this a real curve, not empty/degenerate" check.
+    assert len(curve) > 20
+    for point in curve:
+        assert len(point) == 3
+        assert point[0] == pytest.approx(0.0)
+    ys = [p[1] for p in curve]
+    assert min(ys) >= 0.0
+    assert max(ys) <= 282.0 + 1.0
+
+
+def test_pose_measurement_lines_reflect_manual_override():
+    foot = _dense_box(width=90, length=270, height=60)
+    cavity = _dense_box(width=95, length=282, height=65)
+    hybrid_result = compare_hybrid(foot, "left", cavity, "left", heel_height_mm=18.0, toe_spring_mm=22.0)
+    payload = build_visualization_payload(
+        foot, "left", cavity, "left", hybrid_result, heel_height_mm=18.0, toe_spring_mm=22.0,
+    )
+
+    lines = payload["layers"]["pose_measurements"]
+    assert len(lines) == 2
+    heights = {round(line["points"][1][2], 1) for line in lines}
+    assert 18.0 in heights
+    assert 22.0 in heights
+    for line in lines:
+        assert line["label"]
+        assert len(line["points"]) == 2

@@ -61,10 +61,13 @@ def create_lasts_router() -> APIRouter:
                                          # "левая/правая колодка" text), since
                                          # an unknown side silently disables
                                          # mirroring for whichever foot needs it
-        heel_height_mm: float | None = Form(None),  # hybrid_v2 pose model
-        toe_spring_mm: float | None = Form(None),   # (last_pose_service.py) —
-                                                     # both optional, no pose
-                                                     # applied unless both are set
+        heel_height_mm: float | None = Form(None),  # hybrid_v2 pose model overrides —
+        toe_spring_mm: float | None = Form(None),   # optional manual values that force
+                                                     # last_pose_service.apply_pose's simple
+                                                     # whole-foot lift instead of the default
+                                                     # automatic per-last measurement +
+                                                     # local-frame deformation (see
+                                                     # foot_pose_deformation.resolve_foot_pose)
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
         ext = Path(file.filename or "").suffix.lower()
