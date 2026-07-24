@@ -206,8 +206,11 @@ const CAMERA_DIRECTIONS = {
   back: [0.03, -1, 0.05],
 };
 
+// Breathing room around the fitted model, as a fraction of the tight fit.
+const FIT_MARGIN = 1.12;
+
 function CameraRig({ target, controlsRef, preset, resetKey }) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   useEffect(() => {
     // The scene's true "up" is Z (height), not three.js's default Y -- set
     // once via the Canvas's own `camera={{ up: [0,0,1] }}` prop (applied
@@ -221,21 +224,55 @@ function CameraRig({ target, controlsRef, preset, resetKey }) {
     // from its now-stale internal frame and overwriting whatever the user's
     // input had just done.
     if (!target) return;
-    const dir = CAMERA_DIRECTIONS[preset] || CAMERA_DIRECTIONS.iso;
-    const distance = target.radius * 2.2;
-    camera.position.set(
-      target.center.x + dir[0] * distance,
-      target.center.y + dir[1] * distance,
-      target.center.z + dir[2] * distance,
-    );
+    const dir = new THREE.Vector3(...(CAMERA_DIRECTIONS[preset] || CAMERA_DIRECTIONS.iso)).normalize();
+
+    // Frame the model so it fills the canvas without being clipped, in BOTH
+    // screen axes. The previous `radius * 2.2` used a single fixed multiplier
+    // off the largest dimension, ignoring the canvas aspect ratio -- so the
+    // same scene was clipped on a tall narrow canvas (a phone in portrait cut
+    // the heel and toes off past both edges: a 280mm foot in a 153mm-wide
+    // frame) and shrank to a fifth of the width on a wide short one. The
+    // vertical FOV is fixed by camera.fov, but the horizontal FOV follows the
+    // aspect ratio, and on a portrait canvas it is the *narrower* of the two,
+    // which is precisely the case that formula couldn't see.
+    //
+    // Measuring the bounding box's extent along the camera's own basis (not a
+    // bounding sphere) keeps the fit tight for a foot, whose length dwarfs its
+    // width and height -- a sphere fit would leave most of the frame empty.
+    const worldUp = new THREE.Vector3(0, 0, 1);
+    let right = new THREE.Vector3().crossVectors(dir, worldUp);
+    if (right.lengthSq() < 1e-8) right = new THREE.Vector3(1, 0, 0);
+    right.normalize();
+    const camUp = new THREE.Vector3().crossVectors(right, dir).normalize();
+
+    let halfW = 0;
+    let halfH = 0;
+    let halfDepth = 0;
+    const rel = new THREE.Vector3();
+    for (const corner of target.corners) {
+      rel.copy(corner).sub(target.center);
+      halfW = Math.max(halfW, Math.abs(rel.dot(right)));
+      halfH = Math.max(halfH, Math.abs(rel.dot(camUp)));
+      halfDepth = Math.max(halfDepth, Math.abs(rel.dot(dir)));
+    }
+
+    const aspect = size.height > 0 ? size.width / size.height : 1;
+    const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const tanH = tanV * aspect;
+    // ...plus halfDepth so the near face of the model clears the camera too.
+    const distance = Math.max(halfH / tanV, halfW / tanH) * FIT_MARGIN + halfDepth;
+
+    camera.position.copy(target.center).addScaledVector(dir, distance);
     camera.lookAt(target.center.x, target.center.y, target.center.z);
     camera.updateProjectionMatrix();
     if (controlsRef.current) {
-      controlsRef.current.target.set(target.center.x, target.center.y, target.center.z);
+      controlsRef.current.target.copy(target.center);
       controlsRef.current.update();
     }
+    // Re-runs on size change too: entering fullscreen or rotating the device
+    // swaps the aspect ratio, and the framing has to follow it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, preset, resetKey, camera]);
+  }, [target, preset, resetKey, camera, size.width, size.height]);
   return null;
 }
 
@@ -344,13 +381,19 @@ export default function Viewer3D({ geometry, title }) {
   }, [isFullscreen, exitFullscreen]);
 
   const target = useMemo(() => {
-    if (!bounds) return null;
+    if (!bounds || bounds.isEmpty()) return null;
     const center = new THREE.Vector3();
     bounds.getCenter(center);
-    const size = new THREE.Vector3();
-    bounds.getSize(size);
-    const radius = Math.max(size.x, size.y, size.z) / 2 || 150;
-    return { center, radius };
+    const { min, max } = bounds;
+    // All 8 box corners -- CameraRig measures their spread along the camera's
+    // own right/up axes to fit the frame exactly for the current view angle.
+    const corners = [];
+    for (const x of [min.x, max.x]) {
+      for (const y of [min.y, max.y]) {
+        for (const z of [min.z, max.z]) corners.push(new THREE.Vector3(x, y, z));
+      }
+    }
+    return { center, corners };
   }, [bounds]);
 
   // Stable identity is required here: this is passed to SurfaceLayer as
@@ -447,7 +490,9 @@ export default function Viewer3D({ geometry, title }) {
             </button>
           </div>
         )}
-        <div className="flex items-center gap-1 ml-auto">
+        {/* wraps rather than overflowing: on a narrow phone these 8 buttons
+            ran off the right edge, cutting off the last preset. */}
+        <div className="flex flex-wrap items-center gap-1 sm:ml-auto">
           {Object.keys(CAMERA_DIRECTIONS).map((p) => (
             <button
               key={p} type="button"
