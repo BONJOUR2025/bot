@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -161,14 +161,17 @@ const CAMERA_DIRECTIONS = {
 function CameraRig({ target, controlsRef, preset, resetKey }) {
   const { camera } = useThree();
   useEffect(() => {
-    // The scene's true "up" is Z (height), not three.js's default Y --
-    // without this, lookAt() computes screen-space orientation against the
-    // wrong reference axis, which reads as a correct-looking iso view (Y and
-    // Z offsets both nonzero, so the mismatch is subtle) but renders the
-    // top/front/back presets rotated or flipped, since their view direction
-    // sits close to one of the two axes that disagree between the data's
-    // convention and three.js's default.
-    camera.up.set(0, 0, 1);
+    // The scene's true "up" is Z (height), not three.js's default Y -- set
+    // once via the Canvas's own `camera={{ up: [0,0,1] }}` prop (applied
+    // before OrbitControls ever mounts), NOT here. OrbitControls computes
+    // an internal quaternion from `camera.up` exactly once, at construction
+    // -- mutating `camera.up` again afterwards (as this effect used to do,
+    // on every preset change) doesn't update that cached quaternion, it
+    // just desyncs it from the camera's actual orientation. That mismatch
+    // was the root cause of "drag-to-rotate and scroll-to-zoom do nothing":
+    // OrbitControls' per-frame update() kept recomputing the camera pose
+    // from its now-stale internal frame and overwriting whatever the user's
+    // input had just done.
     if (!target) return;
     const dir = CAMERA_DIRECTIONS[preset] || CAMERA_DIRECTIONS.iso;
     const distance = target.radius * 2.2;
@@ -180,7 +183,6 @@ function CameraRig({ target, controlsRef, preset, resetKey }) {
     camera.lookAt(target.center.x, target.center.y, target.center.z);
     camera.updateProjectionMatrix();
     if (controlsRef.current) {
-      controlsRef.current.object.up.set(0, 0, 1);
       controlsRef.current.target.set(target.center.x, target.center.y, target.center.z);
       controlsRef.current.update();
     }
@@ -242,9 +244,20 @@ export default function Viewer3D({ geometry, title }) {
     return { center, radius };
   }, [bounds]);
 
-  function handleBounds(box) {
+  // Stable identity is required here: this is passed to SurfaceLayer as
+  // `onBounds`, which sits in that component's own effect dependency array.
+  // A plain function (recreated every render) would make that effect refire
+  // on every Viewer3D render, not just when the mesh itself changes -- and
+  // since firing it calls setBounds (producing a new Box3 reference even
+  // when the union is a no-op), that becomes a self-sustaining render loop.
+  // CameraRig's effect depends on the resulting `target`, so that loop kept
+  // snapping the camera back to the current preset on every tick -- which
+  // is exactly why OrbitControls' drag-to-rotate and scroll-to-zoom looked
+  // completely unresponsive: the camera was being reset out from under the
+  // user's input almost immediately after every frame.
+  const handleBounds = useCallback((box) => {
     setBounds((prev) => (prev ? prev.clone().union(box) : box.clone()));
-  }
+  }, []);
 
   function toggleLayer(key) {
     setLayers((l) => ({ ...l, [key]: !l[key] }));
