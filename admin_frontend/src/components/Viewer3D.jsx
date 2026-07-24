@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls, Html } from '@react-three/drei';
+import { Environment, Lightformer, OrbitControls, Html } from '@react-three/drei';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
 import { Download, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
@@ -34,21 +34,43 @@ function useGlbObject(base64) {
   return object;
 }
 
-function SurfaceLayer({ base64, color, opacity, onBounds }) {
+// A "frosted glass" look (MeshPhysicalMaterial's transmission/thickness/ior)
+// rather than the flat MeshStandardMaterial this used before -- transmission
+// needs the renderer's own transmission pass, which three.js provides out of
+// the box without requiring an environment map, though the <Environment>
+// rig added below still meaningfully improves how the specular highlights
+// read. When the geometry itself carries per-vertex heatmap colors (see
+// app/services/surface_heatmap.py), `vertexColors` is enabled and the
+// material's own `color` is left white so it doesn't tint/darken them --
+// three.js multiplies vertex color by material color, so anything but white
+// here would dull the gradient.
+function SurfaceLayer({ base64, color, opacity, glass, onBounds }) {
   const object = useGlbObject(base64);
   const prepared = useMemo(() => {
     if (!object) return null;
     const clone = object.clone(true);
     clone.traverse((child) => {
       if (child.isMesh) {
-        child.material = new THREE.MeshStandardMaterial({
-          color, transparent: true, opacity, side: THREE.DoubleSide,
-          depthWrite: opacity > 0.9,
-        });
+        const hasVertexColors = Boolean(child.geometry?.attributes?.color);
+        child.material = glass
+          ? new THREE.MeshPhysicalMaterial({
+            color: hasVertexColors ? 0xffffff : color,
+            vertexColors: hasVertexColors,
+            transparent: true, opacity, side: THREE.DoubleSide,
+            depthWrite: opacity > 0.9,
+            transmission: 0.55, thickness: 12, roughness: 0.2, ior: 1.4,
+            clearcoat: 0.5, clearcoatRoughness: 0.25, envMapIntensity: 1.2,
+          })
+          : new THREE.MeshStandardMaterial({
+            color: hasVertexColors ? 0xffffff : color,
+            vertexColors: hasVertexColors,
+            transparent: true, opacity, side: THREE.DoubleSide,
+            depthWrite: opacity > 0.9,
+          });
       }
     });
     return clone;
-  }, [object, color, opacity]);
+  }, [object, color, opacity, glass]);
 
   useEffect(() => {
     if (prepared && onBounds) onBounds(new THREE.Box3().setFromObject(prepared));
@@ -76,19 +98,45 @@ function PatchLayer({ patch }) {
   return <primitive object={prepared} />;
 }
 
+// Callout card + a thin leader line from the surface anchor point to the
+// floating label, closer to the reference "labeled medical illustration"
+// style than the old plain bordered chip. `anchor` is optional (the
+// heel/toe measurement lines reuse this same component with just a
+// position, no separate surface point to connect from).
 function LabelLayer({ label }) {
+  const lineGeometry = useMemo(() => {
+    if (!label.anchor) return null;
+    const g = new THREE.BufferGeometry();
+    g.setFromPoints([new THREE.Vector3(...label.anchor), new THREE.Vector3(...label.position)]);
+    return g;
+  }, [label.anchor, label.position]);
+
   return (
-    <Html position={label.position} center style={{ pointerEvents: 'none' }}>
-      <div
-        style={{
-          background: 'rgba(20,20,20,0.85)', color: label.color || '#fff',
-          padding: '2px 7px', borderRadius: 4, fontSize: 11, whiteSpace: 'nowrap',
-          border: `1px solid ${label.color || '#fff'}`,
-        }}
-      >
-        {label.text}
-      </div>
-    </Html>
+    <>
+      {lineGeometry && (
+        <line geometry={lineGeometry}>
+          <lineBasicMaterial color={label.color || '#ffffff'} transparent opacity={0.8} />
+        </line>
+      )}
+      {label.anchor && (
+        <mesh position={label.anchor}>
+          <sphereGeometry args={[1.2, 12, 12]} />
+          <meshBasicMaterial color={label.color || '#ffffff'} />
+        </mesh>
+      )}
+      <Html position={label.position} center style={{ pointerEvents: 'none' }}>
+        <div
+          style={{
+            background: 'rgba(8,12,24,0.85)', color: '#f5f7fa',
+            padding: '5px 10px', borderRadius: 8, fontSize: 11, whiteSpace: 'nowrap',
+            borderLeft: `3px solid ${label.color || '#ffffff'}`,
+            boxShadow: '0 3px 12px rgba(0,0,0,0.45)',
+          }}
+        >
+          <span style={{ fontWeight: 600, color: label.color || '#ffffff' }}>{label.text}</span>
+        </div>
+      </Html>
+    </>
   );
 }
 
@@ -278,7 +326,7 @@ export default function Viewer3D({ geometry, title }) {
   }
 
   if (!geometry) return null;
-  const { geometries, layers: dataLayers, legend } = geometry;
+  const { geometries, layers: dataLayers, legend, heatmap } = geometry;
   const hasFlatFoot = Boolean(geometries.foot_flat);
   const footGlb = footPose === 'flat' && hasFlatFoot ? geometries.foot_flat.data : geometries.foot.data;
   const bottomCurve = dataLayers.last_bottom_curve;
@@ -368,13 +416,24 @@ export default function Viewer3D({ geometry, title }) {
           </button>
         )}
         <Canvas camera={{ fov: 45, near: 1, far: 5000, up: [0, 0, 1] }} gl={{ preserveDrawingBuffer: true }}>
-          <ambientLight intensity={0.7} />
-          <directionalLight position={[200, 300, 200]} intensity={0.6} />
+          <color attach="background" args={['#0a0f1e']} />
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[200, 300, 200]} intensity={0.5} />
+          {/* Procedural (no network fetch) environment for the glass
+              material's specular highlights/refraction -- a couple of soft
+              light panels around the scene, not a photographic HDRI, so
+              this doesn't depend on an external asset CDN being reachable
+              from wherever this admin panel is deployed. */}
+          <Environment resolution={128}>
+            <Lightformer intensity={2} color="#dceeff" position={[0, 0, 200]} scale={[300, 300, 1]} />
+            <Lightformer intensity={1.2} color="#ffffff" position={[200, 150, -100]} scale={[200, 200, 1]} />
+            <Lightformer intensity={1} color="#88bfff" position={[-200, -100, -100]} scale={[200, 200, 1]} />
+          </Environment>
           {layers.last && (
-            <SurfaceLayer base64={geometries.last.data} color={legend.last} opacity={0.35} onBounds={handleBounds} />
+            <SurfaceLayer base64={geometries.last.data} color={legend.last} opacity={0.4} glass onBounds={handleBounds} />
           )}
           {layers.foot && (
-            <SurfaceLayer base64={footGlb} color={legend.foot} opacity={0.45} onBounds={handleBounds} />
+            <SurfaceLayer base64={footGlb} color={legend.foot} opacity={0.72} glass onBounds={handleBounds} />
           )}
           {layers.patches && dataLayers.problem_patches.map((patch, i) => (
             <PatchLayer key={i} patch={patch} />
@@ -393,11 +452,17 @@ export default function Viewer3D({ geometry, title }) {
         </Canvas>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-[11px] text-[color:var(--color-text-muted)]">
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--color-text-muted)]">
         <LegendDot color={legend.last} label="Колодка" />
-        <LegendDot color={legend.foot} label="Стопа" />
-        <LegendDot color={legend.too_tight} label="Теснота" />
-        <LegendDot color={legend.too_loose} label="Избыточная свобода" />
+        {heatmap && (
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-16 h-2.5 rounded-full"
+              style={{ background: `linear-gradient(90deg, ${heatmap.tight_color}, ${heatmap.neutral_color}, ${heatmap.loose_color})` }}
+            />
+            <span>Теснота ↔ свобода (±{heatmap.range_mm} мм)</span>
+          </span>
+        )}
         <LegendDot color={legend.misallocated_volume} label="Объём не туда" />
         <LegendDot color={legend.forefoot_taper_too_fast} label="Носок сужается быстро" />
       </div>

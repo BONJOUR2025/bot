@@ -54,6 +54,15 @@ from app.services.last_fit_hybrid_service import (
 from app.services.foot_pose_deformation import resolve_foot_pose
 from app.services.last_bottom_profile import extract_bottom_profile
 from app.services.last_registration_service import initial_align, register_foot_to_cavity
+from app.services.mesh3d_service import bidirectional_surface_distance, mesh_quality_report
+from app.services.surface_heatmap import (
+    DEFAULT_EASE_CLAMP_MM,
+    LOOSE_RGB,
+    NEUTRAL_RGB,
+    TIGHT_RGB,
+    ease_to_vertex_colors,
+    vertex_ease_values,
+)
 
 # Explicit, documented palette (the source spec insists on this being config,
 # not hardcoded scattered literals — it still lives in one place, just here).
@@ -86,6 +95,10 @@ def _pattern_color(pattern: str) -> str:
     if pattern in _LOOSE_PATTERNS:
         return COLORS["too_loose"]
     return COLORS["default_patch"]
+
+
+def _rgb_to_hex(rgb: tuple[int, int, int]) -> str:
+    return "#{:02X}{:02X}{:02X}".format(*rgb)
 
 
 def _mesh_to_glb_base64(mesh: trimesh.Trimesh) -> str:
@@ -181,7 +194,12 @@ def _labels_for_patches(patches: list[dict], final_foot: trimesh.Trimesh) -> lis
         band = np.abs(y_all - y) < max(length * 0.02, 2.0)
         x = float(final_foot.vertices[band, 0].max()) if band.any() else 0.0
         z = float(final_foot.vertices[band, 2].max()) if band.any() else 0.0
-        labels.append({"text": patch["label"], "position": [x, float(y), z + 10.0], "color": patch["color"]})
+        labels.append({
+            "text": patch["label"],
+            "anchor": [x, float(y), z],
+            "position": [x, float(y), z + 10.0],
+            "color": patch["color"],
+        })
     return labels
 
 
@@ -253,6 +271,22 @@ def build_visualization_payload(
     foot_flat_final = foot_flat_aligned.copy()
     foot_flat_final.vertices = trimesh.transform_points(foot_flat_aligned.vertices, registration.transform)
 
+    # Continuous per-vertex heatmap: reuses the same bounded surface sample
+    # compare_hybrid's own zone aggregates are built from (see
+    # surface_heatmap.py for why this, rather than an exact per-vertex
+    # query, is the affordable option on these meshes). foot_flat_final
+    # shares final_foot's exact vertex order (pose deformation and the
+    # registration transform both only move vertices, never re-triangulate)
+    # so the same color array is valid for both -- computed once.
+    foot_quality = mesh_quality_report(final_foot)
+    cavity_quality = mesh_quality_report(cavity_aligned)
+    bidir = bidirectional_surface_distance(final_foot, foot_quality, cavity_aligned, cavity_quality)
+    f2c = bidir["foot_to_cavity"]
+    ease = vertex_ease_values(final_foot, f2c["points"], f2c["distances"])
+    vertex_colors = ease_to_vertex_colors(ease)
+    final_foot.visual = trimesh.visual.color.ColorVisuals(mesh=final_foot, vertex_colors=vertex_colors)
+    foot_flat_final.visual = trimesh.visual.color.ColorVisuals(mesh=foot_flat_final, vertex_colors=vertex_colors)
+
     patches = _build_patches(final_foot, hybrid_result)
     labels = _labels_for_patches(patches, final_foot)
 
@@ -267,6 +301,13 @@ def build_visualization_payload(
             "labels": labels,
             "last_bottom_curve": _last_bottom_curve(cavity_aligned),
             "pose_measurements": _pose_measurement_lines(pose_details, cavity_aligned),
+        },
+        "heatmap": {
+            "enabled": bool(bidir["foot_to_cavity"]["signed"]),
+            "range_mm": DEFAULT_EASE_CLAMP_MM,
+            "tight_color": _rgb_to_hex(TIGHT_RGB),
+            "neutral_color": _rgb_to_hex(NEUTRAL_RGB),
+            "loose_color": _rgb_to_hex(LOOSE_RGB),
         },
         "legend": {
             "last": COLORS["last_surface"],

@@ -146,6 +146,38 @@ def test_last_bottom_curve_is_a_nonempty_polyline_matching_last_length():
     assert max(ys) <= 282.0 + 1.0
 
 
+def test_heatmap_metadata_present_and_vertex_colors_not_flat():
+    foot = _dense_box(width=90, length=270, height=60)
+    cavity = _dense_box(width=80, length=282, height=75)  # NARROW_HIGH -> real conflict/room variation
+    hybrid_result = compare_hybrid(foot, "left", cavity, "left")
+    payload = build_visualization_payload(foot, "left", cavity, "left", hybrid_result)
+
+    heatmap = payload["heatmap"]
+    assert heatmap["enabled"] is True
+    assert heatmap["range_mm"] > 0
+    for key in ("tight_color", "neutral_color", "loose_color"):
+        assert heatmap[key].startswith("#")
+
+    foot_mesh = _decode_glb_mesh(payload["geometries"]["foot"]["data"])
+    vertex_colors = foot_mesh.visual.vertex_colors
+    assert vertex_colors.shape[0] == len(foot_mesh.vertices)
+    # a real conflict (narrower+taller cavity) should produce more than one
+    # distinct color across the surface -- not a single flat tint.
+    assert len(np.unique(vertex_colors.reshape(-1, 4), axis=0)) > 1
+
+
+def test_foot_flat_shares_same_vertex_colors_as_posed_foot():
+    foot = _dense_box(width=90, length=270, height=60)
+    cavity = _dense_box(width=80, length=282, height=75)
+    hybrid_result = compare_hybrid(foot, "left", cavity, "left")
+    payload = build_visualization_payload(foot, "left", cavity, "left", hybrid_result)
+
+    posed = _decode_glb_mesh(payload["geometries"]["foot"]["data"])
+    flat = _decode_glb_mesh(payload["geometries"]["foot_flat"]["data"])
+    assert posed.visual.vertex_colors.shape == flat.visual.vertex_colors.shape
+    assert np.array_equal(posed.visual.vertex_colors, flat.visual.vertex_colors)
+
+
 def test_pose_measurement_lines_reflect_manual_override():
     foot = _dense_box(width=90, length=270, height=60)
     cavity = _dense_box(width=95, length=282, height=65)
