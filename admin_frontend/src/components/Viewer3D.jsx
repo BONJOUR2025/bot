@@ -3,7 +3,8 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
-import { Download, RotateCcw } from 'lucide-react';
+import { Download, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
+import { useViewport } from '../providers/ViewportProvider.jsx';
 
 // Geometry arrives as base64-encoded GLB (see app/services/mesh_visualization_service.py —
 // same "data URI" convention this codebase already uses for PNG overlays elsewhere),
@@ -133,18 +134,41 @@ function MeasurementLineLayer({ line }) {
 
 // Directions only -- CameraRig scales these by the scene's own bounding
 // radius (computed from the loaded meshes), so this works for a last
-// visualization) regardless of the specific foot/last size.
+// visualization regardless of the specific foot/last size.
+//
+// This codebase's mesh coordinate convention (stl_parser_service.py /
+// scm_parser_service.py, consistent everywhere) is X = width, Y = length
+// from the heel, Z = height above the ground -- NOT three.js's usual Y-up.
+// The previous values here were written as if Y were "up" (top=[0,1,..],
+// front/back=[0,0,±1]), which actually pointed "top" sideways along the
+// foot's length and made "front"/"back" both look straight down from
+// above/below -- exactly the "upside down / wrong angle" bug reported.
+// Corrected so each preset points along the axis its name actually means
+// in this data: top/bottom along Z, front (toe end) / back (heel end)
+// along Y, side along X. Small (0.02-0.05) components on the two
+// non-dominant axes keep the view a hair off pure-axis-aligned so
+// lookAt()'s forward vector is never exactly parallel to camera.up (see
+// below) -- an exact parallel there is a degenerate case three.js can't
+// resolve into a stable orientation.
 const CAMERA_DIRECTIONS = {
-  iso: [1, 0.8, 1],
-  top: [0, 1, 0.01],
-  side: [1, 0, 0],
-  front: [0, 0, 1],
-  back: [0, 0, -1],
+  iso: [0.9, 0.5, 0.8],
+  top: [0.03, 0.03, 1],
+  side: [1, 0.03, 0.03],
+  front: [0.03, 1, 0.05],
+  back: [0.03, -1, 0.05],
 };
 
 function CameraRig({ target, controlsRef, preset, resetKey }) {
   const { camera } = useThree();
   useEffect(() => {
+    // The scene's true "up" is Z (height), not three.js's default Y --
+    // without this, lookAt() computes screen-space orientation against the
+    // wrong reference axis, which reads as a correct-looking iso view (Y and
+    // Z offsets both nonzero, so the mismatch is subtle) but renders the
+    // top/front/back presets rotated or flipped, since their view direction
+    // sits close to one of the two axes that disagree between the data's
+    // convention and three.js's default.
+    camera.up.set(0, 0, 1);
     if (!target) return;
     const dir = CAMERA_DIRECTIONS[preset] || CAMERA_DIRECTIONS.iso;
     const distance = target.radius * 2.2;
@@ -156,6 +180,7 @@ function CameraRig({ target, controlsRef, preset, resetKey }) {
     camera.lookAt(target.center.x, target.center.y, target.center.z);
     camera.updateProjectionMatrix();
     if (controlsRef.current) {
+      controlsRef.current.object.up.set(0, 0, 1);
       controlsRef.current.target.set(target.center.x, target.center.y, target.center.z);
       controlsRef.current.update();
     }
@@ -184,8 +209,28 @@ export default function Viewer3D({ geometry, title }) {
   const [preset, setPreset] = useState('iso');
   const [resetKey, setResetKey] = useState(0);
   const [bounds, setBounds] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsRef = useRef();
   const canvasWrapperRef = useRef();
+  const { isMobile } = useViewport();
+
+  // Fullscreen toggles CSS on this same wrapper (fixed, full-viewport)
+  // rather than portalling/remounting the canvas elsewhere -- moving the
+  // <Canvas> to a different DOM parent would tear down and recreate its
+  // WebGL context, re-parsing the GLB meshes from scratch on every toggle.
+  useEffect(() => {
+    if (!isFullscreen) return undefined;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullscreen]);
 
   const target = useMemo(() => {
     if (!bounds) return null;
@@ -227,7 +272,13 @@ export default function Viewer3D({ geometry, title }) {
   const measurementLines = dataLayers.pose_measurements;
 
   return (
-    <div className="app-card p-3 space-y-2">
+    <div
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-[9999] flex flex-col gap-2 p-3 bg-[color:var(--color-modal-bg)]'
+          : 'app-card p-3 flex flex-col gap-2'
+      }
+    >
       {title && <div className="font-medium text-sm">{title}</div>}
 
       <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -277,11 +328,33 @@ export default function Viewer3D({ geometry, title }) {
           <button type="button" className="btn text-xs" title="Скриншот" onClick={handleScreenshot}>
             <Download size={14} />
           </button>
+          <button
+            type="button"
+            className="btn text-xs"
+            title={isFullscreen ? 'Свернуть' : 'На весь экран'}
+            onClick={() => setIsFullscreen((v) => !v)}
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
         </div>
       </div>
 
-      <div ref={canvasWrapperRef} className="rounded border border-[color:var(--color-border)] overflow-hidden" style={{ height: 420 }}>
-        <Canvas camera={{ fov: 45, near: 1, far: 5000 }} gl={{ preserveDrawingBuffer: true }}>
+      <div
+        ref={canvasWrapperRef}
+        className={`relative rounded border border-[color:var(--color-border)] overflow-hidden ${isFullscreen ? 'flex-1 min-h-0' : ''}`}
+        style={isFullscreen ? undefined : { height: 420 }}
+      >
+        {isMobile && !isFullscreen && (
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(true)}
+            title="Развернуть на весь экран"
+            className="absolute bottom-2 right-2 z-10 rounded-full bg-black/60 text-white p-2 leading-none"
+          >
+            <Maximize2 size={18} />
+          </button>
+        )}
+        <Canvas camera={{ fov: 45, near: 1, far: 5000, up: [0, 0, 1] }} gl={{ preserveDrawingBuffer: true }}>
           <ambientLight intensity={0.7} />
           <directionalLight position={[200, 300, 200]} intensity={0.6} />
           {layers.last && (
