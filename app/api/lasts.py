@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.data.last_repository import LastRepository
 from app.services.access_control_service import ResolvedUser
+from app.services.fit_pipeline import analyze_fit
 from app.services.last_fit_hybrid_service import combine_bilateral, compare_hybrid
 from app.services.mesh_visualization_service import build_visualization_payload
 from app.services.last_fit_service import compare_profiles
@@ -142,6 +143,8 @@ def create_lasts_router() -> APIRouter:
         # (mesh validation + registration + surface distance, a few seconds
         # each) — fine for a single last_id, potentially slow against the
         # whole library.
+        # "fit_v3" runs the research-report pipeline (fit_pipeline.py) and
+        # attaches a per-foot `fit_result` instead of `surface_result`.
         engine: str = Form("slice_v1"),
         # Heavy (base64 GLB meshes + problem-patch submeshes) — only built
         # when explicitly asked and only alongside engine=hybrid_v2, since
@@ -251,6 +254,38 @@ def create_lasts_router() -> APIRouter:
         matches = await asyncio.to_thread(_run_matches)
 
         response_engine = "slice_v1"
+
+        if engine == "fit_v3" and foot_raw_by_side:
+            # The §21 pipeline (fit_pipeline.py). Kept beside hybrid_v2 rather
+            # than replacing it: the admin panel reads hybrid_v2's shape today,
+            # and swapping the engine underneath a live UI is its own decision.
+            targets_by_id = {t["id"]: t for t in targets}
+
+            def _run_fit_v3():
+                for match in matches:
+                    last = targets_by_id[match["last"]["id"]]
+                    url = last.get("scan_file_url") or ""
+                    if not url.lower().endswith(".stl"):
+                        continue
+                    last_path = Path(url.lstrip("/"))
+                    if not last_path.exists():
+                        continue
+                    last_mesh = load_stl_mesh(last_path.read_bytes())
+                    for pf in match["per_foot"]:
+                        raw = foot_raw_by_side.get(pf["foot_side"])
+                        if raw is None:
+                            continue
+                        try:
+                            pf["fit_result"] = analyze_fit(
+                                load_stl_mesh(raw), last_mesh,
+                                pf["foot_side"], last.get("side"),
+                            ).as_dict()
+                        except Exception as exc:
+                            pf["fit_result"] = {"engine": "fit_v3", "error": str(exc)}
+
+            await asyncio.to_thread(_run_fit_v3)
+            response_engine = "fit_v3"
+
         if engine == "hybrid_v2" and foot_raw_by_side:
             targets_by_id = {t["id"]: t for t in targets}
 
