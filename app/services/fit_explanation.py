@@ -196,6 +196,7 @@ _HEADLINE = {
     "FIT_LOCAL_LOOSENESS": "Подходит с оговоркой: местами свободно",
     "FIT_REQUIRES_LAST_MODIFICATION": "Колодка не подходит без переделки",
     "FIT_INDETERMINATE": "Оценить не удалось",
+    "FIT_STRUCTURALLY_INCOMPATIBLE": "Не тот размер колодки",
 }
 
 
@@ -212,11 +213,37 @@ def explain(report: dict) -> Explanation:
         key=lambda f: (_SEVERITY_ORDER[f.severity], -abs(f.confidence)),
     )
 
+    # A size mismatch is the cause; the zone findings are its symptoms. It goes
+    # first and says so, otherwise the reader meets six "independent" tightness
+    # zones and never learns that a shorter last would remove all of them.
+    sm = report.get("size_match") or {}
+    if sm.get("gate_triggered"):
+        parts = []
+        if sm.get("functional_toe_clearance_mm") is not None:
+            parts.append(f"полезный запас перед пальцами "
+                         f"{sm['functional_toe_clearance_mm']:.0f} мм при норме 10–15")
+        if sm.get("ball_offset_mm") is not None:
+            parts.append(f"пучки стопы и колодки расходятся на "
+                         f"{abs(sm['ball_offset_mm']):.0f} мм ({abs(sm.get('ball_offset_pct') or 0):.1f}% длины)")
+        findings.insert(0, Finding(
+            severity=CRITICAL, zone="size",
+            title="Колодка не того размера для этой стопы",
+            fact="; ".join(parts) + "." if parts else "Соразмерность нарушена.",
+            effect=("Самая широкая часть стопы попадает не в самое широкое место колодки, "
+                    "а линия сгиба обуви не совпадает с суставом. Теснота, перечисленная ниже, "
+                    "— следствие этого смещения, а не отдельные проблемы."),
+            confidence=sm.get("confidence", 0.0),
+            check=sm.get("size_hint") or "Подобрать колодку другого размера",
+        ))
+
     tight = [f for f in findings if f.severity in (CRITICAL, WARNING) and "тесно" in f.title]
     loose = [f for f in findings if "свободно" in f.title]
     ok_count = sum(1 for f in findings if f.severity == GOOD)
 
-    if fit_class == "FIT_REQUIRES_LAST_MODIFICATION":
+    if fit_class == "FIT_STRUCTURALLY_INCOMPATIBLE":
+        summary = ("Дело не в полноте и не в разноске: колодка не соответствует стопе "
+                   "по размеру и пропорции. Нужна колодка другой длины.")
+    elif fit_class == "FIT_REQUIRES_LAST_MODIFICATION":
         summary = (f"Теснота не локальная, а по большей части стопы "
                    f"({len(tight)} зон из {len(findings)}). Это не лечится разноской "
                    f"или шнуровкой — нужна другая полнота либо переделка колодки.")

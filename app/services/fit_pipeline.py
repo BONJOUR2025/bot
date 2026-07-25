@@ -28,6 +28,7 @@ from app.services.curvilinear_sections import build_centerline, sections_along
 from app.services.fit_clearance import ClearanceReport, compute_clearance
 from app.services.fit_explanation import explain
 from app.services.fit_footprint import render_footprint_overlay
+from app.services.fit_size_match import evaluate_size_match
 from app.services.foot_landmarks import detect_foot_landmarks
 from app.services.heel_fixed_registration import register_foot_to_last
 from app.services.last_registration_service import initial_align
@@ -43,6 +44,9 @@ FIT_LOCAL_TIGHTNESS = "FIT_LOCAL_TIGHTNESS"
 FIT_LOCAL_LOOSENESS = "FIT_LOCAL_LOOSENESS"
 FIT_REQUIRES_LAST_MODIFICATION = "FIT_REQUIRES_LAST_MODIFICATION"
 FIT_INDETERMINATE = "FIT_INDETERMINATE"
+# §17.2/§15: the last is the wrong size or proportion for this foot, so no
+# amount of easing or a different fullness will help.
+FIT_STRUCTURALLY_INCOMPATIBLE = "FIT_STRUCTURALLY_INCOMPATIBLE"
 
 _MANY_TIGHT_ZONES = 3
 
@@ -57,6 +61,7 @@ class FitReport:
     working_orientation: dict
     cavity: dict
     sections: list[dict]
+    size_match: dict
     clearance: dict
     quality: dict
     explanation: dict = field(default_factory=dict)
@@ -74,6 +79,7 @@ class FitReport:
             "working_orientation": self.working_orientation,
             "cavity": self.cavity,
             "sections": self.sections,
+            "size_match": self.size_match,
             "clearance": self.clearance,
             "quality": self.quality,
             "explanation": self.explanation,
@@ -154,6 +160,13 @@ def analyze_fit(
     # 13. estimated shoe cavity
     cavity = build_cavity(last_used, construction)
 
+    # 13b. Is this last even the right size for this foot? Runs before the
+    # zone analysis because a size mismatch makes those zones consequences
+    # rather than independent findings (see fit_size_match).
+    last_landmarks = detect_foot_landmarks(last_used, side=last_side or foot_side)
+    size_match = evaluate_size_match(foot_registered, cavity.mesh,
+                                     foot_landmarks, last_landmarks)
+
     # 14-17. clearance against the cavity, with the uncertainty budget
     clearance = compute_clearance(
         foot_registered, cavity.mesh, mesh_quality_report(cavity.mesh),
@@ -180,8 +193,17 @@ def analyze_fit(
         except Exception as exc:
             limitations.append(f"footprint overlay unavailable: {exc}")
 
+    fit_class = (FIT_STRUCTURALLY_INCOMPATIBLE if size_match.gate_triggered
+                 else _classify(clearance))
+    if size_match.gate_triggered:
+        limitations.append(
+            "size/proportion mismatch dominates: the zone findings below are its "
+            "consequence, not independent problems"
+        )
+    limitations.extend(size_match.warnings)
+
     report = FitReport(
-        fit_class=_classify(clearance),
+        fit_class=fit_class,
         confidence=confidence,
         analysis_mode=analysis_mode,
         landmarks=foot_landmarks.as_dict(),
@@ -189,6 +211,7 @@ def analyze_fit(
         working_orientation=orientation.as_dict(),
         cavity=cavity.as_dict(),
         sections=sections,
+        size_match=size_match.as_dict(),
         clearance=clearance.as_dict(),
         quality={"foot": foot_quality.as_dict(), "cavity": last_quality.as_dict()},
         footprint_png_base64=footprint,
