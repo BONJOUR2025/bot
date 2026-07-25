@@ -227,10 +227,17 @@ def deform_foot_to_last_pose(
         raise ValueError("no_ball_line_detected_on_foot")
     ball_line_foot_y = float(foot_vertices[:, 1].min()) + ball_line_foot_offset
 
+    # The rotation is driven by the *effective* heel elevation (the height
+    # difference between the last's heel-seat and ball-tread support patches),
+    # never by the Z of its rearmost vertex -- see last_working_orientation.py
+    # for why the latter is not a heel height at all. On a flat last this is
+    # ~0 and the heel segment correctly stays put.
+    heel_elevation = last_pose["effective_heel_elevation_mm"]
+
     foot_frames = build_section_frames(foot_mesh, n_sections=n_sections)
     target_frames = build_target_curve(
         foot_frames,
-        heel_height_mm=last_pose["heel_height_mm"],
+        heel_height_mm=heel_elevation,
         ball_line_foot_y=ball_line_foot_y,
         last_profile=last_pose["bottom_profile"],
         last_ball_line_y=last_pose["ball_line_y_mm"] if last_pose["ball_line_y_mm"] is not None
@@ -265,7 +272,12 @@ def deform_foot_to_last_pose(
     pose_info = {
         "source_geometry": "foot_flat",
         "target_geometry": "foot_last_pose",
-        "heel_height_mm": last_pose["heel_height_mm"],
+        # What the pose actually used, and (separately) the descriptive
+        # back-of-heel profile height it must not be confused with.
+        "heel_height_mm": round(heel_elevation, 1),
+        "effective_heel_elevation_mm": round(heel_elevation, 1),
+        "rear_profile_height_mm": last_pose["heel_height_mm"],
+        "orientation_confidence": last_pose["working_orientation"]["orientation_confidence"],
         "toe_spring_tip_mm": last_pose["toe_spring_tip_mm"],
         "ball_line_foot_mm": round(ball_line_foot_y, 2),
         "n_sections": n_sections,

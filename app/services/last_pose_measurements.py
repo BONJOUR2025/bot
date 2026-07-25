@@ -30,6 +30,7 @@ from app.services.last_bottom_profile import (
     find_ground_plane,
     profile_z_at_y,
 )
+from app.services.last_working_orientation import estimate_working_orientation
 from app.services.scm_parser_service import _ball_line_mm
 
 _REAR_REGION_MAX_U = 0.03
@@ -140,7 +141,21 @@ def measure_last_pose(last_mesh: trimesh.Trimesh) -> dict:
     if ball_line_y is None:
         confidence *= 0.5
 
+    # The number that may drive a pose is the *effective* heel elevation --
+    # the height difference between the two surfaces the foot is actually
+    # supported on (last_working_orientation.py). `heel_height_endpoint_mm`
+    # below is deliberately NOT that: it is the Z of the rearmost vertex,
+    # which sits on the curved back wall of the heel. Reporting it as a heel
+    # height is what §6.2 of the research report forbids, and on the real
+    # Prada 43 last it claimed 22.7mm for a last whose true elevation is
+    # 0.13mm -- a ~7 degree phantom rotation of every foot. It is kept only
+    # as a descriptive measurement of the heel's back profile.
+    orientation = estimate_working_orientation(last_mesh)
+    confidence *= max(orientation.orientation_confidence, 0.05) if orientation.heel_support else 0.5
+
     return {
+        "effective_heel_elevation_mm": orientation.effective_heel_elevation_mm,
+        "working_orientation": orientation.as_dict(),
         "heel_height_mm": heel_toe["heel_height_endpoint_mm"],
         "toe_spring_tip_mm": heel_toe["toe_spring_tip_mm"],
         "toe_spring_start_y_mm": heel_toe["toe_spring_start_y_mm"],
