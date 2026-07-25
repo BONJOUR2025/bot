@@ -35,180 +35,128 @@ function LastCard({ last, onDelete }) {
   );
 }
 
-const VERDICT_STYLE = {
-  good: { label: 'Хорошо подойдёт', cls: 'bg-green-100 text-green-800 border-green-300' },
-  ok: { label: 'Подойдёт с минимальным запасом', cls: 'bg-blue-100 text-blue-800 border-blue-300' },
-  uncertain: { label: 'Неопределённо — нужна примерка', cls: 'bg-gray-100 text-gray-700 border-gray-300' },
-  loose: { label: 'Подойдёт, но свободна', cls: 'bg-amber-100 text-amber-800 border-amber-300' },
-  not_fit: { label: 'Не подойдёт', cls: 'bg-red-100 text-red-800 border-red-300' },
+
+
+
+
+const SEVERITY_STYLE = {
+  critical: { dot: 'bg-red-500', box: 'border-red-300 bg-red-50', text: 'text-red-900' },
+  warning: { dot: 'bg-amber-500', box: 'border-amber-300 bg-amber-50', text: 'text-amber-900' },
+  neutral: { dot: 'bg-slate-400', box: 'border-slate-300 bg-slate-50', text: 'text-slate-800' },
+  good: { dot: 'bg-emerald-500', box: 'border-emerald-200 bg-emerald-50', text: 'text-emerald-900' },
 };
 
-const ZONE_DOT = {
-  too_tight: 'bg-red-500', tight_ok: 'bg-amber-500', ideal: 'bg-green-500',
-  loose_ok: 'bg-amber-400', too_loose: 'bg-amber-500', uncertain: 'bg-gray-400',
+const HEADLINE_STYLE = {
+  FIT_GOOD: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+  FIT_LOCAL_TIGHTNESS: 'bg-amber-100 text-amber-900 border-amber-300',
+  FIT_LOCAL_LOOSENESS: 'bg-amber-100 text-amber-900 border-amber-300',
+  FIT_REQUIRES_LAST_MODIFICATION: 'bg-red-100 text-red-900 border-red-300',
+  FIT_INDETERMINATE: 'bg-slate-100 text-slate-800 border-slate-300',
 };
 
-const PATTERN_LABEL = {
-  NARROW_HIGH: 'Узкая и высокая — сдавливает с боков, свободно сверху',
-  WIDE_LOW: 'Широкая и низкая — давит сверху, свободно по бокам',
-  MEDIAL_CONFLICT_DORSAL_VOID: 'Конфликт с внутренней стороны при свободном верхе',
-  BALL_TIGHT_INSTEP_LOOSE: 'Тесно в пучках, свободно в подъёме',
-  HEEL_VOID_MIDFOOT_TIGHT: 'Свободно в пятке, тесно в своде',
-  GENERAL_OVERSIZE: 'В целом свободнее стопы по всей длине',
-};
-
-function pct(v) {
-  return v == null ? '—' : `${Math.round(v * 100)}%`;
-}
-
-function SurfaceResult({ sr }) {
-  if (!sr) return null;
-  if (sr.error) {
+/** One finding: the measured fact, what it plausibly means, and what to check.
+ * Kept as three separate lines on purpose -- the audit (§21) objects to
+ * verdicts that fuse a measurement and its consequence into one confident
+ * sentence. */
+function FindingRow({ f }) {
+  const st = SEVERITY_STYLE[f.severity] || SEVERITY_STYLE.neutral;
+  const isProblem = f.severity === 'critical' || f.severity === 'warning';
+  if (!isProblem) {
     return (
-      <div className="rounded border border-[color:var(--color-border)] p-2 text-xs text-[color:var(--color-text-muted)]">
-        3D-анализ по сетке (hybrid_v2, экспериментально): не удалось посчитать — {sr.error}
+      <div className="flex items-center gap-2 text-xs">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${st.dot}`} />
+        <span className="text-[color:var(--color-text-muted)]">{f.title}</span>
       </div>
     );
   }
-  const reg = sr.registration;
   return (
-    <div className="rounded border border-[color:var(--color-border)] p-2 space-y-1.5 text-xs">
-      <div className="font-medium">3D-анализ по сетке (hybrid_v2, экспериментально)</div>
-      <div>
-        Паттерн: {sr.dominant_pattern ? (PATTERN_LABEL[sr.dominant_pattern] || sr.dominant_pattern) : 'не выявлен'}
+    <div className={`rounded border p-2.5 space-y-1 ${st.box}`}>
+      <div className={`flex items-center gap-2 text-sm font-medium ${st.text}`}>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${st.dot}`} />
+        {f.title}
       </div>
-      <div className="flex flex-wrap gap-x-3 text-[color:var(--color-text-muted)]">
-        <span>Теснота: {pct(sr.risks?.tightness_risk)}</span>
-        <span>Свобода: {pct(sr.risks?.looseness_risk)}</span>
-        <span>Риск фиксации пятки: {pct(sr.risks?.retention_risk)}</span>
-      </div>
-      <div className="text-[color:var(--color-text-muted)]">
-        Совмещение стопы с колодкой: уверенность {pct(reg?.registration_confidence)}
-        {reg && ` (коррекция ${reg.translation_mm} мм / ${reg.rotation_deg}°)`}
-      </div>
-      {sr.pose_confidence == null && (
-        <div className="text-[color:var(--color-text-muted)]">
-          Поза не учтена — у колодки не заданы высота каблука и носочный подъём.
+      <div className={`text-xs ${st.text} opacity-90`}>{f.fact}</div>
+      <div className={`text-xs ${st.text}`}><span className="font-medium">Что это значит: </span>{f.effect}</div>
+      {f.check && (
+        <div className="text-[11px] text-[color:var(--color-text-muted)]">
+          <span className="font-medium">Проверить: </span>{f.check}
         </div>
       )}
-    </div>
-  );
-}
-
-function FitBadge({ overall }) {
-  const s = VERDICT_STYLE[overall] || VERDICT_STYLE.ok;
-  return <span className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${s.cls}`}>{s.label}</span>;
-}
-
-function GirthRow({ label, pair }) {
-  if (!pair) return null;
-  const sign = pair.ease_mm > 0 ? '+' : '';
-  return (
-    <div className="flex justify-between text-xs">
-      <span className="text-[color:var(--color-text-muted)]">{label}</span>
-      <span>стопа {pair.foot_mm} → колодка {pair.last_mm} (запас {sign}{pair.ease_mm} мм)</span>
     </div>
   );
 }
 
 function FootFit({ pf, onOpenImage }) {
-  const { fit, foot_side } = pf;
+  const { fit_result: fr, foot_side } = pf;
+  const [showDetails, setShowDetails] = useState(false);
+  if (!fr) return null;
+  if (fr.error) {
+    return (
+      <div className="pt-3 border-t border-[color:var(--color-border)] text-sm text-[color:var(--color-text-muted)]">
+        {SIDE_LABEL[foot_side] || 'Стопа'}: не удалось посчитать — {fr.error}
+      </div>
+    );
+  }
+  const ex = fr.explanation || {};
+  const findings = ex.findings || [];
+  const problems = findings.filter((f) => f.severity === 'critical' || f.severity === 'warning');
+  const rest = findings.filter((f) => f.severity !== 'critical' && f.severity !== 'warning');
+  const footprint = fr.footprint_png_base64
+    ? `data:image/png;base64,${fr.footprint_png_base64}` : null;
+
   return (
     <div className="space-y-3 pt-3 border-t border-[color:var(--color-border)]">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{SIDE_LABEL[foot_side] || 'Стопа'}</span>
-        <FitBadge overall={fit.overall} />
-        <span className="text-xs text-[color:var(--color-text-muted)]">совпадение {fit.overlap_pct}%</span>
+        <span className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${HEADLINE_STYLE[fr.fit_class] || HEADLINE_STYLE.FIT_INDETERMINATE}`}>
+          {ex.headline || fr.fit_class}
+        </span>
+        <span className="text-xs text-[color:var(--color-text-muted)]">
+          уверенность {Math.round((fr.confidence || 0) * 100)}%
+        </span>
       </div>
-      <p className="text-sm">{fit.overall_text}</p>
 
-      {fit.hard_fail_reasons?.length > 0 && (
-        <div className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-800">
-          <div className="font-medium mb-1">Жёсткие критерии отказа (не усредняются с другими зонами):</div>
-          <ul className="list-disc list-inside space-y-0.5">
-            {fit.hard_fail_reasons.map((r, i) => <li key={i}>{r}</li>)}
-          </ul>
+      {ex.summary && <p className="text-sm">{ex.summary}</p>}
+
+      {problems.length > 0 && <div className="space-y-2">{problems.map((f, i) => <FindingRow key={i} f={f} />)}</div>}
+
+      {rest.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] font-medium text-[color:var(--color-text-muted)]">Без замечаний:</div>
+          {rest.map((f, i) => <FindingRow key={i} f={f} />)}
         </div>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {fit.images?.top && (
-          <button type="button" className="cursor-zoom-in" onClick={() => onOpenImage(fit.images.top, 'Стопа в колодке — вид сверху')}>
-            <img src={fit.images.top} alt="сверху" className="w-full rounded border border-[color:var(--color-border)]" />
-          </button>
-        )}
-        {fit.images?.side && (
-          <button type="button" className="cursor-zoom-in" onClick={() => onOpenImage(fit.images.side, 'Стопа в колодке — вид сбоку')}>
-            <img src={fit.images.side} alt="сбоку" className="w-full rounded border border-[color:var(--color-border)]" />
+        {footprint && (
+          <button type="button" className="cursor-zoom-in" onClick={() => onOpenImage(footprint, 'След стопы и след колодки')}>
+            <img src={footprint} alt="след стопы и колодки" className="w-full rounded border border-[color:var(--color-border)]" />
           </button>
         )}
       </div>
-      <p className="text-[11px] text-[color:var(--color-text-muted)]">
-        Серым показана колодка, синим — контур стопы. Красные точки — где стопа выходит за габарит колодки (тесно).
-      </p>
 
-      <div className="space-y-1">
-        <GirthRow label="Длина" pair={fit.length && { foot_mm: fit.length.foot_mm, last_mm: fit.length.last_mm, ease_mm: fit.length.ease_mm }} />
-        <GirthRow label="Обхват пучков" pair={fit.girths?.ball} />
-        <GirthRow label="Обхват подъёма" pair={fit.girths?.instep} />
-        {fit.ball_line && (
-          <div className={`flex justify-between text-xs ${fit.ball_line.flagged ? 'text-amber-700 font-medium' : ''}`}>
-            <span className={fit.ball_line.flagged ? '' : 'text-[color:var(--color-text-muted)]'}>
-              Линия сгиба (пучки){fit.ball_line.flagged ? ' ⚠️' : ''}
-            </span>
-            <span>
-              стопа {fit.ball_line.foot_mm} мм → колодка {fit.ball_line.last_mm} мм от пятки
-              (смещение {fit.ball_line.diff_mm > 0 ? '+' : ''}{fit.ball_line.diff_mm} мм)
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        {fit.zones.map((z) => (
-          <div key={z.zone} className="flex gap-2 text-xs">
-            <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${ZONE_DOT[z.verdict] || 'bg-gray-400'}`} />
-            <div>
-              <span className="font-medium">{z.label}.</span>{' '}
-              <span className="text-[color:var(--color-text-muted)]">{z.explanation}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {fit.instep_sections?.length > 0 && (
-        <div className="text-[11px] text-[color:var(--color-text-muted)]">
-          <div className="mb-1">
-            Запас в подъёме по сечениям (% длины стопы от пятки) — по высоте / по обхвату, мм:
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {fit.instep_sections.map((s) => (
-              <span key={s.pct} className={s.height_ease_mm < 0 ? 'text-red-600 font-medium' : ''}>
-                I{s.pct}: {s.height_ease_mm > 0 ? '+' : ''}{s.height_ease_mm} / {s.girth_ease_mm > 0 ? '+' : ''}{s.girth_ease_mm}
-              </span>
-            ))}
-          </div>
-        </div>
+      {fr.visualization && (
+        <Suspense fallback={<p className="text-xs text-[color:var(--color-text-muted)]">Загружаю 3D-просмотрщик…</p>}>
+          <Viewer3D geometry={fr.visualization} title={`3D-сцена — ${SIDE_LABEL[foot_side] || 'стопа'}`} />
+        </Suspense>
       )}
 
-      <SurfaceResult sr={pf.surface_result} />
-      {pf.surface_result?.visualization && (
-        <Suspense fallback={<p className="text-xs text-[color:var(--color-text-muted)]">Загружаю 3D-просмотрщик…</p>}>
-          <Viewer3D
-            geometry={pf.surface_result.visualization}
-            title={`3D-сцена — ${SIDE_LABEL[foot_side] || 'стопа'}`}
-          />
-        </Suspense>
+      <button type="button" className="text-xs text-[color:var(--color-text-muted)] underline"
+              onClick={() => setShowDetails((v) => !v)}>
+        {showDetails ? 'Скрыть подробности измерений' : 'Подробности измерений и оговорки'}
+      </button>
+      {showDetails && (
+        <div className="rounded border border-[color:var(--color-border)] p-2 space-y-1 text-[11px] text-[color:var(--color-text-muted)]">
+          {(ex.caveats || []).map((c, i) => <div key={i}>• {c}</div>)}
+        </div>
       )}
     </div>
   );
 }
 
-const LIMITING_SIDE_LABEL = { left: 'левая', right: 'правая' };
-
 function MatchCard({ match, onOpenImage }) {
   const [open, setOpen] = useState(true);
-  const { last, per_foot, bilateral } = match;
+  const { last, per_foot } = match;
   return (
     <div className="app-card p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -217,17 +165,14 @@ function MatchCard({ match, onOpenImage }) {
           <div className="text-xs text-[color:var(--color-text-muted)]">
             {[last.model, last.size && `размер ${last.size}`, last.material].filter(Boolean).join(' · ') || '—'}
           </div>
-          {bilateral && (
-            <div className="text-xs text-[color:var(--color-text-muted)] mt-1">
-              Ограничивающая сторона: <span className="font-medium">{LIMITING_SIDE_LABEL[bilateral.limiting_side] || bilateral.limiting_side}</span>
-              {bilateral.patterns?.includes('BILATERAL_LAST_MISMATCH') && (
-                <span className="text-amber-700"> · обе стопы тесны — вероятно, дело в форме колодки, а не в асимметрии</span>
-              )}
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-2">
-          {per_foot.map((pf, i) => <FitBadge key={i} overall={pf.fit.overall} />)}
+          {per_foot.map((pf, i) => (
+            <span key={i}
+                  className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${HEADLINE_STYLE[pf.fit_result?.fit_class] || HEADLINE_STYLE.FIT_INDETERMINATE}`}>
+              {pf.fit_result?.explanation?.headline || '—'}
+            </span>
+          ))}
           <button type="button" className="btn" onClick={() => setOpen(o => !o)}>
             {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
@@ -256,8 +201,6 @@ export default function LastLibrary() {
   const [matchFileLeft, setMatchFileLeft] = useState(null);
   const [matchFileRight, setMatchFileRight] = useState(null);
   const [swapSides, setSwapSides] = useState(false);
-  const [useHybrid, setUseHybrid] = useState(false);
-  const [useGeometry, setUseGeometry] = useState(false);
   const [lightbox, setLightbox] = useState(null);
 
   async function loadLasts() {
@@ -348,7 +291,7 @@ export default function LastLibrary() {
     runMatch(file, false);
   }
 
-  async function runMatchStl(left, right, swap, hybrid, geometry) {
+  async function runMatchStl(left, right, swap) {
     if (!left && !right) return;
     setMatching(true);
     setMatchResult(null);
@@ -357,8 +300,10 @@ export default function LastLibrary() {
       if (left) fd.append('file_left', left);
       if (right) fd.append('file_right', right);
       fd.append('swap_sides', swap ? 'true' : 'false');
-      fd.append('engine', hybrid ? 'hybrid_v2' : 'slice_v1');
-      fd.append('include_geometry', hybrid && geometry ? 'true' : 'false');
+      // Always the current engine with its geometry: the UI no longer asks
+      // the user to pick an analysis, it just shows the best one available.
+      fd.append('engine', 'fit_v3');
+      fd.append('include_geometry', 'true');
       const res = await api.post('lasts/match', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setMatchResult(res.data);
       if (!res.data.matches.length) {
@@ -381,25 +326,15 @@ export default function LastLibrary() {
     setMatchFileLeft(left);
     setMatchFileRight(right);
     setSwapSides(false);
-    runMatchStl(left, right, false, useHybrid, useGeometry);
+    runMatchStl(left, right, false);
   }
 
-  function handleToggleHybrid(checked) {
-    setUseHybrid(checked);
-    if (!checked) setUseGeometry(false);
-    if (matchFileLeft || matchFileRight) runMatchStl(matchFileLeft, matchFileRight, swapSides, checked, checked && useGeometry);
-  }
-
-  function handleToggleGeometry(checked) {
-    setUseGeometry(checked);
-    if (matchFileLeft || matchFileRight) runMatchStl(matchFileLeft, matchFileRight, swapSides, useHybrid, checked);
-  }
 
   function handleSwapSides() {
     const next = !swapSides;
     setSwapSides(next);
     if (matchFile) runMatch(matchFile, next);
-    else runMatchStl(matchFileLeft, matchFileRight, next, useHybrid, useGeometry);
+    else runMatchStl(matchFileLeft, matchFileRight, next);
   }
 
   return (
@@ -450,17 +385,6 @@ export default function LastLibrary() {
               <input type="file" accept=".stl" className="hidden" onChange={(e) => handleMatchStlFile('right', e.target.files?.[0])} />
             </label>
           </div>
-          <label className="flex items-center gap-2 text-xs text-[color:var(--color-text-muted)] cursor-pointer">
-            <input type="checkbox" checked={useHybrid} onChange={(e) => handleToggleHybrid(e.target.checked)} />
-            Добавить 3D-анализ по сетке (hybrid_v2, экспериментально) — работает только если и стопа, и
-            колодка загружены как .stl, и колодка тоже сохранена из .stl
-          </label>
-          {useHybrid && (
-            <label className="flex items-center gap-2 text-xs text-[color:var(--color-text-muted)] cursor-pointer pl-5">
-              <input type="checkbox" checked={useGeometry} onChange={(e) => handleToggleGeometry(e.target.checked)} />
-              Показать интерактивную 3D-сцену (тяжелее и медленнее — грузит полную геометрию)
-            </label>
-          )}
         </div>
 
         {matching && <p className="text-sm text-[color:var(--color-text-muted)]">Сравниваю с библиотекой…</p>}
@@ -488,11 +412,6 @@ export default function LastLibrary() {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <h4 className="font-medium text-sm text-[color:var(--color-text-muted)]">Результат подбора (лучшее сверху)</h4>
-                {useHybrid && matchResult.engine !== 'hybrid_v2' && (
-                  <span className="text-xs text-amber-700" title="Возможные причины: скан стопы загружен как .scm, или ни у одной колодки в подборке нет .stl-файла">
-                    3D-анализ не подключился — используется только базовый расчёт
-                  </span>
-                )}
               </div>
               {matchResult.matches.map((m) => (
                 <MatchCard key={m.last.id} match={m} onOpenImage={(src, alt) => setLightbox({ src, alt })} />

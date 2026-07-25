@@ -7,7 +7,7 @@ import base64
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.services.access_control_service import ResolvedUser
-from app.services.scm_parser_service import parse_scm
+from app.services.stl_parser_service import parse_stl
 
 from .dependencies import require_permission
 
@@ -22,20 +22,20 @@ def create_scanner_router() -> APIRouter:
         file: UploadFile = File(...),
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
-        if not file.filename or not file.filename.lower().endswith(".scm"):
-            raise HTTPException(status_code=400, detail="expected_scm_file")
+        if not file.filename or not file.filename.lower().endswith(".stl"):
+            raise HTTPException(status_code=400, detail="expected_stl_file")
         raw = await file.read()
         try:
             # CPU-bound (numpy scan over the whole file + PNG encoding) —
             # off the event loop so a big/slow parse doesn't stall the API
             # for every other user, same lesson as firebird_service's
             # TTLCache / payout_service's cash-move lookup.
-            result = await asyncio.to_thread(parse_scm, raw)
+            result = await asyncio.to_thread(parse_stl, raw)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
 
         feet_out = []
-        for foot in result["feet"]:
+        for foot in [result]:
             views_b64 = {
                 name: "data:image/png;base64," + base64.b64encode(png).decode("ascii")
                 for name, png in foot["views_png"].items()

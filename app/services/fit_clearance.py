@@ -66,6 +66,7 @@ class ZoneClearance:
     required_compression_mm: dict
     conflict_area_mm2: float
     directional_mm: dict         # medial/lateral/dorsal/plantar medians
+    seating_gap_mm: float | None  # plantar: how far the foot sits off the sole
     classification: str
     confidence: float
 
@@ -78,6 +79,7 @@ class ZoneClearance:
             "required_compression_mm": self.required_compression_mm,
             "conflict_area_mm2": round(self.conflict_area_mm2, 1),
             "directional_mm": self.directional_mm,
+            "seating_gap_mm": self.seating_gap_mm,
             "classification": self.classification,
             "confidence": round(self.confidence, 3),
         }
@@ -128,10 +130,32 @@ class ClearanceReport:
 
 
 def _classify(median_gap: float, p05_gap: float, conflict_area: float,
-              sigma: float) -> str:
+              sigma: float, seating_mm: float | None, directional: dict | None) -> str:
     """§13.5/§17: a classification has to survive the uncertainty budget, and
-    a conflict smaller than the measurement noise is not a finding."""
-    if p05_gap < -sigma and conflict_area > 50.0:
+    a conflict smaller than the measurement noise is not a finding.
+
+    Plantar-facing gaps are handled apart from tightness. A negative gap
+    against the shoe's own floor does not mean the shoe squeezes the foot --
+    the foot rests *on* the insole, it cannot sink through it. On the real
+    Prada 43 the toe-tip plantar reading was -21.6mm, matching that last's
+    +21.57mm toe spring exactly: a flat-scanned foot laid against a sprung
+    sole, which §3.2 names as a false conflict produced by comparing without a
+    pose transformation. Reporting it as "tight" would be simply wrong.
+    """
+    if seating_mm is not None and seating_mm < -3.0 * max(sigma, 1.0):
+        return "NOT_SEATED"
+
+    # Judge on the *worst direction*, not on the zone average. §12 of the audit
+    # objects to exactly that averaging: a zone can be pinched medially by 9mm
+    # while sitting 6mm loose dorsally, and the mean of the two reports a
+    # comfortable fit that nobody experiences. Measured on the real pair, the
+    # ball zone reads +3.2mm on average and -9.2mm medially -- the medial
+    # number is the one the wearer feels.
+    worst_squeeze = min((v for k, v in (directional or {}).items()
+                         if k != "plantar" and v is not None), default=None)
+    if worst_squeeze is not None and worst_squeeze < -sigma:
+        return "LOCAL_TIGHTNESS"
+    if p05_gap < -2.0 * sigma:
         return "LOCAL_TIGHTNESS"
     if median_gap > 3.0 * max(sigma, 1.0):
         return "LOCAL_LOOSENESS"
@@ -235,11 +259,25 @@ def compute_clearance(
         finite = g[np.isfinite(g)]
         if finite.size == 0:
             continue
-        conflict = finite[finite < 0]
+
+        # Split off the plantar-facing samples: pressing down on the insole is
+        # seating, not squeezing (see _classify). Tightness is judged on what
+        # is left, so a sprung toe cannot masquerade as a pinched one.
+        zone_normals = normals[in_zone]
+        zone_gaps = g
+        plantar_face = (np.abs(zone_normals[:, 0]) < np.abs(zone_normals[:, 2])) & (zone_normals[:, 2] < 0)
+        plantar_face = plantar_face[np.isfinite(g)]
+        seating_mm = float(np.median(finite[plantar_face])) if plantar_face.sum() >= _DIRECTION_MIN_SAMPLES else None
+
+        zone_directional = _directional_medians(points[in_zone], normals[in_zone], g)
+        squeeze = finite[~plantar_face] if plantar_face.any() else finite
+        if squeeze.size == 0:
+            squeeze = finite
+        conflict = squeeze[squeeze < 0]
         # Area-weighted sampling means a sample fraction is an area fraction.
         conflict_area = float(len(conflict) / len(gaps) * surface_area)
-        median_gap = float(np.median(finite))
-        p05 = float(np.percentile(finite, 5))
+        median_gap = float(np.median(squeeze))
+        p05 = float(np.percentile(squeeze, 5))
 
         zones.append(ZoneClearance(
             zone_id=zone_id, name=name, n_samples=n,
@@ -254,8 +292,9 @@ def compute_clearance(
                 "p95": round(float(-np.percentile(conflict, 5)), 2) if conflict.size else 0.0,
             },
             conflict_area_mm2=conflict_area,
-            directional_mm=_directional_medians(points[in_zone], normals[in_zone], g),
-            classification=_classify(median_gap, p05, conflict_area, sigma),
+            directional_mm=zone_directional,
+            seating_gap_mm=round(seating_mm, 2) if seating_mm is not None else None,
+            classification=_classify(median_gap, p05, conflict_area, sigma, seating_mm, zone_directional),
             # A zone read through a bigger uncertainty budget is worth less.
             confidence=float(np.clip(1.0 - sigma / 12.0, 0.05, 1.0)),
         ))

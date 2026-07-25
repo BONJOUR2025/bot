@@ -26,6 +26,8 @@ import trimesh
 
 from app.services.curvilinear_sections import build_centerline, sections_along
 from app.services.fit_clearance import ClearanceReport, compute_clearance
+from app.services.fit_explanation import explain
+from app.services.fit_footprint import render_footprint_overlay
 from app.services.foot_landmarks import detect_foot_landmarks
 from app.services.heel_fixed_registration import register_foot_to_last
 from app.services.last_registration_service import initial_align
@@ -57,6 +59,8 @@ class FitReport:
     sections: list[dict]
     clearance: dict
     quality: dict
+    explanation: dict = field(default_factory=dict)
+    footprint_png_base64: str | None = None
     limitations: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -72,6 +76,8 @@ class FitReport:
             "sections": self.sections,
             "clearance": self.clearance,
             "quality": self.quality,
+            "explanation": self.explanation,
+            "footprint_png_base64": self.footprint_png_base64,
             "limitations": list(self.limitations),
         }
 
@@ -101,6 +107,7 @@ def analyze_fit(
     last_side: str | None = None,
     construction: dict | None = None,
     analysis_mode: str = "STATIC_GEOMETRY",
+    include_footprint: bool = True,
 ) -> FitReport:
     """§21 pipeline. `analysis_mode="STATIC_GEOMETRY"` compares the foot as
     scanned (§20.1) -- no pose is inferred, which keeps the pose uncertainty
@@ -166,7 +173,14 @@ def analyze_fit(
         "probabilistic geometric model from two STLs -- not a measured foot shape inside a shoe"
     )
 
-    return FitReport(
+    footprint = None
+    if include_footprint:
+        try:
+            footprint = render_footprint_overlay(foot_registered, cavity.mesh)
+        except Exception as exc:
+            limitations.append(f"footprint overlay unavailable: {exc}")
+
+    report = FitReport(
         fit_class=_classify(clearance),
         confidence=confidence,
         analysis_mode=analysis_mode,
@@ -177,5 +191,10 @@ def analyze_fit(
         sections=sections,
         clearance=clearance.as_dict(),
         quality={"foot": foot_quality.as_dict(), "cavity": last_quality.as_dict()},
+        footprint_png_base64=footprint,
         limitations=limitations,
     )
+    # Plain-language findings are derived from the finished report, so the text
+    # and the numbers can never disagree.
+    report.explanation = explain(report.as_dict()).as_dict()
+    return report

@@ -14,14 +14,13 @@ from app.services.fit_pipeline import analyze_fit
 from app.services.last_fit_hybrid_service import combine_bilateral, compare_hybrid
 from app.services.mesh_visualization_service import build_visualization_payload
 from app.services.last_fit_service import compare_profiles
-from app.services.scm_parser_service import parse_scm
 from app.services.stl_parser_service import load_stl_mesh, parse_stl
 
 from .dependencies import require_permission
 from .scanner import SCANNER_PERMISSION
 
 UPLOAD_DIR = Path("static/uploads/lasts")
-SCAN_EXTENSIONS = (".scm", ".stl")
+SCAN_EXTENSIONS = (".stl",)
 
 
 def _foot_profile(foot: dict) -> dict:
@@ -73,20 +72,12 @@ def create_lasts_router() -> APIRouter:
     ):
         ext = Path(file.filename or "").suffix.lower()
         if ext not in SCAN_EXTENSIONS:
-            raise HTTPException(status_code=400, detail="expected_scm_or_stl_file")
+            raise HTTPException(status_code=400, detail="expected_stl_file")
         if side not in (None, "", "left", "right"):
             raise HTTPException(status_code=400, detail="invalid_side")
         raw = await file.read()
         try:
-            if ext == ".scm":
-                result = await asyncio.to_thread(parse_scm, raw)
-                feet = result["feet"]
-                if not feet:
-                    raise HTTPException(status_code=422, detail="no_last_geometry_found")
-                # A last is one shape (both sides are mirror-identical) — take one block.
-                block = feet[0]
-            else:
-                block = await asyncio.to_thread(parse_stl, raw)
+            block = await asyncio.to_thread(parse_stl, raw)
         except HTTPException:
             raise
         except Exception as exc:
@@ -123,7 +114,7 @@ def create_lasts_router() -> APIRouter:
         record = repo.delete(last_id)
         if record is None:
             raise HTTPException(status_code=404, detail="not_found")
-        ext = Path(existing["scan_file_url"]).suffix if existing and existing.get("scan_file_url") else ".scm"
+        ext = Path(existing["scan_file_url"]).suffix if existing and existing.get("scan_file_url") else ".stl"
         (UPLOAD_DIR / f"{last_id}{ext}").unlink(missing_ok=True)
         return {"ok": True}
 
@@ -134,40 +125,22 @@ def create_lasts_router() -> APIRouter:
         file_right: UploadFile | None = File(None),
         last_id: str | None = Form(None),
         swap_sides: bool = Form(False),
-        # "slice_v1" (default) is the frozen cross-sectional pipeline above;
-        # "hybrid_v2" additionally attaches a mesh-based surface_result per
-        # last_fit_hybrid_service.compare_hybrid — only possible when both the
-        # foot and the target last(s) are .stl-sourced (a real mesh, not just
-        # a point cloud). Requesting hybrid_v2 with a .scm foot silently gets
-        # slice_v1 only; hybrid_v2 is noticeably slower per foot/last pair
-        # (mesh validation + registration + surface distance, a few seconds
-        # each) — fine for a single last_id, potentially slow against the
-        # whole library.
-        # "fit_v3" runs the research-report pipeline (fit_pipeline.py) and
-        # attaches a per-foot `fit_result` instead of `surface_result`.
-        engine: str = Form("slice_v1"),
+        # "fit_v3" (default) is the research-report pipeline (fit_pipeline.py):
+        # it attaches a per-foot `fit_result` with the verdict, the plain
+        # language explanation and the footprint overlay. "slice_v1" and
+        # "hybrid_v2" are the older engines, kept for comparison.
+        engine: str = Form("fit_v3"),
         # Heavy (base64 GLB meshes + problem-patch submeshes) — only built
         # when explicitly asked and only alongside engine=hybrid_v2, since
         # slice_v1 has no mesh to visualize with.
         include_geometry: bool = Form(False),
         current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
     ):
-        # Two upload shapes: one .scm file with both feet inside (legacy), or
-        # one/two .stl files — the scanner's .stl export is one foot per
-        # file, so a full pair needs two separate uploads, each tagged with
-        # its side explicitly (an .stl has no side hint to read, unlike
-        # .scm's header text).
+        # The scanner's .stl export is one foot per file, so a full pair needs
+        # two uploads, each tagged with its side explicitly (an .stl carries no
+        # side hint of its own).
         foot_raw_by_side: dict[str, bytes] = {}
-        if file is not None:
-            if not file.filename or not file.filename.lower().endswith(".scm"):
-                raise HTTPException(status_code=400, detail="expected_scm_file")
-            raw = await file.read()
-            try:
-                result = await asyncio.to_thread(parse_scm, raw)
-            except Exception as exc:
-                raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
-            feet = result["feet"]
-        elif file_left is not None or file_right is not None:
+        if file_left is not None or file_right is not None:
             feet = []
             for side, upload in (("left", file_left), ("right", file_right)):
                 if upload is None:
@@ -183,7 +156,7 @@ def create_lasts_router() -> APIRouter:
                 feet.append(block)
                 foot_raw_by_side[side] = raw
         else:
-            raise HTTPException(status_code=400, detail="expected_scm_or_stl_file")
+            raise HTTPException(status_code=400, detail="expected_stl_file")
 
         if not feet:
             raise HTTPException(status_code=422, detail="no_foot_geometry_found")
@@ -276,10 +249,24 @@ def create_lasts_router() -> APIRouter:
                         if raw is None:
                             continue
                         try:
-                            pf["fit_result"] = analyze_fit(
-                                load_stl_mesh(raw), last_mesh,
+                            foot_mesh = load_stl_mesh(raw)
+                            fit = analyze_fit(
+                                foot_mesh, last_mesh,
                                 pf["foot_side"], last.get("side"),
                             ).as_dict()
+                            if include_geometry:
+                                try:
+                                    fit["visualization"] = build_visualization_payload(
+                                        foot_mesh, pf["foot_side"], last_mesh,
+                                        last.get("side"),
+                                        # fit_v3 marks problem zones itself; the
+                                        # scene only needs the heatmap and the
+                                        # meshes, so no pattern patches are fed in.
+                                        {"patterns": [], "critical_sections": [], "zones": {}},
+                                    )
+                                except Exception as exc:
+                                    fit["visualization_error"] = str(exc)
+                            pf["fit_result"] = fit
                         except Exception as exc:
                             pf["fit_result"] = {"engine": "fit_v3", "error": str(exc)}
 

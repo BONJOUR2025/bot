@@ -27,8 +27,8 @@ function ScanTab() {
 
   async function handleFile(file) {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.scm')) {
-      toast('Ожидается файл .scm', 'error');
+    if (!file.name.toLowerCase().endsWith('.stl')) {
+      toast('Ожидается файл .stl', 'error');
       return;
     }
     setLoading(true);
@@ -56,7 +56,7 @@ function ScanTab() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-[color:var(--color-text-muted)]">
-        Загрузите файл скана стопы (.scm) — покажем метаданные скана, замеры (длина/ширина/высота) и визуализацию.
+        Загрузите файл скана стопы (.stl) — покажем метаданные скана, замеры (длина/ширина/высота) и визуализацию.
         Формат не документирован производителем сканера, поэтому данные извлекаются эвристически — сверяйте
         результат со здравым смыслом, а не считайте это метрологически точным измерением.
       </p>
@@ -74,10 +74,10 @@ function ScanTab() {
         }}
       >
         <Upload size={28} className="text-[color:var(--color-text-muted)]" />
-        <div className="font-medium">Перетащите файл .scm сюда или нажмите, чтобы выбрать</div>
+        <div className="font-medium">Перетащите файл .stl сюда или нажмите, чтобы выбрать</div>
         <input
           type="file"
-          accept=".scm"
+          accept=".stl"
           className="hidden"
           onChange={(e) => handleFile(e.target.files?.[0])}
         />
