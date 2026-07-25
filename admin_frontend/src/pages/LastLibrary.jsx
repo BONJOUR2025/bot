@@ -10,34 +10,144 @@ import { FootCard, SIDE_LABEL } from '../components/FootScanCard.jsx';
 // code-split so it only downloads when a user actually requests it.
 const Viewer3D = lazy(() => import('../components/Viewer3D.jsx'));
 
-function LastCard({ last, onDelete }) {
-  const title = last.article || last.model || 'Без названия';
-  const sub = [last.model, last.size && `размер ${last.size}`, last.material].filter(Boolean).join(' · ') || '—';
+/** A production last is a graded family: one model number issued across
+ * several sizes and width grades. The library mirrors that -- a section per
+ * model, and inside it a size x fullness grid -- rather than a flat list where
+ * twenty scans of the same last look like twenty different lasts. */
+function groupByModel(lasts) {
+  const groups = new Map();
+  for (const l of lasts) {
+    const key = (l.article || l.model || '').trim() || 'Без номера';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(l);
+  }
+  return [...groups.entries()]
+    .map(([code, items]) => {
+      // Sizes sort numerically where they are numbers, so 5 does not land
+      // after 40; fullness grades are usually letters and sort naturally.
+      const sizes = [...new Set(items.map((i) => (i.size || '').trim() || '—'))]
+        .sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0) || a.localeCompare(b));
+      const fullnesses = [...new Set(items.map((i) => (i.fullness || '').trim() || '—'))]
+        .sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+      const cell = new Map();
+      for (const i of items) {
+        cell.set(`${(i.size || '').trim() || '—'}|${(i.fullness || '').trim() || '—'}`, i);
+      }
+      return { code, items, sizes, fullnesses, cell };
+    })
+    .sort((a, b) => a.code.localeCompare(b.code, 'ru', { numeric: true }));
+}
+
+function LastDetail({ last, onClose, onDelete }) {
+  if (!last) return null;
+  const rows = [
+    ['Длина', last.length_mm], ['Ширина', last.width_mm], ['Высота', last.height_mm],
+    ['Обхват пучков', last.ball_girth_mm], ['Обхват подъёма', last.instep_girth_mm],
+    ['Линия пучков от пятки', last.ball_line_mm],
+  ];
   return (
-    <div className="app-card p-4 space-y-3">
+    <div className="modal-card max-w-lg w-full space-y-3" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h3 className="font-semibold">{title}</h3>
-          <div className="text-xs text-[color:var(--color-text-muted)]">{sub}</div>
+          <h3 className="font-semibold">
+            Колодка {last.article || last.model || '—'}
+          </h3>
+          <div className="text-xs text-[color:var(--color-text-muted)]">
+            размер {last.size || '—'} · полнота {last.fullness || '—'}
+            {last.side ? ` · ${last.side === 'left' ? 'левая' : 'правая'}` : ''}
+          </div>
         </div>
-        <button type="button" className="btn text-[color:var(--color-danger)]" title="Удалить" onClick={() => onDelete(last.id)}>
-          <Trash2 size={16} />
-        </button>
+        <button type="button" className="btn" onClick={onClose}><X size={16} /></button>
       </div>
+
       {last.note && <p className="text-xs text-[color:var(--color-text-muted)]">{last.note}</p>}
-      <div className="grid grid-cols-4 gap-2 text-center text-xs">
-        <div><div className="font-semibold text-sm">{last.length_mm ?? '—'}</div>длина</div>
-        <div><div className="font-semibold text-sm">{last.ball_girth_mm ?? '—'}</div>пучки</div>
-        <div><div className="font-semibold text-sm">{last.instep_girth_mm ?? '—'}</div>подъём</div>
-        <div><div className="font-semibold text-sm">{last.width_mm ?? '—'}</div>ширина</div>
+
+      <div className="space-y-1">
+        {rows.map(([label, v]) => (
+          <div key={label} className="flex justify-between text-xs">
+            <span className="text-[color:var(--color-text-muted)]">{label}</span>
+            <span>{v ?? '—'}{v != null ? ' мм' : ''}</span>
+          </div>
+        ))}
+        {last.material && (
+          <div className="flex justify-between text-xs">
+            <span className="text-[color:var(--color-text-muted)]">Материал</span><span>{last.material}</span>
+          </div>
+        )}
+      </div>
+
+      {last.scan_file_url && (
+        <a href={last.scan_file_url} className="text-xs underline text-[color:var(--color-text-muted)]"
+           target="_blank" rel="noreferrer">Скачать .stl</a>
+      )}
+
+      <div className="flex justify-end">
+        <button type="button" className="btn text-[color:var(--color-danger)] flex items-center gap-1.5"
+                onClick={() => onDelete(last.id)}>
+          <Trash2 size={15} /> Удалить эту колодку
+        </button>
       </div>
     </div>
   );
 }
 
+function LastFamily({ group, onOpen }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="app-card p-4 space-y-3">
+      <button type="button" className="flex w-full items-center justify-between gap-2"
+              onClick={() => setOpen((v) => !v)}>
+        <div className="text-left">
+          <h4 className="font-semibold">Колодка {group.code}</h4>
+          <div className="text-xs text-[color:var(--color-text-muted)]">
+            {group.items.length} шт · размеры {group.sizes.join(', ')} · полноты {group.fullnesses.join(', ')}
+          </div>
+        </div>
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
 
-
-
+      {open && (
+        <div className="overflow-x-auto">
+          <table className="text-xs">
+            <thead>
+              <tr>
+                <th className="text-left font-medium text-[color:var(--color-text-muted)]">размер \ полнота</th>
+                {group.fullnesses.map((f) => <th key={f} className="px-2 font-medium">{f}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {group.sizes.map((sz) => (
+                <tr key={sz}>
+                  <td className="font-medium">{sz}</td>
+                  {group.fullnesses.map((f) => {
+                    const item = group.cell.get(`${sz}|${f}`);
+                    return (
+                      <td key={f} className="px-1 py-0.5 text-center">
+                        {item ? (
+                          <button type="button"
+                                  title={`Размер ${sz}, полнота ${f} — открыть параметры`}
+                                  className="btn text-xs w-full"
+                                  onClick={() => onOpen(item)}>
+                            {item.ball_girth_mm ? `${item.ball_girth_mm}` : '✓'}
+                          </button>
+                        ) : (
+                          <span className="text-[color:var(--color-text-faint)]">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-1 text-[11px] text-[color:var(--color-text-muted)]">
+            В ячейке — обхват пучков, мм. Нажмите, чтобы открыть параметры колодки.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const SEVERITY_STYLE = {
   critical: { dot: 'bg-red-500', box: 'border-red-300 bg-red-50', text: 'text-red-900' },
@@ -190,18 +300,18 @@ export default function LastLibrary() {
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    article: '', size: '', model: '', material: '', note: '', side: '',
+    article: '', size: '', fullness: '', model: '', material: '', note: '', side: '',
     heel_height_mm: '', toe_spring_mm: '',
   });
   const [addFile, setAddFile] = useState(null);
 
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] = useState(null);
-  const [matchFile, setMatchFile] = useState(null);
   const [matchFileLeft, setMatchFileLeft] = useState(null);
   const [matchFileRight, setMatchFileRight] = useState(null);
   const [swapSides, setSwapSides] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [detailLast, setDetailLast] = useState(null);
 
   async function loadLasts() {
     setLoadingList(true);
@@ -220,7 +330,7 @@ export default function LastLibrary() {
 
   async function handleAddSubmit(e) {
     e.preventDefault();
-    if (!addFile) { toast('Выберите файл .scm или .stl колодки', 'error'); return; }
+    if (!addFile) { toast('Выберите файл .stl колодки', 'error'); return; }
     setSaving(true);
     try {
       const fd = new FormData();
@@ -236,7 +346,7 @@ export default function LastLibrary() {
       toast('Колодка добавлена', 'success');
       setAddOpen(false);
       setForm({
-        article: '', size: '', model: '', material: '', note: '', side: '',
+        article: '', size: '', fullness: '', model: '', material: '', note: '', side: '',
         heel_height_mm: '', toe_spring_mm: '',
       });
       setAddFile(null);
@@ -260,36 +370,7 @@ export default function LastLibrary() {
     }
   }
 
-  async function runMatch(file, swap) {
-    if (!file) return;
-    setMatching(true);
-    setMatchResult(null);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('swap_sides', swap ? 'true' : 'false');
-      const res = await api.post('lasts/match', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setMatchResult(res.data);
-      if (!res.data.matches.length) {
-        toast(lasts.length ? 'Не удалось сопоставить с колодками' : 'Библиотека колодок пуста', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      toast(err.response?.data?.detail || 'Не удалось разобрать файл стопы', 'error');
-    } finally {
-      setMatching(false);
-    }
-  }
 
-  function handleMatchFile(file) {
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.scm')) { toast('Ожидается файл .scm', 'error'); return; }
-    setMatchFile(file);
-    setMatchFileLeft(null);
-    setMatchFileRight(null);
-    setSwapSides(false);
-    runMatch(file, false);
-  }
 
   async function runMatchStl(left, right, swap) {
     if (!left && !right) return;
@@ -320,7 +401,6 @@ export default function LastLibrary() {
   function handleMatchStlFile(side, file) {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.stl')) { toast('Ожидается файл .stl', 'error'); return; }
-    setMatchFile(null);
     const left = side === 'left' ? file : matchFileLeft;
     const right = side === 'right' ? file : matchFileRight;
     setMatchFileLeft(left);
@@ -333,8 +413,7 @@ export default function LastLibrary() {
   function handleSwapSides() {
     const next = !swapSides;
     setSwapSides(next);
-    if (matchFile) runMatch(matchFile, next);
-    else runMatchStl(matchFileLeft, matchFileRight, next);
+    runMatchStl(matchFileLeft, matchFileRight, next);
   }
 
   return (
@@ -353,8 +432,10 @@ export default function LastLibrary() {
             Библиотека пуста — добавьте первую колодку.
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-            {lasts.map(last => <LastCard key={last.id} last={last} onDelete={handleDelete} />)}
+          <div className="space-y-3">
+            {groupByModel(lasts).map((g) => (
+              <LastFamily key={g.code} group={g} onOpen={setDetailLast} />
+            ))}
           </div>
         )}
       </section>
@@ -365,14 +446,9 @@ export default function LastLibrary() {
           Загрузите скан стопы клиента — система «вложит» стопу в каждую колодку, проверит посадку по всей длине
           (пятка, свод, подъём, пучки, носок) и объяснит по-человечески, где и чем колодка неудобна.
         </p>
-        <label className="app-card flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[color:var(--color-border)] p-8 text-center cursor-pointer">
-          <Upload size={24} className="text-[color:var(--color-text-muted)]" />
-          <div className="font-medium">Загрузить скан стопы (.scm)</div>
-          <input type="file" accept=".scm" className="hidden" onChange={(e) => handleMatchFile(e.target.files?.[0])} />
-        </label>
 
         <div className="app-card p-4 space-y-3">
-          <div className="font-medium text-sm">Или загрузите .stl — отдельно левая и правая стопа</div>
+          <div className="font-medium text-sm">Загрузите .stl — отдельно левая и правая стопа</div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-[color:var(--color-border)] rounded p-4 text-center cursor-pointer text-sm">
               <Upload size={18} className="text-[color:var(--color-text-muted)]" />
@@ -431,13 +507,13 @@ export default function LastLibrary() {
             Достаточно одного скана колодки — левая и правая зеркально одинаковы, система сама развернёт под нужную стопу.
           </p>
           <label className="block text-sm">
-            Файл скана (.scm или .stl)
-            <input type="file" accept=".scm,.stl" required className="block w-full mt-1"
+            Файл скана (.stl)
+            <input type="file" accept=".stl" required className="block w-full mt-1"
               onChange={(e) => setAddFile(e.target.files?.[0] || null)} />
           </label>
-          {['article', 'model', 'size', 'material'].map((field) => (
+          {['article', 'size', 'fullness', 'model', 'material'].map((field) => (
             <label key={field} className="block text-sm">
-              {{ article: 'Артикул', model: 'Модель', size: 'Размер', material: 'Материал' }[field]}
+              {{ article: 'Номер колодки', size: 'Размер', fullness: 'Полнота', model: 'Модель', material: 'Материал' }[field]}
               <input type="text" className="input w-full mt-1" value={form[field]}
                 onChange={(e) => setForm(f => ({ ...f, [field]: e.target.value }))} />
             </label>
@@ -489,6 +565,14 @@ export default function LastLibrary() {
           </div>
           {lightbox && <img src={lightbox.src} alt={lightbox.alt} className="block max-w-full max-h-[80vh] mx-auto rounded" />}
         </div>
+      </Modal>
+
+      <Modal isOpen={!!detailLast} onClose={() => setDetailLast(null)}>
+        <LastDetail
+          last={detailLast}
+          onClose={() => setDetailLast(null)}
+          onDelete={(id) => { setDetailLast(null); handleDelete(id); }}
+        />
       </Modal>
     </div>
   );

@@ -9,9 +9,14 @@ DEFAULT_FILE = "lasts.json"
 
 class LastRepository:
     """Library of shoe-last (колодка) 3D scans: manual metadata (article,
-    size, model, material) plus measurements extracted once at upload time
-    via scm_parser_service, so matching against a foot scan later doesn't
-    need to re-parse the last's file."""
+    size, fullness, model, material) plus measurements extracted once at
+    upload time via stl_parser_service, so matching against a foot scan later
+    doesn't need to re-parse the last's file.
+
+    A production last is a graded family rather than a single object: model
+    4977 exists in several sizes and several width grades, and each
+    combination is its own scan. `article` names the family; `size` and
+    `fullness` locate one last within it."""
 
     def __init__(self, file_path: Optional[str] = None) -> None:
         self._file = file_path or DEFAULT_FILE
@@ -47,6 +52,9 @@ class LastRepository:
             "id": uuid.uuid4().hex,
             "article": data.get("article", ""),
             "size": data.get("size", ""),
+            # Width grade. Together with `size` this locates one last inside
+            # its model family, which is how the library grid is laid out.
+            "fullness": data.get("fullness", ""),
             "model": data.get("model", ""),
             "material": data.get("material", ""),
             "note": data.get("note", ""),

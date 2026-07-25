@@ -50,8 +50,13 @@ def create_lasts_router() -> APIRouter:
     @router.post("")
     async def create_last(
         file: UploadFile = File(...),
+        # A production last exists as a whole graded family: one model number
+        # (e.g. 4977) issued in several sizes and several width grades. article
+        # names the family, size and fullness pick the individual last inside
+        # it, so the library can be laid out as a size x fullness grid.
         article: str = Form(""),
         size: str = Form(""),
+        fullness: str = Form(""),
         model: str = Form(""),
         material: str = Form(""),
         note: str = Form(""),
@@ -84,7 +89,7 @@ def create_lasts_router() -> APIRouter:
             raise HTTPException(status_code=422, detail=f"parse_failed: {exc}")
 
         record = repo.create({
-            "article": article, "size": size, "model": model,
+            "article": article, "size": size, "fullness": fullness, "model": model,
             "material": material, "note": note,
             "engine": "slice_v1",  # which pipeline computed "profile" below
             # .stl has no side hint in the file itself (unlike .scm's
