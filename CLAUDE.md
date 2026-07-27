@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 HR/payroll system for the BONJOUR business: a Telegram bot for employees/admins plus a FastAPI HTTP API with a React admin panel. Manages employees, advance payout requests, salaries, vacations, shift check-ins, recruitment (AI-assisted interviews via the Anthropic API), and more. The UI, code comments, and commit messages are predominantly in Russian — follow that convention.
 
+The repo also hosts a second, mostly-independent subsystem bolted onto the same admin panel/API: 3D shoe-last fit matching (see [Shoe-last fitting subsystem](#shoe-last-fitting-3d-scan-subsystem) below). Most recent commit activity on `claude/init-wmebv3` is in this subsystem, not HR/payroll.
+
 Note: the repo root contains live production data (`user.json`, `advance_requests.json`, `hr.db`, `ФОТ админы *.xlsx`, salary report PNGs). Do not edit these data files unless the task is explicitly about the data.
 
 ## Commands
@@ -100,6 +102,19 @@ Session/token auth is handled by `app/services/access_control_service.py` with r
 
 - `admin_frontend/ios/` — Capacitor wrapper around the web admin (app.bonjour.pw).
 - `ios-native/` — a separate, fully native SwiftUI app (own Xcode project) that talks to the same API; it does not replace the Capacitor app.
+
+### Shoe-last fitting (3D scan) subsystem
+
+Separate feature, same repo/API/admin panel: given a 3D scan of a customer's foot and a library of shoe lasts (колодки), determine which lasts fit and explain where/why they don't. Not HR/payroll — it shares only the process, auth, and deployment machinery.
+
+- **Entry points**: `app/api/scanner.py` (raw `.stl` parse/preview), `app/api/lasts.py` (last library CRUD + `/lasts/match` fit comparison). Both gated behind the `3d-scanner` permission.
+- **Frontend**: `admin_frontend/src/pages/Scanner3D.jsx` and `LastLibrary.jsx` (+ shared `FootScanCard.jsx`).
+- **Core services**: `app/services/{scm_parser_service,stl_parser_service}.py` (file format → point cloud/mesh), `last_fit_service.py` / `last_fit_hybrid_service.py` / `fit_pipeline.py` / `fit_clearance.py` / `fit_size_match.py` (comparison + verdicts), `mesh3d_service.py` / `mesh_visualization_service.py` (3D mesh + rendered overlays), plus registration/pose/landmark helpers (`heel_fixed_registration.py`, `last_pose_*.py`, `foot_landmarks.py`, `curvilinear_sections.py`, etc.).
+- **Storage**: shoe lasts are a flat `lasts.json` (`app/data/last_repository.py`) with raw scan files in `static/uploads/lasts/` — no DB involvement; a foot scan submitted for matching is never persisted, only compared on the fly.
+- **Dependencies unique to this subsystem**: `trimesh`, `scipy`, `networkx`, `shapely` (mesh validation/repair/sectioning) plus shared `numpy`/`matplotlib`.
+- **Docs**: `docs/last_fit_system_overview.md` (pipeline + current architecture, in Russian) and `docs/last_fit_verdicts.md` (verdict/threshold details) are the maintained reference — read those instead of re-deriving the pipeline from source. Note the overview doc predates the `trimesh`/mesh-distance work reflected in `requirements.txt` and `mesh3d_service.py`/`mesh_visualization_service.py`, so treat its "no mesh library installed" claims as historical, not current.
+- Related research artifacts (`.scm` format reverse-engineering, sample point clouds, measurement dumps) live in the **outer** `C:\deploy` directory, not in this repo — see that directory's `CLAUDE.md`.
+- Tests: `tests/test_{fit_clearance,fit_pipeline,fit_size_match,last_bottom_profile,last_fit_hybrid_service,last_fit_regression,last_pose_measurements,last_pose_service,last_registration_service,last_working_orientation,mesh3d_service,mesh_visualization_service,stl_parser_service}.py`.
 
 ## Skill routing
 
