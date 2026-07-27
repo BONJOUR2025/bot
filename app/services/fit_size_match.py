@@ -35,12 +35,25 @@ from app.services.foot_landmarks import FootLandmarks
 # Functional toe allowance, mm. Classic men's leather footwear. These are
 # documented starting values, NOT calibrated against real fittings -- §29 asks
 # for a fitting pilot before any threshold is treated as fact.
+#
+# The lower bound widened from 8mm to 5mm after a real pair (functional
+# clearance 7.0mm, ball offset -2.0% -- both otherwise unremarkable) tripped
+# the gate on that single millimetre and reported "wrong length" for a last
+# whose actual problem was width. See _classify_toe/_is_severe below for how
+# a value this close to the edge is now handled even when it IS outside the
+# band.
 TOE_ALLOWANCE_GOOD = (10.0, 15.0)
-TOE_ALLOWANCE_ACCEPTABLE = (8.0, 20.0)
+TOE_ALLOWANCE_ACCEPTABLE = (5.0, 20.0)
+# Past this far beyond the acceptable band, the reading is unambiguous enough
+# to gate on its own, without needing the other signal to agree.
+_TOE_SEVERE_MARGIN_MM = 10.0
 
 # Ball-line offset as a fraction of foot length.
 BALL_OFFSET_GOOD = 0.02
 BALL_OFFSET_GATE = 0.04
+# Same idea as _TOE_SEVERE_MARGIN_MM: an offset this far past the gate
+# threshold is unambiguous on its own.
+BALL_OFFSET_SEVERE = 0.08
 
 # Below this landmark confidence the gate is demoted to an ordinary finding:
 # a bad MTH detection would otherwise silence every real zone result.
@@ -160,20 +173,49 @@ def evaluate_size_match(
 
     confidence = min(foot_landmarks.confidence, last_landmarks.confidence)
 
-    # --- gate -------------------------------------------------------------
-    gate = False
+    # --- gate ---------------------------------------------------------
+    # A single measurement landing just past its own edge is not enough by
+    # itself: on a real pair, functional clearance of 7.0mm (0.9mm past the
+    # then-8mm edge) gated alone and reported "wrong length" for a last that
+    # actually fit lengthwise -- its real problem (an 8mm width deficit at the
+    # ball) only showed up in the zone analysis this gate had suppressed.
+    #
+    # So each signal is graded two ways: past its normal edge ("out"), and far
+    # enough past it to be unambiguous on its own ("severe", via the *_SEVERE
+    # margins/thresholds above). The gate fires only when at least one signal
+    # is severe, or when both signals are simultaneously out -- two
+    # independent measurements agreeing is itself evidence, even if neither
+    # alone clears the severe bar.
+    toe_out_reason: str | None = None
+    toe_severe = False
     if functional_clearance is not None:
         lo, hi = TOE_ALLOWANCE_ACCEPTABLE
         if functional_clearance > hi:
-            gate = True
-            reasons.append(f"functional toe allowance {functional_clearance:.0f}mm exceeds {hi:.0f}mm")
+            toe_out_reason = f"functional toe allowance {functional_clearance:.0f}mm exceeds {hi:.0f}mm"
+            toe_severe = functional_clearance > hi + _TOE_SEVERE_MARGIN_MM
         elif functional_clearance < lo:
-            gate = True
-            reasons.append(f"functional toe allowance {functional_clearance:.0f}mm below {lo:.0f}mm")
+            toe_out_reason = f"functional toe allowance {functional_clearance:.0f}mm below {lo:.0f}mm"
+            toe_severe = functional_clearance < lo - _TOE_SEVERE_MARGIN_MM
+
+    ball_out_reason: str | None = None
+    ball_severe = False
     if ball_fraction is not None and abs(ball_fraction) > BALL_OFFSET_GATE:
+        ball_out_reason = (f"ball line offset {abs(ball_fraction) * 100:.1f}% of foot length "
+                           f"exceeds {BALL_OFFSET_GATE * 100:.0f}%")
+        ball_severe = abs(ball_fraction) > BALL_OFFSET_SEVERE
+
+    gate = False
+    if toe_severe:
         gate = True
-        reasons.append(f"ball line offset {abs(ball_fraction) * 100:.1f}% of foot length "
-                       f"exceeds {BALL_OFFSET_GATE * 100:.0f}%")
+        reasons.append(toe_out_reason)
+    if ball_severe:
+        gate = True
+        reasons.append(ball_out_reason)
+    if not gate and toe_out_reason is not None and ball_out_reason is not None:
+        gate = True
+        reasons.append(toe_out_reason)
+        reasons.append(ball_out_reason)
+        reasons.append("neither signal alone was severe, but both agree")
 
     if gate and confidence < MIN_GATE_CONFIDENCE:
         # A weak landmark set must not be allowed to silence the zone analysis.

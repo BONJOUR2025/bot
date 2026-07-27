@@ -47,6 +47,14 @@ FIT_INDETERMINATE = "FIT_INDETERMINATE"
 # §17.2/§15: the last is the wrong size or proportion for this foot, so no
 # amount of easing or a different fullness will help.
 FIT_STRUCTURALLY_INCOMPATIBLE = "FIT_STRUCTURALLY_INCOMPATIBLE"
+# Length and ball-line placement passed fit_size_match -- the last is the
+# right size -- but tightness (or looseness) is spread broadly rather than
+# local, which on a correctly-sized last is what a wrong width grade looks
+# like. Distinct from FIT_REQUIRES_LAST_MODIFICATION: that name covers a last
+# that is wrong outright; this one means "same model and length, next width
+# grade up/down" -- a real, common, and much cheaper fix on a graded family
+# (see the size x fullness library grid).
+FIT_REQUIRES_DIFFERENT_FULLNESS = "FIT_REQUIRES_DIFFERENT_FULLNESS"
 
 _MANY_TIGHT_ZONES = 3
 
@@ -64,6 +72,8 @@ class FitReport:
     size_match: dict
     clearance: dict
     quality: dict
+    fullness_direction: str | None = None
+    fullness_mm: float | None = None
     explanation: dict = field(default_factory=dict)
     footprint_png_base64: str | None = None
     limitations: list[str] = field(default_factory=list)
@@ -80,6 +90,8 @@ class FitReport:
             "cavity": self.cavity,
             "sections": self.sections,
             "size_match": self.size_match,
+            "fullness_direction": self.fullness_direction,
+            "fullness_mm": round(self.fullness_mm, 1) if self.fullness_mm is not None else None,
             "clearance": self.clearance,
             "quality": self.quality,
             "explanation": self.explanation,
@@ -88,22 +100,54 @@ class FitReport:
         }
 
 
-def _classify(clearance: ClearanceReport) -> str:
+def _fullness_estimate(tight_zones: list, loose_zones: list) -> float:
+    """How many mm to add (tight) or remove (loose), estimated from the
+    worst single-direction squeeze/room across the affected zones -- the same
+    per-direction values fit_clearance already classifies zones on, not the
+    zone average (§12 of the audit: averaging a medial squeeze against a
+    dorsal void reports a comfortable fit nobody feels)."""
+    if tight_zones:
+        worst = min(
+            (v for z in tight_zones for k, v in (z.directional_mm or {}).items()
+             if k != "plantar" and v is not None),
+            default=None,
+        )
+        return abs(worst) if worst is not None else 0.0
+    room = [z.signed_gap_mm["median"] for z in loose_zones]
+    return float(np.mean(room)) if room else 0.0
+
+
+def _classify(clearance: ClearanceReport) -> tuple[str, str | None, float | None]:
     """§17.1: no winner-takes-all. The class summarises the zone profile, and
-    the per-zone detail stays in the report for the reader to disagree with."""
+    the per-zone detail stays in the report for the reader to disagree with.
+
+    Returns (fit_class, fullness_direction, fullness_mm). The fullness fields
+    are only set for FIT_REQUIRES_DIFFERENT_FULLNESS.
+    """
     if not clearance.zones:
-        return FIT_INDETERMINATE
+        return FIT_INDETERMINATE, None, None
     tight = [z for z in clearance.zones if z.classification == "LOCAL_TIGHTNESS"]
     loose = [z for z in clearance.zones if z.classification == "LOCAL_LOOSENESS"]
+
+    if tight and loose:
+        # Both broad tightness AND broad looseness at once is a misallocated-
+        # volume pattern (narrow-and-high, wide-and-low, ...), not "one width
+        # grade up/down would fix it" -- that needs the last reshaped, not
+        # just regraded.
+        return FIT_REQUIRES_LAST_MODIFICATION, None, None
     if len(tight) >= _MANY_TIGHT_ZONES:
-        # Tightness spread across most of the foot is not a local problem to
-        # be eased -- it is the wrong last (§15.3).
-        return FIT_REQUIRES_LAST_MODIFICATION
+        # Broad, uniform tightness on a last already confirmed the right
+        # length and ball-line placement (fit_size_match ran first and did not
+        # gate) is what a too-narrow width grade looks like on a graded last
+        # family -- not a defect needing reshaping.
+        return FIT_REQUIRES_DIFFERENT_FULLNESS, "wider", _fullness_estimate(tight, [])
+    if len(loose) >= _MANY_TIGHT_ZONES:
+        return FIT_REQUIRES_DIFFERENT_FULLNESS, "narrower", _fullness_estimate([], loose)
     if tight:
-        return FIT_LOCAL_TIGHTNESS
+        return FIT_LOCAL_TIGHTNESS, None, None
     if loose:
-        return FIT_LOCAL_LOOSENESS
-    return FIT_GOOD
+        return FIT_LOCAL_LOOSENESS, None, None
+    return FIT_GOOD, None, None
 
 
 def analyze_fit(
@@ -193,8 +237,10 @@ def analyze_fit(
         except Exception as exc:
             limitations.append(f"footprint overlay unavailable: {exc}")
 
-    fit_class = (FIT_STRUCTURALLY_INCOMPATIBLE if size_match.gate_triggered
-                 else _classify(clearance))
+    if size_match.gate_triggered:
+        fit_class, fullness_direction, fullness_mm = FIT_STRUCTURALLY_INCOMPATIBLE, None, None
+    else:
+        fit_class, fullness_direction, fullness_mm = _classify(clearance)
     if size_match.gate_triggered:
         limitations.append(
             "size/proportion mismatch dominates: the zone findings below are its "
@@ -212,6 +258,8 @@ def analyze_fit(
         cavity=cavity.as_dict(),
         sections=sections,
         size_match=size_match.as_dict(),
+        fullness_direction=fullness_direction,
+        fullness_mm=fullness_mm,
         clearance=clearance.as_dict(),
         quality={"foot": foot_quality.as_dict(), "cavity": last_quality.as_dict()},
         footprint_png_base64=footprint,

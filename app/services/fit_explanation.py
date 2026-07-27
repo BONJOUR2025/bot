@@ -197,6 +197,7 @@ _HEADLINE = {
     "FIT_REQUIRES_LAST_MODIFICATION": "Колодка не подходит без переделки",
     "FIT_INDETERMINATE": "Оценить не удалось",
     "FIT_STRUCTURALLY_INCOMPATIBLE": "Не тот размер колодки",
+    "FIT_REQUIRES_DIFFERENT_FULLNESS": "Размер верный — нужна другая полнота",
 }
 
 
@@ -236,6 +237,28 @@ def explain(report: dict) -> Explanation:
             check=sm.get("size_hint") or "Подобрать колодку другого размера",
         ))
 
+    # A broad, uniform width mismatch on an otherwise correctly-sized last
+    # (length and ball line both passed fit_size_match) reads as "wrong width
+    # grade", not as six independent tight zones -- the same escalation the
+    # size gate does above, one level down.
+    fullness_dir = report.get("fullness_direction")
+    fullness_mm = report.get("fullness_mm")
+    if fit_class == "FIT_REQUIRES_DIFFERENT_FULLNESS" and fullness_dir is not None:
+        verb = "шире" if fullness_dir == "wider" else "уже"
+        mm = fullness_mm or 0.0
+        steps = "2–3" if mm >= 6.0 else "1–2"
+        findings.insert(0, Finding(
+            severity=CRITICAL, zone="fullness",
+            title=f"Размер верный, но полнота не та: нужно примерно на {mm:.0f} мм {verb}",
+            fact=("Теснота идёт равномерно по нескольким зонам, а не в одном месте, "
+                  "при этом длина колодки и положение пучков в норме — "
+                  "это признак полноты, а не размера или локального дефекта."),
+            effect=("Точечной растяжкой одной зоны это не лечится — нужна та же модель "
+                    "и тот же размер, но другая полнота."),
+            confidence=sm.get("confidence", 0.6) if sm else 0.6,
+            check=f"Взять колодку той же модели и размера на {steps} ступени {'полнее' if fullness_dir == 'wider' else 'уже'}",
+        ))
+
     tight = [f for f in findings if f.severity in (CRITICAL, WARNING) and "тесно" in f.title]
     loose = [f for f in findings if "свободно" in f.title]
     ok_count = sum(1 for f in findings if f.severity == GOOD)
@@ -243,10 +266,15 @@ def explain(report: dict) -> Explanation:
     if fit_class == "FIT_STRUCTURALLY_INCOMPATIBLE":
         summary = ("Дело не в полноте и не в разноске: колодка не соответствует стопе "
                    "по размеру и пропорции. Нужна колодка другой длины.")
+    elif fit_class == "FIT_REQUIRES_DIFFERENT_FULLNESS" and fullness_dir is not None:
+        verb = "шире" if fullness_dir == "wider" else "уже"
+        summary = (f"Длина колодки и положение пучков в норме. Проблема — полнота: "
+                   f"нужно примерно на {(fullness_mm or 0.0):.0f} мм {verb}.")
     elif fit_class == "FIT_REQUIRES_LAST_MODIFICATION":
-        summary = (f"Теснота не локальная, а по большей части стопы "
-                   f"({len(tight)} зон из {len(findings)}). Это не лечится разноской "
-                   f"или шнуровкой — нужна другая полнота либо переделка колодки.")
+        summary = ("Теснота и свобода встречаются одновременно в разных зонах — объём "
+                   "в колодке есть, но распределён не туда. Ни разноска, ни смена "
+                   "полноты сама по себе это не исправит: нужна переделка колодки "
+                   "в конкретных зонах, а не другой размерный вариант той же модели.")
     elif tight:
         worst = tight[0]
         summary = (f"Главная проблема — {ZONE_LABEL.get(worst.zone, worst.zone).lower()}. "

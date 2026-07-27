@@ -8,6 +8,7 @@ import pytest
 import trimesh
 
 from app.services.fit_pipeline import (
+    FIT_REQUIRES_DIFFERENT_FULLNESS,
     FIT_REQUIRES_LAST_MODIFICATION,
     analyze_fit,
 )
@@ -17,6 +18,22 @@ def _blocky(width, length, height, subdivisions=4):
     mesh = trimesh.creation.box(extents=[width, length, height])
     for _ in range(subdivisions):
         mesh = mesh.subdivide()
+    mesh.apply_translation([0.0, length / 2.0, height / 2.0])
+    return mesh
+
+
+def _tapered(back_width, front_width, length, height, subdivisions=5):
+    """A last that is `back_width` wide at the heel and linearly widens (or
+    narrows) to `front_width` at the toe -- unlike _blocky, tightness and
+    looseness are not uniform along its length."""
+    mesh = trimesh.creation.box(extents=[max(back_width, front_width), length, height])
+    for _ in range(subdivisions):
+        mesh = mesh.subdivide()
+    v = mesh.vertices.copy()
+    t = (v[:, 1] + length / 2.0) / length
+    width_at = back_width + (front_width - back_width) * t
+    v[:, 0] *= width_at / max(back_width, front_width)
+    mesh.vertices = v
     mesh.apply_translation([0.0, length / 2.0, height / 2.0])
     return mesh
 
@@ -64,11 +81,36 @@ def test_heel_stays_pinned_through_the_whole_pipeline():
     assert reg["scale"] == 1.0
 
 
-def test_a_much_narrower_last_needs_modification():
+def test_a_uniformly_narrower_last_needs_a_different_fullness():
+    """Tight everywhere, loose nowhere, on a last that already passed the
+    size/proportion gate is exactly what the next width grade down looks
+    like -- not a defect that needs the last reshaped."""
     foot = _blocky(100, 260, 60)
     narrow = _blocky(70, 285, 95)
     d = _report(foot, narrow)
+    assert d["fit_class"] == FIT_REQUIRES_DIFFERENT_FULLNESS
+    assert d["fullness_direction"] == "wider"
+    assert d["fullness_mm"] > 0
+
+
+def test_a_uniformly_wider_last_needs_a_different_fullness_the_other_way():
+    foot = _blocky(100, 260, 60)
+    wide = _blocky(130, 285, 95)
+    d = _report(foot, wide)
+    assert d["fit_class"] == FIT_REQUIRES_DIFFERENT_FULLNESS
+    assert d["fullness_direction"] == "narrower"
+
+
+def test_mixed_tight_and_loose_still_needs_modification():
+    """A last that is narrow at the heel and flares wide at the toe is not
+    fixable by picking a different fullness of the same model -- squeeze and
+    void at once is a shape problem, not a grading problem."""
+    foot = _blocky(90, 260, 60)
+    lopsided = _tapered(back_width=65, front_width=140, length=278, height=100)
+    d = _report(foot, lopsided)
     assert d["fit_class"] == FIT_REQUIRES_LAST_MODIFICATION
+    assert d["fullness_direction"] is None
+    assert d["fullness_mm"] is None
 
 
 def test_pose_uncertainty_is_absent_in_static_mode():

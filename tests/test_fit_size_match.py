@@ -11,6 +11,7 @@ import trimesh
 
 from app.services.fit_size_match import (
     BALL_OFFSET_GATE,
+    BALL_OFFSET_SEVERE,
     MIN_GATE_CONFIDENCE,
     SizeMatch,
     evaluate_size_match,
@@ -54,15 +55,42 @@ def test_far_too_long_last_triggers_the_gate():
     assert any("toe allowance" in reason for reason in r.reasons)
 
 
-def test_ball_offset_alone_triggers_the_gate():
-    """Same length, but the ball lands well behind the last's own ball."""
+def test_severe_ball_offset_alone_triggers_the_gate():
+    """Same length, but the ball lands well behind the last's own ball -- far
+    enough past BALL_OFFSET_GATE to be unambiguous without the toe signal
+    agreeing (a merely "out" offset must NOT gate alone, see
+    test_borderline_single_signal_does_not_gate_alone)."""
     foot = _box(95, 260, 55)
     cavity = _box(100, 272, 60)
-    offset = 0.06 * 260               # 6% of foot length, past the 4% gate
+    offset = (BALL_OFFSET_SEVERE + 0.01) * 260
     r = evaluate_size_match(foot, cavity, _landmarks(160.0), _landmarks(160.0 + offset))
     assert r.gate_triggered
     assert any("ball line offset" in reason for reason in r.reasons)
     assert abs(r.ball_offset_fraction) > BALL_OFFSET_GATE
+
+
+def test_borderline_single_signal_does_not_gate_alone():
+    """The bug this rewrite fixes: a real last (functional clearance 7.0mm,
+    just past the old 8mm edge) gated on that single signal and reported
+    'wrong length' for a last whose actual problem was width, caught by the
+    zone analysis this gate had suppressed. A signal that is out of its band
+    but not severely so must not gate by itself."""
+    foot = _box(95, 260, 55)
+    cavity = _box(100, 272, 60)
+    offset = (BALL_OFFSET_GATE + 0.01) * 260   # out, but nowhere near severe
+    r = evaluate_size_match(foot, cavity, _landmarks(160.0), _landmarks(160.0 + offset))
+    assert not r.gate_triggered
+
+
+def test_two_signals_both_out_gate_even_if_neither_is_severe():
+    """Two independent measurements agreeing is itself evidence, even when
+    neither alone clears the severe bar."""
+    foot = _box(95, 250, 55)
+    cavity = _box(100, 245, 60)                 # toe allowance -5mm: out, not severe
+    ball_offset = (BALL_OFFSET_GATE + 0.01) * 250   # mildly out, not severe
+    r = evaluate_size_match(foot, cavity, _landmarks(167.0), _landmarks(167.0 + ball_offset))
+    assert r.gate_triggered
+    assert len(r.reasons) >= 2
 
 
 def test_ball_offset_is_scaled_by_foot_length():
