@@ -93,3 +93,20 @@ class LastRepository:
                 self._save()
                 return removed
         return None
+
+    def rename_article(self, old_code: str, new_code: str) -> int:
+        """Renaming an article number in the registry (LastArticleRepository)
+        must not silently orphan every scan already filed under the old
+        code -- they'd vanish from that model's group in the library grid.
+        Returns how many records were updated."""
+        old_code, new_code = (old_code or "").strip(), (new_code or "").strip()
+        if old_code == new_code:
+            return 0
+        count = 0
+        for item in self._data:
+            if item.get("article") == old_code:
+                item["article"] = new_code
+                count += 1
+        if count:
+            self._save()
+        return count

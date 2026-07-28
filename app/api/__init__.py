@@ -478,6 +478,16 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Shoe-last article/model number registry (dropdown source for the "add
+    # a last" form + a separate editable list of known numbers)
+    from .last_articles import create_last_articles_router
+
+    app.include_router(
+        create_last_articles_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Bot users (Telegram users who have started the bot, linkable to employees)
     from .bot_users import create_bot_users_router
     from ..data.bot_user_repository import get_bot_user_repository

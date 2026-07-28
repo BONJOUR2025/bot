@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Upload, Trash2, Plus, X, ChevronDown, ChevronUp, ArrowLeftRight } from 'lucide-react';
+import { Upload, Trash2, Plus, X, ChevronDown, ChevronUp, ArrowLeftRight, Pencil } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
@@ -146,6 +146,88 @@ function LastFamily({ group, onOpen }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** A single row in the article-number registry -- click to rename/relabel.
+ * Renaming cascades on the backend (LastRepository.rename_article) so
+ * existing scans filed under the old number stay grouped correctly. */
+function ArticleRow({ article, onEdit }) {
+  return (
+    <button type="button" onClick={() => onEdit(article)}
+            className="flex w-full items-center justify-between gap-2 rounded border border-[color:var(--color-border)] px-3 py-2 text-left text-sm hover:bg-[color:var(--color-surface-hover,rgba(0,0,0,0.03))]">
+      <div>
+        <span className="font-medium">{article.code}</span>
+        {article.name && <span className="ml-2 text-[color:var(--color-text-muted)]">{article.name}</span>}
+      </div>
+      <Pencil size={14} className="text-[color:var(--color-text-muted)]" />
+    </button>
+  );
+}
+
+function ArticleEditModal({ article, isOpen, onClose, onSave, onDelete }) {
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const isNew = !article?.id;
+
+  useEffect(() => {
+    setCode(article?.code || '');
+    setName(article?.name || '');
+    setNote(article?.note || '');
+  }, [article]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({ id: article?.id, code, name, note });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <form className="modal-card w-full max-w-sm p-4 space-y-3" onSubmit={handleSubmit}>
+        <div className="flex justify-between items-center">
+          <h3 className="font-semibold">{isNew ? 'Новый номер колодки' : `Номер колодки ${article.code}`}</h3>
+          <button type="button" className="btn" onClick={onClose}><X size={16} /></button>
+        </div>
+        <label className="block text-sm">
+          Номер
+          <input type="text" required className="input w-full mt-1" value={code}
+            onChange={(e) => setCode(e.target.value)} />
+        </label>
+        <label className="block text-sm">
+          Название (необязательно)
+          <input type="text" className="input w-full mt-1" value={name}
+            onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="block text-sm">
+          Заметка
+          <textarea className="input w-full mt-1" rows={2} value={note}
+            onChange={(e) => setNote(e.target.value)} />
+        </label>
+        {!isNew && (
+          <p className="text-xs text-[color:var(--color-text-muted)]">
+            Переименование номера обновит его во всех уже добавленных колодках этой модели.
+          </p>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          {!isNew ? (
+            <button type="button" className="btn text-[color:var(--color-danger)] flex items-center gap-1.5"
+                    onClick={() => onDelete(article.id)}>
+              <Trash2 size={15} /> Удалить
+            </button>
+          ) : <span />}
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? 'Сохраняю…' : 'Сохранить'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -313,6 +395,51 @@ export default function LastLibrary() {
   const [lightbox, setLightbox] = useState(null);
   const [detailLast, setDetailLast] = useState(null);
 
+  const [articles, setArticles] = useState([]);
+  const [editingArticle, setEditingArticle] = useState(null); // {} for "new"
+
+  async function loadArticles() {
+    try {
+      const res = await api.get('last-articles');
+      setArticles(res.data.articles);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  useEffect(() => { loadArticles(); }, []);
+
+  async function handleSaveArticle({ id, code, name, note }) {
+    try {
+      const fd = new FormData();
+      fd.append('code', code); fd.append('name', name); fd.append('note', note);
+      if (id) {
+        await api.patch(`last-articles/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      } else {
+        await api.post('last-articles', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      toast('Номер колодки сохранён', 'success');
+      setEditingArticle(null);
+      loadArticles();
+      loadLasts();
+    } catch (err) {
+      console.error(err);
+      toast(err.response?.data?.detail === 'code_already_exists' ? 'Такой номер уже есть' : 'Не удалось сохранить номер', 'error');
+    }
+  }
+
+  async function handleDeleteArticle(id) {
+    if (!window.confirm('Удалить этот номер из списка? Уже добавленные колодки не удалятся.')) return;
+    try {
+      await api.delete(`last-articles/${id}`);
+      setEditingArticle(null);
+      loadArticles();
+    } catch (err) {
+      console.error(err);
+      toast('Не удалось удалить номер', 'error');
+    }
+  }
+
   async function loadLasts() {
     setLoadingList(true);
     try {
@@ -420,6 +547,30 @@ export default function LastLibrary() {
     <div className="space-y-8">
       <section className="space-y-3">
         <div className="flex items-center justify-between">
+          <h3 className="font-semibold">Номера колодок ({articles.length})</h3>
+          <button type="button" className="btn flex items-center gap-1.5" onClick={() => setEditingArticle({})}>
+            <Plus size={16} /> Новый номер
+          </button>
+        </div>
+        <p className="text-sm text-[color:var(--color-text-muted)]">
+          Список номеров моделей колодок (например, 4977) — источник для выпадающего списка при добавлении колодки.
+          Нажмите на номер, чтобы переименовать или удалить его из списка.
+        </p>
+        {articles.length === 0 ? (
+          <div className="rounded border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 text-center text-sm text-[color:var(--color-text-muted)]">
+            Список пуст — добавьте первый номер колодки.
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {articles.map((a) => (
+              <ArticleRow key={a.id} article={a} onEdit={setEditingArticle} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
           <h3 className="font-semibold">Библиотека колодок ({lasts.length})</h3>
           <button type="button" className="btn btn-primary flex items-center gap-1.5" onClick={() => setAddOpen(true)}>
             <Plus size={16} /> Добавить колодку
@@ -511,9 +662,24 @@ export default function LastLibrary() {
             <input type="file" accept=".stl" required className="block w-full mt-1"
               onChange={(e) => setAddFile(e.target.files?.[0] || null)} />
           </label>
-          {['article', 'size', 'fullness', 'model', 'material'].map((field) => (
+          <label className="block text-sm">
+            Номер колодки
+            <select className="input w-full mt-1" required value={form.article}
+              onChange={(e) => setForm(f => ({ ...f, article: e.target.value }))}>
+              <option value="" disabled>Выберите номер…</option>
+              {articles.map((a) => (
+                <option key={a.id} value={a.code}>{a.code}{a.name ? ` — ${a.name}` : ''}</option>
+              ))}
+            </select>
+            {articles.length === 0 && (
+              <span className="block text-xs text-[color:var(--color-text-muted)] mt-1">
+                Список номеров пуст — сначала добавьте номер в разделе «Номера колодок» выше.
+              </span>
+            )}
+          </label>
+          {['size', 'fullness', 'model', 'material'].map((field) => (
             <label key={field} className="block text-sm">
-              {{ article: 'Номер колодки', size: 'Размер', fullness: 'Полнота', model: 'Модель', material: 'Материал' }[field]}
+              {{ size: 'Размер', fullness: 'Полнота', model: 'Модель', material: 'Материал' }[field]}
               <input type="text" className="input w-full mt-1" value={form[field]}
                 onChange={(e) => setForm(f => ({ ...f, [field]: e.target.value }))} />
             </label>
@@ -574,6 +740,14 @@ export default function LastLibrary() {
           onDelete={(id) => { setDetailLast(null); handleDelete(id); }}
         />
       </Modal>
+
+      <ArticleEditModal
+        article={editingArticle}
+        isOpen={!!editingArticle}
+        onClose={() => setEditingArticle(null)}
+        onSave={handleSaveArticle}
+        onDelete={handleDeleteArticle}
+      />
     </div>
   );
 }
