@@ -38,8 +38,108 @@ function groupByModel(lasts) {
     .sort((a, b) => a.code.localeCompare(b.code, 'ru', { numeric: true }));
 }
 
-function LastDetail({ last, onClose, onDelete }) {
+const LAST_EDIT_FIELDS = ['article', 'size', 'fullness', 'model', 'material'];
+
+function LastEditForm({ last, articles, onCancel, onSave }) {
+  const [form, setForm] = useState(() => ({
+    article: last.article || '', size: last.size || '', fullness: last.fullness || '',
+    model: last.model || '', material: last.material || '', note: last.note || '',
+    side: last.side || '', heel_height_mm: last.heel_height_mm ?? '', toe_spring_mm: last.toe_spring_mm ?? '',
+  }));
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave(last.id, form);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="space-y-3" onSubmit={handleSubmit}>
+      <label className="block text-sm">
+        Номер колодки
+        <select className="input w-full mt-1" required value={form.article}
+          onChange={(e) => setForm(f => ({ ...f, article: e.target.value }))}>
+          <option value="" disabled>Выберите номер…</option>
+          {/* the last's current article stays selectable even if it somehow
+              isn't (yet) in the registry, so editing never blanks the field */}
+          {!articles.some(a => a.code === form.article) && form.article && (
+            <option value={form.article}>{form.article}</option>
+          )}
+          {articles.map((a) => (
+            <option key={a.id} value={a.code}>{a.code}{a.name ? ` — ${a.name}` : ''}</option>
+          ))}
+        </select>
+      </label>
+      {LAST_EDIT_FIELDS.filter((f) => f !== 'article').map((field) => (
+        <label key={field} className="block text-sm">
+          {{ size: 'Размер', fullness: 'Полнота', model: 'Модель', material: 'Материал' }[field]}
+          <input type="text" className="input w-full mt-1" value={form[field]}
+            onChange={(e) => setForm(f => ({ ...f, [field]: e.target.value }))} />
+        </label>
+      ))}
+      <label className="block text-sm">
+        Сторона колодки
+        <select className="input w-full mt-1" value={form.side}
+          onChange={(e) => setForm(f => ({ ...f, side: e.target.value }))}>
+          <option value="">Определить автоматически</option>
+          <option value="left">Левая</option>
+          <option value="right">Правая</option>
+        </select>
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block text-sm">
+          Высота каблука, мм
+          <input type="number" step="0.1" className="input w-full mt-1" value={form.heel_height_mm}
+            onChange={(e) => setForm(f => ({ ...f, heel_height_mm: e.target.value }))} />
+        </label>
+        <label className="block text-sm">
+          Носочный подъём, мм
+          <input type="number" step="0.1" className="input w-full mt-1" value={form.toe_spring_mm}
+            onChange={(e) => setForm(f => ({ ...f, toe_spring_mm: e.target.value }))} />
+        </label>
+      </div>
+      <label className="block text-sm">
+        Заметка
+        <textarea className="input w-full mt-1" rows={2} value={form.note}
+          onChange={(e) => setForm(f => ({ ...f, note: e.target.value }))} />
+      </label>
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn" onClick={onCancel} disabled={saving}>Отмена</button>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
+          {saving ? 'Сохраняю…' : 'Сохранить'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function LastDetail({ last, articles, onClose, onDelete, onSave }) {
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { setEditing(false); }, [last?.id]);
   if (!last) return null;
+
+  if (editing) {
+    return (
+      <div className="modal-card max-w-lg w-full space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-semibold">Редактировать колодку {last.article || last.model || '—'}</h3>
+          <button type="button" className="btn" onClick={onClose}><X size={16} /></button>
+        </div>
+        <LastEditForm
+          last={last}
+          articles={articles}
+          onCancel={() => setEditing(false)}
+          onSave={async (id, form) => { await onSave(id, form); setEditing(false); }}
+        />
+      </div>
+    );
+  }
+
   const rows = [
     ['Длина', last.length_mm], ['Ширина', last.width_mm], ['Высота', last.height_mm],
     ['Обхват пучков', last.ball_girth_mm], ['Обхват подъёма', last.instep_girth_mm],
@@ -81,7 +181,10 @@ function LastDetail({ last, onClose, onDelete }) {
            target="_blank" rel="noreferrer">Скачать .stl</a>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn flex items-center gap-1.5" onClick={() => setEditing(true)}>
+          <Pencil size={15} /> Редактировать
+        </button>
         <button type="button" className="btn text-[color:var(--color-danger)] flex items-center gap-1.5"
                 onClick={() => onDelete(last.id)}>
           <Trash2 size={15} /> Удалить эту колодку
@@ -497,6 +600,23 @@ export default function LastLibrary() {
     }
   }
 
+  async function handleSaveLast(id, form) {
+    try {
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => {
+        if ((k === 'heel_height_mm' || k === 'toe_spring_mm') && v === '') return;
+        fd.append(k, v);
+      });
+      const res = await api.patch(`lasts/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setLasts(prev => prev.map(l => (l.id === id ? res.data : l)));
+      setDetailLast(res.data);
+      toast('Колодка обновлена', 'success');
+    } catch (err) {
+      console.error(err);
+      toast(err.response?.data?.detail || 'Не удалось сохранить изменения', 'error');
+    }
+  }
+
 
 
   async function runMatchStl(left, right, swap) {
@@ -736,7 +856,9 @@ export default function LastLibrary() {
       <Modal isOpen={!!detailLast} onClose={() => setDetailLast(null)}>
         <LastDetail
           last={detailLast}
+          articles={articles}
           onClose={() => setDetailLast(null)}
+          onSave={handleSaveLast}
           onDelete={(id) => { setDetailLast(null); handleDelete(id); }}
         />
       </Modal>

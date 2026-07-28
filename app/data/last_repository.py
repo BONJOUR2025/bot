@@ -79,6 +79,25 @@ class LastRepository:
         self._save()
         return record
 
+    # Metadata a user can fix after the fact without re-scanning the last --
+    # everything the "add a last" form collects by hand, as opposed to what
+    # stl_parser_service measured from the file (length_mm, ball_girth_mm,
+    # profile, ...), which only a re-upload can change.
+    _EDITABLE_FIELDS = (
+        "article", "size", "fullness", "model", "material", "note", "side",
+        "heel_height_mm", "toe_spring_mm",
+    )
+
+    def update(self, last_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        for item in self._data:
+            if item.get("id") == last_id:
+                for field in self._EDITABLE_FIELDS:
+                    if field in data:
+                        item[field] = data[field]
+                self._save()
+                return item
+        return None
+
     def set_scan_file_url(self, last_id: str, url: str) -> None:
         for item in self._data:
             if item.get("id") == last_id:

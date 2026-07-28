@@ -113,6 +113,35 @@ def create_lasts_router() -> APIRouter:
         record["scan_file_url"] = url
         return _last_summary(record)
 
+    @router.patch("/{last_id}")
+    async def update_last(
+        last_id: str,
+        # Metadata only -- fixing a typo'd size/fullness/note on an already
+        # scanned last shouldn't require re-uploading the .stl. Re-scanning
+        # (a new file, and everything stl_parser_service measures from it)
+        # is a separate action: delete and re-add.
+        article: str = Form(""),
+        size: str = Form(""),
+        fullness: str = Form(""),
+        model: str = Form(""),
+        material: str = Form(""),
+        note: str = Form(""),
+        side: str | None = Form(None),
+        heel_height_mm: float | None = Form(None),
+        toe_spring_mm: float | None = Form(None),
+        current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION)),
+    ):
+        if side not in (None, "", "left", "right"):
+            raise HTTPException(status_code=400, detail="invalid_side")
+        if repo.get(last_id) is None:
+            raise HTTPException(status_code=404, detail="not_found")
+        record = repo.update(last_id, {
+            "article": article, "size": size, "fullness": fullness, "model": model,
+            "material": material, "note": note, "side": side or None,
+            "heel_height_mm": heel_height_mm, "toe_spring_mm": toe_spring_mm,
+        })
+        return _last_summary(record)
+
     @router.delete("/{last_id}")
     async def delete_last(last_id: str, current: ResolvedUser = Depends(require_permission(SCANNER_PERMISSION))):
         existing = repo.get(last_id)
