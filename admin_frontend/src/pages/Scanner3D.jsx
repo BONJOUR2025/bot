@@ -1,11 +1,15 @@
-import { useState } from 'react';
-import { Scan, Upload, User, Phone, Calendar, Clock, X, Library, ArrowLeftRight } from 'lucide-react';
+import { lazy, Suspense, useState } from 'react';
+import { Scan, Upload, User, Phone, Calendar, Clock, X, Library, ArrowLeftRight, Ruler } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 import { FootCard } from '../components/FootScanCard.jsx';
 import LastLibrary from './LastLibrary.jsx';
+
+// three.js is a large bundle and the measuring tool is opt-in, so it is only
+// fetched when that tab is actually opened (same reason Viewer3D is lazy).
+const StlMeasure = lazy(() => import('../components/StlMeasure.jsx'));
 
 function MetaRow({ icon: Icon, label, value }) {
   if (!value) return null;
@@ -178,11 +182,18 @@ export default function Scanner3D() {
         tabs={[
           { key: 'scan', label: 'Сканер', icon: <Scan size={14} /> },
           { key: 'library', label: 'Библиотека колодок', icon: <Library size={14} /> },
+          { key: 'measure', label: 'Измерения', icon: <Ruler size={14} /> },
         ]}
         active={tab}
         onChange={setTab}
       />
-      {tab === 'scan' ? <ScanTab /> : <LastLibrary />}
+      {tab === 'scan' && <ScanTab />}
+      {tab === 'library' && <LastLibrary />}
+      {tab === 'measure' && (
+        <Suspense fallback={<p className="text-sm text-[color:var(--color-text-muted)]">Загружаю инструмент…</p>}>
+          <StlMeasure />
+        </Suspense>
+      )}
     </div>
   );
 }
