@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { Html, Line, OrbitControls } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import { extractStlColors } from '../utils/stlColor.js';
 import {
   Upload, Trash2, Ruler, Spline, MoveUpRight, CornerDownRight,
-  MousePointerClick, Eye, EyeOff, RotateCcw,
+  MousePointerClick, Eye, EyeOff, RotateCcw, Box,
 } from 'lucide-react';
 
 function useStl(file) {
@@ -127,7 +127,57 @@ function Marker({ position, index, radius, showLabel, selected, onClick }) {
   );
 }
 
-function Scene({ geometry, useVertexColors, points, shapes, radius, showLabels, selected, onPick, onPickPoint }) {
+// These scans are Z-up (Z is height off the sole, Y is length from the heel),
+// but three's default "up" is Y. Left at the default, dragging orbits around
+// an axis lying sideways through the model, so the model tumbles instead of
+// turning and there is no stable horizon -- the "rotation is wrong and
+// unintuitive" report. Viewer3D hit exactly this and documents the fix: `up`
+// must be set through the Canvas's own `camera` prop, because OrbitControls
+// derives its orbit axis from `object.up` once, in its constructor
+// (OrbitControls.js: `this._quat = setFromUnitVectors(object.up, ...)`), and
+// never re-reads it. Mutating camera.up afterwards only desyncs the control
+// from the camera it is driving.
+const CAMERA_UP = [0, 0, 1];
+
+// Directions named for what they mean in this data: height along Z, length
+// along Y, width along X. The small off-axis components keep the view a hair
+// away from pure axis alignment, where the camera's forward vector would be
+// exactly parallel to `up` -- a degenerate case with no stable orientation.
+const VIEWS = {
+  iso: { label: 'Изометрия', dir: [0.9, -1.0, 0.75] },
+  top: { label: 'Сверху', dir: [0.02, -0.02, 1] },
+  bottom: { label: 'Снизу', dir: [0.02, -0.02, -1] },
+  front: { label: 'Спереди', dir: [0.03, -1, 0.04] },
+  back: { label: 'Сзади', dir: [0.03, 1, 0.04] },
+  side: { label: 'Сбоку', dir: [1, 0.03, 0.04] },
+};
+
+/** Moves the camera to a named view without touching camera.up (see above):
+ * only position and the controls' target change, then update() re-derives the
+ * pose from the frame OrbitControls already built. */
+function ViewRig({ view, centre, size, controlsRef }) {
+  const { camera } = useThree();
+  useEffect(() => {
+    if (!view) return;
+    const dir = new THREE.Vector3(...(VIEWS[view.key]?.dir || VIEWS.iso.dir)).normalize();
+    const c = new THREE.Vector3(...centre);
+    camera.position.copy(c).addScaledVector(dir, size * 2.1);
+    camera.near = size / 500;
+    camera.far = size * 40;
+    camera.updateProjectionMatrix();
+    const controls = controlsRef.current;
+    if (controls) {
+      controls.target.copy(c);
+      controls.update();
+    } else {
+      camera.lookAt(c);
+    }
+  }, [view, centre, size, camera, controlsRef]);
+  return null;
+}
+
+function Scene({ geometry, useVertexColors, points, shapes, radius, showLabels, selected,
+                 onPick, onPickPoint, view, controlsRef }) {
   const centre = useMemo(() => {
     if (!geometry?.boundingBox) return [0, 0, 0];
     const c = new THREE.Vector3();
@@ -148,6 +198,8 @@ function Scene({ geometry, useVertexColors, points, shapes, radius, showLabels, 
       <directionalLight position={[-size, -size * 0.5, size]} intensity={0.5} />
 
       <axesHelper args={[size * 0.9]} />
+      {/* gridHelper spans XZ by default (Y-up); rotating it onto XY puts it on
+          the ground plane this data actually uses. */}
       <gridHelper args={[size * 2.4, 24, '#94a3b8', '#e2e8f0']} rotation={[Math.PI / 2, 0, 0]} />
 
       {geometry && (
@@ -164,7 +216,27 @@ function Scene({ geometry, useVertexColors, points, shapes, radius, showLabels, 
               dashed={Boolean(s.dashed)} dashScale={size / 40} />
       ))}
 
-      <OrbitControls makeDefault target={centre} enableDamping dampingFactor={0.12} />
+      <ViewRig view={view} centre={centre} size={size} controlsRef={controlsRef} />
+      <OrbitControls
+        ref={controlsRef}
+        makeDefault
+        target={centre}
+        enableDamping
+        dampingFactor={0.12}
+        // Left drag orbits, right drag pans, wheel zooms -- the convention
+        // every CAD viewer uses, so it needs no explaining.
+        mouseButtons={{
+          LEFT: THREE.MOUSE.ROTATE,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.PAN,
+        }}
+        // Panning across the model's own ground plane rather than the screen
+        // plane keeps "drag right" meaning the same thing at any tilt.
+        screenSpacePanning={false}
+        zoomToCursor
+        minDistance={size * 0.05}
+        maxDistance={size * 12}
+      />
     </>
   );
 }
@@ -192,6 +264,14 @@ export default function StlMeasure() {
   const [results, setResults] = useState([]);     // finished measurements
   const [showLabels, setShowLabels] = useState(true);
   const [toOrigin, setToOrigin] = useState(false);
+  // Bumped (not just set) so re-picking the current view still re-frames it.
+  const [view, setView] = useState(null);
+  const controlsRef = useRef(null);
+  const viewNonce = useRef(0);
+  const applyView = useCallback((key) => {
+    viewNonce.current += 1;
+    setView({ key, nonce: viewNonce.current });
+  }, []);
 
   const size = useMemo(() => {
     if (!geometry?.boundingBox) return 100;
@@ -214,7 +294,10 @@ export default function StlMeasure() {
   );
 
   const reset = useCallback(() => { setPoints([]); setSelected([]); setResults([]); }, []);
-  useEffect(() => { reset(); }, [geometry, reset]);
+  useEffect(() => {
+    reset();
+    if (geometry) applyView('iso');
+  }, [geometry, reset, applyView]);
 
   const byId = useCallback((id) => points.find((p) => p.id === id), [points]);
 
@@ -377,8 +460,32 @@ export default function StlMeasure() {
             )}
           </div>
 
+          <div className="app-card flex flex-wrap items-center gap-1.5 p-2">
+            <span className="mr-1 flex items-center gap-1.5 text-xs text-[color:var(--color-text-muted)]">
+              <Box size={14} /> Вид:
+            </span>
+            {Object.entries(VIEWS).map(([key, v]) => (
+              <button key={key} type="button"
+                className={`btn text-xs ${view?.key === key ? 'btn-primary' : ''}`}
+                onClick={() => applyView(key)}>
+                {v.label}
+              </button>
+            ))}
+            <span className="ml-auto text-xs text-[color:var(--color-text-muted)]">
+              ЛКМ — поворот · ПКМ — сдвиг · колесо — приближение
+            </span>
+          </div>
+
           <div className="app-card overflow-hidden" style={{ height: '60vh', minHeight: 380 }}>
-            <Canvas camera={{ position: [size * 1.4, -size * 1.6, size * 1.2], fov: 45, near: size / 500, far: size * 40 }}>
+            <Canvas
+              camera={{
+                position: [size * 1.4, -size * 1.6, size * 1.2],
+                up: CAMERA_UP,
+                fov: 45,
+                near: size / 500,
+                far: size * 40,
+              }}
+            >
               <color attach="background" args={['#f8fafc']} />
               <Scene
                 geometry={geometry}
@@ -390,6 +497,8 @@ export default function StlMeasure() {
                 selected={selected}
                 onPick={addPoint}
                 onPickPoint={togglePoint}
+                view={view}
+                controlsRef={controlsRef}
               />
             </Canvas>
           </div>
