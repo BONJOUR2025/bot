@@ -237,6 +237,31 @@ def explain(report: dict) -> Explanation:
             check=sm.get("size_hint") or "Подобрать колодку другого размера",
         ))
 
+    # If the foot had to be swung sideways to sit on this last's axis, every
+    # medial/lateral number below partly describes that swing. Said out loud
+    # and high up, because otherwise a reader takes "тесно с внутренней
+    # стороны" at face value when it may be an artefact of the alignment.
+    # Only the severe case is raised as a finding: a swing a little past the
+    # measurement noise is true of most real pairs and would just add a
+    # permanent warning nobody reads. Milder ones stay in the caveats via the
+    # pipeline's limitations.
+    reg = report.get("registration") or {}
+    if reg.get("axis_mismatch_severe"):
+        swing = abs(reg.get("ball_swing_mm") or 0.0)
+        findings.insert(0, Finding(
+            severity=WARNING, zone="axis",
+            title=f"Ось колодки расходится с осью стопы: сдвиг в пучках {swing:.0f} мм",
+            fact=(f"Чтобы совместить линию «пятка → пучки» стопы с той же линией колодки, "
+                  f"стопу пришлось развернуть на {abs(reg.get('rotation_deg') or 0):.0f}° — "
+                  f"в пучках это сдвигает её вбок на {swing:.0f} мм."),
+            effect=("Разделение тесноты на «внутреннюю» и «внешнюю» ниже в значительной мере "
+                    "описывает этот разворот, а не саму колодку: стопа целиком смещена поперёк "
+                    "следа. Общая теснота и длина остаются достоверными, а вот сторона — нет."),
+            confidence=reg.get("confidence", 0.0),
+            check=("Проверить скан колодки: у одной модели соседние полноты не должны "
+                   "давать разный разворот следа относительно пятки"),
+        ))
+
     # A broad, uniform width mismatch on an otherwise correctly-sized last
     # (length and ball line both passed fit_size_match) reads as "wrong width
     # grade", not as six independent tight zones -- the same escalation the

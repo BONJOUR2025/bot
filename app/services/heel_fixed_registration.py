@@ -32,6 +32,28 @@ from app.services.foot_landmarks import FootLandmarks, detect_foot_landmarks
 # §9.5 acceptance budget for the pinned heel quantities.
 _HEEL_TOLERANCE_MM = 0.1
 
+# How far the rotation is allowed to swing the ball sideways before the
+# medial/lateral readings downstream stop meaning anything.
+#
+# A bare angle threshold cannot express this: the same angle costs a 240mm
+# foot far less than a 290mm one, and the number that matters is the
+# displacement at the ball, not the rotation that produced it. Measured on
+# real pairs, aligning the heel->ball headings asked for 1.4deg against the
+# Prada lasts (4.6mm at the ball) but 8.0-8.3deg against several 4977/44
+# scans -- 26-27mm at the ball and ~40mm at the toe tip. The old check only
+# warned past 15deg, so those passed in silence while bodily sliding the foot
+# off the last's axis; this module's own docstring notes a 3mm shift is
+# already enough to manufacture a "medial conflict / lateral gap" verdict.
+#
+# The budget below is the clearance uncertainty budget (fit_clearance's
+# ~2.7mm total sigma) rounded up: past this, the displacement the
+# registration introduced is larger than the signal the analysis reports, so
+# it has to be said out loud rather than absorbed.
+_BALL_SWING_TOLERANCE_MM = 3.0
+# Twice the tolerance is where the reading stops being merely uncertain and
+# becomes dominated by the swing.
+_BALL_SWING_SEVERE_MM = 10.0
+
 
 @dataclass
 class HeelFixedRegistration:
@@ -43,6 +65,10 @@ class HeelFixedRegistration:
     plantar_heel_delta_z: float
     scale: float
     confidence: float
+    # How far the rotation moved the foot's own ball sideways. This is the
+    # honest cost of aligning the two axes, in the units the rest of the
+    # report speaks -- see _BALL_SWING_TOLERANCE_MM.
+    ball_swing_mm: float = 0.0
     warnings: list[str] = field(default_factory=list)
     method: str = "heel_fixed_v1"
 
@@ -52,6 +78,21 @@ class HeelFixedRegistration:
                 and abs(self.heel_center_delta_x) < _HEEL_TOLERANCE_MM
                 and abs(self.plantar_heel_delta_z) < _HEEL_TOLERANCE_MM)
 
+    @property
+    def axis_mismatch(self) -> bool:
+        """True when the last's own heel->ball axis differs from this foot's
+        by more than the clearance analysis can absorb. Worth disclosing, but
+        at this level the medial/lateral split is degraded rather than
+        meaningless -- most real pairs land here."""
+        return abs(self.ball_swing_mm) > _BALL_SWING_TOLERANCE_MM
+
+    @property
+    def axis_mismatch_severe(self) -> bool:
+        """True when the swing dominates the readings outright, so a
+        medial/lateral verdict would describe the alignment rather than the
+        last. Raised to the reader as a finding, not just a caveat."""
+        return abs(self.ball_swing_mm) > _BALL_SWING_SEVERE_MM
+
     def as_dict(self) -> dict:
         return {
             "rotation_deg": round(self.rotation_deg, 2),
@@ -59,6 +100,9 @@ class HeelFixedRegistration:
             "posterior_heel_delta_y_mm": round(self.posterior_heel_delta_y, 3),
             "heel_center_delta_x_mm": round(self.heel_center_delta_x, 3),
             "plantar_heel_delta_z_mm": round(self.plantar_heel_delta_z, 3),
+            "ball_swing_mm": round(self.ball_swing_mm, 1),
+            "axis_mismatch": self.axis_mismatch,
+            "axis_mismatch_severe": self.axis_mismatch_severe,
             "scale": self.scale,
             "within_tolerance": self.within_tolerance,
             "confidence": round(self.confidence, 3),
@@ -118,7 +162,8 @@ def register_foot_to_last(
     ll = last_landmarks or detect_foot_landmarks(last_mesh, side=last_side or foot_side)
     if fl.plantar_heel_center is None or ll.plantar_heel_center is None:
         warnings.append("plantar_heel_center_missing")
-        identity = HeelFixedRegistration(np.eye(4), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, warnings)
+        identity = HeelFixedRegistration(np.eye(4), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+                                         warnings=warnings)
         return identity, foot_mesh.copy(), last_mesh
 
     # 1. Rotation about Z aligning the two heel->ball headings (§9.2 item 4).
@@ -168,10 +213,24 @@ def register_foot_to_last(
     if not np.isclose(scale, 1.0, atol=1e-6):
         warnings.append("transform_is_not_rigid")
 
+    # How far the rotation actually swung the ball. Measured on the foot's own
+    # ball rather than derived from the angle, so the number is the real
+    # displacement for this foot's length rather than a proxy for it.
+    ball_swing = 0.0
+    if fl.ball_center is not None:
+        ball_before = fl.ball_center
+        ball_after = trimesh.transform_points(ball_before[None, :], rot)[0]
+        ball_swing = float(ball_after[0] - ball_before[0])
+
     confidence = min(fl.confidence, ll.confidence)
-    if abs(np.degrees(theta)) > 15.0:
-        warnings.append("large_heel_axis_correction")
+    if abs(ball_swing) > _BALL_SWING_SEVERE_MM:
+        # The foot has been slid so far across the last that a medial/lateral
+        # verdict would describe the registration, not the fit.
+        warnings.append("last_axis_differs_from_foot_axis_medial_lateral_findings_unreliable")
         confidence *= 0.5
+    elif abs(ball_swing) > _BALL_SWING_TOLERANCE_MM:
+        warnings.append("last_axis_differs_from_foot_axis")
+        confidence *= 0.8
 
     result = HeelFixedRegistration(
         transform=transform,
@@ -182,6 +241,7 @@ def register_foot_to_last(
         plantar_heel_delta_z=delta_z,
         scale=1.0,
         confidence=float(np.clip(confidence, 0.0, 1.0)),
+        ball_swing_mm=ball_swing,
         warnings=warnings,
     )
     if not result.within_tolerance:

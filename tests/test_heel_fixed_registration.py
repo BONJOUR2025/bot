@@ -87,3 +87,62 @@ def test_missing_landmarks_report_zero_confidence():
     r, _, _ = register_foot_to_last(tiny, tiny, "left", "left")
     assert r.confidence == 0.0
     assert r.warnings
+
+
+# The landmark detector bins the ball zone finely, so these fixtures need to
+# be denser than the coarse solids the pinning tests above use -- at
+# subdivisions=4 whole bins come up empty and MTH5 is never found.
+_DENSE = 5
+
+
+def _skewed_last(length=286.0, width=104.0, swing_deg=8.0):
+    """A last whose forefoot is swung sideways relative to its heel -- the
+    shape that made several real 4977/44 scans ask for an 8 degree correction
+    while their own fullness neighbours asked for 3. A plain shear about the
+    heel, so the swing angle is exactly `swing_deg`."""
+    mesh = _foot_like(length=length, width=width, subdivisions=_DENSE)
+    v = mesh.vertices.copy()
+    v[:, 0] += np.tan(np.radians(swing_deg)) * v[:, 1]
+    mesh.vertices = v
+    return mesh
+
+
+def test_ball_swing_is_reported_in_millimetres():
+    """The cost of aligning the two axes has to be stated in the units the
+    rest of the report uses, not left as a bare angle."""
+    foot = _foot_like()
+    r, _reg, _last = register_foot_to_last(
+        foot, _foot_like(length=286.0, width=104.0, subdivisions=_DENSE), "left", "left")
+    assert hasattr(r, "ball_swing_mm")
+    assert "ball_swing_mm" in r.as_dict()
+
+
+def test_a_straight_last_does_not_trip_the_axis_guard():
+    foot = _foot_like(subdivisions=_DENSE)
+    last = _foot_like(length=286.0, width=104.0, subdivisions=_DENSE)
+    r, _reg, _last = register_foot_to_last(foot, last, "left", "left")
+    assert abs(r.ball_swing_mm) < 3.0
+    assert not r.axis_mismatch
+    assert not r.axis_mismatch_severe
+
+
+def test_a_swung_last_is_flagged_before_it_can_fake_a_medial_verdict():
+    """The real defect this guards: an 8 degree correction slid the foot ~26mm
+    across the ball and produced a confident 'medial tightness / lateral
+    room' reading that described the alignment, not the last. The old check
+    only warned past 15 degrees, so it passed in silence."""
+    foot = _foot_like(subdivisions=_DENSE)
+    swung = _skewed_last(swing_deg=8.0)
+    r, _reg, _last = register_foot_to_last(foot, swung, "left", "left")
+    assert abs(r.ball_swing_mm) > 10.0
+    assert r.axis_mismatch
+    assert r.axis_mismatch_severe
+    assert any("medial_lateral_findings_unreliable" in w for w in r.warnings)
+
+
+def test_a_severe_axis_mismatch_halves_confidence():
+    foot = _foot_like(subdivisions=_DENSE)
+    straight, _reg, _l = register_foot_to_last(
+        foot, _foot_like(length=286.0, width=104.0, subdivisions=_DENSE), "left", "left")
+    swung, _reg2, _l2 = register_foot_to_last(foot, _skewed_last(swing_deg=8.0), "left", "left")
+    assert swung.confidence < straight.confidence

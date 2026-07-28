@@ -225,6 +225,15 @@ def analyze_fit(
     )
     if not registration.within_tolerance:
         limitations.append("heel could not be pinned within the §9.5 tolerance")
+    if registration.axis_mismatch:
+        # Reported rather than absorbed: the swing needed to put this foot on
+        # this last's axis is itself a finding, and it caps how much the
+        # medial/lateral numbers below can be trusted.
+        limitations.append(
+            f"the last's heel-to-ball axis differs from this foot's: aligning them "
+            f"swung the ball {abs(registration.ball_swing_mm):.0f}mm sideways, so the "
+            f"medial/lateral split below is less reliable than the totals"
+        )
 
     # 12. curvilinear sections, square to the foot's own centreline
     centerline = build_centerline(foot_registered)
