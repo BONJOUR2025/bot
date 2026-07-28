@@ -119,3 +119,64 @@ def test_directional_clearance_is_split_by_facing_not_by_coordinate_sign():
     d = ball.directional_mm
     assert d["dorsal"] is not None and d["medial"] is not None
     assert d["dorsal"] > d["medial"]   # roomy above, tight across
+
+
+def _last_with_cone(width=100.0, length=290.0, body_height=60.0,
+                    cone_height=100.0, cone_frac=0.25, subdivisions=5):
+    """A last shape: a shoe-sized body with a narrow mounting cone rising well
+    above it, which is what a real scanned last looks like.
+
+    Built by deforming one box rather than gluing two together: overlapping
+    solids concatenate into a self-intersecting mesh, which
+    mesh_quality_report rejects for signed distance, and the whole comparison
+    then falls back to unsigned distance where nothing can ever read as tight.
+    """
+    mesh = trimesh.creation.box(extents=[width, length, cone_height])
+    for _ in range(subdivisions):
+        mesh = mesh.subdivide()
+    v = mesh.vertices.copy()
+    z0 = v[:, 2].min()
+    above = (v[:, 2] - z0) > body_height
+    # taper the part above the body inward, in both x and y, into a cone
+    t = np.clip(((v[:, 2] - z0) - body_height) / (cone_height - body_height), 0, 1)
+    scale = np.where(above, 1.0 - (1.0 - cone_frac) * t, 1.0)
+    v[:, 0] *= scale
+    v[:, 1] *= scale
+    mesh.vertices = v
+    mesh.apply_translation([0.0, length / 2.0, cone_height / 2.0])
+    mesh.apply_translation([0.0, 0.0, -mesh.vertices[:, 2].min()])
+    return mesh
+
+
+def test_the_cone_last_fixture_supports_signed_distance():
+    """Guards the fixture itself: if the cavity is not usable for signed
+    distance the comparison silently falls back to unsigned, where no zone can
+    ever read as tight and the two tests below would pass for no reason."""
+    assert mesh_quality_report(_last_with_cone()).valid_for_signed_distance
+
+
+def test_ankle_above_the_shoe_is_not_counted_as_a_conflict():
+    """The defect a real fitting exposed: the cut-off used the cavity's single
+    highest point, which on a last is the top of its mounting cone, so the
+    foot's ankle was compared against the last's waist and reported as a
+    conflict. A wearer found that pair loose everywhere.
+
+    Here the foot sits comfortably inside the shoe body, but its leg rises far
+    above it -- nothing should read as tight.
+    """
+    foot = _box(80, 280, 50)
+    leg = trimesh.creation.box(extents=[70, 55, 130])
+    leg.apply_translation([0.0, 42.0, 65.0])
+    foot = trimesh.util.concatenate([foot, leg])
+
+    r = _clearance(foot, _last_with_cone())
+    tight = [z.name for z in r.zones if z.classification == "LOCAL_TIGHTNESS"]
+    assert not tight, f"ankle/leg above the shoe read as tightness in {tight}"
+
+
+def test_a_foot_wider_than_the_cavity_is_still_reported():
+    """The exclusion must not swallow real conflicts: a foot jutting out
+    sideways past the cavity wall, at shoe height, is a genuine finding."""
+    r = _clearance(_box(130, 280, 50), _last_with_cone(width=95.0))
+    tight = [z.name for z in r.zones if z.classification == "LOCAL_TIGHTNESS"]
+    assert tight, "a foot wider than the cavity produced no tightness at all"

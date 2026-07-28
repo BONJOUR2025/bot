@@ -158,7 +158,17 @@ def _classify(clearance: ClearanceReport) -> tuple[str, str | None, float | None
     sigma = clearance.uncertainty.total_sigma_mm
     tight = [z for z in clearance.zones if z.classification == "LOCAL_TIGHTNESS"]
     loose = [z for z in clearance.zones if z.classification == "LOCAL_LOOSENESS"]
-    conflicted = any(_has_directional_conflict(z, sigma) for z in clearance.zones)
+    # Only zones fit_clearance actually judged tight or loose can carry a
+    # shape verdict. A NOT_SEATED zone is one it explicitly could not judge --
+    # the flat-scanned foot hanging over the last's toe spring -- and its
+    # per-direction numbers are that gap, not the last's shape. Reading them
+    # as "narrow and tall" contradicted the same report's own caveat and, on
+    # the pair a wearer reported as loose everywhere, was the last thing still
+    # forcing FIT_REQUIRES_LAST_MODIFICATION after every real conflict had
+    # cleared.
+    judged = [z for z in clearance.zones
+              if z.classification in ("LOCAL_TIGHTNESS", "LOCAL_LOOSENESS")]
+    conflicted = any(_has_directional_conflict(z, sigma) for z in judged)
 
     if (tight and loose) or conflicted:
         # Both broad tightness AND broad looseness at once (or a single zone

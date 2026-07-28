@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import trimesh
+from scipy.spatial import cKDTree
 
 from app.services.mesh3d_service import MeshQualityReport, _sample_surface_points
 
@@ -55,6 +56,11 @@ SIGMA_POSE_APPLIED_MM = 5.0
 SIGMA_POSE_NONE_MM = 0.0
 
 _DIRECTION_MIN_SAMPLES = 8
+
+# How many nearest cavity vertices (in plan view) define the local ceiling
+# above a foot sample. Enough to span a facet or two so a single stray
+# vertex cannot lower the bound, few enough to stay local to the cone.
+_TOPLINE_NEIGHBOURS = 32
 
 
 @dataclass
@@ -207,14 +213,29 @@ def compute_clearance(
     points, normals = _sample_surface_points(foot_mesh, max_sample_points)
 
     # A shoe cavity stops where the shoe does. A foot scan routinely includes
-    # the lower leg, and those points are not "extremely tight" -- they are
-    # simply outside the shoe, where clearance is undefined. Measured on the
-    # real Nikita scan without this cut, the heel zone reported a -43mm dorsal
-    # conflict that was entirely shin. §14 of the audit asks for exactly this:
-    # a region the analysis cannot evaluate must say so, because a silent
-    # omission reads as an absence of problems.
-    cavity_top_z = float(cavity_mesh.bounds[1, 2])
-    inside_extent = points[:, 2] <= cavity_top_z
+    # the ankle and lower leg, and those points are not "extremely tight" --
+    # they are simply outside the shoe, where clearance is undefined. §14 of
+    # the audit asks for exactly this: a region the analysis cannot evaluate
+    # must say so, because a silent omission reads as an absence of problems.
+    #
+    # This used to cut at the cavity's single highest point, which on a real
+    # last is the top of its mounting cone -- 100mm up, far above any shoe.
+    # Everything below that survived the cut, so the foot's ankle was compared
+    # against the last's waist and read as a conflict: on the pair that a
+    # wearer reported as loose everywhere, the waist zone showed the foot
+    # 10.8mm "wider" than the cavity, which was ankle (97mm across at 80-100mm
+    # height) against a cone (20-35mm across at the same height).
+    #
+    # The bound has to be local, because the cone is narrow: a foot sample is
+    # inside the shoe only if the cavity still has material above it *at its
+    # own x,y*. Taking the highest of the nearest cavity vertices in plan view
+    # gives that, and -- unlike a radius query -- it still returns a bound for
+    # a foot point that juts out sideways past the cavity wall, which is a
+    # real conflict and must not be silently dropped.
+    cav_xy = np.asarray(cavity_mesh.vertices, dtype=float)
+    _, near = cKDTree(cav_xy[:, :2]).query(points[:, :2], k=_TOPLINE_NEIGHBOURS)
+    local_top_z = cav_xy[near, 2].max(axis=1)
+    inside_extent = points[:, 2] <= local_top_z
     n_excluded = int((~inside_extent).sum())
     if n_excluded:
         limitations.append(

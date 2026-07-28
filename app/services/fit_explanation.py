@@ -130,12 +130,28 @@ def _zone_finding(zone: dict, sigma: float) -> Finding:
         # surface is involved -- a deep pinprick and a broad press are not the
         # same problem (§11 of the audit).
         severe = compression >= 3.0 * sigma or area >= 800.0
+
+        # fit_clearance flags a zone on its *worst direction*, which can be
+        # negative while the zone's median gap is positive or near zero: a
+        # local press on one side of an otherwise roomy zone. Reporting
+        # abs(median) then printed the wrong number entirely -- on a real pair
+        # it read "задник пятки: тесно на 0 мм" for a 3.2mm medial press, and
+        # elsewhere it turned +6mm of room into "тесно на 6 мм", the exact
+        # inversion a wearer contradicted after trying the last on. The
+        # headline number is the squeeze the classifier actually acted on.
+        squeeze = abs(dir_mm) if dir_mm is not None else abs(min(median, 0.0))
+        roomy = median > sigma
         return Finding(
             severity=CRITICAL if severe else WARNING,
             zone=name,
-            title=f"{label}: тесно на {abs(median):.0f} мм",
-            fact=(f"Стопа выходит за полость обуви{where} — в среднем на {abs(median):.0f} мм, "
-                  f"в худших точках до {compression:.0f} мм, на площади около {area:.0f} мм²."),
+            title=f"{label}: тесно{where} на {squeeze:.0f} мм",
+            fact=((f"Стопа упирается в полость обуви{where} на {squeeze:.0f} мм, "
+                   f"хотя в среднем по зоне остаётся {median:.0f} мм свободного места — "
+                   f"это местный упор с одной стороны, а не теснота всей зоны. "
+                   f"В худших точках до {compression:.0f} мм, площадь около {area:.0f} мм².")
+                  if roomy else
+                  (f"Стопа выходит за полость обуви{where} — на {squeeze:.0f} мм, "
+                   f"в худших точках до {compression:.0f} мм, на площади около {area:.0f} мм².")),
             effect=_TIGHT_EFFECT.get(name, "Возможно давление в этой зоне."),
             confidence=confidence,
             check=("Проверить примеркой: где именно давит и уходит ли ощущение "
