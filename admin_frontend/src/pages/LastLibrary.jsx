@@ -456,9 +456,23 @@ function MatchCard({ match, onOpenImage }) {
     <div className="app-card p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h4 className="font-semibold">{last.article || last.model || 'Без названия'}</h4>
+          {/* Size and fullness both belong in the heading: one model is
+              graded across several of each, so a card headed by the article
+              alone is indistinguishable from its five neighbours in the
+              results list. */}
+          <h4 className="font-semibold">
+            {last.article || last.model || 'Без названия'}
+            {last.size ? <span className="ml-1.5">· {last.size}</span> : null}
+            {last.fullness
+              ? <span className="ml-1.5">· полнота {last.fullness}</span>
+              : <span className="ml-1.5 font-normal text-[color:var(--color-text-muted)]">· полнота не указана</span>}
+          </h4>
           <div className="text-xs text-[color:var(--color-text-muted)]">
-            {[last.model, last.size && `размер ${last.size}`, last.material].filter(Boolean).join(' · ') || '—'}
+            {[last.model, last.material,
+              last.side && (last.side === 'left' ? 'левая' : 'правая'),
+              last.length_mm && `длина ${last.length_mm} мм`,
+              last.ball_girth_mm && `обхват пучков ${last.ball_girth_mm} мм`,
+            ].filter(Boolean).join(' · ') || '—'}
           </div>
         </div>
         <div className="flex items-center gap-2">
