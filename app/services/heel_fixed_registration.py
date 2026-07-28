@@ -173,7 +173,23 @@ def register_foot_to_last(
         theta = 0.0
         warnings.append("heel_to_ball_axis_unavailable_rotation_skipped")
     else:
-        theta = theta_last - theta_foot
+        # Sign matters and is easy to get backwards. `_heel_axis_angle` reports
+        # a heading measured from +Y toward +X (atan2(dx, dy)), while
+        # _rotation_about_z is an ordinary counter-clockwise rotation of the
+        # XY plane -- the two run in opposite senses. A CCW rotation by phi
+        # sends a heading h to h - phi, so landing the foot's heading on the
+        # last's needs phi = theta_foot - theta_last.
+        #
+        # This was written as theta_last - theta_foot, which rotates the foot
+        # the wrong way and so *doubles* the misalignment instead of removing
+        # it: measured on the real pair, the foot's axis went from -0.31 deg to
+        # +7.77 deg against a last sitting at -8.33 deg -- a 16.10 deg residual
+        # where the original disagreement had only been 8.02 deg. Every
+        # medial/lateral reading downstream inherited twice the sideways swing
+        # it should have had. tests/test_heel_fixed_registration.py pins the
+        # post-registration heading against the last's, which is the check
+        # that catches this directly rather than restating the formula.
+        theta = theta_foot - theta_last
 
     # Rotate about the foot's own plantar heel centre so that point cannot move.
     pivot = fl.plantar_heel_center.position
