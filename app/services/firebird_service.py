@@ -45,13 +45,39 @@ class TTLCache:
     concurrent callers for the same key wait on one in-flight computation
     instead of starting their own turns a burst of identical
     dashboard/search requests into a single Firebird round trip.
+
+    Expired entries are kept rather than dropped, so a caller whose fresh
+    computation times out can still answer from the last good result via
+    `get_stale` instead of failing outright — under the contention above, a
+    report that was correct a few minutes ago beats a 504. `max_entries`
+    bounds what that retention can cost: each entry here is a whole report,
+    and the keys are user-chosen date ranges, so without a cap the map only
+    ever grows.
     """
 
-    def __init__(self, ttl: float):
+    def __init__(self, ttl: float, max_entries: int = 32):
         self._ttl = ttl
+        self._max_entries = max_entries
         self._lock = threading.Lock()
-        self._entries: dict[Any, tuple[float, Any]] = {}
+        # key -> (expires_at, value, stored_at)
+        self._entries: dict[Any, tuple[float, Any, float]] = {}
         self._inflight: dict[Any, threading.Lock] = {}
+
+    def get_stale(self, key: Any) -> tuple[Any, float] | None:
+        """Last value computed for `key` and its age in seconds, ignoring the
+        TTL. None if nothing was ever computed for it."""
+        with self._lock:
+            entry = self._entries.get(key)
+        if entry is None:
+            return None
+        return entry[1], time.monotonic() - entry[2]
+
+    def _store(self, key: Any, value: Any) -> None:
+        now = time.monotonic()
+        self._entries[key] = (now + self._ttl, value, now)
+        if len(self._entries) > self._max_entries:
+            oldest = min(self._entries, key=lambda k: self._entries[k][2])
+            self._entries.pop(oldest, None)
 
     def get_or_compute(self, key: Any, compute: Callable[[], Any]) -> Any:
         now = time.monotonic()
@@ -71,7 +97,8 @@ class TTLCache:
                 pass
             with self._lock:
                 entry = self._entries.get(key)
-            if entry is not None:
+                fresh = entry is not None and entry[0] > time.monotonic()
+            if fresh:
                 return entry[1]
             # The owner we waited on finished without caching anything —
             # its compute() raised (see _search_clients_uncached /
@@ -88,7 +115,7 @@ class TTLCache:
         try:
             result = compute()
             with self._lock:
-                self._entries[key] = (time.monotonic() + self._ttl, result)
+                self._store(key, result)
             return result
         finally:
             lock.release()

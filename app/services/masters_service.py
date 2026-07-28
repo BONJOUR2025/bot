@@ -292,7 +292,14 @@ def _build_salary_summary(service_df: pd.DataFrame) -> list[dict]:
     return summary.sort_values("total_salary", ascending=False).to_dict(orient="records")
 
 
-_FETCH_WORKS_CACHE_TTL = 45
+# Longer than the 45s the search/daily-sales caches use. Those back a
+# type-ahead and a dashboard tile, where a stale answer is visible
+# immediately; this backs a works/payroll report that costs ~17s on a quiet
+# server and blows past the 55s request budget on a busy one, and whose
+# underlying data changes over a shift rather than second to second. A short
+# TTL here buys freshness nobody asked for at the price of re-running the
+# expensive query while Firebird is already the bottleneck.
+_FETCH_WORKS_CACHE_TTL = 180
 _fetch_works_cache = None
 
 
@@ -324,6 +331,23 @@ def fetch_works(
     return _get_fetch_works_cache().get_or_compute(
         (date_from, date_to), lambda: _fetch_works_uncached(date_from, date_to)
     )
+
+
+def fetch_works_stale(
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+) -> tuple[dict, float] | None:
+    """Last successfully computed result for this range and its age in
+    seconds, TTL ignored — or None if this range was never computed.
+
+    For the caller that just hit the request deadline: on a contended
+    Firebird a report from a few minutes ago is a far better answer than a
+    504, and the 504 is what sends the user into a retry loop that adds yet
+    more concurrent queries to the server already causing the problem.
+    """
+    if not FIREBIRD_AVAILABLE:
+        return None
+    return _get_fetch_works_cache().get_stale((date_from, date_to))
 
 
 def _fetch_works_uncached(

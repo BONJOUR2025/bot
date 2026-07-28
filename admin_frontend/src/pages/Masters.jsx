@@ -498,6 +498,7 @@ export default function Masters() {
   const [loading, setLoading]             = useState(false);
   const [loadProgress, setLoadProgress]   = useState(null);
   const [error, setError]                 = useState(null);
+  const [stale, setStale]                 = useState(null);
   const [loaded, setLoaded]               = useState(false);
   const [warningsOnly, setWarningsOnly]   = useState(false);
   const [tab, setTab] = useState('overview');
@@ -560,29 +561,36 @@ export default function Masters() {
     const res = await api.get('/masters/works', { params });
     const data = res.data;
     // Support both old (array) and new (object) response shape
-    return Array.isArray(data) ? { services: data, salary_summary: [] } : {
+    return Array.isArray(data) ? { services: data, salary_summary: [], stale: false } : {
       services: data.services || [], salary_summary: data.salary_summary || [],
+      // Set by the backend when Firebird was too busy to answer inside the
+      // request budget and it served the last good report instead.
+      stale: Boolean(data.stale), staleAgeSec: data.stale_age_sec || 0,
     };
   }
 
   async function load() {
     setLoading(true);
     setError(null);
+    setStale(null);
     setLoadProgress(null);
     try {
       const ranges = splitIntoMonthlyRanges(dateFrom, dateTo);
       if (ranges.length <= 1) {
-        const { services, salary_summary } = await fetchOneRange(dateFrom, dateTo);
+        const { services, salary_summary, stale: isStale, staleAgeSec } =
+          await fetchOneRange(dateFrom, dateTo);
         setRows(services);
         setSalarySummary(salary_summary);
+        if (isStale) setStale(staleAgeSec);
       } else {
         let allServices = [];
         for (let i = 0; i < ranges.length; i++) {
           const [f, t] = ranges[i];
           setLoadProgress({ done: i, total: ranges.length, label: f.slice(0, 7) });
           try {
-            const { services } = await fetchOneRange(f, t);
+            const { services, stale: isStale, staleAgeSec } = await fetchOneRange(f, t);
             allServices = allServices.concat(services);
+            if (isStale) setStale((prev) => Math.max(prev || 0, staleAgeSec));
           } catch (e) {
             const detail = e.response?.data?.detail || e.message || 'Ошибка загрузки';
             throw new Error(`${f.slice(0, 7)}: ${detail}`);
@@ -784,6 +792,15 @@ export default function Masters() {
       {error && (
         <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">
           {error}
+        </div>
+      )}
+
+      {stale != null && (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-amber-800 dark:text-amber-200 text-sm">
+          База Agbis сейчас перегружена, свежий запрос не успел отработать.
+          Показаны последние удачно полученные данные
+          {stale >= 60 ? ` — ${Math.round(stale / 60)} мин назад` : ' — меньше минуты назад'}.
+          Повторная загрузка через пару минут обычно проходит.
         </div>
       )}
 

@@ -24,7 +24,11 @@ def create_masters_router() -> APIRouter:
     ):
         """Return aggregated service works with warnings and salary summary."""
         from app.services.firebird_service import run_with_timeout
-        from app.services.masters_service import fetch_works, FIREBIRD_AVAILABLE
+        from app.services.masters_service import (
+            FIREBIRD_AVAILABLE,
+            fetch_works,
+            fetch_works_stale,
+        )
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(
@@ -40,6 +44,18 @@ def create_masters_router() -> APIRouter:
             # asyncio.wait_for isn't enough here).
             result = await run_with_timeout(fetch_works, date_from=date_from, date_to=date_to, timeout=55)
         except asyncio.TimeoutError:
+            # Measured on this DB, the same month costs ~17s when the Agbis
+            # server is quiet and runs past the 55s budget when it is not, so
+            # a timeout here says "Firebird is busy right now", not "this
+            # range is unanswerable". Returning the last good report for the
+            # same range keeps the page usable and, more importantly, stops
+            # the retry loop that was adding a fresh 55s query per click to a
+            # server already saturated (five straight 504s on 2026-07-28
+            # 18:01-18:05 came in exactly that shape).
+            stale = fetch_works_stale(date_from, date_to)
+            if stale is not None:
+                cached, age = stale
+                return {**cached, "stale": True, "stale_age_sec": int(age)}
             raise HTTPException(
                 status_code=504,
                 detail="Запрос выполняется слишком долго. Выберите период покороче (например, один месяц) и попробуйте снова.",
