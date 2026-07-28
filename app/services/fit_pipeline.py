@@ -117,6 +117,35 @@ def _fullness_estimate(tight_zones: list, loose_zones: list) -> float:
     return float(np.mean(room)) if room else 0.0
 
 
+def _has_directional_conflict(zone, sigma: float) -> bool:
+    """A single zone can be squeezed on one axis and slack on another at the
+    very same Y level -- narrow in width but tall in height, or the reverse.
+    fit_clearance's own per-zone classifier already picks the worst direction
+    to label the zone LOCAL_TIGHTNESS or LOCAL_LOOSENESS (§12 of the audit),
+    which is right for that zone in isolation, but it means the label alone
+    cannot tell "uniformly narrow" from "narrow AND tall" -- both zones get
+    called LOCAL_TIGHTNESS. A real pair confirmed this: every zone from heel
+    to ball read LOCAL_TIGHTNESS (medial/lateral squeeze up to -8mm), and the
+    pipeline reported it as needing a wider fullness, but an independent
+    per-Y-level cross-section check found the last was ALSO 6-13mm taller
+    than the foot at every one of those same levels -- a misallocated-volume
+    last (narrow-and-high), not a uniformly-narrow one. Regrading to a wider
+    fullness would not fix a last that is already too tall; it needs
+    reshaping. So this checks the zone's own directional_mm, not just its
+    single-label classification.
+    """
+    d = zone.directional_mm or {}
+    width = [v for k, v in d.items() if k in ("medial", "lateral") and v is not None]
+    dorsal = d.get("dorsal")
+    if not width or dorsal is None:
+        return False
+    if min(width) < -sigma and dorsal > sigma:
+        return True  # narrow-and-high
+    if max(width) > sigma and dorsal < -sigma:
+        return True  # wide-and-low
+    return False
+
+
 def _classify(clearance: ClearanceReport) -> tuple[str, str | None, float | None]:
     """§17.1: no winner-takes-all. The class summarises the zone profile, and
     the per-zone detail stays in the report for the reader to disagree with.
@@ -126,14 +155,17 @@ def _classify(clearance: ClearanceReport) -> tuple[str, str | None, float | None
     """
     if not clearance.zones:
         return FIT_INDETERMINATE, None, None
+    sigma = clearance.uncertainty.total_sigma_mm
     tight = [z for z in clearance.zones if z.classification == "LOCAL_TIGHTNESS"]
     loose = [z for z in clearance.zones if z.classification == "LOCAL_LOOSENESS"]
+    conflicted = any(_has_directional_conflict(z, sigma) for z in clearance.zones)
 
-    if tight and loose:
-        # Both broad tightness AND broad looseness at once is a misallocated-
-        # volume pattern (narrow-and-high, wide-and-low, ...), not "one width
-        # grade up/down would fix it" -- that needs the last reshaped, not
-        # just regraded.
+    if (tight and loose) or conflicted:
+        # Both broad tightness AND broad looseness at once (or a single zone
+        # squeezed on one axis and slack on another) is a misallocated-volume
+        # pattern (narrow-and-high, wide-and-low, ...), not "one width grade
+        # up/down would fix it" -- that needs the last reshaped, not just
+        # regraded.
         return FIT_REQUIRES_LAST_MODIFICATION, None, None
     if len(tight) >= _MANY_TIGHT_ZONES:
         # Broad, uniform tightness on a last already confirmed the right

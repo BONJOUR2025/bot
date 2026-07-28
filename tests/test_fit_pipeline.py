@@ -82,11 +82,14 @@ def test_heel_stays_pinned_through_the_whole_pipeline():
 
 
 def test_a_uniformly_narrower_last_needs_a_different_fullness():
-    """Tight everywhere, loose nowhere, on a last that already passed the
-    size/proportion gate is exactly what the next width grade down looks
-    like -- not a defect that needs the last reshaped."""
+    """Tight everywhere, loose nowhere, and the same height as the foot, on a
+    last that already passed the size/proportion gate is exactly what the
+    next width grade down looks like -- not a defect that needs the last
+    reshaped. Height is held equal to the foot's own on purpose: a narrower
+    AND taller last is a different, worse case (see
+    test_narrow_and_tall_last_needs_modification_not_fullness below)."""
     foot = _blocky(100, 260, 60)
-    narrow = _blocky(70, 285, 95)
+    narrow = _blocky(70, 285, 60)
     d = _report(foot, narrow)
     assert d["fit_class"] == FIT_REQUIRES_DIFFERENT_FULLNESS
     assert d["fullness_direction"] == "wider"
@@ -95,7 +98,7 @@ def test_a_uniformly_narrower_last_needs_a_different_fullness():
 
 def test_a_uniformly_wider_last_needs_a_different_fullness_the_other_way():
     foot = _blocky(100, 260, 60)
-    wide = _blocky(130, 285, 95)
+    wide = _blocky(130, 285, 60)
     d = _report(foot, wide)
     assert d["fit_class"] == FIT_REQUIRES_DIFFERENT_FULLNESS
     assert d["fullness_direction"] == "narrower"
@@ -108,6 +111,24 @@ def test_mixed_tight_and_loose_still_needs_modification():
     foot = _blocky(90, 260, 60)
     lopsided = _tapered(back_width=65, front_width=140, length=278, height=100)
     d = _report(foot, lopsided)
+    assert d["fit_class"] == FIT_REQUIRES_LAST_MODIFICATION
+    assert d["fullness_direction"] is None
+    assert d["fullness_mm"] is None
+
+
+def test_narrow_and_tall_last_needs_modification_not_fullness():
+    """The real bug: a last narrower in width AND taller in height than the
+    foot, uniformly along its whole length, used to read as "every zone is
+    LOCAL_TIGHTNESS" (the zone label is won by the worst direction, which is
+    the width squeeze) and get diagnosed as needing a wider fullness. An
+    independent cross-section check on a real pair found the last was
+    simultaneously 2-5mm narrower AND 6-13mm taller than the foot at every Y
+    level from mid-foot to the toes -- a misallocated-volume last that a
+    wider fullness of the same model would not fix, since it is already too
+    tall. This is that pattern, reproduced synthetically."""
+    foot = _blocky(100, 260, 60)
+    narrow_and_tall = _blocky(70, 285, 95)
+    d = _report(foot, narrow_and_tall)
     assert d["fit_class"] == FIT_REQUIRES_LAST_MODIFICATION
     assert d["fullness_direction"] is None
     assert d["fullness_mm"] is None
