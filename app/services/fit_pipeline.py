@@ -28,7 +28,7 @@ from app.services.curvilinear_sections import build_centerline, sections_along
 from app.services.fit_clearance import ClearanceReport, compute_clearance
 from app.services.fit_explanation import explain
 from app.services.fit_footprint import render_footprint_overlay
-from app.services.fit_size_match import evaluate_size_match
+from app.services.fit_size_match import LENGTH_ALLOWANCE_ACCEPTABLE, evaluate_size_match
 from app.services.foot_landmarks import detect_foot_landmarks
 from app.services.heel_fixed_registration import register_foot_to_last
 from app.services.last_registration_service import initial_align
@@ -63,6 +63,20 @@ _MANY_TIGHT_ZONES = 3
 # has to be before it is treated as the story rather than half of a
 # misallocated-volume pattern.
 _CONFLICT_SIGMA = 2.0
+
+# Ranking order, best first. Looseness sits above tightness on purpose: slack
+# is a fixation problem and partly recoverable with lacing or an insole, while
+# a press has nowhere to go. Used only to order results -- it asserts nothing
+# the classes themselves do not already say.
+FIT_CLASS_ORDER = {
+    FIT_GOOD: 0,
+    FIT_LOCAL_LOOSENESS: 1,
+    FIT_LOCAL_TIGHTNESS: 2,
+    FIT_REQUIRES_DIFFERENT_FULLNESS: 3,
+    FIT_REQUIRES_LAST_MODIFICATION: 4,
+    FIT_STRUCTURALLY_INCOMPATIBLE: 5,
+    FIT_INDETERMINATE: 6,
+}
 _DOMINANCE_RATIO = 2.0
 
 
@@ -81,6 +95,10 @@ class FitReport:
     quality: dict
     fullness_direction: str | None = None
     fullness_mm: float | None = None
+    # Ordering aids: which class this is (best-first) and how far outside
+    # acceptable its worst reading sits. See _worst_deviation_mm.
+    class_order: int = 0
+    worst_deviation_mm: float = 0.0
     explanation: dict = field(default_factory=dict)
     footprint_png_base64: str | None = None
     limitations: list[str] = field(default_factory=list)
@@ -99,6 +117,8 @@ class FitReport:
             "size_match": self.size_match,
             "fullness_direction": self.fullness_direction,
             "fullness_mm": round(self.fullness_mm, 1) if self.fullness_mm is not None else None,
+            "class_order": self.class_order,
+            "worst_deviation_mm": self.worst_deviation_mm,
             "clearance": self.clearance,
             "quality": self.quality,
             "explanation": self.explanation,
@@ -158,6 +178,30 @@ def _has_directional_conflict(zone, sigma: float) -> bool:
     if max(width) > bar and dorsal < -bar:
         return True  # wide-and-low
     return False
+
+
+def _worst_deviation_mm(clearance: ClearanceReport, size_match) -> float:
+    """The largest single "how many mm outside acceptable" across every check,
+    so two lasts in the same class can still be told apart.
+
+    Deliberately one number over mixed units: within a class the reader is
+    asking "which of these is further off", and the honest answer is the worst
+    thing about each. The detail behind it stays in the findings.
+    """
+    sigma = clearance.uncertainty.total_sigma_mm
+    worst = 0.0
+    for z in clearance.zones:
+        if z.classification == "LOCAL_TIGHTNESS":
+            squeeze = min((v for k, v in (z.directional_mm or {}).items()
+                           if k != "plantar" and v is not None), default=0.0)
+            worst = max(worst, abs(min(squeeze, 0.0)))
+        elif z.classification == "LOCAL_LOOSENESS":
+            worst = max(worst, z.signed_gap_mm["median"] - 2.0 * sigma)
+    allowance = getattr(size_match, "length_allowance_mm", None)
+    if allowance is not None:
+        lo, hi = LENGTH_ALLOWANCE_ACCEPTABLE
+        worst = max(worst, allowance - hi, lo - allowance)
+    return round(max(worst, 0.0), 1)
 
 
 def _classify(clearance: ClearanceReport) -> tuple[str, str | None, float | None]:
@@ -371,6 +415,8 @@ def analyze_fit(
         size_match=size_match.as_dict(),
         fullness_direction=fullness_direction,
         fullness_mm=fullness_mm,
+        class_order=FIT_CLASS_ORDER.get(fit_class, 6),
+        worst_deviation_mm=_worst_deviation_mm(clearance, size_match),
         clearance=clearance.as_dict(),
         quality={"foot": foot_quality.as_dict(), "cavity": last_quality.as_dict()},
         footprint_png_base64=footprint,

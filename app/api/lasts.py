@@ -305,6 +305,23 @@ def create_lasts_router() -> APIRouter:
                             pf["fit_result"] = {"engine": "fit_v3", "error": str(exc)}
 
             await asyncio.to_thread(_run_fit_v3)
+
+            # Re-sort on what the panel actually shows. The ordering above
+            # comes from slice_v1's own overlap score, which has nothing to do
+            # with the fit_v3 verdict rendered on each card -- so the list read
+            # as unranked: a last headed "подходит" sat below two headed "не
+            # тот размер". Rank by the displayed class, then by how far outside
+            # acceptable its worst reading sits. Lasts fit_v3 could not judge
+            # keep their old position at the end rather than jumping the queue.
+            def _rank(match):
+                results = [pf.get("fit_result") or {} for pf in match["per_foot"]]
+                usable = [r for r in results if "class_order" in r]
+                if not usable:
+                    return (99, 0.0)
+                return (max(r["class_order"] for r in usable),
+                        max(r.get("worst_deviation_mm") or 0.0 for r in usable))
+
+            matches.sort(key=_rank)
             response_engine = "fit_v3"
 
         if engine == "hybrid_v2" and foot_raw_by_side:

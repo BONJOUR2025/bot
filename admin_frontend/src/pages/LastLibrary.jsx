@@ -343,6 +343,8 @@ const SEVERITY_STYLE = {
 
 const HEADLINE_STYLE = {
   FIT_GOOD: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+  FIT_REQUIRES_DIFFERENT_FULLNESS: 'bg-sky-100 text-sky-900 border-sky-300',
+  FIT_STRUCTURALLY_INCOMPATIBLE: 'bg-red-100 text-red-900 border-red-300',
   FIT_LOCAL_TIGHTNESS: 'bg-amber-100 text-amber-900 border-amber-300',
   FIT_LOCAL_LOOSENESS: 'bg-amber-100 text-amber-900 border-amber-300',
   FIT_REQUIRES_LAST_MODIFICATION: 'bg-red-100 text-red-900 border-red-300',
@@ -477,9 +479,18 @@ function MatchCard({ match, onOpenImage }) {
         </div>
         <div className="flex items-center gap-2">
           {per_foot.map((pf, i) => (
-            <span key={i}
-                  className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${HEADLINE_STYLE[pf.fit_result?.fit_class] || HEADLINE_STYLE.FIT_INDETERMINATE}`}>
-              {pf.fit_result?.explanation?.headline || '—'}
+            <span key={i} className="flex flex-col items-end gap-0.5">
+              <span
+                className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${HEADLINE_STYLE[pf.fit_result?.fit_class] || HEADLINE_STYLE.FIT_INDETERMINATE}`}>
+                {pf.fit_result?.explanation?.headline || '—'}
+              </span>
+              {/* Within one verdict the list still has to say which is closer:
+                  the worst single reading, in mm outside acceptable. */}
+              {pf.fit_result?.worst_deviation_mm != null && (
+                <span className="text-[11px] text-[color:var(--color-text-muted)]">
+                  худшее отклонение {pf.fit_result.worst_deviation_mm} мм
+                </span>
+              )}
             </span>
           ))}
           <button type="button" className="btn" onClick={() => setOpen(o => !o)}>
@@ -772,7 +783,9 @@ export default function LastLibrary() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <h4 className="font-medium text-sm text-[color:var(--color-text-muted)]">Результат подбора (лучшее сверху)</h4>
+                <h4 className="font-medium text-sm text-[color:var(--color-text-muted)]">
+                Результат подбора (лучшее сверху) — сортировка по вердикту, затем по худшему отклонению
+              </h4>
               </div>
               {matchResult.matches.map((m) => (
                 <MatchCard key={m.last.id} match={m} onOpenImage={(src, alt) => setLightbox({ src, alt })} />
