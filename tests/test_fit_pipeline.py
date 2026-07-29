@@ -218,3 +218,22 @@ def test_comparable_tightness_and_slack_still_reads_as_reshaping():
     lopsided = _tapered(back_width=64, front_width=140, length=278, height=100)
     d = _report(foot, lopsided)
     assert d["fit_class"] == FIT_REQUIRES_LAST_MODIFICATION
+
+
+def test_a_tail_only_press_does_not_become_a_fullness_verdict():
+    """LOCAL_TIGHTNESS can come from a zone's worst 5% of samples alone, which
+    is fair for spotting a local press but is not evidence a whole last is the
+    wrong width grade. Two real lasts read within a millimetre of each other
+    in every zone and still split across "нужна другая полнота" and "локальная
+    теснота", because a third zone crossed the tail threshold by 0.6mm.
+
+    Here the last is roomy through the middle everywhere -- any tightness is
+    tail-only -- so the fullness verdict must not be reached."""
+    foot = _blocky(96, 262, 58)
+    last = _blocky(101, 288, 90)
+    d = _report(foot, last)
+    zones = d["clearance"]["zones"]
+    medians = [z["signed_gap_mm"]["median"] for z in zones
+               if z["classification"] == "LOCAL_TIGHTNESS"]
+    assert all(m > -3.0 for m in medians), "fixture should not be tight in the bulk"
+    assert d["fit_class"] != FIT_REQUIRES_DIFFERENT_FULLNESS

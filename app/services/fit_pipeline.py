@@ -204,6 +204,28 @@ def _worst_deviation_mm(clearance: ClearanceReport, size_match) -> float:
     return round(max(worst, 0.0), 1)
 
 
+def _broadly_tight(zones: list, sigma: float) -> list:
+    """Zones tight in their bulk, not merely in their tail.
+
+    fit_clearance flags a zone as LOCAL_TIGHTNESS on either its worst
+    direction or its p05 -- the worst 5% of samples. The p05 route is right
+    for spotting a local press, but it is not evidence that a whole last is
+    the wrong width grade, and treating it as such made the fullness verdict
+    hinge on noise: Prada 43 and 44 read within a millimetre of each other in
+    every zone (p05 -5.6/-5.8/-6.0 against -5.4/-5.8/-4.2, threshold -5.4),
+    yet one landed on "нужна другая полнота" and the other on "локальная
+    теснота" purely because a third zone crossed by 0.6mm. A grade is wrong
+    only if the zones are tight through their middle too.
+    """
+    out = []
+    for z in zones:
+        worst = min((v for k, v in (z.directional_mm or {}).items()
+                     if k != "plantar" and v is not None), default=0.0)
+        if z.signed_gap_mm["median"] < -sigma or worst < -_CONFLICT_SIGMA * sigma:
+            out.append(z)
+    return out
+
+
 def _classify(clearance: ClearanceReport) -> tuple[str, str | None, float | None]:
     """§17.1: no winner-takes-all. The class summarises the zone profile, and
     the per-zone detail stays in the report for the reader to disagree with.
@@ -251,12 +273,13 @@ def _classify(clearance: ClearanceReport) -> tuple[str, str | None, float | None
             loose = []
         else:
             tight = []
-    if len(tight) >= _MANY_TIGHT_ZONES:
+    broad = _broadly_tight(tight, sigma)
+    if len(broad) >= _MANY_TIGHT_ZONES:
         # Broad, uniform tightness on a last already confirmed the right
         # length and ball-line placement (fit_size_match ran first and did not
         # gate) is what a too-narrow width grade looks like on a graded last
         # family -- not a defect needing reshaping.
-        return FIT_REQUIRES_DIFFERENT_FULLNESS, "wider", _fullness_estimate(tight, [])
+        return FIT_REQUIRES_DIFFERENT_FULLNESS, "wider", _fullness_estimate(broad, [])
     if len(loose) >= _MANY_TIGHT_ZONES:
         return FIT_REQUIRES_DIFFERENT_FULLNESS, "narrower", _fullness_estimate([], loose)
     if tight:

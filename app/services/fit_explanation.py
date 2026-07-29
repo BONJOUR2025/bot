@@ -368,6 +368,13 @@ def explain(report: dict) -> Explanation:
     headline = _HEADLINE.get(fit_class, fit_class)
     if fit_class == "FIT_GOOD" and any(f.severity in (CRITICAL, WARNING) for f in findings):
         headline = "Подходит с оговорками — см. ниже"
+    # "Размер верный" is the size gate's opinion, and the gate only judges
+    # severe or corroborated signals. When the allowance itself is outside the
+    # band, that headline contradicts a warning printed directly beneath it --
+    # Prada 43 claimed the size was right over its own "припуск 8 мм — меньше
+    # нормы".
+    if fit_class == "FIT_REQUIRES_DIFFERENT_FULLNESS" and any(f.zone == "length" for f in findings):
+        headline = "Нужна другая полнота, и длина не в норме"
 
     return Explanation(
         headline=headline,
