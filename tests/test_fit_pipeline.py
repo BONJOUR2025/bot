@@ -237,3 +237,16 @@ def test_a_tail_only_press_does_not_become_a_fullness_verdict():
                if z["classification"] == "LOCAL_TIGHTNESS"]
     assert all(m > -3.0 for m in medians), "fixture should not be tight in the bulk"
     assert d["fit_class"] != FIT_REQUIRES_DIFFERENT_FULLNESS
+
+
+def test_the_report_says_what_its_deviation_is_made_of():
+    """A length-driven gap and a zone-driven one are not comparable: measured
+    on two scans of one physical last, zone clearances repeated to 1.6mm while
+    its measured length varied by 7.7mm. Ranking needs to know which it is
+    looking at, so the pipeline reports the source and the resolution."""
+    d = _report(_blocky(92, 262, 56), _blocky(100, 300, 88))
+    assert d["deviation_source"] in ("length", "zone", "none")
+    if d["deviation_source"] == "length":
+        assert d["deviation_resolution_mm"] >= 5.0
+    elif d["deviation_source"] == "zone":
+        assert d["deviation_resolution_mm"] <= 3.0

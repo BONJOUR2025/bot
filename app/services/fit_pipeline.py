@@ -64,6 +64,23 @@ _MANY_TIGHT_ZONES = 3
 # misallocated-volume pattern.
 _CONFLICT_SIGMA = 2.0
 
+# Repeatability, measured rather than assumed: the same physical last (4977/44
+# fullness 12) scanned twice and both scans run through this pipeline against
+# the same foot.
+#
+# Zone clearances came back within 0.57mm on average and 1.62mm at worst -- far
+# tighter than the 2.69mm *absolute* budget, because most of that budget (the
+# foot's own scan and landmarks, the cavity model) is common to both sides of a
+# comparison and cancels out of the difference.
+#
+# Length did not: 306.5mm against 298.8mm, a 7.7mm spread, and percentile
+# trimming does not remove it because it is real geometry -- one scan tapers to
+# a 16x8mm tip while the other stops at a 29x10mm cross-section, i.e. the toe
+# was captured differently. So a length-driven difference below ~7mm says
+# nothing about the lasts, only about the scans.
+_ZONE_REPEATABILITY_MM = 1.6
+_LENGTH_REPEATABILITY_MM = 7.0
+
 # Ranking order, best first. Looseness sits above tightness on purpose: slack
 # is a fixation problem and partly recoverable with lacing or an insole, while
 # a press has nowhere to go. Used only to order results -- it asserts nothing
@@ -99,6 +116,10 @@ class FitReport:
     # acceptable its worst reading sits. See _worst_deviation_mm.
     class_order: int = 0
     worst_deviation_mm: float = 0.0
+    deviation_source: str = "none"
+    # How small a difference in worst_deviation_mm is still meaningful, given
+    # what produced it. See _ZONE_REPEATABILITY_MM / _LENGTH_REPEATABILITY_MM.
+    deviation_resolution_mm: float = _ZONE_REPEATABILITY_MM
     explanation: dict = field(default_factory=dict)
     footprint_png_base64: str | None = None
     limitations: list[str] = field(default_factory=list)
@@ -119,6 +140,8 @@ class FitReport:
             "fullness_mm": round(self.fullness_mm, 1) if self.fullness_mm is not None else None,
             "class_order": self.class_order,
             "worst_deviation_mm": self.worst_deviation_mm,
+            "deviation_source": self.deviation_source,
+            "deviation_resolution_mm": self.deviation_resolution_mm,
             "clearance": self.clearance,
             "quality": self.quality,
             "explanation": self.explanation,
@@ -180,7 +203,7 @@ def _has_directional_conflict(zone, sigma: float) -> bool:
     return False
 
 
-def _worst_deviation_mm(clearance: ClearanceReport, size_match) -> float:
+def _worst_deviation_mm(clearance: ClearanceReport, size_match) -> tuple[float, str]:
     """The largest single "how many mm outside acceptable" across every check,
     so two lasts in the same class can still be told apart.
 
@@ -189,19 +212,24 @@ def _worst_deviation_mm(clearance: ClearanceReport, size_match) -> float:
     thing about each. The detail behind it stays in the findings.
     """
     sigma = clearance.uncertainty.total_sigma_mm
-    worst = 0.0
+    worst, source = 0.0, "none"
     for z in clearance.zones:
         if z.classification == "LOCAL_TIGHTNESS":
             squeeze = min((v for k, v in (z.directional_mm or {}).items()
                            if k != "plantar" and v is not None), default=0.0)
-            worst = max(worst, abs(min(squeeze, 0.0)))
+            if abs(min(squeeze, 0.0)) > worst:
+                worst, source = abs(min(squeeze, 0.0)), "zone"
         elif z.classification == "LOCAL_LOOSENESS":
-            worst = max(worst, z.signed_gap_mm["median"] - 2.0 * sigma)
+            room = z.signed_gap_mm["median"] - 2.0 * sigma
+            if room > worst:
+                worst, source = room, "zone"
     allowance = getattr(size_match, "length_allowance_mm", None)
     if allowance is not None:
         lo, hi = LENGTH_ALLOWANCE_ACCEPTABLE
-        worst = max(worst, allowance - hi, lo - allowance)
-    return round(max(worst, 0.0), 1)
+        off = max(allowance - hi, lo - allowance)
+        if off > worst:
+            worst, source = off, "length"
+    return round(max(worst, 0.0), 1), source
 
 
 def _broadly_tight(zones: list, sigma: float) -> list:
@@ -426,6 +454,8 @@ def analyze_fit(
         )
     limitations.extend(size_match.warnings)
 
+    deviation, deviation_source = _worst_deviation_mm(clearance, size_match)
+
     report = FitReport(
         fit_class=fit_class,
         confidence=confidence,
@@ -439,7 +469,10 @@ def analyze_fit(
         fullness_direction=fullness_direction,
         fullness_mm=fullness_mm,
         class_order=FIT_CLASS_ORDER.get(fit_class, 6),
-        worst_deviation_mm=_worst_deviation_mm(clearance, size_match),
+        worst_deviation_mm=deviation,
+        deviation_source=deviation_source,
+        deviation_resolution_mm=(_LENGTH_REPEATABILITY_MM if deviation_source == "length"
+                                 else _ZONE_REPEATABILITY_MM),
         clearance=clearance.as_dict(),
         quality={"foot": foot_quality.as_dict(), "cavity": last_quality.as_dict()},
         footprint_png_base64=footprint,

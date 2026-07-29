@@ -332,12 +332,16 @@ def create_lasts_router() -> APIRouter:
             # reading. Entries sharing a class whose deviations differ by less
             # than the uncertainty carry the same tier, so the panel can say so
             # instead of implying a winner.
+            # How small a gap between two entries still means something depends
+            # on what produced it, and fit_pipeline reports that: zone
+            # clearances repeat between two scans of one last to ~1.6mm, its
+            # measured length only to ~7mm. Using one blanket figure either
+            # merged lasts that genuinely differ or split ones that do not.
             def _sigma(match):
-                for pf in match["per_foot"]:
-                    unc = ((pf.get("fit_result") or {}).get("clearance") or {}).get("uncertainty")
-                    if unc and unc.get("total_sigma_mm"):
-                        return float(unc["total_sigma_mm"])
-                return 1.0
+                res = [(pf.get("fit_result") or {}).get("deviation_resolution_mm")
+                       for pf in match["per_foot"]]
+                res = [r for r in res if r]
+                return max(res) if res else 1.0
 
             tier = 0
             anchor = None
