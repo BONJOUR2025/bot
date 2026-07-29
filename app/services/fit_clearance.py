@@ -62,6 +62,23 @@ _DIRECTION_MIN_SAMPLES = 8
 # vertex cannot lower the bound, few enough to stay local to the cone.
 _TOPLINE_NEIGHBOURS = 32
 
+# How far past the uncertainty budget a reading has to sit before it is called
+# a finding. Both directions use the same bar, and the same one the p05 rule
+# already used, because the previous split did not survive contact with a real
+# fitting: tightness fired at 1 sigma -- which is the noise itself, not
+# something past it, contradicting this module's own stated standard -- while
+# looseness needed 3 sigma and so was almost unreachable. On the pair a wearer
+# reported as loose everywhere and tight nowhere, that combination produced
+# exactly the inverse: a "critical" 3.2mm press at the posterior heel (1.2
+# sigma, which they could not feel) and no looseness at all despite 6.8mm of
+# room at the ball.
+#
+# These are still uncalibrated (§29 asks for a fitting pilot before any
+# threshold here is treated as fact) -- one fitting justifies removing an
+# unjustified asymmetry, not tuning a number to a case.
+_TIGHT_SIGMA = 2.0
+_LOOSE_SIGMA = 2.0
+
 
 @dataclass
 class ZoneClearance:
@@ -159,11 +176,11 @@ def _classify(median_gap: float, p05_gap: float, conflict_area: float,
     # number is the one the wearer feels.
     worst_squeeze = min((v for k, v in (directional or {}).items()
                          if k != "plantar" and v is not None), default=None)
-    if worst_squeeze is not None and worst_squeeze < -sigma:
+    if worst_squeeze is not None and worst_squeeze < -_TIGHT_SIGMA * sigma:
         return "LOCAL_TIGHTNESS"
-    if p05_gap < -2.0 * sigma:
+    if p05_gap < -_TIGHT_SIGMA * sigma:
         return "LOCAL_TIGHTNESS"
-    if median_gap > 3.0 * max(sigma, 1.0):
+    if median_gap > _LOOSE_SIGMA * max(sigma, 1.0):
         return "LOCAL_LOOSENESS"
     if abs(median_gap) <= sigma:
         return "WITHIN_UNCERTAINTY"
