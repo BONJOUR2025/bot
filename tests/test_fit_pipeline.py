@@ -171,3 +171,28 @@ def test_the_same_pair_analysed_twice_gives_the_same_answer():
             == [z["classification"] for z in second["clearance"]["zones"]])
     assert ([z["signed_gap_mm"]["median"] for z in first["clearance"]["zones"]]
             == [z["signed_gap_mm"]["median"] for z in second["clearance"]["zones"]])
+
+
+def test_a_last_is_not_called_good_while_a_warning_stands():
+    """fit_class comes from the zone clearance alone, so a last can pass every
+    zone while its length allowance sits well outside the band. Heading that
+    "Колодка подходит" over a warning that it is 23mm too long leaves the
+    reader to resolve the contradiction."""
+    d = _report(_blocky(92, 262, 56), _blocky(100, 300, 88))   # allowance ~38mm
+    ex = d["explanation"]
+    warned = [f for f in ex["findings"] if f["severity"] in ("critical", "warning")]
+    assert warned, "fixture should raise at least one warning"
+    assert ex["headline"] != "Колодка подходит"
+
+
+def test_the_heel_is_seated_against_the_cavity_not_the_last():
+    """Registration pins the heel to the last, but clearance is measured
+    against the cavity, whose back sits forward of it by the heel counter's
+    thickness. Uncorrected, every foot hangs behind every cavity and the
+    posterior heel reads as tight -- measured at a median -3.0mm on a real
+    pair whose wearer reported that heel as loose."""
+    thick = {"heel_counter_thickness_mm": 6.0, "insole_thickness_mm": 5.0}
+    d = _report(_blocky(90, 260, 60), _blocky(104, 285, 92), construction=thick)
+    zones = {z["name"]: z for z in d["clearance"]["zones"]}
+    assert zones["posterior_heel"]["classification"] != "LOCAL_TIGHTNESS"
+    assert any("seated inside the cavity" in lim for lim in d["limitations"])

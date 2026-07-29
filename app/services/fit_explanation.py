@@ -360,8 +360,17 @@ def explain(report: dict) -> Explanation:
     caveats.insert(0, f"Суммарная погрешность измерения ±{sigma:.1f} мм — "
                       f"расхождения меньше этого не интерпретируются.")
 
+    # fit_class is derived from the zone clearance alone, so a last can be
+    # "GOOD" by zones while carrying a length allowance well outside the band.
+    # Saying "Колодка подходит" above a warning that the last is 23mm too long
+    # is a contradiction the reader has to resolve themselves, so the headline
+    # is qualified whenever anything above neutral was raised.
+    headline = _HEADLINE.get(fit_class, fit_class)
+    if fit_class == "FIT_GOOD" and any(f.severity in (CRITICAL, WARNING) for f in findings):
+        headline = "Подходит с оговорками — см. ниже"
+
     return Explanation(
-        headline=_HEADLINE.get(fit_class, fit_class),
+        headline=headline,
         summary=summary,
         findings=findings,
         caveats=caveats,

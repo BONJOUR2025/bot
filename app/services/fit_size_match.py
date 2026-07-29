@@ -141,6 +141,7 @@ def evaluate_size_match(
     foot_landmarks: FootLandmarks,
     last_landmarks: FootLandmarks,
     last_mesh: trimesh.Trimesh | None = None,
+    foot_length_mm: float | None = None,
 ) -> SizeMatch:
     """Both meshes must already be in one frame (heel-fixed registration).
 
@@ -156,11 +157,20 @@ def evaluate_size_match(
     foot_length = foot_y_max - foot_y_min
     cavity_y_max = float(np.asarray(cavity_mesh.vertices)[:, 1].max())
     total_excess = cavity_y_max - foot_y_max
-    last_y_max = (float(np.asarray(last_mesh.vertices)[:, 1].max())
-                  if last_mesh is not None else cavity_y_max)
-    # Heels are pinned by the registration, so this is the last's length minus
-    # the foot's -- the "припуск" the 10-15mm norm is about.
-    allowance = last_y_max - foot_y_max
+    # The allowance is a difference of two *lengths*, not of two positions:
+    # "the last is N mm longer than the foot". Taking it as
+    # last_y_max - foot_y_max made it move with wherever the foot happened to
+    # be seated -- seating the foot 2.9mm forward inside the cavity silently
+    # shrank a 23mm allowance to 18mm and put it back inside the acceptable
+    # band, hiding the very finding it exists to raise.
+    # `foot_length_mm` is the foot's own length, before registration rotated
+    # it: a rotated mesh has a shorter axis-aligned extent than the object it
+    # describes, and on an 8 degree correction that alone moved the allowance
+    # by 2.7mm. The allowance compares the two objects, not their projections.
+    ref = last_mesh if last_mesh is not None else cavity_mesh
+    rv = np.asarray(ref.vertices, dtype=float)
+    allowance = (float(rv[:, 1].max() - rv[:, 1].min())
+                 - (foot_length_mm if foot_length_mm is not None else foot_length))
 
     # --- functional toe allowance ---------------------------------------
     toe_height = _height_at(foot_mesh, foot_y_max - _TOE_BAND_MM / 2.0)

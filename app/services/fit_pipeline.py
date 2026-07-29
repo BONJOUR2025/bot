@@ -255,13 +255,42 @@ def analyze_fit(
     # 13. estimated shoe cavity
     cavity = build_cavity(last_used, construction)
 
+    # 13a. Seat the foot inside the cavity rather than on the last.
+    #
+    # Registration pins the heel to the *last*, which is right: the last is
+    # the reference shape and §9 wants that anchor exact. But clearance is
+    # measured against the cavity, whose back has moved forward by the heel
+    # counter's thickness and whose floor has risen by the insole's. Left
+    # uncorrected, the foot's heel hangs behind the cavity's back and its sole
+    # sits below the cavity's floor -- a constant offset that shows up as
+    # tightness at the posterior heel for *every* foot against *every* last.
+    # Measured: the foot's rearmost point 3.0mm behind the cavity's, and the
+    # posterior-heel zone reading a median -3.0mm at sole level as a result.
+    # In a real shoe the heel rests against the inside of the counter and the
+    # foot stands on top of the insole, which is exactly this shift.
+    fv_reg = np.asarray(foot_registered.vertices, dtype=float)
+    cv = np.asarray(cavity.mesh.vertices, dtype=float)
+    seating_shift = np.array([0.0,
+                              float(cv[:, 1].min() - fv_reg[:, 1].min()),
+                              float(cv[:, 2].min() - fv_reg[:, 2].min())])
+    if np.any(np.abs(seating_shift) > 1e-9):
+        foot_registered = foot_registered.copy()
+        foot_registered.apply_translation(seating_shift)
+        limitations.append(
+            f"foot seated inside the cavity (+{seating_shift[1]:.1f}mm along the foot, "
+            f"+{seating_shift[2]:.1f}mm up) so the counter and insole thicknesses are "
+            "not read as heel tightness"
+        )
+
     # 13b. Is this last even the right size for this foot? Runs before the
     # zone analysis because a size mismatch makes those zones consequences
     # rather than independent findings (see fit_size_match).
     last_landmarks = detect_foot_landmarks(last_used, side=last_side or foot_side)
     size_match = evaluate_size_match(foot_registered, cavity.mesh,
                                      foot_landmarks, last_landmarks,
-                                     last_mesh=last_used)
+                                     last_mesh=last_used,
+                                     foot_length_mm=float(
+                                         np.ptp(np.asarray(foot_aligned.vertices)[:, 1])))
 
     # 14-17. clearance against the cavity, with the uncertainty budget
     clearance = compute_clearance(
