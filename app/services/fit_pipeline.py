@@ -58,6 +58,13 @@ FIT_REQUIRES_DIFFERENT_FULLNESS = "FIT_REQUIRES_DIFFERENT_FULLNESS"
 
 _MANY_TIGHT_ZONES = 3
 
+# Multiples of the clearance uncertainty budget. _CONFLICT_SIGMA matches the
+# bar fit_clearance itself uses; _DOMINANCE_RATIO is how much bigger one side
+# has to be before it is treated as the story rather than half of a
+# misallocated-volume pattern.
+_CONFLICT_SIGMA = 2.0
+_DOMINANCE_RATIO = 2.0
+
 
 @dataclass
 class FitReport:
@@ -139,9 +146,16 @@ def _has_directional_conflict(zone, sigma: float) -> bool:
     dorsal = d.get("dorsal")
     if not width or dorsal is None:
         return False
-    if min(width) < -sigma and dorsal > sigma:
+    # Same bar fit_clearance uses to call a zone tight or loose at all. It used
+    # to be 1 sigma here while the zone classifier moved to 2, and a pair of
+    # readings each within half a millimetre of the noise floor (lateral -2.7,
+    # dorsal +3.2, sigma 2.69) was enough to promote a whole last to "needs
+    # reshaping" -- the most severe verdict there is, off the weakest evidence
+    # the report contains.
+    bar = _CONFLICT_SIGMA * sigma
+    if min(width) < -bar and dorsal > bar:
         return True  # narrow-and-high
-    if max(width) > sigma and dorsal < -sigma:
+    if max(width) > bar and dorsal < -bar:
         return True  # wide-and-low
     return False
 
@@ -170,13 +184,29 @@ def _classify(clearance: ClearanceReport) -> tuple[str, str | None, float | None
               if z.classification in ("LOCAL_TIGHTNESS", "LOCAL_LOOSENESS")]
     conflicted = any(_has_directional_conflict(z, sigma) for z in judged)
 
-    if (tight and loose) or conflicted:
-        # Both broad tightness AND broad looseness at once (or a single zone
-        # squeezed on one axis and slack on another) is a misallocated-volume
-        # pattern (narrow-and-high, wide-and-low, ...), not "one width grade
-        # up/down would fix it" -- that needs the last reshaped, not just
-        # regraded.
+    if conflicted:
+        # A single zone squeezed on one axis and slack on another is a
+        # misallocated-volume pattern (narrow-and-high, wide-and-low, ...),
+        # not "one width grade up/down would fix it" -- that needs the last
+        # reshaped, not just regraded.
         return FIT_REQUIRES_LAST_MODIFICATION, None, None
+
+    if tight and loose:
+        # Tightness and looseness together mean misallocated volume only when
+        # they are of comparable size. Without that check the rule was blind to
+        # magnitude: one small press outranked broad, much larger slack and
+        # headlined a last as needing reshaping when the honest reading was
+        # "roomy, with a local press". When one side clearly dominates, it is
+        # the verdict, and the other stays as its own finding below.
+        tight_mag = _fullness_estimate(tight, [])
+        loose_mag = _fullness_estimate([], loose)
+        weaker = min(tight_mag, loose_mag)
+        if weaker <= 0 or max(tight_mag, loose_mag) < _DOMINANCE_RATIO * weaker:
+            return FIT_REQUIRES_LAST_MODIFICATION, None, None
+        if tight_mag > loose_mag:
+            loose = []
+        else:
+            tight = []
     if len(tight) >= _MANY_TIGHT_ZONES:
         # Broad, uniform tightness on a last already confirmed the right
         # length and ball-line placement (fit_size_match ran first and did not

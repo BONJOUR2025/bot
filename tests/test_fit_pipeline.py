@@ -196,3 +196,25 @@ def test_the_heel_is_seated_against_the_cavity_not_the_last():
     zones = {z["name"]: z for z in d["clearance"]["zones"]}
     assert zones["posterior_heel"]["classification"] != "LOCAL_TIGHTNESS"
     assert any("seated inside the cavity" in lim for lim in d["limitations"])
+
+
+def test_broad_slack_with_one_small_press_is_not_called_a_reshape():
+    """The rule "tight somewhere and loose somewhere -> misallocated volume"
+    was blind to magnitude, so a small press outranked much larger slack and
+    headlined the last as needing reshaping. When one side clearly dominates
+    it is the verdict; the other stays a finding."""
+    foot = _blocky(90, 260, 60)
+    roomy = _blocky(122, 285, 96)
+    d = _report(foot, roomy)
+    zones = {z["name"]: z["classification"] for z in d["clearance"]["zones"]}
+    assert "LOCAL_LOOSENESS" in zones.values(), "fixture must actually be loose"
+    assert d["fit_class"] != FIT_REQUIRES_LAST_MODIFICATION
+
+
+def test_comparable_tightness_and_slack_still_reads_as_reshaping():
+    """Dominance is the escape hatch, not a way out of the verdict: when the
+    two sides are of similar size the volume really is in the wrong place."""
+    foot = _blocky(90, 260, 60)
+    lopsided = _tapered(back_width=64, front_width=140, length=278, height=100)
+    d = _report(foot, lopsided)
+    assert d["fit_class"] == FIT_REQUIRES_LAST_MODIFICATION
