@@ -322,6 +322,32 @@ def create_lasts_router() -> APIRouter:
                         max(r.get("worst_deviation_mm") or 0.0 for r in usable))
 
             matches.sort(key=_rank)
+
+            # Rank ties. Ordering by a millimetre figure implies the order
+            # means something, and between the top two lasts of one family it
+            # did not: 5.0mm against 5.8mm, both driven by the same length
+            # allowance, against a measurement budget of 2.7mm. Presented as a
+            # list that reads 1st and 2nd, that invites "so 7 fits me better
+            # than 6?" -- and the honest answer is no, they are the same
+            # reading. Entries sharing a class whose deviations differ by less
+            # than the uncertainty carry the same tier, so the panel can say so
+            # instead of implying a winner.
+            def _sigma(match):
+                for pf in match["per_foot"]:
+                    unc = ((pf.get("fit_result") or {}).get("clearance") or {}).get("uncertainty")
+                    if unc and unc.get("total_sigma_mm"):
+                        return float(unc["total_sigma_mm"])
+                return 1.0
+
+            tier = 0
+            anchor = None
+            for i, match in enumerate(matches):
+                cls, dev = _rank(match)
+                if anchor is None or cls != anchor[0] or abs(dev - anchor[1]) >= _sigma(match):
+                    tier = i + 1
+                    anchor = (cls, dev)
+                match["tier"] = tier
+
             response_engine = "fit_v3"
 
         if engine == "hybrid_v2" and foot_raw_by_side:

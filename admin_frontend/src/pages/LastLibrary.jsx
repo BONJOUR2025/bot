@@ -451,12 +451,18 @@ function FootFit({ pf, onOpenImage }) {
   );
 }
 
-function MatchCard({ match, onOpenImage }) {
+function MatchCard({ match, onOpenImage, sharedTier }) {
   const [open, setOpen] = useState(true);
   const { last, per_foot } = match;
   return (
     <div className="app-card p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
+        <div className="flex items-start gap-3">
+          {match.tier != null && (
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-bg-secondary)] text-sm font-semibold">
+              {match.tier}
+            </span>
+          )}
         <div>
           {/* Size and fullness both belong in the heading: one model is
               graded across several of each, so a card headed by the article
@@ -476,6 +482,15 @@ function MatchCard({ match, onOpenImage }) {
               last.ball_girth_mm && `обхват пучков ${last.ball_girth_mm} мм`,
             ].filter(Boolean).join(' · ') || '—'}
           </div>
+          {/* Same tier means the difference between these lasts is smaller
+              than the measurement can resolve -- saying "1st, 2nd" there would
+              invent a winner. */}
+          {sharedTier && (
+            <div className="mt-1 text-[11px] text-[color:var(--color-text-muted)]">
+              делит место с другими — разница между ними меньше точности измерения
+            </div>
+          )}
+        </div>
         </div>
         <div className="flex items-center gap-2">
           {per_foot.map((pf, i) => (
@@ -788,7 +803,9 @@ export default function LastLibrary() {
               </h4>
               </div>
               {matchResult.matches.map((m) => (
-                <MatchCard key={m.last.id} match={m} onOpenImage={(src, alt) => setLightbox({ src, alt })} />
+                <MatchCard key={m.last.id} match={m}
+                  sharedTier={matchResult.matches.filter((o) => o.tier === m.tier).length > 1}
+                  onOpenImage={(src, alt) => setLightbox({ src, alt })} />
               ))}
             </div>
           </div>
