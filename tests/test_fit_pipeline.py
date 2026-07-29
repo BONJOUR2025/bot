@@ -154,3 +154,20 @@ def test_construction_overrides_reach_the_cavity():
     d = _report(_blocky(90, 260, 60), _blocky(105, 285, 95), construction=thick)
     assert d["cavity"]["construction"]["insole_thickness_mm"] == 8.0
     assert d["cavity"]["offsets_applied_mm"]["sole_up"] == pytest.approx(8.0)
+
+
+def test_the_same_pair_analysed_twice_gives_the_same_answer():
+    """The surface sample used to be unseeded, so identical inputs returned
+    different reports: the same foot and last, five runs in a row, produced
+    three different fit classes and flipped the ball zone between looseness
+    and tightness. A report that changes on reload cannot be checked against
+    a real fitting, or against itself."""
+    foot, last = _blocky(95, 265, 58), _blocky(104, 285, 92)
+    first = _report(foot, last)
+    second = _report(foot, last)
+
+    assert first["fit_class"] == second["fit_class"]
+    assert ([z["classification"] for z in first["clearance"]["zones"]]
+            == [z["classification"] for z in second["clearance"]["zones"]])
+    assert ([z["signed_gap_mm"]["median"] for z in first["clearance"]["zones"]]
+            == [z["signed_gap_mm"]["median"] for z in second["clearance"]["zones"]])

@@ -52,7 +52,7 @@ def test_far_too_long_last_triggers_the_gate():
     cavity = _box(100, 288, 60)        # the real failing pair's proportions
     r = evaluate_size_match(foot, cavity, _landmarks(167.0), _landmarks(183.0))
     assert r.gate_triggered
-    assert any("toe allowance" in reason for reason in r.reasons)
+    assert any("length allowance" in reason for reason in r.reasons)
 
 
 def test_severe_ball_offset_alone_triggers_the_gate():
@@ -86,7 +86,9 @@ def test_two_signals_both_out_gate_even_if_neither_is_severe():
     """Two independent measurements agreeing is itself evidence, even when
     neither alone clears the severe bar."""
     foot = _box(95, 250, 55)
-    cavity = _box(100, 245, 60)                 # toe allowance -5mm: out, not severe
+    # allowance +20mm: past the 8-18 band but well short of the severe margin,
+    # so on its own it must not gate
+    cavity = _box(100, 270, 60)
     ball_offset = (BALL_OFFSET_GATE + 0.01) * 250   # mildly out, not severe
     r = evaluate_size_match(foot, cavity, _landmarks(167.0), _landmarks(167.0 + ball_offset))
     assert r.gate_triggered

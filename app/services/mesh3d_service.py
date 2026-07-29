@@ -182,16 +182,30 @@ def repair_small_holes(mesh: trimesh.Trimesh) -> tuple[trimesh.Trimesh, bool]:
 DEFAULT_MAX_SAMPLE_POINTS = 2000
 
 
+# Fixed so the same pair of meshes always yields the same report -- see
+# _sample_surface_points for what an unseeded sample did to the verdicts.
+_SAMPLE_SEED = 20260728
+
+
 def _sample_surface_points(mesh: trimesh.Trimesh, max_points: int) -> tuple[np.ndarray, np.ndarray]:
     """Returns (points, normals) — the face normal at each sampled point,
     used by stage 6 to classify a point as medial/lateral/dorsal/plantar-
     *facing* rather than just by raw position (a box's flat top face has
     plenty of points with x>=0, but they aren't "medial surface" in any
-    meaningful sense — their normal points in +Z, not +X)."""
+    meaningful sense — their normal points in +Z, not +X).
+
+    The sample is seeded. Without a seed, `sample_surface` draws a fresh random
+    set of points on every call, and the zone statistics computed from them
+    move enough to change the answer: the same foot against the same last,
+    analysed five times in a row, returned three different fit classes and
+    flipped the ball zone between LOCAL_LOOSENESS and LOCAL_TIGHTNESS. A
+    fitting report that changes when you press reload cannot be checked
+    against anything, including a real fitting. The specific value does not
+    matter; that it is fixed does."""
     if len(mesh.faces) == 0:
         return mesh.vertices, np.zeros_like(mesh.vertices)
     n = min(max_points, len(mesh.vertices))
-    points, face_index = trimesh.sample.sample_surface(mesh, n)
+    points, face_index = trimesh.sample.sample_surface(mesh, n, seed=_SAMPLE_SEED)
     normals = mesh.face_normals[face_index]
     return points, normals
 

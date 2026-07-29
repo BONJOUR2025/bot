@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.services.fit_size_match import LENGTH_ALLOWANCE_ACCEPTABLE
+
 CRITICAL = "critical"
 WARNING = "warning"
 GOOD = "good"
@@ -236,9 +238,9 @@ def explain(report: dict) -> Explanation:
     sm = report.get("size_match") or {}
     if sm.get("gate_triggered"):
         parts = []
-        if sm.get("functional_toe_clearance_mm") is not None:
-            parts.append(f"полезный запас перед пальцами "
-                         f"{sm['functional_toe_clearance_mm']:.0f} мм при норме 10–15")
+        if sm.get("length_allowance_mm") is not None:
+            parts.append(f"припуск по длине {sm['length_allowance_mm']:.0f} мм "
+                         f"при норме 10–15")
         if sm.get("ball_offset_mm") is not None:
             parts.append(f"пучки стопы и колодки расходятся на "
                          f"{abs(sm['ball_offset_mm']):.0f} мм ({abs(sm.get('ball_offset_pct') or 0):.1f}% длины)")
@@ -252,6 +254,34 @@ def explain(report: dict) -> Explanation:
             confidence=sm.get("confidence", 0.0),
             check=sm.get("size_hint") or "Подобрать колодку другого размера",
         ))
+
+    # An allowance outside the band is worth saying even when it does not gate.
+    # The gate deliberately needs a severe reading or two signals agreeing
+    # before it suppresses the zone analysis, but the allowance itself is a
+    # plain difference of two lengths -- no landmark detection in it, so no
+    # reason to stay silent about it. Skipping that is how a last sitting
+    # ~21mm long against a 10-15mm norm reached a wearer with nothing said
+    # about its length at all, which is what they then reported back.
+    if not sm.get("gate_triggered") and sm.get("length_allowance_mm") is not None:
+        allowance = sm["length_allowance_mm"]
+        lo, hi = LENGTH_ALLOWANCE_ACCEPTABLE
+        if allowance > hi or allowance < lo:
+            longish = allowance > hi
+            findings.insert(0, Finding(
+                severity=WARNING, zone="length",
+                title=(f"Припуск по длине {allowance:.0f} мм — "
+                       f"{'больше' if longish else 'меньше'} нормы"),
+                fact=(f"Колодка длиннее стопы на {allowance:.0f} мм при норме 10–15 мм "
+                      f"и допустимых {lo:.0f}–{hi:.0f} мм."),
+                effect=("Обувь будет ощущаться длинной: стопа сможет ездить вперёд-назад, "
+                        "пучки уйдут назад относительно места сгиба, пятка станет хуже "
+                        "держаться." if longish else
+                        "Пальцам не хватит места при перекате — упрутся в носок на шаге, "
+                        "даже если в статике всё помещается."),
+                confidence=sm.get("confidence", 0.0),
+                check=("Взять колодку на размер-полтора короче" if longish
+                       else "Взять колодку длиннее"),
+            ))
 
     # If the foot had to be swung sideways to sit on this last's axis, every
     # medial/lateral number below partly describes that swing. Said out loud

@@ -32,21 +32,25 @@ import trimesh
 
 from app.services.foot_landmarks import FootLandmarks
 
-# Functional toe allowance, mm. Classic men's leather footwear. These are
-# documented starting values, NOT calibrated against real fittings -- §29 asks
-# for a fitting pilot before any threshold is treated as fact.
+# Length allowance ("припуск"), mm: how much longer the last is than the foot.
+# This is the number the 10-15mm norm for classic footwear actually refers to.
 #
-# The lower bound widened from 8mm to 5mm after a real pair (functional
-# clearance 7.0mm, ball offset -2.0% -- both otherwise unremarkable) tripped
-# the gate on that single millimetre and reported "wrong length" for a last
-# whose actual problem was width. See _classify_toe/_is_severe below for how
-# a value this close to the edge is now handled even when it IS outside the
-# band.
-TOE_ALLOWANCE_GOOD = (10.0, 15.0)
-TOE_ALLOWANCE_ACCEPTABLE = (5.0, 20.0)
+# It used to be applied to the *functional* toe clearance instead -- the space
+# ahead of the toes up to where the toe box stops being usable -- which is a
+# different quantity with no norm of its own, and the mistake cost a real
+# verdict: on 4977/44 the functional clearance read 9.0mm and passed, while
+# the allowance was +23mm against a 280mm foot. The wearer described that pair
+# as loose in the length, and nothing in the report said so.
+#
+# The acceptable band is the production one for this workshop, not a textbook
+# figure: outside 8-18mm the last is treated as the wrong length. Measured
+# against that, their Prada 43 (+7.8) and 44 (+17.4) sit inside it and the
+# whole 4977/44 group (+23 to +27) does not.
+LENGTH_ALLOWANCE_GOOD = (10.0, 15.0)
+LENGTH_ALLOWANCE_ACCEPTABLE = (8.0, 18.0)
 # Past this far beyond the acceptable band, the reading is unambiguous enough
 # to gate on its own, without needing the other signal to agree.
-_TOE_SEVERE_MARGIN_MM = 10.0
+_ALLOWANCE_SEVERE_MARGIN_MM = 10.0
 
 # Ball-line offset as a fraction of foot length.
 BALL_OFFSET_GOOD = 0.02
@@ -69,6 +73,7 @@ _MIN_BAND_POINTS = 4
 
 @dataclass
 class SizeMatch:
+    length_allowance_mm: float | None
     functional_toe_clearance_mm: float | None
     total_length_excess_mm: float | None
     functional_toe_end_y_mm: float | None
@@ -82,6 +87,7 @@ class SizeMatch:
 
     def as_dict(self) -> dict:
         return {
+            "length_allowance_mm": _r(self.length_allowance_mm),
             "functional_toe_clearance_mm": _r(self.functional_toe_clearance_mm),
             "total_length_excess_mm": _r(self.total_length_excess_mm),
             "functional_toe_end_y_mm": _r(self.functional_toe_end_y_mm),
@@ -134,8 +140,14 @@ def evaluate_size_match(
     cavity_mesh: trimesh.Trimesh,
     foot_landmarks: FootLandmarks,
     last_landmarks: FootLandmarks,
+    last_mesh: trimesh.Trimesh | None = None,
 ) -> SizeMatch:
-    """Both meshes must already be in one frame (heel-fixed registration)."""
+    """Both meshes must already be in one frame (heel-fixed registration).
+
+    `last_mesh` is the last itself, before shoe_cavity shrinks it for lining
+    and insole. The allowance norm is quoted for lasts, so it has to be
+    measured on one; falling back to the cavity understates it by whatever
+    the toe puff and lining take (4.3mm on the pair this was found on)."""
     warnings: list[str] = []
     reasons: list[str] = []
 
@@ -144,6 +156,11 @@ def evaluate_size_match(
     foot_length = foot_y_max - foot_y_min
     cavity_y_max = float(np.asarray(cavity_mesh.vertices)[:, 1].max())
     total_excess = cavity_y_max - foot_y_max
+    last_y_max = (float(np.asarray(last_mesh.vertices)[:, 1].max())
+                  if last_mesh is not None else cavity_y_max)
+    # Heels are pinned by the registration, so this is the last's length minus
+    # the foot's -- the "припуск" the 10-15mm norm is about.
+    allowance = last_y_max - foot_y_max
 
     # --- functional toe allowance ---------------------------------------
     toe_height = _height_at(foot_mesh, foot_y_max - _TOE_BAND_MM / 2.0)
@@ -188,14 +205,13 @@ def evaluate_size_match(
     # alone clears the severe bar.
     toe_out_reason: str | None = None
     toe_severe = False
-    if functional_clearance is not None:
-        lo, hi = TOE_ALLOWANCE_ACCEPTABLE
-        if functional_clearance > hi:
-            toe_out_reason = f"functional toe allowance {functional_clearance:.0f}mm exceeds {hi:.0f}mm"
-            toe_severe = functional_clearance > hi + _TOE_SEVERE_MARGIN_MM
-        elif functional_clearance < lo:
-            toe_out_reason = f"functional toe allowance {functional_clearance:.0f}mm below {lo:.0f}mm"
-            toe_severe = functional_clearance < lo - _TOE_SEVERE_MARGIN_MM
+    lo, hi = LENGTH_ALLOWANCE_ACCEPTABLE
+    if allowance > hi:
+        toe_out_reason = f"length allowance {allowance:.0f}mm exceeds {hi:.0f}mm"
+        toe_severe = allowance > hi + _ALLOWANCE_SEVERE_MARGIN_MM
+    elif allowance < lo:
+        toe_out_reason = f"length allowance {allowance:.0f}mm below {lo:.0f}mm"
+        toe_severe = allowance < lo - _ALLOWANCE_SEVERE_MARGIN_MM
 
     ball_out_reason: str | None = None
     ball_severe = False
@@ -224,9 +240,9 @@ def evaluate_size_match(
 
     # --- direction to look in --------------------------------------------
     size_hint = None
-    if gate and functional_clearance is not None:
-        target = sum(TOE_ALLOWANCE_GOOD) / 2.0
-        delta = functional_clearance - target
+    if gate:
+        target = sum(LENGTH_ALLOWANCE_GOOD) / 2.0
+        delta = allowance - target
         if abs(delta) >= _SIZE_STEP_MM:
             steps = abs(delta) / _SIZE_STEP_MM
             direction = "меньше" if delta > 0 else "больше"
@@ -239,6 +255,7 @@ def evaluate_size_match(
             size_hint = hint
 
     return SizeMatch(
+        length_allowance_mm=allowance,
         functional_toe_clearance_mm=functional_clearance,
         total_length_excess_mm=total_excess,
         functional_toe_end_y_mm=functional_end,

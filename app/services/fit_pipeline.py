@@ -260,7 +260,8 @@ def analyze_fit(
     # rather than independent findings (see fit_size_match).
     last_landmarks = detect_foot_landmarks(last_used, side=last_side or foot_side)
     size_match = evaluate_size_match(foot_registered, cavity.mesh,
-                                     foot_landmarks, last_landmarks)
+                                     foot_landmarks, last_landmarks,
+                                     last_mesh=last_used)
 
     # 14-17. clearance against the cavity, with the uncertainty budget
     clearance = compute_clearance(
