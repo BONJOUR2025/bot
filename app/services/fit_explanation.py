@@ -31,7 +31,13 @@ _SEVERITY_ORDER = {CRITICAL: 0, WARNING: 1, NEUTRAL: 2, GOOD: 3}
 ZONE_LABEL = {
     "posterior_heel": "Задник пятки",
     "heel": "Пятка",
-    "waist": "Геленок (свод)",
+    # Named after the foot, not the shoe: these labels sit on findings that
+    # compare a foot against a cavity, so a construction term is the wrong
+    # register. "Геленок" is also narrower than this zone -- the геленочная
+    # часть runs from the heel to the ball, spanning both this zone and the
+    # next -- and it was previously paired with "(свод)", which mixed the
+    # shoe's shank and the foot's arch into one label.
+    "waist": "Свод",
     "instep": "Подъём",
     "ball": "Пучки",
     "toes": "Пальцы",
