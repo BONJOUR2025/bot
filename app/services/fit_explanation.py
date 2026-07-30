@@ -107,8 +107,21 @@ class Explanation:
 
 
 def _worst_direction(directional: dict) -> tuple[str | None, float | None]:
-    """Which way the zone is tightest, and by how much."""
-    negatives = {k: v for k, v in directional.items() if v is not None and v < 0}
+    """Which way the zone is tightest, and by how much.
+
+    Plantar is excluded, matching fit_clearance's own classifier
+    (_classify's `k != "plantar"` filter): a negative plantar gap means the
+    foot sits below the cavity's floor, which is a seating question, not a
+    squeeze -- attributing a tail-driven tight zone to "снизу" is not just
+    imprecise, it names the one direction fit_clearance explicitly does not
+    treat as tightness. Measured on a real pair, three zones whose LOCAL_TIGHTNESS
+    verdict was earned by the p05 tail rule (not by any single direction
+    crossing the bar) all had their plantar reading picked as "the" direction,
+    printing "тесно снизу" for what direct geometry confirmed was a lateral
+    squeeze in every one of them.
+    """
+    negatives = {k: v for k, v in directional.items()
+                 if k != "plantar" and v is not None and v < 0}
     if not negatives:
         return None, None
     key = min(negatives, key=lambda k: negatives[k])
@@ -177,12 +190,28 @@ def _zone_finding(zone: dict, sigma: float) -> Finding:
             check="Для точной оценки нужен скан стопы на опоре, повторяющей подъём колодки",
         )
 
+    # A zone can average out fine (or even loose) while one side is quietly
+    # pinched: the median blends medial/lateral/dorsal, and a squeeze past the
+    # noise floor on just one of them is not the same claim as "this zone has
+    # a problem" -- fit_clearance's own bar for that is 2 sigma, met by neither
+    # the LOCAL_LOOSENESS nor the fine-grained branches below. But printing
+    # "в пределах точности измерения" or "нормально" with nothing further is
+    # not honest either when a real one-sided press sits between 1 and 2
+    # sigma: on a real last two zones read "тесно" only through their tail
+    # (p05), while their own worst-direction numbers -- -3.18mm, -2.41mm,
+    # both past 1 sigma -- never surfaced anywhere a reader would see them.
+    caveat = None
+    if dir_mm is not None and dir_mm < -sigma:
+        caveat = (f" Отдельно{where} есть лёгкое поджатие {abs(dir_mm):.0f} мм — "
+                  f"выше шума, но ниже порога, чтобы называть это теснотой зоны.")
+
     if classification == "LOCAL_LOOSENESS":
         return Finding(
             severity=WARNING,
             zone=name,
             title=f"{label}: свободно на {median:.0f} мм",
-            fact=f"Между стопой и полостью обуви около {median:.0f} мм свободного места.",
+            fact=f"Между стопой и полостью обуви около {median:.0f} мм свободного места."
+                 + (caveat or ""),
             effect=_LOOSE_EFFECT.get(name, "Возможна недостаточная фиксация."),
             confidence=confidence,
             check="Проверить, убирается ли объём шнуровкой и держится ли пятка при шаге",
@@ -194,16 +223,20 @@ def _zone_finding(zone: dict, sigma: float) -> Finding:
             zone=name,
             title=f"{label}: посадка в пределах точности измерения",
             fact=(f"Расхождение {median:+.0f} мм меньше суммарной погрешности "
-                  f"±{sigma:.1f} мм, поэтому не считается ни теснотой, ни свободой."),
-            effect="Отклонений, которые можно было бы уверенно назвать проблемой, здесь нет.",
+                  f"±{sigma:.1f} мм, поэтому не считается ни теснотой, ни свободой."
+                  + (caveat or "")),
+            effect="Отклонений, которые можно было бы уверенно назвать проблемой, здесь нет."
+                   if not caveat else
+                   "Зона в целом не проблемная, но именно с этой стороны стоит проверить примеркой.",
             confidence=confidence,
         )
 
     return Finding(
         severity=GOOD, zone=name,
         title=f"{label}: нормально ({median:+.0f} мм)",
-        fact=f"Запас {median:+.0f} мм — в рабочем диапазоне.",
-        effect="Зона не требует вмешательства.",
+        fact=f"Запас {median:+.0f} мм — в рабочем диапазоне." + (caveat or ""),
+        effect="Зона не требует вмешательства." if not caveat else
+               "Зона в целом не проблемная, но именно с этой стороны стоит проверить примеркой.",
         confidence=confidence,
     )
 
