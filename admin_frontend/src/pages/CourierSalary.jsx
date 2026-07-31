@@ -46,7 +46,9 @@ export default function CourierSalary() {
   const [tick, setTick] = useState(0);
 
   const couriers = useMemo(
-    () => employees.filter((e) => (e.position || '').toLowerCase().includes(COURIER_MATCH)),
+    () => employees
+      .filter((e) => (e.position || '').toLowerCase().includes(COURIER_MATCH))
+      .sort((a, b) => (a.full_name || a.name || '').localeCompare(b.full_name || b.name || '', 'ru')),
     [employees]);
   const courier = useMemo(() => couriers.find((e) => String(e.id) === String(courierId)), [couriers, courierId]);
   const dateFrom = `${period}-01`;

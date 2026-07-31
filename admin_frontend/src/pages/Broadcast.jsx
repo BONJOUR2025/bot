@@ -1,11 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Send, User, MessageSquare, Trash2, FileText } from 'lucide-react';
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 
 export default function Broadcast() {
   const [message, setMessage] = useState('');
   const [employees, setEmployees] = useState([]);
+  const recipientsByPosition = useMemo(
+    () => groupEmployeesByPosition(
+      employees.filter(e => e.bot_user || e.vk_id || (!String(e.id).startsWith('nb_') && !!e.id)),
+    ),
+    [employees],
+  );
   const [selected, setSelected] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [selectedTpl, setSelectedTpl] = useState('');
@@ -211,18 +218,25 @@ export default function Broadcast() {
           </button>
           {openRecipients && (
             <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-[color:var(--color-modal-bg)] border border-[color:var(--color-border)] rounded-lg shadow-lg">
-              {employees.filter(e => e.bot_user || e.vk_id || (!String(e.id).startsWith('nb_') && !!e.id)).map((e) => (
-                <label
-                  key={e.id}
-                  className="flex items-center px-2 py-1 gap-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(e.id)}
-                    onChange={() => toggleRecipient(e.id)}
-                  />
-                  {e.full_name || e.name}
-                </label>
+              {recipientsByPosition.map(([position, list]) => (
+                <div key={position}>
+                  <div className="px-2 pt-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                    {position}
+                  </div>
+                  {list.map((e) => (
+                    <label
+                      key={e.id}
+                      className="flex items-center px-2 py-1 gap-2"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(e.id)}
+                        onChange={() => toggleRecipient(e.id)}
+                      />
+                      {e.full_name || e.name}
+                    </label>
+                  ))}
+                </div>
               ))}
             </div>
           )}

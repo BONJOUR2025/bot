@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 
 export default function Vacations() {
   const { toast } = useToast();
@@ -22,6 +23,7 @@ export default function Vacations() {
 
   const [vacations, setVacations] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const employeesByPosition = useMemo(() => groupEmployeesByPosition(employees), [employees]);
   const [filters, setFilters] = useState({
     employee: '',
     type: '',
@@ -173,10 +175,14 @@ export default function Vacations() {
           onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
         >
           <option value="">Сотрудник</option>
-          {employees.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.full_name || e.name}
-            </option>
+          {employeesByPosition.map(([position, list]) => (
+            <optgroup key={position} label={position}>
+              {list.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.full_name || e.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
@@ -389,10 +395,14 @@ export default function Vacations() {
               onChange={(e) => handleSelect(e.target.value)}
             >
               <option value="">Сотрудник</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.full_name || e.name}
-                </option>
+              {employeesByPosition.map(([position, list]) => (
+                <optgroup key={position} label={position}>
+                  {list.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name || e.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <select

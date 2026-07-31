@@ -54,9 +54,9 @@ export default function SaleTransfers() {
         api.get('/payroll/calculate', { params: { month, year } }),
         api.get('/payroll/sale-transfers', { params: { month, year } }),
       ]);
-      const emps = (calc.data.rows || []).map(r => ({
-        code: r.employee_code, name: r.employee_name,
-      }));
+      const emps = (calc.data.rows || [])
+        .map(r => ({ code: r.employee_code, name: r.employee_name }))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
       setEmployees(emps);
       setTransfers(list.data || []);
     } catch (e) {

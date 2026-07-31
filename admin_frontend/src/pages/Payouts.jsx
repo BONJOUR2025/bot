@@ -36,6 +36,7 @@ import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
+import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 
 const MAX_AMOUNT = 100000;
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
@@ -652,18 +653,8 @@ export default function Payouts() {
   }, [filters]);
 
   const employeesByPosition = useMemo(() => {
-    const groups = {};
-    for (const e of employees) {
-      const key = e.position || 'Без должности';
-      (groups[key] = groups[key] || []).push(e);
-    }
     const displayName = (e) => (useFullName ? e.full_name || e.name : e.name || e.full_name) || '';
-    return Object.entries(groups)
-      .sort(([a], [b]) => a.localeCompare(b, 'ru'))
-      .map(([position, list]) => [
-        position,
-        [...list].sort((a, b) => displayName(a).localeCompare(displayName(b), 'ru')),
-      ]);
+    return groupEmployeesByPosition(employees, displayName);
   }, [employees, useFullName]);
 
   const employeeById = useMemo(() => {

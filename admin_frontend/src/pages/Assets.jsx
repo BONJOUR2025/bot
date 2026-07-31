@@ -4,6 +4,7 @@ import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 
 function fmtDate(s) {
   if (!s) return '—';
@@ -46,6 +47,7 @@ export default function Assets() {
 
   const [list, setList]               = useState([]);
   const [employees, setEmployees]     = useState([]);
+  const employeesByPosition = useMemo(() => groupEmployeesByPosition(employees), [employees]);
   const [itemOptions, setItemOptions] = useState([]);
   const [posOptions, setPosOptions]   = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
@@ -328,7 +330,11 @@ export default function Assets() {
         <select className="input" value={filters.employee}
           onChange={e => setFilters(f => ({ ...f, employee: e.target.value }))}>
           <option value="">Все сотрудники</option>
-          {employees.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
+          {employeesByPosition.map(([position, list]) => (
+            <optgroup key={position} label={position}>
+              {list.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
+            </optgroup>
+          ))}
         </select>
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center w-full sm:w-auto">
           <input type="date" className="input w-full sm:w-auto" title="Выдано с"
@@ -567,7 +573,11 @@ export default function Assets() {
               <select className="input mt-1 w-full" value={formEmp.employee_id}
                 onChange={e => pickEmployee(e.target.value)}>
                 <option value="">Выберите сотрудника</option>
-                {employees.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
+                {employeesByPosition.map(([position, list]) => (
+                  <optgroup key={position} label={position}>
+                    {list.map(e => <option key={e.id} value={e.id}>{e.full_name || e.name}</option>)}
+                  </optgroup>
+                ))}
               </select>
             </div>
             <div>

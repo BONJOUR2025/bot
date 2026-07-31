@@ -16,6 +16,7 @@ import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs, StatCard } from '../components/ui/SalaryUI.jsx';
+import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 
 // ── Formatters ────────────────────────────────────────────────────
 const fmtDate = (v) => {
@@ -397,6 +398,7 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
   const { toast } = useToast();
   const [tab, setTab]           = useState('create');
   const [employees, setEmployees] = useState([]);
+  const employeesByPosition = useMemo(() => groupEmployeesByPosition(employees), [employees]);
   const [userId, setUserId]     = useState('');
   const [payoutType, setPayoutType] = useState('Зарплата');
   const [saving, setSaving]     = useState(false);
@@ -520,8 +522,12 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
               <label className="block text-sm font-medium mb-1">Сотрудник *</label>
               <select className="input w-full" value={userId} onChange={(e) => setUserId(e.target.value)}>
                 <option value="">Выберите сотрудника…</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
+                {employeesByPosition.map(([position, list]) => (
+                  <optgroup key={position} label={position}>
+                    {list.map((e) => (
+                      <option key={e.id} value={e.id}>{e.name}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>

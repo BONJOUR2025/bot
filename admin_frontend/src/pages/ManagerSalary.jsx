@@ -223,7 +223,9 @@ export default function ManagerSalary() {
   const [tab, setTab] = useState('overview');
 
   const managers = useMemo(
-    () => employees.filter((e) => (e.position || '').trim().toLowerCase() === MANAGER_POSITION),
+    () => employees
+      .filter((e) => (e.position || '').trim().toLowerCase() === MANAGER_POSITION)
+      .sort((a, b) => (a.full_name || a.name || '').localeCompare(b.full_name || b.name || '', 'ru')),
     [employees]);
   const manager = useMemo(() => managers.find((e) => String(e.id) === String(managerId)), [managers, managerId]);
   const dateFrom = `${period}-01`;

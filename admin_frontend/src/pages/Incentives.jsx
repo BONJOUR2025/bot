@@ -10,6 +10,7 @@ import {
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
+import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 
 const CHART_COLORS = ['#4af626', '#c9502a', '#e61919', '#ffb347'];
 const MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
@@ -159,6 +160,7 @@ export default function Incentives() {
 
   const [list, setList] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const employeesByPosition = useMemo(() => groupEmployeesByPosition(employees), [employees]);
   const [filters, setFilters] = useState({
     employee: query.get('employee_id') || '',
     type: query.get('type') || '',
@@ -360,10 +362,14 @@ export default function Incentives() {
               onChange={(e) => setFilters({ ...filters, employee: e.target.value })}
             >
               <option value="">Все сотрудники</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.full_name || e.name}
-                </option>
+              {employeesByPosition.map(([position, list]) => (
+                <optgroup key={position} label={position}>
+                  {list.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name || e.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <select
@@ -469,10 +475,14 @@ export default function Incentives() {
               }}
             >
               <option value="">Сотрудник</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.full_name || e.name}
-                </option>
+              {employeesByPosition.map(([position, list]) => (
+                <optgroup key={position} label={position}>
+                  {list.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name || e.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <input

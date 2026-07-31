@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -21,6 +22,7 @@ function dateRange(from, to) {
 export default function ShiftCheckins() {
   const [list, setList] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const employeesByPosition = useMemo(() => groupEmployeesByPosition(employees), [employees]);
   const [salons, setSalons] = useState([]);
   const [filters, setFilters] = useState({ from: todayStr(), to: todayStr() });
   const [photoUrl, setPhotoUrl] = useState(null);
@@ -335,10 +337,14 @@ export default function ShiftCheckins() {
               onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
             >
               <option value="">Сотрудник</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.full_name || e.name}
-                </option>
+              {employeesByPosition.map(([position, list]) => (
+                <optgroup key={position} label={position}>
+                  {list.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name || e.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <input
