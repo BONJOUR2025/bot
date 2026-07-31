@@ -88,6 +88,34 @@ class PayoutRepository:
             rows = q.order_by(AdvanceRequest.timestamp.desc()).all()
             return [self._row_to_dict(r) for r in rows]
 
+    def advances_since_last_salary(self, employee_id: str) -> Dict[str, Any]:
+        """Advances («Аванс») issued to this employee since their last
+        approved/paid «Зарплата» payout -- everything from that point on
+        counts as still owed against the next salary.
+
+        Same definition as app.api.manager_salary's async
+        `_advances_since_last_salary`, restated synchronously here: that one
+        awaits `PayoutService.list_payouts`, which is fine from an API
+        handler but not from code that already runs off the event loop in a
+        worker thread (masters_service's Firebird pipeline runs via
+        asyncio.to_thread, where there is no loop to await against).
+        """
+        valid = {"Одобрено", "Выплачено"}
+        rows = sorted(self.list(employee_id=str(employee_id)),
+                      key=lambda r: str(r.get("timestamp") or ""))
+        last_salary_ts = ""
+        for r in rows:
+            if r.get("payout_type") == "Зарплата" and r.get("status") in valid:
+                last_salary_ts = str(r.get("timestamp") or "")
+        adv = [r for r in rows
+               if r.get("payout_type") == "Аванс" and r.get("status") in valid
+               and (not last_salary_ts or str(r.get("timestamp") or "") > last_salary_ts)]
+        return {
+            "total": round(sum(float(r.get("amount") or 0) for r in adv), 2),
+            "count": len(adv),
+            "since": last_salary_ts or None,
+        }
+
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
         with self._session() as db:
             row = AdvanceRequest(

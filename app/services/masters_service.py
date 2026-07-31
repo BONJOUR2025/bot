@@ -1,10 +1,15 @@
 """Service for fetching and aggregating master works data from Firebird."""
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+
+from app.data.payout_repository import PayoutRepository
+from app.settings import settings
 
 try:
     import fdb  # noqa: F401 -- import-availability probe only, see FIREBIRD_AVAILABLE
@@ -267,6 +272,94 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     return service
 
 
+
+# Firebird gives a master's name as "Фамилия И." (surname + first-name
+# initial) -- confirmed against the real 9 masters currently in the salary
+# report, none of which carry any numeric code (unlike Excel-based staff,
+# whose bot name IS "Имя NNNN" -- an earlier version of this matched on that
+# same convention and silently matched nothing at all for every real master).
+#
+# One real master (out of 9) didn't match at all against production
+# user.json ("Смирнов С." -- no employee with that surname exists), and one
+# matched only because their bot `name` field happens to already mirror
+# Firebird's string exactly: Firebird says "Рудем Г." for an employee whose
+# full_name is "Галиулин Рудем Радикович" (surname Галиулин, not Рудем --
+# Agbis has this one master's card entered given-name-first, unlike
+# everyone else's). Neither is a bug here to fix; a name this inconsistent
+# with itself can't be resolved from the string alone, and forcing a guess
+# risks attributing a real payout to the wrong person, which is worse than
+# leaving it unmatched.
+def _parse_surname_initial(name: str | None) -> tuple[str, str] | None:
+    parts = str(name or "").strip().split()
+    if len(parts) < 2:
+        return None
+    surname = parts[0].strip(".").lower()
+    initial = parts[1].strip(".").upper()
+    if not surname or not initial:
+        return None
+    return surname, initial[0]
+
+
+def _employee_lookup_for_masters() -> tuple[dict[str, str], dict[tuple[str, str], str]]:
+    """Two ways to resolve a Firebird master name to a bot employee id.
+
+    Exact: some employee records have their bot `name` field set to mirror
+    Firebird's own "Фамилия И." exactly (seen on a real account -- Firebird
+    said "Рудем Г.", and that employee's own `name` was already "Рудем Г.",
+    even though their `full_name` doesn't reduce to that at all).
+
+    Fallback: parse (surname, first-initial) out of `full_name`
+    ("Фамилия Имя Отчество", Firebird's usual pattern for everyone else) and
+    match on that. Two employees sharing both a surname and a first initial
+    are ambiguous and dropped from this map entirely -- guessing between
+    them would misattribute a real payout figure to the wrong person, which
+    is worse than not showing one at all.
+    """
+    try:
+        users = json.loads(Path(settings.users_file).read_text(encoding="utf-8"))
+    except Exception:
+        return {}, {}
+
+    exact: dict[str, str] = {}
+    by_surname_initial: dict[tuple[str, str], str] = {}
+    collided: set[tuple[str, str]] = set()
+    for user_id, data in (users or {}).items():
+        data = data or {}
+        uid = str(user_id)
+        name = str(data.get("name") or "").strip()
+        if name:
+            exact.setdefault(name, uid)
+        parsed = _parse_surname_initial(data.get("full_name"))
+        if parsed is None:
+            continue
+        if parsed in by_surname_initial and by_surname_initial[parsed] != uid:
+            collided.add(parsed)
+        else:
+            by_surname_initial[parsed] = uid
+    for key in collided:
+        by_surname_initial.pop(key, None)
+    return exact, by_surname_initial
+
+
+def _advances_since_last_salary_by_master(master_names: list[str]) -> dict[str, float]:
+    """For each Firebird master name, advances taken since their last paid
+    salary -- 0.0 for a name that cannot be matched to an employee record
+    (no bot account, or an ambiguous surname+initial), rather than raising:
+    a salary report that fails outright because one master could not be
+    matched is worse than one entry silently reading 0.
+    """
+    exact, by_surname_initial = _employee_lookup_for_masters()
+    repo = PayoutRepository()
+    out: dict[str, float] = {}
+    for name in master_names:
+        employee_id = exact.get(name)
+        if employee_id is None:
+            parsed = _parse_surname_initial(name)
+            employee_id = by_surname_initial.get(parsed) if parsed else None
+        out[name] = repo.advances_since_last_salary(employee_id)["total"] if employee_id else 0.0
+    return out
+
+
 def _build_salary_summary(service_df: pd.DataFrame) -> list[dict]:
     """Aggregate master salary by master name."""
     if service_df.empty:
@@ -288,6 +381,10 @@ def _build_salary_summary(service_df: pd.DataFrame) -> list[dict]:
         "total_salary":    g["master_salary"].sum().round(2),
         "warnings_count":  g["has_warning"].sum(),
     }).reset_index(drop=True)
+
+    advances = _advances_since_last_salary_by_master(summary["master"].tolist())
+    summary["advances_since_last_salary"] = summary["master"].map(advances).fillna(0.0).round(2)
+    summary["to_pay"] = (summary["total_salary"] - summary["advances_since_last_salary"]).round(2)
 
     return summary.sort_values("total_salary", ascending=False).to_dict(orient="records")
 
