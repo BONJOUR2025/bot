@@ -185,3 +185,36 @@ class TestMasterNameResolution:
         )
         assert out["Иванов И."] == 800.0
         assert out["Безфамильный Х."] == 0.0
+
+
+class TestFindMasterSalaryRow:
+    """The reverse direction: given an employee id, find their row in a
+    salary_summary list -- used by the payout form to show a master's
+    current total without the admin hunting for the matching Firebird name."""
+
+    def test_finds_the_row_matching_employee_id(self, tmp_path, monkeypatch):
+        from app.services import masters_service
+
+        users_file = tmp_path / "user.json"
+        users_file.write_text(json.dumps({
+            "5551112233": {"name": "Ваня", "full_name": "Иванов Иван Иванович"},
+        }, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(masters_service.settings, "users_file", str(users_file))
+
+        summary = [
+            {"master": "Иванов И.", "total_salary": 50000.0},
+            {"master": "Другой Д.", "total_salary": 30000.0},
+        ]
+        row = masters_service.find_master_salary_row("5551112233", summary)
+        assert row is not None
+        assert row["total_salary"] == 50000.0
+
+    def test_returns_none_when_no_row_matches(self, tmp_path, monkeypatch):
+        from app.services import masters_service
+
+        users_file = tmp_path / "user.json"
+        users_file.write_text(json.dumps({}, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(masters_service.settings, "users_file", str(users_file))
+
+        summary = [{"master": "Иванов И.", "total_salary": 50000.0}]
+        assert masters_service.find_master_salary_row("999", summary) is None

@@ -642,6 +642,8 @@ export default function Payouts() {
   const [showActivity, setShowActivity] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [dayFilter, setDayFilter] = useState(null);
+  const [salaryContext, setSalaryContext] = useState(null);
+  const [salaryContextLoading, setSalaryContextLoading] = useState(false);
 
   useEffect(() => {
     loadEmployees();
@@ -651,6 +653,31 @@ export default function Payouts() {
   useEffect(() => {
     load();
   }, [filters]);
+
+  // Общая ЗП / к выплате для выбранного в форме сотрудника — маршрутизация
+  // по должности происходит на бэкенде (payouts/salary-context).
+  useEffect(() => {
+    if (!showEditor || !form.user_id) {
+      setSalaryContext(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setSalaryContextLoading(true);
+    api
+      .get('payouts/salary-context', { params: { employee_id: form.user_id } })
+      .then((res) => {
+        if (!cancelled) setSalaryContext(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setSalaryContext(null);
+      })
+      .finally(() => {
+        if (!cancelled) setSalaryContextLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showEditor, form.user_id]);
 
   const employeesByPosition = useMemo(() => {
     const displayName = (e) => (useFullName ? e.full_name || e.name : e.name || e.full_name) || '';
@@ -1547,6 +1574,43 @@ export default function Payouts() {
                 </optgroup>
               ))}
             </select>
+            {form.user_id && (
+              <div className="text-sm border rounded-md p-2 bg-[color:var(--color-bg-subtle)] space-y-0.5">
+                {salaryContextLoading ? (
+                  <div className="text-[color:var(--color-text-muted)]">Загрузка данных о зарплате…</div>
+                ) : salaryContext?.found ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-[color:var(--color-text-muted)]">Общая ЗП</span>
+                      <span className="font-medium">
+                        {salaryContext.total_salary != null
+                          ? `${salaryContext.total_salary.toLocaleString('ru-RU')} ₽`
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[color:var(--color-text-muted)]">Аванс с посл. ЗП</span>
+                      <span className="font-medium">
+                        {salaryContext.advances_since_last_salary.toLocaleString('ru-RU')} ₽
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[color:var(--color-text-muted)]">К выплате</span>
+                      <span className="font-semibold">
+                        {salaryContext.to_pay != null
+                          ? `${salaryContext.to_pay.toLocaleString('ru-RU')} ₽`
+                          : '—'}
+                      </span>
+                    </div>
+                    {salaryContext.note && (
+                      <div className="text-xs text-amber-600 pt-1">{salaryContext.note}</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-[color:var(--color-text-muted)]">Нет данных о зарплате</div>
+                )}
+              </div>
+            )}
             <div className="text-sm text-[color:var(--color-text-muted)]">
               Карта: <span className="font-medium">{form.card_number || '—'}</span>
             </div>

@@ -302,6 +302,19 @@ def create_payout_router(
             return FileResponse(Path(path), filename=Path(path).name)
         raise HTTPException(status_code=404, detail="No data")
 
+    @router.get("/salary-context")
+    async def salary_context(
+        employee_id: str,
+        current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
+    ):
+        """Общая ЗП и к выплате для сотрудника, для формы создания выплаты
+        (маршрутизация по должности: мастер/курьер/менеджер/остальные)."""
+        if not access_service.is_employee_visible(current, employee_id):
+            raise HTTPException(status_code=403, detail="forbidden")
+        from app.services.salary_context import get_salary_context
+
+        return await get_salary_context(employee_id)
+
     @router.get("/control")
     async def payouts_control(
         date_from: Optional[str] = None,

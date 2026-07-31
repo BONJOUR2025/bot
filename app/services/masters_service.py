@@ -341,6 +341,33 @@ def _employee_lookup_for_masters() -> tuple[dict[str, str], dict[tuple[str, str]
     return exact, by_surname_initial
 
 
+def _resolve_master_employee_id(
+    name: str,
+    exact: dict[str, str],
+    by_surname_initial: dict[tuple[str, str], str],
+) -> str | None:
+    employee_id = exact.get(name)
+    if employee_id is None:
+        parsed = _parse_surname_initial(name)
+        employee_id = by_surname_initial.get(parsed) if parsed else None
+    return employee_id
+
+
+def find_master_salary_row(employee_id: str, salary_summary: list[dict]) -> dict | None:
+    """The reverse direction: given a bot employee id (e.g. one just picked in
+    the payout form), find their row in a masters `salary_summary` list (as
+    returned by fetch_works), so the payout form can show a master's current
+    total the same way the masters page itself does -- without asking the
+    admin to go find the matching Firebird name by hand.
+    """
+    exact, by_surname_initial = _employee_lookup_for_masters()
+    target = str(employee_id)
+    for row in salary_summary:
+        if _resolve_master_employee_id(row.get("master", ""), exact, by_surname_initial) == target:
+            return row
+    return None
+
+
 def _advances_since_last_salary_by_master(master_names: list[str]) -> dict[str, float]:
     """For each Firebird master name, advances taken since their last paid
     salary -- 0.0 for a name that cannot be matched to an employee record
@@ -352,10 +379,7 @@ def _advances_since_last_salary_by_master(master_names: list[str]) -> dict[str, 
     repo = PayoutRepository()
     out: dict[str, float] = {}
     for name in master_names:
-        employee_id = exact.get(name)
-        if employee_id is None:
-            parsed = _parse_surname_initial(name)
-            employee_id = by_surname_initial.get(parsed) if parsed else None
+        employee_id = _resolve_master_employee_id(name, exact, by_surname_initial)
         out[name] = repo.advances_since_last_salary(employee_id)["total"] if employee_id else 0.0
     return out
 
