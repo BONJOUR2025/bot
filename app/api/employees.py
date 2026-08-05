@@ -40,10 +40,12 @@ def create_employee_router(
         search: str = "",
         current: ResolvedUser = Depends(get_current_user),
     ):
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
-        svc = get_firebird_service()
+        from app.services import fdb_cache
+        from app.services.firebird_service import run_with_timeout
         try:
-            return await run_with_timeout(svc.get_users_list, search=search)
+            # Only the unfiltered listing is warmed — a search string is
+            # unbounded, so those stay live queries.
+            return await run_with_timeout(fdb_cache.get_or_compute, "employees.users_list", (search or "",))
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
 

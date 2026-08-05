@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,9 +30,15 @@ def create_salons_router(repo: SalonRepository) -> APIRouter:
     async def list_sclads(
         current=Depends(require_permission("salons")),
     ):
-        from app.services.firebird_service import get_firebird_service
+        from app.services.firebird_service import run_with_timeout
+        from app.services import fdb_cache
 
-        return get_firebird_service().get_sclads_list()
+        # Was a bare blocking call in an async handler — on a contended
+        # Firebird that stalls the whole event loop, not just this request.
+        try:
+            return await run_with_timeout(fdb_cache.get_or_compute, "salons.sclads", ())
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова чуть позже.")
 
     @router.get("/{salon_id}", response_model=Salon)
     async def get_salon(

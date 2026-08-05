@@ -8,6 +8,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .dependencies import require_permission
+# Safe to import at module load: fdb_cache resolves the Firebird service
+# lazily, so this does not pull the fdb driver import into the API startup
+# path. Every handler below reads through it — a hit returns a report the
+# warmer already computed, a miss falls through to the same live query
+# these endpoints ran before (see app/services/fdb_cache).
+from app.services import fdb_cache
 
 
 def _resolve_range(date_from: Optional[date], date_to: Optional[date]) -> tuple[date, date]:
@@ -51,12 +57,13 @@ def create_sales_router() -> APIRouter:
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return daily repair + cosmetics sales by employee for a date range."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
-            return await run_with_timeout(svc.get_daily_sales, df, dt, _parse_salon_ids(salon_ids))
+            return await run_with_timeout(
+                fdb_cache.get_or_compute, "sales.daily", (df, dt, _parse_salon_ids(salon_ids)),
+            )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
         except Exception as exc:
@@ -69,12 +76,13 @@ def create_sales_router() -> APIRouter:
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return new-vs-returning client counts for a date range."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
-            return await run_with_timeout(svc.get_client_retention, df, dt, _parse_salon_ids(salon_ids))
+            return await run_with_timeout(
+                fdb_cache.get_or_compute, "sales.client_retention", (df, dt, _parse_salon_ids(salon_ids)),
+            )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
         except Exception as exc:
@@ -87,12 +95,13 @@ def create_sales_router() -> APIRouter:
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return gross-margin breakdown (repair/cosmetics, by employee) for a date range."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
-            return await run_with_timeout(svc.get_margin_summary, df, dt, _parse_salon_ids(salon_ids))
+            return await run_with_timeout(
+                fdb_cache.get_or_compute, "sales.margin", (df, dt, _parse_salon_ids(salon_ids)),
+            )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
         except Exception as exc:
@@ -107,13 +116,13 @@ def create_sales_router() -> APIRouter:
         categories: Optional[str] = Query(default=None, description="Comma-separated category keys"),
     ):
         """Return order fulfillment time (accepted → "Исполненный") and lateness rate by salon."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
             return await run_with_timeout(
-                svc.get_turnaround_stats, df, dt, _parse_salon_ids(salon_ids), service_search, _parse_csv_list(categories),
+                fdb_cache.get_or_compute, "sales.turnaround",
+                (df, dt, _parse_salon_ids(salon_ids), service_search, _parse_csv_list(categories)),
             )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
@@ -126,12 +135,11 @@ def create_sales_router() -> APIRouter:
         date_to: Optional[date] = Query(default=None),
     ):
         """Return unpaid/partially-paid orders created in a date range."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
-            return await run_with_timeout(svc.get_receivables, df, dt)
+            return await run_with_timeout(fdb_cache.get_or_compute, "sales.receivables", (df, dt))
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
         except Exception as exc:
@@ -142,14 +150,13 @@ def create_sales_router() -> APIRouter:
         days: int = Query(default=90, ge=1, le=1095),
     ):
         """Return orders past their promised pickup date with no actual pickup yet."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
+        from app.services.firebird_service import run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
 
         try:
-            svc = get_firebird_service()
-            return await run_with_timeout(svc.get_unclaimed_orders, days)
+            return await run_with_timeout(fdb_cache.get_or_compute, "sales.unclaimed", (days,))
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
         except Exception as exc:
@@ -163,13 +170,13 @@ def create_sales_router() -> APIRouter:
         categories: Optional[str] = Query(default=None, description="Comma-separated category keys"),
     ):
         """Return returned-order counts/amounts by employee for a date range."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
             return await run_with_timeout(
-                svc.get_returns_summary, df, dt, _parse_salon_ids(salon_ids), _parse_csv_list(categories),
+                fdb_cache.get_or_compute, "sales.returns",
+                (df, dt, _parse_salon_ids(salon_ids), _parse_csv_list(categories)),
             )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
@@ -183,12 +190,13 @@ def create_sales_router() -> APIRouter:
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
     ):
         """Return revenue/volume throughput per work place (repair intake/dispatch checkpoints) for a date range."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
-            return await run_with_timeout(svc.get_workplace_summary, df, dt, _parse_salon_ids(salon_ids))
+            return await run_with_timeout(
+                fdb_cache.get_or_compute, "sales.workplaces", (df, dt, _parse_salon_ids(salon_ids)),
+            )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
         except Exception as exc:
@@ -203,14 +211,14 @@ def create_sales_router() -> APIRouter:
         employee_codes: Optional[str] = Query(default=None, description="Comma-separated employee codes"),
     ):
         """Return revenue/order comparison by salon for a date range."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
             return await run_with_timeout(
-                svc.get_department_comparison, df, dt, _parse_salon_ids(salon_ids),
-                _parse_csv_list(categories), _parse_csv_list(employee_codes),
+                fdb_cache.get_or_compute, "sales.departments",
+                (df, dt, _parse_salon_ids(salon_ids),
+                 _parse_csv_list(categories), _parse_csv_list(employee_codes)),
             )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
@@ -227,14 +235,14 @@ def create_sales_router() -> APIRouter:
         employee_codes: Optional[str] = Query(default=None, description="Comma-separated employee codes"),
     ):
         """Return top/bottom-selling SKUs and biggest risers/fallers vs the preceding period."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
 
         df, dt = _resolve_range(date_from, date_to)
         try:
-            svc = get_firebird_service()
             return await run_with_timeout(
-                svc.get_top_products, df, dt, limit, _parse_salon_ids(salon_ids),
-                _parse_csv_list(categories), _parse_csv_list(employee_codes),
+                fdb_cache.get_or_compute, "sales.top_products",
+                (df, dt, limit, _parse_salon_ids(salon_ids),
+                 _parse_csv_list(categories), _parse_csv_list(employee_codes)),
             )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")

@@ -34,6 +34,11 @@ def get_db():
 
 def init_db() -> None:
     """Create all tables that don't exist yet."""
+    # Imported for its side effect of registering the table with Base —
+    # the warmer process creates this table and the API process reads it,
+    # so neither can rely on the other having imported the model first.
+    from app.models.fdb_cache import FdbCacheEntry  # noqa: F401
+
     Base.metadata.create_all(bind=engine)
     _migrate_columns()
     _run_migrations()

@@ -212,8 +212,10 @@ def create_cash_moves_router(
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
+        from app.services import fdb_cache
+
         try:
-            return await run_with_timeout(get_firebird_service().get_cash_balances)
+            return await run_with_timeout(fdb_cache.get_or_compute, "cash.balances", ())
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова чуть позже.")
 
@@ -244,10 +246,11 @@ def create_cash_moves_router(
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
         if kassa_id not in CASH_BALANCE_KASSA_IDS:
             raise HTTPException(status_code=400, detail="Неизвестная касса.")
+        from app.services import fdb_cache
+
         try:
             data = await run_with_timeout(
-                get_firebird_service().get_daily_cash_balances,
-                kassa_id, date_from, date_to,
+                fdb_cache.get_or_compute, "cash.daily_balances", (kassa_id, date_from, date_to),
             )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
@@ -282,11 +285,15 @@ def create_cash_moves_router(
         date_to: Optional[date] = Query(None),
         _=Depends(perm),
     ):
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
+        from app.services.firebird_service import run_with_timeout
+        from app.services import fdb_cache
         from app.data.payout_repository import PayoutRepository
         from app.services.users import get_external_code_to_name_map
         try:
-            rows = await run_with_timeout(get_firebird_service().get_cash_moves, date_from=date_from, date_to=date_to)
+            # Positional args, matching the warmer's cache key — the
+            # keyword form this used to pass would hash to a different key
+            # and never hit.
+            rows = await run_with_timeout(fdb_cache.get_or_compute, "cash.moves", (date_from, date_to))
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
         assignments = repo.get_assignments()

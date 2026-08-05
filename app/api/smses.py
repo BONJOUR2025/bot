@@ -17,10 +17,10 @@ def create_smses_router() -> APIRouter:
         date_to: Optional[date] = Query(None),
         _=Depends(perm),
     ):
-        from app.services.firebird_service import get_firebird_service, run_with_timeout
-        svc = get_firebird_service()
+        from app.services import fdb_cache
+        from app.services.firebird_service import run_with_timeout
         try:
-            return await run_with_timeout(svc.get_smses, date_from=date_from, date_to=date_to)
+            return await run_with_timeout(fdb_cache.get_or_compute, "smses.list", (date_from, date_to))
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
 

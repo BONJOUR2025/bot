@@ -26,6 +26,7 @@ PROCESS_LABELS = {
     "vk_bot": "VK-бот",
     "api_server": "Веб-сервер / админка",
     "xtunnel": "Туннель (xtunnel)",
+    "fdb_warmer": "Прогрев кэша Agbis",
 }
 # Heartbeat name -> pm2 process name (see deploy.ps1 for the pm2 fleet).
 PROCESS_TO_PM2 = {
@@ -33,6 +34,7 @@ PROCESS_TO_PM2 = {
     "vk_bot": "bot-vk",
     "api_server": "bot-app",
     "xtunnel": "xtunnel",
+    "fdb_warmer": "bot-warmer",
 }
 # xtunnel is a compiled binary, not one of our own processes — there's no
 # write_heartbeat() call we can add to it, so its status/restart-detection
@@ -273,6 +275,44 @@ def create_system_router() -> APIRouter:
         for name in PM2_STATUS_PROCESSES:
             items.append(await asyncio.to_thread(_pm2_process_status, name))
         return {"processes": sorted(items, key=lambda x: x["name"])}
+
+    @router.get("/fdb-cache")
+    async def fdb_cache_status(_=Depends(perm)):
+        """State of the precomputed Agbis report cache: one row per report
+        the warmer is meant to keep hot, with how old it actually is.
+
+        This is the panel that answers "why is this page slow again" —
+        a report showing as просрочен (or missing entirely) means readers
+        are falling back to live Firebird queries for it.
+        """
+        from app.services import fdb_cache
+
+        def _collect() -> list[dict]:
+            items = []
+            for report, args, tier in fdb_cache.warm_plan():
+                spec = fdb_cache.TIERS[tier]
+                # age_of, not peek: this runs over the whole plan every
+                # 30s and only needs the timestamp, never the payload.
+                age = fdb_cache.age_of(report, args)
+                items.append({
+                    "report": report,
+                    "args": fdb_cache.encode_args(args),
+                    "tier": tier,
+                    "ttl_s": spec.ttl_s,
+                    "refresh_s": spec.refresh_s,
+                    "age_s": round(age) if age is not None else None,
+                    "fresh": age is not None and age <= spec.ttl_s,
+                })
+            return items
+
+        entries = await asyncio.to_thread(_collect)
+        fresh = sum(1 for e in entries if e["fresh"])
+        return {
+            "entries": entries,
+            "total": len(entries),
+            "fresh": fresh,
+            "stale": len(entries) - fresh,
+        }
 
     @router.post("/process-status/{name}/restart")
     async def restart_process(name: str, _=Depends(perm)):

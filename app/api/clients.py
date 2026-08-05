@@ -26,6 +26,9 @@ def create_clients_router() -> APIRouter:
 
         try:
             svc = get_firebird_service()
+            # Not cached: a free-text query is an unbounded key space, and
+            # this already has its own 45s in-process cache for the
+            # type-ahead's repeated keystrokes.
             return await run_with_timeout(svc.search_clients, q)
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
@@ -38,14 +41,16 @@ def create_clients_router() -> APIRouter:
         min_orders: int = Query(default=3, ge=2, le=50),
     ):
         """Return clients who used to order regularly and have gone quiet."""
-        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
+        from app.services import fdb_cache
+        from app.services.firebird_service import run_with_timeout, FIREBIRD_AVAILABLE
 
         if not FIREBIRD_AVAILABLE:
             raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
 
         try:
-            svc = get_firebird_service()
-            return await run_with_timeout(svc.get_churning_clients, lookback_days, min_orders)
+            return await run_with_timeout(
+                fdb_cache.get_or_compute, "clients.churning", (lookback_days, min_orders),
+            )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
         except Exception as exc:

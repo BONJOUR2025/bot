@@ -125,6 +125,77 @@ function ProcessStatusPanel() {
   );
 }
 
+// Precomputed Agbis reports. The Firebird server behind them is slow and
+// erratic by nature (see app/services/fdb_cache), so pages are served from
+// this cache; a report showing here as просрочен means users are waiting
+// on a live query for it again.
+function FdbCachePanel() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await api.get('system/fdb-cache');
+      setData(res.data);
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const entries = data?.entries || [];
+  const shown = expanded ? entries : entries.filter((e) => !e.fresh);
+
+  return (
+    <Section title="Прогрев отчётов Agbis">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <span className="text-xs text-[color:var(--color-muted-foreground)]">
+          {data
+            ? `Готово ${data.fresh} из ${data.total}${data.stale ? ` · просрочено ${data.stale}` : ''}`
+            : 'Нет данных'}
+        </span>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setExpanded((v) => !v)} className="btn text-xs px-2 py-1">
+            {expanded ? 'Только просроченные' : 'Показать все'}
+          </button>
+          <button type="button" onClick={load} disabled={loading} className="btn text-xs p-1.5 disabled:opacity-50">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+      </div>
+      {shown.length === 0 ? (
+        <p className="text-xs text-[color:var(--color-muted-foreground)]">
+          {entries.length ? 'Все отчёты прогреты.' : 'Прогреватель ещё не отработал ни одного цикла.'}
+        </p>
+      ) : (
+        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+          {shown.map((e) => (
+            <div key={`${e.report}${e.args}`} className="flex items-center justify-between gap-2 text-xs border border-[color:var(--color-border)] rounded-md px-2 py-1.5">
+              <div className="min-w-0 flex items-center gap-2">
+                <Circle size={8} className={`shrink-0 ${e.fresh ? 'fill-green-500 text-green-500' : 'fill-amber-500 text-amber-500'}`} />
+                <span className="font-mono truncate">{e.report}</span>
+                <span className="text-[color:var(--color-muted-foreground)] truncate hidden sm:inline">{e.args}</span>
+              </div>
+              <span className="shrink-0 text-[color:var(--color-muted-foreground)]">
+                {e.tier} · {formatAge(e.age_s)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 export default function SettingsDiagnostics() {
   const { toast } = useToast();
   const [folders, setFolders] = useState([]);
@@ -201,6 +272,7 @@ export default function SettingsDiagnostics() {
     return (
       <div className="space-y-6 max-w-6xl">
         <ProcessStatusPanel />
+        <FdbCachePanel />
         <Section title="Диагностика — журналы">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-[color:var(--color-muted-foreground)]">

@@ -623,3 +623,29 @@ def _fetch_works_uncached(
     ]
 
     return {"services": services, "salary_summary": salary_summary}
+
+
+# Widest range this endpoint will answer. Measured against production:
+# with no dates at all it returned the entire history — 100 MB of JSON
+# after 123 s, which pins one Firebird connection for two minutes and
+# evicts everyone else's pages from the OS file cache on the way. The
+# frontend always sends a range (month-to-date by default), so this only
+# constrains direct API callers.
+MAX_WORKS_RANGE_DAYS = 366
+
+
+def resolve_works_range(
+    date_from: Optional[date], date_to: Optional[date]
+) -> tuple[date, date, bool]:
+    """(date_from, date_to, clamped). Missing dates mean the current
+    month rather than all of history."""
+    today = date.today()
+    dt = date_to or today
+    df = date_from or dt.replace(day=1)
+    if df > dt:
+        df, dt = dt, df
+    clamped = False
+    if (dt - df).days + 1 > MAX_WORKS_RANGE_DAYS:
+        df = dt - timedelta(days=MAX_WORKS_RANGE_DAYS - 1)
+        clamped = True
+    return df, dt, clamped
