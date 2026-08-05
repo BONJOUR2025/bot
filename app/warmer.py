@@ -112,6 +112,7 @@ class Warmer:
         self.consecutive_failures = 0
         self.last_alert_at: float | None = None
         self.last_cycle: dict = {}
+        self.last_pass_started: float | None = None
 
     def compute(self, report: str, args) -> None:
         """One warm query, bounded by WARM_QUERY_TIMEOUT_S.
@@ -134,6 +135,12 @@ class Warmer:
         heartbeat/status panel."""
         now = now or datetime.now()
         started = time.time()
+        # Wall time this pass accounts for: from the previous pass's start,
+        # so the idle gap between passes counts too. Dividing by the pass
+        # duration alone would report a warmer that works 3s every 40s as
+        # "27% busy" instead of the 7% it actually costs the Agbis server.
+        window = None if self.last_pass_started is None else started - self.last_pass_started
+        self.last_pass_started = started
         warmed = skipped = failed = 0
         busy_s = 0.0
         errors: list[str] = []
@@ -164,14 +171,18 @@ class Warmer:
             # when backing off matters most.
             time.sleep(max(MIN_PAUSE_S, min(MAX_PAUSE_S, duration * PACING_RATIO)))
 
-        elapsed = time.time() - started
+        finished = time.time()
+        elapsed = finished - started
+        # Fall back to the pass duration only on the very first pass, when
+        # there is no previous start to measure the window from.
+        measured_over = window if window is not None else (finished - started)
         return {
             "warmed": warmed,
             "skipped": skipped,
             "failed": failed,
             "cycle_s": round(elapsed, 1),
             "firebird_busy_s": round(busy_s, 1),
-            "busy_pct": round(100 * busy_s / elapsed, 1) if elapsed > 0 else 0.0,
+            "busy_pct": round(100 * busy_s / measured_over, 1) if measured_over > 0 else 0.0,
             "errors": errors[:5],
             "finished_at": datetime.now().isoformat(timespec="seconds"),
         }

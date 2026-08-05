@@ -179,3 +179,25 @@ class TestHeartbeat:
         assert captured["warmed"] == 2
         # Error strings can be long and are shown in the cache panel instead.
         assert "errors" not in captured
+
+
+class TestBusyMetric:
+    def test_duty_cycle_counts_the_idle_gap_between_passes(self, monkeypatch, alerts):
+        """busy_pct is what the operator reads to judge how much load the
+        warmer puts on the Agbis server. Measuring it against the pass
+        duration alone would report ~27% for a warmer that in fact works
+        3s out of every 40 — the idle gap has to be in the denominator."""
+        _plan(monkeypatch, [("a", (), "hot")])
+        _due(monkeypatch, True)
+        monkeypatch.setattr(Warmer, "compute", lambda self, r, a: None)
+
+        # t: pass1 start=0, query 0->2, pass1 end=2; pass2 start=40, query
+        # 40->42, pass2 end=42.  Window for pass 2 is 40s, busy is 2s.
+        ticks = iter([0.0, 0.0, 2.0, 2.0, 40.0, 40.0, 42.0, 42.0])
+        monkeypatch.setattr(warmer_mod.time, "time", lambda: next(ticks, 42.0))
+
+        w = Warmer()
+        w.run_pass()
+        second = w.run_pass()
+        assert second["firebird_busy_s"] == 2.0
+        assert second["busy_pct"] == 5.0
