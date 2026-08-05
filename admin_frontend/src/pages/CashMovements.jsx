@@ -706,7 +706,12 @@ function DayEntries({ entries }) {
                 }`}>{e.basis_name || '—'}</span>
                 {e.doc_num && <span className="font-mono text-[color:var(--color-muted-foreground)]">№{e.doc_num}</span>}
               </div>
-              {e.basis_text && <div className="mt-0.5 break-words text-[color:var(--color-muted-foreground)]">{e.basis_text}</div>}
+              {e.basis_text && <div className="mt-0.5 break-words">{e.basis_text}</div>}
+              {/* Направление перевода. Показывается только когда основание
+                  пришло с документа перемещения и вытеснило его отсюда. */}
+              {e.transfer_text && (
+                <div className="mt-0.5 break-words text-[color:var(--color-muted-foreground)]">{e.transfer_text}</div>
+              )}
             </div>
             <span className="text-[color:var(--color-muted-foreground)] shrink-0 hidden sm:inline max-w-[10rem] truncate">{e.user_name || '—'}</span>
             <span className={`tabular-nums font-medium shrink-0 ${e.debet ? 'text-green-600' : 'text-red-500'}`}>

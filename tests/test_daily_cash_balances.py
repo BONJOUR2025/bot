@@ -22,10 +22,11 @@ class _FakeCursor:
     """Dispatches on the SQL text, since get_daily_cash_balances runs its
     four queries through one cursor in a fixed order."""
 
-    def __init__(self, baseline, daily, entries, kassa_name):
+    def __init__(self, baseline, daily, entries, kassa_name, moves=()):
         self._baseline = baseline
         self._daily = daily
         self._entries = entries
+        self._moves = moves
         self._kassa_name = kassa_name
         self._result = None
 
@@ -35,6 +36,8 @@ class _FakeCursor:
             self._result = [(self._kassa_name,)]
         elif "group by d.doc_date" in lowered:
             self._result = list(self._daily)
+        elif "from doc_kassa_moves" in lowered:
+            self._result = list(self._moves)
         elif "doc_kassa_basises" in lowered:
             self._result = list(self._entries)
         else:
@@ -65,8 +68,8 @@ def stub_firebird(monkeypatch):
     a test can assert it was closed."""
     holder = {}
 
-    def install(baseline=0.0, daily=(), entries=(), kassa_name="5_Пассаж"):
-        conn = _FakeConn(_FakeCursor(baseline, daily, entries, kassa_name))
+    def install(baseline=0.0, daily=(), entries=(), kassa_name="5_Пассаж", moves=()):
+        conn = _FakeConn(_FakeCursor(baseline, daily, entries, kassa_name, moves))
         holder["conn"] = conn
         monkeypatch.setattr(fb, "_connect", lambda *a, **k: conn)
         monkeypatch.setattr(fb, "FIREBIRD_AVAILABLE", True)
@@ -198,7 +201,7 @@ class TestEntries:
             entries=[(
                 _day("2026-08-01"), dt.time(16, 45, 12), " 00459 ",
                 "Оплата по заказу № 37065-7", 11317,
-                10725995, 0, "Реализация (розница) ", 2500.0, 0.0,
+                10725995, 900001, 0, "Реализация (розница) ", 2500.0, 0.0,
             )],
         )
         res = FirebirdService().get_daily_cash_balances(21066, _day("2026-08-01"), _day("2026-08-01"))
@@ -219,7 +222,7 @@ class TestEntries:
         stub_firebird(
             baseline=0.0,
             daily=[(_day("2026-08-01"), 100.0, 0.0, 0.0, 1)],
-            entries=[(_day("2026-08-01"), None, None, None, None, 1, 999, None, 100.0, 0.0)],
+            entries=[(_day("2026-08-01"), None, None, None, None, 1, 900002, 999, None, 100.0, 0.0)],
         )
         res = FirebirdService().get_daily_cash_balances(21066, _day("2026-08-01"), _day("2026-08-01"))
         entry = res["entries"][0]
@@ -263,3 +266,54 @@ class TestKassaName:
         stub_firebird(baseline=0.0, daily=[], kassa_name="1_Озерки")
         res = FirebirdService().get_daily_cash_balances(21057, _day("2026-08-01"), _day("2026-08-01"))
         assert res["kassa_name"] == "1_Озерки"
+
+
+class TestTransferBasis:
+    """Инкассация carries two different "basis" strings, and only one of
+    them is worth reading. DOCS.BASIS is boilerplate Agbis writes itself
+    ("Расход на кассу: Основная"); DOC_KASSA_MOVES.BASIS is what a person
+    typed ("зарплата_академ_2201_аванс 2201")."""
+
+    def test_operator_reason_replaces_the_boilerplate(self, stub_firebird):
+        stub_firebird(
+            baseline=0.0,
+            daily=[(_day("2026-08-02"), 0.0, 0.0, 25000.0, 1)],
+            entries=[(
+                _day("2026-08-02"), dt.time(21, 45), "", "Расход на кассу: Основная", 1136,
+                10592333, 105500708, 93, "Инкассация", 0.0, 25000.0,
+            )],
+            moves=[(105500708, 105500709, "зарплата_академ_2201_аванс 2201", "156")],
+        )
+        res = FirebirdService().get_daily_cash_balances(10564, _day("2026-08-02"), _day("2026-08-02"))
+        entry = res["entries"][0]
+        assert entry["basis_text"] == "зарплата_академ_2201_аванс 2201"
+        # The direction is kept, just demoted — it's still the only thing
+        # saying where the money went.
+        assert entry["transfer_text"] == "Расход на кассу: Основная"
+
+    def test_document_number_falls_back_to_the_transfer_number(self, stub_firebird):
+        """Transfer documents leave DOCS.DOC_NUM empty and carry their own."""
+        stub_firebird(
+            baseline=0.0,
+            daily=[(_day("2026-08-02"), 0.0, 0.0, 25000.0, 1)],
+            entries=[(
+                _day("2026-08-02"), dt.time(21, 45), "  ", "Расход на кассу: Основная", 1136,
+                1, 105500708, 93, "Инкассация", 0.0, 25000.0,
+            )],
+            moves=[(105500708, 105500709, "зарплата", "156")],
+        )
+        res = FirebirdService().get_daily_cash_balances(10564, _day("2026-08-02"), _day("2026-08-02"))
+        assert res["entries"][0]["doc_num"] == "156"
+
+    def test_ordinary_sale_keeps_its_own_basis_and_no_transfer_line(self, stub_firebird):
+        stub_firebird(
+            baseline=0.0,
+            daily=[(_day("2026-08-01"), 2500.0, 0.0, 0.0, 1)],
+            entries=[(
+                _day("2026-08-01"), dt.time(16, 45), "00459", "Оплата по заказу № 37065-7", 11317,
+                1, 900003, 0, "Реализация (розница)", 2500.0, 0.0,
+            )],
+        )
+        entry = FirebirdService().get_daily_cash_balances(21066, _day("2026-08-01"), _day("2026-08-01"))["entries"][0]
+        assert entry["basis_text"] == "Оплата по заказу № 37065-7"
+        assert entry["transfer_text"] == ""

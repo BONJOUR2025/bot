@@ -2968,12 +2968,31 @@ class FirebirdService:
         """
         entries_sql = """
             SELECT d.doc_date, d.doc_time, d.doc_num, d.basis, d.user_id,
-                   dk.id, dk.basis_id, b.name, dk.debet, dk.kredit
+                   dk.id, dk.doc_id, dk.basis_id, b.name, dk.debet, dk.kredit
             FROM docs_kassa dk
                 INNER JOIN docs d ON d.doc_id = dk.doc_id
                 LEFT JOIN doc_kassa_basises b ON b.id = dk.basis_id
             WHERE dk.kassa_id = ? AND d.doc_date >= ? AND d.doc_date <= ?
             ORDER BY d.doc_date, d.doc_time
+        """
+        # DOCS.BASIS for a transfer is boilerplate Agbis generates itself
+        # ("Расход на кассу: Основная"); the reason a person actually typed
+        # lives on the transfer document, DOC_KASSA_MOVES.BASIS
+        # ("зарплата_академ_2201_аванс 2201") — the same field the Движения
+        # tab categorises by. DOC_KRE_ID/DOC_DEB_ID point straight at the
+        # DOCS rows of both sides, so the mapping is exact rather than a
+        # guess on date+amount+register (7 pairs in 2026 alone share all
+        # three, and guessing would caption a real cash movement with
+        # someone else's reason).
+        #
+        # Joined in Python, not in SQL: neither DOC_KRE_ID nor DOC_DEB_ID is
+        # indexed, so two LEFT JOINs took a year-wide query from 0.45s to
+        # 10.7s. Pulling the whole (small — ~1200 rows/year) transfer table
+        # for the range and mapping it here costs a fraction of that.
+        moves_sql = """
+            SELECT doc_kre_id, doc_deb_id, basis, doc_num
+            FROM doc_kassa_moves
+            WHERE dk_date >= ? AND dk_date <= ?
         """
         try:
             con = _connect()
@@ -2985,6 +3004,8 @@ class FirebirdService:
                 daily_rows = cur.fetchall()
                 cur.execute(entries_sql, (kassa_id, date_from, date_to))
                 entry_rows = cur.fetchall()
+                cur.execute(moves_sql, (date_from, date_to))
+                move_rows = cur.fetchall()
                 cur.execute("SELECT name FROM kasses WHERE id = ?", (kassa_id,))
                 name_row = cur.fetchone()
             finally:
@@ -3016,17 +3037,31 @@ class FirebirdService:
             })
             cursor_date += timedelta(days=1)
 
+        # doc_id (either side of the transfer) -> (reason, transfer doc number)
+        move_by_doc: dict = {}
+        for kre_id, deb_id, basis, move_num in move_rows:
+            for doc_id in (kre_id, deb_id):
+                if doc_id is not None:
+                    move_by_doc[doc_id] = ((basis or "").strip(), (move_num or "").strip())
+
         entries = []
         for (doc_date, doc_time, doc_num, doc_basis, user_id,
-             entry_id, basis_id, basis_name, debet, kredit) in entry_rows:
+             entry_id, entry_doc_id, basis_id, basis_name, debet, kredit) in entry_rows:
+            move_text, move_num = move_by_doc.get(entry_doc_id, ("", ""))
+            transfer_text = (doc_basis or "").strip()
             entries.append({
                 "id": entry_id,
                 "date": doc_date.isoformat() if isinstance(doc_date, date) else str(doc_date or ""),
                 "time": doc_time.strftime("%H:%M") if hasattr(doc_time, "strftime") else "",
-                "doc_num": (doc_num or "").strip(),
+                "doc_num": (doc_num or "").strip() or (move_num or "").strip(),
                 "basis_id": basis_id,
                 "basis_name": (basis_name or "").strip(),
-                "basis_text": (doc_basis or "").strip(),
+                # What the operator wrote, when there is one — otherwise
+                # whatever the document itself says.
+                "basis_text": move_text or transfer_text,
+                # Kept separately so the transfer's direction ("Расход на
+                # кассу: Основная") isn't lost when a real reason replaces it.
+                "transfer_text": transfer_text if move_text else "",
                 "debet": round(float(debet or 0), 2),
                 "kredit": round(float(kredit or 0), 2),
                 "user_id": str(user_id or ""),
