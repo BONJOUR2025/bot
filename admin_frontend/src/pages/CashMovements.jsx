@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   Search, X, AlertTriangle, CheckCircle, Download, RefreshCw,
-  ChevronUp, ChevronDown, ChevronsUpDown,
+  ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight,
   Tag, Settings, Plus, Trash2, Edit2, Check, Building2,
   LinkIcon, Unlink, BarChart3, TrendingUp, Wallet, ArrowUpDown,
+  CalendarDays, Info,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -34,6 +35,12 @@ const isoToday    = ()          => new Date().toISOString().slice(0, 10);
 const isoMStart   = (offset=0) => { const d=new Date(); d.setMonth(d.getMonth()+offset,1);   return d.toISOString().slice(0,10); };
 const isoMEnd     = (offset=0) => { const d=new Date(); d.setMonth(d.getMonth()+offset+1,0); return d.toISOString().slice(0,10); };
 const isoYStart   = ()          => `${new Date().getFullYear()}-01-01`;
+const isoMinusDays = (iso, n)  => { const d=new Date(iso); d.setDate(d.getDate()-n);       return d.toISOString().slice(0,10); };
+
+// Mirrors DAILY_BALANCE_MAX_DAYS in app/services/firebird_service.py. The
+// server clamps regardless; this is only so the «Всё время» preset (which
+// clears both dates) still sends a bounded range instead of nothing.
+const DAILY_BALANCE_MAX_DAYS = 366;
 
 const DATE_PRESETS = [
   { label: 'Этот месяц',    from: () => isoMStart(0),  to: () => isoToday() },
@@ -605,21 +612,34 @@ function CreatePayoutModal({ move, onClose, onCreated }) {
 
 // ── Visualization components ──────────────────────────────────────
 
+// Rendered on both the "Обзор" and "Остатки" tabs. It's one control, not
+// two: the state lives in the page and both tabs read the same applied
+// range, so switching tabs never silently changes the period you're
+// looking at.
+function DateRangeBar({ dateFrom, dateTo, setDateFrom, setDateTo, onApply, loading }) {
+  return (
+    <div className="flex flex-wrap gap-2 items-center">
+      {DATE_PRESETS.map((p) => (
+        <button key={p.label} onClick={() => onApply(p.from(), p.to())}
+          className="px-3 py-1 rounded-full text-xs font-medium border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
+          {p.label}
+        </button>
+      ))}
+      <div className="flex items-center gap-2 ml-auto">
+        <input type="date" className="input text-xs py-1 h-8" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        <span className="text-[color:var(--color-muted-foreground)] text-xs">—</span>
+        <input type="date" className="input text-xs py-1 h-8" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        <button onClick={() => onApply(dateFrom, dateTo)} disabled={loading} className="btn btn--primary h-8 px-3 text-xs">Применить</button>
+      </div>
+    </div>
+  );
+}
+
 // Cash-on-hand per register, from DOCS_KASSA (the full ledger) — not the
 // same source as the "Движения" tab, which only covers DOC_KASSA_MOVES
 // transfers between registers. This is a live snapshot, not affected by
 // the page's date range.
-function CashBalancesCard() {
-  const [balances, setBalances] = useState(null);
-  const [loading, setLoading]   = useState(true);
-
-  useEffect(() => {
-    api.get('cash-moves/balances')
-      .then((r) => setBalances(Array.isArray(r.data) ? r.data : []))
-      .catch(() => setBalances([]))
-      .finally(() => setLoading(false));
-  }, []);
-
+function CashBalancesCard({ balances, loading }) {
   if (!loading && (!balances || balances.length === 0)) return null;
 
   return (
@@ -644,6 +664,154 @@ function CashBalancesCard() {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Daily opening/closing balances ────────────────────────────────
+
+const fmtDayLabel = (iso) => {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}, ${DAY_NAMES[d.getDay()]}`;
+};
+// Zero turnover renders muted rather than as "0,00 ₽" — a day of nothing
+// should read as nothing at a glance, so the days that did move stand out.
+const fmtTurnover = (v) =>
+  !v ? <span className="text-[color:var(--color-muted-foreground)]">—</span> : fmtMoney(v);
+
+// The documents behind one day. Инкассация is shown with its own badge
+// because it's the one basis that moves cash sideways between registers
+// rather than in or out of the business.
+function DayEntries({ entries }) {
+  if (!entries || entries.length === 0) {
+    return (
+      <div className="px-4 py-3 text-xs text-[color:var(--color-muted-foreground)]">
+        За этот день в кассовой книге нет ни одной проводки.
+      </div>
+    );
+  }
+  return (
+    <div className="divide-y divide-[color:var(--color-border)]">
+      {entries.map((e) => {
+        const inkass = e.basis_id === 93;
+        const amount = e.debet || e.kredit;
+        return (
+          <div key={e.id} className="flex items-start gap-3 px-4 py-2 text-xs">
+            <span className="tabular-nums text-[color:var(--color-muted-foreground)] w-10 shrink-0">{e.time || '—'}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className={`px-1.5 py-0.5 rounded-full font-medium ${
+                  inkass ? 'bg-amber-100 text-amber-700' : 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                }`}>{e.basis_name || '—'}</span>
+                {e.doc_num && <span className="font-mono text-[color:var(--color-muted-foreground)]">№{e.doc_num}</span>}
+              </div>
+              {e.basis_text && <div className="mt-0.5 break-words text-[color:var(--color-muted-foreground)]">{e.basis_text}</div>}
+            </div>
+            <span className="text-[color:var(--color-muted-foreground)] shrink-0 hidden sm:inline max-w-[10rem] truncate">{e.user_name || '—'}</span>
+            <span className={`tabular-nums font-medium shrink-0 ${e.debet ? 'text-green-600' : 'text-red-500'}`}>
+              {e.debet ? '+' : '−'}{fmtMoney(amount)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DailyBalancesTable({ days, entriesByDate, expanded, onToggle, isMobile }) {
+  if (isMobile) {
+    return (
+      <div className="space-y-3">
+        {days.map((d) => {
+          const open = expanded.has(d.date);
+          return (
+            <div key={d.date} className="border border-[color:var(--color-border)] rounded-[var(--ui-radius-card)] bg-[color:var(--color-table-bg)] overflow-hidden">
+              <button type="button" onClick={() => onToggle(d.date)}
+                className="w-full px-4 py-3 flex items-center justify-between gap-2 bg-[color:var(--color-table-header)] text-left">
+                <span className="flex items-center gap-1.5 font-medium text-sm">
+                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  {fmtDayLabel(d.date)}
+                </span>
+                <span className="tabular-nums font-semibold text-sm">{fmtMoney(d.closing)}</span>
+              </button>
+              <div className="px-4 py-2 space-y-1.5 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span className="text-[color:var(--color-muted-foreground)]">На начало</span>
+                  <span className="tabular-nums">{fmtMoney(d.opening)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[color:var(--color-muted-foreground)]">Приход</span>
+                  <span className="tabular-nums text-green-600">{fmtTurnover(d.income)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[color:var(--color-muted-foreground)]">Расход</span>
+                  <span className="tabular-nums text-red-500">{fmtTurnover(d.expense)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[color:var(--color-muted-foreground)]">Инкассация</span>
+                  <span className="tabular-nums text-amber-600">{fmtTurnover(d.collection)}</span>
+                </div>
+              </div>
+              {open && (
+                <div className="border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <DayEntries entries={entriesByDate.get(d.date)} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const th = 'px-3 py-3 text-xs font-semibold uppercase tracking-wide';
+  return (
+    <div className="overflow-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
+      <table className="min-w-max w-full text-sm bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)]">
+        <thead>
+          <tr className="bg-[color:var(--color-table-header)]">
+            <th className="px-3 py-3 w-8"></th>
+            <th className={`${th} text-left`}>Дата</th>
+            <th className={`${th} text-right`}>На начало</th>
+            <th className={`${th} text-right`}>Приход</th>
+            <th className={`${th} text-right`}>Расход</th>
+            <th className={`${th} text-right`}>Инкассация</th>
+            <th className={`${th} text-right`}>На конец</th>
+          </tr>
+        </thead>
+        {days.map((d) => {
+          const open = expanded.has(d.date);
+          const quiet = d.entry_count === 0;
+          return (
+            <tbody key={d.date} className="border-t border-[color:var(--color-border)]">
+              <tr
+                onClick={() => onToggle(d.date)}
+                className={`cursor-pointer hover:bg-[color:var(--color-bg-secondary)] ${open ? 'bg-[color:var(--color-bg-secondary)]' : ''}`}
+              >
+                <td className="px-3 py-2 text-[color:var(--color-muted-foreground)]">
+                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </td>
+                <td className={`px-3 py-2 whitespace-nowrap ${quiet ? 'text-[color:var(--color-muted-foreground)]' : 'font-medium'}`}>
+                  {fmtDayLabel(d.date)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(d.opening)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-green-600">{fmtTurnover(d.income)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-red-500">{fmtTurnover(d.expense)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-amber-600">{fmtTurnover(d.collection)}</td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtMoney(d.closing)}</td>
+              </tr>
+              {open && (
+                <tr>
+                  <td colSpan={7} className="p-0 bg-[color:var(--color-bg-secondary)]">
+                    <DayEntries entries={entriesByDate.get(d.date)} />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          );
+        })}
+      </table>
     </div>
   );
 }
@@ -873,15 +1041,28 @@ export default function CashMovements() {
   const [selected, setSelected]   = useState(new Set());
   const [dayFilter, setDayFilter] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  // The range the loaded data actually corresponds to, as opposed to
+  // whatever is currently typed into the date inputs — the "Остатки" tab
+  // refetches off this so it doesn't fire a request per keystroke.
+  const [appliedRange, setAppliedRange] = useState({ from: isoMStart(0), to: isoToday() });
+  const [balances, setBalances]         = useState(null);
+  const [balKassa, setBalKassa]         = useState(null);
+  const [daily, setDaily]               = useState(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [expandedDays, setExpandedDays] = useState(() => new Set());
 
   useEffect(() => {
     api.get('cash-moves/meta').then((r) => setCategories(r.data.categories || [])).catch(() => {});
+    api.get('cash-moves/balances')
+      .then((r) => setBalances(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setBalances([]));
     loadData(isoMStart(0), isoToday());
   }, []);
 
   async function loadData(from, to) {
     setLoading(true);
     setSelected(new Set());
+    setAppliedRange({ from, to });
     try {
       const params = {};
       if (from) params.date_from = from;
@@ -892,13 +1073,62 @@ export default function CashMovements() {
     finally { setLoading(false); }
   }
 
-  function applyPreset(p) {
-    const from = p.from(), to = p.to();
+  function applyRange(from, to) {
     setDateFrom(from); setDateTo(to);
     loadData(from, to);
   }
+  function applyPreset(p) { applyRange(p.from(), p.to()); }
+  function handleApply()  { applyRange(dateFrom, dateTo); }
 
-  function handleApply() { loadData(dateFrom, dateTo); }
+  // Registers available in the daily report — the same six the balances
+  // card shows, ordered by their numeric name prefix so the list doesn't
+  // reshuffle as balances change.
+  const registers = useMemo(
+    () => [...(balances || [])].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru')),
+    [balances],
+  );
+
+  useEffect(() => {
+    if (balKassa == null && registers.length) setBalKassa(registers[0].kassa_id);
+  }, [registers, balKassa]);
+
+  // «Всё время» clears both dates; the daily report needs a bounded range,
+  // so fall back to the last DAILY_BALANCE_MAX_DAYS days and say so in the UI.
+  const balTo   = appliedRange.to || isoToday();
+  const balFrom = appliedRange.from || isoMinusDays(balTo, DAILY_BALANCE_MAX_DAYS - 1);
+
+  useEffect(() => {
+    if (activeTab !== 'balances' || balKassa == null) return undefined;
+    let cancelled = false;
+    setDailyLoading(true);
+    api.get('cash-moves/daily-balances', { params: { kassa_id: balKassa, date_from: balFrom, date_to: balTo } })
+      .then((r) => { if (!cancelled) { setDaily(r.data); setExpandedDays(new Set()); } })
+      .catch(() => {
+        if (cancelled) return;
+        setDaily(null);
+        toast('Не удалось загрузить остатки по кассе', 'error');
+      })
+      .finally(() => { if (!cancelled) setDailyLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, balKassa, balFrom, balTo]);
+
+  const entriesByDate = useMemo(() => {
+    const map = new Map();
+    (daily?.entries || []).forEach((e) => {
+      if (!map.has(e.date)) map.set(e.date, []);
+      map.get(e.date).push(e);
+    });
+    return map;
+  }, [daily]);
+
+  function toggleDay(dateStr) {
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      next.has(dateStr) ? next.delete(dateStr) : next.add(dateStr);
+      return next;
+    });
+  }
 
   function toggleSort(field) {
     setSort((prev) => prev.field === field ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
@@ -961,10 +1191,26 @@ export default function CashMovements() {
       r.category || '', r.BASIS || '', r.SUMM || 0, r.manually_assigned ? 'Да' : 'Нет',
     ]);
     const csv = [header, ...csvRows].map((row) => row.map((v) => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    downloadCsv(csv, 'cash_moves.csv');
+  }
+
+  function downloadCsv(csv, filename) {
     const blob = new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    Object.assign(document.createElement('a'), { href: url, download: 'cash_moves.csv' }).click();
+    Object.assign(document.createElement('a'), { href: url, download: filename }).click();
     URL.revokeObjectURL(url);
+  }
+
+  // The "Остатки" tab exports the day table it's showing, not the movement
+  // list — same button, whatever is on screen.
+  function exportBalancesCsv() {
+    const header = ['Дата','На начало','Приход','Расход','Инкассация','На конец','Проводок'];
+    const csvRows = (daily?.days || []).map((d) => [
+      fmtDate(d.date), d.opening, d.income, d.expense, d.collection, d.closing, d.entry_count,
+    ]);
+    const csv = [header, ...csvRows].map((row) => row.map((v) => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const name = (daily?.kassa_name || balKassa || 'kassa').toString().replace(/[^\wА-Яа-яЁё-]+/g, '_');
+    downloadCsv(csv, `cash_balances_${name}_${daily?.date_from}_${daily?.date_to}.csv`);
   }
 
   // ── Memos ──────────────────────────────────────────────────────
@@ -1109,7 +1355,11 @@ export default function CashMovements() {
     { key: 'overview',   label: 'Обзор',    icon: <BarChart3 size={14} /> },
     { key: 'movements',  label: 'Движения', icon: <TrendingUp size={14} />, badge: filtered.length || undefined },
     { key: 'analytics',  label: 'Аналитика', icon: <Wallet size={14} /> },
+    { key: 'balances',   label: 'Остатки',  icon: <CalendarDays size={14} /> },
   ];
+
+  const onBalancesTab = activeTab === 'balances';
+  const dailyDays = daily?.days || [];
 
   const thCls = 'px-3 py-3 text-xs font-semibold uppercase tracking-wide select-none cursor-pointer hover:text-[color:var(--color-primary)]';
 
@@ -1128,7 +1378,9 @@ export default function CashMovements() {
             className="btn flex items-center gap-1.5 border border-[color:var(--color-border)] px-2.5 py-1.5">
             <Settings size={15} /><span className="hidden sm:inline">Категории</span>
           </button>
-          <button onClick={exportCsv} disabled={loading || filtered.length === 0}
+          <button
+            onClick={onBalancesTab ? exportBalancesCsv : exportCsv}
+            disabled={onBalancesTab ? (dailyLoading || dailyDays.length === 0) : (loading || filtered.length === 0)}
             className="btn flex items-center gap-1.5 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 px-2.5 py-1.5">
             <Download size={15} /><span className="hidden sm:inline">CSV</span>
           </button>
@@ -1148,23 +1400,14 @@ export default function CashMovements() {
             </div>
           ) : (
             <>
-              <CashBalancesCard />
+              <CashBalancesCard balances={balances} loading={balances === null} />
 
               {/* Date presets row */}
-              <div className="flex flex-wrap gap-2 items-center">
-                {DATE_PRESETS.map((p) => (
-                  <button key={p.label} onClick={() => applyPreset(p)}
-                    className="px-3 py-1 rounded-full text-xs font-medium border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors">
-                    {p.label}
-                  </button>
-                ))}
-                <div className="flex items-center gap-2 ml-auto">
-                  <input type="date" className="input text-xs py-1 h-8" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-                  <span className="text-[color:var(--color-muted-foreground)] text-xs">—</span>
-                  <input type="date" className="input text-xs py-1 h-8" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-                  <button onClick={handleApply} disabled={loading} className="btn btn--primary h-8 px-3 text-xs">Применить</button>
-                </div>
-              </div>
+              <DateRangeBar
+                dateFrom={dateFrom} dateTo={dateTo}
+                setDateFrom={setDateFrom} setDateTo={setDateTo}
+                onApply={applyRange} loading={loading}
+              />
 
               {/* KPI hero */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1733,6 +1976,80 @@ export default function CashMovements() {
               <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
               Загрузка…
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Остатки ───────────────────────────────────────────── */}
+      {onBalancesTab && (
+        <div className="space-y-4">
+          {/* Register picker */}
+          <div className="flex flex-wrap gap-2 items-center">
+            {registers.map((r) => (
+              <button key={r.kassa_id} onClick={() => setBalKassa(r.kassa_id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  balKassa === r.kassa_id
+                    ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                    : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]'
+                }`}>
+                {r.name}
+              </button>
+            ))}
+            {registers.length === 0 && (
+              <span className="text-xs text-[color:var(--color-muted-foreground)]">Список касс недоступен</span>
+            )}
+          </div>
+
+          <DateRangeBar
+            dateFrom={dateFrom} dateTo={dateTo}
+            setDateFrom={setDateFrom} setDateTo={setDateTo}
+            onApply={applyRange} loading={dailyLoading}
+          />
+
+          {(daily?.clamped || (!appliedRange.from && daily)) && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg text-xs bg-amber-50 text-amber-800 border border-amber-200">
+              <Info size={14} className="shrink-0 mt-0.5" />
+              <span>
+                Период ограничен последними {DAILY_BALANCE_MAX_DAYS} днями: показано
+                с {fmtDate(daily.date_from)} по {fmtDate(daily.date_to)}.
+              </span>
+            </div>
+          )}
+
+          {dailyLoading ? (
+            <div className="app-card p-4"><SkeletonTable rows={8} /></div>
+          ) : dailyDays.length === 0 ? (
+            <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+              Нет данных за выбранный период.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <KpiCard label="На начало периода" value={fmtMoneyShort(daily.opening)}
+                  sub={fmtDate(daily.date_from)} accent="#9a9a9a" icon={Wallet} />
+                <KpiCard label="Приход за период"
+                  value={fmtMoneyShort(dailyDays.reduce((s, d) => s + d.income, 0))}
+                  sub="без инкассации" accent="#4af626" icon={TrendingUp} />
+                <KpiCard label="Инкассация за период"
+                  value={fmtMoneyShort(dailyDays.reduce((s, d) => s + d.collection, 0))}
+                  sub="сдано в «Основную»" accent="#ffb347" icon={ArrowUpDown} />
+                <KpiCard label="На конец периода" value={fmtMoneyShort(daily.closing)}
+                  sub={fmtDate(daily.date_to)} accent="#e61919" icon={Wallet} />
+              </div>
+
+              <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                Нажмите на день, чтобы увидеть проводки. «Инкассация» показана нетто:
+                отрицательное значение — пополнение кассы из «Основной».
+              </div>
+
+              <DailyBalancesTable
+                days={dailyDays}
+                entriesByDate={entriesByDate}
+                expanded={expandedDays}
+                onToggle={toggleDay}
+                isMobile={isMobile}
+              />
+            </>
           )}
         </div>
       )}

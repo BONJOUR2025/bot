@@ -482,6 +482,19 @@ _PAIR_STARTERS = {'0', '1'}
 CASH_BALANCE_KASSA_IDS = (21057, 10969, 21067, 10564, 21066, 1172)
 CASH_BALANCE_NAME_OVERRIDES = {21066: "5_Гранд Палас"}
 
+# DOC_KASSA_BASISES.id of «Инкассация» — the only basis that moves cash
+# between registers rather than in/out of the business, so the daily
+# report reports it in its own column instead of mixing it into
+# приход/расход (see get_daily_cash_balances).
+KASSA_BASIS_INKASSATION = 93
+
+# Widest range get_daily_cash_balances will build day rows for. The
+# ledger runs back to 2013, and the report renders one row per calendar
+# day including empty ones — an unbounded "всё время" request would
+# build ~4600 rows of mostly nothing. Not a query-cost limit (the
+# aggregates are indexed and fast at any width); a payload/readability one.
+DAILY_BALANCE_MAX_DAYS = 366
+
 
 def _kassa_display_name(kassa_id, raw_name) -> str | None:
     """KASSES.name resolved for a KASSA_KREDIT/KASSA_DEBET id, applying
@@ -2868,6 +2881,168 @@ class FirebirdService:
             }
             for kassa_id, name, balance in rows
         ]
+
+    def get_daily_cash_balances(
+        self,
+        kassa_id: int,
+        date_from: date,
+        date_to: date,
+    ) -> dict:
+        """Opening/closing cash balance per day for one register — the
+        report employees reconcile their physical cash count against.
+
+        Same ledger and same sign convention as get_cash_balances
+        (DEBET increases the register, KREDIT decreases it), just cut by
+        date instead of all-time, so:
+
+            opening(D) = SUM(debet - kredit) over every row dated < D
+            closing(D) = opening(D) + приход - расход - инкассация
+
+        There is no "opening balance" row in this data to read the first
+        figure off of — the running total starts in 2013 and never
+        resets — so the opening balance is genuinely the sum of all
+        history before the day, which is why this needs a separate
+        baseline query rather than just aggregating the visible range.
+
+        DOCS_KASSA has no date column of its own; the date lives on the
+        parent document (DOC_ID → DOCS.DOC_DATE), hence the join
+        get_cash_balances deliberately avoids. That join is cheap here
+        (~0.1s measured) precisely because this is scoped to one
+        kassa_id — the ~14s figure in get_cash_balances is for the
+        unfiltered aggregate across every register, so don't "optimize"
+        this by dropping the join: without it the day boundaries, which
+        are the entire point of this report, don't exist.
+
+        Инкассация is reported net (KREDIT - DEBET) in its own column
+        rather than folded into приход/расход: a register can also be
+        *topped up* from the central "Основная" register under that same
+        basis (7 such rows in 2026, all "Приход с кассы: Основная"), and
+        counting those as приход would overstate a salon's takings by
+        money it never earned. A negative Инкассация is that top-up.
+
+        Days with no documents are returned too, as flat rows where
+        closing == opening. That is deliberate: a day that is missing
+        from the report reads as "no data", while a day showing zero
+        turnover against an unchanged balance is a positive statement
+        that the ledger says nothing moved — the distinction that
+        matters when reconciling a shortfall.
+        """
+        empty = {
+            "kassa_id": kassa_id,
+            "kassa_name": CASH_BALANCE_NAME_OVERRIDES.get(kassa_id),
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "clamped": False,
+            "opening": 0.0,
+            "closing": 0.0,
+            "days": [],
+            "entries": [],
+        }
+        if not FIREBIRD_AVAILABLE:
+            return empty
+
+        if date_to < date_from:
+            date_from, date_to = date_to, date_from
+        clamped = False
+        span_days = (date_to - date_from).days + 1
+        if span_days > DAILY_BALANCE_MAX_DAYS:
+            date_from = date_to - timedelta(days=DAILY_BALANCE_MAX_DAYS - 1)
+            clamped = True
+
+        baseline_sql = """
+            SELECT SUM(dk.debet - dk.kredit)
+            FROM docs_kassa dk
+                INNER JOIN docs d ON d.doc_id = dk.doc_id
+            WHERE dk.kassa_id = ? AND d.doc_date < ?
+        """
+        daily_sql = f"""
+            SELECT d.doc_date,
+                   SUM(CASE WHEN dk.basis_id <> {KASSA_BASIS_INKASSATION} THEN dk.debet  ELSE 0 END),
+                   SUM(CASE WHEN dk.basis_id <> {KASSA_BASIS_INKASSATION} THEN dk.kredit ELSE 0 END),
+                   SUM(CASE WHEN dk.basis_id  = {KASSA_BASIS_INKASSATION} THEN dk.kredit - dk.debet ELSE 0 END),
+                   COUNT(*)
+            FROM docs_kassa dk
+                INNER JOIN docs d ON d.doc_id = dk.doc_id
+            WHERE dk.kassa_id = ? AND d.doc_date >= ? AND d.doc_date <= ?
+            GROUP BY d.doc_date
+        """
+        entries_sql = """
+            SELECT d.doc_date, d.doc_time, d.doc_num, d.basis, d.user_id,
+                   dk.id, dk.basis_id, b.name, dk.debet, dk.kredit
+            FROM docs_kassa dk
+                INNER JOIN docs d ON d.doc_id = dk.doc_id
+                LEFT JOIN doc_kassa_basises b ON b.id = dk.basis_id
+            WHERE dk.kassa_id = ? AND d.doc_date >= ? AND d.doc_date <= ?
+            ORDER BY d.doc_date, d.doc_time
+        """
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(baseline_sql, (kassa_id, date_from))
+                opening = float((cur.fetchone() or [0])[0] or 0)
+                cur.execute(daily_sql, (kassa_id, date_from, date_to))
+                daily_rows = cur.fetchall()
+                cur.execute(entries_sql, (kassa_id, date_from, date_to))
+                entry_rows = cur.fetchall()
+                cur.execute("SELECT name FROM kasses WHERE id = ?", (kassa_id,))
+                name_row = cur.fetchone()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.warning(f"get_daily_cash_balances error: {e}")
+            return empty
+
+        by_date = {
+            row[0]: (float(row[1] or 0), float(row[2] or 0), float(row[3] or 0), int(row[4] or 0))
+            for row in daily_rows
+        }
+
+        days = []
+        running = opening
+        cursor_date = date_from
+        while cursor_date <= date_to:
+            income, expense, collection, count = by_date.get(cursor_date, (0.0, 0.0, 0.0, 0))
+            day_open = running
+            running = day_open + income - expense - collection
+            days.append({
+                "date": cursor_date.isoformat(),
+                "opening": round(day_open, 2),
+                "income": round(income, 2),
+                "expense": round(expense, 2),
+                "collection": round(collection, 2),
+                "closing": round(running, 2),
+                "entry_count": count,
+            })
+            cursor_date += timedelta(days=1)
+
+        entries = []
+        for (doc_date, doc_time, doc_num, doc_basis, user_id,
+             entry_id, basis_id, basis_name, debet, kredit) in entry_rows:
+            entries.append({
+                "id": entry_id,
+                "date": doc_date.isoformat() if isinstance(doc_date, date) else str(doc_date or ""),
+                "time": doc_time.strftime("%H:%M") if hasattr(doc_time, "strftime") else "",
+                "doc_num": (doc_num or "").strip(),
+                "basis_id": basis_id,
+                "basis_name": (basis_name or "").strip(),
+                "basis_text": (doc_basis or "").strip(),
+                "debet": round(float(debet or 0), 2),
+                "kredit": round(float(kredit or 0), 2),
+                "user_id": str(user_id or ""),
+            })
+
+        return {
+            "kassa_id": kassa_id,
+            "kassa_name": _kassa_display_name(kassa_id, name_row[0] if name_row else None),
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "clamped": clamped,
+            "opening": round(opening, 2),
+            "closing": days[-1]["closing"] if days else round(opening, 2),
+            "days": days,
+            "entries": entries,
+        }
 
     def get_cash_move_by_id(self, move_id: str) -> Optional[dict]:
         """Load a single cash movement by ID from DOC_KASSA_MOVES. See

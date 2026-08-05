@@ -217,6 +217,47 @@ def create_cash_moves_router(
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова чуть позже.")
 
+    @router.get("/daily-balances")
+    async def get_daily_cash_balances(
+        kassa_id: int,
+        date_from: date,
+        date_to: date,
+        _=Depends(perm),
+    ):
+        """Остаток на начало/конец каждого дня по одной кассе — отчёт,
+        с которым сотрудники сверяют фактический пересчёт кассы.
+
+        Returns the day rows and every underlying DOCS_KASSA entry in one
+        response: the detail is what turns "не сходится" into "вот эта
+        проводка", and at a month's width (the page default) it's a few
+        tens of KB, so splitting it into a second per-day request would
+        buy nothing but a spinner on every row expansion. A full year is
+        ~1300 entries / ~400 KB, which is why the service clamps the
+        range to DAILY_BALANCE_MAX_DAYS and reports `clamped` back.
+        """
+        from app.services.firebird_service import (
+            CASH_BALANCE_KASSA_IDS, get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE,
+        )
+        from app.services.users import get_external_code_to_name_map
+
+        if not FIREBIRD_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
+        if kassa_id not in CASH_BALANCE_KASSA_IDS:
+            raise HTTPException(status_code=400, detail="Неизвестная касса.")
+        try:
+            data = await run_with_timeout(
+                get_firebird_service().get_daily_cash_balances,
+                kassa_id, date_from, date_to,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
+
+        user_names = get_external_code_to_name_map()
+        for entry in data.get("entries", []):
+            code = entry.get("user_id") or ""
+            entry["user_name"] = user_names.get(code, code or "—")
+        return data
+
     # ── Records ──────────────────────────────────────────────────────
 
     @router.get("/by-id/{move_id}")
