@@ -104,7 +104,16 @@ function OrderPhotos({ contragentId, docNum, visible }) {
       .catch(() => { if (!cancelled) setPhotos([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [visible, contragentId, docNum, photos, loading]);
+    // photos/loading намеренно не в зависимостях: это результат самого
+    // эффекта. Включение их сюда заставляло React разбирать только что
+    // начатый запрос на следующий же рендер (loading false->true меняет
+    // зависимость раньше, чем сервер успевал ответить) — эффект
+    // перезапускался, видел loading=true и выходил по guard'у, а исходный
+    // запрос отвечал уже в "отменённый" — setPhotos/setLoading(false)
+    // никогда не срабатывали. Лента висла на «Загрузка фотографий» даже
+    // когда сервер отвечал за доли секунды.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, contragentId, docNum]);
 
   // Миниатюра приходит прямо в ответе списка, как data URI — не отдельным
   // <img src> на каждую: у заказа бывает под 90 снимков, и 90 независимых
