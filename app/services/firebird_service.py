@@ -1575,17 +1575,21 @@ class FirebirdService:
         with its own set of shots — hence `item` on every row rather than a
         flat list.
 
-        Returns metadata only. The thumbnail bytes are fetched separately
-        (get_order_photo_thumb) so the browser can cache each one, and the
-        full-size image does not live in this database at all — see
-        app/services/agbis_photos for where it does and why.
+        The thumbnail comes back inline, as a data URI, in the same query —
+        deliberately not as a per-photo endpoint. An order can carry up to
+        ~90 photos, and 90 separate <img> tags each hitting a route that
+        opens its own Firebird attachment is exactly the pattern that
+        caused the 2026-07-18 outage (concurrent attachments piling up on
+        this Classic-architecture server). One connection reading N small
+        blobs costs nothing extra by comparison. The full-size image is the
+        one thing that has to stay a separate, on-click request — it does
+        not live in this database at all, see app/services/agbis_photos.
         """
         if not FIREBIRD_AVAILABLE:
             return []
         sql = """
             SELECT p.id, p.dos_id, p.dt, p.md5_checksum, p.is_main_photo,
-                   p.photo_format, t.name,
-                   CASE WHEN p.small IS NULL THEN 0 ELSE 1 END,
+                   p.photo_format, t.name, p.small,
                    CASE WHEN p.normal IS NULL THEN 0 ELSE 1 END
             FROM docs d
                 INNER JOIN docs_order dor ON dor.doc_id = d.doc_id
@@ -1607,44 +1611,29 @@ class FirebirdService:
             logger.error(f"Error fetching order photos: {e}")
             return []
 
+        import base64
+
         photos = []
-        for (pid, dos_id, dt, md5, is_main, fmt, item, has_small, has_normal) in rows:
+        for (pid, dos_id, dt, md5, is_main, fmt, item, small_blob, has_normal) in rows:
+            small = small_blob.read() if hasattr(small_blob, "read") else small_blob
+            thumb = None
+            if small:
+                mime = "image/png" if small[:4] == b"\x89PNG" else "image/jpeg"
+                thumb = f"data:{mime};base64,{base64.b64encode(small).decode('ascii')}"
             photos.append({
                 "id": pid,
                 "dos_id": dos_id,
+                "thumb": thumb,
                 "item": (item or "").split("***")[0].strip() or "—",
                 "date": dt.isoformat() if hasattr(dt, "isoformat") else None,
                 "md5": (md5 or "").strip(),
                 "is_main": bool(is_main),
                 "format": (fmt or "jpeg").strip(),
-                "has_thumb": bool(has_small),
                 # True only for a handful of pre-2019 photos; everything since
                 # then keeps the full-size image outside the database.
                 "in_db": bool(has_normal),
             })
         return photos
-
-    def get_order_photo_thumb(self, photo_id: int) -> Optional[bytes]:
-        """The stored thumbnail for one photo (~2.3 KB JPEG), or None."""
-        if not FIREBIRD_AVAILABLE:
-            return None
-        try:
-            con = _connect()
-            try:
-                cur = con.cursor()
-                cur.execute(
-                    "SELECT small FROM doc_order_serv_photos WHERE id = ?", (photo_id,)
-                )
-                row = cur.fetchone()
-                if row is None or row[0] is None:
-                    return None
-                blob = row[0]
-                return blob.read() if hasattr(blob, "read") else bytes(blob)
-            finally:
-                con.close()
-        except Exception as e:
-            logger.warning(f"get_order_photo_thumb error: {e}")
-            return None
 
     def get_order_photo_full_from_db(self, photo_id: int) -> Optional[bytes]:
         """Full-size image out of the database, for the rare old photo that

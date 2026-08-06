@@ -106,7 +106,11 @@ function OrderPhotos({ contragentId, docNum, visible }) {
     return () => { cancelled = true; };
   }, [visible, contragentId, docNum, photos, loading]);
 
-  const withThumb = (photos || []).filter((p) => p.has_thumb);
+  // Миниатюра приходит прямо в ответе списка, как data URI — не отдельным
+  // <img src> на каждую: у заказа бывает под 90 снимков, и 90 независимых
+  // запросов к серверу (каждый со своим подключением к Firebird) — ровно
+  // то, из-за чего фотографии и «висели в вечной загрузке».
+  const withThumb = (photos || []).filter((p) => p.thumb);
   if (!visible || (!loading && withThumb.length === 0)) return null;
 
   // Снимки привязаны к позиции заказа, а не к заказу целиком: одна пара
@@ -138,9 +142,8 @@ function OrderPhotos({ contragentId, docNum, visible }) {
                 }`}
               >
                 <img
-                  src={`/api/clients/photos/${p.id}/thumb`}
+                  src={p.thumb}
                   alt=""
-                  loading="lazy"
                   className="block w-14 h-16 object-cover"
                 />
               </button>

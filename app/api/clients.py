@@ -74,11 +74,16 @@ def create_clients_router() -> APIRouter:
 
     @router.get("/{contragent_id}/orders/{doc_num}/photos")
     async def get_order_photos(contragent_id: int, doc_num: str):
-        """Метаданные снимков заказа, сгруппированных по изделиям.
+        """Снимки заказа, сгруппированные по изделиям, с миниатюрой в виде
+        data URI прямо в ответе.
 
-        Сами картинки не здесь: миниатюра отдаётся отдельным адресом (браузер
-        её закэширует), а полноразмерный снимок в этой базе не хранится вовсе
-        — см. app/services/agbis_photos.
+        Специально не отдельным адресом на фото: у заказа бывает под 90
+        снимков, и 90 независимых <img>, каждый со своим запросом к
+        Firebird, — тот самый паттерн параллельных подключений, что уронил
+        сервер 18.07.2026. Один запрос, читающий N маленьких блобов из уже
+        открытого подключения, ничего не стоит по сравнению с этим.
+        Полноразмерный снимок в этой базе не хранится вовсе и тянется
+        отдельно, по клику — см. app/services/agbis_photos.
         """
         from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
 
@@ -89,24 +94,6 @@ def create_clients_router() -> APIRouter:
             return await run_with_timeout(svc.get_order_photos, contragent_id, doc_num)
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Попробуйте снова.")
-
-    @router.get("/photos/{photo_id}/thumb")
-    async def get_photo_thumb(photo_id: int):
-        """Миниатюра из Firebird. Кэшируется браузером надолго: содержимое
-        снимка неизменно, а адрес привязан к его id."""
-        from fastapi import Response
-        from app.services.firebird_service import get_firebird_service, run_with_timeout, FIREBIRD_AVAILABLE
-
-        if not FIREBIRD_AVAILABLE:
-            raise HTTPException(status_code=503, detail="Firebird недоступен: драйвер fdb не установлен.")
-        try:
-            data = await run_with_timeout(get_firebird_service().get_order_photo_thumb, photo_id)
-        except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго.")
-        if not data:
-            raise HTTPException(status_code=404, detail="Миниатюра не найдена")
-        return Response(content=data, media_type="image/jpeg",
-                        headers={"Cache-Control": "private, max-age=604800"})
 
     @router.get("/photos/{photo_id}/full")
     async def get_photo_full(photo_id: int, md5: str = Query(...)):
