@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Search, RefreshCw, SlidersHorizontal, GitCompareArrows, Monitor, ChevronDown, ChevronRight, LayoutGrid, Rows3 } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -59,6 +59,17 @@ function OptionLabel({ option }) {
   );
 }
 
+// Настройки внутри категории отсортированы по их месту в реальном дереве
+// Agbis (LOCAL_OPTIONS_TREE) — эта же сортировка позволяет просто вставлять
+// подзаголовок при каждой смене subgroup, без отдельной группировки на фронте.
+function SubgroupHeader({ text }) {
+  return (
+    <div className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)] bg-[color:var(--color-muted)]/20">
+      {text}
+    </div>
+  );
+}
+
 // ── Режим «По компьютеру»: читается как обычный список настроек, а не таблица ──
 
 function ByComputerCategory({ category, computerId, allComputerIds, open, onToggle }) {
@@ -89,15 +100,19 @@ function ByComputerCategory({ category, computerId, allComputerIds, open, onTogg
       </button>
       {open && (
         <div className="divide-y divide-[color:var(--color-border)] border-t border-[color:var(--color-border)]">
-          {category.options.map((o) => {
+          {category.options.map((o, i) => {
             const cell = o.values[computerId] || {};
             const diff = hasDiff(o.values, allComputerIds);
+            const showSubgroup = o.subgroup && o.subgroup !== category.options[i - 1]?.subgroup;
             return (
-              <div key={o.id} className={`flex items-center justify-between gap-4 px-4 py-2.5 ${diff ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}>
-                <OptionLabel option={o} />
-                <div className="shrink-0 flex items-center gap-2">
-                  {diff && <GitCompareArrows size={12} className="text-amber-500" title="Значение отличается хотя бы на одном ПК" />}
-                  <ValueTag value={cell.value} source={cell.source} />
+              <div key={o.id}>
+                {showSubgroup && <SubgroupHeader text={o.subgroup} />}
+                <div className={`flex items-center justify-between gap-4 px-4 py-2.5 ${diff ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}>
+                  <OptionLabel option={o} />
+                  <div className="shrink-0 flex items-center gap-2">
+                    {diff && <GitCompareArrows size={12} className="text-amber-500" title="Значение отличается хотя бы на одном ПК" />}
+                    <ValueTag value={cell.value} source={cell.source} />
+                  </div>
                 </div>
               </div>
             );
@@ -183,9 +198,21 @@ function CompareCategory({ category, computers, open, onToggle }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--color-border)]">
-              {category.options.map((o) => (
-                <CompareRow key={o.id} option={o} computers={computers} />
-              ))}
+              {category.options.map((o, i) => {
+                const showSubgroup = o.subgroup && o.subgroup !== category.options[i - 1]?.subgroup;
+                return (
+                  <Fragment key={o.id}>
+                    {showSubgroup && (
+                      <tr>
+                        <td colSpan={computers.length + 1} className="p-0">
+                          <SubgroupHeader text={o.subgroup} />
+                        </td>
+                      </tr>
+                    )}
+                    <CompareRow option={o} computers={computers} />
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -238,7 +265,8 @@ export default function AgbisSettings() {
         if (q) {
           options = options.filter((o) =>
             (o.option_name || '').toLowerCase().includes(q) ||
-            (o.short_descr || '').toLowerCase().includes(q)
+            (o.short_descr || '').toLowerCase().includes(q) ||
+            (o.subgroup || '').toLowerCase().includes(q)
           );
         }
         if (onlyDiff) {

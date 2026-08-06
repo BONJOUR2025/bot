@@ -2,25 +2,42 @@
 
 Agbis stores ~665 per-computer settings (LOCAL_OPTIONS = catalog with
 description + default; LOCAL_OPTION_VALUES = per-LOCAL_COMPUTER_ID
-override) under its own GROUP_OPTION_NAME, which is fine for hardware/
-payment-terminal integrations (one vendor = one group) but leaves about a
-third of the options — exactly the day-to-day workflow toggles like order
-issuance, printing, warehouse transfers — dumped in a single ungrouped
-bucket. `_classify` re-buckets everything into a smaller set of categories
-a non-Agbis-admin can actually scan (see CATEGORY_ORDER), first by the
-existing GROUP_OPTION_NAME where that's already a sensible unit, then by
-OPTION_NAME/SHORT_DESCR keyword for the ungrouped remainder.
+override). Every option has a FOLDER_ID pointing into LOCAL_OPTIONS_TREE
+(FOLDER_ID, PARENT_ID, NAME, ORDER_NUM) — this *is* the real category tree
+Agbis's own "Настройки модуля" screen renders (root = tab, e.g. «Кассы/ФР»
+→ «АТОЛ»), confirmed against production: resolving every option through
+this tree drops the catch-all bucket from 98 (an earlier keyword-guessing
+classifier invented for this page, since removed) down to 25 — matching
+Agbis's own «Прочее» folder (53 rows) once the other 28 are also accounted
+for by the vendor-inheritance rule below. There was no need to reverse
+engineer Him.exe for this: the real category structure was sitting in the
+database the whole time, just in a table this page never queried.
+
+7 of 665 rows have FOLDER_ID = NULL (a handful of payment-terminal fields:
+BankName/SberConnectionType for Sberbank, Inpas, Arcus, PosApi,
+Bankomsvyaz, MtbBank). Every one of those GROUP_OPTION_NAMEs has 4-13
+*other* rows that do have a real FOLDER_ID, so the orphan inherits its
+group's folder rather than falling into an unlabeled bucket — not a guess,
+just following the same vendor's own sibling settings to where Agbis
+itself put them.
 """
 from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 
 from app.services.firebird_service import FIREBIRD_AVAILABLE, _connect
 
 logger = logging.getLogger(__name__)
 
 _DB_NAME_RE = re.compile(r"ARM_(\w+?)\.fdb$", re.IGNORECASE)
+
+# Sorts after every real tree-derived category — only hit if a future Agbis
+# option ships with neither a FOLDER_ID nor a GROUP_OPTION_NAME any sibling
+# already has a folder for (none of the current 665 need this).
+_UNCATEGORIZED = "Без категории"
+_UNCATEGORIZED_SORT_KEY = (10**9,)
 
 
 def _decode(v):
@@ -39,108 +56,53 @@ def _decode(v):
             return v.decode("cp1251", errors="replace")
     return v
 
-_FISCAL_BANK_GROUPS = {
-    "AlphaBank", "Arcus", "Bankomsvyaz", "CashaLotFR", "CheckBoxFR", "Chek",
-    "Chon", "DatecsFP", "EHDM", "FiskAtol", "FiskFR", "FiskFR2", "FiskFR_kz",
-    "HDMPrintFP", "Inpas", "MtbBank", "PosApi", "POSConnector", "Sberbank",
-    "SwithBit", "Cipher", "Cipher2",
-}
-_HARDWARE_GROUPS = {
-    "BarCode", "Barcode", "CasVes", "Conveyor", "RFID", "VFD", "VesReader",
-    "Magn", "NFCReaders", "Anviz", "Microphone", "VESREADERLP15",
-}
-_COMMS_GROUPS = {"SMS", "SMTP", "IMAP", "INTERNET", "FreeSwitch"}
-_EXTRA_MODULE_GROUPS = {"Hotel", "JTRIPS", "UDS"}
 
-CATEGORY_ORDER = [
-    "Заказы",
-    "Накладные в пути (логистика между складами)",
-    "Склады и кассы",
-    "Печать чеков и бирок",
-    "Электронная очередь",
-    "Ограниченный режим рабочего места",
-    "Прачечная и доп. модули",
-    "Рабочие места (1-6)",
-    "Мобильное приложение (АРМ)",
-    "Оборудование (сканеры/весы/фото/прочее)",
-    "Фискализация и эквайринг",
-    "Связь и уведомления",
-    "Отладка и логирование",
-    "Прочие настройки",
-]
+def _build_breadcrumb_resolver(tree_rows):
+    """tree_rows: (folder_id, parent_id, name, order_num) from
+    LOCAL_OPTIONS_TREE. Returns a function folder_id -> (category, subgroup,
+    sort_key):
 
-_DEBUG_OPTION_NAMES = {
-    "LogHttp", "BIG_LOG", "MEMORY_LOG", "WRITE_THREAD_LOG", "DEBUG",
-    "DoSqlLog", "BedLog", "HangupMonActive",
-}
-_EQ_OPTION_NAMES = {"OPERATOR", "HALLID", "AutoDelEQ", "DelCountEQ", "EnableEQ"}
-_CAMERA_TABLET_NAMES_SUBSTR = ("Camera", "Photo", "Tablet", "AgbisBarcodeScanner", "AgbisSign")
+    - category: the root of the path — this is the tab a human sees in
+      Agbis's own settings dialog (e.g. «Кассы/ФР»).
+    - subgroup: everything under the root, joined with " → " (e.g. «АТОЛ»),
+      or None if the option sits directly under the root with no subfolder.
+    - sort_key: each folder's own ORDER_NUM from root to leaf — reproduces
+      Agbis's own menu order without needing any ordering of our own.
 
-# Ground truth, not a guess: every option on Agbis's own "Настройки модуля →
-# Основные → Заказы" screen (user-provided screenshot of the real desktop
-# app), regardless of what GROUP_OPTION_NAME/keyword matching would
-# otherwise infer. Two of these (Overhead, CreateAutoDocInWayAnScladTo) were
-# previously misclassified into "Накладные в пути" / "Склады и кассы" by
-# the keyword rules below — Agbis itself puts them under Заказы because
-# they're triggered from the order-save flow, not the накладная screen.
-_ORDERS_TAB_OPTIONS = {
-    "UseOwnerOrder", "AllowNotFullPay", "AlwaysAskWhoOut", "OnlyReestr",
-    "AllowChangeKassaSclad", "UseLastSclad", "UseLastDateOut",
-    "AllowChangeOrderDate", "CorrectDiscountInOrder", "AllowChangeSclad",
-    "AllowChangeKassa", "DontControlStatusOut", "DefOrderScladNum", "ZakazWP",
-    "AllowChangePriceList", "AnyBSO", "OrderServsFontSize",
-    "DontShowZakazItogs", "DontShowOtherPP", "NotPrintLabelAutomatically",
-    "EditingDefaultBarCode", "SaleGoods", "ClearFilterLocalSclad",
-    "Overhead", "CreateAutoDocInWayAnScladTo",
-    "AwayOrders", "ForbidHimOrders", "OrderConfirmUse",
-}
+    Memoized per folder_id: 665 options resolve against only ~84 tree nodes,
+    so repeated rows sharing a folder (the common case) do the walk once.
+    """
+    tree = {fid: (pid, name, onum) for fid, pid, name, onum in tree_rows}
+    cache: dict[int, tuple[str | None, str | None, tuple]] = {}
 
+    def resolve(folder_id):
+        if folder_id is None:
+            return None, None, ()
+        if folder_id in cache:
+            return cache[folder_id]
+        names, orders = [], []
+        fid, seen = folder_id, set()
+        while fid is not None and fid in tree and fid not in seen:
+            seen.add(fid)
+            pid, name, onum = tree[fid]
+            # A couple of tree nodes have a blank NAME in Agbis's own data
+            # (e.g. FOLDER_ID 378 under «Кассы/ФР») — the node still counts
+            # for ordering, it just contributes no breadcrumb text.
+            nm = (name or "").strip()
+            if nm:
+                names.append(nm)
+            orders.append(onum or 0)
+            fid = pid
+        orders.reverse()
+        if not names:
+            result = (None, None, tuple(orders))
+        else:
+            names.reverse()
+            result = (names[0], " → ".join(names[1:]) or None, tuple(orders))
+        cache[folder_id] = result
+        return result
 
-def _classify(group: str | None, option_name: str, short_descr: str) -> str:
-    g = (group or "").strip()
-    name = option_name or ""
-    descr = (short_descr or "").lower()
-
-    if name in _ORDERS_TAB_OPTIONS:
-        return "Заказы"
-    if g == "ARMHim":
-        return "Мобильное приложение (АРМ)"
-    if g == "WorkPlaces":
-        return "Рабочие места (1-6)"
-    if g in _FISCAL_BANK_GROUPS:
-        return "Фискализация и эквайринг"
-    if g in _HARDWARE_GROUPS:
-        return "Оборудование (сканеры/весы/фото/прочее)"
-    if g in _COMMS_GROUPS:
-        return "Связь и уведомления"
-    if g in _EXTRA_MODULE_GROUPS:
-        return "Прачечная и доп. модули"
-    if g in ("PrintBar", "PrintCheck", "OrderPrint"):
-        return "Печать чеков и бирок"
-    if g == "Additional":
-        return "Ограниченный режим рабочего места"
-
-    # Everything below has no GROUP_OPTION_NAME in Agbis (~1/3 of all
-    # options) — split by keyword instead of one "прочее" bucket.
-    if name in _EQ_OPTION_NAMES:
-        return "Электронная очередь"
-    if name in _DEBUG_OPTION_NAMES:
-        return "Отладка и логирование"
-    if name.startswith(("DocInWay", "InWay")):
-        return "Накладные в пути (логистика между складами)"
-    if "Out" in name or "выдач" in descr or "выдав" in descr:
-        return "Заказы"
-    if name.startswith("Print_") or "печат" in descr or "чек" in descr:
-        return "Печать чеков и бирок"
-    if "Laundry" in name or "Aeroflot" in name:
-        return "Прачечная и доп. модули"
-    if any(k in name for k in ("Sclad", "Kassa")):
-        return "Склады и кассы"
-    if "Zakaz" in name or "заказ" in descr:
-        return "Заказы"
-    if any(k in name for k in _CAMERA_TABLET_NAMES_SUBSTR):
-        return "Оборудование (сканеры/весы/фото/прочее)"
-    return "Прочие настройки"
+    return resolve
 
 
 def _effective_value(value_bool, value_int, value_str, value_flt,
@@ -208,10 +170,11 @@ def _computer_label(db_name: str | None, dep_number: int | None, dep_names: dict
 
 
 def get_agbis_settings_matrix() -> dict:
-    """Every LOCAL_OPTION, grouped into CATEGORY_ORDER buckets, with the
-    effective value for every registered Agbis POS computer (Him.exe
-    installs only — Updater.exe/AgbisAgentTasks.exe/AgbisAgentGUI.exe rows
-    share the same computer physically but aren't a "settings screen").
+    """Every LOCAL_OPTION, grouped by Agbis's own LOCAL_OPTIONS_TREE
+    category/subgroup, with the effective value for every registered Agbis
+    POS computer (Him.exe installs only — Updater.exe/AgbisAgentTasks.exe/
+    AgbisAgentGUI.exe rows share the same computer physically but aren't a
+    "settings screen").
     """
     empty = {"computers": [], "categories": []}
     if not FIREBIRD_AVAILABLE:
@@ -234,11 +197,13 @@ def get_agbis_settings_matrix() -> dict:
             cur.execute("SELECT DEP_ID, NAME FROM DEPS")
             dep_names = {dep_id: _decode(dep_name) for dep_id, dep_name in cur.fetchall()}
 
+            cur.execute("SELECT FOLDER_ID, PARENT_ID, NAME, ORDER_NUM FROM LOCAL_OPTIONS_TREE")
+            tree_rows = [(fid, pid, _decode(name), onum) for fid, pid, name, onum in cur.fetchall()]
+
             cur.execute("""
-                SELECT ID, GROUP_OPTION_NAME, OPTION_NAME, SHORT_DESCR, LONG_DESCR,
-                       DEFAULT_BOOL, DEFAULT_INT, DEFAULT_STR, DEFAULT_FLOAT
+                SELECT ID, FOLDER_ID, GROUP_OPTION_NAME, OPTION_NAME, SHORT_DESCR, LONG_DESCR,
+                       DEFAULT_BOOL, DEFAULT_INT, DEFAULT_STR, DEFAULT_FLOAT, ORDER_NUM
                 FROM LOCAL_OPTIONS
-                ORDER BY GROUP_OPTION_NAME, ORDER_NUM, OPTION_NAME
             """)
             option_rows = cur.fetchall()
 
@@ -286,34 +251,61 @@ def get_agbis_settings_matrix() -> dict:
             if suffix:
                 c["label"] = f"{c['label']} · {suffix}"
 
-    categories: dict[str, list[dict]] = {c: [] for c in CATEGORY_ORDER}
-    for opt_id, group, option_name, short_descr, long_descr, d_bool, d_int, d_str, d_float in option_rows:
+    resolve = _build_breadcrumb_resolver(tree_rows)
+
+    # Fallback folder for the handful of options whose own FOLDER_ID is
+    # NULL: the folder most of that option's own vendor-group siblings use
+    # (see module docstring — every current orphan has one).
+    folder_votes: dict[str, Counter] = {}
+    for row in option_rows:
+        group, folder_id = _decode(row[2]), row[1]
+        if group and folder_id is not None:
+            folder_votes.setdefault(group, Counter())[folder_id] += 1
+    group_fallback_folder = {
+        group: counter.most_common(1)[0][0] for group, counter in folder_votes.items()
+    }
+
+    categories: dict[str, list[dict]] = {}
+    category_sort_key: dict[str, tuple] = {}
+
+    for (opt_id, folder_id, group, option_name, short_descr, long_descr,
+         d_bool, d_int, d_str, d_float, own_order) in option_rows:
         group = _decode(group)
         option_name = _decode(option_name)
         short_descr = _decode(short_descr)
         long_descr = _decode(long_descr)
         d_str = _decode(d_str)
         descr = _best_description(option_name, short_descr, long_descr)
-        cat = _classify(group, option_name, descr or "")
+
+        effective_folder_id = folder_id if folder_id is not None else group_fallback_folder.get(group)
+        category, subgroup, sort_key = resolve(effective_folder_id)
+        if category is None:
+            category, sort_key = _UNCATEGORIZED, _UNCATEGORIZED_SORT_KEY
+
+        category_sort_key.setdefault(category, sort_key)
+
         values = {}
         for comp_id in computer_ids:
             v_bool, v_int, v_str, v_flt = values_by_key.get((opt_id, comp_id), (None, None, None, None))
             v_str = _decode(v_str)
             value, source = _effective_value(v_bool, v_int, v_str, v_flt, d_bool, d_int, d_str, d_float)
             values[str(comp_id)] = {"value": _decode(value), "source": source}
-        categories.setdefault(cat, []).append({
+
+        categories.setdefault(category, []).append({
             "id": opt_id,
             "option_name": option_name,
             "short_descr": descr,
             "group": group,
+            "subgroup": subgroup,
+            "_sort": (sort_key, own_order or 0, option_name),
             "values": values,
         })
 
-    return {
-        "computers": computers,
-        "categories": [
-            {"name": name, "options": categories[name]}
-            for name in CATEGORY_ORDER
-            if categories.get(name)
-        ],
-    }
+    ordered_categories = []
+    for name in sorted(categories, key=lambda c: category_sort_key.get(c, _UNCATEGORIZED_SORT_KEY)):
+        opts = sorted(categories[name], key=lambda o: o["_sort"])
+        for o in opts:
+            del o["_sort"]
+        ordered_categories.append({"name": name, "options": opts})
+
+    return {"computers": computers, "categories": ordered_categories}
