@@ -1566,6 +1566,110 @@ class FirebirdService:
             for name, qty, amount, kind in rows
         ]
 
+    def get_order_photos(self, contragent_id: int, doc_num: str) -> list[dict]:
+        """Photos attached to one client order, grouped by the item they
+        belong to.
+
+        Agbis attaches photos to a *service line* (DOC_ORDER_SERVICES), not
+        to the order, so one order can carry several unrelated items each
+        with its own set of shots — hence `item` on every row rather than a
+        flat list.
+
+        Returns metadata only. The thumbnail bytes are fetched separately
+        (get_order_photo_thumb) so the browser can cache each one, and the
+        full-size image does not live in this database at all — see
+        app/services/agbis_photos for where it does and why.
+        """
+        if not FIREBIRD_AVAILABLE:
+            return []
+        sql = """
+            SELECT p.id, p.dos_id, p.dt, p.md5_checksum, p.is_main_photo,
+                   p.photo_format, t.name,
+                   CASE WHEN p.small IS NULL THEN 0 ELSE 1 END,
+                   CASE WHEN p.normal IS NULL THEN 0 ELSE 1 END
+            FROM docs d
+                INNER JOIN docs_order dor ON dor.doc_id = d.doc_id
+                INNER JOIN doc_order_services dos ON dos.doc_order_id = dor.id
+                INNER JOIN doc_order_serv_photos p ON p.dos_id = dos.id
+                LEFT JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id
+            WHERE d.contragent_id = ? AND d.doc_num = ?
+            ORDER BY dos.id, p.id
+        """
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, (contragent_id, doc_num))
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching order photos: {e}")
+            return []
+
+        photos = []
+        for (pid, dos_id, dt, md5, is_main, fmt, item, has_small, has_normal) in rows:
+            photos.append({
+                "id": pid,
+                "dos_id": dos_id,
+                "item": (item or "").split("***")[0].strip() or "—",
+                "date": dt.isoformat() if hasattr(dt, "isoformat") else None,
+                "md5": (md5 or "").strip(),
+                "is_main": bool(is_main),
+                "format": (fmt or "jpeg").strip(),
+                "has_thumb": bool(has_small),
+                # True only for a handful of pre-2019 photos; everything since
+                # then keeps the full-size image outside the database.
+                "in_db": bool(has_normal),
+            })
+        return photos
+
+    def get_order_photo_thumb(self, photo_id: int) -> Optional[bytes]:
+        """The stored thumbnail for one photo (~2.3 KB JPEG), or None."""
+        if not FIREBIRD_AVAILABLE:
+            return None
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(
+                    "SELECT small FROM doc_order_serv_photos WHERE id = ?", (photo_id,)
+                )
+                row = cur.fetchone()
+                if row is None or row[0] is None:
+                    return None
+                blob = row[0]
+                return blob.read() if hasattr(blob, "read") else bytes(blob)
+            finally:
+                con.close()
+        except Exception as e:
+            logger.warning(f"get_order_photo_thumb error: {e}")
+            return None
+
+    def get_order_photo_full_from_db(self, photo_id: int) -> Optional[bytes]:
+        """Full-size image out of the database, for the rare old photo that
+        still has one. Everything recent returns None and has to come from
+        the storage agent instead."""
+        if not FIREBIRD_AVAILABLE:
+            return None
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(
+                    "SELECT normal FROM doc_order_serv_photos WHERE id = ?", (photo_id,)
+                )
+                row = cur.fetchone()
+                if row is None or row[0] is None:
+                    return None
+                blob = row[0]
+                return blob.read() if hasattr(blob, "read") else bytes(blob)
+            finally:
+                con.close()
+        except Exception as e:
+            logger.warning(f"get_order_photo_full_from_db error: {e}")
+            return None
+
     def get_churning_clients(self, lookback_days: int = 365, min_orders: int = 3, limit: int = 200) -> list[dict]:
         """Clients who used to order regularly and have gone quiet.
 

@@ -88,6 +88,24 @@ class Settings(BaseSettings):
     firebird_password: str = Field("masterkey", validation_alias="FIREBIRD_PASSWORD")
     firebird_charset: str = Field("UTF8", validation_alias="FIREBIRD_CHARSET")
 
+    # Хранилище фотографий Agbis. Полноразмерные снимки лежат не в базе (там
+    # только миниатюры) и не в облаке, а на агенте локального хранилища —
+    # компьютере в салоне, доступном снаружи через шлюз im-gate.com. Адрес и
+    # порт агента берутся из MST_AGENTS, здесь только учётные данные.
+    # Пароль хранится в том же виде, в каком его шлёт сам Agbis, — SHA-1.
+    agbis_storage_user: str = Field("", validation_alias="AGBIS_STORAGE_USER")
+    agbis_storage_password_sha1: str = Field(
+        "", validation_alias="AGBIS_STORAGE_PASSWORD_SHA1"
+    )
+    agbis_storage_dep_id: int = Field(21, validation_alias="AGBIS_STORAGE_DEP_ID")
+    # Вне каталога app/: deploy.ps1 зеркалит его через robocopy /MIR и стёр бы кэш.
+    agbis_photo_cache_dir: str = Field(
+        r"D:\Agbis\BonjourPhotoCache", validation_alias="AGBIS_PHOTO_CACHE_DIR"
+    )
+    agbis_photo_cache_limit_mb: int = Field(
+        5120, validation_alias="AGBIS_PHOTO_CACHE_LIMIT_MB"
+    )
+
     # Excel файл с окладами
     payroll_excel_file: str = Field(
         r"C:\Users\hrbon\Desktop\telegram_bot\ФОТ админы 2026.xlsx",

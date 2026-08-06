@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Users, Phone, RefreshCw, TrendingDown, Calendar, Wallet, ShoppingBag, Megaphone, ChevronDown, ChevronRight } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -80,8 +80,175 @@ function OrderRow({ contragentId, order }) {
               ))}
             </ul>
           )}
+          <OrderPhotos contragentId={contragentId} docNum={order.doc_num} visible={expanded} />
         </div>
       )}
+    </div>
+  );
+}
+
+// Лента миниатюр заказа. Миниатюры лежат в самой базе Agbis и почти ничего
+// не стоят; полноразмерный снимок хранится на компьютере в салоне, поэтому
+// тянется только по клику — см. app/services/agbis_photos.
+function OrderPhotos({ contragentId, docNum, visible }) {
+  const [photos, setPhotos] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [viewer, setViewer] = useState(null); // индекс открытого снимка
+
+  useEffect(() => {
+    if (!visible || photos || loading) return;
+    let cancelled = false;
+    setLoading(true);
+    api.get(`/clients/${contragentId}/orders/${encodeURIComponent(docNum)}/photos`)
+      .then((r) => { if (!cancelled) setPhotos(r.data || []); })
+      .catch(() => { if (!cancelled) setPhotos([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [visible, contragentId, docNum, photos, loading]);
+
+  const withThumb = (photos || []).filter((p) => p.has_thumb);
+  if (!visible || (!loading && withThumb.length === 0)) return null;
+
+  // Снимки привязаны к позиции заказа, а не к заказу целиком: одна пара
+  // обуви и сумка в одном заказе — это разные наборы фотографий.
+  const groups = [];
+  for (const p of withThumb) {
+    const last = groups[groups.length - 1];
+    if (last && last.dosId === p.dos_id) last.items.push(p);
+    else groups.push({ dosId: p.dos_id, item: p.item, items: [p] });
+  }
+
+  return (
+    <div className="mt-3">
+      {loading && <div className="text-xs text-[color:var(--color-muted-foreground)]">Загрузка фотографий…</div>}
+      {groups.map((g) => (
+        <div key={g.dosId} className="mb-3">
+          <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1.5">
+            {g.item} · {g.items.length} фото
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {g.items.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setViewer(withThumb.indexOf(p))}
+                title={p.is_main ? 'Главное фото' : undefined}
+                className={`rounded-md overflow-hidden border transition-colors hover:border-[color:var(--color-primary)] ${
+                  p.is_main ? 'border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)]'
+                }`}
+              >
+                <img
+                  src={`/api/clients/photos/${p.id}/thumb`}
+                  alt=""
+                  loading="lazy"
+                  className="block w-14 h-16 object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {viewer != null && (
+        <PhotoViewer photos={withThumb} index={viewer} onIndex={setViewer} onClose={() => setViewer(null)} />
+      )}
+    </div>
+  );
+}
+
+// Путь для axios — без префикса /api, он уже в baseURL. Для <img> нужен
+// полный путь, там axios не участвует; авторизация в этом случае идёт
+// httpOnly-кукой, которую браузер подставляет сам.
+const fullPhotoPath = (p) => `/clients/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
+
+function PhotoViewer({ photos, index, onIndex, onClose }) {
+  const photo = photos[index];
+  const [state, setState] = useState('loading'); // loading | ok | error
+  const [error, setError] = useState(null);
+  const [blobUrl, setBlobUrl] = useState(null);
+
+  useEffect(() => {
+    setState('loading'); setError(null);
+    let cancelled = false;
+    // Через axios, а не через <img>: только так видно текст ошибки от
+    // сервера — «агент недоступен» вместо молчаливой битой картинки.
+    api.get(fullPhotoPath(photo), { responseType: 'blob' })
+      .then((r) => {
+        if (cancelled) return;
+        setState('ok');
+        setBlobUrl(URL.createObjectURL(r.data));
+      })
+      .catch(async (e) => {
+        if (cancelled) return;
+        setState('error');
+        // Тело ошибки тоже пришло как blob — достаём из него detail.
+        let detail = 'Не удалось загрузить снимок';
+        try {
+          const parsed = JSON.parse(await e.response.data.text());
+          if (parsed?.detail) detail = parsed.detail;
+        } catch { /* оставляем общее сообщение */ }
+        setError(detail);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photo.id]);
+
+  useEffect(() => () => { if (blobUrl) URL.revokeObjectURL(blobUrl); }, [blobUrl]);
+
+  // Соседние снимки подгружаются тихо, чтобы листалось без пауз. Браузер
+  // положит их в свой кэш, и следующий клик отрисуется сразу.
+  useEffect(() => {
+    [index - 1, index + 1].forEach((i) => {
+      const p = photos[i];
+      if (p) api.get(fullPhotoPath(p), { responseType: 'blob' }).catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && index > 0) onIndex(index - 1);
+      if (e.key === 'ArrowRight' && index < photos.length - 1) onIndex(index + 1);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [index, photos.length, onIndex, onClose]);
+
+  return (
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-card max-w-4xl w-full flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm min-w-0">
+            <span className="font-medium">{photo.item}</span>
+            <span className="text-[color:var(--color-muted-foreground)] ml-2">
+              {index + 1} из {photos.length}
+              {photo.date ? ` · ${fmtDate(photo.date)}` : ''}
+            </span>
+          </div>
+          <button onClick={onClose} className="btn text-xs px-2 py-1">Закрыть</button>
+        </div>
+
+        <div className="flex items-center justify-center min-h-[50vh] bg-[color:var(--color-bg-secondary)] rounded-lg">
+          {state === 'loading' && (
+            <div className="text-sm text-[color:var(--color-muted-foreground)] flex items-center gap-2">
+              <RefreshCw size={15} className="animate-spin" /> Загрузка из хранилища…
+            </div>
+          )}
+          {state === 'error' && (
+            <div className="text-sm text-red-500 max-w-md text-center px-4">{error}</div>
+          )}
+          {state === 'ok' && blobUrl && (
+            <img src={blobUrl} alt="" className="max-h-[70vh] max-w-full object-contain" />
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <button onClick={() => onIndex(index - 1)} disabled={index === 0}
+            className="btn text-xs px-3 py-1.5 disabled:opacity-40">← Предыдущее</button>
+          <button onClick={() => onIndex(index + 1)} disabled={index >= photos.length - 1}
+            className="btn text-xs px-3 py-1.5 disabled:opacity-40">Следующее →</button>
+        </div>
+      </div>
     </div>
   );
 }
