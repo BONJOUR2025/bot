@@ -11,6 +11,10 @@ _DEFAULT_INTERVAL = 15 * 60  # fallback 15 min; actual per-source interval used 
 # Stages considered "active" for message polling
 _ACTIVE_STAGES = {"отклик", "собеседование", "ждем"}
 
+# How many candidates to name in a "новые отклики" notification before
+# summarising the rest (Telegram caps a message at 4096 characters).
+_NOTIFY_LIST_LIMIT = 15
+
 
 async def _sync_once() -> None:
     from app.db.session import SessionLocal
@@ -43,6 +47,11 @@ async def _sync_once() -> None:
 
             for link in links:
                 try:
+                    # Captured before _sync_link stamps it: on the very first
+                    # run everything imported is a backlog, not today's news,
+                    # and saying "+67 новых откликов" about two-year-old chats
+                    # would be plainly misleading.
+                    is_first_sync = link.last_synced_at is None
                     new_candidates = await _sync_link(db, src, link, token)
                     new_count = len(new_candidates)
                     link.last_synced_at = datetime.utcnow()
@@ -51,7 +60,7 @@ async def _sync_once() -> None:
                     db.commit()
                     if new_count:
                         logger.info(f"[Sync] {src.source} vacancy={link.external_vacancy_id}: +{new_count} candidates")
-                        await _notify_new_candidates(src.source, link, new_candidates)
+                        await _notify_new_candidates(src.source, link, new_candidates, backlog=is_first_sync)
                 except Exception as e:
                     logger.warning(f"[Sync] {src.source} link {link.id} error: {e}")
                     src.last_error = str(e)
@@ -175,7 +184,7 @@ async def _check_pending_tg_links(db) -> None:
         db.commit()
 
 
-async def _notify_new_candidates(source: str, link, candidates: list[dict]) -> None:
+async def _notify_new_candidates(source: str, link, candidates: list[dict], backlog: bool = False) -> None:
     from app.services.notify import send_notification
     src_label = "hh.ru" if source == "hh" else "Авито"
     vac_title = (getattr(link, "external_vacancy_title", "") or "") or \
@@ -183,12 +192,24 @@ async def _notify_new_candidates(source: str, link, candidates: list[dict]) -> N
                 f"#{link.external_vacancy_id}"
     count = len(candidates)
     word = "кандидат" if count == 1 else "кандидата" if count < 5 else "кандидатов"
-    lines = [f"👤 <b>Новые отклики ({src_label})</b>\n{vac_title}: +{count} {word}\n"]
-    for c in candidates:
+    if backlog:
+        lines = [
+            f"📥 <b>Импорт истории ({src_label})</b>\n{vac_title}: загружено {count} {word}\n"
+            f"Это накопившиеся отклики, а не новые — бот им не писал.\n"
+        ]
+    else:
+        lines = [f"👤 <b>Новые отклики ({src_label})</b>\n{vac_title}: +{count} {word}\n"]
+    # The first sync of a link imports the whole backlog at once — 76 chats on
+    # the live Avito account. Listing every one of them blows past Telegram's
+    # 4096-character message limit, so the message would simply fail to send
+    # and the admin would learn nothing. Show a sample and state the rest.
+    for c in candidates[:_NOTIFY_LIST_LIMIT]:
         age_str = f", {c['age']} лет" if c.get("age") else ""
         phone_str = f"\n📞 {c['phone']}" if c.get("phone") else ""
         resume_str = f"\n🔗 <a href=\"{c['resume_url']}\">Резюме</a>" if c.get("resume_url") else ""
         lines.append(f"• <b>{c['name']}</b>{age_str}{phone_str}{resume_str}")
+    if count > _NOTIFY_LIST_LIMIT:
+        lines.append(f"\n…и ещё {count - _NOTIFY_LIST_LIMIT} — смотрите в разделе «Подбор».")
     await send_notification("\n".join(lines))
 
 
