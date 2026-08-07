@@ -37,7 +37,15 @@ const SOURCES = [
 
 const stageOf   = (key) => STAGES.find(s => s.key === key) || STAGES[0];
 const srcLabel  = (key) => SOURCES.find(s => s.key === key)?.label || key;
-const fmtDate   = (iso) => iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '';
+// Год обязателен: после импорта истории с площадок в списке соседствуют
+// отклики 2023-2024 годов и сегодняшние, и «31 окт» рядом с «7 авг» читается
+// как две недавние даты.
+// «31 окт. 2023 г.» → «31 окт 2023»: подпись на карточке рендерится 10-м
+// кеглем, служебные «г.» и точки съедают там заметную долю ширины.
+const fmtDate   = (iso) => iso
+  ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
+      .replace(/\s*г\.$/, '').replace('.', '')
+  : '';
 const tgLink    = (phone) => { const d = (phone || '').replace(/\D/g, ''); return d.length >= 7 ? `https://t.me/+${d}` : null; };
 
 const SRC_BADGE = {
@@ -492,7 +500,9 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   function fmtMsgTime(iso) {
     if (!iso) return '';
     try {
-      return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return new Date(iso).toLocaleString('ru-RU', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
     } catch { return iso; }
   }
 
@@ -1467,7 +1477,9 @@ function InterviewSchedule({ onCandidateClick }) {
   function fmtGroupDate(iso) {
     if (iso === 'Дата не указана') return iso;
     try {
-      return new Date(iso).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+      return new Date(iso).toLocaleDateString('ru-RU', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      });
     } catch { return iso; }
   }
 
