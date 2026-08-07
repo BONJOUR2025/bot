@@ -4,8 +4,10 @@
  * на странице продаж: жесты, зум и полноэкранный режим на мобильном стоили
  * достаточно, чтобы не заводить им вторую копию.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { useSpring, animated } from '@react-spring/web';
+import { useGesture } from '@use-gesture/react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 
@@ -98,15 +100,11 @@ export default function OrderPhotos({ contragentId, docNum, visible }) {
 // Путь для axios — без префикса /api, он уже в baseURL. Для <img> нужен
 // полный путь, там axios не участвует; авторизация в этом случае идёт
 // httpOnly-кукой, которую браузер подставляет сам.
-const fullPhotoPath = (p) => `/clients/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
+// Явная привязка вместо <AnimatedImg>: eslint не засчитывает
+// member-expression в JSX как использование импорта.
+const AnimatedImg = animated.img;
 
-const ZOOM_MAX = 5;
-const ZOOM_DOUBLE_TAP = 2.5;
-// Порог горизонтального свайпа для смены снимка и вертикального — для
-// закрытия. В долях ширины/высоты экрана, чтобы одинаково ощущалось и на
-// маленьком телефоне, и на планшете.
-const SWIPE_X_RATIO = 0.18;
-const SWIPE_Y_RATIO = 0.22;
+const fullPhotoPath = (p) => `/clients/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
 
 function PhotoViewer({ photos, index, onIndex, onClose }) {
   const { isMobile } = useViewport();
@@ -163,117 +161,130 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [index, photos.length, onIndex, onClose]);
 
-  // ── Жесты (только мобильный полноэкранный режим) ──────────────────
-  // Реализованы вручную, а не нативным pinch браузера: внутри
-  // position:fixed оверлея нативный зум ведёт себя непредсказуемо (то
-  // масштабирует всю страницу под оверлеем, то не срабатывает вовсе), и
-  // им нельзя ограничить масштаб или сбросить его при смене снимка.
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [drag, setDrag] = useState({ x: 0, y: 0 });   // текущий незавершённый свайп
-  const [animating, setAnimating] = useState(false);
-  const g = useRef({});
-  const lastTap = useRef(0);
+  // ── Жесты (мобильный полноэкранный режим) ─────────────────────────
+  //
+  // Позиция картинки живёт в spring, а не в useState: обновление состояния
+  // на каждый touchmove — это ре-рендер на каждый пиксель движения, ~60 раз
+  // в секунду, и никакие пороги этой дёрганости не лечат. react-spring
+  // пишет transform прямо в DOM, минуя reconciliation.
+  //
+  // Нативный pinch браузера не используем: внутри position:fixed оверлея он
+  // ведёт себя непредсказуемо, и им нельзя ни ограничить масштаб, ни
+  // сбросить его при переходе к следующему снимку.
   const stageRef = useRef(null);
+  const zoomRef = useRef(1);   // актуальный масштаб для обработчиков, без ре-рендера
+  const lastTap = useRef(0);   // отметка времени для распознавания двойного тапа
+  const [zoomed, setZoomed] = useState(false);  // только для подсказки внизу
+
+  const [{ x, y, scale, opacity }, spring] = useSpring(() => ({
+    x: 0, y: 0, scale: 1, opacity: 1,
+    config: { tension: 300, friction: 30 },
+  }));
+
+  const setZoomState = useCallback((s) => {
+    zoomRef.current = s;
+    setZoomed(s > 1.01);
+  }, []);
 
   // Новый снимок открывается всегда «как есть», без унаследованного зума.
-  useEffect(() => { setZoom(1); setOffset({ x: 0, y: 0 }); setDrag({ x: 0, y: 0 }); }, [index]);
+  useEffect(() => {
+    setZoomState(1);
+    spring.start({ x: 0, y: 0, scale: 1, opacity: 1, immediate: true });
+  }, [index, spring, setZoomState]);
 
-  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-
-  // Не даём картинке уехать за пределы экрана при панорамировании.
-  function clampOffset(next, scale) {
+  // Границы панорамирования: за края увеличенной картинки не пускаем.
+  const clamp = useCallback((nx, ny, s) => {
     const box = stageRef.current?.getBoundingClientRect();
-    if (!box) return next;
-    const maxX = Math.max(0, (box.width * (scale - 1)) / 2);
-    const maxY = Math.max(0, (box.height * (scale - 1)) / 2);
-    return {
-      x: Math.min(maxX, Math.max(-maxX, next.x)),
-      y: Math.min(maxY, Math.max(-maxY, next.y)),
-    };
-  }
+    if (!box) return [nx, ny];
+    const maxX = Math.max(0, (box.width * (s - 1)) / 2);
+    const maxY = Math.max(0, (box.height * (s - 1)) / 2);
+    return [Math.min(maxX, Math.max(-maxX, nx)), Math.min(maxY, Math.max(-maxY, ny))];
+  }, []);
 
-  function onTouchStart(e) {
-    setAnimating(false);
-    if (e.touches.length === 2) {
-      g.current = { mode: 'pinch', startDist: dist(e.touches), startZoom: zoom };
-      return;
-    }
-    if (e.touches.length === 1) {
-      const t = e.touches[0];
-      // Двойной тап — быстрый зум туда и обратно.
-      const now = Date.now();
-      if (now - lastTap.current < 300) {
-        lastTap.current = 0;
-        const to = zoom > 1 ? 1 : ZOOM_DOUBLE_TAP;
-        setAnimating(true);
-        setZoom(to);
-        setOffset({ x: 0, y: 0 });
-        g.current = { mode: 'none' };
-        return;
-      }
-      lastTap.current = now;
-      g.current = {
-        mode: zoom > 1 ? 'pan' : 'swipe',
-        startX: t.clientX, startY: t.clientY,
-        baseOffset: { ...offset },
-      };
-    }
-  }
+  const bind = useGesture(
+    {
+      onDrag: ({ down, movement: [mx, my], velocity: [vx, vy], direction: [dx, dy], pinching, cancel, tap }) => {
+        if (pinching) { cancel(); return; }
+        // Двойной тап ловим здесь, а не отдельным onDoubleClick: такого
+        // обработчика у useGesture нет, он молча игнорировался бы. На тач-
+        // экранах DOM-событие dblclick к тому же приходит с задержкой ~300мс
+        // и не везде.
+        if (tap) {
+          const now = Date.now();
+          if (now - lastTap.current < 300) {
+            lastTap.current = 0;
+            const to = zoomRef.current > 1.01 ? 1 : 2.5;
+            setZoomState(to);
+            spring.start({ scale: to, x: 0, y: 0 });
+          } else {
+            lastTap.current = now;
+          }
+          return;
+        }
+        const s = zoomRef.current;
 
-  function onTouchMove(e) {
-    const st = g.current;
-    if (!st.mode || st.mode === 'none') return;
+        // Увеличенная картинка — жест панорамирует её, а не листает ленту.
+        if (s > 1.01) {
+          const [cx, cy] = clamp(mx, my, s);
+          spring.start({ x: cx, y: cy, immediate: down });
+          return;
+        }
 
-    if (st.mode === 'pinch' && e.touches.length === 2) {
-      const next = Math.min(ZOOM_MAX, Math.max(1, st.startZoom * (dist(e.touches) / st.startDist)));
-      setZoom(next);
-      setOffset((o) => clampOffset(o, next));
-      return;
-    }
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0];
-    const dx = t.clientX - st.startX;
-    const dy = t.clientY - st.startY;
+        if (down) {
+          spring.start({ x: mx, y: my, opacity: 1 - Math.min(Math.abs(my) / 400, 0.5), immediate: true });
+          return;
+        }
 
-    if (st.mode === 'pan') {
-      setOffset(clampOffset({ x: st.baseOffset.x + dx, y: st.baseOffset.y + dy }, zoom));
-    } else {
-      setDrag({ x: dx, y: dy });
-    }
-  }
+        // Быстрый флик закрывает/листает даже на коротком расстоянии —
+        // отсюда порог по скорости рядом с порогом по расстоянию.
+        const w = stageRef.current?.getBoundingClientRect().width || window.innerWidth;
+        const closeByDrag = my > 110 && my > Math.abs(mx);
+        const closeByFlick = vy > 0.5 && dy > 0 && Math.abs(my) > 10;
+        if (closeByDrag || closeByFlick) {
+          spring.start({ y: window.innerHeight, opacity: 0 });
+          setTimeout(onClose, 180);
+          return;
+        }
 
-  function onTouchEnd() {
-    const st = g.current;
-    g.current = {};
+        const nextByDrag = Math.abs(mx) > w * 0.35;
+        const nextByFlick = vx > 0.3 && Math.abs(mx) > 10;
+        if ((nextByDrag || nextByFlick) && Math.abs(mx) > Math.abs(my)) {
+          const forward = dx < 0;
+          const target = forward ? index + 1 : index - 1;
+          if (target >= 0 && target < photos.length) { onIndex(target); return; }
+        }
+        spring.start({ x: 0, y: 0, opacity: 1 });
+      },
 
-    if (st.mode === 'pinch') {
-      // Отпустили ниже единицы — возвращаем в исходное положение.
-      if (zoom <= 1.02) { setAnimating(true); setZoom(1); setOffset({ x: 0, y: 0 }); }
-      return;
-    }
-    if (st.mode !== 'swipe') return;
+      onPinch: ({ offset: [s], first, last }) => {
+        const next = Math.min(4, Math.max(1, s));
+        setZoomState(next);
+        if (first) return;
+        if (last && next <= 1.01) {
+          spring.start({ x: 0, y: 0, scale: 1 });
+          setZoomState(1);
+          return;
+        }
+        const [cx, cy] = clamp(x.get(), y.get(), next);
+        spring.start({ scale: next, x: cx, y: cy, immediate: !last });
+      },
 
-    const { x, y } = drag;
-    const thresholdX = window.innerWidth * SWIPE_X_RATIO;
-    const thresholdY = window.innerHeight * SWIPE_Y_RATIO;
-
-    setAnimating(true);
-    // Вертикальный свайп вниз закрывает — привычный жест для галерей.
-    if (Math.abs(y) > Math.abs(x) && y > thresholdY) { onClose(); return; }
-    if (x <= -thresholdX && index < photos.length - 1) { onIndex(index + 1); }
-    else if (x >= thresholdX && index > 0) { onIndex(index - 1); }
-    setDrag({ x: 0, y: 0 });
-  }
+    },
+    {
+      // threshold 10px — иначе дрожание пальца при обычном тапе читается
+      // как свайп. filterTaps даёт флаг tap вместо нулевого перетаскивания.
+      drag: { filterTaps: true, threshold: 10, from: () => [x.get(), y.get()] },
+      pinch: { scaleBounds: { min: 1, max: 4 }, rubberband: 0.2, from: () => [zoomRef.current, 0] },
+    },
+  );
 
   if (isMobile) {
-    const zoomed = zoom > 1;
     return (
       <div
         // 100dvh, а не 100vh: на мобильных 100vh уходит под адресную строку,
-        // и низ картинки с кнопками оказывался за краем экрана.
+        // и низ картинки с подписью оказывался за краем экрана.
         className="fixed inset-0 z-50 bg-black flex flex-col"
-        style={{ height: '100dvh', touchAction: 'none' }}
+        style={{ height: '100dvh' }}
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3 text-white/90 flex-shrink-0">
           <div className="text-xs min-w-0 truncate">
@@ -290,12 +301,9 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
 
         <div
           ref={stageRef}
+          {...bind()}
           className="flex-1 overflow-hidden flex items-center justify-center"
-          style={{ minHeight: 0 }}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          onTouchCancel={onTouchEnd}
+          style={{ minHeight: 0, touchAction: 'none' }}
         >
           {state === 'loading' && (
             <div className="text-sm text-white/70 flex items-center gap-2">
@@ -304,18 +312,12 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
           )}
           {state === 'error' && <div className="text-sm text-red-400 text-center px-6">{error}</div>}
           {state === 'ok' && blobUrl && (
-            <img
+            <AnimatedImg
               src={blobUrl}
               alt=""
               draggable={false}
               className="max-h-full max-w-full object-contain select-none"
-              style={{
-                transform: `translate(${offset.x + drag.x}px, ${offset.y + (zoomed ? 0 : drag.y)}px) scale(${zoom})`,
-                transition: animating ? 'transform 180ms ease-out' : 'none',
-                // Пока не увеличено, свайп слегка «уводит» картинку —
-                // жест ощущается отзывчивым, а не глухим.
-                opacity: !zoomed && Math.abs(drag.y) > 40 ? 0.6 : 1,
-              }}
+              style={{ x, y, scale, opacity, willChange: 'transform' }}
             />
           )}
         </div>
