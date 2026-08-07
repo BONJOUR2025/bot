@@ -353,7 +353,7 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
     if src.source == "hh":
         new_items = await _collect_hh(token, link.external_vacancy_id)
     elif src.source == "avito":
-        new_items = await avito_api.get_applications_for_vacancy(token, src.employer_id, link.external_vacancy_id)
+        new_items = await _collect_avito(token, src.employer_id, link.external_vacancy_id)
     else:
         return []
 
@@ -414,6 +414,17 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
 
     vacancy = db.query(Vacancy).filter(Vacancy.id == link.vacancy_id).first() if link.vacancy_id else None
     if quick_screening.is_quick_mode(vacancy):
+        # First sync of a link imports the entire existing backlog — on Avito
+        # that is every open chat on the vacancy (44 real people at the time
+        # this was written). Writing to all of them because we happened to
+        # connect the integration today would be indefensible, so the first
+        # pass only records them; screening starts with genuinely new arrivals.
+        if link.last_synced_at is None:
+            logger.info(
+                "[Sync] first sync for link %s: imported %d existing candidates without screening",
+                link.id, len(new_candidate_objs),
+            )
+            return new_candidates
         for cand_obj in new_candidate_objs:
             try:
                 await quick_screening.start_screening(db, cand_obj, vacancy, src, token)
@@ -430,6 +441,27 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
             asyncio.ensure_future(trigger_for_candidate(cand_obj.id))
 
     return new_candidates
+
+
+async def _collect_avito(token: str, employer_id: str, vacancy_id: str) -> list[dict]:
+    """Applicants for an Avito vacancy, preferring the richer applications API.
+
+    That API is gated behind the "Максимальная" Работа subscription and answers
+    402 without it, so we fall back to deriving applicants from Messenger chats
+    — which stays available. The order matters: the moment the subscription is
+    active the paid path takes over on its own, with phone/age/résumé restored
+    and no code change.
+    """
+    from app.services import avito_api
+
+    try:
+        return await avito_api.get_applications_for_vacancy(token, employer_id, vacancy_id)
+    except ValueError as e:
+        if "Максимальной подписки" not in str(e):
+            raise
+        logger.info("[Sync] Avito applications API unavailable (%s) — using messenger chats", e)
+
+    return await avito_api.get_job_chats(token, employer_id, vacancy_id)
 
 
 async def _collect_hh(token: str, vacancy_id: str) -> list[dict]:

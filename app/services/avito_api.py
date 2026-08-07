@@ -97,6 +97,15 @@ async def get_applications_for_vacancy(
                 "createdAtFrom": since,
             },
         )
+        if r.status_code == 402:
+            # Avito's own wording: "Перейдите на Максимальную подписку в
+            # Авито.Работе, чтобы получить доступ к API". Raised rather than
+            # returning [] so the source shows a real reason instead of
+            # looking like a vacancy with no responses.
+            raise ValueError(
+                "Авито: доступ к API откликов требует Максимальной подписки в Авито.Работе "
+                f"(аккаунт {user_id}). Мессенджер при этом может быть доступен."
+            )
         if r.status_code in (404, 403):
             return []
         r.raise_for_status()
@@ -200,6 +209,85 @@ async def send_message(access_token: str, user_id: str, chat_id: str, text: str)
             )
         r.raise_for_status()
         return r.json() if r.content else {}
+
+
+async def get_job_chats(access_token: str, user_id: str, item_id: str,
+                         max_pages: int = 10, page_size: int = 100) -> list[dict]:
+    """Job applicants for a vacancy, derived from Messenger chats instead of
+    the applications API.
+
+    Avito paywalls the whole job/* section behind the "Максимальная" Работа
+    subscription (402 on every endpoint, even ones needing no scope), while
+    the Messenger API stays available. Each chat carries the listing it
+    belongs to (context.value.id), so filtering chats by the vacancy's item id
+    yields exactly its applicants.
+
+    Returned in the same shape as get_applications_for_vacancy() so the sync
+    can use either source interchangeably. Necessarily thinner: phone, age,
+    citizenship and résumé links live only in the paid API. Applicants who
+    only revealed a phone ("by_call") have no chat and therefore never appear
+    here — which is consistent, since there would be no way to write to them.
+    """
+    result = []
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        for page in range(max_pages):
+            r = await client.get(
+                f"{AVITO_BASE}/messenger/v2/accounts/{user_id}/chats",
+                headers=headers,
+                params={"limit": page_size, "offset": page * page_size},
+            )
+            if r.status_code == 403:
+                raise ValueError(
+                    "Авито отклонил чтение чатов (403). Нужен ключ основного аккаунта компании "
+                    "со scope messenger:read."
+                )
+            r.raise_for_status()
+            chats = (r.json() or {}).get("chats") or []
+            if not chats:
+                break
+
+            for chat in chats:
+                context = chat.get("context") or {}
+                value = context.get("value") or {}
+                if str(value.get("id") or "") != str(item_id):
+                    continue
+
+                # The counterparty is whichever participant isn't us.
+                name = "Кандидат"
+                for u in chat.get("users") or []:
+                    if str(u.get("id") or "") != str(user_id):
+                        name = u.get("name") or name
+                        break
+
+                created_ts = chat.get("created")
+                applied_at = None
+                if created_ts:
+                    try:
+                        applied_at = datetime.utcfromtimestamp(int(created_ts)).isoformat()
+                    except Exception:
+                        applied_at = None
+
+                chat_id = str(chat.get("id") or "")
+                result.append({
+                    # No application id is available on this path, so the chat
+                    # id doubles as the stable external key.
+                    "external_id": chat_id,
+                    "name": name,
+                    "phone": "",
+                    "email": "",
+                    "resume_url": "",
+                    "age": None,
+                    "notes": "Авито отклик (через мессенджер)",
+                    "platform_chat_id": chat_id,
+                    "applied_at": applied_at,
+                })
+
+            if len(chats) < page_size:
+                break
+
+    log.info("Avito job chats item=%s → %d applicants", item_id, len(result))
+    return result
 
 
 async def get_messages(access_token: str, user_id: str, chat_id: str, limit: int = 50) -> list[dict]:
