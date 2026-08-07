@@ -49,13 +49,25 @@ export default function SettingsAutomation() {
         <Field label="Место собеседований (по умолчанию)" hint="Используется если у вакансии не задан свой адрес.">
           <input className="input w-full" {...register('automation_interview_location')} placeholder="г. Москва, ул. Примерная, 1" />
         </Field>
-        <Field label="Anthropic API Key" hint="API ключ для Claude AI (console.anthropic.com). Хранится в config.json на сервере.">
+        <Field label="AI-провайдер" hint="Anthropic — прямой доступ к Claude. Polza.ai — шлюз с оплатой в рублях, даёт доступ к DeepSeek и другим моделям.">
+          <select className="input w-full" {...register('llm_provider')}>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="polza">Polza.ai (DeepSeek и др.)</option>
+          </select>
+        </Field>
+        <Field label="Anthropic API Key" hint="API ключ для Claude AI (console.anthropic.com). Используется, если провайдер выше — Anthropic. Хранится в config.json на сервере.">
           <input type="password" className="input w-full font-mono text-sm" placeholder="sk-ant-api03-..." {...register('anthropic_api_key')} />
+        </Field>
+        <Field label="Polza.ai API Key" hint="Ключ из polza.ai/dashboard/api-keys. Используется, если провайдер выше — Polza.ai.">
+          <input type="password" className="input w-full font-mono text-sm" placeholder="pz-..." {...register('polza_api_key')} />
+        </Field>
+        <Field label="Polza.ai — модель" hint="Формат provider/model, например deepseek/deepseek-chat. Проверьте точный id в каталоге моделей на polza.ai/models — пусто = deepseek/deepseek-chat.">
+          <input className="input w-full font-mono text-sm" {...register('polza_model')} placeholder="deepseek/deepseek-chat" />
         </Field>
         <div className="border-t border-[color:var(--color-border)] pt-4 mt-2">
           <p className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wide mb-3">Параметры AI — разговор с кандидатами</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <Field label="Модель" hint="claude-haiku-4-5-20251001 / claude-sonnet-4-6 / claude-opus-4-7">
+            <Field label="Модель" hint="claude-haiku-4-5-20251001 / claude-sonnet-4-6 / claude-opus-4-7 — только если провайдер Anthropic. Для Polza.ai используйте поле «Polza.ai — модель» выше.">
               <input className="input w-full font-mono text-sm" {...register('ai_candidate_model')}
                 placeholder="claude-haiku-4-5-20251001" />
             </Field>

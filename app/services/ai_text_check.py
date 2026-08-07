@@ -72,10 +72,10 @@ def generate_candidate_questions(cfg: dict, title: str, description: str) -> lis
     key, API error, unparseable response) instead of returning an empty list
     — the caller surfaces this to the admin so a misconfiguration doesn't
     look like "AI decided there are no questions"."""
-    from app.services.llm_client import chat
+    from app.services.llm_client import chat, get_client
 
-    if not (cfg.get("anthropic_api_key") or "").strip():
-        raise RuntimeError("Не задан Anthropic API Key (Настройки → Автоматизация).")
+    if not get_client(cfg):
+        raise RuntimeError("Не настроен AI-провайдер (Настройки → Автоматизация).")
 
     prompt = (
         f"Вакансия: {title}\n"
@@ -93,10 +93,10 @@ def generate_candidate_questions(cfg: dict, title: str, description: str) -> lis
         raw = chat(cfg, [{"role": "user", "content": prompt}], max_tokens=2000)
     except Exception as e:
         log.warning("generate_candidate_questions failed: %s", e)
-        raise RuntimeError(f"Ошибка запроса к Anthropic: {e}") from e
+        raise RuntimeError(f"Ошибка запроса к AI: {e}") from e
 
     if not raw:
-        raise RuntimeError("Anthropic не вернул ответ (проверьте API-ключ и логи сервера).")
+        raise RuntimeError("AI не вернул ответ (проверьте API-ключ и логи сервера).")
     m = re.search(r"\{.*\}", raw, re.DOTALL)
     if not m:
         raise RuntimeError("Не удалось распознать JSON в ответе ИИ.")

@@ -110,13 +110,13 @@ async def send_morning_briefing():
 
 
 async def _summarize_messages(tg_msgs, cand_names: dict, hh_candidates, cfg) -> str:
-    """Use Claude to extract only important/actionable messages."""
+    """Use the configured AI provider to extract only important/actionable messages."""
     if not tg_msgs and not hh_candidates:
         return ""
 
-    api_key = (cfg.get("anthropic_api_key") or "").strip() or None
-    if not api_key:
-        # Fallback without Claude
+    from app.services.llm_client import get_client
+    if not get_client(cfg):
+        # Fallback without AI
         parts = []
         if tg_msgs:
             parts.append(f"• {len(tg_msgs)} новых сообщений от кандидатов в Telegram")

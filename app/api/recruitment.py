@@ -649,7 +649,7 @@ def vacancy_checklist(vacancy_id: int, db: Session = Depends(get_db)):
     ).count() > 0
 
     items = [
-        {"key": "api_key", "label": "Настроен Anthropic API-ключ", "done": bool(get_client(cfg))},
+        {"key": "api_key", "label": "Настроен AI-провайдер (API-ключ)", "done": bool(get_client(cfg))},
         {"key": "knowledge_base", "label": "Есть хотя бы один пункт базы знаний (общий или для вакансии)",
          "done": has_global_kb or has_vacancy_kb},
         {"key": "interview_location", "label": "Указано место/формат собеседования",
