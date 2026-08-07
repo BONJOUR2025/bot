@@ -303,6 +303,15 @@ def update_vacancy(vacancy_id: int, data: VacancyUpdate, db: Session = Depends(g
 def delete_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
     v = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
     if not v: raise HTTPException(404, "Vacancy not found")
+    # The model declares ondelete="CASCADE" on KnowledgeBaseEntry.vacancy_id,
+    # but SQLite only enforces FK actions when PRAGMA foreign_keys=ON for the
+    # connection, which this app never sets — so that CASCADE is inert and a
+    # deleted vacancy silently leaves its scoped KB entries orphaned (found
+    # via a real 12-row orphan set from earlier deleted vacancies). Delete
+    # them explicitly instead of relying on a constraint that isn't active.
+    db.query(KnowledgeBaseEntry).filter(
+        KnowledgeBaseEntry.scope == "vacancy", KnowledgeBaseEntry.vacancy_id == vacancy_id
+    ).delete()
     db.delete(v); db.commit()
     return {"status": "deleted"}
 
