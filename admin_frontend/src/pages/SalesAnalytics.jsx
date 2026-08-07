@@ -1,9 +1,10 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   RefreshCw, Download, EyeOff, Eye, ChevronDown, Check,
   TrendingUp, TrendingDown, BarChart3, Trophy, Users, Target, Calendar,
   Percent, Clock, RotateCcw, Gauge, Building2, PackageX, Phone, Package, Maximize2,
+  ChevronRight, Camera, Wallet, ListOrdered,
 } from 'lucide-react';
 import {
   ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid,
@@ -15,6 +16,7 @@ import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
+import OrderPhotos from '../components/OrderPhotos.jsx';
 
 /* ── constants ───────────────────────────────────────────── */
 function toLocalDateStr(d) {
@@ -78,6 +80,11 @@ function toggleSet(setter, key) {
 
 /* ── helpers ─────────────────────────────────────────────── */
 const fmtRub = (v) => v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽';
+const fmtDateFull = (v) => {
+  if (!v) return '—';
+  const d = new Date(v);
+  return isNaN(d) ? '—' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
 const fmtPct = (v) => v == null ? '—' : v.toFixed(1) + '%';
 
 const empName = (code) => EMP_CODE_NAMES[code] || code;
@@ -500,6 +507,221 @@ function ProductRankTable({ title, items, showChange }) {
 }
 
 /* ── Unclaimed orders tab (self-contained: its own "days" window, not the page date range) ── */
+// Одна строка списка заказов. Состав и фотографии тянутся только при
+// раскрытии: в списке легко полтысячи заказов, и грузить состав каждого
+// заранее — полтысячи запросов к Firebird ради данных, которые почти никто
+// не откроет.
+function SalesOrderRow({ order }) {
+  const [expanded, setExpanded] = useState(false);
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function toggle() {
+    if (expanded) { setExpanded(false); return; }
+    setExpanded(true);
+    if (items || loading) return;
+    setLoading(true); setError(null);
+    try {
+      const res = await api.get(
+        `/clients/${order.contragent_id}/orders/${encodeURIComponent(order.doc_num)}/items`
+      );
+      setItems(res.data || []);
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || 'Ошибка загрузки состава');
+    } finally { setLoading(false); }
+  }
+
+  const overdue = !order.issued && order.date_out && new Date(order.date_out) < new Date();
+
+  return (
+    <div className="border-b border-[color:var(--color-border)] last:border-0">
+      <button type="button" onClick={toggle}
+        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[color:var(--color-muted)]/30 transition-colors text-left">
+        {expanded
+          ? <ChevronDown size={14} className="shrink-0 text-[color:var(--color-muted-foreground)]" />
+          : <ChevronRight size={14} className="shrink-0 text-[color:var(--color-muted-foreground)]" />}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm">{order.doc_num}</span>
+            {order.salon && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
+                салон {order.salon}
+              </span>
+            )}
+            {order.photo_count > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)] flex items-center gap-0.5">
+                <Camera size={10} /> {order.photo_count}
+              </span>
+            )}
+            {order.issued
+              ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600">выдан</span>
+              : overdue
+                ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-600">просрочен</span>
+                : <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600">в работе</span>}
+          </div>
+          <div className="text-xs text-[color:var(--color-muted-foreground)] truncate mt-0.5">
+            {order.client}{order.employee ? ` · ${order.employee}` : ''}
+          </div>
+        </div>
+
+        <div className="text-right shrink-0">
+          <div className="font-semibold tabular-nums text-sm">{fmtRub(order.amount)}</div>
+          <div className="text-[11px] text-[color:var(--color-muted-foreground)]">{fmtDateFull(order.date)}</div>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-3 pb-3 pl-9 space-y-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <Detail label="Клиент" value={order.client} />
+            <Detail label="Телефон" value={order.phone || '—'} />
+            <Detail label="Принял" value={order.employee || '—'} />
+            <Detail label="Позиций" value={order.items_count} />
+            <Detail label="Принят" value={fmtDateFull(order.date)} />
+            <Detail label="Обещан" value={fmtDateFull(order.date_out)} />
+            <Detail label="Выдан" value={order.date_out_fact ? fmtDateFull(order.date_out_fact) : '—'} />
+            <Detail label="Сумма" value={fmtRub(order.amount)} />
+          </div>
+
+          {loading && <div className="text-xs text-[color:var(--color-muted-foreground)]">Загрузка состава…</div>}
+          {error && <div className="text-xs text-red-500">{error}</div>}
+          {!loading && !error && items?.length > 0 && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Состав</div>
+              <ul className="space-y-0.5">
+                {items.map((it, i) => (
+                  <li key={i} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate">{it.name}{it.qty != null && it.qty !== 1 ? ` × ${it.qty}` : ''}</span>
+                    <span className="tabular-nums text-[color:var(--color-muted-foreground)] shrink-0">{fmtRub(it.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {!loading && !error && items?.length === 0 && (
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">Нет данных о составе</div>
+          )}
+
+          <OrderPhotos contragentId={order.contragent_id} docNum={order.doc_num} visible={expanded} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Detail({ label, value }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">{label}</div>
+      <div className="truncate">{value}</div>
+    </div>
+  );
+}
+
+function OrdersTab({ params }) {
+  const [orders, setOrders] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [onlyPhotos, setOnlyPhotos] = useState(false);
+  const [onlyOpen, setOnlyOpen] = useState(false);
+
+  const load = useCallback(async (searchText) => {
+    setLoading(true); setError(null);
+    try {
+      const res = await api.get('/sales/orders', {
+        params: { ...params, ...(searchText?.trim() ? { search: searchText.trim() } : {}) },
+      });
+      setOrders(res.data || []);
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
+      setOrders([]);
+    } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(params)]);
+
+  useEffect(() => { load(''); }, [load]);
+
+  // Фильтры «с фото» и «в работе» применяются на клиенте: список уже
+  // ограничен лимитом и периодом, а гонять ради двух галочек новый запрос
+  // к Firebird — лишняя нагрузка на и без того единственный сервер.
+  const shown = (orders || []).filter((o) =>
+    (!onlyPhotos || o.photo_count > 0) && (!onlyOpen || !o.issued)
+  );
+  const total = shown.reduce((s, o) => s + (o.amount || 0), 0);
+  const withPhotos = (orders || []).filter((o) => o.photo_count > 0).length;
+
+  function exportCsv() {
+    if (!shown.length) return;
+    const hdr = '№ заказа;Дата;Клиент;Телефон;Принял;Салон;Позиций;Фото;Сумма;Обещан;Выдан';
+    const body = shown.map((o) => [
+      o.doc_num, o.date, o.client, o.phone, o.employee, o.salon || '',
+      o.items_count, o.photo_count, o.amount, o.date_out || '', o.date_out_fact || '',
+    ].join(';')).join('\n');
+    const blob = new Blob(['﻿' + hdr + '\n' + body], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'orders.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="app-card p-3 flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') load(search); }}
+          placeholder="Номер заказа или клиент…"
+          className="input text-sm flex-1 min-w-[180px]"
+        />
+        <button onClick={() => load(search)} disabled={loading} className="btn btn--primary text-xs">
+          {loading ? 'Поиск…' : 'Найти'}
+        </button>
+        <label className="text-xs flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" checked={onlyPhotos} onChange={(e) => setOnlyPhotos(e.target.checked)} />
+          только с фото
+        </label>
+        <label className="text-xs flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
+          только невыданные
+        </label>
+        <button onClick={exportCsv} disabled={!shown.length} className="btn text-xs disabled:opacity-40">CSV</button>
+      </div>
+
+      {error && <div className="app-card p-4 text-sm text-red-500">{error}</div>}
+
+      {orders && !error && (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <KpiStat label="Заказов" value={shown.length.toLocaleString('ru-RU')} accent="#e61919" icon={<Package size={18} />} />
+            <KpiStat label="Сумма" value={fmtRub(total)} accent="#4af626" icon={<Wallet size={18} />} />
+            <KpiStat label="Средний чек" value={fmtRub(shown.length ? total / shown.length : 0)} accent="#ffb347" icon={<Target size={18} />} />
+            <KpiStat label="С фотографиями" value={withPhotos.toLocaleString('ru-RU')} accent="#6fb8ff" icon={<Camera size={18} />} />
+          </div>
+
+          {orders.length >= 500 && (
+            <div className="text-xs text-amber-600">
+              Показаны первые 500 заказов периода — сузьте период или уточните поиск, чтобы увидеть остальные.
+            </div>
+          )}
+
+          <div className="app-card overflow-hidden">
+            {shown.length === 0 ? (
+              <div className="py-8 text-center text-sm text-[color:var(--color-muted-foreground)]">
+                {loading ? 'Загрузка…' : 'Заказов не найдено'}
+              </div>
+            ) : (
+              shown.map((o) => <SalesOrderRow key={`${o.doc_num}-${o.contragent_id}`} order={o} />)
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function UnclaimedTab() {
   const [days, setDays] = useState(90);
   const [data, setData] = useState(null);
@@ -931,6 +1153,7 @@ export default function SalesAnalytics() {
     { key: 'returns',    label: 'Возвраты',      icon: <RotateCcw size={15} /> },
     { key: 'workplaces', label: 'Пропускная способность', icon: <Gauge size={15} /> },
     { key: 'departments', label: 'Салоны',      icon: <Building2 size={15} /> },
+    { key: 'orders',     label: 'Заказы',        icon: <ListOrdered size={15} /> },
     { key: 'unclaimed',  label: 'Незабранные',  icon: <PackageX size={15} /> },
     { key: 'products',   label: 'Товары',        icon: <Package size={15} /> },
   ];
@@ -1599,6 +1822,7 @@ export default function SalesAnalytics() {
           )}
 
           {/* ══ UNCLAIMED tab ═══════════════════════════════ */}
+          {activeTab === 'orders' && <OrdersTab params={buildParams()} />}
           {activeTab === 'unclaimed' && <UnclaimedTab />}
 
           {/* ══ PRODUCTS tab ════════════════════════════════ */}

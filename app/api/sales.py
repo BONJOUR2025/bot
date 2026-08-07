@@ -145,6 +145,33 @@ def create_sales_router() -> APIRouter:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @router.get("/orders")
+    async def get_orders_for_period(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated salon order-number suffixes"),
+        search: Optional[str] = Query(default=None, description="Поиск по номеру заказа или клиенту"),
+        limit: int = Query(default=500, ge=1, le=2000),
+    ):
+        """Список заказов за период для вкладки «Заказы».
+
+        Намеренно без fdb_cache: у этой выдачи есть свободный текстовый
+        поиск и лимит, то есть ключ кэша получался бы почти уникальным на
+        каждый запрос — кэш только раздувал бы hr.db, ничего не ускоряя.
+        """
+        from app.services.firebird_service import get_firebird_service, run_with_timeout
+
+        df, dt = _resolve_range(date_from, date_to)
+        try:
+            svc = get_firebird_service()
+            return await run_with_timeout(
+                svc.get_orders_for_period, df, dt, _parse_salon_ids(salon_ids), search, limit,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     @router.get("/unclaimed")
     async def get_unclaimed_orders(
         days: int = Query(default=90, ge=1, le=1095),

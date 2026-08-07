@@ -1514,6 +1514,122 @@ class FirebirdService:
             ],
         }
 
+    def get_orders_for_period(
+        self,
+        date_from,
+        date_to,
+        salon_ids: list[str] | None = None,
+        search: str | None = None,
+        limit: int = 500,
+    ) -> list[dict]:
+        """Orders accepted in a date range, one row per order, for the sales
+        page's «Заказы» tab.
+
+        Sums come from correlated subqueries rather than joining both item
+        tables: an order carrying 3 services and 2 goods would otherwise
+        produce 6 rows and inflate every SUM by the other table's row count.
+
+        contragent_id is returned so the UI can reuse the existing per-order
+        endpoints (items, photos) as-is — they are keyed on client + doc_num.
+        photo_count is computed here so the list can show a camera badge
+        without N extra round-trips just to learn whether a row has photos.
+
+        Salon attribution uses the order-number suffix (34247-7 → salon 7),
+        matching _order_salon_code and the payroll-by-salon report, not
+        DOCS.DEP_ID — mixing the two conventions is how the same order ends
+        up counted under different salons in different reports.
+        """
+        if not FIREBIRD_AVAILABLE:
+            return []
+
+        # Фильтры и лимит обязаны жить в SQL, а не в Python: при отборе
+        # «за 30 дней» в диапазон попадает ~1400 заказов, и выбор всех строк
+        # с последующей обрезкой до limit прогонял пять коррелированных
+        # подзапросов по каждой — 62.7с против 0.5с, когда ROWS отсекает
+        # лишнее на стороне сервера.
+        where = ["d.doc_date >= ?", "d.doc_date < ?"]
+        params: list = [date_from, date_to + timedelta(days=1)]
+
+        salon_list = [str(s).strip() for s in (salon_ids or []) if str(s).strip()]
+        if salon_list:
+            # Салон — суффикс номера заказа (34247-7), поэтому LIKE, а не
+            # сравнение с DEP_ID: см. комментарий к _order_salon_code.
+            where.append("(" + " OR ".join(["d.doc_num LIKE ?"] * len(salon_list)) + ")")
+            params.extend(f"%-{s}" for s in salon_list)
+
+        needle = (search or "").strip().lower()
+        if needle:
+            where.append("(LOWER(d.doc_num) LIKE ? OR LOWER(c.name) LIKE ?)")
+            params.extend([f"%{needle}%", f"%{needle}%"])
+
+        sql = f"""
+            SELECT
+                d.doc_num,
+                d.doc_date,
+                d.contragent_id,
+                c.name,
+                c.teleph_cell,
+                u.description,
+                dor.date_out,
+                dor.date_out_fact,
+                (SELECT SUM(s.kredit) FROM doc_order_services s WHERE s.doc_order_id = dor.id),
+                (SELECT SUM(l.kredit) FROM doc_order_lines l WHERE l.doc_order_id = dor.id),
+                (SELECT COUNT(*) FROM doc_order_services s2 WHERE s2.doc_order_id = dor.id),
+                (SELECT COUNT(*) FROM doc_order_lines l2 WHERE l2.doc_order_id = dor.id),
+                (SELECT COUNT(*) FROM doc_order_serv_photos p
+                    INNER JOIN doc_order_services s3 ON s3.id = p.dos_id
+                    WHERE s3.doc_order_id = dor.id)
+            FROM docs d
+                INNER JOIN docs_order dor ON dor.doc_id = d.doc_id
+                LEFT JOIN contragents c ON c.contr_id = d.contragent_id
+                LEFT JOIN users u ON u.user_id = dor.creater_id
+            WHERE {' AND '.join(where)}
+            ORDER BY d.doc_date DESC, d.doc_num DESC
+            ROWS {int(limit)}
+        """
+
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+            finally:
+                con.close()
+        except Exception as e:
+            logger.error(f"Error fetching orders for period: {e}")
+            return []
+
+        out: list[dict] = []
+        for (doc_num, doc_date, contr_id, client, phone, emp_desc,
+             date_out, date_out_fact, serv_sum, goods_sum,
+             serv_cnt, goods_cnt, photo_cnt) in rows:
+            doc_num = (doc_num or "").strip()
+            salon = _order_salon_code(doc_num)
+            client = (client or "").strip()
+            amount = float(serv_sum or 0) + float(goods_sum or 0)
+            out.append({
+                "doc_num": doc_num,
+                "date": doc_date.isoformat() if doc_date else None,
+                "contragent_id": contr_id,
+                "client": client or "—",
+                "phone": (phone or "").strip(),
+                "employee": (emp_desc or "").strip(),
+                "employee_code": _code_from_description(emp_desc),
+                "salon": salon,
+                "date_out": date_out.isoformat() if date_out else None,
+                "date_out_fact": date_out_fact.isoformat() if date_out_fact else None,
+                "amount": amount,
+                "items_count": int(serv_cnt or 0) + int(goods_cnt or 0),
+                "photo_count": int(photo_cnt or 0),
+                # Выдан ли заказ — по факту выдачи, а не по статусу: статус
+                # живёт в истории отдельной таблицей, а здесь нужен один
+                # дешёвый признак для бейджа в списке.
+                "issued": date_out_fact is not None,
+            })
+
+        return out
+
     def get_order_items(self, contragent_id: int, doc_num: str) -> list[dict]:
         """Line items (services + goods) inside one client order.
 
