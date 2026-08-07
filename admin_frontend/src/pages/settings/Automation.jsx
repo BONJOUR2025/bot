@@ -94,6 +94,7 @@ export default function SettingsAutomation() {
               {...register('ai_candidate_system_prompt')}
               placeholder={"Ты HR-ассистент компании. Отвечаешь на вопросы кандидата о вакансии.\n\nБаза знаний:\n{knowledge_base}\n\nМесто собеседований: {interview_location}\n\nПравила..."} />
           </Field>
+          <LlmUsagePanel />
         </div>
       </Section>
 
@@ -101,5 +102,66 @@ export default function SettingsAutomation() {
         <button type="submit" className="btn btn--primary">Сохранить настройки</button>
       </div>
     </form>
+  );
+}
+
+function LlmUsagePanel() {
+  const [usage, setUsage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get('config/llm-usage');
+      setUsage(res.data);
+    } catch {
+      setError('Не удалось загрузить статистику расходов');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  const fmtRub = (v) => (v == null ? '—' : `${Number(v).toFixed(2)} ₽`);
+  const fmtInt = (v) => Number(v || 0).toLocaleString('ru-RU');
+
+  return (
+    <div className="border-t border-[color:var(--color-border)] pt-4 mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wide">
+          Расход AI — токены и рубли
+        </p>
+        <button type="button" onClick={load} disabled={loading} className="btn btn--secondary">
+          {loading ? 'Обновление…' : 'Обновить'}
+        </button>
+      </div>
+      {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
+      {usage && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div className="rounded border border-[color:var(--color-border)] p-3">
+            <p className="text-[color:var(--color-muted-foreground)] mb-1">Сегодня</p>
+            <p className="font-mono">{fmtInt(usage.today.tokens)} токенов</p>
+            <p className="font-mono">{fmtRub(usage.today.cost_rub)}</p>
+          </div>
+          <div className="rounded border border-[color:var(--color-border)] p-3">
+            <p className="text-[color:var(--color-muted-foreground)] mb-1">Всего (в этой панели)</p>
+            <p className="font-mono">{fmtInt(usage.total.tokens)} токенов</p>
+            <p className="font-mono">{fmtRub(usage.total.cost_rub)}</p>
+          </div>
+          <div className="rounded border border-[color:var(--color-border)] p-3">
+            <p className="text-[color:var(--color-muted-foreground)] mb-1">Баланс Polza.ai</p>
+            <p className="font-mono">
+              {usage.balance_rub != null
+                ? fmtRub(usage.balance_rub)
+                : (usage.balance_error ? '—' : 'н/д (провайдер не Polza)')}
+            </p>
+            {usage.balance_error && <p className="text-xs text-red-500 mt-1">{usage.balance_error}</p>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

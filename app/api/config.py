@@ -52,6 +52,23 @@ def create_config_router(service: ConfigService) -> APIRouter:
         else:
             return {"ok": False, "error": f"Не удалось отправить. Проверьте логи сервера и убедитесь что chat_id={chat_id} верный и бот не заблокирован."}
 
+    @router.get("/llm-usage")
+    async def llm_usage():
+        """Live AI spend view: our own running tokens/cost log, plus (when
+        the Polza provider is configured) the actual remaining balance
+        straight from their API — see app/services/llm_usage_service.py."""
+        from app.services.llm_usage_service import get_usage_summary, get_polza_balance
+
+        cfg = service.load()
+        result = get_usage_summary()
+        result["balance_rub"] = None
+        result["balance_error"] = None
+        try:
+            result["balance_rub"] = get_polza_balance(cfg)
+        except Exception as exc:
+            result["balance_error"] = str(exc)
+        return result
+
     @router.get("/secretary-status")
     async def secretary_status():
         """Diagnostic: show current Secretary Mode config values."""

@@ -38,6 +38,7 @@ def init_db() -> None:
     # the warmer process creates this table and the API process reads it,
     # so neither can rely on the other having imported the model first.
     from app.models.fdb_cache import FdbCacheEntry  # noqa: F401
+    from app.models.llm_usage import LlmUsageLog  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _migrate_columns()
