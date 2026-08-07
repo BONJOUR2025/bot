@@ -304,7 +304,13 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const { toast } = useToast();
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
+  // Both job boards expose a chat, they just address it differently: hh by
+  // negotiation id (external_id), Avito by messenger chat id. Avito applies of
+  // type "by_call" carry no chat at all, hence the explicit check.
   const isHh = candidate.source === 'hh' && candidate.external_id;
+  const isAvitoChat = candidate.source === 'avito' && candidate.platform_chat_id;
+  const hasPlatformChat = isHh || isAvitoChat;
+  const platformLabel = candidate.source === 'avito' ? 'Авито' : 'hh.ru';
 
   const [tab, setTab] = useState('info');
   const hasTg = !!candidate.telegram_chat_id;
@@ -317,7 +323,9 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const [localProfile, setLocalProfile] = useState(null);
   const [localProfileAt, setLocalProfileAt] = useState(null);
 
-  // hh.ru chat state
+  // Job-board chat state (hh.ru / Авито)
+  const [quick, setQuick]           = useState(null);
+  const [quickStarting, setQuickStarting] = useState(false);
   const [messages, setMessages]     = useState([]);
   const [msgLoading, setMsgLoading] = useState(false);
   const [msgError, setMsgError]     = useState('');
@@ -339,7 +347,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const [loadingCode, setLoadingCode]   = useState(false);
 
   useEffect(() => {
-    if (tab === 'chat' && isHh && messages.length === 0) loadMessages();
+    if (tab === 'chat' && hasPlatformChat && messages.length === 0) { loadMessages(); loadQuick(); }
     if (tab === 'tg' && candidate.telegram_chat_id && tgMessages.length === 0) loadTgMessages();
   }, [tab]);
 
@@ -356,6 +364,24 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
     } catch (e) {
       setMsgError(e.response?.data?.detail || e.message);
     } finally { setMsgLoading(false); }
+  }
+
+  async function loadQuick() {
+    try {
+      const res = await api.get(`/recruitment/candidates/${candidate.id}/quick-screening`);
+      setQuick(res.data);
+    } catch { /* панель просто не покажется */ }
+  }
+
+  async function startQuick() {
+    setQuickStarting(true); setMsgError('');
+    try {
+      await api.post(`/recruitment/candidates/${candidate.id}/quick-screening`);
+      await loadQuick();
+      await loadMessages();
+    } catch (e) {
+      setMsgError(e.response?.data?.detail || e.message);
+    } finally { setQuickStarting(false); }
   }
 
   async function handleSend() {
@@ -534,7 +560,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           >
             Инфо
           </button>
-          {isHh && (
+          {hasPlatformChat && (
             <button
               onClick={() => setTab('chat')}
               className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors flex items-center gap-1 ${
@@ -543,7 +569,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                   : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
               }`}
             >
-              <MessageCircle size={13} /> hh.ru
+              <MessageCircle size={13} /> {platformLabel}
             </button>
           )}
           <button
@@ -713,6 +739,44 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
         {/* ── Chat tab ── */}
         {tab === 'chat' && (
           <div className="flex flex-col flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+            {/* Быстрый режим для одного кандидата — работает независимо от
+                тумблера вакансии: тумблер решает только, запускать ли опрос
+                автоматически на новых откликах. */}
+            {quick && (
+              <div className="border-b border-[color:var(--color-border)] px-4 py-2.5 bg-[color:var(--color-muted)]/30">
+                {quick.status === 'asking' && (
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                    ⚡ Опрос идёт: вопрос {Math.min(quick.idx + 1, quick.questions.length)} из {quick.questions.length}
+                    {quick.answers.length > 0 && ` · получено ответов: ${quick.answers.length}`}
+                  </p>
+                )}
+                {quick.status === 'done' && (
+                  <p className="text-xs text-emerald-600">✅ Опрос завершён — кандидат ответил на все вопросы</p>
+                )}
+                {quick.status === 'waiting_admin' && (
+                  <p className="text-xs text-amber-600">
+                    ⏸ Опрос остановлен, дальше вы — бот больше не пишет
+                  </p>
+                )}
+                {!quick.status && (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                      {quick.questions.length > 0
+                        ? `Быстрый опрос: ${quick.questions.length} вопрос(ов), бот задаст их здесь по одному`
+                        : 'У вакансии не заданы вопросы быстрого режима'}
+                    </p>
+                    <button
+                      onClick={startQuick}
+                      disabled={!quick.can_start || quickStarting}
+                      className="btn btn--secondary text-xs flex-shrink-0 disabled:opacity-40"
+                    >
+                      {quickStarting ? 'Запуск…' : 'Начать опрос'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Messages list */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
               {msgLoading && (

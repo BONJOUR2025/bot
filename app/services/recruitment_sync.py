@@ -313,7 +313,11 @@ async def _route_to_quick_screening(cand_id: int, src, token: str,
         if not c or not quick_screening.load_state(c):
             return False
         vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
-        if not quick_screening.is_quick_mode(vacancy):
+        # Continuation is keyed on the candidate already having a running
+        # screen, NOT on the vacancy's toggle: the toggle governs whether new
+        # responses start one automatically, and a screen started by hand on a
+        # single candidate must still advance when they reply.
+        if not quick_screening.get_questions(vacancy):
             return False
         await quick_screening.handle_incoming(
             db, c, vacancy, src, token, msg_text, msg_id, ConfigService().load()
@@ -351,7 +355,9 @@ async def _check_avito_messages(db, src, token: str) -> None:
         if quick_screening.load_state(c).get("status") != "asking":
             continue
         vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
-        if quick_screening.is_quick_mode(vacancy):
+        # See _route_to_quick_screening: a running screen is polled regardless
+        # of the vacancy toggle, so manually-started ones keep working.
+        if quick_screening.get_questions(vacancy):
             active.append(c.id)
 
     for cand_id in active:

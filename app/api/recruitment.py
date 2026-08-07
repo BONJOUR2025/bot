@@ -1010,35 +1010,122 @@ def _get_hh_candidate(candidate_id: int, db):
     return c, src.access_token
 
 
+async def _get_platform_chat(candidate_id: int, db):
+    """Resolve a candidate to (candidate, source_row, token) for reading or
+    writing their chat on whichever job board they came from.
+
+    Avito needs a freshly-minted token (client_credentials, 24h) rather than a
+    stored one, so it is fetched here instead of relying on whatever the last
+    sync happened to leave in the row.
+    """
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    if c.source not in ("hh", "avito"):
+        raise HTTPException(400, "Переписка доступна только для откликов с hh.ru или Авито")
+
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == c.source).first()
+    if not src:
+        raise HTTPException(400, f"{c.source} не подключён")
+
+    if c.source == "hh":
+        if not c.external_id:
+            raise HTTPException(400, "У отклика нет идентификатора переписки hh.ru")
+        if not src.access_token:
+            raise HTTPException(400, "hh.ru не подключён")
+        return c, src, src.access_token
+
+    if not (c.platform_chat_id or "").strip():
+        raise HTTPException(400, "У этого отклика нет чата на Авито (кандидат оставил только телефон)")
+    if not (src.client_id and src.client_secret):
+        raise HTTPException(400, "Авито не подключён — не заданы ключи API")
+    from app.services import avito_api
+    try:
+        token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
+    except Exception as exc:
+        raise HTTPException(502, f"Авито: не удалось получить токен ({exc})")
+    return c, src, token
+
+
 @router.get("/candidates/{candidate_id}/messages")
 async def get_candidate_messages(candidate_id: int, db: Session = Depends(get_db)):
-    c, token = _get_hh_candidate(candidate_id, db)
-    # Clear unread flag when admin opens hh chat
+    c, src, token = await _get_platform_chat(candidate_id, db)
+    # Clear unread flag when admin opens the chat
     if getattr(c, 'has_unread_hh_msg', False):
         try:
             c.has_unread_hh_msg = False
             db.commit()
         except Exception:
             pass
-    from app.services import hh_api
+    from app.services import hh_api, avito_api
     try:
+        if c.source == "avito":
+            # Normalised to the same shape as hh so the UI renders one list.
+            return await avito_api.get_messages(token, src.employer_id, c.platform_chat_id)
         return await hh_api.get_messages(token, c.external_id)
+    except ValueError as exc:
+        raise HTTPException(502, str(exc))
     except Exception as exc:
-        raise HTTPException(502, f"Ошибка hh.ru: {exc}")
+        raise HTTPException(502, f"Ошибка {'Авито' if c.source == 'avito' else 'hh.ru'}: {exc}")
 
 
 @router.post("/candidates/{candidate_id}/messages")
 async def send_candidate_message(candidate_id: int, data: SendMessageRequest, db: Session = Depends(get_db)):
     if not data.text.strip():
         raise HTTPException(400, "Текст сообщения не может быть пустым")
-    c, token = _get_hh_candidate(candidate_id, db)
-    from app.services import hh_api
+    c, src, token = await _get_platform_chat(candidate_id, db)
+    from app.services import hh_api, avito_api
     try:
+        if c.source == "avito":
+            return await avito_api.send_message(token, src.employer_id, c.platform_chat_id, data.text.strip())
         return await hh_api.send_message(token, c.external_id, data.text.strip())
     except ValueError as exc:
         raise HTTPException(502, str(exc))
     except Exception as exc:
-        raise HTTPException(502, f"Ошибка hh.ru: {exc}")
+        raise HTTPException(502, f"Ошибка {'Авито' if c.source == 'avito' else 'hh.ru'}: {exc}")
+
+
+# ── Quick screening (быстрый режим) for a single candidate ─────────
+
+@router.get("/candidates/{candidate_id}/quick-screening")
+def get_quick_screening(candidate_id: int, db: Session = Depends(get_db)):
+    """Current screening state for the candidate card."""
+    from app.services import quick_screening
+
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+    state = quick_screening.load_state(c)
+    questions = quick_screening.get_questions(vacancy)
+    return {
+        "status": state.get("status"),          # None = не запущен
+        "idx": state.get("idx", 0),
+        "answers": state.get("answers") or [],
+        "questions": questions,
+        "can_start": bool(questions) and not state and c.source in ("hh", "avito"),
+        "vacancy_quick_mode": bool(vacancy and vacancy.quick_mode_enabled),
+    }
+
+
+@router.post("/candidates/{candidate_id}/quick-screening")
+async def start_quick_screening(candidate_id: int, db: Session = Depends(get_db)):
+    """Start the screen for this one candidate, regardless of whether the
+    vacancy's quick-mode toggle is on — that toggle only governs whether new
+    responses start one automatically. Requires the vacancy to have questions."""
+    from app.services import quick_screening
+
+    c, src, token = await _get_platform_chat(candidate_id, db)
+    vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+    if not quick_screening.get_questions(vacancy):
+        raise HTTPException(400, "У вакансии не заданы вопросы быстрого режима — заполните их в карточке вакансии.")
+    if quick_screening.load_state(c):
+        raise HTTPException(400, "Опрос по этому кандидату уже запущен.")
+
+    ok = await quick_screening.start_screening(db, c, vacancy, src, token)
+    if not ok:
+        raise HTTPException(502, "Не удалось начать опрос — подробности в уведомлении.")
+    return {"status": "started"}
 
 
 # ── Integration sources ────────────────────────────────────────────

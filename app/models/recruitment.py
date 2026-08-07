@@ -346,6 +346,9 @@ class Candidate(Base):
             "email": self.email or "",
             "source": self.source,
             "external_id": self.external_id,
+            # Lets the UI know an Avito chat exists to open (empty for
+            # "by_call" applies, where there is nothing to write to).
+            "platform_chat_id": self.platform_chat_id or "",
             "resume_url": self.resume_url or "",
             "photo_url": self.photo_url or "",
             "age": self.age,
