@@ -27,6 +27,14 @@ class CallbackQueryHandler(MessageHandler):
         super().__init__(None, callback)
         self.pattern = pattern
 
+class BusinessConnectionHandler(MessageHandler):
+    """Secretary Mode's handler (app/core/application.py imports it at module
+    load). Without it here, importing anything under app.api pulled in
+    app.api.__init__ -> app.core.application and died on the import, which
+    made 17 unrelated test files uncollectable."""
+    def __init__(self, callback, *args, **kwargs):
+        super().__init__(None, callback)
+
 class ConversationHandler:
     END = -1
     def __init__(self, *args, **kwargs):

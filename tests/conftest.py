@@ -27,6 +27,10 @@ if "telegram" not in sys.modules and _STUB_DIR.exists():
     _err = importlib.import_module("telegram_stub.error")
     sys.modules["telegram.error"] = _err
 
+    # telegram.request  (telegram_service imports HTTPXRequest at module level)
+    _req = importlib.import_module("telegram_stub.request")
+    sys.modules["telegram.request"] = _req
+
     # Add missing names to the telegram stub that the app imports
     for _name in ("InputFile",):
         if not hasattr(_tg, _name):
@@ -35,6 +39,7 @@ if "telegram" not in sys.modules and _STUB_DIR.exists():
     # Make sub-attributes reachable from the top-level ``telegram`` module
     _tg.ext = _ext
     _tg.error = _err
+    _tg.request = _req
 
     # Provide Application stub for telegram.ext
     if not hasattr(_ext, "Application"):
