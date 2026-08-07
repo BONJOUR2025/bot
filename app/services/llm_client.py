@@ -147,22 +147,4 @@ def _chat_polza(
     )
     response.raise_for_status()
     data = response.json()
-    _record_usage_safely(data)
     return data["choices"][0]["message"]["content"].strip()
-
-
-def _record_usage_safely(data: dict) -> None:
-    """Best-effort: a usage-logging failure must never break a chat reply."""
-    try:
-        usage = data.get("usage") or {}
-        from app.services.llm_usage_service import record_usage
-        record_usage(
-            provider="polza",
-            model=data.get("model") or "",
-            prompt_tokens=usage.get("prompt_tokens") or 0,
-            completion_tokens=usage.get("completion_tokens") or 0,
-            total_tokens=usage.get("total_tokens") or 0,
-            cost_rub=usage.get("cost_rub"),
-        )
-    except Exception:
-        log.warning("llm_client: failed to record polza usage", exc_info=True)

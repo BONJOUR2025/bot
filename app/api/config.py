@@ -54,13 +54,13 @@ def create_config_router(service: ConfigService) -> APIRouter:
 
     @router.get("/llm-usage")
     async def llm_usage():
-        """Live AI spend view: our own running tokens/cost log, plus (when
-        the Polza provider is configured) the actual remaining balance
-        straight from their API — see app/services/llm_usage_service.py."""
+        """Live AI spend view, sourced entirely from Polza.ai's own API
+        (tokens/cost per request, remaining balance) — see
+        app/services/llm_usage_service.py for why nothing is tracked locally."""
         from app.services.llm_usage_service import get_usage_summary, get_polza_balance
 
         cfg = service.load()
-        result = get_usage_summary()
+        result = get_usage_summary(cfg)
         result["balance_rub"] = None
         result["balance_error"] = None
         try:

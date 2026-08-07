@@ -1,62 +1,90 @@
-"""Tests for the AI spend tracker behind the live usage view in Настройки →
-Автоматизация. Same throwaway-SQLite pattern as test_fdb_cache.py — no hr.db.
+"""Tests for the AI spend view in Настройки → Автоматизация.
+
+Deliberately has no local storage of its own — every number comes live from
+Polza.ai's own API (GET /v1/history/generations for tokens/cost,
+GET /v1/balance for remaining rubles), since that already reflects
+everything billed to the key, including calls made outside llm_client.chat().
 """
 from __future__ import annotations
 
 import httpx
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.db.base_class import Base
-from app.models.llm_usage import LlmUsageLog  # noqa: F401 — registers the table
 from app.services import llm_usage_service as svc
 
 
-@pytest.fixture(autouse=True)
-def temp_db(tmp_path, monkeypatch):
-    engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine, tables=[LlmUsageLog.__table__])
-    Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-    monkeypatch.setattr(svc, "_session", lambda: Session())
-    yield
-    engine.dispose()
+def _page(items, page=1, total_pages=1):
+    return {"items": items, "meta": {"page": page, "limit": 100, "total": len(items), "totalPages": total_pages}}
 
 
-class TestRecordAndSummarize:
-    def test_empty_log_returns_zeroed_summary(self):
-        result = svc.get_usage_summary()
+def _item(tokens, cost):
+    return {"usage": {"total_tokens": tokens}, "cost": str(cost)}
+
+
+class TestGetUsageSummary:
+    def test_no_api_key_returns_zeroed_shape(self):
+        result = svc.get_usage_summary({})
         assert result == {
-            "today": {"requests": 0, "tokens": 0, "cost_rub": 0.0},
-            "total": {"requests": 0, "tokens": 0, "cost_rub": 0.0},
+            "today": {"requests": 0, "tokens": 0, "cost_rub": 0.0, "truncated": False},
+            "period_30d": {"requests": 0, "tokens": 0, "cost_rub": 0.0, "truncated": False},
         }
 
-    def test_recorded_usage_is_reflected_in_today_and_total(self):
-        svc.record_usage(provider="polza", model="deepseek/deepseek-chat",
-                          prompt_tokens=100, completion_tokens=50, total_tokens=150,
-                          cost_rub=0.0087)
-        result = svc.get_usage_summary()
-        for bucket in ("today", "total"):
-            assert result[bucket] == {"requests": 1, "tokens": 150, "cost_rub": 0.0087}
+    def test_single_page_is_summed(self, monkeypatch):
+        def fake_get(url, params=None, headers=None, timeout=None):
+            assert url == "https://polza.ai/api/v1/history/generations"
+            assert headers["Authorization"] == "Bearer pz-test"
+            return httpx.Response(200, json=_page([_item(100, "0.01"), _item(50, "0.005")]),
+                                   request=httpx.Request("GET", url))
 
-    def test_multiple_calls_accumulate(self):
-        for _ in range(3):
-            svc.record_usage(provider="polza", model="deepseek/deepseek-chat",
-                              prompt_tokens=10, completion_tokens=10, total_tokens=20,
-                              cost_rub=0.001)
-        result = svc.get_usage_summary()
-        assert result["total"] == {"requests": 3, "tokens": 60, "cost_rub": 0.003}
+        monkeypatch.setattr(httpx, "get", fake_get)
+        result = svc.get_usage_summary({"polza_api_key": "pz-test"})
+        assert result["today"] == {"requests": 2, "tokens": 150, "cost_rub": 0.015, "truncated": False}
 
-    def test_null_cost_rub_does_not_break_sum(self):
-        """anthropic-provider rows (no cost_rub) must not poison the sum."""
-        svc.record_usage(provider="anthropic", model="claude-haiku-4-5-20251001",
-                          prompt_tokens=10, completion_tokens=10, total_tokens=20,
-                          cost_rub=None)
-        svc.record_usage(provider="polza", model="deepseek/deepseek-chat",
-                          prompt_tokens=10, completion_tokens=10, total_tokens=20,
-                          cost_rub=0.001)
-        result = svc.get_usage_summary()
-        assert result["total"] == {"requests": 2, "tokens": 40, "cost_rub": 0.001}
+    def test_date_from_is_sent_for_today_but_not_needed_for_period(self, monkeypatch):
+        captured = []
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            captured.append(dict(params))
+            return httpx.Response(200, json=_page([]), request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(httpx, "get", fake_get)
+        svc.get_usage_summary({"polza_api_key": "pz-test"})
+
+        assert all("dateFrom" in p for p in captured)
+        today_call, period_call = captured[0], captured[1]
+        assert today_call["dateFrom"] > period_call["dateFrom"]
+
+    def test_pagination_across_pages_is_summed(self, monkeypatch):
+        pages = {
+            1: _page([_item(10, "0.001")], page=1, total_pages=2),
+            2: _page([_item(20, "0.002")], page=2, total_pages=2),
+        }
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            return httpx.Response(200, json=pages[params["page"]], request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(httpx, "get", fake_get)
+        result = svc.get_usage_summary({"polza_api_key": "pz-test"})
+        assert result["today"] == {"requests": 2, "tokens": 30, "cost_rub": 0.003, "truncated": False}
+
+    def test_truncated_when_more_pages_exist_than_max_pages(self, monkeypatch):
+        def fake_get(url, params=None, headers=None, timeout=None):
+            # totalPages far beyond max_pages — every page looks identical
+            return httpx.Response(200, json=_page([_item(1, "0.0001")], page=params["page"], total_pages=999),
+                                   request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(httpx, "get", fake_get)
+        result = svc._fetch_period_totals({"polza_api_key": "pz-test"}, None, max_pages=3)
+        assert result["truncated"] is True
+        assert result["requests"] == 3
+
+    def test_missing_usage_or_cost_fields_default_to_zero(self, monkeypatch):
+        def fake_get(url, params=None, headers=None, timeout=None):
+            return httpx.Response(200, json=_page([{}]), request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(httpx, "get", fake_get)
+        result = svc._fetch_period_totals({"polza_api_key": "pz-test"}, None)
+        assert result == {"requests": 1, "tokens": 0, "cost_rub": 0.0, "truncated": False}
 
 
 class TestGetPolzaBalance:
@@ -70,8 +98,7 @@ class TestGetPolzaBalance:
             return httpx.Response(200, json={"amount": "1250.50"}, request=httpx.Request("GET", url))
 
         monkeypatch.setattr(httpx, "get", fake_get)
-        balance = svc.get_polza_balance({"polza_api_key": "pz-test"})
-        assert balance == 1250.50
+        assert svc.get_polza_balance({"polza_api_key": "pz-test"}) == 1250.50
 
     def test_http_error_raises(self, monkeypatch):
         def fake_get(url, headers=None, timeout=None):

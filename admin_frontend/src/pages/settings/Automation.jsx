@@ -145,11 +145,13 @@ function LlmUsagePanel() {
             <p className="text-[color:var(--color-muted-foreground)] mb-1">Сегодня</p>
             <p className="font-mono">{fmtInt(usage.today.tokens)} токенов</p>
             <p className="font-mono">{fmtRub(usage.today.cost_rub)}</p>
+            {usage.today.truncated && <p className="text-xs text-amber-500 mt-1">Показана не вся история за период</p>}
           </div>
           <div className="rounded border border-[color:var(--color-border)] p-3">
-            <p className="text-[color:var(--color-muted-foreground)] mb-1">Всего (в этой панели)</p>
-            <p className="font-mono">{fmtInt(usage.total.tokens)} токенов</p>
-            <p className="font-mono">{fmtRub(usage.total.cost_rub)}</p>
+            <p className="text-[color:var(--color-muted-foreground)] mb-1">За 30 дней</p>
+            <p className="font-mono">{fmtInt(usage.period_30d.tokens)} токенов</p>
+            <p className="font-mono">{fmtRub(usage.period_30d.cost_rub)}</p>
+            {usage.period_30d.truncated && <p className="text-xs text-amber-500 mt-1">Показана не вся история за период</p>}
           </div>
           <div className="rounded border border-[color:var(--color-border)] p-3">
             <p className="text-[color:var(--color-muted-foreground)] mb-1">Баланс Polza.ai</p>
