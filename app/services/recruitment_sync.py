@@ -38,6 +38,8 @@ async def _sync_once() -> None:
                 except Exception as e:
                     logger.warning(f"[Sync] Avito token refresh failed: {e}")
                     continue
+            elif src.source == "hh":
+                token = await _refresh_hh_token_if_needed(db, src) or token
 
             for link in links:
                 try:
@@ -69,6 +71,69 @@ async def _sync_once() -> None:
             logger.warning(f"[Sync] pending TG check error: {e}")
     finally:
         db.close()
+
+
+# Refresh this far ahead of the recorded expiry. hh access tokens live ~14 days,
+# so a 1-day margin means a normally-running sync always renews well before the
+# token dies, and a box that was off for a few days still recovers on first run.
+_HH_REFRESH_MARGIN = timedelta(days=1)
+
+# Re-notify guard: without it a source whose refresh_token is genuinely dead
+# (needs manual re-auth) would alert on every single sync cycle.
+_hh_refresh_failure_notified = False
+
+
+async def _refresh_hh_token_if_needed(db, src) -> str | None:
+    """Renew the hh access token before it expires, returning the token to use.
+
+    hh_api.refresh_access_token() existed from the start but was never called
+    anywhere — so the token simply died every ~2 weeks and the whole hh
+    integration went silent (found in production as a 403 on every sync, with
+    a token that had expired a month earlier and nobody noticed). Returns None
+    if nothing was refreshed, so the caller keeps the existing token.
+    """
+    global _hh_refresh_failure_notified
+    from app.services import hh_api
+    from app.services.notify import send_notification
+
+    if not src.refresh_token:
+        return None
+    expires_at = src.token_expires_at
+    if expires_at and expires_at - _HH_REFRESH_MARGIN > datetime.utcnow():
+        return None  # still comfortably valid
+
+    try:
+        data = await hh_api.refresh_access_token(
+            src.client_id or "", src.client_secret or "", src.refresh_token
+        )
+    except Exception as e:
+        logger.warning("[Sync] hh token refresh failed: %s", e)
+        src.last_error = f"Не удалось обновить токен hh.ru: {e}"
+        db.commit()
+        if not _hh_refresh_failure_notified:
+            _hh_refresh_failure_notified = True
+            await send_notification(
+                "🔑 <b>hh.ru: не удалось обновить токен</b>\n"
+                "Отклики с hh.ru не загружаются. Переподключите hh.ru в разделе «Подбор» "
+                f"— требуется повторная авторизация.\n\nОшибка: {e}"
+            )
+        return None
+
+    _hh_refresh_failure_notified = False
+    token = data.get("access_token")
+    if not token:
+        return None
+    src.access_token = token
+    # hh rotates the refresh token on every use — keeping the old one would
+    # make the *next* refresh fail with an already-used token.
+    if data.get("refresh_token"):
+        src.refresh_token = data["refresh_token"]
+    if data.get("expires_in"):
+        src.token_expires_at = datetime.utcnow() + timedelta(seconds=int(data["expires_in"]))
+    src.last_error = ""
+    db.commit()
+    logger.info("[Sync] hh token refreshed, valid until %s", src.token_expires_at)
+    return token
 
 
 async def _check_pending_tg_links(db) -> None:
