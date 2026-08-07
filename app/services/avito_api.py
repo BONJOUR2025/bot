@@ -135,6 +135,13 @@ async def get_applications_for_vacancy(
         phones = contacts.get("phones") or []
         phone = phones[0].get("value", "") if phones else ""
 
+        # Chat id for replying through the Messenger API. Empty when the
+        # applicant only revealed the phone number (apply type "by_call") —
+        # per Avito's docs there is simply no chat in that case, so anything
+        # built on top must treat "" as "cannot write to this candidate".
+        chat = contacts.get("chat") or {}
+        chat_id = str(chat.get("value") or "") if isinstance(chat, dict) else ""
+
         age = None
         raw_age = data.get("age")
         if raw_age is not None:
@@ -161,8 +168,79 @@ async def get_applications_for_vacancy(
             "resume_url": "",
             "age": age,
             "notes": "Авито отклик",
+            "platform_chat_id": chat_id,
         })
 
+    return result
+
+
+# ── Messenger ────────────────────────────────────────────────────────────────
+# Used to talk to a job applicant in Avito's own chat (see quick_screening).
+# The chat id comes from an application's contacts.chat.value.
+#
+# Note: for Работа, Avito gates the Messenger API behind the "Максимальный"
+# subscription tier — a 403 here usually means the tariff, not a bad token.
+
+MESSAGE_MAX_LEN = 1000  # hard limit from Avito's sendMessage schema
+
+
+async def send_message(access_token: str, user_id: str, chat_id: str, text: str) -> dict:
+    """Send a text message into an Avito chat."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.post(
+            f"{AVITO_BASE}/messenger/v1/accounts/{user_id}/chats/{chat_id}/messages",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"type": "text", "message": {"text": text[:MESSAGE_MAX_LEN]}},
+        )
+        if r.status_code == 403:
+            raise ValueError(
+                "Авито отклонил отправку сообщения (403). Messenger API в Авито Работе "
+                "доступен только на тарифе «Максимальный» — проверьте тариф и права ключа "
+                "(нужен scope messenger:write)."
+            )
+        r.raise_for_status()
+        return r.json() if r.content else {}
+
+
+async def get_messages(access_token: str, user_id: str, chat_id: str, limit: int = 50) -> list[dict]:
+    """Return chat messages, normalised to the same shape hh_api.get_messages uses
+    so callers don't branch per platform:
+        {"id", "text", "author_type": "applicant"|"employer", "created_at"}
+
+    Avito marks direction from *our* side: "in" is a message from the applicant.
+    """
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.get(
+            f"{AVITO_BASE}/messenger/v3/accounts/{user_id}/chats/{chat_id}/messages/",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"limit": limit},
+        )
+        if r.status_code == 403:
+            raise ValueError(
+                "Авито отклонил чтение чата (403). Messenger API в Авито Работе доступен "
+                "только на тарифе «Максимальный» (нужен scope messenger:read)."
+            )
+        r.raise_for_status()
+        data = r.json()
+
+    # The endpoint returns a bare array; tolerate a wrapped form too, since a
+    # shape change here would otherwise surface as a confusing AttributeError.
+    items = data if isinstance(data, list) else (data.get("messages") or [])
+
+    result = []
+    for m in items:
+        if m.get("type") != "text":
+            continue  # images/calls/system carry no answer we can screen on
+        content = m.get("content") or {}
+        text = (content.get("text") or "").strip()
+        if not text:
+            continue
+        result.append({
+            "id": str(m.get("id") or ""),
+            "text": text,
+            "author_type": "applicant" if m.get("direction") == "in" else "employer",
+            "created_at": m.get("created") or 0,
+        })
     return result
 
 

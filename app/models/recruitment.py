@@ -147,6 +147,15 @@ class Vacancy(Base):
     # are written for the internal staff assistant and may contain things
     # irrelevant or inappropriate to hand a candidate. [int, ...]
     knowledge_document_ids_json = Column(Text, nullable=True)
+    # "Быстрый режим": screen the candidate with a few questions directly in the
+    # job board's own chat (hh.ru / Avito) instead of moving them to Telegram
+    # for the full AI interview. Per-vacancy so both flows can run side by side.
+    quick_mode_enabled = Column(Boolean, nullable=False, default=False)
+    # Questions asked in quick mode — deliberately separate from
+    # custom_questions_json (those feed the full Telegram interview's profile),
+    # since a 3-4 question on-platform screen and a full interview want
+    # different wording and different depth. [str, ...]
+    quick_questions_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     candidates = relationship("Candidate", back_populates="vacancy", cascade="all, delete-orphan")
@@ -173,6 +182,12 @@ class Vacancy(Base):
                 knowledge_document_ids = json.loads(self.knowledge_document_ids_json) or []
             except Exception:
                 knowledge_document_ids = []
+        quick_questions = []
+        if self.quick_questions_json:
+            try:
+                quick_questions = json.loads(self.quick_questions_json) or []
+            except Exception:
+                quick_questions = []
         return {
             "id": self.id,
             "title": self.title,
@@ -186,6 +201,8 @@ class Vacancy(Base):
             "deal_breakers": deal_breakers,
             "custom_questions": custom_questions,
             "knowledge_document_ids": knowledge_document_ids,
+            "quick_mode_enabled": bool(self.quick_mode_enabled),
+            "quick_questions": quick_questions,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -297,6 +314,17 @@ class Candidate(Base):
     # the admin sends a manual reply to the candidate.
     pending_question = Column(Text, nullable=True)
     pending_question_asked_at = Column(DateTime, nullable=True)
+    # Avito's own chat id for this application (contacts.chat.value, e.g.
+    # "u2i-2142059193-600277161"). Needed to reply through the Avito Messenger
+    # API — unlike hh.ru, where external_id (the negotiation id) is itself the
+    # address to reply to. Empty when the candidate only revealed a phone
+    # number (apply type "by_call"), in which case there is no chat to write to.
+    platform_chat_id = Column(String, nullable=True, default="")
+    # Quick-screening progress for the on-platform mode (see
+    # app/services/quick_screening.py). JSON: asked index, collected answers,
+    # and which alerts already fired. Separate from the Telegram interview's
+    # interview_phase/stages_snapshot_json so the two flows never fight.
+    quick_state_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

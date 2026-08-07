@@ -54,6 +54,8 @@ class VacancyCreate(BaseModel):
     deal_breakers: Optional[List[DealBreaker]] = None
     custom_questions: Optional[List[str]] = None
     knowledge_document_ids: Optional[List[int]] = None
+    quick_mode_enabled: bool = False
+    quick_questions: Optional[List[str]] = None
 
 class VacancyUpdate(BaseModel):
     title: Optional[str] = None
@@ -69,6 +71,8 @@ class VacancyUpdate(BaseModel):
     deal_breakers: Optional[List[DealBreaker]] = None
     custom_questions: Optional[List[str]] = None
     knowledge_document_ids: Optional[List[int]] = None
+    quick_mode_enabled: Optional[bool] = None
+    quick_questions: Optional[List[str]] = None
 
 
 class VacancyTemplateCreate(BaseModel):
@@ -222,8 +226,9 @@ def _serialize_deal_breakers(deal_breakers: Optional[List[DealBreaker]]) -> Opti
 
 
 def _serialize_custom_questions(questions: Optional[List[str]]) -> Optional[str]:
-    """Converts a list of question strings into the custom_questions_json
-    column value, dropping blanks."""
+    """Converts a list of question strings into a JSON column value, dropping
+    blanks. Used for both custom_questions_json (full Telegram interview) and
+    quick_questions_json (on-platform quick screen)."""
     import json
 
     if questions is None:
@@ -265,7 +270,9 @@ def create_vacancy(data: VacancyCreate, db: Session = Depends(get_db)):
                 is_open=data.is_open, strategy_id=data.strategy_id,
                 deal_breakers_json=_serialize_deal_breakers(data.deal_breakers),
                 custom_questions_json=_serialize_custom_questions(data.custom_questions),
-                knowledge_document_ids_json=_serialize_knowledge_document_ids(data.knowledge_document_ids))
+                knowledge_document_ids_json=_serialize_knowledge_document_ids(data.knowledge_document_ids),
+                quick_mode_enabled=data.quick_mode_enabled,
+                quick_questions_json=_serialize_custom_questions(data.quick_questions))
     db.add(v); db.commit(); db.refresh(v)
     return v.to_dict()
 
@@ -294,6 +301,10 @@ def update_vacancy(vacancy_id: int, data: VacancyUpdate, db: Session = Depends(g
         v.deal_breakers_json = _serialize_deal_breakers(data.deal_breakers)
     if data.custom_questions is not None:
         v.custom_questions_json = _serialize_custom_questions(data.custom_questions)
+    if data.quick_mode_enabled is not None:
+        v.quick_mode_enabled = data.quick_mode_enabled
+    if data.quick_questions is not None:
+        v.quick_questions_json = _serialize_custom_questions(data.quick_questions)
     if data.knowledge_document_ids is not None:
         v.knowledge_document_ids_json = _serialize_knowledge_document_ids(data.knowledge_document_ids)
     db.commit(); db.refresh(v)
@@ -337,6 +348,8 @@ def duplicate_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
         deal_breakers_json=src.deal_breakers_json,
         custom_questions_json=src.custom_questions_json,
         knowledge_document_ids_json=src.knowledge_document_ids_json,
+        quick_mode_enabled=src.quick_mode_enabled,
+        quick_questions_json=src.quick_questions_json,
     )
     db.add(v); db.commit(); db.refresh(v)
 

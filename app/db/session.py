@@ -157,6 +157,10 @@ def _run_migrations() -> None:
             "ALTER TABLE candidates ADD COLUMN profile_generated_at DATETIME",
             "ALTER TABLE candidates ADD COLUMN pending_question TEXT",
             "ALTER TABLE candidates ADD COLUMN pending_question_asked_at DATETIME",
+            "ALTER TABLE candidates ADD COLUMN platform_chat_id TEXT DEFAULT ''",
+            "ALTER TABLE candidates ADD COLUMN quick_state_json TEXT",
+            "ALTER TABLE vacancies ADD COLUMN quick_mode_enabled BOOLEAN DEFAULT 0",
+            "ALTER TABLE vacancies ADD COLUMN quick_questions_json TEXT",
         ]:
             try:
                 conn.execute(text(stmt))

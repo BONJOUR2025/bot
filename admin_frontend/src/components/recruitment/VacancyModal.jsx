@@ -16,6 +16,7 @@ const WIZARD_STEPS = [
   { key: 'dealbreakers',  label: 'Дил-брейкеры' },
   { key: 'askquestions',  label: 'Вопросы для кандидата' },
   { key: 'kbdocs',        label: 'Материалы базы знаний' },
+  { key: 'quickmode',     label: 'Быстрый режим' },
   { key: 'strategy',      label: 'Стратегия найма' },
   { key: 'questions',     label: 'Вопросы кандидатов' },
   { key: 'extra',         label: 'Особые инструкции' },
@@ -198,6 +199,98 @@ function StepAskQuestions({ vacancyId, questions, setQuestions, onPatched }) {
 
       <button onClick={save} disabled={saving} className="btn btn--primary text-sm">
         {saving ? 'Сохранение...' : 'Сохранить вопросы'}
+      </button>
+    </div>
+  );
+}
+
+// «Быстрый режим» — screen the candidate right in the job board's chat
+// (hh.ru / Avito) instead of inviting them to Telegram for the full interview.
+// Per-vacancy, so both flows can run side by side across different vacancies.
+function StepQuickMode({ vacancyId, enabled, setEnabled, questions, setQuestions, onPatched }) {
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  function updateRow(idx, value) {
+    setQuestions(rows => rows.map((r, i) => i === idx ? value : r));
+  }
+  function removeRow(idx) {
+    setQuestions(rows => rows.filter((_, i) => i !== idx));
+  }
+  function addRow() {
+    setQuestions(rows => [...rows, '']);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const cleaned = questions.filter(q => q.trim());
+      const res = await api.patch(`/recruitment/vacancies/${vacancyId}`, {
+        quick_mode_enabled: enabled, quick_questions: cleaned,
+      });
+      onPatched?.(res.data);
+      toast('Сохранено', 'success');
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message, 'error');
+    } finally { setSaving(false); }
+  }
+
+  if (!vacancyId) {
+    return <p className="text-sm text-[color:var(--color-muted-foreground)]">Сначала сохраните основное на шаге 1.</p>;
+  }
+
+  const cleanCount = questions.filter(q => q.trim()).length;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-[color:var(--color-muted-foreground)]">
+        В быстром режиме бот отвечает кандидату прямо на площадке (hh.ru / Авито), задаёт вопросы ниже
+        по одному и присылает вам ответы. Кандидата <b>не</b> переводят в Telegram и полное AI-интервью
+        со скорингом не проводится.
+      </p>
+
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input type="checkbox" className="mt-0.5" checked={enabled}
+          onChange={e => setEnabled(e.target.checked)} />
+        <span className="text-sm">
+          Включить быстрый режим для этой вакансии
+          <span className="block text-xs text-[color:var(--color-muted-foreground)]">
+            Выключено — работает обычный сценарий с переводом в Telegram.
+          </span>
+        </span>
+      </label>
+
+      {enabled && cleanCount === 0 && (
+        <p className="text-xs text-amber-600">
+          Нужен хотя бы один вопрос — иначе режим не включится и отклики пойдут по обычному сценарию.
+        </p>
+      )}
+
+      {questions.map((q, idx) => (
+        <div key={idx} className="flex items-center gap-1.5">
+          <span className="text-xs text-[color:var(--color-muted-foreground)] w-4 flex-shrink-0">{idx + 1}.</span>
+          <input className="input text-sm flex-1 min-w-0" value={q}
+            onChange={e => updateRow(idx, e.target.value)}
+            placeholder="Например: У вас есть гражданство РФ?" />
+          <button type="button" onClick={() => removeRow(idx)} title="Удалить вопрос"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-red-400 flex-shrink-0">
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+
+      <button type="button" onClick={addRow}
+        className="text-xs text-[color:var(--color-primary)] flex items-center gap-1 hover:underline">
+        <Plus size={13} /> Добавить вопрос
+      </button>
+
+      <p className="text-xs text-[color:var(--color-muted-foreground)]">
+        Вы получите уведомление на новый отклик, когда кандидат ответит на все вопросы, если он задаст
+        встречный вопрос (бот на него не отвечает) и если он молчит сутки.
+      </p>
+
+      <button onClick={save} disabled={saving} className="btn btn--primary text-sm">
+        {saving ? 'Сохранение...' : 'Сохранить'}
       </button>
     </div>
   );
@@ -650,6 +743,8 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
   const [dealBreakers, setDealBreakers] = useState(vacancy?.deal_breakers || []);
   const [customQuestions, setCustomQuestions] = useState(vacancy?.custom_questions || []);
   const [kbDocumentIds, setKbDocumentIds] = useState(vacancy?.knowledge_document_ids || []);
+  const [quickModeEnabled, setQuickModeEnabled] = useState(vacancy?.quick_mode_enabled || false);
+  const [quickQuestions, setQuickQuestions] = useState(vacancy?.quick_questions || []);
   const [saving, setSaving] = useState(false);
   const [showStrategyMgmt, setShowStrategyMgmt] = useState(false);
   const [showKb, setShowKb] = useState(false);
@@ -683,6 +778,8 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
     setDealBreakers(data.deal_breakers || []);
     setCustomQuestions(data.custom_questions || []);
     setKbDocumentIds(data.knowledge_document_ids || []);
+    setQuickModeEnabled(data.quick_mode_enabled || false);
+    setQuickQuestions(data.quick_questions || []);
     onSave(data);
   }
 
@@ -735,6 +832,12 @@ export default function VacancyModal({ vacancy, onClose, onSave, zIndex }) {
           {step === 'askquestions' && (
             <StepAskQuestions vacancyId={vacancyId} questions={customQuestions}
               setQuestions={setCustomQuestions} onPatched={handlePatched} />
+          )}
+          {step === 'quickmode' && (
+            <StepQuickMode vacancyId={vacancyId}
+              enabled={quickModeEnabled} setEnabled={setQuickModeEnabled}
+              questions={quickQuestions} setQuestions={setQuickQuestions}
+              onPatched={handlePatched} />
           )}
           {step === 'kbdocs' && (
             <StepKbDocuments vacancyId={vacancyId} documentIds={kbDocumentIds}

@@ -64,11 +64,25 @@ async def _sync_once() -> None:
                 except Exception as e:
                     logger.warning(f"[Sync] hh message check failed: {e}")
 
+            # Poll Avito chats, but only for candidates in an active quick screen
+            if src.source == "avito" and token:
+                try:
+                    await _check_avito_messages(db, src, token)
+                except Exception as e:
+                    logger.warning(f"[Sync] avito message check failed: {e}")
+
         # Check 24h unlinked candidates
         try:
             await _check_pending_tg_links(db)
         except Exception as e:
             logger.warning(f"[Sync] pending TG check error: {e}")
+
+        # Alert on quick-screen candidates who went silent for 24h
+        try:
+            from app.services import quick_screening
+            await quick_screening.check_silence(db)
+        except Exception as e:
+            logger.warning(f"[Sync] quick screening silence check error: {e}")
     finally:
         db.close()
 
@@ -235,6 +249,12 @@ async def _check_hh_messages(db, src, token: str) -> None:
                     logger.info("[Sync] hh new applicant message from %s has empty text, skipping notification", name)
                     return
 
+                # A candidate mid-quick-screen gets their reply consumed by the
+                # screening state machine (which sends its own, richer alerts)
+                # instead of the generic "новое сообщение" ping.
+                if await _route_to_quick_screening(cand_id, src, token, msg_text, latest_id):
+                    return
+
                 logger.warning("[Sync] hh NEW applicant message from %s (neg=%s), attempting notification", name, neg_id)
                 ok = await send_notification(
                     f"💬 <b>Новое сообщение от кандидата (hh.ru)</b>\n"
@@ -251,6 +271,79 @@ async def _check_hh_messages(db, src, token: str) -> None:
         check_one(c.id, c.external_id, c.name, c.last_msg_id)
         for c in candidates
     ])
+
+
+async def _route_to_quick_screening(cand_id: int, src, token: str,
+                                     msg_text: str, msg_id: str) -> bool:
+    """Feed an incoming candidate message to the quick-screening state machine.
+
+    Returns True if the message was consumed there, so the caller skips its own
+    generic notification — the screening sends its own, more useful alerts.
+    Runs in its own session, matching the surrounding polling code.
+    """
+    from app.db.session import SessionLocal
+    from app.models.recruitment import Candidate, Vacancy
+    from app.services import quick_screening
+    from app.services.config_service import ConfigService
+
+    db = SessionLocal()
+    try:
+        c = db.query(Candidate).filter(Candidate.id == cand_id).first()
+        if not c or not quick_screening.load_state(c):
+            return False
+        vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+        if not quick_screening.is_quick_mode(vacancy):
+            return False
+        await quick_screening.handle_incoming(
+            db, c, vacancy, src, token, msg_text, msg_id, ConfigService().load()
+        )
+        return True
+    except Exception as e:
+        logger.warning("[Sync] quick screening failed for candidate %s: %s", cand_id, e)
+        return False
+    finally:
+        db.close()
+
+
+async def _check_avito_messages(db, src, token: str) -> None:
+    """Poll Avito chats for candidates in an active quick screen.
+
+    Unlike hh, Avito is polled only for these candidates: every other Avito
+    candidate has no conversation we drive, and the Messenger API is both
+    rate-limited and gated behind the "Максимальный" tariff.
+    """
+    from app.models.recruitment import Candidate, Vacancy
+    from app.services import avito_api, quick_screening
+
+    candidates = db.query(Candidate).filter(
+        Candidate.source == "avito",
+        Candidate.platform_chat_id.isnot(None),
+        Candidate.platform_chat_id != "",
+        Candidate.quick_state_json.isnot(None),
+        Candidate.quick_state_json != "",
+    ).all()
+    if not candidates:
+        return
+
+    active = []
+    for c in candidates:
+        if quick_screening.load_state(c).get("status") != "asking":
+            continue
+        vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+        if quick_screening.is_quick_mode(vacancy):
+            active.append(c.id)
+
+    for cand_id in active:
+        try:
+            c = db.query(Candidate).filter(Candidate.id == cand_id).first()
+            messages = await avito_api.get_messages(token, src.employer_id, c.platform_chat_id)
+            incoming = [m for m in messages if m["author_type"] == "applicant"]
+            if not incoming:
+                continue
+            latest = max(incoming, key=lambda m: m["created_at"])
+            await _route_to_quick_screening(cand_id, src, token, latest["text"], latest["id"])
+        except Exception as e:
+            logger.warning("[Sync] avito message check failed for candidate %s: %s", cand_id, e)
 
 
 async def _sync_link(db, src, link, token: str) -> list[dict]:
@@ -294,6 +387,9 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 age=item.get("age"),
                 stage="отклик",
                 notes=item.get("notes", ""),
+                # Avito only: the chat to reply in. hh replies go to
+                # external_id (the negotiation), so it stays empty there.
+                platform_chat_id=item.get("platform_chat_id", ""),
                 created_at=applied_at or datetime.utcnow(),
             )
             db.add(c)
@@ -306,11 +402,30 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
             new_candidate_objs.append(c)
     db.flush()
 
+    if not new_candidate_objs:
+        return new_candidates
+
+    # A vacancy in "быстрый режим" is screened right here on the job board and
+    # never invited to Telegram, so it must not also go through the automation
+    # that sends the Telegram-link message — the two flows would talk over each
+    # other in the same chat.
+    from app.models.recruitment import Vacancy
+    from app.services import quick_screening
+
+    vacancy = db.query(Vacancy).filter(Vacancy.id == link.vacancy_id).first() if link.vacancy_id else None
+    if quick_screening.is_quick_mode(vacancy):
+        for cand_obj in new_candidate_objs:
+            try:
+                await quick_screening.start_screening(db, cand_obj, vacancy, src, token)
+            except Exception as e:
+                logger.warning("[Sync] quick screening start failed for candidate %s: %s", cand_obj.id, e)
+        return new_candidates
+
     # Trigger automation for newly added candidates — trigger_for_candidate
     # resolves the vacancy's strategy and applies its filters itself, so no
     # pre-filtering is needed here.
     from app.services.automation import is_enabled, trigger_for_candidate
-    if is_enabled() and new_candidate_objs:
+    if is_enabled():
         for cand_obj in new_candidate_objs:
             asyncio.ensure_future(trigger_for_candidate(cand_obj.id))
 
