@@ -435,13 +435,22 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
             const p = photos[i];
             const url = urls[p.id];
             const err = errors[p.id];
+            // Зум и «убирание» действуют только на текущий кадр, но гасятся
+            // внутри интерполяции, а не выключением стиля: набор анимируемых
+            // свойств обязан оставаться одинаковым у всех кадров, иначе при
+            // превращении соседа в текущий react-spring переподключает
+            // анимацию и кадр моргает. Раньше масштаб применялся ко всем, и
+            // увеличенный сосед наезжал на текущий: при зуме 2.5 его левый
+            // край оказывался на 114px при видимой области 0..390.
+            const isCurrent = i === index;
+            const only = (v) => (isCurrent ? v : 0);
             return (
               <AnimatedDiv
                 key={p.id}
                 className="absolute inset-0 flex items-center justify-center"
                 style={{
                   x: stripX.to((v) => i * ((stageWidth || window.innerWidth) + GAP) + v),
-                  y: dy,
+                  y: dy.to(only),
                 }}
               >
                 {err && <div className="text-sm text-red-400 text-center px-6">{err}</div>}
@@ -456,18 +465,13 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
                     alt=""
                     draggable={false}
                     className="max-h-full max-w-full object-contain select-none"
-                    // Стиль одинаковой формы у всех кадров, а не только у
-                    // текущего: когда соседний кадр становился текущим, набор
-                    // анимируемых свойств менялся с undefined на springs, и
-                    // react-spring переподключал анимацию — отсюда моргание в
-                    // момент появления снимка. Соседям пружины безвредны:
-                    // зум сбрасывается при смене кадра, а листать увеличенное
-                    // нельзя — там жест панорамирует.
                     style={{
-                      x: ox, y: oy,
+                      x: ox.to(only),
+                      y: oy.to(only),
                       // Масштаб — произведение зума и «убирания»: при свайпе
-                      // вниз кадр уменьшается поверх текущего зума.
-                      scale: to([sc, dismiss], (z, k) => z * k),
+                      // вниз кадр уменьшается поверх текущего зума. У соседей
+                      // всегда 1, иначе увеличенный сосед наезжает на текущий.
+                      scale: to([sc, dismiss], (z, k) => (isCurrent ? z * k : 1)),
                       willChange: 'transform',
                     }}
                   />
