@@ -191,7 +191,26 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
   const [zoomed, setZoomed] = useState(false);
 
   const box = useCallback(() => stageRef.current?.getBoundingClientRect(), []);
-  const stageW = useCallback(() => box()?.width || window.innerWidth, [box]);
+  // Ширина меряется один раз и при ресайзе, а не внутри интерполятора:
+  // getBoundingClientRect на каждом кадре для каждого из трёх кадров — это
+  // 180 принудительных пересчётов layout в секунду, отсюда и подрагивание
+  // при появлении нового снимка.
+  const [stageWidth, setStageWidth] = useState(0);
+  const widthRef = useRef(0);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.getBoundingClientRect().width;
+      widthRef.current = w;
+      setStageWidth(w);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const stageW = useCallback(() => widthRef.current || window.innerWidth, []);
 
   const [{ dx, dy, dismiss, backdrop, ox, oy, sc }, spring] = useSpring(() => ({
     dx: 0, dy: 0, dismiss: 1, backdrop: 1, ox: 0, oy: 0, sc: 1, config: SPRING,
@@ -301,8 +320,11 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
           return;
         }
 
+        // Оба условия требуют вертикального преобладания. Без этого быстрый
+        // горизонтальный свайп с малейшим уклоном вниз закрывал просмотр
+        // вместо листания — и жест ощущался как чересчур чувствительный.
         const closeByDrag = my > 110 && vertical;
-        const closeByFlick = vy > 0.5 && dyDir > 0 && Math.abs(my) > 10;
+        const closeByFlick = vertical && dyDir > 0 && vy > 0.6 && my > 60;
         if (closeByDrag || closeByFlick) {
           spring.start({ dy: window.innerHeight, dismiss: 0.6, backdrop: 0 });
           setTimeout(onClose, 180);
@@ -387,7 +409,6 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
           style={{ minHeight: 0, touchAction: 'none' }}>
           {slides.map((i) => {
             const p = photos[i];
-            const current = i === index;
             const url = urls[p.id];
             const err = errors[p.id];
             return (
@@ -395,8 +416,8 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
                 key={p.id}
                 className="absolute inset-0 flex items-center justify-center"
                 style={{
-                  x: dx.to((v) => (i - index) * (stageW() + GAP) + v),
-                  y: current ? dy : 0,
+                  x: dx.to((v) => (i - index) * ((stageWidth || window.innerWidth) + GAP) + v),
+                  y: dy,
                 }}
               >
                 {err && <div className="text-sm text-red-400 text-center px-6">{err}</div>}
@@ -411,15 +432,20 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
                     alt=""
                     draggable={false}
                     className="max-h-full max-w-full object-contain select-none"
-                    style={current
-                      ? {
-                          x: ox, y: oy,
-                          // Масштаб — произведение зума и «убирания»: при
-                          // свайпе вниз кадр уменьшается поверх текущего зума.
-                          scale: to([sc, dismiss], (z, k) => z * k),
-                          willChange: 'transform',
-                        }
-                      : undefined}
+                    // Стиль одинаковой формы у всех кадров, а не только у
+                    // текущего: когда соседний кадр становился текущим, набор
+                    // анимируемых свойств менялся с undefined на springs, и
+                    // react-spring переподключал анимацию — отсюда моргание в
+                    // момент появления снимка. Соседям пружины безвредны:
+                    // зум сбрасывается при смене кадра, а листать увеличенное
+                    // нельзя — там жест панорамирует.
+                    style={{
+                      x: ox, y: oy,
+                      // Масштаб — произведение зума и «убирания»: при свайпе
+                      // вниз кадр уменьшается поверх текущего зума.
+                      scale: to([sc, dismiss], (z, k) => z * k),
+                      willChange: 'transform',
+                    }}
                   />
                 )}
               </AnimatedDiv>
