@@ -197,24 +197,45 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
   // при появлении нового снимка.
   const [stageWidth, setStageWidth] = useState(0);
   const widthRef = useRef(0);
+  const indexRef = useRef(index);
+  useEffect(() => { indexRef.current = index; }, [index]);
+  const stageW = useCallback(() => widthRef.current || window.innerWidth, []);
+
+  // Лента живёт в АБСОЛЮТНЫХ координатах: stripX — положение всей ленты, а
+  // кадр i стоит в i*step + stripX. Раньше позиция считалась от текущего
+  // индекса ((i - index)*step + сдвиг), из-за чего index и сдвиг обязаны были
+  // меняться атомарно — а они не могут: spring.set пишет в DOM синхронно, а
+  // onIndex это состояние React, ре-рендер позже. В зазоре сдвиг был уже
+  // обнулён, индекс ещё старый — и предыдущий кадр на кадр анимации вставал
+  // в центр. С абсолютными координатами доводка приходит ровно в ту точку,
+  // которую потом выставит эффект по смене индекса, поэтому порядок неважен.
+  const [{ stripX, dy, dismiss, backdrop, ox, oy, sc }, spring] = useSpring(() => ({
+    stripX: 0, dy: 0, dismiss: 1, backdrop: 1, ox: 0, oy: 0, sc: 1, config: SPRING,
+  }));
+
+  const step = useCallback(() => (widthRef.current || window.innerWidth) + GAP, []);
+  const restX = useCallback((i) => -i * step(), [step]);
+
+  // Ширина меряется один раз и по ResizeObserver, а не внутри интерполятора:
+  // getBoundingClientRect на каждом кадре анимации для каждого из трёх кадров
+  // ленты — это ~180 принудительных пересчётов layout в секунду.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const measure = () => {
       const w = el.getBoundingClientRect().width;
+      if (w === widthRef.current) return;
       widthRef.current = w;
       setStageWidth(w);
+      // Шаг ленты зависит от ширины, поэтому при первом замере и при повороте
+      // экрана её нужно переставить в положение текущего кадра.
+      spring.set({ stripX: -indexRef.current * (w + GAP) });
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-  const stageW = useCallback(() => widthRef.current || window.innerWidth, []);
-
-  const [{ dx, dy, dismiss, backdrop, ox, oy, sc }, spring] = useSpring(() => ({
-    dx: 0, dy: 0, dismiss: 1, backdrop: 1, ox: 0, oy: 0, sc: 1, config: SPRING,
-  }));
+  }, [spring]);
 
   const setZoomState = useCallback((s) => {
     zoomRef.current = s;
@@ -224,8 +245,8 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
   // Новый кадр открывается «как есть», без унаследованного зума.
   useEffect(() => {
     setZoomState(1);
-    spring.set({ dx: 0, dy: 0, dismiss: 1, backdrop: 1, ox: 0, oy: 0, sc: 1 });
-  }, [index, spring, setZoomState]);
+    spring.set({ stripX: restX(index), dy: 0, dismiss: 1, backdrop: 1, ox: 0, oy: 0, sc: 1 });
+  }, [index, spring, setZoomState, restX]);
 
   // Пределы панорамирования увеличенного кадра.
   const panMax = useCallback((s) => {
@@ -238,12 +259,14 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
   // индекс, одновременно обнуляя сдвиг — иначе кадр дёрнулся бы на ширину
   // экрана в момент переключения.
   const settleTo = useCallback((target) => {
-    const dir = target > index ? -1 : 1;
+    // Доводим ленту точно в положение целевого кадра и только по завершении
+    // сообщаем наверх новый индекс. Обнулять что-либо не нужно: эффект по
+    // смене индекса выставит ровно то же значение stripX.
     spring.start({
-      dx: dir * (stageW() + GAP),
-      onRest: () => { onIndex(target); spring.set({ dx: 0 }); },
+      stripX: restX(target),
+      onRest: () => onIndex(target),
     });
-  }, [index, onIndex, spring, stageW]);
+  }, [onIndex, spring, restX]);
 
   const bind = useGesture(
     {
@@ -315,7 +338,8 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
             // На краях ленты ход вязнет резинкой, а не упирается насмерть.
             const atStart = index === 0 && mx > 0;
             const atEnd = index === photos.length - 1 && mx < 0;
-            spring.start({ dx: (atStart || atEnd) ? rubber(mx, w) : mx, immediate: true });
+            const shift = (atStart || atEnd) ? rubber(mx, w) : mx;
+            spring.start({ stripX: restX(index) + shift, immediate: true });
           }
           return;
         }
@@ -337,7 +361,7 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
           const target = dxDir < 0 ? index + 1 : index - 1;
           if (target >= 0 && target < photos.length) { settleTo(target); return; }
         }
-        spring.start({ dx: 0, dy: 0, dismiss: 1, backdrop: 1 });
+        spring.start({ stripX: restX(index), dy: 0, dismiss: 1, backdrop: 1 });
       },
 
       onPinch: ({ offset: [s], origin: [px, py], first, last, memo }) => {
@@ -416,7 +440,7 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
                 key={p.id}
                 className="absolute inset-0 flex items-center justify-center"
                 style={{
-                  x: dx.to((v) => (i - index) * ((stageWidth || window.innerWidth) + GAP) + v),
+                  x: stripX.to((v) => i * ((stageWidth || window.innerWidth) + GAP) + v),
                   y: dy,
                 }}
               >
