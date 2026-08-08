@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { useSpring, animated } from '@react-spring/web';
+import { useSpring, animated, to } from '@react-spring/web';
 import { useGesture } from '@use-gesture/react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -97,59 +97,79 @@ export default function OrderPhotos({ contragentId, docNum, visible }) {
   );
 }
 
+
 // Путь для axios — без префикса /api, он уже в baseURL. Для <img> нужен
 // полный путь, там axios не участвует; авторизация в этом случае идёт
 // httpOnly-кукой, которую браузер подставляет сам.
-// Явная привязка вместо <AnimatedImg>: eslint не засчитывает
+const fullPhotoPath = (p) => `/clients/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
+
+// Явная привязка вместо <animated.img>: eslint не засчитывает
 // member-expression в JSX как использование импорта.
 const AnimatedImg = animated.img;
+const AnimatedDiv = animated.div;
 
-const fullPhotoPath = (p) => `/clients/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
+const GAP = 16;          // зазор между кадрами ленты, как в стоковых галереях
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 4;
+const ZOOM_DOUBLE_TAP = 2.5;
+const SPRING = { tension: 300, friction: 30 };
+
+// Резинка iOS: за границей ход не блокируется, а вязнет — чем дальше тянешь,
+// тем меньше отдача. Жёсткий clamp вместо неё ощущается как заедание.
+function rubber(delta, dim, c = 0.55) {
+  if (!dim) return 0;
+  return (delta * dim * c) / (dim + c * Math.abs(delta));
+}
+
+// Смещение, при котором точка p (координаты сцены от центра) остаётся под
+// пальцем при смене масштаба s0 -> s1. Без этого картинка при щипке уползает
+// к центру — главная причина ощущения, что жест живёт своей жизнью.
+function anchorOffset(p, o0, s0, s1) {
+  return p - ((p - o0) * s1) / s0;
+}
 
 function PhotoViewer({ photos, index, onIndex, onClose }) {
   const { isMobile } = useViewport();
   const photo = photos[index];
-  const [state, setState] = useState('loading'); // loading | ok | error
-  const [error, setError] = useState(null);
-  const [blobUrl, setBlobUrl] = useState(null);
+
+  // Соседние кадры грузятся вместе с текущим: без них свайп показывал бы
+  // пустоту, и ощущения ленты не возникает.
+  const [urls, setUrls] = useState({});     // id -> blobURL
+  const [errors, setErrors] = useState({}); // id -> текст ошибки
+  const urlsRef = useRef({});
+
+  useEffect(() => { urlsRef.current = urls; }, [urls]);
 
   useEffect(() => {
-    setState('loading'); setError(null);
     let cancelled = false;
-    // Через axios, а не через <img>: только так видно текст ошибки от
-    // сервера — «агент недоступен» вместо молчаливой битой картинки.
-    api.get(fullPhotoPath(photo), { responseType: 'blob' })
-      .then((r) => {
-        if (cancelled) return;
-        setState('ok');
-        setBlobUrl(URL.createObjectURL(r.data));
-      })
-      .catch(async (e) => {
-        if (cancelled) return;
-        setState('error');
-        // Тело ошибки тоже пришло как blob — достаём из него detail.
-        let detail = 'Не удалось загрузить снимок';
-        try {
-          const parsed = JSON.parse(await e.response.data.text());
-          if (parsed?.detail) detail = parsed.detail;
-        } catch { /* оставляем общее сообщение */ }
-        setError(detail);
-      });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photo.id]);
-
-  useEffect(() => () => { if (blobUrl) URL.revokeObjectURL(blobUrl); }, [blobUrl]);
-
-  // Соседние снимки подгружаются тихо, чтобы листалось без пауз. Браузер
-  // положит их в свой кэш, и следующий клик отрисуется сразу.
-  useEffect(() => {
-    [index - 1, index + 1].forEach((i) => {
-      const p = photos[i];
-      if (p) api.get(fullPhotoPath(p), { responseType: 'blob' }).catch(() => {});
+    const wanted = [index, index - 1, index + 1].map((i) => photos[i]).filter(Boolean);
+    wanted.forEach((p) => {
+      if (urlsRef.current[p.id]) return;
+      // Через axios, а не через <img>: только так виден текст ошибки от
+      // сервера — «агент недоступен» вместо молчаливой битой картинки.
+      api.get(fullPhotoPath(p), { responseType: 'blob' })
+        .then((r) => {
+          if (cancelled) return;
+          setUrls((m) => (m[p.id] ? m : { ...m, [p.id]: URL.createObjectURL(r.data) }));
+        })
+        .catch(async (e) => {
+          if (cancelled) return;
+          let detail = 'Не удалось загрузить снимок';
+          try {
+            const parsed = JSON.parse(await e.response.data.text());
+            if (parsed?.detail) detail = parsed.detail;
+          } catch { /* оставляем общее сообщение */ }
+          setErrors((m) => ({ ...m, [p.id]: detail }));
+        });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index]);
+    return () => { cancelled = true; };
+  }, [index, photos]);
+
+  // Блобы освобождаются при закрытии, а не при смене кадра: во время листания
+  // они нужны соседям, и пересоздавать их на каждый шаг — лишние запросы.
+  useEffect(() => () => {
+    Object.values(urlsRef.current).forEach((u) => URL.revokeObjectURL(u));
+  }, []);
 
   useEffect(() => {
     function onKey(e) {
@@ -161,24 +181,20 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [index, photos.length, onIndex, onClose]);
 
-  // ── Жесты (мобильный полноэкранный режим) ─────────────────────────
-  //
-  // Позиция картинки живёт в spring, а не в useState: обновление состояния
-  // на каждый touchmove — это ре-рендер на каждый пиксель движения, ~60 раз
-  // в секунду, и никакие пороги этой дёрганости не лечат. react-spring
-  // пишет transform прямо в DOM, минуя reconciliation.
-  //
-  // Нативный pinch браузера не используем: внутри position:fixed оверлея он
-  // ведёт себя непредсказуемо, и им нельзя ни ограничить масштаб, ни
-  // сбросить его при переходе к следующему снимку.
+  // ── Жесты ─────────────────────────────────────────────────────────
+  // Позиция живёт в spring и пишется в transform напрямую: обновление через
+  // useState на каждый touchmove — это ре-рендер на каждый пиксель движения,
+  // ~60 раз в секунду, и никакие пороги такую дёрганость не лечат.
   const stageRef = useRef(null);
-  const zoomRef = useRef(1);   // актуальный масштаб для обработчиков, без ре-рендера
-  const lastTap = useRef(0);   // отметка времени для распознавания двойного тапа
-  const [zoomed, setZoomed] = useState(false);  // только для подсказки внизу
+  const zoomRef = useRef(1);
+  const lastTap = useRef(0);
+  const [zoomed, setZoomed] = useState(false);
 
-  const [{ x, y, scale, opacity }, spring] = useSpring(() => ({
-    x: 0, y: 0, scale: 1, opacity: 1,
-    config: { tension: 300, friction: 30 },
+  const box = useCallback(() => stageRef.current?.getBoundingClientRect(), []);
+  const stageW = useCallback(() => box()?.width || window.innerWidth, [box]);
+
+  const [{ dx, dy, dismiss, backdrop, ox, oy, sc }, spring] = useSpring(() => ({
+    dx: 0, dy: 0, dismiss: 1, backdrop: 1, ox: 0, oy: 0, sc: 1, config: SPRING,
   }));
 
   const setZoomState = useCallback((s) => {
@@ -186,105 +202,172 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
     setZoomed(s > 1.01);
   }, []);
 
-  // Новый снимок открывается всегда «как есть», без унаследованного зума.
+  // Новый кадр открывается «как есть», без унаследованного зума.
   useEffect(() => {
     setZoomState(1);
-    spring.start({ x: 0, y: 0, scale: 1, opacity: 1, immediate: true });
+    spring.set({ dx: 0, dy: 0, dismiss: 1, backdrop: 1, ox: 0, oy: 0, sc: 1 });
   }, [index, spring, setZoomState]);
 
-  // Границы панорамирования: за края увеличенной картинки не пускаем.
-  const clamp = useCallback((nx, ny, s) => {
-    const box = stageRef.current?.getBoundingClientRect();
-    if (!box) return [nx, ny];
-    const maxX = Math.max(0, (box.width * (s - 1)) / 2);
-    const maxY = Math.max(0, (box.height * (s - 1)) / 2);
-    return [Math.min(maxX, Math.max(-maxX, nx)), Math.min(maxY, Math.max(-maxY, ny))];
-  }, []);
+  // Пределы панорамирования увеличенного кадра.
+  const panMax = useCallback((s) => {
+    const b = box();
+    if (!b) return [0, 0];
+    return [Math.max(0, (b.width * (s - 1)) / 2), Math.max(0, (b.height * (s - 1)) / 2)];
+  }, [box]);
+
+  // Доводим ленту до соседнего кадра и только по завершении анимации меняем
+  // индекс, одновременно обнуляя сдвиг — иначе кадр дёрнулся бы на ширину
+  // экрана в момент переключения.
+  const settleTo = useCallback((target) => {
+    const dir = target > index ? -1 : 1;
+    spring.start({
+      dx: dir * (stageW() + GAP),
+      onRest: () => { onIndex(target); spring.set({ dx: 0 }); },
+    });
+  }, [index, onIndex, spring, stageW]);
 
   const bind = useGesture(
     {
-      onDrag: ({ down, movement: [mx, my], velocity: [vx, vy], direction: [dx, dy], pinching, cancel, tap }) => {
+      onDrag: ({ down, movement: [mx, my], velocity: [vx, vy], direction: [dxDir, dyDir],
+                 pinching, cancel, tap, event }) => {
         if (pinching) { cancel(); return; }
-        // Двойной тап ловим здесь, а не отдельным onDoubleClick: такого
-        // обработчика у useGesture нет, он молча игнорировался бы. На тач-
-        // экранах DOM-событие dblclick к тому же приходит с задержкой ~300мс
-        // и не везде.
+
         if (tap) {
           const now = Date.now();
           if (now - lastTap.current < 300) {
             lastTap.current = 0;
-            const to = zoomRef.current > 1.01 ? 1 : 2.5;
-            setZoomState(to);
-            spring.start({ scale: to, x: 0, y: 0 });
+            const b = box();
+            const s0 = zoomRef.current;
+            const s1 = s0 > 1.01 ? 1 : ZOOM_DOUBLE_TAP;
+            if (s1 === 1 || !b) {
+              setZoomState(1);
+              spring.start({ sc: 1, ox: 0, oy: 0 });
+            } else {
+              // Приближаем к точке касания, а не к центру.
+              const px = (event?.clientX ?? b.left + b.width / 2) - (b.left + b.width / 2);
+              const py = (event?.clientY ?? b.top + b.height / 2) - (b.top + b.height / 2);
+              const [mxLim, myLim] = panMax(s1);
+              const nx = anchorOffset(px, ox.get(), s0, s1);
+              const ny = anchorOffset(py, oy.get(), s0, s1);
+              setZoomState(s1);
+              spring.start({
+                sc: s1,
+                ox: Math.min(mxLim, Math.max(-mxLim, nx)),
+                oy: Math.min(myLim, Math.max(-myLim, ny)),
+              });
+            }
           } else {
             lastTap.current = now;
           }
           return;
         }
+
         const s = zoomRef.current;
 
-        // Увеличенная картинка — жест панорамирует её, а не листает ленту.
+        // Увеличенный кадр жест панорамирует, а не листает ленту.
         if (s > 1.01) {
-          const [cx, cy] = clamp(mx, my, s);
-          spring.start({ x: cx, y: cy, immediate: down });
+          const b = box();
+          const [mxLim, myLim] = panMax(s);
+          const rx = mx > mxLim ? mxLim + rubber(mx - mxLim, b?.width)
+            : mx < -mxLim ? -mxLim + rubber(mx + mxLim, b?.width) : mx;
+          const ry = my > myLim ? myLim + rubber(my - myLim, b?.height)
+            : my < -myLim ? -myLim + rubber(my + myLim, b?.height) : my;
+          if (down) { spring.start({ ox: rx, oy: ry, immediate: true }); return; }
+          spring.start({
+            ox: Math.min(mxLim, Math.max(-mxLim, rx)),
+            oy: Math.min(myLim, Math.max(-myLim, ry)),
+          });
           return;
         }
+
+        const w = stageW();
+        const vertical = Math.abs(my) > Math.abs(mx);
 
         if (down) {
-          spring.start({ x: mx, y: my, opacity: 1 - Math.min(Math.abs(my) / 400, 0.5), immediate: true });
+          if (vertical && my > 0) {
+            // Свайп вниз: кадр уменьшается и тускнеет, как «убирание» в iOS.
+            const k = 1 - Math.min(Math.abs(my) / (w * 2), 0.35);
+            spring.start({
+              dy: my, dismiss: k,
+              backdrop: 1 - Math.min(Math.abs(my) / 400, 0.6),
+              immediate: true,
+            });
+          } else {
+            // На краях ленты ход вязнет резинкой, а не упирается насмерть.
+            const atStart = index === 0 && mx > 0;
+            const atEnd = index === photos.length - 1 && mx < 0;
+            spring.start({ dx: (atStart || atEnd) ? rubber(mx, w) : mx, immediate: true });
+          }
           return;
         }
 
-        // Быстрый флик закрывает/листает даже на коротком расстоянии —
-        // отсюда порог по скорости рядом с порогом по расстоянию.
-        const w = stageRef.current?.getBoundingClientRect().width || window.innerWidth;
-        const closeByDrag = my > 110 && my > Math.abs(mx);
-        const closeByFlick = vy > 0.5 && dy > 0 && Math.abs(my) > 10;
+        const closeByDrag = my > 110 && vertical;
+        const closeByFlick = vy > 0.5 && dyDir > 0 && Math.abs(my) > 10;
         if (closeByDrag || closeByFlick) {
-          spring.start({ y: window.innerHeight, opacity: 0 });
+          spring.start({ dy: window.innerHeight, dismiss: 0.6, backdrop: 0 });
           setTimeout(onClose, 180);
           return;
         }
 
-        const nextByDrag = Math.abs(mx) > w * 0.35;
-        const nextByFlick = vx > 0.3 && Math.abs(mx) > 10;
-        if ((nextByDrag || nextByFlick) && Math.abs(mx) > Math.abs(my)) {
-          const forward = dx < 0;
-          const target = forward ? index + 1 : index - 1;
-          if (target >= 0 && target < photos.length) { onIndex(target); return; }
+        const byDrag = Math.abs(mx) > w * 0.35;
+        const byFlick = vx > 0.3 && Math.abs(mx) > 10;
+        if ((byDrag || byFlick) && !vertical) {
+          const target = dxDir < 0 ? index + 1 : index - 1;
+          if (target >= 0 && target < photos.length) { settleTo(target); return; }
         }
-        spring.start({ x: 0, y: 0, opacity: 1 });
+        spring.start({ dx: 0, dy: 0, dismiss: 1, backdrop: 1 });
       },
 
-      onPinch: ({ offset: [s], first, last }) => {
-        const next = Math.min(4, Math.max(1, s));
+      onPinch: ({ offset: [s], origin: [px, py], first, last, memo }) => {
+        const b = box();
+        if (!b) return memo;
+        // Опорные значения фиксируются на старте жеста: пересчёт от текущих
+        // на каждом кадре накапливает ошибку, и точка щипка «плывёт».
+        const base = first ? { s0: zoomRef.current, ox: ox.get(), oy: oy.get() } : memo;
+        if (!base) return memo;
+
+        const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, s));
+        const cx = px - (b.left + b.width / 2);
+        const cy = py - (b.top + b.height / 2);
+        const [mxLim, myLim] = panMax(next);
+        const nx = anchorOffset(cx, base.ox, base.s0, next);
+        const ny = anchorOffset(cy, base.oy, base.s0, next);
+
         setZoomState(next);
-        if (first) return;
         if (last && next <= 1.01) {
-          spring.start({ x: 0, y: 0, scale: 1 });
           setZoomState(1);
-          return;
+          spring.start({ sc: 1, ox: 0, oy: 0 });
+          return undefined;
         }
-        const [cx, cy] = clamp(x.get(), y.get(), next);
-        spring.start({ scale: next, x: cx, y: cy, immediate: !last });
+        spring.start({
+          sc: next,
+          ox: Math.min(mxLim, Math.max(-mxLim, nx)),
+          oy: Math.min(myLim, Math.max(-myLim, ny)),
+          immediate: !last,
+        });
+        return base;
       },
-
     },
     {
-      // threshold 10px — иначе дрожание пальца при обычном тапе читается
-      // как свайп. filterTaps даёт флаг tap вместо нулевого перетаскивания.
-      drag: { filterTaps: true, threshold: 10, from: () => [x.get(), y.get()] },
-      pinch: { scaleBounds: { min: 1, max: 4 }, rubberband: 0.2, from: () => [zoomRef.current, 0] },
+      // threshold 10px — иначе дрожание пальца при тапе читается как свайп.
+      drag: { filterTaps: true, threshold: 10 },
+      pinch: {
+        scaleBounds: { min: ZOOM_MIN, max: ZOOM_MAX },
+        rubberband: 0.2,
+        from: () => [zoomRef.current, 0],
+      },
     },
   );
 
+  const slides = [index - 1, index, index + 1].filter((i) => i >= 0 && i < photos.length);
+
   if (isMobile) {
     return (
-      <div
+      <AnimatedDiv
         // 100dvh, а не 100vh: на мобильных 100vh уходит под адресную строку,
-        // и низ картинки с подписью оказывался за краем экрана.
-        className="fixed inset-0 z-50 bg-black flex flex-col"
-        style={{ height: '100dvh' }}
+        // и низ кадра с подписью оказывался за краем экрана.
+        className="fixed inset-0 z-50 flex flex-col"
+        style={{ height: '100dvh', backgroundColor: backdrop.to((v) => `rgba(0,0,0,${v})`) }}
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3 text-white/90 flex-shrink-0">
           <div className="text-xs min-w-0 truncate">
@@ -299,36 +382,60 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
           </button>
         </div>
 
-        <div
-          ref={stageRef}
-          {...bind()}
-          className="flex-1 overflow-hidden flex items-center justify-center"
-          style={{ minHeight: 0, touchAction: 'none' }}
-        >
-          {state === 'loading' && (
-            <div className="text-sm text-white/70 flex items-center gap-2">
-              <RefreshCw size={15} className="animate-spin" /> Загрузка из хранилища…
-            </div>
-          )}
-          {state === 'error' && <div className="text-sm text-red-400 text-center px-6">{error}</div>}
-          {state === 'ok' && blobUrl && (
-            <AnimatedImg
-              src={blobUrl}
-              alt=""
-              draggable={false}
-              className="max-h-full max-w-full object-contain select-none"
-              style={{ x, y, scale, opacity, willChange: 'transform' }}
-            />
-          )}
+        <div ref={stageRef} {...bind()}
+          className="flex-1 relative overflow-hidden"
+          style={{ minHeight: 0, touchAction: 'none' }}>
+          {slides.map((i) => {
+            const p = photos[i];
+            const current = i === index;
+            const url = urls[p.id];
+            const err = errors[p.id];
+            return (
+              <AnimatedDiv
+                key={p.id}
+                className="absolute inset-0 flex items-center justify-center"
+                style={{
+                  x: dx.to((v) => (i - index) * (stageW() + GAP) + v),
+                  y: current ? dy : 0,
+                }}
+              >
+                {err && <div className="text-sm text-red-400 text-center px-6">{err}</div>}
+                {!err && !url && (
+                  <div className="text-sm text-white/70 flex items-center gap-2">
+                    <RefreshCw size={15} className="animate-spin" /> Загрузка из хранилища…
+                  </div>
+                )}
+                {!err && url && (
+                  <AnimatedImg
+                    src={url}
+                    alt=""
+                    draggable={false}
+                    className="max-h-full max-w-full object-contain select-none"
+                    style={current
+                      ? {
+                          x: ox, y: oy,
+                          // Масштаб — произведение зума и «убирания»: при
+                          // свайпе вниз кадр уменьшается поверх текущего зума.
+                          scale: to([sc, dismiss], (z, k) => z * k),
+                          willChange: 'transform',
+                        }
+                      : undefined}
+                  />
+                )}
+              </AnimatedDiv>
+            );
+          })}
         </div>
 
-        <div className="flex items-center justify-center gap-4 px-4 py-3 flex-shrink-0 text-white/50 text-[11px]">
+        <div className="flex items-center justify-center px-4 py-3 flex-shrink-0 text-white/50 text-[11px]">
           {zoomed ? 'Двойной тап — сбросить масштаб' : 'Свайп — листать · вниз — закрыть · щипок — зум'}
         </div>
-      </div>
+      </AnimatedDiv>
     );
   }
 
+  const url = urls[photo.id];
+  const err = errors[photo.id];
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-card max-w-4xl w-full flex flex-col gap-3">
@@ -344,17 +451,13 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
         </div>
 
         <div className="flex items-center justify-center min-h-[50vh] bg-[color:var(--color-bg-secondary)] rounded-lg">
-          {state === 'loading' && (
+          {!url && !err && (
             <div className="text-sm text-[color:var(--color-muted-foreground)] flex items-center gap-2">
               <RefreshCw size={15} className="animate-spin" /> Загрузка из хранилища…
             </div>
           )}
-          {state === 'error' && (
-            <div className="text-sm text-red-500 max-w-md text-center px-4">{error}</div>
-          )}
-          {state === 'ok' && blobUrl && (
-            <img src={blobUrl} alt="" className="max-h-[70vh] max-w-full object-contain" />
-          )}
+          {err && <div className="text-sm text-red-500 max-w-md text-center px-4">{err}</div>}
+          {url && <img src={url} alt="" className="max-h-[70vh] max-w-full object-contain" />}
         </div>
 
         <div className="flex items-center justify-between gap-2">
@@ -367,4 +470,3 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
     </div>
   );
 }
-
