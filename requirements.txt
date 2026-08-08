@@ -56,3 +56,6 @@ psutil>=5.9.0
 
 # Testing
 pytest>=8.0.0
+# Правка графика через настоящий Excel (COM) — см. app/services/schedule_editor.py.
+# Только Windows; на других ОС ставить не нужно, редактор графика там не работает.
+pywin32>=306; sys_platform == "win32"

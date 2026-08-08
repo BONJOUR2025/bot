@@ -39,6 +39,35 @@ export default function Schedule() {
   const [error, setError] = useState(null);
   const todayColRef = useRef(null);
 
+  // Правка клетки. Коды тянем с сервера, а не из POINT_STYLE: там только
+  // цвета, и новый салон в справочнике иначе не появился бы в списке.
+  const [codes, setCodes] = useState([]);
+  const [canEdit, setCanEdit] = useState(false);
+  const [editing, setEditing] = useState(null);   // {emp, day}
+  const [saving, setSaving] = useState(null);     // {emp, day}
+  const [saveError, setSaveError] = useState(null);
+
+  useEffect(() => {
+    api.get('/schedule/codes')
+      .then((r) => { setCodes(r.data || []); setCanEdit(true); })
+      // 403 — обычный сотрудник: график показываем, правку прячем.
+      .catch(() => setCanEdit(false));
+  }, []);
+
+  async function saveCell(emp, day, code) {
+    setEditing(null);
+    setSaving({ emp, day });
+    setSaveError(null);
+    try {
+      await api.patch('/schedule/cell', { year, month, employee: emp, day, code });
+      await load();
+    } catch (e) {
+      setSaveError(e.response?.data?.detail || e.message || 'Не удалось сохранить');
+    } finally {
+      setSaving(null);
+    }
+  }
+
   useEffect(() => { load(); }, [year, month]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to today's column after load
@@ -166,6 +195,13 @@ export default function Schedule() {
         </div>
       )}
 
+      {saveError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300 flex items-start justify-between gap-3">
+          <span>{saveError}</span>
+          <button onClick={() => setSaveError(null)} className="opacity-60 leading-none">&times;</button>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
           {error}
@@ -271,13 +307,33 @@ export default function Schedule() {
                         const code      = d.assignments[emp] || '';
                         const isToday   = isCurrentMonth && d.day === todayDay;
                         const isWeekend = d.is_weekend;
+                        const isEditing = editing && editing.emp === emp && editing.day === d.day;
+                        const isSaving  = saving && saving.emp === emp && saving.day === d.day;
                         return (
                           <td key={d.day}
+                            onClick={() => canEdit && !isSaving && setEditing({ emp, day: d.day })}
                             className={`border-b border-r border-[color:var(--color-border)] px-1 py-1.5 text-center
                               ${isToday   ? 'bg-[color:var(--color-primary)]/10' : ''}
                               ${isWeekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}
+                              ${canEdit && !isEditing ? 'cursor-pointer hover:bg-[color:var(--color-primary)]/10' : ''}
                             `}>
-                            {code ? <PointChip code={code} /> : (
+                            {isSaving ? (
+                              <RefreshCw size={12} className="animate-spin mx-auto opacity-60" />
+                            ) : isEditing ? (
+                              <select
+                                autoFocus
+                                defaultValue={code}
+                                onBlur={() => setEditing(null)}
+                                onChange={(e) => saveCell(emp, d.day, e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs bg-transparent border border-[color:var(--color-primary)] rounded px-0.5 py-0.5"
+                              >
+                                <option value="">—</option>
+                                {codes.map((c) => (
+                                  <option key={c.code} value={c.code}>{c.code}</option>
+                                ))}
+                              </select>
+                            ) : code ? <PointChip code={code} /> : (
                               <span className="text-[color:var(--color-muted-foreground)] opacity-30">—</span>
                             )}
                           </td>
