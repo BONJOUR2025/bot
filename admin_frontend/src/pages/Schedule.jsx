@@ -43,7 +43,8 @@ export default function Schedule() {
   // цвета, и новый салон в справочнике иначе не появился бы в списке.
   const [codes, setCodes] = useState([]);
   const [canEdit, setCanEdit] = useState(false);
-  const [editing, setEditing] = useState(null);   // {emp, day}
+  const [editing, setEditing] = useState(null);   // {emp, day} — десктоп
+  const [expandedEmp, setExpandedEmp] = useState(null); // мобильная карточка
   const [saving, setSaving] = useState(null);     // {emp, day}
   const [saveError, setSaveError] = useState(null);
 
@@ -236,9 +237,21 @@ export default function Schedule() {
                   .filter(d => d.assignments[emp])
                   .map(d => ({ day: d.day, weekday_short: d.weekday_short, code: d.assignments[emp], isToday: isCurrentMonth && d.day === todayDay, isWeekend: d.is_weekend }));
                 const todayAssignment = assignments.find(a => a.isToday);
+                const isOpen = expandedEmp === emp;
                 return (
                   <div key={emp} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium">{emp}</div>
+                    <button
+                      type="button"
+                      onClick={() => canEdit && setExpandedEmp(isOpen ? null : emp)}
+                      className="w-full px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium flex items-center justify-between gap-2 text-left"
+                    >
+                      <span className="min-w-0 truncate">{emp}</span>
+                      {canEdit && (
+                        <span className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">
+                          {isOpen ? 'свернуть' : 'изменить'}
+                        </span>
+                      )}
+                    </button>
                     <div className="px-4 py-2 space-y-1.5 text-sm">
                       {todayAssignment && (
                         <div className="flex justify-between items-center">
@@ -247,13 +260,50 @@ export default function Schedule() {
                         </div>
                       )}
                       <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Смен в месяце</span><span>{assignments.length}</span></div>
-                      {assignments.length > 0 && (
+                      {!isOpen && assignments.length > 0 && (
                         <div className="flex flex-wrap gap-1 pt-1">
                           {assignments.map(a => (
                             <span key={a.day} className={`text-xs px-1.5 py-0.5 rounded border ${a.isToday ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 font-semibold' : a.isWeekend ? 'border-red-200 bg-red-50' : 'border-[color:var(--color-border)]'}`}>
                               {a.day} <PointChip code={a.code} />
                             </span>
                           ))}
+                        </div>
+                      )}
+
+                      {/* Развёрнутый режим показывает ВСЕ дни месяца, а не
+                          только занятые: иначе на пустой день смену не
+                          поставить — а это основной сценарий правки. */}
+                      {isOpen && (
+                        <div className="pt-1 -mx-2">
+                          {data.days.map(d => {
+                            const code = d.assignments[emp] || '';
+                            const isToday = isCurrentMonth && d.day === todayDay;
+                            const isSaving = saving && saving.emp === emp && saving.day === d.day;
+                            return (
+                              <div key={d.day}
+                                className={`flex items-center gap-2 px-2 py-1.5 rounded
+                                  ${isToday ? 'bg-[color:var(--color-primary)]/10' : ''}
+                                  ${d.is_weekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}`}>
+                                <span className="w-14 flex-shrink-0 text-xs text-[color:var(--color-muted-foreground)] tabular-nums">
+                                  {d.day} {d.weekday_short}
+                                </span>
+                                {isSaving ? (
+                                  <RefreshCw size={13} className="animate-spin opacity-60" />
+                                ) : (
+                                  <select
+                                    value={code}
+                                    onChange={(e) => saveCell(emp, d.day, e.target.value)}
+                                    className="input text-sm py-1 flex-1 min-w-0"
+                                  >
+                                    <option value="">— выходной —</option>
+                                    {codes.map((c) => (
+                                      <option key={c.code} value={c.code}>{c.code} · {c.name}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
