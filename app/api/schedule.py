@@ -31,9 +31,12 @@ def create_schedule_router(service: ScheduleService) -> APIRouter:
             raise HTTPException(status_code=400, detail="month must be 1–12")
         return await service.get_schedule_month(year, month)
 
-    @router.get("/codes")
+    # Право то же, что и на саму правку: фронтенд использует этот запрос как
+    # пробу «могу ли я редактировать». Без проверки сотрудник получал бы
+    # редактируемые клетки и отказ лишь после выбора кода.
+    @router.get("/codes", dependencies=[Depends(require_permission("payroll"))])
     def schedule_codes():
-        """Коды салонов для выпадающего списка в клетке графика."""
+        """Коды салонов для выпадающего списка в клетке расписания."""
         from app.data.salon_repository import get_salon_repository
 
         return [
