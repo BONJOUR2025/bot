@@ -379,6 +379,56 @@ class TestEmployeeAttribution:
 
         assert calls[0]["cached_tokens"] == 0
 
+    def test_polza_records_question_and_answer_without_the_system_prompt(self, monkeypatch):
+        """The system prompt is the whole knowledge base — tens of thousands of
+        identical tokens per call. Only the employee's own question is kept."""
+        calls = self._capture_usage_calls(monkeypatch)
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            return httpx.Response(
+                200, json={"choices": [{"message": {"content": "  30 дней.  "}}]},
+                request=httpx.Request("POST", url),
+            )
+
+        monkeypatch.setattr(httpx, "post", fake_post)
+        llm.chat(self.BASE, [{"role": "user", "content": "Какая гарантия?"}],
+                  system="ОГРОМНАЯ БАЗА ЗНАНИЙ" * 1000, employee_id="1")
+
+        assert calls[0]["question"] == "Какая гарантия?"
+        assert calls[0]["answer"] == "30 дней."
+        assert "БАЗА ЗНАНИЙ" not in calls[0]["question"]
+
+    def test_last_user_message_is_picked_from_a_multi_turn_history(self, monkeypatch):
+        calls = self._capture_usage_calls(monkeypatch)
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            return httpx.Response(
+                200, json={"choices": [{"message": {"content": "ok"}}]},
+                request=httpx.Request("POST", url),
+            )
+
+        monkeypatch.setattr(httpx, "post", fake_post)
+        llm.chat(self.BASE, [
+            {"role": "user", "content": "старый вопрос"},
+            {"role": "assistant", "content": "старый ответ"},
+            {"role": "user", "content": "новый вопрос"},
+        ], employee_id="1")
+
+        assert calls[0]["question"] == "новый вопрос"
+
+    def test_anthropic_records_question_and_answer(self, monkeypatch):
+        calls = self._capture_usage_calls(monkeypatch)
+        monkeypatch.setattr("anthropic.Anthropic", _FakeAnthropicClient)
+
+        result = llm.chat({"anthropic_api_key": "sk-ant-test"},
+                           [{"role": "user", "content": "вопрос"}], employee_id="1")
+
+        assert calls[0]["question"] == "вопрос"
+        # _FakeAnthropicClient replies "  привет  " — the logged answer must be
+        # the same stripped text the caller got back, not the raw payload.
+        assert calls[0]["answer"] == "привет"
+        assert result == "привет"
+
     def test_anthropic_records_cache_read_tokens(self, monkeypatch):
         """Anthropic reports cache reads in its own field rather than inside
         input_tokens, so it needs a different source than the polza path."""

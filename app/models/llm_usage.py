@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 
 from app.db.base_class import Base
 
@@ -47,3 +47,12 @@ class EmployeeLlmUsage(Base):
     # rows, where only token counts are meaningful (same convention as the
     # account-wide log had before it was replaced by the live Polza pull).
     cost_rub = Column(Float, nullable=True)
+    # What the employee actually asked and what the AI answered. Kept so a
+    # costly row can be explained rather than just counted — a 50k-token
+    # question looks identical to a cheap one in the numbers alone. Truncated
+    # on write (see llm_usage_service.MAX_TEXT_CHARS): this is a spend-audit
+    # trail, not a transcript store, and the system prompt (the actual bulk of
+    # the tokens) is deliberately never copied in — it is the same knowledge
+    # base every time and already lives in knowledge_documents.
+    question = Column(Text, nullable=False, default="")
+    answer = Column(Text, nullable=False, default="")

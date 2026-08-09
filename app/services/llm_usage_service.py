@@ -98,6 +98,19 @@ def get_polza_balance(cfg: dict) -> Optional[float]:
     return float(response.json()["amount"])
 
 
+# Cap on the stored question/answer text. Long enough that a knowledge-base
+# exchange is kept whole (the handler caps answers at 600 tokens), short
+# enough that a runaway paste can't bloat hr.db, which the bot and API share.
+MAX_TEXT_CHARS = 4000
+
+
+def _truncate(text: Optional[str]) -> str:
+    text = (text or "").strip()
+    if len(text) <= MAX_TEXT_CHARS:
+        return text
+    return text[:MAX_TEXT_CHARS] + "…"
+
+
 def _session():
     from app.db.session import SessionLocal
 
@@ -107,7 +120,7 @@ def _session():
 def record_employee_usage(
     *, employee_id: str, employee_name: str, feature: str, provider: str, model: str,
     prompt_tokens: int, completion_tokens: int, total_tokens: int, cost_rub: Optional[float],
-    cached_tokens: int = 0,
+    cached_tokens: int = 0, question: Optional[str] = None, answer: Optional[str] = None,
 ) -> None:
     from app.models.llm_usage import EmployeeLlmUsage
 
@@ -124,8 +137,48 @@ def record_employee_usage(
             total_tokens=total_tokens or 0,
             cached_tokens=cached_tokens or 0,
             cost_rub=cost_rub,
+            question=_truncate(question),
+            answer=_truncate(answer),
         ))
         db.commit()
+    finally:
+        db.close()
+
+
+def get_employee_usage_details(employee_id: str, *, since: Optional[datetime] = None,
+                                feature: Optional[str] = None, limit: int = 200) -> list[dict]:
+    """Individual requests for one employee, newest first — what the per-employee
+    totals are actually made of. Rows logged before question/answer were stored
+    come back with empty strings rather than being hidden, so the spend history
+    stays complete."""
+    from app.models.llm_usage import EmployeeLlmUsage
+
+    db = _session()
+    try:
+        q = db.query(EmployeeLlmUsage).filter(EmployeeLlmUsage.employee_id == str(employee_id))
+        if since is not None:
+            q = q.filter(EmployeeLlmUsage.created_at >= since)
+        if feature is not None:
+            q = q.filter(EmployeeLlmUsage.feature == feature)
+        rows = q.order_by(EmployeeLlmUsage.created_at.desc()).limit(limit).all()
+
+        return [
+            {
+                "id": r.id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "feature": r.feature or "",
+                "provider": r.provider or "",
+                "model": r.model or "",
+                "prompt_tokens": int(r.prompt_tokens or 0),
+                "completion_tokens": int(r.completion_tokens or 0),
+                "total_tokens": int(r.total_tokens or 0),
+                "cached_tokens": int(r.cached_tokens or 0),
+                "cost_rub": round(float(r.cost_rub), 4) if r.cost_rub is not None else None,
+                "question": r.question or "",
+                "answer": r.answer or "",
+            }
+            for r in rows
+        ]
     finally:
         db.close()
 

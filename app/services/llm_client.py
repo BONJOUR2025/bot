@@ -109,9 +109,21 @@ def chat(
                             cache_system=cache_system, attribution=attribution)
 
 
+def _last_user_message(messages: list) -> str:
+    """The employee's own question. Only user-role content is taken: the
+    system prompt is the knowledge base (tens of thousands of tokens, identical
+    every call) and copying it into every log row would be pure bloat."""
+    for message in reversed(messages or []):
+        if (message or {}).get("role") == "user":
+            content = message.get("content")
+            return content if isinstance(content, str) else str(content)
+    return ""
+
+
 def _record_usage_safely(attribution: Optional[dict], *, provider: str, model: str,
                           prompt_tokens: int, completion_tokens: int, total_tokens: int,
-                          cost_rub: Optional[float], cached_tokens: int = 0) -> None:
+                          cost_rub: Optional[float], cached_tokens: int = 0,
+                          question: str = "", answer: str = "") -> None:
     """Best-effort: a logging failure must never break an actual chat reply."""
     if not attribution:
         return
@@ -124,6 +136,7 @@ def _record_usage_safely(attribution: Optional[dict], *, provider: str, model: s
             provider=provider, model=model or "",
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
             total_tokens=total_tokens, cost_rub=cost_rub, cached_tokens=cached_tokens,
+            question=question, answer=answer,
         )
     except Exception:
         log.warning("llm_client: failed to record per-employee usage", exc_info=True)
@@ -156,6 +169,7 @@ def _chat_anthropic(
 
     response = client.messages.create(**kwargs)
     usage = getattr(response, "usage", None)
+    reply_text = response.content[0].text.strip()
     # Anthropic reports no ruble cost — cost_rub stays None for these rows,
     # same convention the account-wide log used before it was replaced by a
     # live Polza pull (see llm_usage_service.py's module docstring).
@@ -169,8 +183,9 @@ def _chat_anthropic(
         # counting them inside input_tokens, unlike the OpenAI-shaped
         # prompt_tokens_details.cached_tokens on the polza path.
         cached_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+        question=_last_user_message(messages), answer=reply_text,
     )
-    return response.content[0].text.strip()
+    return reply_text
 
 
 def _chat_polza(
@@ -204,6 +219,7 @@ def _chat_polza(
     response.raise_for_status()
     data = response.json()
     usage = data.get("usage") or {}
+    reply_text = data["choices"][0]["message"]["content"].strip()
     _record_usage_safely(
         attribution, provider="polza", model=data.get("model") or resolved_model,
         prompt_tokens=usage.get("prompt_tokens") or 0,
@@ -211,5 +227,8 @@ def _chat_polza(
         total_tokens=usage.get("total_tokens") or 0,
         cost_rub=usage.get("cost_rub"),
         cached_tokens=(usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0,
+        # messages is the caller's list, without the system prompt the polza
+        # path prepends locally — so this stays the employee's own question.
+        question=_last_user_message(messages), answer=reply_text,
     )
-    return data["choices"][0]["message"]["content"].strip()
+    return reply_text

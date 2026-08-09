@@ -83,6 +83,18 @@ def create_config_router(service: ConfigService) -> APIRouter:
         since = datetime.utcnow() - timedelta(days=days) if days else None
         return get_usage_by_employee(since=since, feature=feature)
 
+    @router.get("/llm-usage/by-employee/{employee_id}")
+    async def llm_usage_employee_details(employee_id: str, days: int = 30,
+                                          feature: Optional[str] = None, limit: int = 200):
+        """Individual requests behind one employee's total — question, answer,
+        tokens and cost per call."""
+        from datetime import datetime, timedelta
+
+        from app.services.llm_usage_service import get_employee_usage_details
+
+        since = datetime.utcnow() - timedelta(days=days) if days else None
+        return get_employee_usage_details(employee_id, since=since, feature=feature, limit=limit)
+
     @router.get("/secretary-status")
     async def secretary_status():
         """Diagnostic: show current Secretary Mode config values."""

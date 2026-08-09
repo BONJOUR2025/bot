@@ -56,6 +56,8 @@ def _migrate_columns() -> None:
         _add_column_if_missing(conn, "payment_schedules", "invoice_file_url", "TEXT DEFAULT ''")
         _add_column_if_missing(conn, "sale_transfers", "to_category", "TEXT")
         _add_column_if_missing(conn, "employee_llm_usage", "cached_tokens", "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "employee_llm_usage", "question", "TEXT DEFAULT ''")
+        _add_column_if_missing(conn, "employee_llm_usage", "answer", "TEXT DEFAULT ''")
 
 
 def _add_column_if_missing(conn, table, column, definition):

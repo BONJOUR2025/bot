@@ -143,12 +143,12 @@ def temp_db(tmp_path, monkeypatch):
 
 def _log(employee_id, employee_name="", feature="knowledge_base", provider="polza",
          model="deepseek/deepseek-chat", prompt_tokens=10, completion_tokens=20,
-         total_tokens=30, cost_rub=1.5, cached_tokens=0):
+         total_tokens=30, cost_rub=1.5, cached_tokens=0, question=None, answer=None):
     svc.record_employee_usage(
         employee_id=employee_id, employee_name=employee_name, feature=feature,
         provider=provider, model=model, prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens, total_tokens=total_tokens, cost_rub=cost_rub,
-        cached_tokens=cached_tokens,
+        cached_tokens=cached_tokens, question=question, answer=answer,
     )
 
 
@@ -232,6 +232,73 @@ class TestEmployeeUsage:
         rows = svc.get_usage_by_employee()
 
         assert rows[0]["cached_tokens"] == 95232
+
+    def test_question_and_answer_are_stored(self, temp_db):
+        _log("1", "Никита", question="Какая гарантия на ремонт?", answer="30 дней.")
+
+        [row] = svc.get_employee_usage_details("1")
+
+        assert row["question"] == "Какая гарантия на ремонт?"
+        assert row["answer"] == "30 дней."
+        assert row["cost_rub"] == 1.5
+
+    def test_details_are_newest_first_and_scoped_to_one_employee(self, temp_db):
+        _log("1", "Никита", question="первый")
+        _log("1", "Никита", question="второй")
+        _log("2", "Вера", question="чужой")
+
+        rows = svc.get_employee_usage_details("1")
+
+        assert [r["question"] for r in rows] == ["второй", "первый"]
+
+    def test_details_of_unknown_employee_is_empty(self, temp_db):
+        _log("1", "Никита")
+        assert svc.get_employee_usage_details("999") == []
+
+    def test_long_text_is_truncated_on_write(self, temp_db):
+        """hr.db is shared by the bot and API processes — an unbounded paste
+        must not be allowed to bloat it."""
+        _log("1", "Никита", question="я" * (svc.MAX_TEXT_CHARS + 500))
+
+        [row] = svc.get_employee_usage_details("1")
+
+        assert len(row["question"]) == svc.MAX_TEXT_CHARS + 1  # + the ellipsis
+        assert row["question"].endswith("…")
+
+    def test_missing_text_reads_back_as_empty_string(self, temp_db):
+        """Rows written before the text columns existed must still be listed,
+        not hidden — the spend history has to stay complete."""
+        _log("1", "Никита", question=None, answer=None)
+
+        [row] = svc.get_employee_usage_details("1")
+
+        assert row["question"] == ""
+        assert row["answer"] == ""
+
+    def test_details_respect_limit(self, temp_db):
+        for i in range(5):
+            _log("1", "Никита", question=f"q{i}")
+
+        assert len(svc.get_employee_usage_details("1", limit=2)) == 2
+
+    def test_details_since_filter(self, temp_db):
+        db = svc._session()
+        try:
+            db.add(EmployeeLlmUsage(
+                employee_id="1", employee_name="Никита", feature="knowledge_base",
+                provider="polza", model="x", prompt_tokens=1, completion_tokens=1,
+                total_tokens=2, cost_rub=1.0, question="старый", answer="",
+                created_at=dt.datetime.utcnow() - dt.timedelta(days=60),
+            ))
+            db.commit()
+        finally:
+            db.close()
+        _log("1", "Никита", question="новый")
+
+        rows = svc.get_employee_usage_details(
+            "1", since=dt.datetime.utcnow() - dt.timedelta(days=30))
+
+        assert [r["question"] for r in rows] == ["новый"]
 
     def test_uncached_rows_report_zero_not_null(self, temp_db):
         """A model whose provider has no prompt cache reports nothing at all,
