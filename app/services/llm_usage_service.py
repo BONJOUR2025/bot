@@ -1,18 +1,23 @@
-"""Live AI spend view for Настройки → Автоматизация, sourced directly from
-Polza.ai's own API rather than a local log:
+"""AI spend visibility for Настройки → Автоматизация: account-wide totals
+live from Polza's own API, plus a locally-logged per-employee breakdown.
 
-- GET /v1/history/generations (dateFrom-filterable, paginated via meta.page/
-  meta.totalPages) — per-request history with tokens and cost ("cost" field,
-  a decimal string in rubles). This is authoritative: it reflects everything
-  billed to the API key, not just calls made through llm_client.chat().
-- GET /v1/balance — current remaining balance.
+Two different data sources, and deliberately not merged into one:
 
-https://polza.ai/docs/osobennosti/usage.md
+- get_usage_summary/get_polza_balance: GET /v1/history/generations and
+  /v1/balance — the account-wide truth, live from Polza, no local copy kept.
+  That endpoint already reflects everything billed to the key, better than a
+  local mirror could (see https://polza.ai/docs/osobennosti/usage.md).
+- record_employee_usage/get_usage_by_employee: local log in EmployeeLlmUsage.
+  Polza has no notion of "which employee" made a call — that's our data, not
+  theirs — so per-employee attribution can only come from logging it
+  ourselves at the moment of the call. See app/models/llm_usage.py.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Optional
+
+from sqlalchemy import func
 
 
 def _base_url(cfg: dict) -> str:
@@ -91,3 +96,74 @@ def get_polza_balance(cfg: dict) -> Optional[float]:
     )
     response.raise_for_status()
     return float(response.json()["amount"])
+
+
+def _session():
+    from app.db.session import SessionLocal
+
+    return SessionLocal()
+
+
+def record_employee_usage(
+    *, employee_id: str, employee_name: str, feature: str, provider: str, model: str,
+    prompt_tokens: int, completion_tokens: int, total_tokens: int, cost_rub: Optional[float],
+) -> None:
+    from app.models.llm_usage import EmployeeLlmUsage
+
+    db = _session()
+    try:
+        db.add(EmployeeLlmUsage(
+            employee_id=employee_id,
+            employee_name=employee_name or "",
+            feature=feature or "",
+            provider=provider or "",
+            model=model or "",
+            prompt_tokens=prompt_tokens or 0,
+            completion_tokens=completion_tokens or 0,
+            total_tokens=total_tokens or 0,
+            cost_rub=cost_rub,
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+
+def get_usage_by_employee(since: Optional[datetime] = None, feature: Optional[str] = None) -> list[dict]:
+    """Per-employee totals, most expensive first. This is real-time in the
+    sense that it reads whatever has been logged up to this instant — there
+    is no batching/aggregation delay, each call writes its row immediately."""
+    from app.models.llm_usage import EmployeeLlmUsage
+
+    db = _session()
+    try:
+        q = db.query(
+            EmployeeLlmUsage.employee_id,
+            # MAX() rather than grouping by name too: an employee's display
+            # name can change between calls (renamed in user.json), and we
+            # want one row per employee_id showing their current name, not
+            # one row per (id, name) combination fragmenting their history.
+            func.max(EmployeeLlmUsage.employee_name),
+            func.count(EmployeeLlmUsage.id),
+            func.coalesce(func.sum(EmployeeLlmUsage.total_tokens), 0),
+            func.coalesce(func.sum(EmployeeLlmUsage.cost_rub), 0.0),
+            func.max(EmployeeLlmUsage.created_at),
+        ).group_by(EmployeeLlmUsage.employee_id)
+        if since is not None:
+            q = q.filter(EmployeeLlmUsage.created_at >= since)
+        if feature is not None:
+            q = q.filter(EmployeeLlmUsage.feature == feature)
+        q = q.order_by(func.coalesce(func.sum(EmployeeLlmUsage.cost_rub), 0.0).desc())
+
+        return [
+            {
+                "employee_id": employee_id,
+                "employee_name": employee_name or "",
+                "requests": int(requests),
+                "tokens": int(tokens),
+                "cost_rub": round(float(cost_rub), 4),
+                "last_used_at": last_used_at.isoformat() if last_used_at else None,
+            }
+            for employee_id, employee_name, requests, tokens, cost_rub, last_used_at in q.all()
+        ]
+    finally:
+        db.close()

@@ -66,6 +66,9 @@ def chat(
     model: Optional[str] = None,
     max_tokens: int = 256,
     cache_system: bool = True,
+    employee_id: Optional[str] = None,
+    employee_name: Optional[str] = None,
+    feature: Optional[str] = None,
 ) -> Optional[str]:
     """
     Send a chat request and return the text response, or None if unavailable.
@@ -84,24 +87,60 @@ def chat(
                     turns within the cache window, instead of full price each
                     time. No effect on the response itself. Anthropic-only;
                     ignored on the polza path.
+        employee_id: pass together with feature to attribute this call's
+                    token/cost usage to a specific employee (e.g. the
+                    Telegram-bot knowledge base) — see
+                    app/services/llm_usage_service.py. Omit for calls that
+                    aren't tied to one employee (candidate interviews,
+                    briefings, admin tools); this account-wide usage is
+                    already visible live via Polza's own history endpoint.
+        employee_name: display name for the same log row; purely cosmetic.
+        feature:    short tag identifying which feature made the call, e.g.
+                    "knowledge_base" — lets usage be filtered per feature.
     """
+    attribution = (
+        {"employee_id": employee_id, "employee_name": employee_name or "", "feature": feature or ""}
+        if employee_id else None
+    )
     if _provider(cfg) == "polza":
-        return _chat_polza(cfg, messages, system=system, model=model, max_tokens=max_tokens)
+        return _chat_polza(cfg, messages, system=system, model=model, max_tokens=max_tokens,
+                            attribution=attribution)
     return _chat_anthropic(cfg, messages, system=system, model=model, max_tokens=max_tokens,
-                            cache_system=cache_system)
+                            cache_system=cache_system, attribution=attribution)
+
+
+def _record_usage_safely(attribution: Optional[dict], *, provider: str, model: str,
+                          prompt_tokens: int, completion_tokens: int, total_tokens: int,
+                          cost_rub: Optional[float]) -> None:
+    """Best-effort: a logging failure must never break an actual chat reply."""
+    if not attribution:
+        return
+    try:
+        from app.services.llm_usage_service import record_employee_usage
+        record_employee_usage(
+            employee_id=attribution["employee_id"],
+            employee_name=attribution.get("employee_name") or "",
+            feature=attribution.get("feature") or "",
+            provider=provider, model=model or "",
+            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+            total_tokens=total_tokens, cost_rub=cost_rub,
+        )
+    except Exception:
+        log.warning("llm_client: failed to record per-employee usage", exc_info=True)
 
 
 def _chat_anthropic(
     cfg: dict, messages: list, *, system: Optional[str], model: Optional[str],
-    max_tokens: int, cache_system: bool,
+    max_tokens: int, cache_system: bool, attribution: Optional[dict] = None,
 ) -> Optional[str]:
     client = get_client(cfg)
     if not client:
         log.warning("llm_client: no Anthropic API key configured")
         return None
 
+    resolved_model = model or DEFAULT_MODEL
     kwargs = dict(
-        model=model or DEFAULT_MODEL,
+        model=resolved_model,
         max_tokens=max_tokens,
         messages=messages,
     )
@@ -116,11 +155,23 @@ def _chat_anthropic(
         )
 
     response = client.messages.create(**kwargs)
+    usage = getattr(response, "usage", None)
+    # Anthropic reports no ruble cost — cost_rub stays None for these rows,
+    # same convention the account-wide log used before it was replaced by a
+    # live Polza pull (see llm_usage_service.py's module docstring).
+    _record_usage_safely(
+        attribution, provider="anthropic", model=resolved_model,
+        prompt_tokens=getattr(usage, "input_tokens", 0) or 0,
+        completion_tokens=getattr(usage, "output_tokens", 0) or 0,
+        total_tokens=(getattr(usage, "input_tokens", 0) or 0) + (getattr(usage, "output_tokens", 0) or 0),
+        cost_rub=None,
+    )
     return response.content[0].text.strip()
 
 
 def _chat_polza(
     cfg: dict, messages: list, *, system: Optional[str], model: Optional[str], max_tokens: int,
+    attribution: Optional[dict] = None,
 ) -> Optional[str]:
     api_key = (cfg.get("polza_api_key") or "").strip()
     if not api_key:
@@ -134,8 +185,9 @@ def _chat_polza(
     if system:
         payload_messages = [{"role": "system", "content": system}] + payload_messages
 
+    resolved_model = model or (cfg.get("polza_model") or "").strip() or DEFAULT_POLZA_MODEL
     body = {
-        "model": model or (cfg.get("polza_model") or "").strip() or DEFAULT_POLZA_MODEL,
+        "model": resolved_model,
         "messages": payload_messages,
         "max_tokens": max_tokens,
     }
@@ -147,4 +199,12 @@ def _chat_polza(
     )
     response.raise_for_status()
     data = response.json()
+    usage = data.get("usage") or {}
+    _record_usage_safely(
+        attribution, provider="polza", model=data.get("model") or resolved_model,
+        prompt_tokens=usage.get("prompt_tokens") or 0,
+        completion_tokens=usage.get("completion_tokens") or 0,
+        total_tokens=usage.get("total_tokens") or 0,
+        cost_rub=usage.get("cost_rub"),
+    )
     return data["choices"][0]["message"]["content"].strip()

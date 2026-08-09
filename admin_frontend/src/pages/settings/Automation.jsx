@@ -95,6 +95,7 @@ export default function SettingsAutomation() {
               placeholder={"Ты HR-ассистент компании. Отвечаешь на вопросы кандидата о вакансии.\n\nБаза знаний:\n{knowledge_base}\n\nМесто собеседований: {interview_location}\n\nПравила..."} />
           </Field>
           <LlmUsagePanel />
+          <EmployeeLlmUsagePanel />
         </div>
       </Section>
 
@@ -162,6 +163,74 @@ function LlmUsagePanel() {
             </p>
             {usage.balance_error && <p className="text-xs text-red-500 mt-1">{usage.balance_error}</p>}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmployeeLlmUsagePanel() {
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get('config/llm-usage/by-employee', { params: { days: 30 } });
+      setRows(res.data);
+    } catch {
+      setError('Не удалось загрузить расходы по сотрудникам');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  const fmtRub = (v) => (v == null ? '—' : `${Number(v).toFixed(2)} ₽`);
+  const fmtInt = (v) => Number(v || 0).toLocaleString('ru-RU');
+  const fmtDate = (v) => (v ? new Date(v).toLocaleString('ru-RU') : '—');
+
+  return (
+    <div className="border-t border-[color:var(--color-border)] pt-4 mt-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wide">
+          Расход AI по сотрудникам (база знаний, 30 дней)
+        </p>
+        <button type="button" onClick={load} disabled={loading} className="btn btn--secondary">
+          {loading ? 'Обновление…' : 'Обновить'}
+        </button>
+      </div>
+      {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
+      {rows && rows.length === 0 && (
+        <p className="text-sm text-[color:var(--color-muted-foreground)]">Пока нет обращений к базе знаний через бота.</p>
+      )}
+      {rows && rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[color:var(--color-muted-foreground)]">
+                <th className="pr-3 py-1 font-normal">Сотрудник</th>
+                <th className="pr-3 py-1 font-normal text-right">Запросов</th>
+                <th className="pr-3 py-1 font-normal text-right">Токенов</th>
+                <th className="pr-3 py-1 font-normal text-right">Рублей</th>
+                <th className="pr-3 py-1 font-normal">Последнее обращение</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.employee_id} className="border-t border-[color:var(--color-border)]">
+                  <td className="pr-3 py-1">{r.employee_name || r.employee_id}</td>
+                  <td className="pr-3 py-1 text-right font-mono">{fmtInt(r.requests)}</td>
+                  <td className="pr-3 py-1 text-right font-mono">{fmtInt(r.tokens)}</td>
+                  <td className="pr-3 py-1 text-right font-mono">{fmtRub(r.cost_rub)}</td>
+                  <td className="pr-3 py-1">{fmtDate(r.last_used_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

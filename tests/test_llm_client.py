@@ -220,3 +220,121 @@ class TestChatPolza:
         with pytest.raises(httpx.HTTPStatusError):
             llm.chat(self.BASE, [{"role": "user", "content": "hi"}])
 
+
+class TestEmployeeAttribution:
+    """employee_id/employee_name/feature must reach record_employee_usage()
+    with real token counts pulled from each provider's own response shape,
+    and must never be recorded (or crash the reply) when employee_id is
+    omitted, since most chat() callers aren't tied to one employee."""
+
+    BASE = {"llm_provider": "polza", "polza_api_key": "pz-test"}
+
+    def _capture_usage_calls(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            "app.services.llm_usage_service.record_employee_usage",
+            lambda **kwargs: calls.append(kwargs),
+        )
+        return calls
+
+    def test_anthropic_records_usage_when_employee_id_given(self, monkeypatch):
+        calls = self._capture_usage_calls(monkeypatch)
+
+        class _WithUsage(_FakeAnthropicClient):
+            def __init__(self, **kw):
+                super().__init__(**kw)
+                orig_create = self.messages.create
+
+                def create(**kwargs):
+                    resp = orig_create(**kwargs)
+
+                    class _Usage:
+                        input_tokens = 12
+                        output_tokens = 34
+
+                    resp.usage = _Usage()
+                    return resp
+
+                self.messages.create = create
+
+        monkeypatch.setattr("anthropic.Anthropic", _WithUsage)
+        cfg = {"anthropic_api_key": "sk-ant-test"}
+        llm.chat(cfg, [{"role": "user", "content": "hi"}], model="claude-opus-4-7",
+                  employee_id="1", employee_name="Анастасия", feature="knowledge_base")
+
+        assert len(calls) == 1
+        call = calls[0]
+        assert call["employee_id"] == "1"
+        assert call["employee_name"] == "Анастасия"
+        assert call["feature"] == "knowledge_base"
+        assert call["provider"] == "anthropic"
+        assert call["model"] == "claude-opus-4-7"
+        assert call["prompt_tokens"] == 12
+        assert call["completion_tokens"] == 34
+        assert call["total_tokens"] == 46
+        assert call["cost_rub"] is None
+
+    def test_anthropic_no_employee_id_records_nothing(self, monkeypatch):
+        calls = self._capture_usage_calls(monkeypatch)
+        monkeypatch.setattr("anthropic.Anthropic", _FakeAnthropicClient)
+        cfg = {"anthropic_api_key": "sk-ant-test"}
+        llm.chat(cfg, [{"role": "user", "content": "hi"}])
+        assert calls == []
+
+    def test_polza_records_usage_and_cost_when_employee_id_given(self, monkeypatch):
+        calls = self._capture_usage_calls(monkeypatch)
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            return httpx.Response(
+                200,
+                json={
+                    "model": "deepseek/deepseek-chat",
+                    "choices": [{"message": {"content": "ok"}}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12, "cost_rub": 0.42},
+                },
+                request=httpx.Request("POST", url),
+            )
+
+        monkeypatch.setattr(httpx, "post", fake_post)
+        llm.chat(self.BASE, [{"role": "user", "content": "hi"}],
+                  employee_id="2", employee_name="Вера", feature="knowledge_base")
+
+        assert len(calls) == 1
+        call = calls[0]
+        assert call["employee_id"] == "2"
+        assert call["provider"] == "polza"
+        assert call["model"] == "deepseek/deepseek-chat"
+        assert call["prompt_tokens"] == 5
+        assert call["completion_tokens"] == 7
+        assert call["total_tokens"] == 12
+        assert call["cost_rub"] == 0.42
+
+    def test_polza_no_employee_id_records_nothing(self, monkeypatch):
+        calls = self._capture_usage_calls(monkeypatch)
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            return httpx.Response(
+                200, json={"choices": [{"message": {"content": "ok"}}]},
+                request=httpx.Request("POST", url),
+            )
+
+        monkeypatch.setattr(httpx, "post", fake_post)
+        llm.chat(self.BASE, [{"role": "user", "content": "hi"}])
+        assert calls == []
+
+    def test_usage_logging_failure_does_not_break_the_reply(self, monkeypatch):
+        def fake_post(url, json=None, headers=None, timeout=None):
+            return httpx.Response(
+                200, json={"choices": [{"message": {"content": "ok"}}]},
+                request=httpx.Request("POST", url),
+            )
+
+        def boom(**kwargs):
+            raise RuntimeError("db is down")
+
+        monkeypatch.setattr(httpx, "post", fake_post)
+        monkeypatch.setattr("app.services.llm_usage_service.record_employee_usage", boom)
+
+        result = llm.chat(self.BASE, [{"role": "user", "content": "hi"}], employee_id="1")
+        assert result == "ok"
+

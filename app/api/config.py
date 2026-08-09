@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -68,6 +69,19 @@ def create_config_router(service: ConfigService) -> APIRouter:
         except Exception as exc:
             result["balance_error"] = str(exc)
         return result
+
+    @router.get("/llm-usage/by-employee")
+    async def llm_usage_by_employee(days: int = 30, feature: Optional[str] = None):
+        """Per-employee AI spend, logged locally at call time — see
+        app/services/llm_usage_service.py's module docstring for why this is
+        a separate data source from /llm-usage above (Polza has no notion of
+        which employee made a call)."""
+        from datetime import datetime, timedelta
+
+        from app.services.llm_usage_service import get_usage_by_employee
+
+        since = datetime.utcnow() - timedelta(days=days) if days else None
+        return get_usage_by_employee(since=since, feature=feature)
 
     @router.get("/secretary-status")
     async def secretary_status():

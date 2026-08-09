@@ -1,15 +1,26 @@
 """Tests for the AI spend view in Настройки → Автоматизация.
 
-Deliberately has no local storage of its own — every number comes live from
-Polza.ai's own API (GET /v1/history/generations for tokens/cost,
-GET /v1/balance for remaining rubles), since that already reflects
-everything billed to the key, including calls made outside llm_client.chat().
+The account-wide summary (TestGetUsageSummary/TestGetPolzaBalance) has no
+local storage of its own — every number comes live from Polza.ai's own API
+(GET /v1/history/generations for tokens/cost, GET /v1/balance for remaining
+rubles), since that already reflects everything billed to the key, including
+calls made outside llm_client.chat().
+
+The per-employee breakdown (TestEmployeeUsage) is the opposite: Polza has no
+notion of "which employee" made a call, so that data only ever exists in the
+local EmployeeLlmUsage log — these tests point it at a throwaway SQLite file.
 """
 from __future__ import annotations
 
+import datetime as dt
+
 import httpx
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
+from app.db.base_class import Base
+from app.models.llm_usage import EmployeeLlmUsage  # noqa: F401 — registers the table
 from app.services import llm_usage_service as svc
 
 
@@ -118,3 +129,97 @@ class TestGetPolzaBalance:
         monkeypatch.setattr(httpx, "get", fake_get)
         svc.get_polza_balance({"polza_api_key": "pz-test", "polza_base_url": "https://polza.ai/api/v1/"})
         assert captured["url"] == "https://polza.ai/api/v1/balance"
+
+
+@pytest.fixture
+def temp_db(tmp_path, monkeypatch):
+    engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine, tables=[EmployeeLlmUsage.__table__])
+    Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    monkeypatch.setattr(svc, "_session", lambda: Session())
+    yield
+    engine.dispose()
+
+
+def _log(employee_id, employee_name="", feature="knowledge_base", provider="polza",
+         model="deepseek/deepseek-chat", prompt_tokens=10, completion_tokens=20,
+         total_tokens=30, cost_rub=1.5):
+    svc.record_employee_usage(
+        employee_id=employee_id, employee_name=employee_name, feature=feature,
+        provider=provider, model=model, prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens, total_tokens=total_tokens, cost_rub=cost_rub,
+    )
+
+
+class TestEmployeeUsage:
+    def test_record_and_fetch_single_employee(self, temp_db):
+        _log("1", "Анастасия")
+
+        rows = svc.get_usage_by_employee()
+
+        assert len(rows) == 1
+        assert rows[0]["employee_id"] == "1"
+        assert rows[0]["employee_name"] == "Анастасия"
+        assert rows[0]["requests"] == 1
+        assert rows[0]["tokens"] == 30
+        assert rows[0]["cost_rub"] == 1.5
+        assert rows[0]["last_used_at"] is not None
+
+    def test_multiple_calls_aggregate_per_employee(self, temp_db):
+        _log("1", "Анастасия", total_tokens=30, cost_rub=1.5)
+        _log("1", "Анастасия", total_tokens=50, cost_rub=2.5)
+        _log("2", "Вера", total_tokens=10, cost_rub=0.5)
+
+        rows = {r["employee_id"]: r for r in svc.get_usage_by_employee()}
+
+        assert rows["1"]["requests"] == 2
+        assert rows["1"]["tokens"] == 80
+        assert rows["1"]["cost_rub"] == 4.0
+        assert rows["2"]["requests"] == 1
+
+    def test_ordered_most_expensive_first(self, temp_db):
+        _log("1", "Дешёвый", cost_rub=0.5)
+        _log("2", "Дорогой", cost_rub=9.0)
+
+        rows = svc.get_usage_by_employee()
+
+        assert [r["employee_id"] for r in rows] == ["2", "1"]
+
+    def test_feature_filter(self, temp_db):
+        _log("1", "Анастасия", feature="knowledge_base")
+        _log("1", "Анастасия", feature="other_feature")
+
+        kb_rows = svc.get_usage_by_employee(feature="knowledge_base")
+
+        assert len(kb_rows) == 1
+        assert kb_rows[0]["requests"] == 1
+
+    def test_since_filter_excludes_old_rows(self, temp_db):
+        db = svc._session()
+        try:
+            db.add(EmployeeLlmUsage(
+                employee_id="1", employee_name="Старый", feature="knowledge_base",
+                provider="polza", model="x", prompt_tokens=1, completion_tokens=1,
+                total_tokens=2, cost_rub=1.0,
+                created_at=dt.datetime.utcnow() - dt.timedelta(days=60),
+            ))
+            db.commit()
+        finally:
+            db.close()
+
+        _log("2", "Новый")
+
+        rows = svc.get_usage_by_employee(since=dt.datetime.utcnow() - dt.timedelta(days=30))
+
+        assert len(rows) == 1
+        assert rows[0]["employee_id"] == "2"
+
+    def test_anthropic_rows_have_no_cost(self, temp_db):
+        _log("1", "Анастасия", provider="anthropic", cost_rub=None)
+
+        rows = svc.get_usage_by_employee()
+
+        assert rows[0]["cost_rub"] == 0.0
+
+    def test_no_usage_returns_empty_list(self, temp_db):
+        assert svc.get_usage_by_employee() == []

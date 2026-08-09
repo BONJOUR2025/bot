@@ -61,8 +61,17 @@ async def handle_kb_question(update: Update, context: ContextTypes.DEFAULT_TYPE)
 4. Пиши на русском, обращайся на «вы»."""
 
     try:
+        from app.data.employee_repository import EmployeeRepository
         from app.services.llm_client import chat
-        reply = chat(cfg, [{"role": "user", "content": text}], system=system, max_tokens=600) or ""
+
+        user_id = str(update.effective_user.id)
+        employee = EmployeeRepository().get_employee(user_id)
+        employee_name = getattr(employee, "name", None) or update.effective_user.full_name or ""
+
+        reply = chat(
+            cfg, [{"role": "user", "content": text}], system=system, max_tokens=600,
+            employee_id=user_id, employee_name=employee_name, feature="knowledge_base",
+        ) or ""
         reply = reply.replace("**", "").replace("__", "").strip()
     except Exception as e:
         log.warning("KB AI error: %s", e)
