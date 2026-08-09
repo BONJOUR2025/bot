@@ -5,6 +5,17 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 log = logging.getLogger(__name__)
 
+# The knowledge base is a ~50k-token block resent in full on every question,
+# so what matters here is prompt caching, not raw per-token price. Measured
+# against the real KB via Polza: deepseek/deepseek-chat reports
+# cached_tokens=0 on every repeat (Polza routes it to third-party hosts that
+# have no prefix cache, and pinning the real DeepSeek provider 503s), costing
+# ~1.58₽ per question, while gpt-4.1-nano serves ~47.6k of the same prompt
+# from cache for ~0.14₽ — same answers, 11x cheaper. Hence a model dedicated
+# to this feature rather than the account-wide polza_model, which also drives
+# the candidate-facing recruitment AI and must not change as a side effect.
+DEFAULT_KB_MODEL = "openai/gpt-4.1-nano"
+
 KB_CHAT = 1
 _EXIT_PHRASES = {"🏠 домой", "🏠 домой", "/start", "/cancel"}
 
@@ -70,6 +81,7 @@ async def handle_kb_question(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         reply = chat(
             cfg, [{"role": "user", "content": text}], system=system, max_tokens=600,
+            model=_kb_model(cfg),
             employee_id=user_id, employee_name=employee_name, feature="knowledge_base",
         ) or ""
         reply = reply.replace("**", "").replace("__", "").strip()
@@ -83,6 +95,23 @@ async def handle_kb_question(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await update.message.reply_text(reply, reply_markup=KB_KEYBOARD)
     return KB_CHAT
+
+
+def _kb_model(cfg: dict):
+    """Model id for knowledge-base answers, or None to let llm_client pick the
+    provider's default.
+
+    Only ever returns an override on the polza path: DEFAULT_KB_MODEL is a
+    Polza-style "provider/model" id, and handing that to the Anthropic SDK
+    would fail the request outright. An explicit kb_model set by an admin is
+    honoured either way — if someone points this at an Anthropic model they
+    mean it.
+    """
+    explicit = (cfg.get("kb_model") or "").strip()
+    if explicit:
+        return explicit
+    provider = (cfg.get("llm_provider") or "anthropic").strip().lower()
+    return DEFAULT_KB_MODEL if provider == "polza" else None
 
 
 def _load_kb_and_cfg():

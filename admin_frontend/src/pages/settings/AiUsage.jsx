@@ -107,6 +107,15 @@ function EmployeeLlmUsagePanel() {
   const fmtRub = (v) => (v == null ? '—' : `${Number(v).toFixed(2)} ₽`);
   const fmtInt = (v) => Number(v || 0).toLocaleString('ru-RU');
   const fmtDate = (v) => (v ? new Date(v).toLocaleString('ru-RU') : '—');
+  // Share of tokens the provider served from its prompt cache. 0% here means
+  // caching silently isn't working on the configured model — the whole reason
+  // this column exists, since the cost difference is ~10x.
+  const fmtCached = (r) => {
+    const tokens = Number(r.tokens || 0);
+    const cached = Number(r.cached_tokens || 0);
+    if (!tokens) return '—';
+    return `${fmtInt(cached)} (${Math.round((cached / tokens) * 100)}%)`;
+  };
 
   return (
     <div>
@@ -127,6 +136,7 @@ function EmployeeLlmUsagePanel() {
                 <th className="pr-3 py-1 font-normal">Сотрудник</th>
                 <th className="pr-3 py-1 font-normal text-right">Запросов</th>
                 <th className="pr-3 py-1 font-normal text-right">Токенов</th>
+                <th className="pr-3 py-1 font-normal text-right">Из кэша</th>
                 <th className="pr-3 py-1 font-normal text-right">Рублей</th>
                 <th className="pr-3 py-1 font-normal">Последнее обращение</th>
               </tr>
@@ -137,6 +147,7 @@ function EmployeeLlmUsagePanel() {
                   <td className="pr-3 py-1">{r.employee_name || r.employee_id}</td>
                   <td className="pr-3 py-1 text-right font-mono">{fmtInt(r.requests)}</td>
                   <td className="pr-3 py-1 text-right font-mono">{fmtInt(r.tokens)}</td>
+                  <td className="pr-3 py-1 text-right font-mono">{fmtCached(r)}</td>
                   <td className="pr-3 py-1 text-right font-mono">{fmtRub(r.cost_rub)}</td>
                   <td className="pr-3 py-1">{fmtDate(r.last_used_at)}</td>
                 </tr>

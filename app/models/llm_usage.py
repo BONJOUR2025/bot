@@ -34,6 +34,15 @@ class EmployeeLlmUsage(Base):
     prompt_tokens = Column(Integer, nullable=False, default=0)
     completion_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)
+    # Part of prompt_tokens that the provider served from its prompt cache
+    # instead of re-processing. The knowledge base is a large, unchanging
+    # prefix, so on a cache-capable model this is nearly all of the prompt
+    # and is billed at a fraction of the normal input rate — logging it is
+    # the only way to tell "the cache is working" from "it silently isn't",
+    # which is exactly what went wrong on the deepseek-chat route (Polza
+    # fans out to third-party hosts with no prefix cache, so it reported
+    # cached_tokens=0 on every single call).
+    cached_tokens = Column(Integer, nullable=False, default=0)
     # Only Polza reports cost per request; stays NULL for anthropic-provider
     # rows, where only token counts are meaningful (same convention as the
     # account-wide log had before it was replaced by the live Polza pull).

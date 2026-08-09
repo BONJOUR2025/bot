@@ -107,6 +107,7 @@ def _session():
 def record_employee_usage(
     *, employee_id: str, employee_name: str, feature: str, provider: str, model: str,
     prompt_tokens: int, completion_tokens: int, total_tokens: int, cost_rub: Optional[float],
+    cached_tokens: int = 0,
 ) -> None:
     from app.models.llm_usage import EmployeeLlmUsage
 
@@ -121,6 +122,7 @@ def record_employee_usage(
             prompt_tokens=prompt_tokens or 0,
             completion_tokens=completion_tokens or 0,
             total_tokens=total_tokens or 0,
+            cached_tokens=cached_tokens or 0,
             cost_rub=cost_rub,
         ))
         db.commit()
@@ -147,6 +149,7 @@ def get_usage_by_employee(since: Optional[datetime] = None, feature: Optional[st
             func.coalesce(func.sum(EmployeeLlmUsage.total_tokens), 0),
             func.coalesce(func.sum(EmployeeLlmUsage.cost_rub), 0.0),
             func.max(EmployeeLlmUsage.created_at),
+            func.coalesce(func.sum(EmployeeLlmUsage.cached_tokens), 0),
         ).group_by(EmployeeLlmUsage.employee_id)
         if since is not None:
             q = q.filter(EmployeeLlmUsage.created_at >= since)
@@ -162,8 +165,10 @@ def get_usage_by_employee(since: Optional[datetime] = None, feature: Optional[st
                 "tokens": int(tokens),
                 "cost_rub": round(float(cost_rub), 4),
                 "last_used_at": last_used_at.isoformat() if last_used_at else None,
+                "cached_tokens": int(cached_tokens),
             }
-            for employee_id, employee_name, requests, tokens, cost_rub, last_used_at in q.all()
+            for (employee_id, employee_name, requests, tokens, cost_rub,
+                 last_used_at, cached_tokens) in q.all()
         ]
     finally:
         db.close()

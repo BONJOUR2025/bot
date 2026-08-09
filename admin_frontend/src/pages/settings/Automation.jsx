@@ -64,6 +64,12 @@ export default function SettingsAutomation() {
         <Field label="Polza.ai — модель" hint="Формат provider/model, например deepseek/deepseek-chat. Проверьте точный id в каталоге моделей на polza.ai/models — пусто = deepseek/deepseek-chat.">
           <input className="input w-full font-mono text-sm" {...register('polza_model')} placeholder="deepseek/deepseek-chat" />
         </Field>
+        <Field
+          label="Модель для базы знаний (бот)"
+          hint="Отдельно от модели выше, потому что база знаний целиком (~50 000 токенов) уходит в каждый вопрос сотрудника — здесь решает не цена за токен, а кэширование промпта. На deepseek кэш не работает: Polza раздаёт её сторонним площадкам без префиксного кэша (замерено — 1.58 ₽ за вопрос). У gpt-4.1-nano кэш есть: те же ответы за ~0.14 ₽. Пусто = openai/gpt-4.1-nano."
+        >
+          <input className="input w-full font-mono text-sm" {...register('kb_model')} placeholder="openai/gpt-4.1-nano" />
+        </Field>
         <div className="border-t border-[color:var(--color-border)] pt-4 mt-2">
           <p className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wide mb-3">Параметры AI — разговор с кандидатами</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">

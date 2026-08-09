@@ -338,3 +338,73 @@ class TestEmployeeAttribution:
         result = llm.chat(self.BASE, [{"role": "user", "content": "hi"}], employee_id="1")
         assert result == "ok"
 
+    def test_polza_records_cached_tokens(self, monkeypatch):
+        """Prompt-cache hits arrive as usage.prompt_tokens_details.cached_tokens
+        on the polza path. Logging it is what makes a silently-non-caching
+        model visible — deepseek/deepseek-chat reports 0 here on every call."""
+        calls = self._capture_usage_calls(monkeypatch)
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": "ok"}}],
+                    "usage": {
+                        "prompt_tokens": 47754, "completion_tokens": 97, "total_tokens": 47851,
+                        "cost_rub": 0.1399,
+                        "prompt_tokens_details": {"cached_tokens": 47616},
+                    },
+                },
+                request=httpx.Request("POST", url),
+            )
+
+        monkeypatch.setattr(httpx, "post", fake_post)
+        llm.chat(self.BASE, [{"role": "user", "content": "hi"}], employee_id="1")
+
+        assert calls[0]["cached_tokens"] == 47616
+
+    def test_polza_missing_cache_details_records_zero(self, monkeypatch):
+        calls = self._capture_usage_calls(monkeypatch)
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "ok"}}],
+                      "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}},
+                request=httpx.Request("POST", url),
+            )
+
+        monkeypatch.setattr(httpx, "post", fake_post)
+        llm.chat(self.BASE, [{"role": "user", "content": "hi"}], employee_id="1")
+
+        assert calls[0]["cached_tokens"] == 0
+
+    def test_anthropic_records_cache_read_tokens(self, monkeypatch):
+        """Anthropic reports cache reads in its own field rather than inside
+        input_tokens, so it needs a different source than the polza path."""
+        calls = self._capture_usage_calls(monkeypatch)
+
+        class _WithCache(_FakeAnthropicClient):
+            def __init__(self, **kw):
+                super().__init__(**kw)
+                orig_create = self.messages.create
+
+                def create(**kwargs):
+                    resp = orig_create(**kwargs)
+
+                    class _Usage:
+                        input_tokens = 100
+                        output_tokens = 20
+                        cache_read_input_tokens = 4000
+
+                    resp.usage = _Usage()
+                    return resp
+
+                self.messages.create = create
+
+        monkeypatch.setattr("anthropic.Anthropic", _WithCache)
+        llm.chat({"anthropic_api_key": "sk-ant-test"},
+                  [{"role": "user", "content": "hi"}], employee_id="1")
+
+        assert calls[0]["cached_tokens"] == 4000
+

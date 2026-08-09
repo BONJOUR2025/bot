@@ -111,7 +111,7 @@ def chat(
 
 def _record_usage_safely(attribution: Optional[dict], *, provider: str, model: str,
                           prompt_tokens: int, completion_tokens: int, total_tokens: int,
-                          cost_rub: Optional[float]) -> None:
+                          cost_rub: Optional[float], cached_tokens: int = 0) -> None:
     """Best-effort: a logging failure must never break an actual chat reply."""
     if not attribution:
         return
@@ -123,7 +123,7 @@ def _record_usage_safely(attribution: Optional[dict], *, provider: str, model: s
             feature=attribution.get("feature") or "",
             provider=provider, model=model or "",
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
-            total_tokens=total_tokens, cost_rub=cost_rub,
+            total_tokens=total_tokens, cost_rub=cost_rub, cached_tokens=cached_tokens,
         )
     except Exception:
         log.warning("llm_client: failed to record per-employee usage", exc_info=True)
@@ -165,6 +165,10 @@ def _chat_anthropic(
         completion_tokens=getattr(usage, "output_tokens", 0) or 0,
         total_tokens=(getattr(usage, "input_tokens", 0) or 0) + (getattr(usage, "output_tokens", 0) or 0),
         cost_rub=None,
+        # Anthropic splits cache reads into their own field rather than
+        # counting them inside input_tokens, unlike the OpenAI-shaped
+        # prompt_tokens_details.cached_tokens on the polza path.
+        cached_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
     )
     return response.content[0].text.strip()
 
@@ -206,5 +210,6 @@ def _chat_polza(
         completion_tokens=usage.get("completion_tokens") or 0,
         total_tokens=usage.get("total_tokens") or 0,
         cost_rub=usage.get("cost_rub"),
+        cached_tokens=(usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0,
     )
     return data["choices"][0]["message"]["content"].strip()

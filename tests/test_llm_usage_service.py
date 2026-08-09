@@ -143,11 +143,12 @@ def temp_db(tmp_path, monkeypatch):
 
 def _log(employee_id, employee_name="", feature="knowledge_base", provider="polza",
          model="deepseek/deepseek-chat", prompt_tokens=10, completion_tokens=20,
-         total_tokens=30, cost_rub=1.5):
+         total_tokens=30, cost_rub=1.5, cached_tokens=0):
     svc.record_employee_usage(
         employee_id=employee_id, employee_name=employee_name, feature=feature,
         provider=provider, model=model, prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens, total_tokens=total_tokens, cost_rub=cost_rub,
+        cached_tokens=cached_tokens,
     )
 
 
@@ -223,3 +224,19 @@ class TestEmployeeUsage:
 
     def test_no_usage_returns_empty_list(self, temp_db):
         assert svc.get_usage_by_employee() == []
+
+    def test_cached_tokens_are_summed(self, temp_db):
+        _log("1", "Анастасия", total_tokens=50000, cached_tokens=47616)
+        _log("1", "Анастасия", total_tokens=50000, cached_tokens=47616)
+
+        rows = svc.get_usage_by_employee()
+
+        assert rows[0]["cached_tokens"] == 95232
+
+    def test_uncached_rows_report_zero_not_null(self, temp_db):
+        """A model whose provider has no prompt cache reports nothing at all,
+        not a zero — the column must still read back as 0 so the UI can show
+        an honest "0%" rather than a blank."""
+        _log("1", "Анастасия", cached_tokens=0)
+
+        assert svc.get_usage_by_employee()[0]["cached_tokens"] == 0
