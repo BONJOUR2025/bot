@@ -375,12 +375,28 @@ class PayrollService:
                         )
                         if not code:
                             continue
+                        # `x or 0` does not catch NaN: pandas reads a blank Excel
+                        # cell as float('nan'), and NaN is truthy in Python, so
+                        # `nan or 0` stays nan. That nan then propagates into
+                        # base_salary/total_gross/total_net and finally breaks
+                        # the whole endpoint — FastAPI's JSON encoder rejects
+                        # NaN outright, so one employee with a blank rate cell
+                        # (e.g. a new admin whose ОСН/ДОП was never filled in)
+                        # 500s the entire month's payroll instead of just that
+                        # employee's row. Route every read through this helper.
+                        def _num(v):
+                            try:
+                                f = float(v)
+                            except (TypeError, ValueError):
+                                return 0.0
+                            return f if f == f else 0.0  # f != f only for NaN
+
                         extras_by_code[code] = {
-                            "main_rate": float(r.get("ОСН", 0) or 0),
-                            "main_shifts": float(r.get("ОСН.", 0) or 0),
-                            "extra_rate": float(r.get("ДОП", 0) or 0),
-                            "extra_shifts": float(r.get("ДОП.", 0) or 0),
-                            "workshop": float(r.get("Цех", 0) or 0),
+                            "main_rate": _num(r.get("ОСН")),
+                            "main_shifts": _num(r.get("ОСН.")),
+                            "extra_rate": _num(r.get("ДОП")),
+                            "extra_shifts": _num(r.get("ДОП.")),
+                            "workshop": _num(r.get("Цех")),
                         }
                     for emp in employees:
                         ex = extras_by_code.get(emp["code"], {})
