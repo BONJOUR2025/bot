@@ -1,11 +1,12 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import {
-  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope, Plug,
+  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope, Plug, Coins,
 } from 'lucide-react';
 
 import SettingsGeneral from './settings/General.jsx';
 import SettingsTelegram from './settings/Telegram.jsx';
 import SettingsAutomation from './settings/Automation.jsx';
+import SettingsAiUsage from './settings/AiUsage.jsx';
 import SettingsTemplates from './settings/Templates.jsx';
 import SettingsDictionary from './settings/DictionarySettings.jsx';
 import SettingsAccessControl from './settings/AccessControl.jsx';
@@ -16,6 +17,7 @@ const TABS = [
   { to: '/admin/settings/general',     label: 'Общие',         icon: SlidersHorizontal },
   { to: '/admin/settings/telegram',    label: 'Telegram',      icon: Send },
   { to: '/admin/settings/automation',  label: 'Автоматизация', icon: Sparkles },
+  { to: '/admin/settings/ai-usage',    label: 'Расход AI',     icon: Coins },
   { to: '/admin/settings/integrations', label: 'Интеграции',   icon: Plug },
   { to: '/admin/settings/templates',   label: 'Шаблоны',       icon: FileText },
   { to: '/admin/settings/dictionary',  label: 'Словарь',       icon: BookOpen },
@@ -61,6 +63,7 @@ export default function Settings() {
         <Route path="general" element={<SettingsGeneral />} />
         <Route path="telegram" element={<SettingsTelegram />} />
         <Route path="automation" element={<SettingsAutomation />} />
+        <Route path="ai-usage" element={<SettingsAiUsage />} />
         <Route path="integrations" element={<SettingsIntegrations />} />
         <Route path="templates" element={<SettingsTemplates />} />
         <Route path="dictionary" element={<SettingsDictionary />} />
