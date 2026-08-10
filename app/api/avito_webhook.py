@@ -134,10 +134,14 @@ async def _process(msg: dict) -> None:
             Candidate.platform_chat_id == msg["chat_id"],
         ).first()
         if not candidate:
+            log.info("avito webhook: no candidate for chat %s, ignoring", msg["chat_id"])
             return  # not a candidate we track (or not imported yet)
         # Only chats with a running screen are driven from here; anything else
         # is just a conversation the admin handles manually.
-        if quick_screening.load_state(candidate).get("status") != "asking":
+        state_status = quick_screening.load_state(candidate).get("status")
+        if state_status != "asking":
+            log.info("avito webhook: candidate %s is not in an active screen (%s), ignoring",
+                     candidate.id, state_status)
             return
         if not msg["text"]:
             return  # image/system message carries no answer to record
@@ -177,8 +181,13 @@ async def avito_webhook(secret: str, request: Request, background: BackgroundTas
     try:
         body = await request.json()
     except Exception:
+        # Logged, not silent: an "ignored" with no trace is indistinguishable
+        # from "never arrived" when diagnosing, which is exactly the question
+        # asked whenever this feature looks dead.
+        log.info("avito webhook: body is not valid JSON, ignoring")
         return {"status": "ignored"}  # never 4xx/5xx a webhook over a bad body
     if not isinstance(body, dict):
+        log.info("avito webhook: body is not an object, ignoring")
         return {"status": "ignored"}
 
     msg = _extract_message(body)
@@ -186,7 +195,12 @@ async def avito_webhook(secret: str, request: Request, background: BackgroundTas
         log.info("avito webhook: unrecognised payload shape, ignoring: %s", str(body)[:500])
         return {"status": "ignored"}
     if msg["type"] and msg["type"] != "text":
+        log.info("avito webhook: non-text message (%s), ignoring", msg["type"])
         return {"status": "ignored"}
 
+    # The one line that proves Avito reaches us at all — without it, a webhook
+    # silently dropped by the IP allowlist looks identical to one that was
+    # never sent, and polling would quietly mask the difference.
+    log.info("avito webhook: accepted message %s in chat %s", msg["message_id"], msg["chat_id"])
     background.add_task(_process, msg)
     return {"status": "ok"}
