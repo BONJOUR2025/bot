@@ -630,6 +630,80 @@ def disconnect_avito(db: Session = Depends(get_db)):
     return {"status": "disconnected"}
 
 
+@router.get("/integrations/hh/webhook")
+async def get_hh_webhook(request: Request, db: Session = Depends(get_db)):
+    """Состояние подписки hh на мгновенные уведомления о сообщениях."""
+    from app.api.hh_webhook import webhook_path
+    from app.services import hh_api
+
+    src = db.query(RecruitmentSource).filter(
+        RecruitmentSource.source == "hh", RecruitmentSource.is_active == True
+    ).first()
+    if not src or not src.access_token:
+        raise HTTPException(400, "hh.ru не подключён")
+    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    try:
+        subs = await hh_api.list_webhook_subscriptions(src.access_token)
+    except Exception as exc:
+        raise HTTPException(502, f"hh.ru: не удалось получить подписки ({exc})")
+    mine = [s for s in subs if s.get("url") == our_url]
+    return {"url": our_url, "subscribed": bool(mine),
+            "subscription_id": (mine[0].get("id") if mine else None),
+            "all_subscriptions": [s.get("url", "") for s in subs]}
+
+
+@router.post("/integrations/hh/webhook")
+async def subscribe_hh_webhook(request: Request, db: Session = Depends(get_db)):
+    """Подписаться на CHAT_MESSAGE_CREATED — ответ кандидата обрабатывается
+    за секунды вместо ожидания цикла синхронизации. Опрос остаётся
+    подстраховкой: hh прямо предупреждает, что доставка не гарантируется."""
+    from app.api.hh_webhook import webhook_path, EVENT_NEW_MESSAGE
+    from app.services import hh_api
+
+    src = db.query(RecruitmentSource).filter(
+        RecruitmentSource.source == "hh", RecruitmentSource.is_active == True
+    ).first()
+    if not src or not src.access_token:
+        raise HTTPException(400, "hh.ru не подключён")
+    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    if not our_url.startswith("https://"):
+        raise HTTPException(
+            400,
+            "Вебхук требует публичный https-адрес. Открывайте админку по внешнему адресу "
+            "(app.bonjour.pw), а не по localhost — hh.ru должен достучаться до этого URL.",
+        )
+    try:
+        await hh_api.subscribe_webhook(src.access_token, our_url, [EVENT_NEW_MESSAGE])
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"hh.ru: не удалось подписаться ({exc})")
+    return {"status": "subscribed", "url": our_url}
+
+
+@router.delete("/integrations/hh/webhook")
+async def unsubscribe_hh_webhook(request: Request, db: Session = Depends(get_db)):
+    from app.api.hh_webhook import webhook_path
+    from app.services import hh_api
+
+    src = db.query(RecruitmentSource).filter(
+        RecruitmentSource.source == "hh", RecruitmentSource.is_active == True
+    ).first()
+    if not src or not src.access_token:
+        raise HTTPException(400, "hh.ru не подключён")
+    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    try:
+        subs = await hh_api.list_webhook_subscriptions(src.access_token)
+        for s in subs:
+            if s.get("url") == our_url and s.get("id"):
+                await hh_api.delete_webhook_subscription(src.access_token, str(s["id"]))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"hh.ru: не удалось отписаться ({exc})")
+    return {"status": "unsubscribed"}
+
+
 async def _avito_source_and_token(db):
     src = db.query(RecruitmentSource).filter(
         RecruitmentSource.source == "avito",

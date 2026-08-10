@@ -181,6 +181,11 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
 
             raw_items.append({
                 "neg_id": str(neg["id"]),
+                # Вебхук CHAT_MESSAGE_CREATED приходит с chat_id, а не с id
+                # отклика — без этой связки уведомление невозможно сопоставить
+                # с кандидатом. Здесь единственное место, где hh отдаёт обе
+                # величины рядом.
+                "chat_id": str(neg.get("chat_id") or ""),
                 "name": name,
                 "resume_url": resume_url,
                 "resume_id": resume_id,
@@ -259,6 +264,10 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
         items = [
             {
                 "external_id": it["neg_id"],
+                # Кладём в то же поле, что и Авито: для hh отвечать по-прежнему
+                # надо в negotiation (external_id), но вебхук о новом сообщении
+                # приходит с chat_id — по нему и ищем кандидата.
+                "platform_chat_id": it["chat_id"],
                 "name": it["name"],
                 "phone": it["phone"],
                 "email": it["email"],
@@ -427,3 +436,55 @@ async def sync_negotiation_stage(access_token: str, neg_id: str, new_stage: str,
                 log.warning("hh message error for neg %s: %s", neg_id, exc)
 
         return True
+
+
+# ── Webhooks ──────────────────────────────────────────────────────
+# hh doesn't document these in its GitHub docs repo — they live only in the
+# OpenAPI spec (api.hh.ru/openapi/specification/public, tag Webhook-API).
+#
+# Differences from Avito's webhooks that shape the code around this:
+# * one URL per application — a single endpoint has to serve every event;
+# * hh retries with growing backoff unless we answer 2xx within 5 seconds,
+#   and expects 409 (not 200) for a duplicate it already delivered;
+# * a subscription that keeps failing gets queued for blocking, with a mail
+#   to the app developer — so silently 500-ing here has a real cost;
+# * delivery is explicitly not guaranteed, so polling stays as the net.
+
+WEBHOOK_EVENT_NEW_MESSAGE = "CHAT_MESSAGE_CREATED"
+WEBHOOK_EVENT_NEW_RESPONSE = "NEW_RESPONSE_OR_INVITATION_VACANCY"
+
+
+async def list_webhook_subscriptions(access_token: str) -> list[dict]:
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.get(f"{HH_BASE}/webhook/subscriptions", headers=_headers(access_token))
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        data = r.json() or {}
+    return data.get("items") or data.get("subscriptions") or []
+
+
+async def subscribe_webhook(access_token: str, url: str, actions: list[str]) -> dict:
+    """Subscribe the given URL to hh events."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.post(
+            f"{HH_BASE}/webhook/subscriptions",
+            headers={**_headers(access_token), "Content-Type": "application/json"},
+            json={"url": url, "actions": [{"type": a} for a in actions]},
+        )
+        if r.status_code in (200, 201, 204):
+            return r.json() if r.content else {}
+        raise ValueError(
+            f"hh.ru не принял подписку на вебхук ({r.status_code}): {r.text[:300]}. "
+            "Проверьте, что URL доступен снаружи и у приложения есть права работодателя."
+        )
+
+
+async def delete_webhook_subscription(access_token: str, subscription_id: str) -> None:
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.delete(
+            f"{HH_BASE}/webhook/subscriptions/{subscription_id}",
+            headers=_headers(access_token),
+        )
+        if r.status_code not in (200, 204, 404):
+            raise ValueError(f"hh.ru не снял подписку ({r.status_code}): {r.text[:300]}")

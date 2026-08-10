@@ -439,7 +439,7 @@ async def _check_avito_messages(db, src, token: str) -> None:
 
 async def _sync_link(db, src, link, token: str) -> list[dict]:
     from app.models.recruitment import Candidate
-    from app.services import hh_api, avito_api
+    from app.services import hh_api, avito_api, recruitment_stages as rs
 
     if src.source == "hh":
         new_items = await _collect_hh(token, link.external_vacancy_id)
@@ -457,6 +457,13 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
             Candidate.source == src.source,
             Candidate.external_id == ext_id,
         ).first()
+        if exists:
+            # Дозаполняем chat_id у уже импортированных: без него вебхук hh
+            # (он приходит с chat_id, а не с id отклика) не сопоставить с
+            # кандидатом, а все существующие записи созданы до того, как мы
+            # начали его сохранять.
+            if not (exists.platform_chat_id or "").strip() and item.get("platform_chat_id"):
+                exists.platform_chat_id = item["platform_chat_id"]
         if not exists:
             applied_at = None
             raw_applied = item.get("applied_at")
@@ -476,10 +483,15 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 resume_url=item.get("resume_url", ""),
                 photo_url=item.get("photo_url", ""),
                 age=item.get("age"),
-                stage="отклик",
+                # Название этапа берём из воронки, а не строкой: раньше здесь
+                # был «отклик» из старой воронки, и каждый импортированный
+                # кандидат до ближайшего рестарта (когда отрабатывает миграция
+                # этапов) лежал в БД с этапом, которого в воронке уже нет.
+                stage=rs.STAGE_NEW,
                 notes=item.get("notes", ""),
-                # Avito only: the chat to reply in. hh replies go to
-                # external_id (the negotiation), so it stays empty there.
+                # Куда отвечать (Авито) и по чему искать кандидата из вебхука
+                # (обе площадки). У hh ответ уходит в negotiation по
+                # external_id, но chat_id всё равно нужен для вебхука.
                 platform_chat_id=item.get("platform_chat_id", ""),
                 created_at=applied_at or datetime.utcnow(),
             )

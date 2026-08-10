@@ -553,6 +553,9 @@ def create_app() -> FastAPI:
     from .avito_webhook import router as avito_webhook_router
     app.include_router(avito_webhook_router, prefix="/api")
 
+    from .hh_webhook import router as hh_webhook_router
+    app.include_router(hh_webhook_router, prefix="/api")
+
     # Employee knowledge base
     from .knowledge import router as knowledge_router
     from app.models.knowledge import KnowledgeDocument  # noqa: F401

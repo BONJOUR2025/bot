@@ -241,6 +241,8 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
             </button>
           </div>
 
+          <WebhookPanel source="hh" />
+
           <div>
             <p className="text-sm font-semibold mb-2">Привязка вакансий</p>
             <p className="text-xs text-[color:var(--color-muted-foreground)] mb-3">
@@ -332,24 +334,25 @@ function AvitoVacancyLinkRow({ internalVacancy, existingLinks, onLink, onUnlink 
   );
 }
 
-// ── Avito instant-message webhook ─────────────────────────────────
+// ── Instant-message webhook (Авито и hh) ──────────────────────────
 // Без него ответ кандидата ждёт ближайшего цикла опроса (до часа). Опрос
 // при этом остаётся включённым намеренно: недоставленный вебхук (лежал
 // туннель) теряется навсегда, а опрос подберёт такое сообщение позже.
-function AvitoWebhookPanel() {
+function WebhookPanel({ source }) {
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const endpoint = `/recruitment/integrations/${source}/webhook`;
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const res = await api.get('/recruitment/integrations/avito/webhook');
+      const res = await api.get(endpoint);
       setState(res.data);
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
     }
-  }, []);
+  }, [endpoint]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -357,9 +360,9 @@ function AvitoWebhookPanel() {
     setBusy(true); setError('');
     try {
       if (state?.subscribed) {
-        await api.delete('/recruitment/integrations/avito/webhook');
+        await api.delete(endpoint);
       } else {
-        await api.post('/recruitment/integrations/avito/webhook');
+        await api.post(endpoint);
       }
       await load();
     } catch (e) {
@@ -506,7 +509,7 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
             </button>
           </div>
 
-          <AvitoWebhookPanel />
+          <WebhookPanel source="avito" />
 
           <div>
             <p className="text-sm font-semibold mb-2">Привязка вакансий</p>
