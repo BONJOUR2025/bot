@@ -3,7 +3,7 @@ import {
   Plus, X, Phone, Mail, FileText,
   Briefcase, ExternalLink, Pencil, Trash2, Settings, Send,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
-  ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Zap,
+  ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare,
   Pause, Play, Check, BookOpen, Sparkles, ListChecks, Copy, FileStack,
 } from 'lucide-react';
 import api from '../api';
@@ -1122,7 +1122,7 @@ function MobileBoard({ candidates, onCardClick, onAddClick, selectionMode, selec
 }
 
 // ── Bulk actions bar ───────────────────────────────────────────────
-function BulkActionsBar({ count, total, onSelectAll, onClear, onMoveStage, onDelete, loading }) {
+function BulkActionsBar({ count, total, onSelectAll, onClear, onMoveStage, onStartScreening, onDelete, loading }) {
   const [stageOpen, setStageOpen] = useState(false);
   return (
     <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center justify-center gap-2 max-w-[calc(100vw-1rem)] bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-3 text-sm">
@@ -1160,6 +1160,14 @@ function BulkActionsBar({ count, total, onSelectAll, onClear, onMoveStage, onDel
         )}
       </div>
 
+      <button
+        onClick={onStartScreening}
+        disabled={loading}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-50"
+        title="Запустить быстрый опрос всем выбранным (hh.ru/Авито, у кого он ещё не идёт)"
+      >
+        <SendHorizonal size={13} /> Начать опрос
+      </button>
       <button
         onClick={onDelete}
         disabled={loading}
@@ -1300,20 +1308,6 @@ export default function Recruitment() {
 
   const [mainView, setMainView] = useState('funnel'); // 'funnel' | 'interviews'
 
-  const [automationEnabled, setAutomationEnabled] = useState(false);
-  useEffect(() => {
-    api.get('/recruitment/automation/status')
-      .then(r => setAutomationEnabled(r.data.enabled))
-      .catch(() => {});
-  }, []);
-
-  async function toggleAutomation() {
-    try {
-      const res = await api.post('/recruitment/automation/toggle', { enabled: !automationEnabled });
-      setAutomationEnabled(res.data.enabled);
-    } catch (e) { setError(e.response?.data?.detail || e.message); }
-  }
-
   function toggleSelection(id) {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -1350,6 +1344,30 @@ export default function Recruitment() {
       ));
       await loadCandidates();
       exitSelection();
+    } catch (e) { setError(e.message); }
+    finally { setBulkLoading(false); }
+  }
+
+  async function bulkStartScreening() {
+    if (!selectedIds.size) return;
+    setBulkLoading(true);
+    try {
+      // allSettled, not all — a mixed selection is normal (some may already
+      // be mid-screen, lack quick-mode questions, or not be a job-board
+      // candidate at all), and one such rejection must not hide that the
+      // rest actually started.
+      const results = await Promise.allSettled([...selectedIds].map(id =>
+        api.post(`/recruitment/candidates/${id}/quick-screening`)
+      ));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      const started = results.length - failed;
+      await loadCandidates();
+      exitSelection();
+      if (failed > 0) {
+        toast(`Опрос запущен: ${started} из ${results.length}. Не удалось: ${failed} — откройте карточку, там есть причина.`, failed === results.length ? 'error' : 'success');
+      } else {
+        toast(`Опрос запущен для ${started} кандидатов`, 'success');
+      }
     } catch (e) { setError(e.message); }
     finally { setBulkLoading(false); }
   }
@@ -1512,18 +1530,6 @@ export default function Recruitment() {
               {showVacList ? 'Скрыть вакансии' : 'Вакансии'}
             </button>
           )}
-          <button
-            onClick={toggleAutomation}
-            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-              automationEnabled
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                : 'bg-[color:var(--color-control-bg)] border-[color:var(--color-border)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'
-            }`}
-            title={automationEnabled ? 'Автоматизация включена. Нажмите чтобы выключить.' : 'Автоматизация выключена. Нажмите чтобы включить.'}
-          >
-            <Zap size={14} className={automationEnabled ? 'text-emerald-600' : ''} />
-            {automationEnabled ? 'Авто: вкл' : 'Авто: выкл'}
-          </button>
           <button
             onClick={() => setShowIntegrations(true)}
             className="btn btn-secondary text-sm flex items-center gap-1.5"
@@ -1925,6 +1931,7 @@ export default function Recruitment() {
           onSelectAll={() => setSelectedIds(new Set(candidates.map(c => c.id)))}
           onClear={exitSelection}
           onMoveStage={bulkMoveStage}
+          onStartScreening={bulkStartScreening}
           onDelete={bulkDelete}
           loading={bulkLoading}
         />
