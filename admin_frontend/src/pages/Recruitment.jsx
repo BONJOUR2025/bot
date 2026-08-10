@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
-  Briefcase, ExternalLink, Pencil, Trash2, Settings, Send, Link,
+  Briefcase, ExternalLink, Pencil, Trash2, Settings, Send,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare, Zap,
-  Pause, Play, Check, AlertTriangle, BookOpen, Sparkles, ListChecks, Copy, FileStack,
+  Pause, Play, Check, BookOpen, Sparkles, ListChecks, Copy, FileStack,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -310,7 +310,7 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
 }
 
 // ── Candidate detail modal ─────────────────────────────────────────
-function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory, onPauseToggle, onDeclineSuggestion, onProfileGenerated }) {
+function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory, onPauseToggle }) {
   const { toast } = useToast();
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
@@ -323,15 +323,9 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const platformLabel = candidate.source === 'avito' ? 'Авито' : 'hh.ru';
 
   const [tab, setTab] = useState('info');
-  const hasTg = !!candidate.telegram_chat_id;
   const [resetting, setResetting] = useState(false);
   const [paused, setPaused] = useState(!!candidate.is_paused);
   const [toggling, setToggling] = useState(false);
-  const [pendingDecline, setPendingDecline] = useState(candidate.pending_decline_suggested_at || null);
-  const [decliningAction, setDecliningAction] = useState(null); // 'decline' | 'dismiss' | null
-  const [generatingProfile, setGeneratingProfile] = useState(false);
-  const [localProfile, setLocalProfile] = useState(null);
-  const [localProfileAt, setLocalProfileAt] = useState(null);
 
   // Job-board chat state (hh.ru / Авито)
   const [quick, setQuick]           = useState(null);
@@ -343,28 +337,13 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const [sending, setSending]       = useState(false);
   const bottomRef                   = useRef(null);
 
-  // Telegram chat state
-  const [tgMessages, setTgMessages]     = useState([]);
-  const [tgLoading, setTgLoading]       = useState(false);
-  const [tgError, setTgError]           = useState('');
-  const [tgText, setTgText]             = useState('');
-  const [tgSending, setTgSending]       = useState(false);
-  const tgBottomRef                     = useRef(null);
-  const [manualChatId, setManualChatId] = useState('');
-  const [savingChatId, setSavingChatId] = useState(false);
-  const [linkCode, setLinkCode]         = useState('');
-  const [tgDeepLink, setTgDeepLink]     = useState('');
-  const [loadingCode, setLoadingCode]   = useState(false);
-
   useEffect(() => {
     if (tab === 'chat' && hasPlatformChat && messages.length === 0) { loadMessages(); loadQuick(); }
-    if (tab === 'tg' && candidate.telegram_chat_id && tgMessages.length === 0) loadTgMessages();
   }, [tab]);
 
   useEffect(() => {
     if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    if (tab === 'tg') tgBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, tgMessages, tab]);
+  }, [messages, tab]);
 
   async function loadMessages() {
     setMsgLoading(true); setMsgError('');
@@ -406,53 +385,6 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
     } finally { setSending(false); }
   }
 
-  async function loadTgMessages() {
-    setTgLoading(true); setTgError('');
-    try {
-      const res = await api.get(`/recruitment/candidates/${candidate.id}/telegram-messages`);
-      setTgMessages(res.data);
-    } catch (e) {
-      setTgError(e.response?.data?.detail || e.message);
-    } finally { setTgLoading(false); }
-  }
-
-  async function handleTgSend() {
-    if (!tgText.trim() || tgSending) return;
-    setTgSending(true); setTgError('');
-    try {
-      await api.post(`/recruitment/candidates/${candidate.id}/telegram-messages`, { text: tgText.trim() });
-      setTgText('');
-      await loadTgMessages();
-    } catch (e) {
-      setTgError(e.response?.data?.detail || e.message);
-    } finally { setTgSending(false); }
-  }
-
-  async function saveChatId() {
-    const id = manualChatId.trim();
-    if (!id) return;
-    setSavingChatId(true); setTgError('');
-    try {
-      await api.patch(`/recruitment/candidates/${candidate.id}`, { telegram_chat_id: id });
-      candidate.telegram_chat_id = id;
-      setManualChatId('');
-      await loadTgMessages();
-    } catch (e) {
-      setTgError(e.response?.data?.detail || e.message);
-    } finally { setSavingChatId(false); }
-  }
-
-  async function fetchLinkCode() {
-    setLoadingCode(true);
-    try {
-      const res = await api.get(`/recruitment/candidates/${candidate.id}/telegram-link`);
-      setLinkCode(res.data.code);
-      setTgDeepLink(res.data.tg_link || '');
-    } catch (e) {
-      setTgError(e.response?.data?.detail || e.message);
-    } finally { setLoadingCode(false); }
-  }
-
   async function handleTogglePause() {
     setToggling(true);
     try {
@@ -461,30 +393,6 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
       onPauseToggle?.(candidate.id, res.data.is_paused);
     } catch(e) { toast(e.response?.data?.detail || e.message, 'error'); }
     finally { setToggling(false); }
-  }
-
-  async function handleDeclineSuggestion(action) {
-    setDecliningAction(action);
-    try {
-      const res = await api.post(`/recruitment/candidates/${candidate.id}/decline-suggestion`, { action });
-      setPendingDecline(res.data.pending_decline_suggested_at || null);
-      onDeclineSuggestion?.(candidate.id, res.data);
-    } catch (e) {
-      toast(e.response?.data?.detail || e.message, 'error');
-    } finally { setDecliningAction(null); }
-  }
-
-  async function handleGenerateProfile() {
-    setGeneratingProfile(true);
-    try {
-      const res = await api.post(`/recruitment/candidates/${candidate.id}/generate-profile`);
-      setLocalProfile(res.data.profile || null);
-      setLocalProfileAt(res.data.profile_generated_at || null);
-      onProfileGenerated?.(candidate.id, res.data);
-      toast('Профиль сформирован', 'success');
-    } catch (e) {
-      toast(e.response?.data?.detail || e.message, 'error');
-    } finally { setGeneratingProfile(false); }
   }
 
   async function handleResetHistory() {
@@ -585,16 +493,6 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
             </button>
           )}
           <button
-            onClick={() => setTab('tg')}
-            className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors flex items-center gap-1 ${
-              tab === 'tg'
-                ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
-                : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-            }`}
-          >
-            <MessageCircle size={13} /> TG
-          </button>
-          <button
             onClick={() => setTab('profile')}
             className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors flex items-center gap-1 ${
               tab === 'profile'
@@ -608,34 +506,6 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
 
         {/* ── Body ── */}
         {tab === 'info' && <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-
-          {/* Decline suggestion banner */}
-          {pendingDecline && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-2.5">
-              <p className="text-sm font-medium text-amber-800 flex items-start gap-2">
-                <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
-                ⚠️ Система предлагает отказать — кандидат долго не отвечает
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleDeclineSuggestion('decline')}
-                  disabled={!!decliningAction}
-                  className="flex-1 btn text-sm bg-red-500 hover:bg-red-600 text-white border-red-500 disabled:opacity-50"
-                >
-                  {decliningAction === 'decline' ? <Loader2 size={13} className="animate-spin inline mr-1" /> : null}
-                  Отказать
-                </button>
-                <button
-                  onClick={() => handleDeclineSuggestion('dismiss')}
-                  disabled={!!decliningAction}
-                  className="flex-1 btn btn-secondary text-sm disabled:opacity-50"
-                >
-                  {decliningAction === 'dismiss' ? <Loader2 size={13} className="animate-spin inline mr-1" /> : null}
-                  Подождать ещё
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Contacts block */}
           {(candidate.phone || candidate.email) && (
@@ -849,131 +719,14 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           </div>
         )}
 
-        {tab === 'tg' && (
-          <div className="flex flex-col flex-1 overflow-hidden" style={{ minHeight: 0 }}>
-            {!candidate.telegram_chat_id && (
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
-                <div className="text-sm text-[color:var(--color-muted-foreground)] space-y-1">
-                  <p className="font-medium text-[color:var(--color-foreground)]">Telegram не привязан</p>
-                  <p>Chat ID определяется автоматически, когда кандидат напишет первым на ваш личный аккаунт.</p>
-                  <p>Или введите Chat ID вручную, если он вам известен.</p>
-                </div>
-
-                {/* Link code block */}
-                {linkCode ? (
-                  <div className="w-full max-w-sm space-y-2">
-                    {tgDeepLink ? (
-                      <>
-                        <p className="text-xs text-[color:var(--color-muted-foreground)] text-left">
-                          Скопируйте ссылку и отправьте кандидату (например, в сообщении на hh.ru).
-                          При переходе откроется Telegram с вашим аккаунтом и предзаполненным сообщением —
-                          кандидату останется только нажать «Отправить».
-                        </p>
-                        <div className="flex gap-2 items-center">
-                          <input readOnly value={tgDeepLink}
-                            className="input flex-1 text-xs font-mono truncate" />
-                          <button onClick={() => navigator.clipboard.writeText(tgDeepLink)}
-                            className="btn btn--primary text-xs px-3 shrink-0">Копировать</button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-xs text-[color:var(--color-muted-foreground)] text-left">
-                          Подключите Secretary Mode чтобы получить ссылку. Пока что скопируйте код и попросите кандидата прислать его вам в Telegram:
-                        </p>
-                        <div className="flex gap-2 items-center">
-                          <code className="flex-1 bg-[color:var(--color-muted)] rounded px-3 py-2 text-sm font-mono select-all">
-                            {linkCode}
-                          </code>
-                          <button onClick={() => navigator.clipboard.writeText(linkCode)}
-                            className="btn text-xs px-2">Копировать</button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <button onClick={fetchLinkCode} disabled={loadingCode}
-                    className="btn btn-secondary text-sm disabled:opacity-50">
-                    {loadingCode ? <Loader2 size={13} className="animate-spin inline mr-1" /> : <Link size={13} className="inline mr-1" />}
-                    {loadingCode ? 'Загрузка...' : 'Получить ссылку для кандидата'}
-                  </button>
-                )}
-
-                <div className="flex gap-2 w-full max-w-xs">
-                  <input
-                    className="input flex-1 text-sm"
-                    placeholder="Напр. 123456789"
-                    value={manualChatId}
-                    onChange={e => setManualChatId(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && saveChatId()}
-                  />
-                  <button onClick={saveChatId} disabled={savingChatId || !manualChatId.trim()}
-                    className="btn btn--primary text-sm disabled:opacity-50">
-                    {savingChatId ? <Loader2 size={13} className="animate-spin" /> : 'Сохранить'}
-                  </button>
-                </div>
-                {tgError && <p className="text-xs text-red-500">{tgError}</p>}
-              </div>
-            )}
-            {candidate.telegram_chat_id && (<>
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
-                {tgLoading && <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-[color:var(--color-muted-foreground)]" /></div>}
-                {tgError && <div className="text-xs text-red-500 text-center py-4">{tgError}</div>}
-                {!tgLoading && !tgError && tgMessages.length === 0 && (
-                  <div className="text-xs text-[color:var(--color-muted-foreground)] text-center py-8">
-                    Сообщений пока нет. Входящие появятся после того как кандидат напишет.
-                  </div>
-                )}
-                {tgMessages.map(m => {
-                  const isOut = m.direction === 'out';
-                  return (
-                    <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                        isOut
-                          ? 'bg-[color:var(--color-primary)] text-white rounded-br-sm'
-                          : 'bg-[color:var(--color-muted)] text-[color:var(--color-foreground)] rounded-bl-sm'
-                      }`}>
-                        <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                        <div className={`text-[10px] mt-1 opacity-60 ${isOut ? 'text-right' : ''}`}>
-                          {fmtMsgTime(m.created_at)}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={tgBottomRef} />
-              </div>
-              <div className="border-t border-[color:var(--color-border)] px-4 py-3 flex gap-2 items-end">
-                <textarea rows={1} value={tgText}
-                  onChange={e => setTgText(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTgSend(); } }}
-                  placeholder="Написать в Telegram..."
-                  className="flex-1 resize-none input text-sm py-2 max-h-28" style={{ minHeight: '38px' }}
-                />
-                <button onClick={handleTgSend} disabled={!tgText.trim() || tgSending}
-                  className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-[color:var(--color-primary)] text-white disabled:opacity-40">
-                  {tgSending ? <Loader2 size={15} className="animate-spin" /> : <SendHorizonal size={15} />}
-                </button>
-              </div>
-            </>)}
-          </div>
-        )}
-
         {tab === 'profile' && (
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            {!(localProfile ?? candidate.profile) ? (
-              <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8 space-y-3">
-                <p>Профиль появится здесь после того, как кандидат закончит интервью с ИИ-ассистентом.</p>
-                <button onClick={handleGenerateProfile} disabled={generatingProfile}
-                  className="btn btn-secondary text-sm inline-flex items-center gap-1.5 disabled:opacity-60">
-                  <Sparkles size={14} /> {generatingProfile ? 'Формируем…' : 'Сформировать профиль сейчас'}
-                </button>
-                <p className="text-xs text-[color:var(--color-muted-foreground)]">
-                  Используйте, если интервью завершилось, но профиль не появился сам — например, если переписка застряла на финальном сообщении.
-                </p>
+            {!candidate.profile ? (
+              <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8">
+                <p>Профиля нет — эта функция была частью старого ИИ-интервью и больше не используется.</p>
               </div>
             ) : (() => {
-              const p = localProfile ?? candidate.profile;
+              const p = candidate.profile;
               const recBadge = {
                 invite:  { label: '✅ Пригласить', color: 'bg-emerald-100 text-emerald-700' },
                 reserve: { label: '🔶 В резерв',    color: 'bg-amber-100 text-amber-700' },
@@ -1059,17 +812,11 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                     </p>
                   )}
 
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    {(localProfileAt ?? candidate.profile_generated_at) && (
-                      <p className="text-xs text-[color:var(--color-muted-foreground)] flex items-center gap-1.5">
-                        <Clock size={12} /> Сформирован {fmtMsgTime(localProfileAt ?? candidate.profile_generated_at)}
-                      </p>
-                    )}
-                    <button onClick={handleGenerateProfile} disabled={generatingProfile}
-                      className="text-xs text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] inline-flex items-center gap-1 disabled:opacity-60">
-                      <Sparkles size={12} /> {generatingProfile ? 'Формируем…' : 'Сформировать заново'}
-                    </button>
-                  </div>
+                  {candidate.profile_generated_at && (
+                    <p className="text-xs text-[color:var(--color-muted-foreground)] flex items-center gap-1.5 pt-1">
+                      <Clock size={12} /> Сформирован {fmtMsgTime(candidate.profile_generated_at)}
+                    </p>
+                  )}
                 </>
               );
             })()}
@@ -1086,21 +833,6 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
             <button onClick={() => { onDelete(candidate.id); onClose(); }}
               className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 transition-colors">
               <Trash2 size={14} /> Удалить
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  const res = await api.post(`/recruitment/candidates/${candidate.id}/test-automation`);
-                  toast(`Результат: ${res.data.result}`, 'success');
-                } catch (e) {
-                  toast(e.response?.data?.detail || e.message, 'error');
-                }
-              }}
-              className="btn text-xs flex items-center gap-1 text-[color:var(--color-muted-foreground)]"
-              title="Реально отправляет сообщение hh.ru и переводит кандидата на следующий шаг — только для этого кандидата, даже если глобальная автоматизация выключена"
-            >
-              <Zap size={12} />
-              Запустить автоматизацию
             </button>
           </div>
         </div>
@@ -1724,14 +1456,6 @@ export default function Recruitment() {
     setCandidates(prev => prev.map(c => c.id === id ? { ...c, is_paused: isPaused } : c));
   }
 
-  function handleDeclineSuggestion(id, updatedCandidate) {
-    setCandidates(prev => prev.map(c => c.id === id ? { ...c, ...updatedCandidate } : c));
-  }
-
-  function handleProfileGenerated(id, updatedCandidate) {
-    setCandidates(prev => prev.map(c => c.id === id ? { ...c, ...updatedCandidate } : c));
-  }
-
   async function stageChange(candidateId, newStage, extraFields = {}) {
     try {
       const res = await api.patch(`/recruitment/candidates/${candidateId}`, { stage: newStage, ...extraFields });
@@ -2080,8 +1804,6 @@ export default function Recruitment() {
           onStageChange={requestStageChange}
           onResetHistory={resetCandidateHistory}
           onPauseToggle={handlePauseToggle}
-          onDeclineSuggestion={handleDeclineSuggestion}
-          onProfileGenerated={handleProfileGenerated}
         />
       )}
 
