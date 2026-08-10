@@ -44,6 +44,7 @@ def init_db() -> None:
     _migrate_columns()
     _run_migrations()
     _migrate_recruitment_stages()
+    _migrate_vacancy_links_allow_multiple()
     _seed_hiring_strategies()
     _migrate_recruitment_kb_and_strategy_defaults()
     _backfill_builtin_strategy_message_defaults()
@@ -195,6 +196,59 @@ def _migrate_recruitment_stages() -> None:
                              {"new": new, "old": old})
             except Exception:
                 pass  # таблицы ещё нет — create_all создаст её пустой
+
+
+def _migrate_vacancy_links_allow_multiple() -> None:
+    """vacancy_links used to allow only one link per (vacancy, source) via
+    UNIQUE(vacancy_id, source) — see app/models/recruitment.py:VacancyLink.
+    Rebuilds the table so a vacancy can carry several external listings on
+    the same platform; uniqueness moves to (vacancy_id, source,
+    external_vacancy_id) so the same listing still can't be linked twice.
+    SQLite can't ALTER a table's constraints in place, hence the
+    rename/recreate/copy/drop dance. Idempotent: skipped once the old
+    constraint name is gone from the table's DDL.
+    """
+    from sqlalchemy import text, inspect
+
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        if "vacancy_links" not in inspector.get_table_names():
+            return  # create_all will make it fresh with the new constraint
+
+        row = conn.execute(text(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='vacancy_links'"
+        )).fetchone()
+        ddl = (row[0] or "") if row else ""
+        if "uq_vacancy_source_external" in ddl or "uq_vacancy_source" not in ddl:
+            return  # already migrated (or constraint was renamed/removed some other way)
+
+        conn.execute(text("ALTER TABLE vacancy_links RENAME TO vacancy_links_old"))
+        conn.execute(text("""
+            CREATE TABLE vacancy_links (
+                id INTEGER NOT NULL,
+                vacancy_id INTEGER NOT NULL,
+                source VARCHAR NOT NULL,
+                source_id INTEGER NOT NULL,
+                external_vacancy_id VARCHAR NOT NULL,
+                external_vacancy_title VARCHAR,
+                sync_enabled BOOLEAN NOT NULL,
+                last_synced_at DATETIME,
+                last_sync_count INTEGER,
+                created_at DATETIME,
+                PRIMARY KEY (id),
+                CONSTRAINT uq_vacancy_source_external UNIQUE (vacancy_id, source, external_vacancy_id),
+                FOREIGN KEY(vacancy_id) REFERENCES vacancies (id) ON DELETE CASCADE,
+                FOREIGN KEY(source_id) REFERENCES recruitment_sources (id) ON DELETE CASCADE
+            )
+        """))
+        conn.execute(text("""
+            INSERT INTO vacancy_links (id, vacancy_id, source, source_id, external_vacancy_id,
+                external_vacancy_title, sync_enabled, last_synced_at, last_sync_count, created_at)
+            SELECT id, vacancy_id, source, source_id, external_vacancy_id,
+                external_vacancy_title, sync_enabled, last_synced_at, last_sync_count, created_at
+            FROM vacancy_links_old
+        """))
+        conn.execute(text("DROP TABLE vacancy_links_old"))
 
 
 def _migrate_assets_from_json() -> None:

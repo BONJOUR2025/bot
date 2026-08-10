@@ -619,14 +619,16 @@ def create_link(data: LinkCreate, db: Session = Depends(get_db)):
     ).first()
     if not src:
         raise HTTPException(400, f"Источник {data.source} не подключён")
-    # Check uniqueness (one source per vacancy)
+    # A vacancy can carry several external listings on the same platform (see
+    # VacancyLink docstring) — only the exact same listing is treated as a
+    # no-op update, not "any link for this vacancy+source".
     existing = db.query(VacancyLink).filter(
         VacancyLink.vacancy_id == data.vacancy_id,
         VacancyLink.source == data.source,
+        VacancyLink.external_vacancy_id == data.external_vacancy_id,
     ).first()
     if existing:
         # Update instead
-        existing.external_vacancy_id = data.external_vacancy_id
         existing.external_vacancy_title = data.external_vacancy_title or ""
         existing.sync_enabled = True
         db.commit(); db.refresh(existing)

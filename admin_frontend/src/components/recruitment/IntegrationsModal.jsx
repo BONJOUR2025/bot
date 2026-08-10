@@ -22,10 +22,56 @@ function StatusBadge({ isActive, error }) {
   return <span className="text-xs text-[color:var(--color-muted-foreground)]">Не подключено</span>;
 }
 
-// ── Vacancy linker row ─────────────────────────────────────────────
-function VacancyLinkRow({ internalVacancy, source, externalVacancies, existingLink, onLink, onUnlink }) {
-  const [selected, setSelected] = useState(existingLink?.external_vacancy_id || '');
+// ── One already-linked external listing, with its own unlink/status row ──
+function LinkedListingRow({ link, onUnlink }) {
   const [saving, setSaving] = useState(false);
+  async function handleUnlink() {
+    setSaving(true);
+    try { await onUnlink(link.id); }
+    finally { setSaving(false); }
+  }
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2 space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-emerald-700 min-w-0 truncate">
+          → {link.external_vacancy_title || link.external_vacancy_id}
+        </p>
+        <button
+          onClick={handleUnlink}
+          disabled={saving}
+          className="flex-shrink-0 flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium"
+        >
+          <Unlink size={12} /> Отвязать
+        </button>
+      </div>
+      <div className="flex items-center gap-3 text-xs text-[color:var(--color-muted-foreground)]">
+        <span className={`flex items-center gap-1 ${link.sync_enabled ? 'text-emerald-600' : 'text-[color:var(--color-text-faint)]'}`}>
+          <Zap size={11} /> {link.sync_enabled ? 'Авто-синхронизация вкл.' : 'Синхронизация откл.'}
+        </span>
+        {link.last_synced_at && (
+          <span className="flex items-center gap-1">
+            <Clock size={11} /> {new Date(link.last_synced_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+        {link.last_sync_count > 0 && (
+          <span>+{link.last_sync_count} в последний раз</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Vacancy linker row ─────────────────────────────────────────────
+// One internal vacancy can carry several external listings on the same
+// platform (e.g. two Avito ads in different districts) — existingLinks is
+// an array, and the "add another" control stays available even when links
+// already exist.
+function VacancyLinkRow({ internalVacancy, source, externalVacancies, existingLinks, onLink, onUnlink }) {
+  const [selected, setSelected] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const linkedIds = new Set(existingLinks.map(l => l.external_vacancy_id));
+  const available = externalVacancies.filter(v => !linkedIds.has(v.id));
 
   async function handleLink() {
     if (!selected) return;
@@ -33,74 +79,39 @@ function VacancyLinkRow({ internalVacancy, source, externalVacancies, existingLi
     try {
       const ext = externalVacancies.find(v => v.id === selected);
       await onLink(internalVacancy.id, source, selected, ext?.title || '');
+      setSelected('');
     } finally { setSaving(false); }
   }
 
-  async function handleUnlink() {
-    if (!existingLink) return;
-    setSaving(true);
-    try { await onUnlink(existingLink.id); }
-    finally { setSaving(false); }
-  }
-
-  const hasLink = !!existingLink;
-
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${hasLink ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--color-border)] bg-[color:var(--color-surface)]'}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{internalVacancy.title}</p>
-          {hasLink && (
-            <p className="text-xs text-emerald-700 mt-0.5 truncate">
-              → {existingLink.external_vacancy_title || existingLink.external_vacancy_id}
-            </p>
-          )}
-        </div>
-        {hasLink ? (
-          <button
-            onClick={handleUnlink}
-            disabled={saving}
-            className="flex-shrink-0 flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium"
+    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3 space-y-2">
+      <p className="text-sm font-medium truncate">{internalVacancy.title}</p>
+      {existingLinks.map(link => (
+        <LinkedListingRow key={link.id} link={link} onUnlink={onUnlink} />
+      ))}
+      {available.length > 0 ? (
+        <div className="flex items-center gap-2">
+          <select
+            className="input text-xs py-1 max-w-[160px]"
+            value={selected}
+            onChange={e => setSelected(e.target.value)}
           >
-            <Unlink size={12} /> Отвязать
+            <option value="">— выбрать объявление —</option>
+            {available.map(v => (
+              <option key={v.id} value={v.id}>{v.title}{v.area ? ` (${v.area})` : ''}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleLink}
+            disabled={saving || !selected}
+            className="btn btn--primary text-xs px-3 py-1.5 flex items-center gap-1"
+          >
+            <Link2 size={12} /> {existingLinks.length > 0 ? 'Добавить ещё' : 'Привязать'}
           </button>
-        ) : (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <select
-              className="input text-xs py-1 max-w-[160px]"
-              value={selected}
-              onChange={e => setSelected(e.target.value)}
-            >
-              <option value="">— выбрать объявление —</option>
-              {externalVacancies.map(v => (
-                <option key={v.id} value={v.id}>{v.title}{v.area ? ` (${v.area})` : ''}</option>
-              ))}
-            </select>
-            <button
-              onClick={handleLink}
-              disabled={saving || !selected}
-              className="btn btn--primary text-xs px-3 py-1.5 flex items-center gap-1"
-            >
-              <Link2 size={12} /> Привязать
-            </button>
-          </div>
-        )}
-      </div>
-      {hasLink && (
-        <div className="flex items-center gap-3 text-xs text-[color:var(--color-muted-foreground)]">
-          <span className={`flex items-center gap-1 ${existingLink.sync_enabled ? 'text-emerald-600' : 'text-[color:var(--color-text-faint)]'}`}>
-            <Zap size={11} /> {existingLink.sync_enabled ? 'Авто-синхронизация вкл.' : 'Синхронизация откл.'}
-          </span>
-          {existingLink.last_synced_at && (
-            <span className="flex items-center gap-1">
-              <Clock size={11} /> {new Date(existingLink.last_synced_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          {existingLink.last_sync_count > 0 && (
-            <span>+{existingLink.last_sync_count} в последний раз</span>
-          )}
         </div>
-      )}
+      ) : existingLinks.length === 0 ? (
+        <p className="text-xs text-[color:var(--color-muted-foreground)]">Нет доступных объявлений</p>
+      ) : null}
     </div>
   );
 }
@@ -251,7 +262,7 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
                     internalVacancy={v}
                     source="hh"
                     externalVacancies={externalVacs}
-                    existingLink={links.find(l => l.vacancy_id === v.id && l.source === 'hh')}
+                    existingLinks={links.filter(l => l.vacancy_id === v.id && l.source === 'hh')}
                     onLink={onLink}
                     onUnlink={onUnlink}
                   />
@@ -265,89 +276,58 @@ function HHTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
   );
 }
 
+// Accepts either a bare ID ("123456789") or a pasted full vacancy URL
+// (".../vakansii/master-po-remontu-obuvi_123456789?..."): Avito's API has no
+// endpoint to list an employer's own vacancies, so the ID always has to come
+// from a human pasting it — this just avoids making them hand-trim the URL.
+function extractAvitoVacancyId(raw) {
+  const matches = (raw || '').match(/\d+/g);
+  return matches && matches.length ? matches[matches.length - 1] : '';
+}
+
 // ── Avito manual vacancy link row ─────────────────────────────────
-function AvitoVacancyLinkRow({ internalVacancy, existingLink, onLink, onUnlink }) {
-  const [vacancyId, setVacancyId] = useState('');
+// existingLinks: this vacancy can run several Avito ads at once (e.g.
+// different districts) — each gets its own row, "add another" stays open.
+function AvitoVacancyLinkRow({ internalVacancy, existingLinks, onLink, onUnlink }) {
+  const [raw, setRaw]             = useState('');
   const [saving, setSaving]       = useState(false);
-  const [lookupTitle, setLookupTitle] = useState('');
 
   async function handleLink() {
-    const id = vacancyId.trim();
+    const id = extractAvitoVacancyId(raw);
     if (!id) return;
     setSaving(true);
     try {
-      // Try to get title for display
-      let title = lookupTitle || `Авито #${id}`;
+      let title = `Авито #${id}`;
       try {
         const res = await api.get(`/recruitment/integrations/avito/vacancy/${id}`);
         if (res.data?.title) title = res.data.title;
       } catch { /* ignore, use fallback title */ }
       await onLink(internalVacancy.id, 'avito', id, title);
-      setVacancyId('');
+      setRaw('');
     } finally { setSaving(false); }
   }
 
-  async function handleUnlink() {
-    if (!existingLink) return;
-    setSaving(true);
-    try { await onUnlink(existingLink.id); }
-    finally { setSaving(false); }
-  }
-
-  const hasLink = !!existingLink;
-
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${hasLink ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--color-border)] bg-[color:var(--color-surface)]'}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{internalVacancy.title}</p>
-          {hasLink && (
-            <p className="text-xs text-emerald-700 mt-0.5 truncate">
-              → {existingLink.external_vacancy_title || `Авито #${existingLink.external_vacancy_id}`}
-            </p>
-          )}
-        </div>
-        {hasLink ? (
-          <button
-            onClick={handleUnlink}
-            disabled={saving}
-            className="flex-shrink-0 flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium"
-          >
-            <Unlink size={12} /> Отвязать
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <input
-              className="input text-xs py-1 w-32"
-              value={vacancyId}
-              onChange={e => setVacancyId(e.target.value.replace(/\D/g, ''))}
-              placeholder="ID вакансии"
-            />
-            <button
-              onClick={handleLink}
-              disabled={saving || !vacancyId.trim()}
-              className="btn btn--primary text-xs px-3 py-1.5 flex items-center gap-1"
-            >
-              <Link2 size={12} /> Привязать
-            </button>
-          </div>
-        )}
+    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3 space-y-2">
+      <p className="text-sm font-medium truncate">{internalVacancy.title}</p>
+      {existingLinks.map(link => (
+        <LinkedListingRow key={link.id} link={link} onUnlink={onUnlink} />
+      ))}
+      <div className="flex items-center gap-2">
+        <input
+          className="input text-xs py-1 flex-1"
+          value={raw}
+          onChange={e => setRaw(e.target.value)}
+          placeholder="ID или ссылка на вакансию avito.ru"
+        />
+        <button
+          onClick={handleLink}
+          disabled={saving || !extractAvitoVacancyId(raw)}
+          className="btn btn--primary text-xs px-3 py-1.5 flex items-center gap-1 flex-shrink-0"
+        >
+          <Link2 size={12} /> {existingLinks.length > 0 ? 'Добавить ещё' : 'Привязать'}
+        </button>
       </div>
-      {hasLink && (
-        <div className="flex items-center gap-3 text-xs text-[color:var(--color-muted-foreground)]">
-          <span className={`flex items-center gap-1 ${existingLink.sync_enabled ? 'text-emerald-600' : 'text-[color:var(--color-text-faint)]'}`}>
-            <Zap size={11} /> {existingLink.sync_enabled ? 'Авто-синхронизация вкл.' : 'Синхронизация откл.'}
-          </span>
-          {existingLink.last_synced_at && (
-            <span className="flex items-center gap-1">
-              <Clock size={11} /> {new Date(existingLink.last_synced_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          {existingLink.last_sync_count > 0 && (
-            <span>+{existingLink.last_sync_count} в последний раз</span>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -464,8 +444,10 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
           <div>
             <p className="text-sm font-semibold mb-2">Привязка вакансий</p>
             <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700 mb-3">
-              API Авито не предоставляет список вакансий. Введите ID объявления вручную — его можно найти в конце URL вакансии на avito.ru, например:<br />
-              <span className="font-mono">avito.ru/…/vakansii/nazvanie-<strong>123456789</strong></span>
+              У Авито нет API для списка ваших вакансий, поэтому объявление привязывается вручную —
+              но можно просто вставить полную ссылку на вакансию, ID вытащится из неё сам:<br />
+              <span className="font-mono">avito.ru/…/vakansii/nazvanie-<strong>123456789</strong></span>.
+              Одну внутреннюю вакансию можно привязать сразу к нескольким объявлениям на Авито.
             </div>
             {vacancies.length === 0 ? (
               <p className="text-sm text-center py-4 text-[color:var(--color-muted-foreground)]">
@@ -477,7 +459,7 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
                   <AvitoVacancyLinkRow
                     key={v.id}
                     internalVacancy={v}
-                    existingLink={links.find(l => l.vacancy_id === v.id && l.source === 'avito')}
+                    existingLinks={links.filter(l => l.vacancy_id === v.id && l.source === 'avito')}
                     onLink={onLink}
                     onUnlink={onUnlink}
                   />

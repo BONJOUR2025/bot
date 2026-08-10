@@ -382,10 +382,15 @@ class RecruitmentSource(Base):
 
 
 class VacancyLink(Base):
-    """Maps one internal Vacancy to one external vacancy on hh/avito."""
+    """Maps one internal Vacancy to one or more external listings on hh/avito.
+
+    A single internal vacancy can be published as several separate ads on the
+    same platform (e.g. two Avito listings in different districts), so
+    uniqueness is on the external listing itself — (vacancy, source,
+    external_vacancy_id) — not on (vacancy, source)."""
     __tablename__ = "vacancy_links"
     __table_args__ = (
-        UniqueConstraint("vacancy_id", "source", name="uq_vacancy_source"),
+        UniqueConstraint("vacancy_id", "source", "external_vacancy_id", name="uq_vacancy_source_external"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
