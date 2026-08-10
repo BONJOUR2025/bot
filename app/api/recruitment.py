@@ -322,6 +322,69 @@ def toggle_pause(candidate_id: int, db: Session = Depends(get_db)):
     return {"id": c.id, "is_paused": bool(c.is_paused)}
 
 
+@router.get("/interviews")
+async def list_interviews(db: Session = Depends(get_db)):
+    """Return candidates at 'собеседование' stage with their interview task details."""
+    from app.services.task_service import get_task_service
+
+    candidates = db.query(Candidate).filter(
+        Candidate.stage == "собеседование"
+    ).order_by(Candidate.updated_at.desc()).all()
+
+    try:
+        tasks = await get_task_service().list_tasks(category="Подбор персонала")
+    except Exception:
+        tasks = []
+
+    result = []
+    for c in candidates:
+        task = next((t for t in tasks if c.name in (t.title or "") and not (t.status == "done")), None)
+        entry = c.to_dict()
+        entry["interview_date"] = task.due_date if task else None
+        entry["interview_time"] = task.due_time if task else None
+        raw_desc = (task.description or "") if task else ""
+        entry["interview_place"] = raw_desc.replace("📍 Место: ", "").strip() or None
+        result.append(entry)
+    return result
+
+
+async def _get_platform_chat(candidate_id: int, db):
+    """Resolve a candidate to (candidate, source_row, token) for reading or
+    writing their chat on whichever job board they came from.
+
+    Avito needs a freshly-minted token (client_credentials, 24h) rather than a
+    stored one, so it is fetched here instead of relying on whatever the last
+    sync happened to leave in the row.
+    """
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    if c.source not in ("hh", "avito"):
+        raise HTTPException(400, "Переписка доступна только для откликов с hh.ru или Авито")
+
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == c.source).first()
+    if not src:
+        raise HTTPException(400, f"{c.source} не подключён")
+
+    if c.source == "hh":
+        if not c.external_id:
+            raise HTTPException(400, "У отклика нет идентификатора переписки hh.ru")
+        if not src.access_token:
+            raise HTTPException(400, "hh.ru не подключён")
+        return c, src, src.access_token
+
+    if not (c.platform_chat_id or "").strip():
+        raise HTTPException(400, "У этого отклика нет чата на Авито (кандидат оставил только телефон)")
+    if not (src.client_id and src.client_secret):
+        raise HTTPException(400, "Авито не подключён — не заданы ключи API")
+    from app.services import avito_api
+    try:
+        token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
+    except Exception as exc:
+        raise HTTPException(502, f"Авито: не удалось получить токен ({exc})")
+    return c, src, token
+
+
 @router.get("/candidates/{candidate_id}/messages")
 async def get_candidate_messages(candidate_id: int, db: Session = Depends(get_db)):
     c, src, token = await _get_platform_chat(candidate_id, db)
