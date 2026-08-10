@@ -18,14 +18,16 @@ import ScopeBadge from '../components/recruitment/ScopeBadge.jsx';
 import AiCheckPanel from '../components/recruitment/AiCheckPanel.jsx';
 import useAiCheckGate from '../components/recruitment/useAiCheckGate.js';
 
+// Этапы синхронизированы с app/services/recruitment_stages.py (воронка
+// «5 этапов + флаги» — старая телеграм-привязка/общение убраны вместе со
+// старым интервью-флоу, единственный живой источник теперь быстрый режим).
 const STAGES = [
-  { key: 'отклик',        label: 'Отклик',        color: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-400',     border: 'border-t-blue-400'   },
+  { key: 'новый',         label: 'Новый',          color: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-400',     border: 'border-t-blue-400'   },
+  { key: 'опрос',         label: 'Опрос',          color: 'bg-cyan-100 text-cyan-700',       dot: 'bg-cyan-400',     border: 'border-t-cyan-400'   },
+  { key: 'ответил',       label: 'Ответил',        color: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-400',    border: 'border-t-amber-400'  },
   { key: 'собеседование', label: 'Собеседование',  color: 'bg-violet-100 text-violet-700',   dot: 'bg-violet-400',   border: 'border-t-violet-400' },
-  { key: 'ждем',          label: 'Ожидание',       color: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-400',    border: 'border-t-amber-400'  },
-  { key: 'ждем_привязки', label: 'Ждём TG',        color: 'bg-cyan-100 text-cyan-700',       dot: 'bg-cyan-400',     border: 'border-t-cyan-400'   },
-  { key: 'общение',       label: 'Общение',        color: 'bg-purple-100 text-purple-700',   dot: 'bg-purple-400',   border: 'border-t-purple-400' },
-  { key: 'отказ',         label: 'Отказ',          color: 'bg-red-100 text-red-700',         dot: 'bg-red-400',      border: 'border-t-red-400'    },
   { key: 'нанят',         label: 'Нанят ✓',        color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-400',  border: 'border-t-emerald-400'},
+  { key: 'отказ',         label: 'Отказ',          color: 'bg-red-100 text-red-700',         dot: 'bg-red-400',      border: 'border-t-red-400'    },
 ];
 
 const SOURCES = [
@@ -63,7 +65,7 @@ function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave })
     phone:            candidate?.phone            || '',
     email:            candidate?.email            || '',
     source:           candidate?.source           || 'manual',
-    stage:            candidate?.stage            || initialStage || 'отклик',
+    stage:            candidate?.stage            || initialStage || 'новый',
     notes:            candidate?.notes            || '',
     age:              candidate?.age              ?? '',
     resume_url:         candidate?.resume_url         || '',
@@ -486,7 +488,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   }
 
   async function handleResetHistory() {
-    if (!window.confirm(`Удалить всю историю переписки с ${candidate.name} и сбросить этап на «Отклик»? Это действие нельзя отменить.`)) return;
+    if (!window.confirm(`Удалить всю историю переписки с ${candidate.name} и сбросить этап на «Новый»? Это действие нельзя отменить.`)) return;
     setResetting(true);
     try {
       await api.post(`/recruitment/candidates/${candidate.id}/reset-history`);
@@ -1332,7 +1334,7 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
 
 // ── Mobile board (tabs + list) ─────────────────────────────────────
 function MobileBoard({ candidates, onCardClick, onAddClick, selectionMode, selectedIds, onToggle }) {
-  const [activeStage, setActiveStage] = useState('отклик');
+  const [activeStage, setActiveStage] = useState('новый');
   const stage = stageOf(activeStage);
   const filtered = candidates.filter(c => c.stage === activeStage);
 
@@ -1715,7 +1717,7 @@ export default function Recruitment() {
   }
 
   async function resetCandidateHistory(id) {
-    setCandidates(prev => prev.map(c => c.id === id ? { ...c, stage: 'отклик' } : c));
+    setCandidates(prev => prev.map(c => c.id === id ? { ...c, stage: 'новый' } : c));
   }
 
   function handlePauseToggle(id, isPaused) {
@@ -2008,7 +2010,7 @@ export default function Recruitment() {
                 </button>
                 {!selectionMode && (
                   <button
-                    onClick={() => setCandModal({ stage: 'отклик' })}
+                    onClick={() => setCandModal({ stage: 'новый' })}
                     className="btn btn--primary text-sm flex items-center gap-1.5"
                   >
                     <Plus size={15} /> Кандидат
