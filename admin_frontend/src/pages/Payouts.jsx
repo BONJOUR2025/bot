@@ -51,6 +51,31 @@ const fmtMoneyShort = (v) => (!v ? '—' : Number(v).toLocaleString('ru-RU', { m
 
 const pad = (value) => String(value).padStart(2, '0');
 
+// Общая ЗП/К выплате в форме выплаты считается за конкретный календарный
+// месяц — по умолчанию текущий, но выплата часто оформляется в начале
+// месяца за предыдущий, поэтому его можно сменить вручную.
+function currentSalaryMonth() {
+  const d = new Date();
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+
+const MONTH_LABELS = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+];
+
+// Last 12 months, most recent first, for the salary-period picker.
+function salaryMonthOptions() {
+  const out = [];
+  const d = new Date();
+  d.setDate(1);
+  for (let i = 0; i < 12; i++) {
+    out.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    d.setMonth(d.getMonth() - 1);
+  }
+  return out;
+}
+
 function toInputTimestamp(value) {
   if (!value) return '';
   const source = value instanceof Date ? value : new Date(value);
@@ -644,6 +669,7 @@ export default function Payouts() {
   const [dayFilter, setDayFilter] = useState(null);
   const [salaryContext, setSalaryContext] = useState(null);
   const [salaryContextLoading, setSalaryContextLoading] = useState(false);
+  const [salaryMonth, setSalaryMonth] = useState(currentSalaryMonth);
 
   useEffect(() => {
     loadEmployees();
@@ -654,8 +680,15 @@ export default function Payouts() {
     load();
   }, [filters]);
 
-  // Общая ЗП / к выплате для выбранного в форме сотрудника — маршрутизация
-  // по должности происходит на бэкенде (payouts/salary-context).
+  // Сбрасываем период на текущий месяц при каждом открытии формы — но не
+  // при смене сотрудника внутри уже открытой формы, чтобы можно было
+  // проверить несколько человек за один выбранный (например, прошлый) месяц.
+  useEffect(() => {
+    if (showEditor) setSalaryMonth(currentSalaryMonth());
+  }, [showEditor]);
+
+  // Общая ЗП / к выплате для выбранного в форме сотрудника и периода —
+  // маршрутизация по должности происходит на бэкенде (payouts/salary-context).
   useEffect(() => {
     if (!showEditor || !form.user_id) {
       setSalaryContext(null);
@@ -664,7 +697,9 @@ export default function Payouts() {
     let cancelled = false;
     setSalaryContextLoading(true);
     api
-      .get('payouts/salary-context', { params: { employee_id: form.user_id } })
+      .get('payouts/salary-context', {
+        params: { employee_id: form.user_id, year: salaryMonth.year, month: salaryMonth.month },
+      })
       .then((res) => {
         if (!cancelled) setSalaryContext(res.data);
       })
@@ -677,7 +712,7 @@ export default function Payouts() {
     return () => {
       cancelled = true;
     };
-  }, [showEditor, form.user_id]);
+  }, [showEditor, form.user_id, salaryMonth]);
 
   const employeesByPosition = useMemo(() => {
     const displayName = (e) => (useFullName ? e.full_name || e.name : e.name || e.full_name) || '';
@@ -1574,6 +1609,25 @@ export default function Payouts() {
                 </optgroup>
               ))}
             </select>
+            {form.user_id && (
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-[color:var(--color-text-muted)] flex-shrink-0">Месяц ЗП:</span>
+                <select
+                  className="modal-control"
+                  value={`${salaryMonth.year}-${salaryMonth.month}`}
+                  onChange={(e) => {
+                    const [year, month] = e.target.value.split('-').map(Number);
+                    setSalaryMonth({ year, month });
+                  }}
+                >
+                  {salaryMonthOptions().map(({ year, month }) => (
+                    <option key={`${year}-${month}`} value={`${year}-${month}`}>
+                      {MONTH_LABELS[month - 1]} {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {form.user_id && (
               <div className="text-sm border rounded-md p-2 bg-[color:var(--color-bg-subtle)] space-y-0.5">
                 {salaryContextLoading ? (

@@ -305,15 +305,20 @@ def create_payout_router(
     @router.get("/salary-context")
     async def salary_context(
         employee_id: str,
+        year: Optional[int] = None,
+        month: Optional[int] = None,
         current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION)),
     ):
         """Общая ЗП и к выплате для сотрудника, для формы создания выплаты
-        (маршрутизация по должности: мастер/курьер/менеджер/остальные)."""
+        (маршрутизация по должности: мастер/курьер/менеджер/остальные).
+        year/month необязательны — по умолчанию текущий месяц, но выплата
+        часто оформляется в начале месяца за предыдущий, поэтому форма
+        позволяет админу выбрать период вручную."""
         if not access_service.is_employee_visible(current, employee_id):
             raise HTTPException(status_code=403, detail="forbidden")
         from app.services.salary_context import get_salary_context
 
-        return await get_salary_context(employee_id)
+        return await get_salary_context(employee_id, year=year, month=month)
 
     @router.get("/control")
     async def payouts_control(

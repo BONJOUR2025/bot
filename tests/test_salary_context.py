@@ -47,6 +47,18 @@ class TestNotFound:
         assert result == {"found": False}
 
 
+class TestMonthEnd:
+    def test_current_month_ends_today_not_the_calendar_end(self):
+        from datetime import date
+        today = date.today()
+        assert salary_context._month_end(today.year, today.month) == today
+
+    def test_past_month_ends_on_its_calendar_last_day(self):
+        from datetime import date
+        assert salary_context._month_end(2026, 7) == date(2026, 7, 31)
+        assert salary_context._month_end(2024, 2) == date(2024, 2, 29)  # leap year
+
+
 class TestPositionRole:
     @pytest.mark.parametrize("position,expected", [
         ("Мастер маникюра", "master"),
@@ -141,6 +153,29 @@ class TestAccrualBranches:
         assert result["role"] == "courier"
         assert result["total_salary"] == 20000.0
         assert result["to_pay"] == 19900.0
+
+    def test_explicit_year_month_overrides_the_current_period(self, monkeypatch):
+        """A payout created early in a new month is usually for the previous
+        one's accrual -- the caller must be able to ask for a period other
+        than "right now"."""
+        employee = _employee(position="Курьер")
+        monkeypatch.setattr(salary_context, "EmployeeRepository",
+                             lambda: _FakeEmployeeRepo({"3": employee}))
+
+        seen_periods = []
+
+        class FakeRepo:
+            def list(self, *, employee_code, period, limit):
+                seen_periods.append(period)
+                return [{"result": {"gross": 20000.0}}]
+
+        monkeypatch.setattr(
+            "app.data.courier_salary_repository.get_courier_salary_repository",
+            lambda: FakeRepo(),
+        )
+
+        asyncio.run(salary_context.get_salary_context("3", year=2026, month=7))
+        assert seen_periods == ["2026-07"]
 
     def test_manager_with_no_accrual_yet_gives_note_not_zero(self, monkeypatch):
         employee = _employee(position="Менеджер по продажам")
