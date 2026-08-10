@@ -43,6 +43,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _migrate_columns()
     _run_migrations()
+    _migrate_recruitment_stages()
     _seed_hiring_strategies()
     _migrate_recruitment_kb_and_strategy_defaults()
     _backfill_builtin_strategy_message_defaults()
@@ -172,6 +173,28 @@ def _run_migrations() -> None:
             except Exception:
                 pass  # column already exists
     _migrate_assets_from_json()
+
+
+def _migrate_recruitment_stages() -> None:
+    """Старые этапы найма → новая воронка (см. recruitment_stages.py).
+
+    Идемпотентна по построению: новые значения не встречаются среди ключей
+    отображения, поэтому повторный запуск ничего не меняет. Маркер в конфиге
+    не нужен — и не нужен намеренно, иначе кандидаты, доехавшие со старым
+    этапом из резервной копии, остались бы непереведёнными навсегда.
+    """
+    from sqlalchemy import text
+
+    from app.services.recruitment_stages import LEGACY_STAGE_MAP
+
+    changes = {old: new for old, new in LEGACY_STAGE_MAP.items() if old != new}
+    with engine.begin() as conn:
+        for old, new in changes.items():
+            try:
+                conn.execute(text("UPDATE candidates SET stage = :new WHERE stage = :old"),
+                             {"new": new, "old": old})
+            except Exception:
+                pass  # таблицы ещё нет — create_all создаст её пустой
 
 
 def _migrate_assets_from_json() -> None:

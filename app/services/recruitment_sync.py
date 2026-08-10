@@ -330,6 +330,26 @@ async def _route_to_quick_screening(cand_id: int, src, token: str,
         db.close()
 
 
+def _asked_at_ts(state: dict) -> float | None:
+    """Момент отправки текущего вопроса в виде unix-времени — Авито отдаёт
+    created_at сообщений именно так. None, если времени нет (старое состояние,
+    записанное до появления отсечки) — тогда фильтровать не по чему и лучше
+    вести себя как раньше, чем молча игнорировать все сообщения."""
+    from datetime import datetime, timezone
+
+    raw = (state or {}).get("asked_at")
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+    except Exception:
+        return None
+    # asked_at пишется через datetime.utcnow() — naive UTC.
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
 async def _check_avito_messages(db, src, token: str) -> None:
     """Poll Avito chats for candidates in an active quick screen.
 
@@ -365,6 +385,14 @@ async def _check_avito_messages(db, src, token: str) -> None:
             c = db.query(Candidate).filter(Candidate.id == cand_id).first()
             messages = await avito_api.get_messages(token, src.employer_id, c.platform_chat_id)
             incoming = [m for m in messages if m["author_type"] == "applicant"]
+            # Только то, что написано ПОСЛЕ заданного вопроса. Без этой отсечки
+            # берётся просто последнее сообщение кандидата в чате — а переписка
+            # на Авито часто тянется с прошлых откликов, и старое «Актуально?»
+            # или вовсе номер телефона годичной давности засчитывались как
+            # ответ на первый вопрос: кандидат молчит, а опрос едет дальше.
+            asked_ts = _asked_at_ts(quick_screening.load_state(c))
+            if asked_ts is not None:
+                incoming = [m for m in incoming if (m.get("created_at") or 0) > asked_ts]
             if not incoming:
                 continue
             latest = max(incoming, key=lambda m: m["created_at"])

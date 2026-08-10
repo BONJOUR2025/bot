@@ -33,7 +33,7 @@ router = APIRouter(
     dependencies=[Depends(require_permission("employees"))],
 )
 
-VALID_STAGES = ["отклик", "собеседование", "ждем", "ждем_привязки", "общение", "отказ", "нанят"]
+from app.services.recruitment_stages import STAGES as VALID_STAGES  # noqa: E402
 VALID_SOURCES = ["hh", "avito", "manual", "other"]
 
 
@@ -165,7 +165,7 @@ class CandidateCreate(BaseModel):
     phone: Optional[str] = ""
     email: Optional[str] = ""
     source: Optional[str] = "manual"
-    stage: Optional[str] = "отклик"
+    stage: Optional[str] = "новый"
     notes: Optional[str] = ""
     age: Optional[int] = None
     resume_url: Optional[str] = ""
@@ -691,30 +691,39 @@ def list_candidates(
 ):
     q = db.query(Candidate)
     if vacancy_id is not None: q = q.filter(Candidate.vacancy_id == vacancy_id)
-    if stage: q = q.filter(Candidate.stage == stage)
     candidates = q.order_by(Candidate.created_at.asc()).all()
 
-    # Compute per-candidate flags
+    from app.services import quick_screening, recruitment_stages as rs
+
     since_24h = datetime.utcnow() - timedelta(hours=24)
-    # Collect candidate IDs with unread TG messages
-    try:
-        unread_tg_ids = {
-            row[0] for row in db.query(TelegramMessage.candidate_id).filter(
-                TelegramMessage.direction == "in",
-                TelegramMessage.is_read == False,
-            ).all()
-        }
-    except Exception:
-        unread_tg_ids = set()
+    now = datetime.utcnow()
+    # Вопросы кэшируем по вакансии: их парсинг из JSON одинаков для всех
+    # кандидатов одной вакансии, а список может быть длинным.
+    questions_by_vacancy: dict[int, list] = {}
 
     result = []
     for c in candidates:
         d = c.to_dict()
+        if c.vacancy_id not in questions_by_vacancy:
+            questions_by_vacancy[c.vacancy_id] = quick_screening.get_questions(c.vacancy)
+        questions = questions_by_vacancy[c.vacancy_id]
+
+        state = quick_screening.load_state(c)
+        # Этап считается от состояния опроса, а не читается из БД: так карточка
+        # не может разойтись с реальным ходом переписки. Ручные этапы
+        # (собеседование/нанят/отказ) при этом сохраняются как есть.
+        d["stage"] = rs.derive_stage(c.stage, state)
+        d["flags"] = rs.flags(state, now=now)
+        d["progress"] = rs.progress(state, questions)
+        d["answers"] = state.get("answers") or []
         d["is_new"] = bool(c.created_at and c.created_at >= since_24h)
-        d["has_unread_hh_msg"] = bool(getattr(c, "has_unread_hh_msg", False))
-        d["has_unread_tg"] = c.id in unread_tg_ids
         d["vacancy_title"] = c.vacancy.title if c.vacancy else ""
         result.append(d)
+
+    if stage:
+        # Фильтр по этапу применяем уже к вычисленному значению, иначе он бы
+        # работал по устаревшему полю в БД.
+        result = [d for d in result if d["stage"] == stage]
     return result
 
 @router.post("/candidates")
@@ -726,7 +735,7 @@ def create_candidate(data: CandidateCreate, db: Session = Depends(get_db)):
     c = Candidate(
         vacancy_id=data.vacancy_id, name=data.name,
         phone=data.phone or "", email=data.email or "",
-        source=data.source or "manual", stage=data.stage or "отклик",
+        source=data.source or "manual", stage=data.stage or "новый",
         notes=data.notes or "", age=data.age,
         resume_url=data.resume_url or "",
         photo_url=data.photo_url or "",
@@ -905,7 +914,7 @@ def reset_candidate_history(candidate_id: int, db: Session = Depends(get_db)):
     c.pending_interview_date = None
     c.pending_interview_time = None
     c.pending_interview_place = None
-    c.stage = "отклик"
+    c.stage = "новый"
     c.updated_at = datetime.utcnow()
     db.commit()
 

@@ -131,7 +131,7 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
         )
         # Mark as needing the admin rather than retrying forever on every sync.
         save_state(db, candidate, {
-            "status": "waiting_admin", "idx": 0, "answers": [],
+            "status": "waiting_admin", "reason": "send_failed", "idx": 0, "answers": [],
             "asked_at": datetime.utcnow().isoformat(), "last_msg_id": "",
             "silence_alerted": False,
         })
@@ -219,6 +219,16 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
     # Counter-question → stop and hand over, without answering it.
     if _looks_like_question(text, cfg):
         state["status"] = "waiting_admin"
+        state["reason"] = "question"
+        # Кандидат мог в одном сообщении и ответить, и спросить («актуально,
+        # а какая оплата?»). Раньше такой ответ терялся целиком — теперь он
+        # записывается, и админ видит, на чём опрос остановился.
+        answers = state.get("answers") or []
+        idx = int(state.get("idx") or 0)
+        if idx < len(questions):
+            answers.append({"q": questions[idx], "a": text, "with_question": True})
+            state["answers"] = answers
+            state["idx"] = idx + 1
         save_state(db, candidate, state)
         collected = _format_answers(state.get("answers") or [])
         await send_notification(
@@ -242,6 +252,7 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
         err = await _send(candidate, src, token, questions[idx])
         if err:
             state["status"] = "waiting_admin"
+            state["reason"] = "send_failed"
             save_state(db, candidate, state)
             await send_notification(
                 f"⚠️ <b>Не удалось задать следующий вопрос</b>\n"
