@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import RedirectResponse
 
 log = logging.getLogger(__name__)
@@ -625,6 +625,80 @@ def disconnect_avito(db: Session = Depends(get_db)):
         src.last_error   = ""
         db.commit()
     return {"status": "disconnected"}
+
+
+async def _avito_source_and_token(db):
+    src = db.query(RecruitmentSource).filter(
+        RecruitmentSource.source == "avito",
+        RecruitmentSource.is_active == True,
+    ).first()
+    if not src or not (src.client_id and src.client_secret):
+        raise HTTPException(400, "Авито не подключён")
+    from app.services import avito_api
+    try:
+        token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
+    except Exception as exc:
+        raise HTTPException(502, f"Авито: не удалось получить токен ({exc})")
+    return src, token
+
+
+@router.get("/integrations/avito/webhook")
+async def get_avito_webhook(request: Request, db: Session = Depends(get_db)):
+    """Текущее состояние подписки на мгновенные уведомления о сообщениях."""
+    from app.api.avito_webhook import webhook_path
+    from app.services import avito_api
+
+    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    _src, token = await _avito_source_and_token(db)
+    try:
+        subs = await avito_api.list_messenger_subscriptions(token)
+    except Exception as exc:
+        raise HTTPException(502, f"Авито: не удалось получить подписки ({exc})")
+    urls = [s.get("url", "") for s in subs]
+    return {"url": our_url, "subscribed": our_url in urls, "all_subscriptions": urls}
+
+
+@router.post("/integrations/avito/webhook")
+async def subscribe_avito_webhook(request: Request, db: Session = Depends(get_db)):
+    """Подписаться на мгновенные уведомления о сообщениях кандидатов.
+
+    Опрос при этом НЕ выключается: недоставленный вебхук (туннель лежал)
+    теряется навсегда, а опрос подберёт такое сообщение на следующем круге.
+    """
+    from app.api.avito_webhook import webhook_path
+    from app.services import avito_api
+
+    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    if not our_url.startswith("https://"):
+        raise HTTPException(
+            400,
+            "Вебхук требует публичный https-адрес. Открывайте админку по внешнему адресу "
+            "(app.bonjour.pw), а не по localhost — Авито должен достучаться до этого URL.",
+        )
+    _src, token = await _avito_source_and_token(db)
+    try:
+        await avito_api.subscribe_messenger_webhook(token, our_url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Авито: не удалось подписаться ({exc})")
+    return {"status": "subscribed", "url": our_url}
+
+
+@router.delete("/integrations/avito/webhook")
+async def unsubscribe_avito_webhook(request: Request, db: Session = Depends(get_db)):
+    from app.api.avito_webhook import webhook_path
+    from app.services import avito_api
+
+    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    _src, token = await _avito_source_and_token(db)
+    try:
+        await avito_api.unsubscribe_messenger_webhook(token, our_url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Авито: не удалось отписаться ({exc})")
+    return {"status": "unsubscribed"}
 
 
 @router.get("/integrations/avito/vacancies")

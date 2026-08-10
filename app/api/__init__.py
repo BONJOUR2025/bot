@@ -547,6 +547,12 @@ def create_app() -> FastAPI:
     _init_db()
     app.include_router(recruitment_router, prefix="/api", dependencies=protected)
 
+    # Avito message webhook — deliberately NOT behind `protected`: Avito can't
+    # present a session token, so the secret in the URL path authenticates it
+    # (see app/api/avito_webhook.py).
+    from .avito_webhook import router as avito_webhook_router
+    app.include_router(avito_webhook_router, prefix="/api")
+
     # Employee knowledge base
     from .knowledge import router as knowledge_router
     from app.models.knowledge import KnowledgeDocument  # noqa: F401

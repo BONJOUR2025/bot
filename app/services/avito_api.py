@@ -183,6 +183,68 @@ async def get_applications_for_vacancy(
     return result
 
 
+# ── Messenger webhooks ───────────────────────────────────────────────────────
+# Push delivery of incoming candidate messages, so a reply is acted on within
+# seconds instead of waiting for the next polling cycle (up to an hour).
+#
+# Polling is deliberately NOT removed when a webhook is active: a webhook
+# Avito failed to deliver (our tunnel down — it restarts often enough that a
+# watchdog exists for it) is gone for good, whereas the poll simply catches
+# it on the next pass. Webhook = speed, polling = safety net.
+
+
+async def subscribe_messenger_webhook(access_token: str, url: str) -> dict:
+    """Subscribe to incoming-message notifications for this account.
+
+    Avito checks the URL is reachable from their network at subscribe time and
+    refuses to create the hook otherwise, so a failure here usually means the
+    public URL/tunnel is down rather than a bad token.
+    """
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.post(
+            f"{AVITO_BASE}/messenger/v3/webhook",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"url": url},
+        )
+        if r.status_code == 403:
+            raise ValueError(
+                "Авито отклонил подписку на вебхук (403) — нужен scope messenger:read "
+                "и тариф «Максимальный»."
+            )
+        if r.status_code not in (200, 201):
+            raise ValueError(
+                f"Авито не принял вебхук ({r.status_code}): {r.text[:300]}. "
+                "Чаще всего это значит, что URL недоступен из сети Авито — проверьте туннель."
+            )
+        return r.json() if r.content else {}
+
+
+async def unsubscribe_messenger_webhook(access_token: str, url: str) -> dict:
+    """Remove a previously registered message webhook."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.post(
+            f"{AVITO_BASE}/messenger/v1/webhook/unsubscribe",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"url": url},
+        )
+        if r.status_code not in (200, 201):
+            raise ValueError(f"Авито не снял вебхук ({r.status_code}): {r.text[:300]}")
+        return r.json() if r.content else {}
+
+
+async def list_messenger_subscriptions(access_token: str) -> list[dict]:
+    """Currently registered message webhooks. POST despite being a read —
+    that is Avito's own contract for this endpoint, not a mistake here."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        r = await client.post(
+            f"{AVITO_BASE}/messenger/v1/subscriptions",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        data = r.json() or {}
+    return data.get("subscriptions") or []
+
+
 # ── Messenger ────────────────────────────────────────────────────────────────
 # Used to talk to a job applicant in Avito's own chat (see quick_screening).
 # The chat id comes from an application's contacts.chat.value.

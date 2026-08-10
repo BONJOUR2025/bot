@@ -332,6 +332,71 @@ function AvitoVacancyLinkRow({ internalVacancy, existingLinks, onLink, onUnlink 
   );
 }
 
+// ── Avito instant-message webhook ─────────────────────────────────
+// Без него ответ кандидата ждёт ближайшего цикла опроса (до часа). Опрос
+// при этом остаётся включённым намеренно: недоставленный вебхук (лежал
+// туннель) теряется навсегда, а опрос подберёт такое сообщение позже.
+function AvitoWebhookPanel() {
+  const [state, setState] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const res = await api.get('/recruitment/integrations/avito/webhook');
+      setState(res.data);
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function toggle() {
+    setBusy(true); setError('');
+    try {
+      if (state?.subscribed) {
+        await api.delete('/recruitment/integrations/avito/webhook');
+      } else {
+        await api.post('/recruitment/integrations/avito/webhook');
+      }
+      await load();
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="rounded-xl border border-[color:var(--color-border)] p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Мгновенные ответы кандидатов</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+            {state?.subscribed
+              ? 'Включено — бот отвечает сразу, не дожидаясь цикла синхронизации.'
+              : 'Выключено — ответы кандидатов обрабатываются только при синхронизации.'}
+          </p>
+        </div>
+        <button
+          onClick={toggle}
+          disabled={busy || !state}
+          className={`btn text-xs flex-shrink-0 disabled:opacity-50 ${state?.subscribed ? 'btn--secondary' : 'btn--primary'}`}
+        >
+          {busy ? '…' : state?.subscribed ? 'Выключить' : 'Включить'}
+        </button>
+      </div>
+      {state?.subscribed && (
+        <p className="text-xs text-[color:var(--color-muted-foreground)]">
+          Синхронизация продолжает работать как подстраховка: если Авито не смог доставить
+          уведомление (например, лежал туннель), сообщение подберётся на ближайшем цикле.
+        </p>
+      )}
+      {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
 // ── Avito Tab ──────────────────────────────────────────────────────
 function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
   const [clientId, setClientId]     = useState('');
@@ -440,6 +505,8 @@ function AvitoTab({ source, onRefresh, vacancies, links, onLink, onUnlink }) {
               Отключить
             </button>
           </div>
+
+          <AvitoWebhookPanel />
 
           <div>
             <p className="text-sm font-semibold mb-2">Привязка вакансий</p>
