@@ -323,11 +323,18 @@ async def get_messages(access_token: str, user_id: str, chat_id: str, limit: int
         text = (content.get("text") or "").strip()
         if not text:
             continue
+        created = m.get("created")
+        created_at = ""
+        if created:
+            try:
+                created_at = datetime.utcfromtimestamp(int(created)).isoformat()
+            except Exception:
+                created_at = ""
         result.append({
             "id": str(m.get("id") or ""),
             "text": text,
             "author_type": "applicant" if m.get("direction") == "in" else "employer",
-            "created_at": m.get("created") or 0,
+            "created_at": created_at,
         })
     return result
 

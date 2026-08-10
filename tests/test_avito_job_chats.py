@@ -168,3 +168,58 @@ class TestApplicationsPaywall:
         monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
         with pytest.raises(ValueError, match="Максимальной подписки"):
             run_async(avito_api.get_applications_for_vacancy("tok", OUR_ID, VACANCY_ITEM))
+
+
+class TestGetMessages:
+    """Avito's messenger API reports `created` as Unix epoch *seconds*
+    (verified against the live account), but the frontend's fmtMsgTime does
+    `new Date(created_at)`, which treats a bare number as milliseconds — so
+    every message rendered as 21.01.1970 until this converted it to an ISO
+    string, the same shape hh_api.get_messages already returns."""
+
+    def _patch_messages(self, monkeypatch, items):
+        class _FakeClient:
+            def __init__(self, *a, **kw):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def get(self, url, headers=None, params=None):
+                return httpx.Response(200, json=items, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
+
+    def _message(self, msg_id="m1", text="Есть ли опыт?", direction="out", created=1786356003):
+        return {
+            "id": msg_id,
+            "type": "text",
+            "direction": direction,
+            "created": created,
+            "content": {"text": text},
+        }
+
+    def test_created_at_is_an_iso_string_not_a_raw_epoch(self, monkeypatch):
+        self._patch_messages(monkeypatch, [self._message(created=1786356003)])
+        result = run_async(avito_api.get_messages("tok", OUR_ID, "chat-1"))
+
+        assert result[0]["created_at"] == "2026-08-10T10:00:03"
+
+    def test_direction_maps_to_author_type(self, monkeypatch):
+        self._patch_messages(monkeypatch, [
+            self._message(msg_id="m1", direction="in", text="Здравствуйте"),
+            self._message(msg_id="m2", direction="out", text="Добрый день"),
+        ])
+        result = run_async(avito_api.get_messages("tok", OUR_ID, "chat-1"))
+
+        assert [r["author_type"] for r in result] == ["applicant", "employer"]
+
+    def test_non_text_messages_are_skipped(self, monkeypatch):
+        image = {"id": "m0", "type": "image", "direction": "in", "created": 1786356003}
+        self._patch_messages(monkeypatch, [image, self._message(msg_id="m1")])
+        result = run_async(avito_api.get_messages("tok", OUR_ID, "chat-1"))
+
+        assert [r["id"] for r in result] == ["m1"]
