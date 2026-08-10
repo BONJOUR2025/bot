@@ -8,11 +8,15 @@ kept in config.json, so rotating it never requires a code change.
 Two safeguards on top of the secret, because this endpoint can cause the bot
 to message real candidates:
 
-* IP allowlist — Avito publishes the ranges its webhooks originate from.
-  Enforced only when the real client IP is actually visible: requests reach us
-  through a tunnel, and if it presents everything as loopback there is no IP
-  to judge (blocking on that would break the feature outright, so it is
-  logged instead and the secret remains the gate).
+* IP logging, NOT filtering. Avito publishes egress ranges, but those are
+  documented for the *applications* webhook: the very first real messenger
+  webhook after go-live arrived from 176.114.125.109, outside every published
+  range, and was rejected — with polling quietly masking the breakage. Since
+  the published list demonstrably doesn't describe this hook's traffic,
+  blocking on it produces silent false negatives, which is worse here than
+  the marginal hardening it buys on top of a 43-char unguessable secret.
+  Unexpected origins are therefore logged (so a real change of behaviour is
+  still visible) but never rejected.
 * Fast 200 + background processing — screening does LLM calls and platform
   sends that take seconds; holding the webhook connection open for that risks
   Avito timing out and retrying (or disabling the hook), so the work is
@@ -170,13 +174,12 @@ async def avito_webhook(secret: str, request: Request, background: BackgroundTas
     if not hmac.compare_digest(secret, get_or_create_secret()):
         raise HTTPException(404, "Not found")  # 404, not 403 — don't confirm the path exists
 
-    ip = _client_ip(request)
-    verdict = _ip_is_avito(ip)
-    if verdict is False:
-        log.warning("avito webhook: rejected request from unexpected IP %s", ip)
-        raise HTTPException(403, "Forbidden")
-    if verdict is None:
-        log.debug("avito webhook: client IP not verifiable (%s) — relying on the secret", ip)
+    # Observability only — see the module docstring for why this must not
+    # reject: the secret is the gate, and Avito's real messenger egress IPs
+    # are not the ones it publishes for the applications webhook.
+    if _ip_is_avito(_client_ip(request)) is False:
+        log.info("avito webhook: request from IP outside published Avito ranges (%s)",
+                 _client_ip(request))
 
     try:
         body = await request.json()

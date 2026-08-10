@@ -68,19 +68,27 @@ class TestPayloadParsing:
         assert msg["text"] == ""
 
 
-class TestIpAllowlist:
-    def test_documented_avito_ranges_pass(self):
+class TestIpClassification:
+    """_ip_is_avito используется ТОЛЬКО для логирования, не для блокировки.
+
+    Первый же реальный вебхук после включения пришёл с 176.114.125.109 —
+    вне всех опубликованных Авито диапазонов (они задокументированы для
+    вебхука откликов, а не мессенджера) — и был отвергнут, притом что опрос
+    эту поломку маскировал. Поэтому фильтрация снята, охраной остаётся
+    43-символьный секрет в URL.
+    """
+
+    def test_documented_ranges_recognised(self):
         assert aw._ip_is_avito("185.89.12.1") is True
         assert aw._ip_is_avito("146.158.48.10") is True
         assert aw._ip_is_avito("87.245.204.33") is True
 
-    def test_outside_address_is_rejected(self):
+    def test_address_outside_published_ranges(self):
         assert aw._ip_is_avito("8.8.8.8") is False
+        # Реальный адрес, с которого Авито прислал первый вебхук.
+        assert aw._ip_is_avito("176.114.125.109") is False
 
-    def test_tunnel_hidden_origin_is_unverifiable_not_rejected(self):
-        """Запрос приходит через туннель: если тот показывает loopback/private,
-        судить не по чему — блокировать нельзя, иначе фича не работает вовсе,
-        и охраной остаётся секрет в URL."""
+    def test_unverifiable_origin(self):
         assert aw._ip_is_avito("127.0.0.1") is None
         assert aw._ip_is_avito("192.168.1.5") is None
         assert aw._ip_is_avito(None) is None
