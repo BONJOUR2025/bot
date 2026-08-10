@@ -3,18 +3,23 @@ own chat (hh.ru / Avito), then hand the conversation to the admin.
 
 Deliberately much smaller than the Telegram interview in ai_conversation.py:
 there is no stage graph, no knowledge-base answering and no scoring. The bot
-only asks the vacancy's quick_questions one at a time, collects the raw
-answers, and alerts the admin — who takes over from there.
+greets the candidate, confirms they're still looking for work, then asks the
+vacancy's quick_questions one at a time, collects the raw answers, and alerts
+the admin — who takes over from there.
 
-Flow (all four alert points were specified by the operator):
-  new response          → alert "новый отклик" + question 1
-  candidate answers     → next question
-  all questions answered→ alert with every answer collected
-  counter-question      → stop asking, alert, stay silent (do NOT answer it)
-  silent for 24h        → alert
+Flow:
+  new response             → greet + "вы ещё в поиске работы?"
+  still looking             → question 1
+  no longer looking         → polite goodbye, candidate moved to «отказ»
+  candidate answers         → next question
+  all questions answered    → thank candidate + alert admin with every answer
+  counter-question           → stop asking, alert, stay silent (do NOT answer it)
+  silent for 24h             → alert
 
 State lives in Candidate.quick_state_json:
   {"status": "asking"|"waiting_admin"|"done",
+   "phase": "interest"|"questions",  # "вы ещё в поиске?" vs the real questions;
+                                      # absent (legacy rows) means "questions"
    "idx": int,                       # index of the question awaiting an answer
    "answers": [{"q": str, "a": str}],
    "asked_at": iso str,              # when the pending question was sent
@@ -32,6 +37,10 @@ log = logging.getLogger(__name__)
 
 SILENCE_AFTER = timedelta(hours=24)
 
+INTEREST_QUESTION = "Подскажите, вы ещё в поиске работы?"
+CLOSING_MESSAGE = "Спасибо за ответы! Мы свяжемся с вами в ближайшее время, чтобы договориться о собеседовании."
+DECLINE_FAREWELL = "Понял вас, спасибо за ответ! Если что-то изменится — будем рады снова пообщаться. Хорошего дня!"
+
 # Fallback counter-question detector, used only when the LLM is unavailable.
 # Deliberately broad: over-alerting merely hands the chat to the admin a bit
 # early (which is the desired end state anyway), while missing a question
@@ -39,6 +48,17 @@ SILENCE_AFTER = timedelta(hours=24)
 _QUESTION_HINT = re.compile(
     r"\?|\b(сколько|какая|какие|какой|когда|где|почему|зачем|можно ли|а что|"
     r"есть ли|как\s|что по)\b",
+    re.IGNORECASE,
+)
+
+# Fallback "no longer looking" detector for the interest-check reply, used
+# only when the LLM is unavailable. Deliberately narrow (unlike
+# _QUESTION_HINT) — _looks_still_interested defaults to True on anything it
+# doesn't recognise, since misreading a real "да" as "нет" silently drops an
+# interested candidate, while the reverse just asks a few extra questions.
+_NOT_LOOKING_HINT = re.compile(
+    r"\bнет\b|не\s*ищу|уже\s*наш[её]л|уже\s*устро|нашл?а?\s*работу|"
+    r"не\s*актуальн|неактуальн|передумал|не\s*нужн|не\s*интересн",
     re.IGNORECASE,
 )
 
@@ -121,26 +141,28 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
 
     await send_notification(
         f"⚡ <b>Новый отклик — бот начал опрос</b>\n{_candidate_label(candidate, vacancy)}\n\n"
-        f"Задаю {len(questions)} вопрос(ов), пришлю ответы одним сообщением."
+        f"Уточняю, актуален ли ещё поиск работы, затем задам {len(questions)} вопрос(ов)."
     )
 
-    err = await _send(candidate, src, token, questions[0])
+    greeting = f"Здравствуйте, {candidate.name}!\n\n{INTEREST_QUESTION}" if candidate.name else \
+        f"Здравствуйте!\n\n{INTEREST_QUESTION}"
+    err = await _send(candidate, src, token, greeting)
     if err:
-        log.warning("quick_screening: failed to send Q1 to candidate %s: %s", candidate.id, err)
+        log.warning("quick_screening: failed to send greeting to candidate %s: %s", candidate.id, err)
         await send_notification(
             f"⚠️ <b>Не удалось написать кандидату</b>\n{_candidate_label(candidate, vacancy)}\n\n"
             f"Ошибка: {err}\nОтветьте вручную на площадке."
         )
         # Mark as needing the admin rather than retrying forever on every sync.
         save_state(db, candidate, {
-            "status": "waiting_admin", "reason": "send_failed", "idx": 0, "answers": [],
+            "status": "waiting_admin", "reason": "send_failed", "phase": "interest", "idx": 0, "answers": [],
             "asked_at": datetime.utcnow().isoformat(), "last_msg_id": "",
             "silence_alerted": False,
         })
         return False
 
     save_state(db, candidate, {
-        "status": "asking", "idx": 0, "answers": [],
+        "status": "asking", "phase": "interest", "idx": 0, "answers": [],
         "asked_at": datetime.utcnow().isoformat(), "last_msg_id": "",
         "silence_alerted": False,
     })
@@ -192,11 +214,107 @@ def _looks_like_question(text: str, cfg: dict) -> bool:
         return bool(_QUESTION_HINT.search(text))
 
 
+def _looks_still_interested(text: str, cfg: dict) -> bool:
+    """Is the candidate still looking for work, per their reply to
+    INTEREST_QUESTION? Defaults to True on any uncertainty — see
+    _NOT_LOOKING_HINT for why a false "нет" is worse than a false "да"."""
+    from app.services.llm_client import chat, get_client
+
+    if not get_client(cfg):
+        return not bool(_NOT_LOOKING_HINT.search(text))
+
+    try:
+        raw = chat(
+            cfg,
+            [{"role": "user", "content": text}],
+            system=(
+                'Кандидат отвечает на вопрос рекрутера «Вы ещё в поиске работы?». '
+                'Определи, ищет ли он всё ещё работу. Ответь ТОЛЬКО JSON: '
+                '{"still_looking": true/false}'
+            ),
+            max_tokens=20,
+            employee_id="quick_screening",
+            employee_name="Быстрый режим (кандидаты)",
+            feature="quick_screening",
+        )
+    except Exception as e:
+        log.warning("quick_screening: interest-check LLM call failed: %s", e)
+        return not bool(_NOT_LOOKING_HINT.search(text))
+
+    if not raw:
+        return not bool(_NOT_LOOKING_HINT.search(text))
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not m:
+        return not bool(_NOT_LOOKING_HINT.search(text))
+    try:
+        return bool(json.loads(m.group()).get("still_looking", True))
+    except Exception:
+        return not bool(_NOT_LOOKING_HINT.search(text))
+
+
 def _format_answers(answers: list[dict]) -> str:
     lines = []
     for i, a in enumerate(answers, 1):
         lines.append(f"{i}. <b>{a.get('q', '')}</b>\n   → {a.get('a', '') or '—'}")
     return "\n".join(lines)
+
+
+async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
+                                  state: dict, text: str, cfg: dict) -> None:
+    """Reply to INTEREST_QUESTION, before the real quick_questions start."""
+    from app.services.notify import send_notification
+
+    # A counter-question here gets the same treatment as during the real
+    # questions — stop and hand over rather than guess an answer.
+    if _looks_like_question(text, cfg):
+        state["status"] = "waiting_admin"
+        state["reason"] = "question"
+        save_state(db, candidate, state)
+        await send_notification(
+            f"❓ <b>Кандидат задал вопрос — нужен ваш ответ</b>\n"
+            f"{_candidate_label(candidate, vacancy)}\n\n"
+            f"Вопрос: «{text[:400]}»\n\nБот больше не пишет — отвечайте на площадке."
+        )
+        log.info("quick_screening: candidate %s asked a question during interest-check, handed to admin",
+                  candidate.id)
+        return
+
+    if not _looks_still_interested(text, cfg):
+        err = await _send(candidate, src, token, DECLINE_FAREWELL)
+        if err:
+            log.warning("quick_screening: failed to send farewell to candidate %s: %s", candidate.id, err)
+        candidate.stage = "отказ"
+        state["status"] = "done"
+        save_state(db, candidate, state)
+        await send_notification(
+            f"🚫 <b>Кандидат больше не ищет работу</b>\n{_candidate_label(candidate, vacancy)}\n\n"
+            f"Ответ: «{text[:200]}»\n\nЭтап переведён в «Отказ»."
+        )
+        log.info("quick_screening: candidate %s no longer looking, declined", candidate.id)
+        return
+
+    # Still looking — move on to the vacancy's real questions.
+    questions = get_questions(vacancy)
+    if not questions:
+        state["status"] = "done"
+        save_state(db, candidate, state)
+        return
+
+    err = await _send(candidate, src, token, questions[0])
+    if err:
+        state["status"] = "waiting_admin"
+        state["reason"] = "send_failed"
+        save_state(db, candidate, state)
+        await send_notification(
+            f"⚠️ <b>Не удалось задать первый вопрос</b>\n{_candidate_label(candidate, vacancy)}\n\nОшибка: {err}"
+        )
+        return
+
+    state["phase"] = "questions"
+    state["idx"] = 0
+    state["asked_at"] = datetime.utcnow().isoformat()
+    state["silence_alerted"] = False
+    save_state(db, candidate, state)
 
 
 async def handle_incoming(db, candidate, vacancy, src, token: str,
@@ -215,15 +333,19 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
         return  # already processed this one
     state["last_msg_id"] = message_id or state.get("last_msg_id", "")
 
+    text = (message_text or "").strip()
+    if not text:
+        save_state(db, candidate, state)
+        return
+
+    if state.get("phase", "questions") == "interest":
+        await _handle_interest_reply(db, candidate, vacancy, src, token, state, text, cfg)
+        return
+
     questions = get_questions(vacancy)
     idx = int(state.get("idx") or 0)
     if idx >= len(questions):
         state["status"] = "done"
-        save_state(db, candidate, state)
-        return
-
-    text = (message_text or "").strip()
-    if not text:
         save_state(db, candidate, state)
         return
 
@@ -278,6 +400,9 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
     # All questions answered.
     state["status"] = "done"
     save_state(db, candidate, state)
+    err = await _send(candidate, src, token, CLOSING_MESSAGE)
+    if err:
+        log.warning("quick_screening: failed to send closing message to candidate %s: %s", candidate.id, err)
     await send_notification(
         f"✅ <b>Кандидат ответил на все вопросы</b>\n{_candidate_label(candidate, vacancy)}\n\n"
         f"{_format_answers(answers)}\n\nДальше — вы."
@@ -313,9 +438,12 @@ async def check_silence(db) -> None:
             continue
 
         vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
-        questions = get_questions(vacancy)
-        idx = int(state.get("idx") or 0)
-        pending = questions[idx] if idx < len(questions) else ""
+        if state.get("phase", "questions") == "interest":
+            pending = INTEREST_QUESTION
+        else:
+            questions = get_questions(vacancy)
+            idx = int(state.get("idx") or 0)
+            pending = questions[idx] if idx < len(questions) else ""
         collected = _format_answers(state.get("answers") or [])
 
         await send_notification(

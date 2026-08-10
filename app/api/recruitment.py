@@ -438,6 +438,7 @@ def get_quick_screening(candidate_id: int, db: Session = Depends(get_db)):
     questions = quick_screening.get_questions(vacancy)
     return {
         "status": state.get("status"),          # None = не запущен
+        "phase": state.get("phase", "questions") if state else None,
         "idx": state.get("idx", 0),
         "answers": state.get("answers") or [],
         "questions": questions,

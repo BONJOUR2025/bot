@@ -626,7 +626,12 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 автоматически на новых откликах. */}
             {quick && (
               <div className="border-b border-[color:var(--color-border)] px-4 py-2.5 bg-[color:var(--color-muted)]/30">
-                {quick.status === 'asking' && (
+                {quick.status === 'asking' && quick.phase === 'interest' && (
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                    ⚡ Уточняю у кандидата, актуален ли ещё поиск работы
+                  </p>
+                )}
+                {quick.status === 'asking' && quick.phase !== 'interest' && (
                   <p className="text-xs text-[color:var(--color-muted-foreground)]">
                     ⚡ Опрос идёт: вопрос {Math.min(quick.idx + 1, quick.questions.length)} из {quick.questions.length}
                     {quick.answers.length > 0 && ` · получено ответов: ${quick.answers.length}`}

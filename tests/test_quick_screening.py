@@ -27,7 +27,7 @@ class _FakeVacancy:
 
 
 class _FakeCandidate:
-    def __init__(self, source="hh", chat_id="", state=None, is_paused=False):
+    def __init__(self, source="hh", chat_id="", state=None, is_paused=False, stage="новый"):
         self.id = 42
         self.name = "Иван Петров"
         self.source = source
@@ -36,6 +36,7 @@ class _FakeCandidate:
         self.platform_chat_id = chat_id
         self.quick_state_json = json.dumps(state, ensure_ascii=False) if state else None
         self.is_paused = is_paused
+        self.stage = stage
 
 
 class _FakeSource:
@@ -109,17 +110,21 @@ class TestQuickModeDetection:
 
 
 class TestStart:
-    def test_alerts_admin_and_sends_first_question(self, alerts, sent_messages):
+    def test_alerts_admin_and_greets_with_interest_question(self, alerts, sent_messages):
         c, v = _FakeCandidate(), _FakeVacancy()
         ok = run_async(qs.start_screening(_FakeDb(), c, v, _FakeSource(), "tok"))
 
         assert ok is True
         assert len(alerts) == 1
         assert "Новый отклик" in alerts[0]
-        assert sent_messages == [("hh", "neg-1", "Есть ли опыт?")]
+        assert len(sent_messages) == 1
+        assert sent_messages[0][:2] == ("hh", "neg-1")
+        assert "Здравствуйте" in sent_messages[0][2]
+        assert qs.INTEREST_QUESTION in sent_messages[0][2]
 
         state = qs.load_state(c)
         assert state["status"] == "asking"
+        assert state["phase"] == "interest"
         assert state["idx"] == 0
         assert state["answers"] == []
 
@@ -156,7 +161,9 @@ class TestStart:
         c = _FakeCandidate(source="avito", chat_id="u2i-123-456")
         run_async(qs.start_screening(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok"))
 
-        assert sent_messages == [("avito", "u2i-123-456", "Есть ли опыт?")]
+        assert len(sent_messages) == 1
+        assert sent_messages[0][:2] == ("avito", "u2i-123-456")
+        assert qs.INTEREST_QUESTION in sent_messages[0][2]
 
     def test_paused_candidate_is_not_started(self, alerts, sent_messages):
         c = _FakeCandidate(is_paused=True)
@@ -166,6 +173,88 @@ class TestStart:
         assert sent_messages == []
         assert alerts == []
         assert qs.load_state(c) == {}
+
+
+class TestInterestCheck:
+    def _greeted(self, is_paused=False):
+        return _FakeCandidate(is_paused=is_paused, state={
+            "status": "asking", "phase": "interest", "idx": 0, "answers": [],
+            "asked_at": datetime.utcnow().isoformat(), "last_msg_id": "", "silence_alerted": False,
+        })
+
+    def test_yes_moves_on_to_the_real_questions(self, alerts, sent_messages, no_llm):
+        c = self._greeted()
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Да, в поиске", "m1", {}))
+
+        state = qs.load_state(c)
+        assert state["phase"] == "questions"
+        assert state["idx"] == 0
+        assert state["answers"] == []
+        assert sent_messages == [("hh", "neg-1", "Есть ли опыт?")]
+        assert c.stage == "новый"  # untouched
+
+    def test_no_sends_farewell_and_declines(self, alerts, sent_messages, no_llm):
+        c = self._greeted()
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Нет, уже нашёл работу", "m1", {}))
+
+        state = qs.load_state(c)
+        assert state["status"] == "done"
+        assert sent_messages == [("hh", "neg-1", qs.DECLINE_FAREWELL)]
+        assert c.stage == "отказ"
+        assert len(alerts) == 1
+        assert "больше не ищет работу" in alerts[0]
+
+    def test_counter_question_during_interest_check_hands_over(self, alerts, sent_messages, no_llm):
+        c = self._greeted()
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "А какая зарплата?", "m1", {}))
+
+        state = qs.load_state(c)
+        assert state["status"] == "waiting_admin"
+        assert state["phase"] == "interest"
+        assert sent_messages == []
+        assert c.stage == "новый"  # not declined — just handed to the admin
+        assert len(alerts) == 1
+        assert "задал вопрос" in alerts[0]
+
+    def test_paused_candidate_reply_is_not_processed(self, sent_messages, no_llm):
+        c = self._greeted(is_paused=True)
+        state_before = qs.load_state(c)
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Да, в поиске", "m1", {}))
+
+        assert qs.load_state(c) == state_before
+        assert sent_messages == []
+
+    def test_llm_verdict_wins_over_the_keyword_fallback(self, alerts, sent_messages, monkeypatch):
+        """"Не, не сейчас, а вот через месяц — да" trips the "не" keyword but is
+        actually a yes; the LLM should be trusted over the blunt fallback."""
+        monkeypatch.setattr("app.services.llm_client.get_client", lambda cfg: object())
+        monkeypatch.setattr("app.services.llm_client.chat",
+                             lambda *a, **kw: '{"still_looking": true}')
+        c = self._greeted()
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Не, не сейчас, а вот через месяц — да", "m1", {}))
+
+        assert qs.load_state(c)["phase"] == "questions"
+        assert c.stage == "новый"
+
+    def test_llm_failure_falls_back_to_keywords(self, monkeypatch):
+        monkeypatch.setattr("app.services.llm_client.get_client", lambda cfg: object())
+
+        def boom(*a, **kw):
+            raise RuntimeError("provider down")
+
+        monkeypatch.setattr("app.services.llm_client.chat", boom)
+        assert qs._looks_still_interested("Да, в поиске", {}) is True
+        assert qs._looks_still_interested("Нет, уже не ищу", {}) is False
+
+    def test_default_is_still_looking_on_unclear_reply(self):
+        """Ambiguous text with no LLM configured must not be read as a
+        decline — see _NOT_LOOKING_HINT's docstring."""
+        assert qs._looks_still_interested("окей", {}) is True
 
 
 class TestAnswerFlow:
@@ -208,8 +297,9 @@ class TestAnswerFlow:
         assert "ответил на все вопросы" in alerts[0].lower()
         for answer in ["Да, есть", "Да, РФ", "Метро Лесная"]:
             assert answer in alerts[0]
-        # three questions asked, none repeated after the last answer
-        assert len(sent_messages) == 2
+        # two follow-up questions plus the closing message to the candidate
+        assert len(sent_messages) == 3
+        assert sent_messages[-1][2] == qs.CLOSING_MESSAGE
 
     def test_duplicate_message_id_is_ignored(self, alerts, sent_messages, no_llm):
         """The sync polls repeatedly; the same message must not double-advance."""
@@ -370,3 +460,14 @@ class TestSilence:
         c.is_paused = True
         run_async(qs.check_silence(self._Db([c], _FakeVacancy())))
         assert alerts == []
+
+    def test_silent_during_interest_check_names_the_interest_question(self, alerts):
+        c = _FakeCandidate(state={
+            "status": "asking", "phase": "interest", "idx": 0, "answers": [],
+            "asked_at": (datetime.utcnow() - timedelta(hours=25)).isoformat(),
+            "last_msg_id": "", "silence_alerted": False,
+        })
+        run_async(qs.check_silence(self._Db([c], _FakeVacancy())))
+
+        assert len(alerts) == 1
+        assert qs.INTEREST_QUESTION in alerts[0]
