@@ -300,13 +300,29 @@ def _parse_surname_initial(name: str | None) -> tuple[str, str] | None:
     return surname, initial[0]
 
 
+# Masters whose Firebird out_description doesn't reduce to either "Фамилия
+# И." (the exact-name path below) or (surname, first-initial) parsed from
+# full_name — Firebird apparently recorded these under a different name
+# shape entirely (e.g. first-name + surname-initial instead of the usual
+# surname + first-initial). Keyed by employee id rather than bot `name` so
+# renaming the employee in the bot (e.g. back to the standard "Фамилия И."
+# display format) can never silently re-break this match again.
+_KNOWN_FIREBIRD_ALIASES: dict[str, str] = {
+    # Галиулин Рудем Радикович — Firebird records him as "Рудем Г." (first
+    # name + surname-initial) instead of "Галиулин Р.".
+    "20456189804": "Рудем Г.",
+}
+
+
 def _employee_lookup_for_masters() -> tuple[dict[str, str], dict[tuple[str, str], str]]:
     """Two ways to resolve a Firebird master name to a bot employee id.
 
     Exact: some employee records have their bot `name` field set to mirror
     Firebird's own "Фамилия И." exactly (seen on a real account -- Firebird
     said "Рудем Г.", and that employee's own `name` was already "Рудем Г.",
-    even though their `full_name` doesn't reduce to that at all).
+    even though their `full_name` doesn't reduce to that at all). Also
+    seeded from _KNOWN_FIREBIRD_ALIASES for accounts where the bot's own
+    `name` was later changed away from that Firebird-matching value.
 
     Fallback: parse (surname, first-initial) out of `full_name`
     ("Фамилия Имя Отчество", Firebird's usual pattern for everyone else) and
@@ -338,6 +354,8 @@ def _employee_lookup_for_masters() -> tuple[dict[str, str], dict[tuple[str, str]
             by_surname_initial[parsed] = uid
     for key in collided:
         by_surname_initial.pop(key, None)
+    for uid, alias in _KNOWN_FIREBIRD_ALIASES.items():
+        exact.setdefault(alias, uid)
     return exact, by_surname_initial
 
 
