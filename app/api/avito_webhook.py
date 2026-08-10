@@ -140,6 +140,11 @@ async def _process(msg: dict) -> None:
         if not candidate:
             log.info("avito webhook: no candidate for chat %s, ignoring", msg["chat_id"])
             return  # not a candidate we track (or not imported yet)
+        # Витрина для карточки пишется до всех проверок ниже: последнее
+        # сообщение полезно видеть и у кандидата, чей опрос уже завершён или
+        # передан админу — именно там переписку ведут руками.
+        if msg["text"]:
+            quick_screening.record_last_message(db, candidate, msg["text"], "applicant")
         # Only chats with a running screen are driven from here; anything else
         # is just a conversation the admin handles manually.
         state_status = quick_screening.load_state(candidate).get("status")

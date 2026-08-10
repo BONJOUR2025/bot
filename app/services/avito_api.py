@@ -398,6 +398,11 @@ async def get_messages(access_token: str, user_id: str, chat_id: str, limit: int
             "author_type": "applicant" if m.get("direction") == "in" else "employer",
             "created_at": created_at,
         })
+    # Oldest first — Avito returns newest first, hh_api.get_messages already
+    # normalises to chronological order, and the chat UI renders top-to-bottom
+    # like any messenger. Callers that want "the latest" use max() by
+    # created_at rather than relying on position, so this only affects display.
+    result.reverse()
     return result
 
 

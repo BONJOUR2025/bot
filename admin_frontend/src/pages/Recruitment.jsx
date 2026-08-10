@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
-  Briefcase, ExternalLink, Pencil, Trash2, Settings, Send,
+  Briefcase, ExternalLink, Pencil, Trash2, Settings,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare,
   Pause, Play, Check, BookOpen, Sparkles, ListChecks, Copy, FileStack,
@@ -852,6 +852,12 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
     if (selectionMode) { onToggle(c.id); return; }
     onClick(c);
   }
+  const flags = c.flags || [];
+  const progressAnswered = c.progress?.answered ?? 0;
+  const progressTotal = c.progress?.total ?? 0;
+  // Реплика кандидата выделяется, наша — приглушается: сканируя колонку,
+  // ищут именно то, на что ещё не ответили.
+  const fromCandidate = c.last_message_from !== 'employer';
   return (
     <div
       draggable={!selectionMode}
@@ -869,59 +875,98 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
           : 'bg-[color:var(--color-surface)] border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]/40'
         }`}
     >
-      <div className="flex items-start justify-between gap-1">
+      <div className="flex items-start justify-between gap-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           {selectionMode && (
-            <span className={`flex-shrink-0 mt-0.5 ${selected ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
+            <span className={`flex-shrink-0 ${selected ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
               {selected ? <CheckSquare size={14} /> : <Square size={14} />}
             </span>
           )}
-          <span className="text-sm font-medium leading-snug group-hover:text-[color:var(--color-primary)] transition-colors">
+          <span className="text-sm font-semibold leading-snug truncate group-hover:text-[color:var(--color-primary)] transition-colors">
             {c.name}
-            {c.age != null && (
-              <span className="font-normal text-[color:var(--color-muted-foreground)] ml-1">{c.age} л.</span>
-            )}
           </span>
+          {c.age != null && (
+            <span className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">{c.age} л.</span>
+          )}
         </div>
-        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${SRC_BADGE[c.source] || SRC_BADGE.other}`}>
+        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${SRC_BADGE[c.source] || SRC_BADGE.other}`}>
           {srcBadgeLabel(c.source)}
         </span>
       </div>
-      {c.phone && (
-        <div className="flex items-center gap-1 mt-1.5 text-xs text-[color:var(--color-muted-foreground)]">
-          <Phone size={10} /> {c.phone}
+
+      {/* Флаги — то, ради чего карточку и открывают: видно, требует ли она
+          действия, ещё до клика. */}
+      {(flags.length > 0 || c.is_new || c.is_paused) && (
+        <div className="flex flex-wrap items-center gap-1 mt-2">
+          {c.is_new && <CardFlag tone="new" label="новый" />}
+          {flags.map(f => (
+            <CardFlag key={f.code} tone={f.code} label={f.label} />
+          ))}
+          {c.is_paused && <CardFlag tone="paused" label="на паузе" icon={<Pause size={9} />} />}
         </div>
       )}
-      <div className="mt-1.5 flex items-center justify-between gap-1">
-        <span className="text-[10px] text-[color:var(--color-muted-foreground)] opacity-60">{fmtDate(c.created_at)}</span>
-        <div className="flex items-center gap-1">
-          {c.is_paused && (
-            <span title="ИИ на паузе"
-              className="w-4 h-4 rounded-full bg-amber-400 text-white flex items-center justify-center">
-              <Pause size={8} />
-            </span>
-          )}
-          {c.has_unread_hh_msg && (
-            <span title="Новое сообщение hh.ru"
-              className="w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[8px] font-bold">
-              hh
-            </span>
-          )}
-          {c.has_unread_tg && (
-            <span title="Новое сообщение Telegram"
-              className="w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center">
-              <Send size={8} />
-            </span>
-          )}
-          {c.is_new && (
-            <span title="Новый кандидат (добавлен сегодня)"
-              className="text-[9px] font-semibold px-1 py-0.5 rounded bg-emerald-100 text-emerald-700">
-              new
-            </span>
-          )}
+
+      {/* Прогресс опроса — «2 из 4» отвечает на вопрос «далеко ли зашло»
+          нагляднее, чем сам факт этапа. */}
+      {progressTotal > 0 && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <div className="flex-1 h-1 rounded-full bg-[color:var(--color-bg-secondary)] overflow-hidden">
+            <div className="h-full rounded-full bg-[color:var(--color-primary)]"
+                 style={{ width: `${Math.round((progressAnswered / progressTotal) * 100)}%` }} />
+          </div>
+          <span className="text-[10px] text-[color:var(--color-muted-foreground)] flex-shrink-0">
+            {progressAnswered}/{progressTotal}
+          </span>
         </div>
+      )}
+
+      {/* Последнее сообщение: главный ответ на «что там внутри». */}
+      {c.last_message_text && (
+        <div className="mt-2 flex items-start gap-1.5">
+          <MessageCircle
+            size={11}
+            className={`flex-shrink-0 mt-0.5 ${fromCandidate ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-muted-foreground)] opacity-50'}`}
+          />
+          <p className={`text-xs leading-snug line-clamp-2 ${fromCandidate
+            ? 'text-[color:var(--color-foreground)]'
+            : 'text-[color:var(--color-muted-foreground)]'}`}>
+            {!fromCandidate && <span className="opacity-60">Вы: </span>}
+            {c.last_message_text}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-2 flex items-center justify-between gap-1">
+        <span className="text-[10px] text-[color:var(--color-muted-foreground)] opacity-60">
+          {fmtDate(c.last_message_at || c.created_at)}
+        </span>
+        {c.phone && (
+          <span className="flex items-center gap-1 text-[10px] text-[color:var(--color-muted-foreground)] opacity-70">
+            <Phone size={9} /> {c.phone}
+          </span>
+        )}
       </div>
     </div>
+  );
+}
+
+// Подписи флагов приходят с бэкенда (recruitment_stages.flags), чтобы
+// формулировка была одинаковой в карточке и в уведомлениях.
+const FLAG_TONES = {
+  needs_reply: 'bg-amber-100 text-amber-800 border-amber-200',
+  silent:      'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]',
+  undelivered: 'bg-red-100 text-red-700 border-red-200',
+  new:         'bg-emerald-100 text-emerald-700 border-emerald-200',
+  paused:      'bg-amber-100 text-amber-700 border-amber-200',
+};
+
+function CardFlag({ tone, label, icon }) {
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
+      FLAG_TONES[tone] || FLAG_TONES.silent
+    }`}>
+      {icon}{label}
+    </span>
   );
 }
 
@@ -990,6 +1035,9 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
           const isTarget = dragOver === stage.key;
           const isDragSrc = dragging != null && candidates.find(c => c.id === dragging)?.stage === stage.key;
           const colSelected = cards.filter(c => selectedIds.has(c.id)).length;
+          const needsAttention = cards.filter(
+            c => (c.flags || []).some(f => f.code === 'needs_reply' || f.code === 'undelivered')
+          ).length;
           return (
             <div key={stage.key} id={`kanban-col-${stage.key}`} className="w-[230px] flex flex-col">
               <div className="flex items-center justify-between mb-3 px-0.5">
@@ -1008,6 +1056,16 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
                   <span className="text-[10px] text-[color:var(--color-muted-foreground)] bg-[color:var(--color-muted)]/60 rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
                     {cards.length}
                   </span>
+                  {/* Сколько в колонке ждут ответа — чтобы не проглядеть их
+                      среди прочих, не разворачивая каждую карточку. */}
+                  {needsAttention > 0 && (
+                    <span
+                      title={`${needsAttention} ждут вашего ответа`}
+                      className="text-[10px] font-semibold text-amber-800 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5"
+                    >
+                      {needsAttention} ⚠
+                    </span>
+                  )}
                 </div>
                 {!selectionMode && (
                   <button

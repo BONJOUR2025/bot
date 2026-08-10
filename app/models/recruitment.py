@@ -299,6 +299,15 @@ class Candidate(Base):
     # and which alerts already fired. Separate from the Telegram interview's
     # interview_phase/stages_snapshot_json so the two flows never fight.
     quick_state_json = Column(Text, nullable=True)
+    # Снимок последнего сообщения в переписке — чтобы карточка в воронке
+    # показывала его без похода в API площадки: список из сотни кандидатов
+    # означал бы сотню запросов к Авито на каждую отрисовку доски.
+    # Пишется в момент, когда сообщение и так проходит через нас (отправка
+    # ботом, приём вебхуком или опросом), поэтому отдельной синхронизации
+    # не требует.
+    last_message_text = Column(Text, nullable=True, default="")
+    last_message_at = Column(DateTime, nullable=True)
+    last_message_from = Column(String, nullable=True, default="")  # applicant | employer
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -336,6 +345,9 @@ class Candidate(Base):
             "profile_generated_at": self.profile_generated_at.isoformat() if self.profile_generated_at else None,
             "pending_question": self.pending_question or None,
             "pending_question_asked_at": self.pending_question_asked_at.isoformat() if self.pending_question_asked_at else None,
+            "last_message_text": self.last_message_text or "",
+            "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
+            "last_message_from": self.last_message_from or "",
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

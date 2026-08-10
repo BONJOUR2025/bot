@@ -209,13 +209,27 @@ class TestGetMessages:
         assert result[0]["created_at"] == "2026-08-10T10:00:03"
 
     def test_direction_maps_to_author_type(self, monkeypatch):
+        # Фикстура в «сыром» порядке Авито — новые сверху.
         self._patch_messages(monkeypatch, [
             self._message(msg_id="m1", direction="in", text="Здравствуйте"),
             self._message(msg_id="m2", direction="out", text="Добрый день"),
         ])
         result = run_async(avito_api.get_messages("tok", OUR_ID, "chat-1"))
 
-        assert [r["author_type"] for r in result] == ["applicant", "employer"]
+        assert {r["id"]: r["author_type"] for r in result} == {"m1": "applicant", "m2": "employer"}
+
+    def test_messages_come_back_oldest_first(self, monkeypatch):
+        """Авито отдаёт новые сверху, hh_api.get_messages — наоборот, и чат
+        рисуется сверху вниз как любой мессенджер. Нормализуем к хронологии,
+        иначе переписка в карточке читается задом наперёд."""
+        self._patch_messages(monkeypatch, [
+            self._message(msg_id="newest", created=1786356003),
+            self._message(msg_id="middle", created=1786356002),
+            self._message(msg_id="oldest", created=1786356001),
+        ])
+        result = run_async(avito_api.get_messages("tok", OUR_ID, "chat-1"))
+
+        assert [r["id"] for r in result] == ["oldest", "middle", "newest"]
 
     def test_non_text_messages_are_skipped(self, monkeypatch):
         image = {"id": "m0", "type": "image", "direction": "in", "created": 1786356003}

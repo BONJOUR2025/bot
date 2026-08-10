@@ -194,7 +194,10 @@ def list_candidates(
 ):
     q = db.query(Candidate)
     if vacancy_id is not None: q = q.filter(Candidate.vacancy_id == vacancy_id)
-    candidates = q.order_by(Candidate.created_at.asc()).all()
+    # Новые сверху: воронку смотрят, чтобы разобрать свежие отклики, а при
+    # старом порядке (asc) они оказывались в самом низу колонки — под сотней
+    # уже обработанных.
+    candidates = q.order_by(Candidate.created_at.desc()).all()
 
     from app.services import quick_screening, recruitment_stages as rs
 

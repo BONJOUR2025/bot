@@ -400,6 +400,17 @@ async def _check_avito_messages(db, src, token: str) -> None:
             # на Авито часто тянется с прошлых откликов, и старое «Актуально?»
             # или вовсе номер телефона годичной давности засчитывались как
             # ответ на первый вопрос: кандидат молчит, а опрос едет дальше.
+            # Витрина для карточки — по последнему сообщению вообще, без
+            # отсечки по времени вопроса ниже: показать в воронке нужно то,
+            # что реально написано последним, даже если как ответ на текущий
+            # вопрос оно не засчитывается.
+            if messages:
+                newest = max(messages, key=lambda m: _iso_to_ts(m.get("created_at")) or 0)
+                quick_screening.record_last_message(
+                    db, c, newest.get("text", ""),
+                    "applicant" if newest.get("author_type") == "applicant" else "employer",
+                )
+
             asked_ts = _asked_at_ts(quick_screening.load_state(c))
             if asked_ts is not None:
                 incoming = [m for m in incoming if (_iso_to_ts(m.get("created_at")) or 0) > asked_ts]

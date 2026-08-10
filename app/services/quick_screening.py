@@ -96,7 +96,31 @@ def save_state(db, candidate, state: dict) -> None:
     db.commit()
 
 
-async def _send(candidate, src, token: str, text: str) -> str | None:
+# Длиннее, чем показывает карточка, но достаточно коротко, чтобы простыня
+# от кандидата не раздувала hr.db, который делят бот и API.
+_LAST_MESSAGE_MAX_CHARS = 500
+
+
+def record_last_message(db, candidate, text: str, direction: str, when: datetime | None = None) -> None:
+    """Запомнить последнюю реплику переписки для показа в карточке воронки.
+
+    Best-effort: витрина не должна ронять отправку сообщения кандидату, ради
+    которой всё и затевалось, поэтому любая ошибка здесь только логируется.
+    """
+    text = (text or "").strip()
+    if not text:
+        return
+    try:
+        candidate.last_message_text = text[:_LAST_MESSAGE_MAX_CHARS]
+        candidate.last_message_at = when or datetime.utcnow()
+        candidate.last_message_from = direction
+        db.commit()
+    except Exception:
+        log.warning("quick_screening: failed to record last message for candidate %s",
+                    getattr(candidate, "id", "?"), exc_info=True)
+
+
+async def _send(db, candidate, src, token: str, text: str) -> str | None:
     """Send a message to the candidate on their own platform.
     Returns None on success, or a human-readable error string."""
     from app.services import hh_api, avito_api
@@ -106,6 +130,7 @@ async def _send(candidate, src, token: str, text: str) -> str | None:
             if not candidate.external_id:
                 return "нет id отклика hh"
             await hh_api.send_message(token, candidate.external_id, text)
+            record_last_message(db, candidate, text, "employer")
             return None
         if candidate.source == "avito":
             chat_id = (getattr(candidate, "platform_chat_id", "") or "").strip()
@@ -114,6 +139,7 @@ async def _send(candidate, src, token: str, text: str) -> str | None:
                 # nothing to write to, and that is a data fact, not a failure.
                 return "у отклика нет чата на Авито (кандидат оставил только телефон)"
             await avito_api.send_message(token, src.employer_id, chat_id, text)
+            record_last_message(db, candidate, text, "employer")
             return None
         return f"неподдерживаемый источник {candidate.source!r}"
     except Exception as e:
@@ -145,7 +171,7 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
     )
 
     greeting = f"Здравствуйте!\n\n{INTEREST_QUESTION}"
-    err = await _send(candidate, src, token, greeting)
+    err = await _send(db, candidate, src, token, greeting)
     if err:
         log.warning("quick_screening: failed to send greeting to candidate %s: %s", candidate.id, err)
         await send_notification(
@@ -279,7 +305,7 @@ async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
         return
 
     if not _looks_still_interested(text, cfg):
-        err = await _send(candidate, src, token, DECLINE_FAREWELL)
+        err = await _send(db, candidate, src, token, DECLINE_FAREWELL)
         if err:
             log.warning("quick_screening: failed to send farewell to candidate %s: %s", candidate.id, err)
         candidate.stage = "отказ"
@@ -299,7 +325,7 @@ async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
         save_state(db, candidate, state)
         return
 
-    err = await _send(candidate, src, token, questions[0])
+    err = await _send(db, candidate, src, token, questions[0])
     if err:
         state["status"] = "waiting_admin"
         state["reason"] = "send_failed"
@@ -381,7 +407,7 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
     state["idx"] = idx
 
     if idx < len(questions):
-        err = await _send(candidate, src, token, questions[idx])
+        err = await _send(db, candidate, src, token, questions[idx])
         if err:
             state["status"] = "waiting_admin"
             state["reason"] = "send_failed"
@@ -399,7 +425,7 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
     # All questions answered.
     state["status"] = "done"
     save_state(db, candidate, state)
-    err = await _send(candidate, src, token, CLOSING_MESSAGE)
+    err = await _send(db, candidate, src, token, CLOSING_MESSAGE)
     if err:
         log.warning("quick_screening: failed to send closing message to candidate %s: %s", candidate.id, err)
     await send_notification(
