@@ -144,8 +144,7 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
         f"Уточняю, актуален ли ещё поиск работы, затем задам {len(questions)} вопрос(ов)."
     )
 
-    greeting = f"Здравствуйте, {candidate.name}!\n\n{INTEREST_QUESTION}" if candidate.name else \
-        f"Здравствуйте!\n\n{INTEREST_QUESTION}"
+    greeting = f"Здравствуйте!\n\n{INTEREST_QUESTION}"
     err = await _send(candidate, src, token, greeting)
     if err:
         log.warning("quick_screening: failed to send greeting to candidate %s: %s", candidate.id, err)
