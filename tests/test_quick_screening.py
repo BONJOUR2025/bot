@@ -27,7 +27,7 @@ class _FakeVacancy:
 
 
 class _FakeCandidate:
-    def __init__(self, source="hh", chat_id="", state=None):
+    def __init__(self, source="hh", chat_id="", state=None, is_paused=False):
         self.id = 42
         self.name = "Иван Петров"
         self.source = source
@@ -35,6 +35,7 @@ class _FakeCandidate:
         self.vacancy_id = 1
         self.platform_chat_id = chat_id
         self.quick_state_json = json.dumps(state, ensure_ascii=False) if state else None
+        self.is_paused = is_paused
 
 
 class _FakeSource:
@@ -157,13 +158,32 @@ class TestStart:
 
         assert sent_messages == [("avito", "u2i-123-456", "Есть ли опыт?")]
 
+    def test_paused_candidate_is_not_started(self, alerts, sent_messages):
+        c = _FakeCandidate(is_paused=True)
+        ok = run_async(qs.start_screening(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok"))
+
+        assert ok is False
+        assert sent_messages == []
+        assert alerts == []
+        assert qs.load_state(c) == {}
+
 
 class TestAnswerFlow:
-    def _started(self):
-        return _FakeCandidate(state={
+    def _started(self, is_paused=False):
+        return _FakeCandidate(is_paused=is_paused, state={
             "status": "asking", "idx": 0, "answers": [],
             "asked_at": datetime.utcnow().isoformat(), "last_msg_id": "", "silence_alerted": False,
         })
+
+    def test_paused_candidate_reply_is_not_processed(self, alerts, sent_messages, no_llm):
+        c = self._started(is_paused=True)
+        state_before = qs.load_state(c)
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Да, полтора года чинил обувь", "m1", {}))
+
+        assert qs.load_state(c) == state_before  # untouched — admin handles it manually
+        assert sent_messages == []
+        assert alerts == []
 
     def test_answer_advances_to_next_question(self, alerts, sent_messages, no_llm):
         c = self._started()
@@ -342,5 +362,11 @@ class TestSilence:
         """Already waiting on the admin — nagging about candidate silence there
         would be blaming the candidate for our own pending reply."""
         c = self._candidate(hours_ago=48, status="waiting_admin")
+        run_async(qs.check_silence(self._Db([c], _FakeVacancy())))
+        assert alerts == []
+
+    def test_paused_candidates_are_not_chased(self, alerts):
+        c = self._candidate(hours_ago=48)
+        c.is_paused = True
         run_async(qs.check_silence(self._Db([c], _FakeVacancy())))
         assert alerts == []

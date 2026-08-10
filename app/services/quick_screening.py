@@ -111,6 +111,8 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
     then ask the first question. Returns True if the first question was sent."""
     from app.services.notify import send_notification
 
+    if candidate.is_paused:
+        return False  # ИИ-автоматизация поставлена на паузу для этого кандидата
     questions = get_questions(vacancy)
     if not questions:
         return False
@@ -202,6 +204,9 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
     """Process one incoming candidate message while a quick screen is running."""
     from app.services.notify import send_notification
 
+    if candidate.is_paused:
+        return  # ИИ-автоматизация на паузе — админ ведёт переписку вручную
+
     state = load_state(candidate)
     if not state or state.get("status") != "asking":
         return  # not screening (or already handed over) — nothing to do
@@ -292,6 +297,8 @@ async def check_silence(db) -> None:
     ).all()
 
     for c in candidates:
+        if c.is_paused:
+            continue
         state = load_state(c)
         if state.get("status") != "asking" or state.get("silence_alerted"):
             continue
