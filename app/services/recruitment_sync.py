@@ -8,9 +8,6 @@ logger = logging.getLogger(__name__)
 _task: asyncio.Task | None = None
 _DEFAULT_INTERVAL = 15 * 60  # fallback 15 min; actual per-source interval used inside loop
 
-# Stages considered "active" for message polling
-_ACTIVE_STAGES = {"отклик", "собеседование", "ждем"}
-
 # How many candidates to name in a "новые отклики" notification before
 # summarising the rest (Telegram caps a message at 4096 characters).
 _NOTIFY_LIST_LIMIT = 15
@@ -220,13 +217,31 @@ async def _check_hh_messages(db, src, token: str) -> None:
     from app.services.notify import send_notification
     from app.db.session import SessionLocal
 
+    from app.services import quick_screening, recruitment_stages as rs
+
     cutoff = datetime.utcnow() - timedelta(days=60)
+    # Раньше здесь стоял фильтр по этапу (_ACTIVE_STAGES со старыми названиями
+    # «отклик»/«ждем»). После перехода на воронку «5 этапов» новые кандидаты
+    # получают этап «новый», в старый список он не входит — и опрос сообщений
+    # hh замолчал полностью: 27 кандидатов с запущенным опросом ждали ответа,
+    # а лог невинно писал «0 active candidates to poll». У Авито поломку
+    # маскировали вебхук и отдельный путь опроса, у hh других путей нет.
+    #
+    # Поэтому фильтруем по состоянию переписки, а не по названию этапа: так
+    # это переживёт любое следующее переименование этапов.
     candidates = db.query(Candidate).filter(
         Candidate.source == "hh",
         Candidate.external_id.isnot(None),
-        Candidate.stage.in_(_ACTIVE_STAGES),
+        Candidate.stage.notin_([rs.STAGE_HIRED, rs.STAGE_REJECTED]),
         Candidate.created_at >= cutoff,
     ).all()
+    # Опрашиваем тех, у кого идёт быстрый опрос, либо тех, у кого переписка
+    # ведётся вручную (опрос не запускался/завершён) — во втором случае
+    # входящее превращается в обычное уведомление админу.
+    candidates = [
+        c for c in candidates
+        if quick_screening.load_state(c).get("status") == "asking" or not quick_screening.load_state(c)
+    ]
 
     logger.info("[Sync] hh message check: %d active candidates to poll", len(candidates))
 
