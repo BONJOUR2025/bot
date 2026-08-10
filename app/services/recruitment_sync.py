@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 _task: asyncio.Task | None = None
+_deferred_task: asyncio.Task | None = None
 _DEFAULT_INTERVAL = 15 * 60  # fallback 15 min; actual per-source interval used inside loop
 
 # How many candidates to name in a "новые отклики" notification before
@@ -600,18 +601,90 @@ async def _run() -> None:
         await asyncio.sleep(interval)
 
 
+async def _resolve_source_and_token(db, source: str):
+    """(src, token) для площадки — или None, если она не подключена."""
+    from app.models.recruitment import RecruitmentSource
+    from app.services import avito_api
+
+    src = db.query(RecruitmentSource).filter(
+        RecruitmentSource.source == source,
+        RecruitmentSource.is_active == True,
+    ).first()
+    if not src:
+        return None
+    if source == "avito":
+        if not (src.client_id and src.client_secret):
+            return None
+        try:
+            token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
+        except Exception as exc:
+            logger.warning("[Hours] avito token failed: %s", exc)
+            return None
+        return src, token
+    if not src.access_token:
+        return None
+    return src, src.access_token
+
+
+# Проверяем чаще, чем идёт синхронизация: отложенное должно уходить в начале
+# рабочего окна, а не через час после него.
+_DEFERRED_CHECK_INTERVAL = 60
+
+
+async def _deferred_run() -> None:
+    """Доигрывает отложенное на нерабочие часы.
+
+    Отдельная задача, а не часть цикла синхронизации: тот ходит раз в час,
+    а обещание «продолжим, как только наступят рабочие часы» требует минутной
+    точности. Первый проход — сразу при старте процесса: именно он
+    восстанавливает цепочки после падения сервера.
+    """
+    from app.db.session import SessionLocal
+    from app.services import candidate_hours, quick_screening
+
+    while True:
+        try:
+            if candidate_hours.is_within():
+                db = SessionLocal()
+                try:
+                    # Токены резолвим лениво и по одному разу на площадку.
+                    cache: dict = {}
+
+                    def resolve(source: str):
+                        return cache.get(source)
+
+                    for source in ("avito", "hh"):
+                        resolved = await _resolve_source_and_token(db, source)
+                        if resolved:
+                            cache[source] = resolved
+                    if cache:
+                        done = await quick_screening.flush_deferred(db, resolve)
+                        if done:
+                            logger.info("[Hours] доиграно отложенных диалогов: %d", done)
+                finally:
+                    db.close()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("[Hours] deferred flush error: %s", exc)
+        await asyncio.sleep(_DEFERRED_CHECK_INTERVAL)
+
+
 def start() -> None:
-    global _task
+    global _task, _deferred_task
     if _task and not _task.done():
         return
     _task = asyncio.create_task(_run())
+    _deferred_task = asyncio.create_task(_deferred_run())
     logger.info("[Sync] Recruitment sync task started")
 
 
 def stop() -> None:
-    global _task
+    global _task, _deferred_task
     if _task and not _task.done():
         _task.cancel()
+    if _deferred_task and not _deferred_task.done():
+        _deferred_task.cancel()
 
 
 async def run_now() -> None:

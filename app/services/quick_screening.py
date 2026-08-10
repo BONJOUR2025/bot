@@ -157,6 +157,8 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
     then ask the first question. Returns True if the first question was sent."""
     from app.services.notify import send_notification
 
+    from app.services import candidate_hours
+
     if candidate.is_paused:
         return False  # ИИ-автоматизация поставлена на паузу для этого кандидата
     questions = get_questions(vacancy)
@@ -164,6 +166,20 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
         return False
     if load_state(candidate):
         return False  # already started
+
+    if not candidate_hours.is_within():
+        # Отклик пришёл ночью — здороваться сейчас нельзя. Ставим опрос в
+        # очередь: status="queued" отличает «ждёт рабочих часов» от «идёт»
+        # и от «не запускался», и переживает перезапуск, потому что лежит
+        # в БД. Стартует flush_deferred в начале ближайшего окна.
+        save_state(db, candidate, {
+            "status": "queued", "phase": "interest", "idx": 0, "answers": [],
+            "asked_at": None, "last_msg_id": "", "silence_alerted": False,
+            "queued_at": datetime.utcnow().isoformat(),
+        })
+        log.info("quick_screening: candidate %s arrived outside working hours, screening queued",
+                 candidate.id)
+        return False
 
     await send_notification(
         f"⚡ <b>Новый отклик — бот начал опрос</b>\n{_candidate_label(candidate, vacancy)}\n\n"
@@ -344,8 +360,15 @@ async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
 
 async def handle_incoming(db, candidate, vacancy, src, token: str,
                            message_text: str, message_id: str, cfg: dict) -> None:
-    """Process one incoming candidate message while a quick screen is running."""
-    from app.services.notify import send_notification
+    """Process one incoming candidate message while a quick screen is running.
+
+    Вне рабочих часов ответ не обрабатывается, а откладывается: см.
+    app/services/candidate_hours.py. Откладывается именно входящее сообщение
+    целиком, а не «следующее действие» — тогда при наступлении окна
+    отыгрывается ровно та же логика (встречный вопрос, проверка интереса,
+    завершение), а не её копия, которая неизбежно разъедется с оригиналом.
+    """
+    from app.services import candidate_hours
 
     if candidate.is_paused:
         return  # ИИ-автоматизация на паузе — админ ведёт переписку вручную
@@ -362,6 +385,29 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
     if not text:
         save_state(db, candidate, state)
         return
+
+    if not candidate_hours.is_within(cfg=cfg):
+        # last_msg_id уже проставлен выше — значит ни опрос, ни вебхук не
+        # положат это сообщение второй раз, а сам текст лежит в состоянии и
+        # переживёт перезапуск. Дальше его доиграет flush_deferred.
+        state["deferred_incoming"] = {
+            "text": text,
+            "message_id": message_id or "",
+            "received_at": datetime.utcnow().isoformat(),
+        }
+        save_state(db, candidate, state)
+        record_last_message(db, candidate, text, "applicant")
+        log.info("quick_screening: candidate %s replied outside working hours, deferred", candidate.id)
+        return
+
+    await _process_message(db, candidate, vacancy, src, token, state, text, cfg)
+
+
+async def _process_message(db, candidate, vacancy, src, token: str,
+                            state: dict, text: str, cfg: dict) -> None:
+    """Собственно обработка ответа кандидата — без дедупа и без проверки
+    рабочих часов: то же самое проигрывается и «сейчас», и отложенно."""
+    from app.services.notify import send_notification
 
     if state.get("phase", "questions") == "interest":
         await _handle_interest_reply(db, candidate, vacancy, src, token, state, text, cfg)
@@ -433,6 +479,78 @@ async def handle_incoming(db, candidate, vacancy, src, token: str,
         f"{_format_answers(answers)}\n\nДальше — вы."
     )
     log.info("quick_screening: completed for candidate_id=%s", candidate.id)
+
+
+async def flush_deferred(db, resolve_source) -> int:
+    """Доиграть то, что отложено на нерабочее время. Возвращает число
+    обработанных кандидатов.
+
+    Вызывается периодически и при старте процесса — именно это и делает
+    механику устойчивой к падению: всё отложенное лежит в quick_state_json,
+    поэтому после перезапуска цепочка продолжается с того места, где
+    остановилась, а не начинается заново.
+
+    resolve_source(source) → (src, token) | None — резолвер площадки,
+    передаётся снаружи, чтобы этот модуль не знал про устройство синка.
+    """
+    from app.models.recruitment import Candidate, Vacancy
+    from app.services import candidate_hours
+    from app.services.config_service import ConfigService
+
+    if not candidate_hours.is_within():
+        return 0
+
+    candidates = db.query(Candidate).filter(
+        Candidate.quick_state_json.isnot(None),
+        Candidate.quick_state_json != "",
+    ).all()
+
+    pending = []
+    for c in candidates:
+        if c.is_paused:
+            continue
+        state = load_state(c)
+        if state.get("status") == "queued" or state.get("deferred_incoming"):
+            pending.append(c)
+    if not pending:
+        return 0
+
+    cfg = ConfigService().load()
+    processed = 0
+    for c in pending:
+        try:
+            resolved = resolve_source(c.source)
+            if not resolved:
+                continue
+            src, token = resolved
+            vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+            state = load_state(c)
+
+            if state.get("status") == "queued":
+                # Опрос ещё не начинался — стартуем с чистого листа. Состояние
+                # очереди снимаем до вызова, иначе start_screening увидит его
+                # как «уже запущен» и ничего не сделает.
+                c.quick_state_json = None
+                db.commit()
+                await start_screening(db, c, vacancy, src, token)
+                processed += 1
+                continue
+
+            deferred = state.pop("deferred_incoming", None)
+            if not deferred:
+                continue
+            # Снимаем отложенное ДО обработки: если обработка упадёт на
+            # середине, кандидат не должен попасть в вечный цикл повторов —
+            # ответ уже записан в переписке, а админ увидит его в карточке.
+            save_state(db, c, state)
+            await _process_message(db, c, vacancy, src, token, state,
+                                    deferred.get("text", ""), cfg)
+            processed += 1
+            log.info("quick_screening: replayed deferred reply for candidate %s", c.id)
+        except Exception:
+            log.warning("quick_screening: failed to flush deferred for candidate %s",
+                        c.id, exc_info=True)
+    return processed
 
 
 async def check_silence(db) -> None:

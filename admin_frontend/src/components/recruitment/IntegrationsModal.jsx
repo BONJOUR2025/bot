@@ -334,6 +334,130 @@ function AvitoVacancyLinkRow({ internalVacancy, existingLinks, onLink, onUnlink 
   );
 }
 
+// ── Расписание общения с кандидатами ──────────────────────────────
+const WEEKDAYS = [
+  { n: 1, label: 'Пн' }, { n: 2, label: 'Вт' }, { n: 3, label: 'Ср' },
+  { n: 4, label: 'Чт' }, { n: 5, label: 'Пт' }, { n: 6, label: 'Сб' }, { n: 7, label: 'Вс' },
+];
+
+function CandidateHoursPanel() {
+  const [form, setForm] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get('/recruitment/candidate-hours');
+      setForm({ enabled: res.data.enabled, days: res.data.days, start: res.data.start, end: res.data.end });
+      setStatus({ within_now: res.data.within_now, next_window_start: res.data.next_window_start });
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function save(next) {
+    setBusy(true); setError(''); setSaved(false);
+    try {
+      const res = await api.put('/recruitment/candidate-hours', next);
+      setForm({ enabled: res.data.enabled, days: res.data.days, start: res.data.start, end: res.data.end });
+      setStatus({ within_now: res.data.within_now, next_window_start: res.data.next_window_start });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message);
+    } finally { setBusy(false); }
+  }
+
+  if (!form) return null;
+
+  const toggleDay = (n) => {
+    const days = form.days.includes(n) ? form.days.filter(d => d !== n) : [...form.days, n].sort();
+    setForm({ ...form, days });
+  };
+
+  const fmtNext = (iso) => {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString('ru-RU', {
+        weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+      });
+    } catch { return iso; }
+  };
+
+  return (
+    <div className="rounded-xl border border-[color:var(--color-border)] p-3 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Часы общения с кандидатами</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+            Вне этих часов бот молчит. Ответ кандидата не теряется: переписка продолжится
+            с того места, где остановилась, как только начнутся рабочие часы.
+          </p>
+        </div>
+        <label className="flex items-center gap-1.5 text-xs flex-shrink-0 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.enabled}
+            onChange={e => save({ ...form, enabled: e.target.checked })}
+            disabled={busy}
+          />
+          Включено
+        </label>
+      </div>
+
+      {form.enabled && (
+        <>
+          <div className="flex flex-wrap items-center gap-1">
+            {WEEKDAYS.map(d => (
+              <button
+                key={d.n}
+                type="button"
+                onClick={() => toggleDay(d.n)}
+                disabled={busy}
+                className={`w-9 h-8 rounded-lg text-xs font-medium border transition-colors ${
+                  form.days.includes(d.n)
+                    ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                    : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]'
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-[color:var(--color-muted-foreground)]">с</span>
+            <input type="time" className="input text-sm py-1" value={form.start}
+                   onChange={e => setForm({ ...form, start: e.target.value })} />
+            <span className="text-xs text-[color:var(--color-muted-foreground)]">до</span>
+            <input type="time" className="input text-sm py-1" value={form.end}
+                   onChange={e => setForm({ ...form, end: e.target.value })} />
+            <button onClick={() => save(form)} disabled={busy}
+                    className="btn btn--primary text-xs ml-auto disabled:opacity-50">
+              {busy ? 'Сохраняем…' : 'Сохранить'}
+            </button>
+          </div>
+
+          <p className={`text-xs ${status?.within_now ? 'text-emerald-600' : 'text-amber-600'}`}>
+            {status?.within_now
+              ? '● Сейчас рабочие часы — бот отвечает кандидатам.'
+              : `● Сейчас нерабочее время — бот молчит${
+                  status?.next_window_start ? `, продолжит ${fmtNext(status.next_window_start)}` : ''
+                }.`}
+          </p>
+        </>
+      )}
+
+      {saved && <p className="text-xs text-emerald-600">Сохранено</p>}
+      {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
 // ── Instant-message webhook (Авито и hh) ──────────────────────────
 // Без него ответ кандидата ждёт ближайшего цикла опроса (до часа). Опрос
 // при этом остаётся включённым намеренно: недоставленный вебхук (лежал
@@ -619,7 +743,9 @@ export default function IntegrationsModal({ onClose, vacancies }) {
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 overflow-y-auto pt-4">
+        <div className="flex-1 overflow-y-auto pt-4 space-y-4">
+          {/* Расписание общее для обеих площадок, поэтому вне вкладок. */}
+          {!loading && <CandidateHoursPanel />}
           {loading ? (
             <div className="text-center py-12 text-sm text-[color:var(--color-muted-foreground)]">Загрузка...</div>
           ) : tab === 'hh' ? (

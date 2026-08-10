@@ -630,6 +630,53 @@ def disconnect_avito(db: Session = Depends(get_db)):
     return {"status": "disconnected"}
 
 
+class CandidateHoursUpdate(BaseModel):
+    enabled: bool
+    days: List[int]
+    start: str
+    end: str
+
+
+@router.get("/candidate-hours")
+def get_candidate_hours():
+    """Расписание общения с кандидатами + признак, идут ли рабочие часы
+    прямо сейчас (чтобы оператор видел, будет бот писать или молчать)."""
+    from app.services import candidate_hours
+
+    schedule = candidate_hours.load_schedule()
+    nxt = candidate_hours.next_window_start()
+    return {
+        **schedule,
+        "within_now": candidate_hours.is_within(),
+        "next_window_start": nxt.isoformat() if nxt else None,
+    }
+
+
+@router.put("/candidate-hours")
+def update_candidate_hours(data: CandidateHoursUpdate):
+    from app.services import candidate_hours
+    from app.services.config_service import ConfigService
+
+    days = sorted({d for d in data.days if 1 <= d <= 7})
+    if data.enabled and not days:
+        raise HTTPException(400, "Выберите хотя бы один рабочий день.")
+    for value in (data.start, data.end):
+        try:
+            hh, mm = str(value).split(":")[:2]
+            if not (0 <= int(hh) <= 23 and 0 <= int(mm) <= 59):
+                raise ValueError
+        except Exception:
+            raise HTTPException(400, f"Некорректное время: {value!r}. Формат ЧЧ:ММ.")
+
+    ConfigService().patch({
+        candidate_hours.CFG_ENABLED: bool(data.enabled),
+        candidate_hours.CFG_DAYS: days,
+        candidate_hours.CFG_START: data.start,
+        candidate_hours.CFG_END: data.end,
+    })
+    return get_candidate_hours()
+
+
 @router.get("/integrations/hh/webhook")
 async def get_hh_webhook(request: Request, db: Session = Depends(get_db)):
     """Состояние подписки hh на мгновенные уведомления о сообщениях."""
