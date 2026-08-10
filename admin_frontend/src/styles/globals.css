@@ -645,6 +645,17 @@ tbody tr:last-child td { border-bottom: none; }
 .toast--info    { background: var(--color-info); }
 .toast--warning { background: var(--color-warning); color: #1a1a2e; }
 
+/* Bulk-actions bar (Recruitment.jsx): an always-dark floating pill, same
+   idea as .toast — deliberately a dedicated class rather than the
+   bg-gray-900 Tailwind utility, because .visual-refresh remaps any
+   [class*="bg-gray-"] to --color-control-bg (~2-4% opacity, meant for a
+   subtle tint over an already-opaque card) which made this standalone
+   fixed-position bar nearly see-through. */
+.bulk-actions-bar {
+  background: #111827;
+  color: #fff;
+}
+
 /* ================================================================
    Animations
    ================================================================ */

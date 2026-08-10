@@ -1125,7 +1125,7 @@ function MobileBoard({ candidates, onCardClick, onAddClick, selectionMode, selec
 function BulkActionsBar({ count, total, onSelectAll, onClear, onMoveStage, onStartScreening, onDelete, loading }) {
   const [stageOpen, setStageOpen] = useState(false);
   return (
-    <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center justify-center gap-2 max-w-[calc(100vw-1rem)] bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-3 text-sm">
+    <div className="bulk-actions-bar fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50 flex flex-wrap items-center justify-center gap-2 max-w-[calc(100vw-1rem)] rounded-2xl shadow-2xl px-4 py-3 text-sm">
       <span className="font-semibold text-white/90 mr-1">{count} выбрано</span>
       <button
         onClick={onSelectAll}
