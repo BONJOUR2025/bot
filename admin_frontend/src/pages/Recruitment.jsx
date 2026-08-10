@@ -1352,13 +1352,25 @@ export default function Recruitment() {
     if (!selectedIds.size) return;
     setBulkLoading(true);
     try {
-      // allSettled, not all — a mixed selection is normal (some may already
-      // be mid-screen, lack quick-mode questions, or not be a job-board
-      // candidate at all), and one such rejection must not hide that the
-      // rest actually started.
-      const results = await Promise.allSettled([...selectedIds].map(id =>
-        api.post(`/recruitment/candidates/${id}/quick-screening`)
-      ));
+      // Small batches, not one giant Promise.all(Settled) burst: each start
+      // fetches its own fresh Avito OAuth token (no caching across the
+      // batch — see _get_platform_chat), so 20-30 selected candidates fired
+      // at once means 20-30 simultaneous token requests hitting Avito and
+      // the DB at the same moment. Chunking keeps that burst small.
+      const ids = [...selectedIds];
+      const BATCH_SIZE = 5;
+      const results = [];
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const batch = ids.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.allSettled(batch.map(id =>
+          api.post(`/recruitment/candidates/${id}/quick-screening`)
+        ));
+        results.push(...batchResults);
+      }
+      // allSettled per batch, not all — a mixed selection is normal (some
+      // may already be mid-screen, lack quick-mode questions, or not be a
+      // job-board candidate at all), and one such rejection must not hide
+      // that the rest actually started.
       const failed = results.filter(r => r.status === 'rejected').length;
       const started = results.length - failed;
       await loadCandidates();

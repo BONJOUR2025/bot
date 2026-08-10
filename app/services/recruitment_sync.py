@@ -330,24 +330,34 @@ async def _route_to_quick_screening(cand_id: int, src, token: str,
         db.close()
 
 
-def _asked_at_ts(state: dict) -> float | None:
-    """Момент отправки текущего вопроса в виде unix-времени — Авито отдаёт
-    created_at сообщений именно так. None, если времени нет (старое состояние,
-    записанное до появления отсечки) — тогда фильтровать не по чему и лучше
-    вести себя как раньше, чем молча игнорировать все сообщения."""
+def _iso_to_ts(raw: str | None) -> float | None:
+    """Naive-UTC ISO 8601 строка → unix-время, или None если разобрать нечего.
+
+    Общий парсер и для asked_at (пишется через datetime.utcnow().isoformat()),
+    и для created_at сообщений Авито (avito_api.get_messages конвертирует их
+    так же, через datetime.utcfromtimestamp(...).isoformat() — до 1fc3f0b это
+    было сырое unix-время, и код ниже сравнивал числа напрямую; после смены
+    формата сравнение float > str падало на каждом сообщении молча, в try/
+    except, так что ни один ответ кандидата в Авито не долетал до опроса)."""
     from datetime import datetime, timezone
 
-    raw = (state or {}).get("asked_at")
     if not raw:
         return None
     try:
         dt = datetime.fromisoformat(raw)
     except Exception:
         return None
-    # asked_at пишется через datetime.utcnow() — naive UTC.
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.timestamp()
+
+
+def _asked_at_ts(state: dict) -> float | None:
+    """Момент отправки текущего вопроса в виде unix-времени. None, если
+    времени нет (старое состояние, записанное до появления отсечки) —
+    тогда фильтровать не по чему и лучше вести себя как раньше, чем молча
+    игнорировать все сообщения."""
+    return _iso_to_ts((state or {}).get("asked_at"))
 
 
 async def _check_avito_messages(db, src, token: str) -> None:
@@ -392,10 +402,10 @@ async def _check_avito_messages(db, src, token: str) -> None:
             # ответ на первый вопрос: кандидат молчит, а опрос едет дальше.
             asked_ts = _asked_at_ts(quick_screening.load_state(c))
             if asked_ts is not None:
-                incoming = [m for m in incoming if (m.get("created_at") or 0) > asked_ts]
+                incoming = [m for m in incoming if (_iso_to_ts(m.get("created_at")) or 0) > asked_ts]
             if not incoming:
                 continue
-            latest = max(incoming, key=lambda m: m["created_at"])
+            latest = max(incoming, key=lambda m: _iso_to_ts(m.get("created_at")) or 0)
             await _route_to_quick_screening(cand_id, src, token, latest["text"], latest["id"])
         except Exception as e:
             logger.warning("[Sync] avito message check failed for candidate %s: %s", cand_id, e)
