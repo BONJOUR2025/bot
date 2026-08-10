@@ -168,6 +168,12 @@ def _looks_like_question(text: str, cfg: dict) -> bool:
                 'ответа или вместе с ним. Ответь ТОЛЬКО JSON: {"question": true/false}'
             ),
             max_tokens=20,
+            # Not tied to a staff member — a fixed pseudo-employee bucket so
+            # this shows up as its own line in Расход AI по сотрудникам
+            # instead of being invisible next to the knowledge-base spend.
+            employee_id="quick_screening",
+            employee_name="Быстрый режим (кандидаты)",
+            feature="quick_screening",
         )
     except Exception as e:
         log.warning("quick_screening: question-detection LLM call failed: %s", e)

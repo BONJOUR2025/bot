@@ -15,8 +15,10 @@ export default function SettingsAiUsage() {
 
       <Section title="Расход AI по сотрудникам">
         <p className="text-sm text-[color:var(--color-muted-foreground)] -mt-2">
-          Разбивка по сотрудникам, обращавшимся к базе знаний через Telegram-бота. Polza не знает,
-          какой сотрудник сделал запрос — эти данные считаются и хранятся у нас, при каждом обращении.
+          Разбивка по сотрудникам, обращавшимся к базе знаний через Telegram-бота, плюс отдельная
+          строка «Быстрый режим (кандидаты)» — распознавание встречных вопросов кандидатов в
+          быстром опросе (hh/Авито), не привязанное к конкретному сотруднику. Polza не знает, кто
+          сделал запрос — эти данные считаются и хранятся у нас, при каждом обращении.
         </p>
         <EmployeeLlmUsagePanel />
       </Section>
@@ -127,7 +129,7 @@ function EmployeeLlmUsagePanel() {
       </div>
       {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
       {rows && rows.length === 0 && (
-        <p className="text-sm text-[color:var(--color-muted-foreground)]">Пока нет обращений к базе знаний через бота.</p>
+        <p className="text-sm text-[color:var(--color-muted-foreground)]">Пока нет обращений к базе знаний через бота и запросов быстрого режима.</p>
       )}
       {rows && rows.length > 0 && (
         <div className="overflow-x-auto">
