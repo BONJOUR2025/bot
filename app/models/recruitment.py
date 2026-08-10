@@ -6,12 +6,12 @@ from app.db.base_class import Base
 
 
 class HiringStrategy(Base):
-    """Named automation preset (filters, follow-ups, hh templates, AI model).
+    """НЕ ИСПОЛЬЗУЕТСЯ. Стратегии найма убраны — в системе остался только
+    быстрый режим (app/services/quick_screening.py).
 
-    Once a vacancy has a strategy assigned, the strategy is the sole source
-    of truth for these parameters — there is no global-config fallback for
-    a vacancy that has a strategy. follow_up_enabled defaults to False for
-    every strategy (builtin or admin-created) by design.
+    Класс намеренно оставлен, чтобы create_all не пересоздавал таблицу пустой
+    и накопленные данные остались на месте: если решим вернуть часть логики,
+    поднимать её будет откуда. Ничего в приложении сюда больше не обращается.
     """
     __tablename__ = "hiring_strategies"
 
@@ -38,36 +38,10 @@ class HiringStrategy(Base):
     away_message = Column(Text, nullable=True, default="")
     ai_model = Column(String, nullable=True)
 
-    # JSON list of interview stages (see app/services/interview_stages.py).
-    # Null/empty = use the built-in default flow.
     stages_json = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def to_dict(self):
-        from app.services.interview_stages import get_stages
-        return {
-            "id": self.id,
-            "name": self.name,
-            "description": self.description or "",
-            "is_builtin": bool(self.is_builtin),
-            "age_min": self.age_min,
-            "age_max": self.age_max,
-            "sources_str": self.sources_str or "",
-            "follow_up_enabled": bool(self.follow_up_enabled),
-            "follow_up_delay_hours": self.follow_up_delay_hours,
-            "follow_up_message_1": self.follow_up_message_1 or "",
-            "follow_up_message_2": self.follow_up_message_2 or "",
-            "decline_after_hours": self.decline_after_hours,
-            "hh_message_with_link": self.hh_message_with_link or "",
-            "hh_message_no_link": self.hh_message_no_link or "",
-            "away_message": self.away_message or "",
-            "ai_model": self.ai_model,
-            "stages": get_stages(self),
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
 
 
 class KnowledgeBaseEntry(Base):

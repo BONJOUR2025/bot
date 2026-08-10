@@ -487,14 +487,6 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 logger.warning("[Sync] quick screening start failed for candidate %s: %s", cand_obj.id, e)
         return new_candidates
 
-    # Trigger automation for newly added candidates — trigger_for_candidate
-    # resolves the vacancy's strategy and applies its filters itself, so no
-    # pre-filtering is needed here.
-    from app.services.automation import is_enabled, trigger_for_candidate
-    if is_enabled():
-        for cand_obj in new_candidate_objs:
-            asyncio.ensure_future(trigger_for_candidate(cand_obj.id))
-
     return new_candidates
 
 

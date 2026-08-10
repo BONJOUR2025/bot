@@ -59,13 +59,10 @@ from ..handlers.admin import (
 )
 from ..handlers.reset import global_reset
 from ..handlers.media_archive import archive_media
-from ..handlers.business_connection import handle_business_connection, handle_business_message
 from ..handlers.knowledge_base import handle_kb_entry, handle_kb_question, KB_CHAT
 from ..handlers.admin.asset_actions import handle_asset_ack
 from ..handlers.admin.payment_calendar_actions import handle_payment_calendar_paid
-from ..handlers.interview_decision import build_interview_decision_handlers
 from ..handlers.quick_task import build_quick_task_handler
-from ..handlers.vacancy_setup import build_vacancy_setup_handler
 from telegram.request import HTTPXRequest
 import datetime
 
@@ -117,12 +114,7 @@ def _register_all_handlers(app):
         TGMessageHandler(filters.ALL, log_user_activity, block=False),
         group=-1,
     )
-    app.add_handler(BusinessConnectionHandler(handle_business_connection))
-    app.add_handler(TGMessageHandler(filters.UpdateType.BUSINESS_MESSAGE, handle_business_message))
-    for h in build_interview_decision_handlers():
-        app.add_handler(h)
     app.add_handler(build_quick_task_handler(ADMIN_ID))
-    app.add_handler(build_vacancy_setup_handler())
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         CommandHandler("salary", handle_salary_request, filters=~filters.User(ADMIN_ID))
@@ -359,13 +351,6 @@ def register_jobs(app):
                             pass
 
     app.job_queue.run_daily(payment_reminder, time(hour=9, minute=0))
-
-    @log_job("follow_up")
-    async def follow_up_job(context: ContextTypes.DEFAULT_TYPE):
-        from ..services.follow_up_service import run_follow_up_check
-        await run_follow_up_check()
-
-    app.job_queue.run_repeating(follow_up_job, interval=900, first=60)
 
     @log_job("morning_briefing")
     async def morning_briefing_job(context: ContextTypes.DEFAULT_TYPE):

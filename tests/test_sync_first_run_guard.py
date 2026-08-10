@@ -139,22 +139,3 @@ def test_later_syncs_do_screen_new_arrivals(collected, started, quiet_notify):
     run_async(sync._sync_link(db, _FakeSource(), link, "tok"))
 
     assert started == ["u2i-0", "u2i-1", "u2i-2"]
-
-
-def test_quick_mode_off_leaves_the_old_telegram_flow_alone(collected, started, quiet_notify, monkeypatch):
-    triggered = []
-
-    async def fake_trigger(cid, force=False):
-        triggered.append(cid)
-        return "ok"
-
-    monkeypatch.setattr("app.services.automation.is_enabled", lambda: True)
-    monkeypatch.setattr("app.services.automation.trigger_for_candidate", fake_trigger)
-
-    vacancy = _FakeVacancy()
-    vacancy.quick_mode_enabled = False
-    db = _FakeDb(vacancy)
-
-    run_async(sync._sync_link(db, _FakeSource(), _FakeLink(last_synced_at=datetime.utcnow()), "tok"))
-
-    assert started == []  # quick screening stays out of it
