@@ -1039,23 +1039,29 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
           : 'bg-[color:var(--color-surface)] border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]/40'
         }`}
     >
+      {/* Имя переносится на вторую строку, а не обрезается: «Захаренкова …»
+          не отвечает на вопрос, чья это карточка, — а именно по имени её и
+          ищут глазами. Возраст и площадка ушли вправо, чтобы не отъедать у
+          имени ширину в той же строке. */}
       <div className="flex items-start justify-between gap-1.5">
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-start gap-1.5 min-w-0 flex-1">
           {selectionMode && (
-            <span className={`flex-shrink-0 ${selected ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
+            <span className={`flex-shrink-0 mt-0.5 ${selected ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
               {selected ? <CheckSquare size={14} /> : <Square size={14} />}
             </span>
           )}
-          <span className="text-sm font-semibold leading-snug truncate group-hover:text-[color:var(--color-primary)] transition-colors">
+          <span className="text-sm font-semibold leading-snug line-clamp-2 break-words group-hover:text-[color:var(--color-primary)] transition-colors">
             {c.name}
           </span>
-          {c.age != null && (
-            <span className="text-xs text-[color:var(--color-muted-foreground)] flex-shrink-0">{c.age} л.</span>
-          )}
         </div>
-        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${SRC_BADGE[c.source] || SRC_BADGE.other}`}>
-          {srcBadgeLabel(c.source)}
-        </span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {c.age != null && (
+            <span className="text-xs text-[color:var(--color-muted-foreground)]">{c.age} л.</span>
+          )}
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${SRC_BADGE[c.source] || SRC_BADGE.other}`}>
+            {srcBadgeLabel(c.source)}
+          </span>
+        </div>
       </div>
 
       {/* Флаги — то, ради чего карточку и открывают: видно, требует ли она
@@ -1255,12 +1261,13 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
             c => (c.flags || []).some(f => f.code === 'needs_reply' || f.code === 'undelivered')
           ).length;
           return (
-            // Колонки тянутся по доступной ширине вместо фиксированных 230px:
-            // раньше семь колонок всегда давали горизонтальную прокрутку,
-            // даже когда места на экране хватало. Ниже 200px не сжимаются —
-            // там карточка перестаёт читаться, и лучше честно прокрутить.
+            // Колонки тянутся по доступной ширине, но не уже 250px: на 200
+            // карточка становится теснее прежней фиксированной (230), и имя
+            // с фамилией переставали помещаться. Приоритет за читаемостью
+            // карточки — если семь колонок не влезают, доска прокручивается
+            // стрелками, а вот обрезанное имя ничем не компенсируешь.
             <div key={stage.key} id={`kanban-col-${stage.key}`} data-kanban-col
-                 className="flex-1 min-w-[200px] max-w-[300px] flex flex-col snap-start">
+                 className="flex-1 min-w-[250px] max-w-[340px] flex flex-col snap-start">
               <div className="flex items-center justify-between mb-3 px-0.5">
                 <div className="flex items-center gap-2">
                   {selectionMode && cards.length > 0 && (
