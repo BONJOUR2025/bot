@@ -77,6 +77,11 @@ class CandidateUpdate(BaseModel):
     rejection_message: Optional[str] = None
     hh_message: Optional[str] = None
 
+class NoAnswerRequest(BaseModel):
+    """Не дозвонились. По умолчанию пишем кандидату сами."""
+    send_message: bool = True
+    text: Optional[str] = None
+
 class HHIntervalRequest(BaseModel):
     sync_interval_minutes: int = 15
 
@@ -219,7 +224,9 @@ def list_candidates(
         # не может разойтись с реальным ходом переписки. Ручные этапы
         # (собеседование/нанят/отказ) при этом сохраняются как есть.
         d["stage"] = rs.derive_stage(c.stage, state)
-        d["flags"] = rs.flags(state, now=now)
+        d["flags"] = rs.flags(state, now=now,
+                              call_attempts=c.follow_up_count or 0,
+                              last_call_at=c.follow_up_last_sent_at)
         d["progress"] = rs.progress(state, questions)
         d["answers"] = state.get("answers") or []
         d["is_new"] = bool(c.created_at and c.created_at >= since_24h)
@@ -267,6 +274,29 @@ async def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session
 
     warnings: list[str] = []
 
+    # Отказ на Авито. У hh отказ — это действие в API отклика, и текст уходит
+    # вместе с ним (см. ниже sync_negotiation_stage). У Авито такого действия
+    # нет вовсе, есть только переписка — поэтому раньше кандидат с Авито
+    # просто молча исчезал из воронки, хотя текст отказа рекрутёр вводил.
+    # Теперь текст доходит по единственному доступному каналу — в чат.
+    if (
+        data.stage == "отказ" and data.stage != old_stage
+        and c.source == "avito"
+        and (data.rejection_message or "").strip()
+    ):
+        from app.services import candidate_outreach as outreach
+        if not outreach.has_chat(c):
+            warnings.append("Отказ сохранён, но написать кандидату некуда — у отклика нет чата на Авито.")
+        else:
+            try:
+                _, src_row, token = await _get_platform_chat(candidate_id, db)
+                await outreach.send_to_candidate(db, c, src_row, token, data.rejection_message)
+            except HTTPException as exc:
+                warnings.append(f"Отказ сохранён, но сообщение не отправлено: {exc.detail}")
+            except Exception as exc:
+                log.warning("avito rejection message failed for candidate %s: %s", candidate_id, exc)
+                warnings.append(f"Отказ сохранён, но сообщение не отправлено: {exc}")
+
     # Push stage change to hh.ru when applicable
     if (
         data.stage and data.stage != old_stage
@@ -311,6 +341,58 @@ def reset_candidate_history(candidate_id: int, db: Session = Depends(get_db)):
     c.updated_at = datetime.utcnow()
     db.commit()
     return {"status": "ok"}
+
+
+@router.post("/candidates/{candidate_id}/no-answer")
+async def register_no_answer(candidate_id: int, data: NoAnswerRequest,
+                             db: Session = Depends(get_db)):
+    """Не дозвонились: зафиксировать попытку и (по умолчанию) написать в чат.
+
+    Попытка засчитывается всегда, даже если писать некуда или отправка не
+    удалась: те, кому звонят, — как раз чаще всего отклики «только телефон»,
+    и терять из-за них учёт звонков нельзя. Поэтому ответ отдельно сообщает,
+    ушло сообщение или нет.
+    """
+    from app.services import candidate_outreach as outreach
+
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+
+    attempts = outreach.register_call_attempt(db, c)
+    result = {"id": c.id, "call_attempts": attempts, "message_sent": False, "warning": None}
+
+    if not data.send_message:
+        return result
+    if not outreach.has_chat(c):
+        result["warning"] = "Попытка записана. Переписки с этим кандидатом нет — только телефон."
+        return result
+
+    try:
+        _, src, token = await _get_platform_chat(candidate_id, db)
+        await outreach.send_to_candidate(
+            db, c, src, token,
+            (data.text or "").strip() or outreach.DEFAULT_NO_ANSWER_MESSAGE,
+        )
+        result["message_sent"] = True
+    except HTTPException as exc:
+        result["warning"] = f"Попытка записана, но сообщение не отправлено: {exc.detail}"
+    except Exception as exc:
+        log.warning("no-answer message failed for candidate %s: %s", candidate_id, exc)
+        result["warning"] = f"Попытка записана, но сообщение не отправлено: {exc}"
+    return result
+
+
+@router.post("/candidates/{candidate_id}/reached")
+def register_reached(candidate_id: int, db: Session = Depends(get_db)):
+    """Дозвонились — снять счётчик недозвонов и флаг с карточки."""
+    from app.services import candidate_outreach as outreach
+
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    outreach.reset_call_attempts(db, c)
+    return {"id": c.id, "call_attempts": 0}
 
 
 @router.post("/candidates/{candidate_id}/toggle-pause")

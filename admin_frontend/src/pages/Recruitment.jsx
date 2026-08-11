@@ -5,6 +5,7 @@ import {
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare,
   Pause, Play, Check, BookOpen, Sparkles, ListChecks, Copy, FileStack,
+  PhoneMissed, PhoneCall,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -57,6 +58,19 @@ const SRC_BADGE = {
   other:  'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]',
 };
 const srcBadgeLabel = (s) => s === 'manual' ? 'руч.' : s;
+
+/** Куда уйдёт текст отказа: 'hh' | 'avito' | null.
+ *
+ * У hh отказ — действие в API отклика, текст прикладывается к нему. У Авито
+ * такого действия нет, есть только переписка, и без чата (отклик «только
+ * телефон») отправлять некуда — тогда отказ проставляется молча.
+ */
+function rejectionTarget(c) {
+  if (!c) return null;
+  if (c.source === 'hh' && c.external_id) return 'hh';
+  if (c.source === 'avito' && c.platform_chat_id) return 'avito';
+  return null;
+}
 
 // ── Candidate modal ────────────────────────────────────────────────
 function CandidateModal({ candidate, vacancyId, initialStage, onClose, onSave }) {
@@ -310,7 +324,144 @@ function InterviewModal({ candidate, onSave, onClose, templates = [] }) {
 }
 
 // ── Candidate detail modal ─────────────────────────────────────────
-function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory, onPauseToggle }) {
+const DEFAULT_NO_ANSWER_MSG =
+  'Здравствуйте! Пробовали до вас дозвониться, но не получилось. ' +
+  'Подскажите, когда вам удобно поговорить?';
+
+/** Исход звонка кандидату.
+ *
+ * Смысл кнопки «не дозвонился» не в учёте попыток, а в том, что вместо
+ * второго звонка вслепую кандидату уходит вопрос «когда вам удобно» —
+ * он отвечает текстом, и следующий звонок уже по назначенному времени.
+ * Поэтому отправка включена по умолчанию, а галочка её отключает, а не
+ * включает.
+ */
+function CallOutcome({ candidate, hasPlatformChat, platformLabel, templates, onChanged }) {
+  const { toast } = useToast();
+  const noAnswerTemplates = (templates || []).filter(t => t.type === 'no_answer');
+  const [open, setOpen] = useState(false);
+  const [send, setSend] = useState(true);
+  const [text, setText] = useState(noAnswerTemplates[0]?.text || DEFAULT_NO_ANSWER_MSG);
+  const [busy, setBusy] = useState(false);
+  const [attempts, setAttempts] = useState(candidate.call_attempts || 0);
+
+  async function submit() {
+    setBusy(true);
+    try {
+      const res = await api.post(`/recruitment/candidates/${candidate.id}/no-answer`, {
+        send_message: send && hasPlatformChat,
+        text: text.trim() || null,
+      });
+      setAttempts(res.data.call_attempts);
+      setOpen(false);
+      toast(res.data.warning
+        || (res.data.message_sent
+            ? `Попытка записана, сообщение отправлено в ${platformLabel}`
+            : 'Попытка записана'),
+        res.data.warning ? 'error' : 'success');
+      onChanged?.();
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message, 'error');
+    } finally { setBusy(false); }
+  }
+
+  async function reached() {
+    setBusy(true);
+    try {
+      await api.post(`/recruitment/candidates/${candidate.id}/reached`);
+      setAttempts(0);
+      toast('Отметили, что дозвонились', 'success');
+      onChanged?.();
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message, 'error');
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="rounded-xl border border-[color:var(--color-border)] p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] uppercase tracking-wide">
+          Исход звонка
+        </p>
+        {attempts > 0 && (
+          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md border ${
+            attempts >= 3
+              ? 'bg-orange-100 text-orange-800 border-orange-300'
+              : 'bg-sky-100 text-sky-800 border-sky-200'
+          }`}>
+            не дозвонились {attempts} раз{attempts === 1 ? '' : attempts < 5 ? 'а' : ''}
+          </span>
+        )}
+      </div>
+
+      {attempts >= 3 && (
+        <p className="text-xs text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 leading-relaxed">
+          Третья попытка подряд. Дальше звонить смысла мало — либо ждём ответа в переписке,
+          либо переводите в «Отказ».
+        </p>
+      )}
+
+      {!open ? (
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setOpen(true)} disabled={busy}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors disabled:opacity-50">
+            <PhoneMissed size={13} /> Не дозвонился
+          </button>
+          {attempts > 0 && (
+            <button onClick={reached} disabled={busy}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50">
+              <PhoneCall size={13} /> Дозвонился
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {hasPlatformChat ? (
+            <>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={send} onChange={e => setSend(e.target.checked)}
+                  className="rounded" />
+                <span className="text-xs">Написать кандидату в {platformLabel}</span>
+              </label>
+              {send && (
+                <>
+                  {noAnswerTemplates.length > 0 && (
+                    <select className="input w-full text-sm" defaultValue=""
+                      onChange={e => { if (e.target.value) setText(e.target.value); }}>
+                      <option value="">— выбрать шаблон —</option>
+                      {noAnswerTemplates.map((t, i) => (
+                        <option key={i} value={t.text}>{t.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  <textarea className="input w-full text-sm" rows={3} value={text}
+                    onChange={e => setText(e.target.value)} />
+                </>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-[color:var(--color-muted-foreground)] leading-relaxed">
+              У этого отклика нет переписки — кандидат оставил только телефон.
+              Запишем попытку, писать некуда.
+            </p>
+          )}
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setOpen(false)} disabled={busy}
+              className="btn btn-secondary text-xs">Отмена</button>
+            <button onClick={submit} disabled={busy}
+              className="btn btn-primary text-xs flex items-center gap-1.5">
+              {busy && <Loader2 size={12} className="animate-spin" />}
+              {send && hasPlatformChat ? 'Записать и написать' : 'Записать попытку'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory,
+                           onPauseToggle, templates = [], onCandidateChanged }) {
   const { toast } = useToast();
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
@@ -535,6 +686,18 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 </div>
               )}
             </div>
+          )}
+
+          {/* Исход звонка. Стоит сразу под телефоном, потому что нажимают
+              это ровно в тот момент, когда положили трубку. */}
+          {candidate.phone && (
+            <CallOutcome
+              candidate={candidate}
+              hasPlatformChat={hasPlatformChat}
+              platformLabel={platformLabel}
+              templates={templates}
+              onChanged={onCandidateChanged}
+            />
           )}
 
           {/* Resume link */}
@@ -900,7 +1063,12 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
         <div className="flex flex-wrap items-center gap-1 mt-2">
           {c.is_new && <CardFlag tone="new" label="новый" />}
           {flags.map(f => (
-            <CardFlag key={f.code} tone={f.code} label={f.label} />
+            <CardFlag
+              key={f.code}
+              tone={f.escalate ? `${f.code}_escalate` : f.code}
+              label={f.label}
+              icon={f.code === 'no_answer' ? <PhoneMissed size={9} /> : undefined}
+            />
           ))}
           {c.is_paused && <CardFlag tone="paused" label="на паузе" icon={<Pause size={9} />} />}
         </div>
@@ -956,6 +1124,10 @@ const FLAG_TONES = {
   needs_reply: 'bg-amber-100 text-amber-800 border-amber-200',
   silent:      'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]',
   undelivered: 'bg-red-100 text-red-700 border-red-200',
+  no_answer:   'bg-sky-100 text-sky-800 border-sky-200',
+  // Третий недозвон подряд — карточка перестаёт быть «просто перезвонить»
+  // и требует решения, поэтому меняет тон на тревожный.
+  no_answer_escalate: 'bg-orange-100 text-orange-800 border-orange-300',
   new:         'bg-emerald-100 text-emerald-700 border-emerald-200',
   paused:      'bg-amber-100 text-amber-700 border-amber-200',
 };
@@ -1354,11 +1526,10 @@ export default function Recruitment() {
   const [selectionMode,   setSelectionMode]   = useState(false);
   const [selectedIds,     setSelectedIds]     = useState(new Set());
   const [bulkLoading,     setBulkLoading]     = useState(false);
-  // hh.ru discard confirmation
+  // Подтверждение отказа (hh.ru и Авито)
   const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null); // {candidateId, newStage, candidate}
   const DEFAULT_REJECTION_MSG = 'Здравствуйте! К сожалению, ваша кандидатура не подошла для данной вакансии. Спасибо за проявленный интерес, желаем удачи в поиске работы!';
   const [rejectionMsg, setRejectionMsg] = useState(DEFAULT_REJECTION_MSG);
-  const [sendRejectionTg, setSendRejectionTg] = useState(false);
   const [msgTemplates, setMsgTemplates] = useState([]);
   useEffect(() => {
     api.get('/config/message-templates').then(r => setMsgTemplates(r.data || [])).catch(() => {});
@@ -1565,10 +1736,11 @@ export default function Recruitment() {
       setInterviewModal(candidate);
       return;
     }
-    // Warn before rejecting an hh.ru candidate — it sends them a notification
-    if (newStage === 'отказ' && candidate.source === 'hh') {
+    // Отказ подтверждаем для любой площадки, где есть переписка. Раньше
+    // условие было только на hh — а откликов с Авито теперь большинство, и
+    // они уходили в отказ молча, без единого слова кандидату.
+    if (newStage === 'отказ' && rejectionTarget(candidate)) {
       setRejectionMsg(DEFAULT_REJECTION_MSG);
-      setSendRejectionTg(false);
       setHhDiscardConfirm({ candidateId, newStage, candidate });
       return;
     }
@@ -1885,6 +2057,8 @@ export default function Recruitment() {
           onStageChange={requestStageChange}
           onResetHistory={resetCandidateHistory}
           onPauseToggle={handlePauseToggle}
+          templates={msgTemplates}
+          onCandidateChanged={loadCandidates}
         />
       )}
 
@@ -1898,7 +2072,9 @@ export default function Recruitment() {
               <div>
                 <h3 className="font-semibold text-base">Подтвердите отказ</h3>
                 <p className="text-sm text-[color:var(--color-muted-foreground)] mt-1">
-                  Кандидат получит письмо на hh.ru и увидит статус «Не подходит». Это действие нельзя отменить.
+                  {rejectionTarget(hhDiscardConfirm.candidate) === 'hh'
+                    ? 'Кандидат получит письмо на hh.ru и увидит статус «Не подходит». Это действие нельзя отменить.'
+                    : 'Текст уйдёт кандидату в переписку на Авито. Это действие нельзя отменить.'}
                 </p>
               </div>
             </div>
@@ -1929,15 +2105,6 @@ export default function Recruitment() {
                 />
               </div>
             </div>
-            {hhDiscardConfirm?.candidate?.telegram_chat_id && (
-              <div className="flex items-center gap-2 mb-3">
-                <input type="checkbox" id="sendRejTg" checked={sendRejectionTg}
-                  onChange={e => setSendRejectionTg(e.target.checked)} className="rounded" />
-                <label htmlFor="sendRejTg" className="text-xs cursor-pointer">
-                  Также отправить в Telegram (chat_id: <code>{hhDiscardConfirm.candidate.telegram_chat_id}</code>)
-                </label>
-              </div>
-            )}
             <div className="flex gap-2 justify-end">
               <button
                 className="btn btn-secondary text-sm"
@@ -1952,7 +2119,6 @@ export default function Recruitment() {
                   setHhDiscardConfirm(null);
                   stageChange(candidateId, newStage, {
                     rejection_message: rejectionMsg.trim() || null,
-                    send_telegram: sendRejectionTg,
                   });
                 }}
               >

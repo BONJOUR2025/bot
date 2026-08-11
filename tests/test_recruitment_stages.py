@@ -113,3 +113,51 @@ class TestLegacyMigration:
 
     def test_every_legacy_stage_maps_to_a_real_stage(self):
         assert set(rs.LEGACY_STAGE_MAP.values()) <= set(rs.STAGES)
+
+
+class TestNoAnswerFlag:
+    """Недозвон — состояние поверх этапа, как и «молчит».
+
+    Кандидат остаётся в «Ответил» (он ведь действительно ответил), но
+    карточка обязана показывать, что ему уже звонили и не застали — иначе
+    после пятнадцатого звонка непонятно, кому набирали, а кому нет.
+    """
+    NOW = datetime(2026, 8, 10, 12, 0, 0)
+
+    def test_no_attempts_no_flag(self):
+        assert rs.flags({}, now=self.NOW, call_attempts=0) == []
+
+    def test_single_attempt_reads_naturally(self):
+        [flag] = rs.flags({}, now=self.NOW, call_attempts=1,
+                          last_call_at=self.NOW - timedelta(minutes=10))
+        assert flag["code"] == rs.FLAG_NO_ANSWER
+        assert flag["label"] == "не дозвонился, только что"
+        assert flag["escalate"] is False
+
+    def test_repeat_attempts_are_counted(self):
+        [flag] = rs.flags({}, now=self.NOW, call_attempts=2,
+                          last_call_at=self.NOW - timedelta(hours=5))
+        assert flag["label"] == "не дозвонился ×2, 5 ч назад"
+        assert flag["attempts"] == 2
+
+    def test_days_for_older_attempts(self):
+        [flag] = rs.flags({}, now=self.NOW, call_attempts=2,
+                          last_call_at=self.NOW - timedelta(days=3))
+        assert flag["label"] == "не дозвонился ×2, 3 дн. назад"
+
+    def test_third_attempt_escalates(self):
+        """Звонить четвёртый раз бессмысленно — карточке пора требовать
+        решения, а не выглядеть как «просто перезвонить»."""
+        [flag] = rs.flags({}, now=self.NOW, call_attempts=rs.NO_ANSWER_ESCALATE_AT)
+        assert flag["escalate"] is True
+
+    def test_missing_timestamp_still_shows_the_count(self):
+        [flag] = rs.flags({}, now=self.NOW, call_attempts=2, last_call_at=None)
+        assert flag["label"] == "не дозвонился ×2"
+
+    def test_coexists_with_screening_flags(self):
+        """Кандидат может одновременно молчать в переписке и не брать трубку —
+        оба факта нужны, схлопывать их в один нельзя."""
+        state = {"status": "asking", "asked_at": (self.NOW - timedelta(days=2)).isoformat()}
+        codes = [f["code"] for f in rs.flags(state, now=self.NOW, call_attempts=1)]
+        assert codes == [rs.FLAG_NO_ANSWER, rs.FLAG_SILENT]

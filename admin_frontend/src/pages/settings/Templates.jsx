@@ -64,6 +64,7 @@ export default function SettingsTemplates() {
                 >
                   <option value="rejection">Отказ</option>
                   <option value="interview">Собеседование</option>
+                  <option value="no_answer">Не дозвонились</option>
                 </select>
                 <input
                   className="input flex-1 text-sm"
@@ -79,9 +80,12 @@ export default function SettingsTemplates() {
               <textarea
                 className="input w-full text-sm resize-none"
                 rows={3}
-                placeholder={t.type === 'interview'
-                  ? 'Здравствуйте, #name! Приглашаем на собеседование #date в #time. Место: #place'
-                  : 'Текст письма об отказе...'}
+                placeholder={
+                  t.type === 'interview'
+                    ? 'Здравствуйте, #name! Приглашаем на собеседование #date в #time. Место: #place'
+                    : t.type === 'no_answer'
+                      ? 'Здравствуйте! Пробовали до вас дозвониться, но не получилось. Когда вам удобно поговорить?'
+                      : 'Текст письма об отказе...'}
                 value={t.text}
                 onChange={(e) => updateTemplate(i, 'text', e.target.value)}
               />

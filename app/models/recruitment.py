@@ -261,6 +261,10 @@ class Candidate(Base):
     telegram_chat_id = Column(String, nullable=True, default="")
     telegram_username = Column(String, nullable=True, default="")
     telegram_link_code = Column(String, nullable=True)  # уникальный код для матчинга
+    # Неудачные попытки дозвониться: счётчик и время последней. Колонки
+    # остались от вырезанной телеграм-воронки и были пустыми у всех
+    # кандидатов, а смысл «повторный контакт после неудачной попытки»
+    # совпадает — см. app/services/candidate_outreach.py.
     follow_up_count = Column(Integer, nullable=False, default=0)
     follow_up_last_sent_at = Column(DateTime, nullable=True)
     pending_interview_date = Column(String, nullable=True)   # YYYY-MM-DD, ждёт подтверждения
@@ -345,6 +349,9 @@ class Candidate(Base):
             "profile_generated_at": self.profile_generated_at.isoformat() if self.profile_generated_at else None,
             "pending_question": self.pending_question or None,
             "pending_question_asked_at": self.pending_question_asked_at.isoformat() if self.pending_question_asked_at else None,
+            # Неудачные дозвоны (см. candidate_outreach.register_call_attempt).
+            "call_attempts": self.follow_up_count or 0,
+            "last_call_at": self.follow_up_last_sent_at.isoformat() if self.follow_up_last_sent_at else None,
             "last_message_text": self.last_message_text or "",
             "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
             "last_message_from": self.last_message_from or "",

@@ -42,8 +42,13 @@ HUMAN_STAGES = {STAGE_INTERVIEW, STAGE_HIRED, STAGE_REJECTED}
 FLAG_NEEDS_REPLY = "needs_reply"
 FLAG_SILENT = "silent"
 FLAG_UNDELIVERED = "undelivered"
+FLAG_NO_ANSWER = "no_answer"
 
 SILENT_AFTER = timedelta(hours=24)
+
+# Сколько неудачных дозвонов до того, как карточка начнёт требовать решения
+# (перезванивать четвёртый раз бессмысленно — нужен либо отказ, либо пауза).
+NO_ANSWER_ESCALATE_AT = 3
 
 
 def derive_stage(current_stage: str | None, state: dict | None) -> str:
@@ -94,17 +99,43 @@ def _silent_days(state: dict, now: datetime) -> int | None:
     return max(1, idle.days)
 
 
-def flags(state: dict | None, *, now: datetime | None = None) -> list[dict]:
+def _no_answer_label(count: int, last_at: datetime | None, now: datetime) -> str:
+    base = "не дозвонился" if count == 1 else f"не дозвонился ×{count}"
+    if not last_at:
+        return base
+    idle = now - last_at
+    if idle < timedelta(hours=1):
+        return f"{base}, только что"
+    if idle < timedelta(days=1):
+        return f"{base}, {max(1, int(idle.total_seconds() // 3600))} ч назад"
+    return f"{base}, {idle.days} дн. назад"
+
+
+def flags(state: dict | None, *, now: datetime | None = None,
+          call_attempts: int = 0, last_call_at: datetime | None = None) -> list[dict]:
     """Флаги состояния: что именно сейчас требует внимания.
 
     Каждый флаг — {"code", "label"}, чтобы список рендерился без словаря
     подписей на фронте и подпись оставалась одинаковой везде, включая
     уведомления.
+
+    Недозвоны приходят отдельными аргументами, а не через объект кандидата:
+    модуль описывает воронку и намеренно ничего не знает про SQLAlchemy —
+    иначе его нельзя было бы посчитать на голых данных в тестах.
     """
     state = state or {}
     now = now or datetime.utcnow()
     status = state.get("status")
     result: list[dict] = []
+
+    if call_attempts and call_attempts > 0:
+        result.append({
+            "code": FLAG_NO_ANSWER,
+            "label": _no_answer_label(call_attempts, last_call_at, now),
+            "attempts": call_attempts,
+            # Подсказка интерфейсу: пора не звонить снова, а решать.
+            "escalate": call_attempts >= NO_ANSWER_ESCALATE_AT,
+        })
 
     if status == "waiting_admin":
         if state.get("reason") == "send_failed":
