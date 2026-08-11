@@ -350,7 +350,7 @@ function CallOutcome({ candidate, hasPlatformChat, platformLabel, templates, onC
     setBusy(true);
     try {
       const res = await api.post(`/recruitment/candidates/${candidate.id}/no-answer`, {
-        send_message: send && hasPlatformChat,
+        send_message: Boolean(send && hasPlatformChat),
         text: text.trim() || null,
       });
       setAttempts(res.data.call_attempts);
@@ -469,8 +469,12 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   // Both job boards expose a chat, they just address it differently: hh by
   // negotiation id (external_id), Avito by messenger chat id. Avito applies of
   // type "by_call" carry no chat at all, hence the explicit check.
-  const isHh = candidate.source === 'hh' && candidate.external_id;
-  const isAvitoChat = candidate.source === 'avito' && candidate.platform_chat_id;
+  // Boolean(), а не голое &&: `'avito' === source && candidate.platform_chat_id`
+  // возвращает саму СТРОКУ chat_id, а не true. Пока значение только включало
+  // и выключало разметку, это не мешало — но стоило отправить его в тело
+  // запроса как `send_message`, и Pydantic ответил 422: строка вместо bool.
+  const isHh = Boolean(candidate.source === 'hh' && candidate.external_id);
+  const isAvitoChat = Boolean(candidate.source === 'avito' && candidate.platform_chat_id);
   const hasPlatformChat = isHh || isAvitoChat;
   const platformLabel = candidate.source === 'avito' ? 'Авито' : 'hh.ru';
 
