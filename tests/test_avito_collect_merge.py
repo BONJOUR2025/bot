@@ -160,3 +160,31 @@ class TestBacklogIsNotSpammed:
     def test_no_previous_sync_is_backlog(self):
         """Связка ещё ни разу не синхронизировалась — весь импорт исторический."""
         assert recruitment_sync.is_new_arrival(self.SYNCED_AT, None) is False
+
+
+class TestNameFromApplication:
+    """Мессенджер отдаёт имя аккаунта, отклик — настоящие ФИО.
+
+    «Бутте Роман Валерьевич» лежал в воронке как «Олег»: его отклик от
+    19 июня не попадал в 30-дневное окно, а чат был жив. Найти человека по
+    фамилии было невозможно — что и случилось, когда его искали.
+    """
+
+    def test_window_covers_an_application_from_two_months_ago(self):
+        """Окно должно перекрывать срок жизни объявления, а не месяц."""
+        import inspect
+        from app.services import avito_api
+
+        default = inspect.signature(
+            avito_api.get_applications_for_vacancy).parameters["days_back"].default
+        assert default >= 120, "30 дней обрезали историю: 7 откликов вместо 23"
+
+    def test_application_record_is_the_richer_one(self, sources):
+        """Именно поэтому при слиянии побеждает отклик, а не чат."""
+        sources["apps"] = [_app("6a3573905870b522d88fabfc", "u2i-x",
+                                "Бутте Роман Валерьевич", phone="79533528962")]
+        sources["chats"] = [_chat("u2i-x", "Олег")]
+
+        [got] = _collect()
+        assert got["name"] == "Бутте Роман Валерьевич"
+        assert got["phone"] == "79533528962"

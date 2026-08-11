@@ -76,12 +76,23 @@ async def get_applications_for_vacancy(
     access_token: str,
     user_id: str,
     avito_vacancy_id: str,
-    days_back: int = 30,
+    days_back: int = 180,
 ) -> list[dict]:
     """
     Fetch job applications for a vacancy using the Avito Jobs API v1 two-step flow:
     1. GET /job/v1/applications/get_ids — returns application IDs
     2. POST /job/v1/applications/get_by_ids — returns full applicant data
+
+    Окно было 30 дней, и это тихо обрезало историю: по боевому объявлению
+    оно давало 7 откликов вместо 23. Кандидат, откликнувшийся 19 июня, в
+    выдачу не попадал — а его чат был жив, он отвечал на наши вопросы, и
+    в воронке он оказался только как безымянный «Олег» из мессенджера.
+
+    Дело в том, что мессенджер отдаёт ИМЯ АККАУНТА, а отклик — настоящие
+    ФИО, телефон и возраст. Пока отклик за окном, карточка остаётся с
+    ником вместо имени, и найти человека по фамилии невозможно.
+    Наплыва старых карточек это не вызывает: совпадение по chat_id
+    дополняет уже заведённые, а опрос им не запускается (is_new_arrival).
     """
     since = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
 

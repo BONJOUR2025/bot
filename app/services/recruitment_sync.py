@@ -600,13 +600,22 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 Candidate.source == src.source,
                 Candidate.platform_chat_id == item["platform_chat_id"],
             ).first()
-            if exists and exists.external_id != ext_id and item.get("phone"):
-                # Пришёл формальный отклик к карточке, заведённой из чата:
-                # переносим на неё id заявки и данные, которых в чате нет.
+            if exists and exists.external_id == exists.platform_chat_id and ext_id != exists.external_id:
+                # Пришёл формальный отклик к карточке, заведённой из чата
+                # (у такой external_id совпадает с id чата). Переносим на неё
+                # данные, которых в мессенджере нет.
+                #
+                # Имя тоже: мессенджер отдаёт имя аккаунта, а отклик —
+                # настоящие ФИО. Из-за этого «Бутте Роман Валерьевич» лежал
+                # в воронке как «Олег», и найти его по фамилии было нельзя.
+                if item.get("name"):
+                    exists.name = item["name"]
                 exists.external_id = ext_id
                 exists.phone = exists.phone or item.get("phone", "")
                 exists.age = exists.age or item.get("age")
                 exists.resume_url = exists.resume_url or item.get("resume_url", "")
+                exists.notes = item.get("notes") or exists.notes
+                logger.info("[Sync] avito: карточка из чата дополнена откликом — %s", exists.name)
         if exists:
             # Дозаполняем chat_id у уже импортированных: без него вебхук hh
             # (он приходит с chat_id, а не с id отклика) не сопоставить с
