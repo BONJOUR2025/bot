@@ -25,19 +25,26 @@ from datetime import datetime, timedelta
 STAGE_NEW = "новый"
 STAGE_SCREENING = "опрос"
 STAGE_ANSWERED = "ответил"
+# Дозвонились, поговорили — кандидат взял паузу на подумать. Отдельный этап,
+# потому что иначе такие висят в «Ответил» вперемешку с теми, кому ещё не
+# звонили, и прозвон приходится начинать с попытки вспомнить, с кем уже
+# говорили.
+STAGE_THINKING = "думает"
 STAGE_INTERVIEW = "собеседование"
 STAGE_HIRED = "нанят"
 STAGE_REJECTED = "отказ"
 
-STAGES = [STAGE_NEW, STAGE_SCREENING, STAGE_ANSWERED,
+STAGES = [STAGE_NEW, STAGE_SCREENING, STAGE_ANSWERED, STAGE_THINKING,
           STAGE_INTERVIEW, STAGE_HIRED, STAGE_REJECTED]
 
 # Этапы, которые ведёт бот по ходу опроса.
 BOT_STAGES = {STAGE_NEW, STAGE_SCREENING, STAGE_ANSWERED}
 # Этапы, которые ставит человек. Бот их не трогает никогда: если кандидата
 # позвали на собеседование, дописанный им ответ не должен утащить карточку
-# обратно в «опрос».
-HUMAN_STAGES = {STAGE_INTERVIEW, STAGE_HIRED, STAGE_REJECTED}
+# обратно в «опрос». «Думает» здесь по той же причине и с большим весом:
+# кандидат на этом этапе как раз и должен написать «я согласен», и этот
+# ответ обязан оставить карточку на месте, а не сбросить её в «опрос».
+HUMAN_STAGES = {STAGE_THINKING, STAGE_INTERVIEW, STAGE_HIRED, STAGE_REJECTED}
 
 FLAG_NEEDS_REPLY = "needs_reply"
 FLAG_SILENT = "silent"

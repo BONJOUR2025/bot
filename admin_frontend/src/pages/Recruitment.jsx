@@ -26,6 +26,7 @@ const STAGES = [
   { key: 'новый',         label: 'Новый',          color: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-400',     border: 'border-t-blue-400'   },
   { key: 'опрос',         label: 'Опрос',          color: 'bg-cyan-100 text-cyan-700',       dot: 'bg-cyan-400',     border: 'border-t-cyan-400'   },
   { key: 'ответил',       label: 'Ответил',        color: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-400',    border: 'border-t-amber-400'  },
+  { key: 'думает',        label: 'Думает',         color: 'bg-orange-100 text-orange-700',   dot: 'bg-orange-400',   border: 'border-t-orange-400' },
   { key: 'собеседование', label: 'Собеседование',  color: 'bg-violet-100 text-violet-700',   dot: 'bg-violet-400',   border: 'border-t-violet-400' },
   { key: 'нанят',         label: 'Нанят ✓',        color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-400',  border: 'border-t-emerald-400'},
   { key: 'отказ',         label: 'Отказ',          color: 'bg-red-100 text-red-700',         dot: 'bg-red-400',      border: 'border-t-red-400'    },
@@ -1198,10 +1199,53 @@ function FunnelStats({ candidates, activeStage, onSelectStage }) {
 function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMode, selectedIds, onToggle }) {
   const [dragOver, setDragOver] = useState(null);
   const [dragging, setDragging] = useState(null);
+  const scrollRef = useRef(null);
+  // Показывать стрелки только когда листать действительно есть куда —
+  // иначе они висят как украшение и врут о состоянии доски.
+  const [overflow, setOverflow] = useState({ left: false, right: false });
+
+  const syncOverflow = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setOverflow({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+  }, []);
+
+  useEffect(() => {
+    syncOverflow();
+    const el = scrollRef.current;
+    if (!el) return;
+    // ResizeObserver, а не событие window: доска сужается ещё и при
+    // сворачивании списка вакансий, когда размер окна не меняется.
+    const ro = new ResizeObserver(syncOverflow);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncOverflow, candidates.length]);
+
+  function scrollByColumn(dir) {
+    const el = scrollRef.current;
+    if (!el) return;
+    const col = el.querySelector('[data-kanban-col]');
+    el.scrollBy({ left: dir * ((col?.offsetWidth || 220) + 12), behavior: 'smooth' });
+  }
 
   return (
-    <div className="overflow-x-auto pb-4">
-      <div className="flex gap-4 min-w-max">
+    <div className="relative">
+      {/* Стрелки поверх доски. Колесо мыши здесь намеренно не перехватывается:
+          доска занимает почти весь экран, и превращать вертикальную прокрутку
+          в горизонтальную значило бы отобрать прокрутку страницы. Нативный
+          Shift+колесо при этом работает как обычно. */}
+      {overflow.left && (
+        <ScrollArrow side="left" onClick={() => scrollByColumn(-1)} />
+      )}
+      {overflow.right && (
+        <ScrollArrow side="right" onClick={() => scrollByColumn(1)} />
+      )}
+      <div ref={scrollRef} onScroll={syncOverflow}
+           className="overflow-x-auto pb-4 snap-x snap-proximity scroll-smooth">
+        <div className="flex gap-3">
         {STAGES.map(stage => {
           const cards = candidates.filter(c => c.stage === stage.key);
           const isTarget = dragOver === stage.key;
@@ -1211,7 +1255,12 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
             c => (c.flags || []).some(f => f.code === 'needs_reply' || f.code === 'undelivered')
           ).length;
           return (
-            <div key={stage.key} id={`kanban-col-${stage.key}`} className="w-[230px] flex flex-col">
+            // Колонки тянутся по доступной ширине вместо фиксированных 230px:
+            // раньше семь колонок всегда давали горизонтальную прокрутку,
+            // даже когда места на экране хватало. Ниже 200px не сжимаются —
+            // там карточка перестаёт читаться, и лучше честно прокрутить.
+            <div key={stage.key} id={`kanban-col-${stage.key}`} data-kanban-col
+                 className="flex-1 min-w-[200px] max-w-[300px] flex flex-col snap-start">
               <div className="flex items-center justify-between mb-3 px-0.5">
                 <div className="flex items-center gap-2">
                   {selectionMode && cards.length > 0 && (
@@ -1294,8 +1343,25 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
             </div>
           );
         })}
+        </div>
       </div>
     </div>
+  );
+}
+
+function ScrollArrow({ side, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={side === 'left' ? 'Предыдущие этапы' : 'Следующие этапы'}
+      className={`absolute top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full flex items-center justify-center
+        bg-[color:var(--color-surface)] border border-[color:var(--color-border)] shadow-md
+        text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]
+        hover:border-[color:var(--color-primary)]/40 transition-colors
+        ${side === 'left' ? '-left-3' : '-right-3'}`}
+    >
+      <ChevronDown size={16} className={side === 'left' ? 'rotate-90' : '-rotate-90'} />
+    </button>
   );
 }
 
@@ -1853,14 +1919,38 @@ export default function Recruitment() {
 
       {/* Two-panel layout */}
       {mainView === 'funnel' && <div className={`flex ${isMobile ? 'flex-col' : ''} gap-0`}>
+        {/* Свёрнутый список вакансий: 240px — заметная доля доски, а когда
+            вакансия одна, панель всё это время держит выбор из одного
+            пункта. В свёрнутом виде остаётся полоска, чтобы вернуть её. */}
+        {!isMobile && !showVacList && (
+          <aside className="flex-shrink-0 w-9 border-r border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10 flex justify-center pt-4">
+            <button
+              onClick={() => setShowVacList(true)}
+              title="Показать список вакансий"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-muted)] hover:text-[color:var(--color-foreground)] transition-colors"
+            >
+              <ChevronDown size={15} className="-rotate-90" />
+            </button>
+          </aside>
+        )}
+
         {/* Left — vacancy list */}
-        {(!isMobile || showVacList) && (
+        {showVacList && (
           <aside className={`flex-shrink-0 border-b sm:border-b-0 sm:border-r border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10 ${isMobile ? 'w-full' : 'w-60'}`}>
-            <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+            <div className="px-4 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-xs text-[color:var(--color-muted-foreground)] cursor-pointer">
                 <input type="checkbox" checked={showClosed} onChange={e => setShowClosed(e.target.checked)} className="rounded" />
                 Показать закрытые
               </label>
+              {!isMobile && (
+                <button
+                  onClick={() => setShowVacList(false)}
+                  title="Свернуть — освободить место доске"
+                  className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-muted)] hover:text-[color:var(--color-foreground)] transition-colors"
+                >
+                  <ChevronDown size={14} className="rotate-90" />
+                </button>
+              )}
             </div>
             {loading ? (
               <div className="py-8 text-center text-sm text-[color:var(--color-muted-foreground)]">Загрузка...</div>

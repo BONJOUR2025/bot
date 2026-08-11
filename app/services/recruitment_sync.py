@@ -211,6 +211,28 @@ async def _notify_new_candidates(source: str, link, candidates: list[dict], back
     await send_notification("\n".join(lines))
 
 
+def should_poll_messages(candidate) -> bool:
+    """Нужно ли тянуть новые сообщения по этому кандидату.
+
+    Отбор строится на состоянии переписки, а не на названии этапа: этапы уже
+    один раз переименовали, и опрос из-за этого замолчал целиком (см. большой
+    комментарий в _check_hh_messages).
+
+    Опрашиваем три случая, и все три — это «от человека ещё может прийти
+    сообщение»: опрос идёт (`asking`), опрос завершён (`done` — как раз
+    «Ответил»/«Думает», где и ждёшь «я согласен»), опрос не запускался
+    (`None` — переписку ведут руками). Не опрашиваем только промежуточные
+    состояния вроде `queued`/`waiting_admin`, где ход не за кандидатом.
+
+    Живёт отдельной функцией, потому что раньше тест держал у себя копию
+    этого условия — и такая копия уже однажды позволила боевому багу
+    проехать мимо зелёных тестов.
+    """
+    from app.services import quick_screening
+
+    return quick_screening.load_state(candidate).get("status") in ("asking", "done", None)
+
+
 async def _check_hh_messages(db, src, token: str) -> None:
     """Poll hh.ru messages for active candidates, notify on new applicant messages."""
     from app.models.recruitment import Candidate
@@ -237,12 +259,17 @@ async def _check_hh_messages(db, src, token: str) -> None:
         Candidate.created_at >= cutoff,
     ).all()
     # Опрашиваем тех, у кого идёт быстрый опрос, либо тех, у кого переписка
-    # ведётся вручную (опрос не запускался/завершён) — во втором случае
-    # входящее превращается в обычное уведомление админу.
-    candidates = [
-        c for c in candidates
-        if quick_screening.load_state(c).get("status") == "asking" or not quick_screening.load_state(c)
-    ]
+    # ведётся вручную (опрос не запускался или уже завершён) — во втором
+    # случае входящее превращается в обычное уведомление админу.
+    #
+    # Условие «завершён» тут раньше отсутствовало: код проверял только
+    # «не запускался», хотя комментарий обещал оба случая. Из-за этого
+    # кандидаты в «Ответил» выпадали из опроса совсем — а это ровно те, от
+    # кого ждёшь «я согласен» после звонка. С этапом «Думает» цена такой
+    # тишины стала очевидной, поэтому фильтр приведён к обещанному смыслу:
+    # не опрашиваем только тех, кто прямо сейчас в середине опроса и ждёт
+    # своей очереди в другом состоянии.
+    candidates = [c for c in candidates if should_poll_messages(c)]
 
     logger.info("[Sync] hh message check: %d active candidates to poll", len(candidates))
 
@@ -326,7 +353,12 @@ async def _route_to_quick_screening(cand_id: int, src, token: str,
     db = SessionLocal()
     try:
         c = db.query(Candidate).filter(Candidate.id == cand_id).first()
-        if not c or not quick_screening.load_state(c):
+        # Только идущий опрос действительно поглощает сообщение. Раньше здесь
+        # проверялось лишь наличие состояния — и ответ кандидата с уже
+        # завершённым опросом уходил в handle_incoming, тот молча выходил
+        # (status != "asking"), а вызывающий, увидев True, пропускал своё
+        # уведомление. Сообщение исчезало целиком: ни ответа, ни алерта.
+        if not c or quick_screening.load_state(c).get("status") != "asking":
             return False
         vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
         # Continuation is keyed on the candidate already having a running

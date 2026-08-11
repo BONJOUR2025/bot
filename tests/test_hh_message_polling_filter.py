@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 
-from app.services import quick_screening, recruitment_stages as rs
+from app.services import quick_screening, recruitment_stages as rs, recruitment_sync
 
 
 class _Candidate:
@@ -27,12 +27,13 @@ class _Candidate:
 
 
 def _selected(candidates):
-    """Тот же отбор, что делает _check_hh_messages после SQL-фильтра."""
-    return [
-        c for c in candidates
-        if quick_screening.load_state(c).get("status") == "asking"
-        or not quick_screening.load_state(c)
-    ]
+    """Отбор берётся из боевого кода, а не переписывается здесь.
+
+    Раньше тут лежала копия условия — и ровно такая копия однажды уже дала
+    зелёные тесты при сломанном проде: тест проверял свою версию логики,
+    а не ту, что выполняется.
+    """
+    return [c for c in candidates if recruitment_sync.should_poll_messages(c)]
 
 
 ASKING = {"status": "asking", "phase": "interest", "idx": 0, "answers": []}
@@ -61,7 +62,22 @@ class TestPollingIsStageNameIndependent:
         c = _Candidate(rs.STAGE_NEW, None)
         assert _selected([c]) == [c]
 
-    def test_finished_and_handed_over_screens_are_not_polled(self):
-        done = _Candidate(rs.STAGE_ANSWERED, {"status": "done"})
+    def test_finished_screens_are_polled(self):
+        """Кандидат прошёл опрос до конца и лежит в «Ответил»/«Думает» — от
+        него как раз и ждёшь «я согласен» после звонка.
+
+        Раньше такие выпадали из опроса: код проверял только «опрос не
+        запускался», хотя комментарий рядом обещал ещё и «завершён». Ответ
+        такого кандидата не забирался вовсе, а по пути вебхука его глушил
+        _route_to_quick_screening — сообщение исчезало целиком, без ответа и
+        без уведомления. С этапом «Думает» это стало явной дырой.
+        """
+        for stage in (rs.STAGE_ANSWERED, rs.STAGE_THINKING):
+            c = _Candidate(stage, {"status": "done"})
+            assert _selected([c]) == [c]
+
+    def test_intermediate_states_are_not_polled(self):
+        """Ход не за кандидатом: опрос ждёт рабочих часов либо решения админа."""
+        queued = _Candidate(rs.STAGE_NEW, {"status": "queued"})
         waiting = _Candidate(rs.STAGE_NEW, {"status": "waiting_admin"})
-        assert _selected([done, waiting]) == []
+        assert _selected([queued, waiting]) == []
