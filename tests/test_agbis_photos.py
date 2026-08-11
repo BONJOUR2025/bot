@@ -176,7 +176,11 @@ class TestGetPhoto:
         monkeypatch.setattr(ap, "_download", refused)
         with pytest.raises(ap.PhotoStorageError) as exc:
             ap.get_photo("MD5F")
-        assert "недоступен" in str(exc.value)
+        # Текст уходит прямо в интерфейс, поэтому проверяем, что он объясняет
+        # оператору, что проверять, а не пересказывает исключение.
+        assert "не отвечает" in str(exc.value)
+        assert "connection refused" not in str(exc.value)
+        ap._clear_outage()
 
     def test_empty_md5_rejected(self, agent):
         with pytest.raises(ap.PhotoStorageError):
@@ -194,6 +198,13 @@ class TestCredentials:
         captured = {}
 
         class _Httpx:
+            # Логин собирает таймаут через httpx.Timeout (короткий на
+            # соединение, длинный на чтение), поэтому подделка обязана его
+            # иметь — иначе тест падает не на том, что проверяет.
+            class Timeout:
+                def __init__(self, read, connect=None):
+                    self.read, self.connect = read, connect
+
             @staticmethod
             def get(url, params=None, timeout=None):
                 captured["url"] = url

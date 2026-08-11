@@ -52,13 +52,66 @@ logger = logging.getLogger(__name__)
 # conservative rather than squeezing the last minute out of it.
 SESSION_TTL_S = 600
 REQUEST_TIMEOUT_S = 60
+# Дозвониться и договориться о шифровании — быстро; качать снимок — долго.
+# Раньше и на то, и на другое отводилось 60 секунд, и выключенный компьютер
+# в салоне стоил минуты ожидания на КАЖДЫЙ снимок: заказ из трёх фотографий
+# висел «Загрузка из хранилища…» несколько минут и заканчивался ничем.
+# Недоступность видна за секунды, а на скорость скачивания большого файла
+# это не влияет — там работает read-таймаут.
+CONNECT_TIMEOUT_S = 8
+
+
+def _timeout():
+    """Таймаут httpx: короткий на соединение, длинный на чтение."""
+    import httpx
+
+    return httpx.Timeout(REQUEST_TIMEOUT_S, connect=CONNECT_TIMEOUT_S)
+
+
 # Room for one very large order to be viewed end to end without evicting
 # itself; the cap is enforced after each write, oldest access first.
 CACHE_SWEEP_MARGIN = 0.9
 
+# ── Размыкатель ───────────────────────────────────────────────────────
+# Хранилище — компьютер в салоне, и выключен он целиком, а не для одного
+# снимка. Узнав об этом один раз, незачем выяснять то же самое заново для
+# каждой следующей фотографии: пользователь всё равно открывает их подряд.
+# Полминуты — чтобы включённый обратно агент подхватился сам, без
+# перезапуска процесса.
+_OUTAGE_TTL_S = 30
+_outage: tuple[str, float] | None = None  # (причина, действует до)
+
+
+def _outage_reason() -> str | None:
+    if _outage and _outage[1] > time.time():
+        return _outage[0]
+    return None
+
+
+def _mark_outage(reason: str) -> None:
+    global _outage
+    _outage = (reason, time.time() + _OUTAGE_TTL_S)
+
+
+def _clear_outage() -> None:
+    global _outage
+    _outage = None
+
 
 class PhotoStorageError(RuntimeError):
     """Agent unreachable, credentials rejected, or photo missing."""
+
+
+def _unreachable_message(exc: Exception) -> str:
+    """Причина недоступности словами, понятными тому, кто это чинит.
+
+    Текст уходит прямо в интерфейс, а «_ssl.c:975: The handshake operation
+    timed out» не подсказывает оператору ничего. Подробности при этом не
+    теряются — они уходят в лог.
+    """
+    logger.warning("Хранилище фотографий недоступно: %r", exc)
+    return ("Хранилище фотографий не отвечает. Обычно это значит, что компьютер "
+            "в салоне выключен или остался без интернета.")
 
 
 @dataclass(frozen=True)
@@ -141,10 +194,10 @@ def _login(agent: StorageAgent) -> str:
                 "dep_id": settings.agbis_storage_dep_id,
                 "AsUser": 1,
             },
-            timeout=REQUEST_TIMEOUT_S,
+            timeout=_timeout(),
         )
     except Exception as exc:
-        raise PhotoStorageError(f"Агент хранилища недоступен: {exc}") from exc
+        raise PhotoStorageError(_unreachable_message(exc)) from exc
     if resp.status_code != 200:
         raise PhotoStorageError(f"Агент отклонил вход: HTTP {resp.status_code}")
 
@@ -300,7 +353,7 @@ def _download(agent: StorageAgent, session_id: str, md5: str):
             "dont_calc_current_size": 1,
             "FileID": md5,
         },
-        timeout=REQUEST_TIMEOUT_S,
+        timeout=_timeout(),
     )
 
 
@@ -318,18 +371,33 @@ def get_photo(md5: str) -> bytes:
     if cached is not None:
         return cached
 
+    # Проверяется до блокировки: иначе снимки успели бы выстроиться в
+    # очередь за первым, который сейчас честно выжидает свой таймаут.
+    reason = _outage_reason()
+    if reason:
+        raise PhotoStorageError(reason)
+
     with _fetch_lock:
         # Another request may have fetched it while we waited for the lock.
         cached = cache_get(md5)
         if cached is not None:
             return cached
+        reason = _outage_reason()
+        if reason:
+            raise PhotoStorageError(reason)
 
-        agent = resolve_agent()
-        session_id = _get_session(agent)
+        try:
+            agent = resolve_agent()
+            session_id = _get_session(agent)
+        except PhotoStorageError as exc:
+            _mark_outage(str(exc))
+            raise
         try:
             resp = _download(agent, session_id, md5)
         except Exception as exc:
-            raise PhotoStorageError(f"Агент хранилища недоступен: {exc}") from exc
+            msg = _unreachable_message(exc)
+            _mark_outage(msg)
+            raise PhotoStorageError(msg) from exc
 
         # A stale session comes back as an error page, not as a 401 — hence
         # the content-type check rather than a status check alone.
@@ -338,14 +406,21 @@ def get_photo(md5: str) -> bytes:
             try:
                 resp = _download(agent, session_id, md5)
             except Exception as exc:
-                raise PhotoStorageError(f"Агент хранилища недоступен: {exc}") from exc
+                msg = f"Агент хранилища недоступен: {exc}"
+                _mark_outage(msg)
+                raise PhotoStorageError(msg) from exc
 
         if resp.status_code != 200:
             raise PhotoStorageError(f"Агент вернул HTTP {resp.status_code}")
         data = resp.content
         if not _looks_like_image(data):
+            # Не размыкаем: агент ответил, просто этого снимка у него нет —
+            # соседние вполне могут найтись.
             raise PhotoStorageError("Агент не вернул изображение — снимка нет в хранилище.")
 
+        # Дошли до байтов — значит хранилище живо, даже если минуту назад
+        # оно молчало.
+        _clear_outage()
         cache_put(md5, data)
         return data
 
