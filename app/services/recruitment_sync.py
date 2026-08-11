@@ -408,37 +408,102 @@ def _asked_at_ts(state: dict) -> float | None:
     return _iso_to_ts((state or {}).get("asked_at"))
 
 
-async def _check_avito_messages(db, src, token: str) -> None:
-    """Poll Avito chats for candidates in an active quick screen.
+_SOURCE_LABEL = {"avito": "Авито", "hh": "hh.ru"}
 
-    Unlike hh, Avito is polled only for these candidates: every other Avito
-    candidate has no conversation we drive, and the Messenger API is both
-    rate-limited and gated behind the "Максимальный" tariff.
+
+async def notify_unhandled_message(cand_id: int, name: str, text: str,
+                                   msg_id: str, source: str) -> bool:
+    """Сообщение, которое опрос не забрал, — довести до админа.
+
+    Нужно потому, что «опрос закончен» не значит «разговор закончен»:
+    кандидат отвечает на приглашение, пишет «когда удобно», уточняет адрес.
+    Раньше у Авито такого уведомления не было вовсе — ни строчки кода, — и
+    подобное сообщение оседало только в карточке. Пять человек просидели так
+    полдня, включая тех, кому мы сами написали «когда вам удобно поговорить?».
+
+    Дедупликация по Candidate.last_msg_id: помечаем ДО отправки, поэтому
+    вебхук и опрос, увидев одно и то же сообщение, уведомят один раз.
+    Возвращает True, если уведомление ушло.
+    """
+    from app.db.session import SessionLocal
+    from app.models.recruitment import Candidate
+    from app.services.notify import send_notification
+
+    text = (text or "").strip()
+    if not text:
+        return False
+
+    own = SessionLocal()
+    try:
+        c = own.query(Candidate).filter(Candidate.id == cand_id).first()
+        if not c:
+            return False
+        if msg_id and c.last_msg_id == msg_id:
+            return False  # уже уведомляли об этом сообщении
+        c.last_msg_id = msg_id or c.last_msg_id
+        own.commit()
+    finally:
+        own.close()
+
+    label = _SOURCE_LABEL.get(source, source)
+    ok = await send_notification(
+        f"💬 <b>Новое сообщение от кандидата ({label})</b>\n"
+        f"<b>{name}</b>: {text[:200]}"
+    )
+    if not ok:
+        logger.warning("[Sync] %s notification FAILED for %s", source, name)
+    return ok
+
+
+async def _check_avito_messages(db, src, token: str) -> None:
+    """Poll Avito chats for candidates we may still owe an answer.
+
+    Раньше здесь опрашивались только кандидаты с ИДУЩИМ опросом, а всё
+    остальное отбрасывалось строкой `if status != "asking": continue`. Но
+    разговор не заканчивается вместе с опросом, и такие сообщения не получали
+    ни ответа, ни уведомления — в отличие от hh, где уведомление админу было
+    с самого начала. Теперь опрашиваем по общему предикату
+    should_poll_messages, а то, что опрос не забрал, уходит админу.
     """
     from app.models.recruitment import Candidate, Vacancy
     from app.services import avito_api, quick_screening
 
+    from app.services import recruitment_stages as rs
+
+    cutoff = datetime.utcnow() - timedelta(days=60)
     candidates = db.query(Candidate).filter(
         Candidate.source == "avito",
         Candidate.platform_chat_id.isnot(None),
         Candidate.platform_chat_id != "",
-        Candidate.quick_state_json.isnot(None),
-        Candidate.quick_state_json != "",
+        Candidate.stage.notin_([rs.STAGE_HIRED, rs.STAGE_REJECTED]),
+        Candidate.created_at >= cutoff,
     ).all()
     if not candidates:
         return
 
-    active = []
+    # Кого опрашивать — тем же предикатом, что и hh: опрос идёт, опрос
+    # завершён, опроса не было. Раньше здесь стояло жёсткое «только asking»,
+    # из-за чего половина живых разговоров была невидима.
+    #
+    # Отсечка по времени и по терминальным этапам — потому что Messenger API
+    # Авито и лимитирован по частоте, и доступен только на «Максимальном»
+    # тарифе: перебирать все 45 чатов, включая прошлогодние, ни к чему.
+    watched = []
     for c in candidates:
-        if quick_screening.load_state(c).get("status") != "asking":
+        if not should_poll_messages(c):
             continue
-        vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
-        # See _route_to_quick_screening: a running screen is polled regardless
-        # of the vacancy toggle, so manually-started ones keep working.
-        if quick_screening.get_questions(vacancy):
-            active.append(c.id)
+        state = quick_screening.load_state(c)
+        if state.get("status") == "asking":
+            vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+            # See _route_to_quick_screening: a running screen is polled regardless
+            # of the vacancy toggle, so manually-started ones keep working.
+            if not quick_screening.get_questions(vacancy):
+                continue
+        watched.append((c.id, c.name, state.get("status") == "asking"))
 
-    for cand_id in active:
+    logger.info("[Sync] avito message check: %d chats to poll", len(watched))
+
+    for cand_id, cand_name, screening in watched:
         try:
             c = db.query(Candidate).filter(Candidate.id == cand_id).first()
             messages = await avito_api.get_messages(token, src.employer_id, c.platform_chat_id)
@@ -458,6 +523,22 @@ async def _check_avito_messages(db, src, token: str) -> None:
                     db, c, newest.get("text", ""),
                     "applicant" if newest.get("author_type") == "applicant" else "employer",
                 )
+
+            if not incoming:
+                continue
+            newest_in = max(incoming, key=lambda m: _iso_to_ts(m.get("created_at")) or 0)
+
+            if not screening:
+                # Опрос не идёт — разговор ведёт человек, наше дело сообщить.
+                # Уведомляем, только если последнее слово в чате за кандидатом:
+                # если после его реплики уже ответили мы, дёргать админа не за
+                # чем. get_messages отдаёт по возрастанию времени, поэтому
+                # «последнее слово» — это просто последний элемент.
+                if messages[-1]["author_type"] != "applicant":
+                    continue
+                await notify_unhandled_message(
+                    cand_id, cand_name, newest_in.get("text", ""), newest_in["id"], "avito")
+                continue
 
             asked_ts = _asked_at_ts(quick_screening.load_state(c))
             if asked_ts is not None:

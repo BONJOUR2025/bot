@@ -124,6 +124,13 @@ async def _process(msg: dict) -> None:
     from app.services import avito_api, quick_screening
     from app.services.recruitment_sync import _route_to_quick_screening
 
+    # Разговор без опроса: заполняется ниже, а уведомление уходит уже после
+    # закрытия сессии — держать её открытой на время сетевого вызова в
+    # Telegram незачем, а делать это внутри try/except значило бы списать
+    # ошибку отправки на «не смогли найти кандидата».
+    notify_args: tuple | None = None
+    cand_id = token = src_snapshot = None
+
     db = SessionLocal()
     try:
         src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "avito").first()
@@ -145,27 +152,41 @@ async def _process(msg: dict) -> None:
         # передан админу — именно там переписку ведут руками.
         if msg["text"]:
             quick_screening.record_last_message(db, candidate, msg["text"], "applicant")
-        # Only chats with a running screen are driven from here; anything else
-        # is just a conversation the admin handles manually.
+
         state_status = quick_screening.load_state(candidate).get("status")
         if state_status != "asking":
-            log.info("avito webhook: candidate %s is not in an active screen (%s), ignoring",
+            # Опрос не идёт — но разговор идёт. Раньше здесь был просто выход,
+            # и сообщение оседало в карточке, о которой никто не знал: человек
+            # отвечал на наше же «когда вам удобно поговорить?» и не получал
+            # ничего. Отвечать за админа мы не вправе, а сказать ему — обязаны.
+            log.info("avito webhook: candidate %s is not in an active screen (%s), notifying admin",
                      candidate.id, state_status)
-            return
-        if not msg["text"]:
-            return  # image/system message carries no answer to record
-
-        token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
-        cand_id = candidate.id
-        # Снимок вместо самого ORM-объекта: ниже сессия уже закрыта, а
-        # отправка сообщения читает src.employer_id — на detached-инстансе это
-        # отказ в самый неудобный момент (кандидат ждёт ответа).
-        src_snapshot = SimpleNamespace(source="avito", employer_id=src.employer_id)
+            notify_args = (candidate.id, candidate.name, msg["text"], msg["message_id"])
+        elif msg["text"]:
+            token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
+            cand_id = candidate.id
+            # Снимок вместо самого ORM-объекта: ниже сессия уже закрыта, а
+            # отправка сообщения читает src.employer_id — на detached-инстансе это
+            # отказ в самый неудобный момент (кандидат ждёт ответа).
+            src_snapshot = SimpleNamespace(source="avito", employer_id=src.employer_id)
+        # else: картинка или системное сообщение — ответа в нём нет
     except Exception:
         log.warning("avito webhook: failed to resolve candidate", exc_info=True)
         return
     finally:
         db.close()
+
+    if notify_args:
+        from app.services.recruitment_sync import notify_unhandled_message
+        try:
+            await notify_unhandled_message(*notify_args, "avito")
+        except Exception:
+            log.warning("avito webhook: admin notification failed for candidate %s",
+                        notify_args[0], exc_info=True)
+        return
+
+    if token is None:
+        return
 
     try:
         await _route_to_quick_screening(cand_id, src_snapshot, token, msg["text"], msg["message_id"])
