@@ -1,0 +1,162 @@
+"""Импорт кандидатов Авито: отклики И чаты, а не одно из двух.
+
+Найдено в бою. `_collect_avito` выбирал источник: пробовал платный API
+откликов, а при 402 откатывался на чаты мессенджера. Пока подписки не было,
+импорт шёл по чатам и заводил карточку каждому, кто написал. Как только
+«Максимальный» включили, импорт молча перешёл на API откликов — а тот
+отдаёт только формальные отклики: 7 против 67 чатов по одному объявлению.
+
+Переключение задумывалось бесшумным («подписка включилась — платный путь
+берёт верх сам»), и оно таким и было: воронка сузилась в девять раз, никто
+не заметил, а живые кандидаты остались без ответа.
+"""
+from __future__ import annotations
+
+import pytest
+
+from app.services import recruitment_sync
+from tests.conftest import run_async
+
+
+def _app(app_id, chat, name, phone="79000000000"):
+    return {"external_id": app_id, "name": name, "phone": phone, "age": 30,
+            "notes": "Авито отклик", "platform_chat_id": chat}
+
+
+def _chat(chat, name):
+    return {"external_id": chat, "name": name, "phone": "", "age": None,
+            "notes": "Авито отклик (через мессенджер)", "platform_chat_id": chat}
+
+
+@pytest.fixture
+def sources(monkeypatch):
+    """Задаёт, что вернут оба источника. Значение — список или исключение."""
+    state = {"apps": [], "chats": []}
+
+    async def fake_apps(token, uid, vac, **kw):
+        if isinstance(state["apps"], Exception):
+            raise state["apps"]
+        return state["apps"]
+
+    async def fake_chats(token, uid, vac, **kw):
+        if isinstance(state["chats"], Exception):
+            raise state["chats"]
+        return state["chats"]
+
+    monkeypatch.setattr("app.services.avito_api.get_applications_for_vacancy", fake_apps)
+    monkeypatch.setattr("app.services.avito_api.get_job_chats", fake_chats)
+    return state
+
+
+def _collect(vac="2353269952"):
+    return run_async(recruitment_sync._collect_avito("tok", "21315059", vac))
+
+
+class TestMerge:
+    def test_chat_only_applicants_are_kept(self, sources):
+        """Тот самый случай: человек написал в чат без формального отклика."""
+        sources["apps"] = [_app("a1", "chat-1", "С откликом")]
+        sources["chats"] = [_chat("chat-1", "С откликом"), _chat("chat-2", "Олег")]
+
+        got = _collect()
+        assert {c["name"] for c in got} == {"С откликом", "Олег"}
+
+    def test_the_same_person_is_not_duplicated(self, sources):
+        sources["apps"] = [_app("a1", "chat-1", "Бугай Егор")]
+        sources["chats"] = [_chat("chat-1", "Бугай Егор")]
+
+        got = _collect()
+        assert len(got) == 1
+
+    def test_application_wins_over_chat(self, sources):
+        """У отклика есть телефон, возраст и резюме — у чата только имя."""
+        sources["apps"] = [_app("a1", "chat-1", "Бугай Егор", phone="79002894881")]
+        sources["chats"] = [_chat("chat-1", "Егор")]
+
+        [got] = _collect()
+        assert got["external_id"] == "a1"
+        assert got["phone"] == "79002894881"
+
+    def test_nine_to_one_ratio_from_production(self, sources):
+        """Боевые числа по объявлению 2353269952 на момент находки."""
+        sources["apps"] = [_app(f"a{i}", f"chat-{i}", f"Отклик {i}") for i in range(7)]
+        sources["chats"] = [_chat(f"chat-{i}", f"Чат {i}") for i in range(67)]
+
+        assert len(_collect()) == 67
+
+
+class TestOneSourceFailing:
+    def test_paywall_still_yields_chats(self, sources):
+        """Поведение до подписки должно сохраниться."""
+        sources["apps"] = ValueError("Авито: доступ к API откликов требует Максимальной подписки")
+        sources["chats"] = [_chat("chat-1", "Олег")]
+
+        assert [c["name"] for c in _collect()] == ["Олег"]
+
+    def test_applications_outage_does_not_cost_us_chats(self, sources):
+        sources["apps"] = RuntimeError("500 Internal Server Error")
+        sources["chats"] = [_chat("chat-1", "Олег")]
+
+        assert len(_collect()) == 1
+
+    def test_chat_outage_does_not_cost_us_applications(self, sources):
+        sources["apps"] = [_app("a1", "chat-1", "Бугай Егор")]
+        sources["chats"] = RuntimeError("rate limited")
+
+        assert [c["name"] for c in _collect()] == ["Бугай Егор"]
+
+    def test_unrelated_value_error_is_not_swallowed(self, sources):
+        """Ошибку, не связанную с подпиской, глушить нельзя — иначе поломка
+        конфигурации выглядит как «откликов нет»."""
+        sources["apps"] = ValueError("неверный client_id")
+        sources["chats"] = []
+
+        with pytest.raises(ValueError):
+            _collect()
+
+    def test_both_down_yields_nothing_rather_than_raising(self, sources):
+        sources["apps"] = RuntimeError("нет сети")
+        sources["chats"] = RuntimeError("нет сети")
+
+        assert _collect() == []
+
+
+class TestBacklogIsNotSpammed:
+    """Слияние источников задним числом вливает в импорт пласт старых людей.
+
+    По боевым данным это 40 чатов, включая организации («2S LAB чистка
+    реставрация обуви») и собеседника с именем «пользователь». Разослать им
+    «вы ещё в поиске работы?» только потому, что мы сегодня поменяли импорт,
+    — ровно то, что запрещает комментарий про первую синхронизацию, просто
+    на другом поводе. Опрос положен тем, кто написал ПОСЛЕ прошлого синка.
+    """
+    from datetime import datetime, timedelta
+
+    SYNCED_AT = datetime(2026, 8, 11, 12, 0, 0)
+
+    def _split(self, created_ats):
+        """Предикат берётся из боевого кода, а не переписывается здесь: копия
+        условия в тесте уже однажды дала зелёные тесты при сломанном проде."""
+        return [t for t in created_ats
+                if recruitment_sync.is_new_arrival(t, self.SYNCED_AT)]
+
+    def test_old_chats_are_not_screened(self):
+        old = self.SYNCED_AT - self.timedelta(days=30)
+        assert self._split([old, old, old]) == []
+
+    def test_genuinely_new_arrival_is_screened(self):
+        new = self.SYNCED_AT + self.timedelta(minutes=5)
+        assert len(self._split([new])) == 1
+
+    def test_mixed_batch_screens_only_the_new_one(self):
+        old = self.SYNCED_AT - self.timedelta(days=3)
+        new = self.SYNCED_AT + self.timedelta(minutes=1)
+        assert len(self._split([old, new, old, old])) == 1
+
+    def test_missing_date_is_treated_as_backlog(self):
+        """Без даты нельзя доказать, что человек новый — молчим."""
+        assert self._split([None]) == []
+
+    def test_no_previous_sync_is_backlog(self):
+        """Связка ещё ни разу не синхронизировалась — весь импорт исторический."""
+        assert recruitment_sync.is_new_arrival(self.SYNCED_AT, None) is False

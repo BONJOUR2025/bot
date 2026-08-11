@@ -211,6 +211,25 @@ async def _notify_new_candidates(source: str, link, candidates: list[dict], back
     await send_notification("\n".join(lines))
 
 
+def is_new_arrival(applied_at, last_synced_at) -> bool:
+    """Действительно ли этот человек написал только что.
+
+    «Новый для базы» и «новый вообще» — разные вещи, и путать их дорого:
+    задним числом в импорт может влиться пласт старых людей (так вышло, когда
+    источники Авито объединили и к формальным откликам добавились 40 чатов
+    месячной давности). Рассылать им приветствие только потому, что мы
+    поменяли импорт, нельзя.
+
+    Без даты отклика считаем человека старым: доказать обратное нечем, а
+    цена ошибки несимметрична — промолчать не страшно, написать зря стыдно.
+    """
+    if not applied_at:
+        return False
+    if not last_synced_at:
+        return False
+    return applied_at >= last_synced_at
+
+
 def should_poll_messages(candidate) -> bool:
     """Нужно ли тянуть новые сообщения по этому кандидату.
 
@@ -571,6 +590,23 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
             Candidate.source == src.source,
             Candidate.external_id == ext_id,
         ).first()
+        # У Авито два источника с разными external_id: формальный отклик
+        # адресуется id заявки, чат — id чата. Один и тот же человек,
+        # пришедший обоими путями, без этой проверки получил бы две карточки.
+        # Совпадение по чату надёжнее: чат у пары «мы ↔ кандидат» один.
+        if not exists and (item.get("platform_chat_id") or "").strip():
+            exists = db.query(Candidate).filter(
+                Candidate.vacancy_id == link.vacancy_id,
+                Candidate.source == src.source,
+                Candidate.platform_chat_id == item["platform_chat_id"],
+            ).first()
+            if exists and exists.external_id != ext_id and item.get("phone"):
+                # Пришёл формальный отклик к карточке, заведённой из чата:
+                # переносим на неё id заявки и данные, которых в чате нет.
+                exists.external_id = ext_id
+                exists.phone = exists.phone or item.get("phone", "")
+                exists.age = exists.age or item.get("age")
+                exists.resume_url = exists.resume_url or item.get("resume_url", "")
         if exists:
             # Дозаполняем chat_id у уже импортированных: без него вебхук hh
             # (он приходит с chat_id, а не с id отклика) не сопоставить с
@@ -642,7 +678,25 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 link.id, len(new_candidate_objs),
             )
             return new_candidates
-        for cand_obj in new_candidate_objs:
+
+        # «Новый для базы» и «новый вообще» — разные вещи, и путать их дорого.
+        # Проверка выше ловит только самый первый синк связки; но задним
+        # числом в импорт может влиться и целый пласт старых людей — так
+        # случилось, когда источники Авито объединили и к формальным откликам
+        # добавились 40 чатов месячной давности, включая организации и чат с
+        # именем «пользователь». Разослать им «вы ещё в поиске работы?» было
+        # бы ровно тем, что запрещает абзац выше, просто на другом поводе.
+        #
+        # Поэтому опрос начинаем только тем, кто написал ПОСЛЕ прошлой
+        # синхронизации: остальные просто появляются в воронке, и решение по
+        # ним принимает человек.
+        fresh = [c for c in new_candidate_objs
+                 if is_new_arrival(c.created_at, link.last_synced_at)]
+        backlog = len(new_candidate_objs) - len(fresh)
+        if backlog:
+            logger.info("[Sync] link %s: %d кандидатов из прошлого импортированы без опроса",
+                        link.id, backlog)
+        for cand_obj in fresh:
             try:
                 await quick_screening.start_screening(db, cand_obj, vacancy, src, token)
             except Exception as e:
@@ -653,24 +707,55 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
 
 
 async def _collect_avito(token: str, employer_id: str, vacancy_id: str) -> list[dict]:
-    """Applicants for an Avito vacancy, preferring the richer applications API.
+    """Applicants for an Avito vacancy: формальные отклики ПЛЮС чаты.
 
-    That API is gated behind the "Максимальная" Работа subscription and answers
-    402 without it, so we fall back to deriving applicants from Messenger chats
-    — which stays available. The order matters: the moment the subscription is
-    active the paid path takes over on its own, with phone/age/résumé restored
-    and no code change.
+    Раньше здесь стоял выбор одного источника: пробуем платный API откликов,
+    а при 402 откатываемся на чаты мессенджера. Это оказалось ловушкой.
+    Пока подписки не было, импорт шёл по чатам и заводил карточку каждому,
+    кто написал. Как только «Максимальный» включили, импорт молча перешёл
+    на API откликов — а тот отдаёт только формальные отклики: 7 против 67
+    чатов по одному и тому же объявлению. Люди, которые просто пишут в чат
+    по вакансии, перестали попадать в воронку вовсе, и заметили это лишь
+    когда живые кандидаты остались без ответа.
+
+    Поэтому теперь источники объединяются, а не выбираются. Отклик даёт
+    телефон, возраст и резюме; чат даёт полноту. Дедупликация по chat_id,
+    и запись из API откликов побеждает — она богаче.
+
+    Падение платного пути больше не лишает нас чатов, и наоборот.
     """
     from app.services import avito_api
 
+    applications: list[dict] = []
     try:
-        return await avito_api.get_applications_for_vacancy(token, employer_id, vacancy_id)
+        applications = await avito_api.get_applications_for_vacancy(token, employer_id, vacancy_id)
     except ValueError as e:
         if "Максимальной подписки" not in str(e):
             raise
-        logger.info("[Sync] Avito applications API unavailable (%s) — using messenger chats", e)
+        logger.info("[Sync] Avito applications API unavailable (%s) — только чаты", e)
+    except Exception as e:
+        # Сеть или пятисотка на стороне Авито не должна стоить нам чатов.
+        logger.warning("[Sync] Avito applications API failed (%s) — только чаты", e)
 
-    return await avito_api.get_job_chats(token, employer_id, vacancy_id)
+    try:
+        chats = await avito_api.get_job_chats(token, employer_id, vacancy_id)
+    except Exception as e:
+        logger.warning("[Sync] Avito job chats failed (%s) — только отклики", e)
+        return applications
+
+    by_chat = {(a.get("platform_chat_id") or "").strip(): a for a in applications}
+    merged = list(applications)
+    added = 0
+    for ch in chats:
+        key = (ch.get("platform_chat_id") or "").strip()
+        if key and key in by_chat:
+            continue  # тот же человек, но с откликом — берём богатую запись
+        merged.append(ch)
+        added += 1
+
+    logger.info("[Sync] avito vacancy=%s: откликов %d, чатов без отклика %d, всего %d",
+                vacancy_id, len(applications), added, len(merged))
+    return merged
 
 
 async def _collect_hh(token: str, vacancy_id: str) -> list[dict]:

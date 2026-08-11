@@ -14,23 +14,24 @@ from __future__ import annotations
 from app.api import avito_webhook as aw
 
 
-def _v3(chat_id="u2i-abc", msg_id="m1", text="Да, в поиске", author_id="777", type_="text"):
+def _v3(chat_id="u2i-abc", msg_id="m1", text="Да, в поиске", author_id="777",
+        type_="text", item_id=None):
     """Конверт messenger webhook v3 — тот, что Авито шлёт сейчас."""
+    value = {
+        "id": msg_id,
+        "chat_id": chat_id,
+        "author_id": author_id,
+        "created": 1786356003,
+        "type": type_,
+        "content": {"text": text},
+    }
+    if item_id is not None:
+        value["item_id"] = item_id
     return {
         "id": "evt-1",
         "version": "v3",
         "timestamp": 1786356003,
-        "payload": {
-            "type": "message",
-            "value": {
-                "id": msg_id,
-                "chat_id": chat_id,
-                "author_id": author_id,
-                "created": 1786356003,
-                "type": type_,
-                "content": {"text": text},
-            },
-        },
+        "payload": {"type": "message", "value": value},
     }
 
 
@@ -43,7 +44,17 @@ class TestPayloadParsing:
             "text": "Да, в поиске",
             "author_id": "777",
             "type": "text",
+            "item_id": "",
         }
+
+    def test_item_id_is_extracted_when_present(self):
+        """Объявление отличает кандидата по вакансии от покупателя по ремонту
+        обуви: подписка на мессенджер одна на весь аккаунт."""
+        assert aw._extract_message(_v3(item_id=2353269952))["item_id"] == "2353269952"
+
+    def test_missing_item_id_is_empty_not_absent(self):
+        """Старые конверты его не несут — вызывающий не должен ловить KeyError."""
+        assert aw._extract_message(_v3())["item_id"] == ""
 
     def test_accepts_a_flatter_envelope(self):
         """Более старая форма — value лежит в корне, без payload."""

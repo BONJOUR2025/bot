@@ -114,7 +114,43 @@ def _extract_message(body: dict) -> dict | None:
         "text": text,
         "author_id": str(value.get("author_id") or value.get("user_id") or "").strip(),
         "type": str(value.get("type") or "").strip(),
+        # Объявление, по которому идёт чат. Нужно, чтобы отличить кандидата по
+        # нашей вакансии от покупателя по ремонту обуви: подписка на мессенджер
+        # одна на весь аккаунт, и сюда прилетает всё подряд.
+        "item_id": str(value.get("item_id") or value.get("itemId") or "").strip(),
     }
+
+
+# Сообщения из чатов, о которых уже сказали админу. В памяти, потому что
+# карточки у такого чата нет — писать некуда, а цена перезапуска здесь
+# одно лишнее уведомление.
+_notified_unknown: set[str] = set()
+
+
+def _unlinked_vacancy_message(db, msg: dict) -> tuple | None:
+    """Сообщение по нашей вакансии из чата, для которого нет карточки.
+
+    Возвращает аргументы уведомления либо None, если это не наш случай.
+    Такие люди существуют: импорт откликов Авито отдаёт только формальные
+    отклики, а писать в чат по вакансии можно и без отклика — они не
+    попадали в воронку вовсе, и здесь стоял тихий выход в лог.
+    """
+    from app.models.recruitment import VacancyLink
+
+    if not msg["text"] or not msg["item_id"]:
+        return None
+    if msg["message_id"] in _notified_unknown:
+        return None
+    linked = db.query(VacancyLink).filter(
+        VacancyLink.source == "avito",
+        VacancyLink.external_vacancy_id == msg["item_id"],
+    ).first()
+    if not linked:
+        return None  # обычный чат по объявлению мастерской
+    _notified_unknown.add(msg["message_id"])
+    if len(_notified_unknown) > 2000:
+        _notified_unknown.clear()
+    return (msg["chat_id"], msg["text"])
 
 
 async def _process(msg: dict) -> None:
@@ -128,8 +164,12 @@ async def _process(msg: dict) -> None:
     # закрытия сессии — держать её открытой на время сетевого вызова в
     # Telegram незачем, а делать это внутри try/except значило бы списать
     # ошибку отправки на «не смогли найти кандидата».
-    notify_args: tuple | None = None
-    cand_id = token = src_snapshot = None
+    # Что делать после закрытия сессии. Держать её открытой на время сетевых
+    # вызовов незачем, а выполнять их внутри try/except значило бы списывать
+    # ошибку отправки на «не смогли найти кандидата».
+    notify_args: tuple | None = None       # кандидат написал вне опроса
+    stranger: tuple | None = None          # написал по нашей вакансии, а карточки нет
+    cand_id = token = src_snapshot = None  # ответить в опросе
 
     db = SessionLocal()
     try:
@@ -144,37 +184,61 @@ async def _process(msg: dict) -> None:
             Candidate.source == "avito",
             Candidate.platform_chat_id == msg["chat_id"],
         ).first()
-        if not candidate:
-            log.info("avito webhook: no candidate for chat %s, ignoring", msg["chat_id"])
-            return  # not a candidate we track (or not imported yet)
-        # Витрина для карточки пишется до всех проверок ниже: последнее
-        # сообщение полезно видеть и у кандидата, чей опрос уже завершён или
-        # передан админу — именно там переписку ведут руками.
-        if msg["text"]:
-            quick_screening.record_last_message(db, candidate, msg["text"], "applicant")
 
-        state_status = quick_screening.load_state(candidate).get("status")
-        if state_status != "asking":
-            # Опрос не идёт — но разговор идёт. Раньше здесь был просто выход,
-            # и сообщение оседало в карточке, о которой никто не знал: человек
-            # отвечал на наше же «когда вам удобно поговорить?» и не получал
-            # ничего. Отвечать за админа мы не вправе, а сказать ему — обязаны.
-            log.info("avito webhook: candidate %s is not in an active screen (%s), notifying admin",
-                     candidate.id, state_status)
-            notify_args = (candidate.id, candidate.name, msg["text"], msg["message_id"])
-        elif msg["text"]:
-            token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
-            cand_id = candidate.id
-            # Снимок вместо самого ORM-объекта: ниже сессия уже закрыта, а
-            # отправка сообщения читает src.employer_id — на detached-инстансе это
-            # отказ в самый неудобный момент (кандидат ждёт ответа).
-            src_snapshot = SimpleNamespace(source="avito", employer_id=src.employer_id)
-        # else: картинка или системное сообщение — ответа в нём нет
+        if not candidate:
+            # Чат без карточки. Обычно это покупатель по ремонту обуви —
+            # подписка на мессенджер одна на весь аккаунт. Но так же выглядит
+            # и кандидат, которого импорт не завёл: писать в чат по вакансии
+            # можно и без формального отклика. Отличаем по объявлению.
+            stranger = _unlinked_vacancy_message(db, msg)
+            if stranger:
+                log.warning("avito webhook: сообщение по нашей вакансии из чата %s без карточки",
+                            msg["chat_id"])
+            else:
+                log.info("avito webhook: no candidate for chat %s, ignoring", msg["chat_id"])
+        else:
+            # Витрина для карточки пишется до проверок ниже: последнее
+            # сообщение полезно видеть и у кандидата, чей опрос уже завершён
+            # или передан админу — именно там переписку ведут руками.
+            if msg["text"]:
+                quick_screening.record_last_message(db, candidate, msg["text"], "applicant")
+
+            state_status = quick_screening.load_state(candidate).get("status")
+            if state_status != "asking":
+                # Опрос не идёт — но разговор идёт. Раньше здесь был просто
+                # выход, и сообщение оседало в карточке, о которой никто не
+                # знал: человек отвечал на наше же «когда вам удобно
+                # поговорить?» и не получал ничего. Отвечать за админа мы не
+                # вправе, а сказать ему — обязаны.
+                log.info("avito webhook: candidate %s is not in an active screen (%s), notifying admin",
+                         candidate.id, state_status)
+                notify_args = (candidate.id, candidate.name, msg["text"], msg["message_id"])
+            elif msg["text"]:
+                token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
+                cand_id = candidate.id
+                # Снимок вместо самого ORM-объекта: ниже сессия уже закрыта, а
+                # отправка сообщения читает src.employer_id — на detached-инстансе
+                # это отказ в самый неудобный момент (кандидат ждёт ответа).
+                src_snapshot = SimpleNamespace(source="avito", employer_id=src.employer_id)
+            # else: картинка или системное сообщение — ответа в нём нет
     except Exception:
         log.warning("avito webhook: failed to resolve candidate", exc_info=True)
         return
     finally:
         db.close()
+
+    if stranger:
+        from app.services.notify import send_notification
+        chat_id, text = stranger
+        try:
+            await send_notification(
+                "💬 <b>Сообщение по вакансии от неизвестного кандидата (Авито)</b>\n"
+                f"{text[:200]}\n\n"
+                "Карточки в воронке нет — человек написал в чат без формального отклика."
+            )
+        except Exception:
+            log.warning("avito webhook: stranger notification failed for chat %s", chat_id, exc_info=True)
+        return
 
     if notify_args:
         from app.services.recruitment_sync import notify_unhandled_message
