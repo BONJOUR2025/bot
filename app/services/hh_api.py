@@ -1,4 +1,5 @@
 """hh.ru Employer API client."""
+from datetime import datetime
 from urllib.parse import urlencode
 
 import httpx
@@ -289,8 +290,32 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
 
 # ── Messaging ─────────────────────────────────────────────────────
 
+def _sort_ts(value: str) -> float:
+    """Дата hh («2026-08-11T09:00:38+0300») → число для сортировки.
+
+    Битая или пустая дата даёт 0.0, то есть уезжает в начало списка: это
+    место исходного отклика, а не свежего ответа, поэтому «последним
+    сообщением кандидата» такая запись стать не может.
+    """
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except Exception:
+        return 0.0
+
+
 async def get_messages(access_token: str, neg_id: str) -> list[dict]:
-    """Return messages for a negotiation, oldest first."""
+    """Return messages for a negotiation, oldest first.
+
+    Порядок здесь — часть контракта, а не деталь: вызывающие берут
+    «последнее сообщение кандидата» как `applicant[-1]`, а карточка рисует
+    список сверху вниз. Раньше тут стоял `reversed(items)` с комментарием
+    «hh returns newest first» — на живом API это неверно, hh отдаёт сначала
+    исходный отклик. В итоге `applicant[-1]` возвращал самый СТАРЫЙ ответ,
+    то есть пустой текст первичного отклика, и вебхук hh молча выходил по
+    `if not text` — ни одно сообщение через него так и не доехало, всё
+    вытягивал часовой опрос (он берёт max() по дате и потому уцелел).
+    Поэтому теперь порядок не предполагается, а задаётся сортировкой.
+    """
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         r = await client.get(
             f"{HH_BASE}/negotiations/{neg_id}/messages",
@@ -300,7 +325,7 @@ async def get_messages(access_token: str, neg_id: str) -> list[dict]:
             return []
         r.raise_for_status()
         items = r.json().get("items", [])
-        return [
+        result = [
             {
                 "id": str(m.get("id") or ""),
                 "text": m.get("text") or "",
@@ -309,8 +334,10 @@ async def get_messages(access_token: str, neg_id: str) -> list[dict]:
                 "author_name": (m.get("author") or {}).get("name", ""),
                 "read": m.get("read", True),
             }
-            for m in reversed(items)  # hh returns newest first
+            for m in items
         ]
+        result.sort(key=lambda m: _sort_ts(m["created_at"]))
+        return result
 
 
 _HH_ERROR_HINTS = {
