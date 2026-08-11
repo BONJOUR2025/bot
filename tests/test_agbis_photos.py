@@ -37,11 +37,11 @@ def agent(monkeypatch):
     return AGENT
 
 
-class _Resp:
-    def __init__(self, status_code=200, content=b"", text=""):
-        self.status_code = status_code
-        self.content = content
-        self.text = text
+# _download отдаёт (HTTP-код, байты), а не объект ответа: транспортом
+# служит curl.exe, а не httpx — шлюз Agbis не отвечает на рукопожатие
+# OpenSSL (см. _curl_get в сервисе).
+def _resp(status=200, body=b""):
+    return status, body
 
 
 class TestAgent:
@@ -126,7 +126,7 @@ class TestGetPhoto:
 
     def test_downloads_and_caches(self, agent, monkeypatch):
         monkeypatch.setattr(ap, "_get_session", lambda a, force_new=False: "S1")
-        monkeypatch.setattr(ap, "_download", lambda a, s, md5: _Resp(200, JPEG))
+        monkeypatch.setattr(ap, "_download", lambda a, s, md5: _resp(200, JPEG))
         assert ap.get_photo("MD5B") == JPEG
         # Второй раз — уже из кэша, агент не нужен.
         monkeypatch.setattr(ap, "_download", lambda *a: pytest.fail("повторная загрузка"))
@@ -134,7 +134,7 @@ class TestGetPhoto:
 
     def test_accepts_png(self, agent, monkeypatch):
         monkeypatch.setattr(ap, "_get_session", lambda a, force_new=False: "S1")
-        monkeypatch.setattr(ap, "_download", lambda a, s, md5: _Resp(200, PNG))
+        monkeypatch.setattr(ap, "_download", lambda a, s, md5: _resp(200, PNG))
         assert ap.get_photo("MD5PNG") == PNG
 
     def test_stale_session_triggers_one_relogin(self, agent, monkeypatch):
@@ -147,7 +147,7 @@ class TestGetPhoto:
             return "S2" if force_new else "S1"
 
         def download(a, session, md5):
-            return _Resp(200, JPEG) if session == "S2" else _Resp(200, b"<html>no session</html>")
+            return _resp(200, JPEG) if session == "S2" else _resp(200, b"<html>no session</html>")
 
         monkeypatch.setattr(ap, "_get_session", get_session)
         monkeypatch.setattr(ap, "_download", download)
@@ -156,13 +156,13 @@ class TestGetPhoto:
 
     def test_gives_up_after_the_retry(self, agent, monkeypatch):
         monkeypatch.setattr(ap, "_get_session", lambda a, force_new=False: "S")
-        monkeypatch.setattr(ap, "_download", lambda a, s, md5: _Resp(200, b"nope"))
+        monkeypatch.setattr(ap, "_download", lambda a, s, md5: _resp(200, b"nope"))
         with pytest.raises(ap.PhotoStorageError):
             ap.get_photo("MD5D")
 
     def test_failed_download_is_not_cached(self, agent, monkeypatch):
         monkeypatch.setattr(ap, "_get_session", lambda a, force_new=False: "S")
-        monkeypatch.setattr(ap, "_download", lambda a, s, md5: _Resp(500, b""))
+        monkeypatch.setattr(ap, "_download", lambda a, s, md5: _resp(500, b""))
         with pytest.raises(ap.PhotoStorageError):
             ap.get_photo("MD5E")
         assert ap.cache_get("MD5E") is None
@@ -197,21 +197,14 @@ class TestCredentials:
     def test_login_sends_hash_not_plaintext(self, agent, monkeypatch):
         captured = {}
 
-        class _Httpx:
-            # Логин собирает таймаут через httpx.Timeout (короткий на
-            # соединение, длинный на чтение), поэтому подделка обязана его
-            # иметь — иначе тест падает не на том, что проверяет.
-            class Timeout:
-                def __init__(self, read, connect=None):
-                    self.read, self.connect = read, connect
+        # Транспорт — curl.exe, а не httpx: шлюз Agbis не отвечает на
+        # рукопожатие OpenSSL (см. _curl_get).
+        def fake_curl(url, params):
+            captured["url"] = url
+            captured["params"] = params
+            return 200, b"3C69D00E-978F-4610-A2A6-EDFC5D858820"
 
-            @staticmethod
-            def get(url, params=None, timeout=None):
-                captured["url"] = url
-                captured["params"] = params
-                return _Resp(200, text="3C69D00E-978F-4610-A2A6-EDFC5D858820")
-
-        monkeypatch.setitem(__import__("sys").modules, "httpx", _Httpx)
+        monkeypatch.setattr(ap, "_curl_get", fake_curl)
         session = ap._login(agent)
         assert session == "3C69D00E-978F-4610-A2A6-EDFC5D858820"
         assert captured["url"] == "https://im-gate.com/10460/Login"

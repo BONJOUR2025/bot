@@ -61,11 +61,56 @@ REQUEST_TIMEOUT_S = 60
 CONNECT_TIMEOUT_S = 8
 
 
-def _timeout():
-    """Таймаут httpx: короткий на соединение, длинный на чтение."""
-    import httpx
+def _curl_get(url: str, params: dict) -> tuple[int, bytes]:
+    """GET через curl.exe. Возвращает (HTTP-код, тело).
 
-    return httpx.Timeout(REQUEST_TIMEOUT_S, connect=CONNECT_TIMEOUT_S)
+    Почему не httpx, как везде в проекте: шлюз Agbis не отвечает на
+    рукопожатие, которое присылает OpenSSL, — соединение устанавливается,
+    ClientHello уходит, и в ответ не приходит НИ ОДНОГО байта. Проверено на
+    TLS 1.0/1.1/1.2, с SNI и без, на узком списке шифров и на широком:
+    результат одинаковый. При этом с той же машины и в ту же секунду
+    curl.exe и PowerShell (оба на schannel) получают HTTP 200 за 0.3 с, и
+    сам клиент Agbis качает снимки оттуда же.
+
+    Это зеркальное отражение случая из xtunnel_healthcheck.py: там schannel
+    спотыкается о подменённый сертификат, а OpenSSL работает. Здесь
+    наоборот. Поэтому транспорт выбирается по месту, а не по привычке.
+
+    Тело пишется во временный файл, а не в stdout: снимки бинарные, и
+    смешивать их с выводом `-w %{http_code}` в одном потоке — напрашиваться
+    на повреждение JPEG.
+    """
+    import subprocess
+    import tempfile
+    from urllib.parse import urlencode
+
+    fd, path = tempfile.mkstemp(prefix="agbis_photo_")
+    os.close(fd)
+    try:
+        proc = subprocess.run(
+            [
+                "curl.exe", "-s", "--fail-with-body",
+                "--connect-timeout", str(CONNECT_TIMEOUT_S),
+                "--max-time", str(REQUEST_TIMEOUT_S),
+                "-o", path,
+                "-w", "%{http_code}",
+                f"{url}?{urlencode(params)}",
+            ],
+            capture_output=True,
+            timeout=REQUEST_TIMEOUT_S + 10,
+        )
+        code_raw = (proc.stdout or b"").decode("ascii", "ignore").strip()
+        if not code_raw.isdigit():
+            # curl не дошёл до ответа: сеть, DNS, таймаут.
+            detail = (proc.stderr or b"").decode("utf-8", "replace").strip() or f"curl rc={proc.returncode}"
+            raise OSError(detail)
+        with open(path, "rb") as f:
+            return int(code_raw), f.read()
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 # Room for one very large order to be viewed end to end without evicting
@@ -179,29 +224,26 @@ def resolve_agent(force: bool = False) -> StorageAgent:
 
 
 def _login(agent: StorageAgent) -> str:
-    import httpx
-
     if not settings.agbis_storage_user or not settings.agbis_storage_password_sha1:
         raise PhotoStorageError(
             "Не заданы AGBIS_STORAGE_USER / AGBIS_STORAGE_PASSWORD_SHA1."
         )
     try:
-        resp = httpx.get(
+        status, body = _curl_get(
             f"{agent.base_url}/Login",
-            params={
+            {
                 "User": settings.agbis_storage_user,
                 "Password": settings.agbis_storage_password_sha1,
                 "dep_id": settings.agbis_storage_dep_id,
                 "AsUser": 1,
             },
-            timeout=_timeout(),
         )
     except Exception as exc:
         raise PhotoStorageError(_unreachable_message(exc)) from exc
-    if resp.status_code != 200:
-        raise PhotoStorageError(f"Агент отклонил вход: HTTP {resp.status_code}")
+    if status != 200:
+        raise PhotoStorageError(f"Агент отклонил вход: HTTP {status}")
 
-    session_id = _extract_session_id(resp.text)
+    session_id = _extract_session_id(body.decode("utf-8", "replace"))
     if not session_id:
         raise PhotoStorageError("Агент не вернул SessionID — проверьте учётные данные.")
     return session_id
@@ -343,17 +385,15 @@ def cache_stats() -> dict:
 
 # ── Fetching ──────────────────────────────────────────────────────────
 
-def _download(agent: StorageAgent, session_id: str, md5: str):
-    import httpx
-
-    return httpx.get(
+def _download(agent: StorageAgent, session_id: str, md5: str) -> tuple[int, bytes]:
+    """(HTTP-код, байты снимка). Транспорт — curl.exe, см. _curl_get."""
+    return _curl_get(
         f"{agent.base_url}/GetPhoto",
-        params={
+        {
             "SessionID": session_id,
             "dont_calc_current_size": 1,
             "FileID": md5,
         },
-        timeout=_timeout(),
     )
 
 
@@ -393,7 +433,7 @@ def get_photo(md5: str) -> bytes:
             _mark_outage(str(exc))
             raise
         try:
-            resp = _download(agent, session_id, md5)
+            status, data = _download(agent, session_id, md5)
         except Exception as exc:
             msg = _unreachable_message(exc)
             _mark_outage(msg)
@@ -401,18 +441,17 @@ def get_photo(md5: str) -> bytes:
 
         # A stale session comes back as an error page, not as a 401 — hence
         # the content-type check rather than a status check alone.
-        if resp.status_code != 200 or not _looks_like_image(resp.content):
+        if status != 200 or not _looks_like_image(data):
             session_id = _get_session(agent, force_new=True)
             try:
-                resp = _download(agent, session_id, md5)
+                status, data = _download(agent, session_id, md5)
             except Exception as exc:
-                msg = f"Агент хранилища недоступен: {exc}"
+                msg = _unreachable_message(exc)
                 _mark_outage(msg)
                 raise PhotoStorageError(msg) from exc
 
-        if resp.status_code != 200:
-            raise PhotoStorageError(f"Агент вернул HTTP {resp.status_code}")
-        data = resp.content
+        if status != 200:
+            raise PhotoStorageError(f"Агент вернул HTTP {status}")
         if not _looks_like_image(data):
             # Не размыкаем: агент ответил, просто этого снимка у него нет —
             # соседние вполне могут найтись.

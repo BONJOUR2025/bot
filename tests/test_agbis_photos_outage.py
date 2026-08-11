@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import time
 
-import httpx
 import pytest
 
 from app.services import agbis_photos as ap
@@ -35,13 +34,40 @@ def agent(monkeypatch):
 
 
 class TestTimeoutSplit:
-    def test_connect_is_bounded_much_tighter_than_read(self):
+    def test_connect_is_bounded_much_tighter_than_download(self, monkeypatch):
         """Дозвониться — быстро, качать — долго. Раньше на оба было 60 с, и
         выключенный компьютер стоил минуты ожидания на каждый снимок."""
-        t = ap._timeout()
-        assert t.connect <= 10
-        assert t.read >= 60
-        assert t.connect < t.read
+        seen = {}
+
+        class _Done:
+            stdout, stderr, returncode = b"200", b"", 0
+
+        def fake_run(cmd, **kw):
+            seen["cmd"] = cmd
+            return _Done()
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+        ap._curl_get("https://x/Login", {"a": 1})
+
+        cmd = seen["cmd"]
+        connect = int(cmd[cmd.index("--connect-timeout") + 1])
+        total = int(cmd[cmd.index("--max-time") + 1])
+        assert connect <= 10
+        assert total >= 60
+        assert connect < total
+
+    def test_session_id_never_reaches_the_command_log(self, monkeypatch):
+        """SessionID равнозначен паролю сервисной учётки: он уходит в URL,
+        но не должен всплыть в сообщении об ошибке."""
+        def fake_run(cmd, **kw):
+            class _R:
+                stdout, stderr, returncode = b"", b"curl: (28) timeout", 28
+            return _R()
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+        with pytest.raises(OSError) as exc:
+            ap._curl_get("https://x/GetPhoto", {"SessionID": "SECRET-GUID"})
+        assert "SECRET-GUID" not in str(exc.value)
 
 
 class TestCircuitBreaker:
@@ -50,7 +76,7 @@ class TestCircuitBreaker:
 
         def boom(*a, **kw):
             calls.append(1)
-            raise httpx.ConnectTimeout("handshake timed out")
+            raise OSError("curl: (28) Operation timed out")
 
         monkeypatch.setattr(ap, "_download", boom)
 
@@ -65,7 +91,7 @@ class TestCircuitBreaker:
 
     def test_the_reason_is_preserved_for_the_ui(self, agent, monkeypatch):
         monkeypatch.setattr(ap, "_download",
-                            lambda *a, **kw: (_ for _ in ()).throw(httpx.ConnectTimeout("x")))
+                            lambda *a, **kw: (_ for _ in ()).throw(OSError("curl: (28) timeout")))
         with pytest.raises(ap.PhotoStorageError) as e1:
             ap.get_photo("md5-1")
         with pytest.raises(ap.PhotoStorageError) as e2:
@@ -79,7 +105,7 @@ class TestCircuitBreaker:
         говорит ничего — он должен узнать, что проверять."""
         monkeypatch.setattr(ap, "_download",
                             lambda *a, **kw: (_ for _ in ()).throw(
-                                httpx.ConnectTimeout("_ssl.c:975: The handshake operation timed out")))
+                                OSError("_ssl.c:975: The handshake operation timed out")))
         with pytest.raises(ap.PhotoStorageError) as e:
             ap.get_photo("md5-1")
 
@@ -91,7 +117,7 @@ class TestCircuitBreaker:
         перезапуска процесса."""
         monkeypatch.setattr(ap, "_OUTAGE_TTL_S", 0.05)
         monkeypatch.setattr(ap, "_download",
-                            lambda *a, **kw: (_ for _ in ()).throw(httpx.ConnectTimeout("x")))
+                            lambda *a, **kw: (_ for _ in ()).throw(OSError("curl: (28) timeout")))
         with pytest.raises(ap.PhotoStorageError):
             ap.get_photo("md5-1")
         assert ap._outage_reason() is not None
@@ -105,8 +131,7 @@ class TestCircuitBreaker:
         совсем, а не ждёт следующего таймаута."""
         jpeg = b"\xff\xd8\xff\xe0" + b"0" * 100
         monkeypatch.setattr(ap, "_download",
-                            lambda *a, **kw: httpx.Response(200, content=jpeg,
-                                                            request=httpx.Request("GET", "https://x/")))
+                            lambda *a, **kw: (200, jpeg))
         ap._outage = ("старая ошибка", time.time() - 1)  # срок уже вышел
         assert ap.get_photo("md5-ok") == jpeg
         assert ap._outage is None
@@ -117,8 +142,7 @@ class TestMissingPhotoIsNotAnOutage:
         """Агент ответил, просто этого снимка у него нет — соседние вполне
         могут найтись, размыкать нельзя."""
         monkeypatch.setattr(ap, "_download",
-                            lambda *a, **kw: httpx.Response(200, content=b"not an image",
-                                                            request=httpx.Request("GET", "https://x/")))
+                            lambda *a, **kw: (200, b"not an image"))
         with pytest.raises(ap.PhotoStorageError):
             ap.get_photo("md5-missing")
 
