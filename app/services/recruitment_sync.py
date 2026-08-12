@@ -1,7 +1,7 @@
 """Background sync: pulls new candidates from hh.ru and Avito into the CRM."""
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +211,22 @@ async def _notify_new_candidates(source: str, link, candidates: list[dict], back
     await send_notification("\n".join(lines))
 
 
+def _naive_utc(dt):
+    """Дата без часового пояса, в UTC.
+
+    hh отдаёт даты со смещением («2026-08-12T16:59:01+0300»), Авито — без
+    него, а last_synced_at пишется как datetime.utcnow(), то есть тоже без.
+    Сравнение aware с naive в Python — это TypeError, и он утопил весь
+    импорт hh: исключение ловилось общим `except` уровнем выше и оседало
+    строчкой «hh link 3 error: can't compare offset-naive and offset-aware
+    datetimes», после чего кандидаты успевали создаться, а опрос им уже не
+    запускался. Поэтому приводим к общему виду, а не надеемся на удачу.
+    """
+    if dt is None or dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def is_new_arrival(applied_at, last_synced_at) -> bool:
     """Действительно ли этот человек написал только что.
 
@@ -227,7 +243,7 @@ def is_new_arrival(applied_at, last_synced_at) -> bool:
         return False
     if not last_synced_at:
         return False
-    return applied_at >= last_synced_at
+    return _naive_utc(applied_at) >= _naive_utc(last_synced_at)
 
 
 def should_poll_messages(candidate) -> bool:

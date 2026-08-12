@@ -188,3 +188,36 @@ class TestNameFromApplication:
         [got] = _collect()
         assert got["name"] == "Бутте Роман Валерьевич"
         assert got["phone"] == "79533528962"
+
+
+class TestTimezoneRegression:
+    """Регрессия из боя: hh отдаёт даты со смещением, а last_synced_at пишется
+    через utcnow() без него.
+
+    Сравнение aware с naive — TypeError, и он утопил ВЕСЬ импорт hh:
+    исключение ловил общий except уровнем выше, в логе оставалось
+    «hh link 3 error: can't compare offset-naive and offset-aware datetimes»,
+    кандидаты успевали создаться, а опрос им уже не запускался. Два дня
+    откликов на hh прошли молча. У Авито даты наивные — там всё работало,
+    что и скрывало поломку.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    SYNCED = datetime(2026, 8, 12, 12, 0, 0)  # naive UTC, как в базе
+
+    def test_aware_date_does_not_raise(self):
+        fresh = self.SYNCED.replace(tzinfo=self.timezone.utc) + self.timedelta(minutes=5)
+        assert recruitment_sync.is_new_arrival(fresh, self.SYNCED) is True
+
+    def test_aware_backlog_is_still_backlog(self):
+        old = self.SYNCED.replace(tzinfo=self.timezone.utc) - self.timedelta(days=1)
+        assert recruitment_sync.is_new_arrival(old, self.SYNCED) is False
+
+    def test_offset_is_honoured_not_stripped(self):
+        """09:00 по +03:00 — это 06:00 UTC, то есть РАНЬШЕ синка в 12:00 UTC.
+        Просто отбросить tzinfo значило бы посчитать такого кандидата новым."""
+        msk = self.datetime(2026, 8, 12, 9, 0, tzinfo=self.timezone(self.timedelta(hours=3)))
+        assert recruitment_sync.is_new_arrival(msk, self.SYNCED) is False
+
+    def test_both_naive_still_works(self):
+        assert recruitment_sync.is_new_arrival(self.SYNCED + self.timedelta(minutes=1), self.SYNCED) is True

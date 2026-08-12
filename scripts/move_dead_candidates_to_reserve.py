@@ -45,12 +45,18 @@ def classify(c, now: datetime) -> str | None:
 
     if c.stage in rs.TERMINAL_STAGES:
         return None
-    if quick_screening.load_state(c):
-        return None  # с человеком работали — решает оператор
 
+    # Организация остаётся организацией, даже если по ней «прошёл опрос».
+    # У «Заборы от профи» и «heirloom-second» стоит status=done с четырьмя
+    # ответами — это massовый запуск зачёл за ответы старые реплики из чата,
+    # а не диалог с кандидатом. Поэтому проверка имени идёт ДО проверки
+    # состояния опроса.
     name = (c.name or "").strip()
     if not name or name.lower() in PLACEHOLDER_NAMES or ORG_PATTERN.search(name):
         return "не человек (организация или чат без имени)"
+
+    if quick_screening.load_state(c):
+        return None  # с человеком работали — решает оператор
 
     has_chat_history = bool((c.last_message_text or "").strip())
     age_days = (now - c.created_at).days if c.created_at else 0
