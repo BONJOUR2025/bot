@@ -161,3 +161,40 @@ class TestNoAnswerFlag:
         state = {"status": "asking", "asked_at": (self.NOW - timedelta(days=2)).isoformat()}
         codes = [f["code"] for f in rs.flags(state, now=self.NOW, call_attempts=1)]
         assert codes == [rs.FLAG_NO_ANSWER, rs.FLAG_SILENT]
+
+
+class TestReserve:
+    """Резерв — отстойник для условно мёртвых: организаций, случайных чатов,
+    откликов двухлетней давности.
+
+    Именно перемещением, а не удалением: карточка остаётся ключом, по
+    которому импорт узнаёт уже виденного человека. Удалённые возвращаются
+    при следующей переподключённой интеграции — это уже происходило, когда
+    объединение источников Авито разом вернуло 40 старых чатов.
+    """
+
+    def test_reserve_is_a_valid_stage(self):
+        assert rs.STAGE_RESERVE in rs.STAGES
+
+    def test_bot_never_moves_a_reserved_candidate(self):
+        """Иначе входящее сообщение вытащило бы карточку обратно в воронку —
+        ровно то, от чего резерв и заводили."""
+        for state in ({"status": "asking"}, {"status": "done"}, {}, None):
+            assert rs.derive_stage(rs.STAGE_RESERVE, state) == rs.STAGE_RESERVE
+
+    def test_reserve_is_terminal(self):
+        """Опрос сообщений отбирает кандидатов по TERMINAL_STAGES — резерв
+        должен выпадать оттуда вместе с «нанят» и «отказ»."""
+        assert rs.STAGE_RESERVE in rs.TERMINAL_STAGES
+        assert rs.STAGE_HIRED in rs.TERMINAL_STAGES
+        assert rs.STAGE_REJECTED in rs.TERMINAL_STAGES
+
+    def test_working_stages_are_not_terminal(self):
+        for stage in (rs.STAGE_NEW, rs.STAGE_SCREENING, rs.STAGE_ANSWERED,
+                      rs.STAGE_THINKING, rs.STAGE_INTERVIEW):
+            assert stage not in rs.TERMINAL_STAGES
+
+    def test_reserve_is_not_a_rejection(self):
+        """Разные вещи: отказ — решение по человеку, резерв — «это вообще не
+        кандидат». Смешивать их значит портить статистику отказов."""
+        assert rs.STAGE_RESERVE != rs.STAGE_REJECTED

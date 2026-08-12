@@ -5,7 +5,7 @@ import {
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare,
   Pause, Play, Check, BookOpen, Sparkles, ListChecks, Copy, FileStack,
-  PhoneMissed, PhoneCall,
+  PhoneMissed, PhoneCall, Archive,
 } from 'lucide-react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -32,6 +32,14 @@ const STAGES = [
   { key: 'отказ',         label: 'Отказ',          color: 'bg-red-100 text-red-700',         dot: 'bg-red-400',      border: 'border-t-red-400'    },
 ];
 
+// Резерв намеренно НЕ колонка на доске: он заведён ровно затем, чтобы
+// убрать с глаз организации, случайные чаты и отклики двухлетней давности.
+// Отдельной колонкой он засорял бы доску тем же самым, от чего избавляет.
+// Смотреть его — через кнопку «Резерв», переводить туда — из карточки и
+// массовых действий.
+const RESERVE = { key: 'резерв', label: 'Резерв', color: 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]', dot: 'bg-gray-400', border: 'border-t-gray-400' };
+const ALL_STAGES = [...STAGES, RESERVE];
+
 const SOURCES = [
   { key: 'manual', label: 'Вручную' },
   { key: 'hh',     label: 'hh.ru'   },
@@ -39,7 +47,7 @@ const SOURCES = [
   { key: 'other',  label: 'Другое'  },
 ];
 
-const stageOf   = (key) => STAGES.find(s => s.key === key) || STAGES[0];
+const stageOf   = (key) => ALL_STAGES.find(s => s.key === key) || STAGES[0];
 const srcLabel  = (key) => SOURCES.find(s => s.key === key)?.label || key;
 // Год обязателен: после импорта истории с площадок в списке соседствуют
 // отклики 2023-2024 годов и сегодняшние, и «31 окт» рядом с «7 авг» читается
@@ -737,7 +745,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
           <div>
             <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-2.5 uppercase tracking-wide">Перевести в этап</p>
             <div className="flex flex-wrap gap-2">
-              {STAGES.map(s => (
+              {ALL_STAGES.map(s => (
                 <button
                   key={s.key}
                   onClick={() => { onStageChange(candidate.id, s.key); onClose(); }}
@@ -1153,6 +1161,59 @@ function CardFlag({ tone, label, icon }) {
   );
 }
 
+/** Резерв — условно мёртвые кандидаты.
+ *
+ * Списком, а не карточками: сюда заходят раз в месяц убедиться, что ничего
+ * живого не заперли, а не разбирать по одному. Возврат в воронку — одной
+ * кнопкой, потому что ошибка тут возможна и цена её должна быть нулевой.
+ */
+function ReserveView({ candidates, onOpen, onRestore }) {
+  if (!candidates.length) {
+    return (
+      <div className="px-6 sm:px-10 py-16 text-center text-[color:var(--color-muted-foreground)]">
+        <Archive size={40} className="mx-auto mb-3 opacity-20" />
+        <p className="text-sm">Резерв пуст</p>
+        <p className="text-xs mt-1 opacity-70">
+          Сюда переносят организации, случайные чаты и отклики, по которым работа не ведётся.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="px-6 sm:px-10 py-5">
+      <p className="text-sm text-[color:var(--color-muted-foreground)] mb-4 max-w-3xl leading-relaxed">
+        {candidates.length} в резерве. Они не удалены и не участвуют в воронке: опрос им не
+        запускается, сообщения не опрашиваются, уведомления не приходят. Карточки сохранены
+        намеренно — по ним импорт узнаёт уже виденных людей и не заводит их заново при
+        переподключении интеграции.
+      </p>
+      <div className="rounded-xl border border-[color:var(--color-border)] divide-y divide-[color:var(--color-border)] overflow-hidden">
+        {candidates.map(c => (
+          <div key={c.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[color:var(--color-muted)]/20 transition-colors">
+            <button onClick={() => onOpen(c)} className="flex-1 min-w-0 text-left">
+              <span className="text-sm font-medium">{c.name}</span>
+              <span className="text-xs text-[color:var(--color-muted-foreground)] ml-2">
+                {srcBadgeLabel(c.source)} · добавлен {fmtDate(c.created_at)}
+              </span>
+              {c.last_message_text && (
+                <p className="text-xs text-[color:var(--color-muted-foreground)] truncate mt-0.5">
+                  {c.last_message_text}
+                </p>
+              )}
+            </button>
+            <button
+              onClick={() => onRestore(c.id)}
+              className="flex-shrink-0 text-xs px-2.5 py-1.5 rounded-lg border border-[color:var(--color-border)] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)]/40 transition-colors"
+            >
+              Вернуть в воронку
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Funnel conversion stats (executive summary above the board) ────
 function FunnelStats({ candidates, activeStage, onSelectStage }) {
   const total = candidates.length;
@@ -1453,11 +1514,13 @@ function BulkActionsBar({ count, total, onSelectAll, onClear, onMoveStage, onSta
         </button>
         {stageOpen && (
           <div className="absolute bottom-full mb-2 left-0 bg-[color:var(--color-surface)] text-[color:var(--color-text)] rounded-xl shadow-xl border border-[color:var(--color-border)] overflow-hidden min-w-[160px]">
-            {STAGES.map(s => (
+            {ALL_STAGES.map(s => (
               <button
                 key={s.key}
                 onClick={() => { setStageOpen(false); onMoveStage(s.key); }}
-                className={`w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-[color:var(--color-control-bg-hover)] transition-colors`}
+                className={`w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-[color:var(--color-control-bg-hover)] transition-colors ${
+                  s.key === RESERVE.key ? 'border-t border-[color:var(--color-border)]' : ''
+                }`}
               >
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
                 {s.label}
@@ -1585,6 +1648,10 @@ export default function Recruitment() {
   const [vacancies,       setVacancies]       = useState([]);
   const [selectedId,      setSelectedId]      = useState(null);
   const [candidates,      setCandidates]      = useState([]);
+  // Резерв держим отдельно от доски: доска рисует только STAGES, поэтому
+  // резервные карточки в неё не попадают сами, а счётчик нужен на кнопке.
+  const reserved = candidates.filter(c => c.stage === RESERVE.key);
+  const reserveCount = reserved.length;
   const [loading,         setLoading]         = useState(true);
   const [cLoading,        setCLoading]        = useState(false);
   const [showClosed,      setShowClosed]      = useState(false);
@@ -1890,6 +1957,18 @@ export default function Recruitment() {
             >
               <Calendar size={13} /> Собеседования
             </button>
+            <button
+              onClick={() => setMainView('reserve')}
+              title="Условно мёртвые: организации, случайные чаты, старые отклики. Не удалены — лежат отдельно, чтобы не подтянулись заново при переподключении интеграции."
+              className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 ${mainView === 'reserve' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+            >
+              <Archive size={13} /> Резерв
+              {reserveCount > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${mainView === 'reserve' ? 'bg-white/25' : 'bg-[color:var(--color-muted)]'}`}>
+                  {reserveCount}
+                </span>
+              )}
+            </button>
           </div>
           <button onClick={() => setVacancyModal('new')} className="btn btn--primary text-sm flex items-center gap-1.5">
             <Plus size={15} /> Вакансия
@@ -1918,6 +1997,14 @@ export default function Recruitment() {
       {/* Interview schedule view */}
       {mainView === 'interviews' && (
         <InterviewSchedule onCandidateClick={c => setDetailModal(c)} />
+      )}
+
+      {mainView === 'reserve' && (
+        <ReserveView
+          candidates={reserved}
+          onOpen={c => setDetailModal(c)}
+          onRestore={id => stageChange(id, 'новый')}
+        />
       )}
 
       {/* Funnel conversion summary — click a stage to scroll the board to it */}

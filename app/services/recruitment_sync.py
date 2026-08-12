@@ -274,7 +274,7 @@ async def _check_hh_messages(db, src, token: str) -> None:
     candidates = db.query(Candidate).filter(
         Candidate.source == "hh",
         Candidate.external_id.isnot(None),
-        Candidate.stage.notin_([rs.STAGE_HIRED, rs.STAGE_REJECTED]),
+        Candidate.stage.notin_(rs.TERMINAL_STAGES),
         Candidate.created_at >= cutoff,
     ).all()
     # Опрашиваем тех, у кого идёт быстрый опрос, либо тех, у кого переписка
@@ -494,7 +494,7 @@ async def _check_avito_messages(db, src, token: str) -> None:
         Candidate.source == "avito",
         Candidate.platform_chat_id.isnot(None),
         Candidate.platform_chat_id != "",
-        Candidate.stage.notin_([rs.STAGE_HIRED, rs.STAGE_REJECTED]),
+        Candidate.stage.notin_(rs.TERMINAL_STAGES),
         Candidate.created_at >= cutoff,
     ).all()
     if not candidates:

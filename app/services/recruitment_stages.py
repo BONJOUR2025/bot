@@ -33,9 +33,23 @@ STAGE_THINKING = "думает"
 STAGE_INTERVIEW = "собеседование"
 STAGE_HIRED = "нанят"
 STAGE_REJECTED = "отказ"
+# Отстойник для условно мёртвых: организации, случайные чаты, отклики
+# двухлетней давности. Не «отказ» — отказ означает решение по человеку, а
+# здесь мы просто убираем с глаз то, что кандидатом никогда не было.
+#
+# Именно перемещением, а не удалением: карточка остаётся ключом, по которому
+# импорт узнаёт уже виденного человека. Удалить — значит получить их всех
+# заново при следующей переnastройке интеграции, что однажды уже случилось.
+STAGE_RESERVE = "резерв"
 
 STAGES = [STAGE_NEW, STAGE_SCREENING, STAGE_ANSWERED, STAGE_THINKING,
-          STAGE_INTERVIEW, STAGE_HIRED, STAGE_REJECTED]
+          STAGE_INTERVIEW, STAGE_HIRED, STAGE_REJECTED, STAGE_RESERVE]
+
+# Этапы, на которых работа с человеком закончена: ни опроса, ни ответов, ни
+# уведомлений. Один список на всех, кто это проверяет, — раньше терминальные
+# этапы перечисляли по месту, и «резерв» пришлось бы не забыть дописать в
+# каждое из них.
+TERMINAL_STAGES = [STAGE_HIRED, STAGE_REJECTED, STAGE_RESERVE]
 
 # Этапы, которые ведёт бот по ходу опроса.
 BOT_STAGES = {STAGE_NEW, STAGE_SCREENING, STAGE_ANSWERED}
@@ -44,7 +58,8 @@ BOT_STAGES = {STAGE_NEW, STAGE_SCREENING, STAGE_ANSWERED}
 # обратно в «опрос». «Думает» здесь по той же причине и с большим весом:
 # кандидат на этом этапе как раз и должен написать «я согласен», и этот
 # ответ обязан оставить карточку на месте, а не сбросить её в «опрос».
-HUMAN_STAGES = {STAGE_THINKING, STAGE_INTERVIEW, STAGE_HIRED, STAGE_REJECTED}
+HUMAN_STAGES = {STAGE_THINKING, STAGE_INTERVIEW, STAGE_HIRED, STAGE_REJECTED,
+                STAGE_RESERVE}
 
 FLAG_NEEDS_REPLY = "needs_reply"
 FLAG_SILENT = "silent"
