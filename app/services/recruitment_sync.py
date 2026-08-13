@@ -446,6 +446,45 @@ def _asked_at_ts(state: dict) -> float | None:
 _SOURCE_LABEL = {"avito": "Авито", "hh": "hh.ru"}
 
 
+async def _schedule_call_if_named(cand_id: int, name: str, text: str) -> str | None:
+    """Кандидат назвал время звонка — завести задачу с напоминанием.
+
+    Возвращает человекочитаемое время или None. Нужно потому, что назначенные
+    самим кандидатом звонки держались исключительно на памяти: Бугай написал
+    «Завтра в 14:00», никто не позвонил, и обнаружилось это через сутки при
+    чтении переписок.
+
+    Ошибка здесь не должна ронять уведомление: сообщить о письме важнее, чем
+    завести задачу.
+    """
+    from app.services import call_time
+    from app.services.config_service import ConfigService
+
+    try:
+        found = call_time.extract(text, ConfigService().load())
+        if not found:
+            return None
+        d, t = found
+        from app.schemas.task import TaskCreate
+        from app.services.task_service import get_task_service
+
+        await get_task_service().create_task(
+            TaskCreate(
+                title=f"Позвонить: {name}",
+                description=f"Кандидат сам назвал время: «{text[:300]}»",
+                due_date=d, due_time=t,
+                category="Подбор персонала",
+                priority="high",
+                reminder_minutes=15,
+            ),
+            created_by="Быстрый режим",
+        )
+        return f"{d.strftime('%d.%m')} в {t.strftime('%H:%M')}"
+    except Exception as exc:
+        logger.warning("не удалось завести задачу на звонок для кандидата %s: %s", cand_id, exc)
+        return None
+
+
 async def notify_unhandled_message(cand_id: int, name: str, text: str,
                                    msg_id: str, source: str) -> bool:
     """Сообщение, которое опрос не забрал, — довести до админа.
@@ -481,9 +520,12 @@ async def notify_unhandled_message(cand_id: int, name: str, text: str,
         own.close()
 
     label = _SOURCE_LABEL.get(source, source)
+    when = await _schedule_call_if_named(cand_id, name, text)
     ok = await send_notification(
         f"💬 <b>Новое сообщение от кандидата ({label})</b>\n"
         f"<b>{name}</b>: {text[:200]}"
+        + (f"\n\n📞 Договорились созвониться: <b>{when}</b>\nЗадача с напоминанием создана."
+           if when else "")
     )
     if not ok:
         logger.warning("[Sync] %s notification FAILED for %s", source, name)

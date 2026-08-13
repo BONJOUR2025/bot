@@ -82,6 +82,70 @@ _NOT_LOOKING_HINT = re.compile(
 )
 
 
+# Заявление «я уже трудоустроен» посреди опроса. Отдельно от
+# _NOT_LOOKING_HINT: тот проверяет ОТВЕТ на прямой вопрос «вы ещё в поиске?»,
+# где голое «нет» — это отказ. Здесь же кандидат отвечает на «На каких
+# позициях работали?», и «нет» означает «нет такого опыта», а не «не ищу».
+# Поэтому голого отрицания недостаточно, нужно именно заявление.
+_ALREADY_EMPLOYED_HINT = re.compile(
+    r"уже\s*наш[её]л|уже\s*нашла|уже\s*устро|нашл[аи]?\s*работу|"
+    r"не\s*актуальн|неактуальн|вышел\s*на\s*работу|closed|"
+    r"больше\s*не\s*ищу|не\s*ищу\s*работу",
+    re.IGNORECASE,
+)
+
+
+def _announces_not_looking(text: str, cfg: dict) -> bool:
+    """Кандидат посреди опроса сообщает, что уже трудоустроен.
+
+    Найдено в переписках: Халимов на вопрос о позициях ответил «Здравствуйте
+    я уже устроился» и получил в ответ следующий вопрос по списку. Осипов —
+    «Спасибо, я уже нашел», и тоже поехали дальше. Проверка интереса
+    вызывалась только в первой фазе, а человек может передумать в любой.
+
+    Асимметрия здесь ОБРАТНАЯ той, что у встречного вопроса: попрощаться с
+    заинтересованным кандидатом дороже, чем задать лишний вопрос уже
+    трудоустроенному. Поэтому срабатываем, только когда И ключевые слова, И
+    модель согласны; при любой неуверенности продолжаем опрос.
+
+    Ключевые слова заодно работают предфильтром: без них модель не
+    вызывается вовсе, так что на обычных ответах это ничего не стоит.
+    """
+    if not _ALREADY_EMPLOYED_HINT.search(text or ""):
+        return False
+
+    from app.services.llm_client import chat, get_client
+
+    if not get_client(cfg):
+        return True  # ключевые слова здесь достаточно однозначны
+
+    try:
+        raw = chat(
+            cfg,
+            [{"role": "user", "content": text}],
+            system=(
+                "Сообщение кандидата в переписке о вакансии. Определи, сообщает ли он, "
+                "что уже нашёл работу или больше не ищет. Ответь ТОЛЬКО JSON: "
+                '{"not_looking": true/false}'
+            ),
+            max_tokens=20,
+            employee_id="quick_screening",
+            employee_name="Быстрый режим (кандидаты)",
+            feature="quick_screening",
+        )
+    except Exception as e:
+        log.warning("quick_screening: not-looking check failed: %s", e)
+        return True
+
+    m = re.search(r"\{.*\}", raw or "", re.DOTALL)
+    if not m:
+        return True
+    try:
+        return bool(json.loads(m.group()).get("not_looking"))
+    except Exception:
+        return True
+
+
 def is_quick_mode(vacancy) -> bool:
     return bool(vacancy and getattr(vacancy, "quick_mode_enabled", False) and get_questions(vacancy))
 
@@ -442,6 +506,26 @@ async def _process_message(db, candidate, vacancy, src, token: str,
     if idx >= len(questions):
         state["status"] = "done"
         save_state(db, candidate, state)
+        return
+
+    # «Я уже устроился» посреди опроса — прощаемся, а не задаём следующий
+    # вопрос. Проверка интереса раньше жила только в первой фазе, и человек,
+    # передумавший на середине, продолжал получать анкету: Халимову после
+    # «Здравствуйте я уже устроился» пришло «На каких позициях вы работали?».
+    if _announces_not_looking(text, cfg):
+        err = await _send(db, candidate, src, token, DECLINE_FAREWELL)
+        if err:
+            log.warning("quick_screening: failed to send farewell to candidate %s: %s", candidate.id, err)
+        candidate.stage = "отказ"
+        state["status"] = "done"
+        state["reason"] = "not_looking"
+        save_state(db, candidate, state)
+        await send_notification(
+            f"🚫 <b>Кандидат больше не ищет работу</b>\n{_candidate_label(candidate, vacancy)}\n\n"
+            f"Сообщение: «{text[:200]}»\n\nОпрос остановлен, этап переведён в «Отказ»."
+        )
+        log.info("quick_screening: candidate %s announced they are employed mid-screen, declined",
+                 candidate.id)
         return
 
     # Counter-question → stop and hand over, without answering it.
