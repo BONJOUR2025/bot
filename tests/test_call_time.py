@@ -155,3 +155,29 @@ class TestInventedTimeIsRejected:
     def test_daypart_counts_as_named_hour(self, model):
         model["reply"] = {"day": "day_after", "time": "18:00"}
         assert call_time.extract("послезавтра вечером", {}, now=NOW) is not None
+
+
+class TestTimePrepositions:
+    """Предлог времени + число — самая частая форма в переписках.
+
+    «после 17 смогу» не подходило ни под один шаблон предфильтра, и до
+    модели дело не доходило вовсе: сообщение молча считалось «без времени».
+    Вместе с ним пропадали «к 18 подъеду», «до 19 свободен», «с 15 могу».
+    """
+
+    def test_prepositions_are_recognised(self):
+        for t in ("после 17 смогу", "к 18 подъеду", "до 19 свободен",
+                  "с 15 могу", "около 16 наберите", "в 17"):
+            assert call_time.looks_like_time(t) is True, t
+
+    def test_bare_number_about_experience_is_not_a_time(self):
+        """Голое число в предфильтр не берём: иначе модель начнёт искать
+        время в рассказе про стаж — и находить там, где его нет."""
+        for t in ("Работаю мастером по коже 8 лет", "опыт 2 года",
+                  "делал 15 пар в смену"):
+            assert call_time.looks_like_time(t) is False, t
+
+    def test_after_seventeen_resolves_to_today(self, model):
+        model["reply"] = {"day": None, "time": "17:00"}
+        d, t = call_time.extract("после 17 смогу", {}, now=NOW)
+        assert (d.isoformat(), t.strftime("%H:%M")) == ("2026-08-13", "17:00")
