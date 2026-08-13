@@ -143,7 +143,7 @@ def main() -> None:
     if result.returncode != 0:
         print(f"[restart_watcher] pm2 restart failed: {result.stderr}")
         send_telegram(
-            f"❌ Не удалось перезапустить «{label}» (pm2 restart {pm2_name}): "
+            f"🛠 СБОЙ · Не удалось перезапустить «{label}» (pm2 restart {pm2_name}): "
             f"{(result.stderr or result.stdout).strip()[:300]}"
         )
         return
@@ -153,12 +153,12 @@ def main() -> None:
         else _wait_heartbeat(heartbeat_name, trigger_time)
     )
     if came_back:
-        send_telegram(f"✅ Процесс «{label}» перезапущен (pm2 restart {pm2_name}) и снова онлайн.")
+        send_telegram(f"⚪ Процесс «{label}» перезапущен (pm2 restart {pm2_name}) и снова онлайн.")
         return
 
     print(f"[restart_watcher] {pm2_name} did not come back within {TIMEOUT_S}s")
     send_telegram(
-        f"⚠️ Процесс «{label}» перезапущен, но не вышел на связь за {TIMEOUT_S // 60} мин — проверьте вручную."
+        f"🛠 СБОЙ · «{label}» перезапущен, но не вышел на связь за {TIMEOUT_S // 60} мин — проверьте вручную."
     )
 
 

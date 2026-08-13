@@ -26,7 +26,8 @@ async def notify_admin_profile_change(employee_id: str, employee_name: str, fiel
         log("⚠️ [vk] Telegram bot/ADMIN_CHAT_ID не настроены — не удалось уведомить админа")
         return
     text = (
-        f"🔔 (VK) Пользователь {employee_name} хочет обновить данные:\n"
+        f"🔴 РЕШЕНИЕ · Изменение данных сотрудника (VK)\n"
+        f"{employee_name} хочет обновить данные:\n"
         f"Поле: {field}\n"
         f"Новое значение: {new_value}"
     )

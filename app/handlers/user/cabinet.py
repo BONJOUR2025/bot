@@ -202,7 +202,8 @@ async def handle_edit_confirmation(
             f"DEBUG [handle_edit_confirmation] Сохранено изменение для {user_id}: {field} → {new_value}"
         )
         admin_message = (
-            f"🔔 Пользователь {users[user_id]['name']} хочет обновить данные:\n"
+            f"🔴 РЕШЕНИЕ · Изменение данных сотрудника\n"
+            f"{users[user_id]['name']} хочет обновить данные:\n"
             f"Поле: {field}\n"
             f"Новое значение: {new_value}"
         )

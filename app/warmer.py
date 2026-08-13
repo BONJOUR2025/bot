@@ -198,7 +198,7 @@ class Warmer:
             self.consecutive_failures += 1
         else:
             if self.consecutive_failures >= ALERT_AFTER_FAILURES:
-                notify("✅ Прогрев кэша Firebird восстановился.")
+                notify("⚪ Прогрев кэша Firebird восстановился.")
                 self.last_alert_at = None
             self.consecutive_failures = 0
 
@@ -210,7 +210,7 @@ class Warmer:
         self.last_alert_at = now
         detail = "\n".join(result.get("errors") or []) or "нет подробностей"
         notify(
-            "⚠️ Прогрев кэша Firebird не работает.\n"
+            "🛠 СБОЙ · Прогрев кэша Firebird не работает.\n"
             f"Неудачных циклов подряд: {self.consecutive_failures}.\n"
             f"Отчёты по продажам и мастерам будут открываться медленно.\n\n{detail}"
         )

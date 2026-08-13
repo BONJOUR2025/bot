@@ -94,3 +94,46 @@ class TestHelpers:
         for fn, prefix in ((notify.notify_action, ACTION),
                            (notify.notify_failure, FAILURE)):
             assert prefix.split("<b>")[0].strip() in inspect.getsource(fn)
+
+
+# ── Второе семейство: всё, что уходит админу мимо send_notification ──
+#
+# Первый разбор охватил только канал send_notification — это оказался
+# рекрутинг и часть служебных сообщений. Но админу пишут ещё и напрямую
+# через bot.send_message(chat_id=ADMIN_CHAT_ID): запросы на выплату,
+# заявки на смену данных сотрудника, отчёты сторожа процессов, прогреватель
+# кэша, дни рождения, напоминания о платежах. Именно там и живёт самое
+# срочное, что есть в системе, — деньги.
+
+DECISION = "🔴 РЕШЕНИЕ"
+
+
+class TestAdminRequestsAreMarkedAsDecisions:
+    """Запрос выплаты и смена данных ждут не реплики, а нажатия кнопки —
+    и на другой стороне человек ждёт денег или доступа."""
+
+    @pytest.mark.parametrize("path,fragment", [
+        ("services/telegram_service.py", "Новый запрос на выплату"),
+        ("handlers/user/cabinet.py", "Изменение данных сотрудника"),
+        ("vk/admin_bridge.py", "Изменение данных сотрудника (VK)"),
+    ])
+    def test_marked(self, path, fragment):
+        src = (APP / path).read_text(encoding="utf-8")
+        assert f"{DECISION} · {fragment}" in src
+
+
+class TestInfrastructureAlertsAreClassified:
+    @pytest.mark.parametrize("path,fragment,tier", [
+        ("utils/restart_watcher.py", "Не удалось перезапустить", "🛠 СБОЙ"),
+        ("utils/restart_watcher.py", "не вышел на связь", "🛠 СБОЙ"),
+        ("warmer.py", "Прогрев кэша Firebird не работает", "🛠 СБОЙ"),
+        ("warmer.py", "Прогрев кэша Firebird восстановился", "⚪"),
+        ("core/application.py", "день рождения", "⚪"),
+        ("core/application.py", "Напоминание о платеже", "⚪"),
+    ])
+    def test_tier_prefix_present(self, path, fragment, tier):
+        src = (APP / path).read_text(encoding="utf-8")
+        lines = [ln for ln in src.splitlines() if fragment in ln and '"' in ln]
+        assert lines, f"строка с «{fragment}» не найдена в {path}"
+        assert any(tier in ln for ln in lines), \
+            f"«{fragment}» в {path} без префикса {tier}: {lines[:1]}"

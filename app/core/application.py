@@ -303,9 +303,9 @@ def register_jobs(app):
                 tomorrow_lines.append(line)
         messages = []
         if today_lines:
-            messages.append("🎉 Сегодня день рождения у:\n" + "\n".join(today_lines))
+            messages.append("⚪ Сегодня день рождения у:\n" + "\n".join(today_lines))
         if tomorrow_lines:
-            messages.append("ℹ️ Завтра день рождения у:\n" + "\n".join(tomorrow_lines))
+            messages.append("⚪ Завтра день рождения у:\n" + "\n".join(tomorrow_lines))
         if messages and ADMIN_CHAT_ID:
             await context.bot.send_message(
                 chat_id=ADMIN_CHAT_ID, text="\n\n".join(messages)
@@ -335,7 +335,7 @@ def register_jobs(app):
                 amount = sched.get("planned_amount", 0)
                 name = sched.get("name", "")
                 text = (
-                    f"🗓 Напоминание о платеже\n"
+                    f"⚪ Напоминание о платеже\n"
                     f"📌 {name}\n"
                     f"💰 {amount:,.0f} ₽\n"
                     f"📅 Срок: {due.strftime('%d.%m.%Y')}"
