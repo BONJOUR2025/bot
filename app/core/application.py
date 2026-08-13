@@ -352,6 +352,20 @@ def register_jobs(app):
 
     app.job_queue.run_daily(payment_reminder, time(hour=9, minute=0))
 
+    @log_job("first_order_watch")
+    async def first_order_watch(context: ContextTypes.DEFAULT_TYPE):
+        """Первый заказ на новой точке — повод поздравить.
+
+        Раз в 15 минут, а не раз в сутки: узнать о таком через сутки — уже
+        не новость. Проверка дешёвая (два запроса к Firebird) и, пока точки
+        нет, обрывается на первом же — подразделение по названию не
+        находится.
+        """
+        from ..services.first_order_watch import check_and_notify
+        await check_and_notify()
+
+    app.job_queue.run_repeating(first_order_watch, interval=15 * 60, first=60)
+
     @log_job("morning_briefing")
     async def morning_briefing_job(context: ContextTypes.DEFAULT_TYPE):
         from ..services.briefing_service import send_morning_briefing
