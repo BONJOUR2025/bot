@@ -1,14 +1,23 @@
-"""Сторож первого заказа с новой точки.
+"""Сторож первого заказа, сданного в «Чистомат».
 
-Заведён под «Чистомат» — точку самообслуживания, которой в Agbis ещё нет.
-Отсюда главное решение: ищем по НАЗВАНИЮ подразделения, а не по его номеру.
-Номер появится только вместе с точкой, и просить его заранее — значит
-вернуться к этой задаче ещё раз; название же известно сейчас, и сторож
-сработает сам в тот день, когда точку заведут.
+Три вещи, которые выяснились при разборе и определили устройство:
 
-Срабатывает один раз: факт и номер заказа записываются в конфиг, дальше
-проверка выходит сразу. Это важнее, чем кажется, — «первый заказ» бывает
-один, и повторное поздравление обесценило бы его.
+1. **Чистомат — это склад, а не подразделение.** `SCLADS.id=10125`,
+   название «Чистомат 1». Поиск идёт по названию, а не по номеру: точку
+   могут пересоздать или добавить «Чистомат 2», и тогда сторож подхватит
+   её сам.
+
+2. **Заказ привязывается к складу приёмки через `sclad_kredit_id`.**
+   Проверено на живых данных: у заказа 1232305 `kredit=21021`
+   (Бестужевская), а `current_sclad_id=10125` — то есть он принят на
+   Бестужевской и лишь перемещён в Чистомат. Считать такой сданным в
+   чистомат было бы неверно.
+
+3. **На складе уже есть 19 заказов от 3–22 июня** (номера 00003–00019,
+   плотно за четыре дня, потом два месяца тишины) — очевидно тестовые.
+   Поэтому «первый заказ» отсчитывается не от начала времён, а от момента
+   установки сторожа: при первом запуске он запоминает последний
+   существующий заказ и ждёт следующего за ним.
 """
 from __future__ import annotations
 
@@ -16,62 +25,78 @@ import logging
 
 log = logging.getLogger(__name__)
 
-# Подстрока названия подразделения, регистр не важен. Список, потому что
-# точку могут назвать «Чистомат», «ЧистоМат №1» или «Чистомат Озерки».
+# Подстрока названия склада, регистр не важен.
 WATCH_NAMES = ("чистомат",)
 
-CFG_SEEN = "first_order_seen"  # {"чистомат": "64863-5"}
+CFG_BASELINE = "first_order_baseline"  # {"чистомат": 123456}  — doc_id на момент установки
+CFG_SEEN = "first_order_seen"          # {"чистомат": "00020"} — уже поздравили
 
 
-def _seen(cfg: dict) -> dict:
-    raw = cfg.get(CFG_SEEN) or {}
+def _dict(cfg: dict, key: str) -> dict:
+    raw = cfg.get(key) or {}
     return raw if isinstance(raw, dict) else {}
 
 
-def find_first_order(name_part: str) -> dict | None:
-    """Самый ранний заказ, созданный на точке с таким названием.
+def _sclad_ids(cur, name_part: str) -> dict[int, str]:
+    cur.execute("SELECT id, name FROM sclads WHERE UPPER(name) LIKE UPPER(?)", (f"%{name_part}%",))
+    out = {}
+    for row in cur.fetchall():
+        name = row[1].decode("utf-8", "replace") if isinstance(row[1], bytes) else (row[1] or "")
+        out[row[0]] = name.strip()
+    return out
 
-    None — если такой точки ещё нет или заказов на ней не было. Оба случая
-    штатные: до открытия точки их не будет каждый раз.
-    """
+
+def latest_doc_id(name_part: str) -> int | None:
+    """Самый свежий заказ склада — точка отсчёта. None, если склада нет."""
     from app.services.firebird_service import FIREBIRD_AVAILABLE, _connect
 
     if not FIREBIRD_AVAILABLE:
         return None
-
     con = _connect()
     try:
         cur = con.cursor()
-        cur.execute(
-            "SELECT dep_id, name FROM deps WHERE UPPER(name) LIKE UPPER(?)",
-            (f"%{name_part}%",),
-        )
-        deps = []
-        for row in cur.fetchall():
-            dep_name = row[1].decode("utf-8", "replace") if isinstance(row[1], bytes) else (row[1] or "")
-            deps.append((row[0], dep_name.strip()))
-        if not deps:
+        sclads = _sclad_ids(cur, name_part)
+        if not sclads:
             return None
+        ids = ",".join(str(i) for i in sclads)
+        cur.execute(f"SELECT MAX(o.doc_id) FROM docs_order o WHERE o.sclad_kredit_id IN ({ids})")
+        row = cur.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+    finally:
+        con.close()
 
-        ids = ",".join(str(d[0]) for d in deps)
-        # FIRST 1 + ORDER BY: нужен именно первый заказ, а не любой.
+
+def find_order_after(name_part: str, after_doc_id: int) -> dict | None:
+    """Первый заказ, сданный в этот склад ПОСЛЕ указанного doc_id."""
+    from app.services.firebird_service import FIREBIRD_AVAILABLE, _connect
+
+    if not FIREBIRD_AVAILABLE:
+        return None
+    con = _connect()
+    try:
+        cur = con.cursor()
+        sclads = _sclad_ids(cur, name_part)
+        if not sclads:
+            return None
+        ids = ",".join(str(i) for i in sclads)
         cur.execute(
             f"""
-            SELECT FIRST 1 d.doc_num, d.doc_date, d.dep_src_id
-            FROM docs d
-            WHERE d.dep_src_id IN ({ids})
-            ORDER BY d.doc_date, d.doc_id
-            """
+            SELECT FIRST 1 d.doc_num, d.doc_date, o.sclad_kredit_id, o.doc_id
+            FROM docs_order o
+                INNER JOIN docs d ON d.doc_id = o.doc_id
+            WHERE o.sclad_kredit_id IN ({ids}) AND o.doc_id > ?
+            ORDER BY o.doc_id
+            """,
+            (after_doc_id,),
         )
         row = cur.fetchone()
         if not row:
             return None
-        by_id = dict(deps)
         return {
             "doc_num": str(row[0]),
             "doc_date": row[1],
-            "dep_id": row[2],
-            "dep_name": by_id.get(row[2], name_part),
+            "sclad_name": sclads.get(row[2], name_part),
+            "doc_id": int(row[3]),
         }
     finally:
         con.close()
@@ -89,8 +114,8 @@ def _celebration(order: dict) -> str:
         when = d.strftime("%d.%m.%Y")
     return (
         "🎉🎉🎉\n\n"
-        f"<b>ПЕРВЫЙ ЗАКАЗ В «{order['dep_name'].upper()}»!</b>\n\n"
-        "🥳 Это случилось! Точка заработала и приняла своего первого клиента.\n\n"
+        f"<b>ПЕРВЫЙ ЗАКАЗ В «{order['sclad_name'].upper()}»!</b>\n\n"
+        "🥳 Свершилось! Чистомат принял своего первого клиента.\n\n"
         f"📄 Заказ <b>{order['doc_num']}</b>\n"
         f"🕒 {when}\n\n"
         "Поздравляю! 🍾✨🎊"
@@ -104,14 +129,26 @@ async def check_and_notify() -> bool:
 
     svc = ConfigService()
     cfg = svc.load()
-    seen = _seen(cfg)
+    baseline = _dict(cfg, CFG_BASELINE)
+    seen = _dict(cfg, CFG_SEEN)
     fired = False
 
     for name_part in WATCH_NAMES:
         if seen.get(name_part):
             continue
         try:
-            order = find_first_order(name_part)
+            if name_part not in baseline:
+                # Первый запуск: запоминаем, что уже есть, и ждём следующего.
+                # Без этого поздравление ушло бы за июньские тестовые заказы.
+                last = latest_doc_id(name_part)
+                if last is None:
+                    continue  # склада ещё нет
+                baseline[name_part] = last
+                svc.patch({CFG_BASELINE: baseline})
+                log.info("first_order_watch: точка отсчёта для «%s» — doc_id=%s", name_part, last)
+                continue
+
+            order = find_order_after(name_part, int(baseline[name_part]))
         except Exception as exc:
             log.warning("first_order_watch: не удалось проверить «%s»: %s", name_part, exc)
             continue
@@ -119,11 +156,10 @@ async def check_and_notify() -> bool:
             continue
 
         # Пишем в конфиг ДО отправки: если Telegram не ответит, лучше
-        # промолчать один раз, чем поздравлять с первым заказом на каждом
-        # цикле проверки.
+        # промолчать один раз, чем поздравлять на каждом цикле проверки.
         seen[name_part] = order["doc_num"]
         svc.patch({CFG_SEEN: seen})
-        log.info("first_order_watch: первый заказ в «%s» — %s", order["dep_name"], order["doc_num"])
+        log.info("first_order_watch: первый заказ в «%s» — %s", order["sclad_name"], order["doc_num"])
 
         await send_notification(_celebration(order))
         fired = True
