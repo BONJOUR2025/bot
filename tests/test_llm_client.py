@@ -143,7 +143,10 @@ class TestChatPolza:
 
         assert result == "привет от deepseek"
         assert captured["url"] == "https://polza.ai/api/v1/chat/completions"
-        assert captured["json"]["model"] == "deepseek/deepseek-chat"
+        # Модель по умолчанию сверяется с константой, а не с её значением:
+        # она уже менялась (deepseek → gpt-4.1-nano по итогам замера на
+        # реальных репликах), и тест не должен падать от смены модели.
+        assert captured["json"]["model"] == llm.DEFAULT_POLZA_MODEL
         assert captured["headers"]["Authorization"] == "Bearer pz-test"
 
     def test_system_prompt_is_prepended_as_message(self, monkeypatch):
@@ -211,14 +214,23 @@ class TestChatPolza:
         assert captured["url"] == "https://polza.ai/api/v1/chat/completions"
 
     def test_http_error_status_raises(self, monkeypatch):
+        """Ошибочный HTTP-статус должен долетать до вызывающего.
+
+        Тип исключения сменился с httpx.HTTPStatusError на HttpError, когда
+        запросы к polza перевели на транспорт с откатом на curl: рукопожатие
+        OpenSSL к этому хосту срывается через раз. Важен не тип, а то, что
+        ошибка не проглатывается и несёт в себе код ответа."""
+        from app.services.http_transport import HttpError
+
         def fake_post(url, json=None, headers=None, timeout=None):
             return httpx.Response(
                 401, json={"error": "invalid key"}, request=httpx.Request("POST", url),
             )
 
         monkeypatch.setattr(httpx, "post", fake_post)
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(HttpError) as exc:
             llm.chat(self.BASE, [{"role": "user", "content": "hi"}])
+        assert "401" in str(exc.value)
 
 
 class TestEmployeeAttribution:

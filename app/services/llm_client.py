@@ -21,7 +21,13 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-DEFAULT_POLZA_MODEL = "deepseek/deepseek-chat"
+# Замерено на 11 реальных репликах кандидатов из боевых переписок:
+# gpt-4.1-nano — 11/11, deepseek-chat — 9/10 (спутал встречный вопрос
+# «Не совсем понимаю ваш вопрос…» с ответом по существу), gpt-5-nano — 0/5,
+# потому что рассуждающая модель тратит на размышления весь бюджет ответа
+# и при max_tokens=20 возвращает пустоту. При этом gpt-4.1-nano втрое
+# дешевле deepseek на входе и вдвое быстрее.
+DEFAULT_POLZA_MODEL = "openai/gpt-4.1-nano"
 DEFAULT_POLZA_BASE_URL = "https://polza.ai/api/v1"
 
 
@@ -197,7 +203,7 @@ def _chat_polza(
         log.warning("llm_client: no Polza API key configured")
         return None
 
-    import httpx
+    from app.services.http_transport import post_json
 
     base_url = (cfg.get("polza_base_url") or DEFAULT_POLZA_BASE_URL).rstrip("/")
     payload_messages = list(messages)
@@ -210,14 +216,16 @@ def _chat_polza(
         "messages": payload_messages,
         "max_tokens": max_tokens,
     }
-    response = httpx.post(
+    # Через post_json, а не httpx напрямую: рукопожатие OpenSSL к polza на
+    # боевой машине срывается через раз, и раньше это молча превращало
+    # классификатор в поиск по ключевым словам. Подробности — в
+    # app/services/http_transport.py.
+    data = post_json(
         f"{base_url}/chat/completions",
-        json=body,
+        body,
         headers={"Authorization": f"Bearer {api_key}"},
         timeout=60.0,
     )
-    response.raise_for_status()
-    data = response.json()
     usage = data.get("usage") or {}
     reply_text = data["choices"][0]["message"]["content"].strip()
     _record_usage_safely(

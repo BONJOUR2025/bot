@@ -232,3 +232,43 @@ class TestNewResponseOutsideHours:
         assert qs.load_state(c)["status"] == "asking"
         assert len(sent) == 1
         assert qs.INTEREST_QUESTION in sent[0]
+
+
+class TestObviousQuestionIsNotLeftToTheModel:
+    """Короткие явные вопросы модель классифицирует нестабильно.
+
+    Замер на боевой модели: «Какая цена за изделие?» при пяти прогонах подряд
+    дала True, False, False, True, True. Цена ошибки несимметрична —
+    пропущенный встречный вопрос оставляет живого кандидата без ответа
+    (Захаренкова с 21 годом стажа спросила «или я общаюсь с ботом?» и ждала
+    двое суток), а лишнее срабатывание лишь раньше передаёт разговор
+    человеку, что и есть желаемый исход.
+    """
+
+    def _q(self, text):
+        # cfg пустой: если сработает эвристика, до модели дело не дойдёт
+        return qs._looks_like_question(text, {})
+
+    def test_interrogative_word_plus_question_mark(self):
+        for text in ("Какая цена за изделие?",
+                     "Сколько смен в месяц?",
+                     "Подскажите, где находится мастерская?",
+                     "А когда можно приступить?"):
+            assert self._q(text) is True, text
+
+    def test_plain_answers_are_not_questions(self):
+        for text in ("Да", "Нет, такого опыта пока нет",
+                     "Работаю мастером по коже 8 лет",
+                     "Есть гражданство РФ"):
+            assert self._q(text) is False, text
+
+    def test_question_mark_alone_is_not_enough(self):
+        """Иначе любая реплика со знаком вопроса уводила бы разговор
+        человеку, и модель была бы не нужна вовсе."""
+        assert qs._OBVIOUS_QUESTION.search("Да?") is None
+        assert qs._OBVIOUS_QUESTION.search("Готов выйти завтра, ок?") is None
+
+    def test_interrogative_word_without_mark_is_left_to_the_model(self):
+        """«сколько платите» — вопрос без знака вопроса. Такие случаи как раз
+        и нужна модель; эвристика их себе не забирает."""
+        assert qs._OBVIOUS_QUESTION.search("сколько платите") is None

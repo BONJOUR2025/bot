@@ -51,6 +51,25 @@ _QUESTION_HINT = re.compile(
     re.IGNORECASE,
 )
 
+# Явный вопрос: вопросительное слово И знак вопроса одновременно.
+#
+# Нужен потому, что модель на коротких фразах плавает: «Какая цена за
+# изделие?» при пяти прогонах подряд дала True, False, False, True, True.
+# Здесь важна несимметричность цены ошибки. Пропущенный встречный вопрос
+# означает, что живой кандидат остался без ответа — это мы уже наблюдали:
+# Захаренкова с 21 годом стажа спросила «или я общаюсь с ботом?» и ждала
+# двое суток. Лишнее срабатывание означает лишь, что разговор чуть раньше
+# передали человеку, а это и есть желаемый исход.
+#
+# Требование обоих признаков сразу, а не одного «?», отсекает ответы вида
+# «Да?» и обычные реплики со знаком вопроса в конце.
+_OBVIOUS_QUESTION = re.compile(
+    r"(?=.*\?)"
+    r"(?=.*\b(сколько|какая|какие|какой|каков|когда|где|почему|зачем|"
+    r"можно ли|есть ли|подскажите|расскажите|уточните)\b)",
+    re.IGNORECASE | re.DOTALL,
+)
+
 # Fallback "no longer looking" detector for the interest-check reply, used
 # only when the LLM is unavailable. Deliberately narrow (unlike
 # _QUESTION_HINT) — _looks_still_interested defaults to True on anything it
@@ -219,6 +238,11 @@ def _looks_like_question(text: str, cfg: dict) -> bool:
     gate so this never becomes a hard dependency on the AI provider.
     """
     from app.services.llm_client import chat, get_client
+
+    # Явный вопрос не отдаём модели на суд вовсе: она на таких коротких
+    # фразах недетерминирована, а ошибка здесь стоит живого кандидата.
+    if _OBVIOUS_QUESTION.search(text):
+        return True
 
     if not get_client(cfg):
         return bool(_QUESTION_HINT.search(text))
