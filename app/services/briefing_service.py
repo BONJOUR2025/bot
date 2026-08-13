@@ -105,7 +105,9 @@ async def send_morning_briefing():
     if msg_summary:
         sections.append(f"💬 <b>Требует внимания:</b>\n{msg_summary}")
 
-    await send_notification("\n\n".join(sections))
+    # Утренняя сводка — тоже «к сведению»: единый префикс позволяет отсеивать
+    # её глазом наравне с остальным, не вчитываясь.
+    await send_notification("⚪ <b>Утренняя сводка</b>\n\n" + "\n\n".join(sections))
     log.info("Morning briefing sent")
 
 

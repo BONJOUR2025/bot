@@ -29,7 +29,7 @@ async def _alert_secretary_disconnected(reason: str) -> None:
     _last_disconnect_alert = now
     try:
         await send_notification(
-            f"⚠️ <b>Secretary Mode отключён</b>\n{reason}\n\n"
+            f"🛠 <b>СБОЙ · Secretary Mode отключён</b>\n{reason}\n\n"
             f"Пока бот не переподключён, ИИ-ассистент и напоминания кандидатам "
             f"работать не будут — переподключите Chat Automation в настройках Telegram."
         )
@@ -102,7 +102,7 @@ async def send_secretary_message(chat_id: str | int, text: str) -> str | None:
         error_str = f"Telegram: {last_description}"
         try:
             await send_notification(
-                f"❌ Сообщение не доставлено кандидату\n"
+                f"🛠 <b>СБОЙ · Сообщение не доставлено кандидату</b>\n"
                 f"chat_id: {chat_id}\n"
                 f"Текст: {text[:100]}...\n"
                 f"Ошибка: {last_description}"
@@ -243,6 +243,35 @@ async def send_chat_document(
         log.warning("send_chat_document error: %s", exc)
         log_payment_calendar(f"send_chat_document error chat_id={chat_id} file={file_path}: {exc!r}")
         return False
+
+
+# ── Уведомления по срочности ─────────────────────────────────────
+#
+# За сутки приходило 34 уведомления из 19 разных мест, у каждого свой
+# эмодзи и формат. Проблема была не в количестве, а в том, что всё
+# выглядело одинаково: «кандидат задал вопрос и ждёт» читалось тем же
+# весом, что и «бот начал опрос». Глаз переставал различать, и важное
+# терялось — семерых кандидатов, ждавших ответа по двое суток, нашли не по
+# уведомлениям, а при сплошном чтении переписок.
+#
+# Отсюда три категории с постоянным префиксом. Категория, а не эмодзи по
+# вкусу автора строки: одинаковая шапка позволяет отсеивать глазом, не
+# вчитываясь.
+
+
+async def notify_action(title: str, body: str = "") -> bool:
+    """Требует вашего действия сейчас: кандидат ждёт ответа."""
+    return await send_notification(f"🔴 <b>НУЖЕН ОТВЕТ · {title}</b>" + (f"\n{body}" if body else ""))
+
+
+async def notify_info(title: str, body: str = "") -> bool:
+    """К сведению: бот справился сам, но знать полезно."""
+    return await send_notification(f"⚪ <b>{title}</b>" + (f"\n{body}" if body else ""))
+
+
+async def notify_failure(title: str, body: str = "") -> bool:
+    """Что-то сломалось — это про систему, а не про кандидата."""
+    return await send_notification(f"🛠 <b>СБОЙ · {title}</b>" + (f"\n{body}" if body else ""))
 
 
 async def send_notification(text: str) -> bool:

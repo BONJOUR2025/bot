@@ -78,11 +78,11 @@ async def _sync_once() -> None:
                 except Exception as e:
                     logger.warning(f"[Sync] avito message check failed: {e}")
 
-        # Check 24h unlinked candidates
-        try:
-            await _check_pending_tg_links(db)
-        except Exception as e:
-            logger.warning(f"[Sync] pending TG check error: {e}")
+        # Проверки «TG не привязан 24ч» здесь больше нет: она искала этап
+        # «ждем_привязки», которого в воронке не существует с тех пор, как
+        # привязку к Telegram вырезали вместе со старым интервью-флоу. То
+        # есть код отрабатывал вхолостую на каждом цикле и не мог сработать
+        # никогда.
 
         # Alert on quick-screen candidates who went silent for 24h
         try:
@@ -134,7 +134,7 @@ async def _refresh_hh_token_if_needed(db, src) -> str | None:
         if not _hh_refresh_failure_notified:
             _hh_refresh_failure_notified = True
             await send_notification(
-                "🔑 <b>hh.ru: не удалось обновить токен</b>\n"
+                "🛠 <b>СБОЙ · hh.ru не обновил токен</b>\n"
                 "Отклики с hh.ru не загружаются. Переподключите hh.ru в разделе «Подбор» "
                 f"— требуется повторная авторизация.\n\nОшибка: {e}"
             )
@@ -157,31 +157,6 @@ async def _refresh_hh_token_if_needed(db, src) -> str | None:
     return token
 
 
-async def _check_pending_tg_links(db) -> None:
-    """Notify admin about candidates waiting for TG link more than 24h."""
-    from app.models.recruitment import Candidate
-    from app.services.notify import send_notification
-
-    cutoff = datetime.utcnow() - timedelta(hours=24)
-    pending = db.query(Candidate).filter(
-        Candidate.stage == "ждем_привязки",
-        Candidate.updated_at <= cutoff,
-        Candidate.telegram_chat_id == None,
-    ).all()
-
-    for c in pending:
-        # Only notify once — use last_error as flag
-        if c.last_error == "tg_notified":
-            continue
-        await send_notification(
-            f"⏰ <b>TG не привязан 24ч</b>\n"
-            f"Кандидат <b>{c.name}</b> не перешёл по ссылке в течение 24 часов.\n"
-            f"Вакансия: {c.vacancy.title if c.vacancy else '?'}"
-        )
-        c.last_error = "tg_notified"
-        db.commit()
-
-
 async def _notify_new_candidates(source: str, link, candidates: list[dict], backlog: bool = False) -> None:
     from app.services.notify import send_notification
     src_label = "hh.ru" if source == "hh" else "Авито"
@@ -192,11 +167,11 @@ async def _notify_new_candidates(source: str, link, candidates: list[dict], back
     word = "кандидат" if count == 1 else "кандидата" if count < 5 else "кандидатов"
     if backlog:
         lines = [
-            f"📥 <b>Импорт истории ({src_label})</b>\n{vac_title}: загружено {count} {word}\n"
+            f"⚪ <b>Импорт истории ({src_label})</b>\n{vac_title}: загружено {count} {word}\n"
             f"Это накопившиеся отклики, а не новые — бот им не писал.\n"
         ]
     else:
-        lines = [f"👤 <b>Новые отклики ({src_label})</b>\n{vac_title}: +{count} {word}\n"]
+        lines = [f"⚪ <b>Новые отклики ({src_label})</b>\n{vac_title}: +{count} {word}\n"]
     # The first sync of a link imports the whole backlog at once — 76 chats on
     # the live Avito account. Listing every one of them blows past Telegram's
     # 4096-character message limit, so the message would simply fail to send
@@ -356,7 +331,7 @@ async def _check_hh_messages(db, src, token: str) -> None:
 
                 logger.warning("[Sync] hh NEW applicant message from %s (neg=%s), attempting notification", name, neg_id)
                 ok = await send_notification(
-                    f"💬 <b>Новое сообщение от кандидата (hh.ru)</b>\n"
+                    f"🔴 <b>НУЖЕН ОТВЕТ · Сообщение от кандидата (hh.ru)</b>\n"
                     f"<b>{name}</b>: {msg_text[:200]}"
                 )
                 if ok:
@@ -522,7 +497,7 @@ async def notify_unhandled_message(cand_id: int, name: str, text: str,
     label = _SOURCE_LABEL.get(source, source)
     when = await _schedule_call_if_named(cand_id, name, text)
     ok = await send_notification(
-        f"💬 <b>Новое сообщение от кандидата ({label})</b>\n"
+        f"🔴 <b>НУЖЕН ОТВЕТ · Сообщение от кандидата ({label})</b>\n"
         f"<b>{name}</b>: {text[:200]}"
         + (f"\n\n📞 Договорились созвониться: <b>{when}</b>\nЗадача с напоминанием создана."
            if when else "")

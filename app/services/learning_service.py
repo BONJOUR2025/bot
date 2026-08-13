@@ -89,11 +89,12 @@ async def learn_from_escalation(candidate_id: int, question: str, admin_answer: 
         finally:
             db.close()
 
-        await send_notification(
-            f"🧠 <b>База знаний обновлена</b>\n"
-            f"Из диалога с <b>{cand_name}</b> добавлена новая запись:\n\n"
-            f"<b>{title}</b>\n{content[:300]}"
-        )
+        # Уведомления здесь намеренно нет: пополнение базы знаний действия не
+        # требует, а в общей ленте оно тонуло вперемешку с сообщениями
+        # кандидатов, которые ответа как раз ждут. Запись видна в разделе
+        # базы знаний.
+        log.info("learning_service: knowledge base updated from dialog with %s: %s",
+                 cand_name, title)
         return True
 
     except Exception as e:

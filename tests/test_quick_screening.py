@@ -115,8 +115,9 @@ class TestStart:
         ok = run_async(qs.start_screening(_FakeDb(), c, v, _FakeSource(), "tok"))
 
         assert ok is True
-        assert len(alerts) == 1
-        assert "Новый отклик" in alerts[0]
+        # Уведомления на старте больше нет: их приходило по шесть в сутки,
+        # и ни одно не требовало действия — бот как раз работает сам.
+        assert alerts == []
         assert len(sent_messages) == 1
         assert sent_messages[0][:2] == ("hh", "neg-1")
         assert "Здравствуйте" in sent_messages[0][2]
@@ -203,8 +204,8 @@ class TestInterestCheck:
         assert state["status"] == "done"
         assert sent_messages == [("hh", "neg-1", qs.DECLINE_FAREWELL)]
         assert c.stage == "отказ"
-        assert len(alerts) == 1
-        assert "больше не ищет работу" in alerts[0]
+        # Бот попрощался и перевёл в «Отказ» сам — в ленте это было шумом.
+        assert alerts == []
 
     def test_counter_question_during_interest_check_hands_over(self, alerts, sent_messages, no_llm):
         c = self._greeted()
@@ -217,7 +218,7 @@ class TestInterestCheck:
         assert sent_messages == []
         assert c.stage == "новый"  # not declined — just handed to the admin
         assert len(alerts) == 1
-        assert "задал вопрос" in alerts[0]
+        assert "НУЖЕН ОТВЕТ" in alerts[0] and "Вопрос от кандидата" in alerts[0]
 
     def test_paused_candidate_reply_is_not_processed(self, sent_messages, no_llm):
         c = self._greeted(is_paused=True)
@@ -294,7 +295,7 @@ class TestAnswerFlow:
 
         assert qs.load_state(c)["status"] == "done"
         assert len(alerts) == 1
-        assert "ответил на все вопросы" in alerts[0].lower()
+        assert "НУЖЕН ОТВЕТ" in alerts[0] and "Анкета готова" in alerts[0]
         for answer in ["Да, есть", "Да, РФ", "Метро Лесная"]:
             assert answer in alerts[0]
         # two follow-up questions plus the closing message to the candidate
@@ -343,7 +344,7 @@ class TestCounterQuestion:
         assert qs.load_state(c)["status"] == "waiting_admin"
         assert sent_messages == []  # the bot must NOT answer it
         assert len(alerts) == 1
-        assert "задал вопрос" in alerts[0]
+        assert "НУЖЕН ОТВЕТ" in alerts[0] and "Вопрос от кандидата" in alerts[0]
         assert "А какая зарплата?" in alerts[0]
 
     def test_question_without_question_mark_is_still_caught(self, alerts, sent_messages, no_llm):
@@ -431,7 +432,9 @@ class TestSilence:
         run_async(qs.check_silence(self._Db([c], _FakeVacancy())))
 
         assert len(alerts) == 1
-        assert "молчит сутки" in alerts[0]
+        # Молчащих за сутки бывает сразу несколько, поэтому теперь одно
+        # сводное сообщение со списком, а не по уведомлению на каждого.
+        assert "Молчат сутки" in alerts[0]
         assert qs.load_state(c)["silence_alerted"] is True
 
     def test_no_alert_before_24h(self, alerts):

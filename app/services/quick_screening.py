@@ -264,17 +264,18 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
                  candidate.id)
         return False
 
-    await send_notification(
-        f"⚡ <b>Новый отклик — бот начал опрос</b>\n{_candidate_label(candidate, vacancy)}\n\n"
-        f"Уточняю, актуален ли ещё поиск работы, затем задам {len(questions)} вопрос(ов)."
-    )
+    # Уведомления «бот начал опрос» здесь намеренно нет: их приходило по
+    # шесть в сутки, и ни одно не требовало действия — бот как раз работает
+    # сам, а новый отклик и так виден в воронке. Ровно такие сообщения
+    # приучали пролистывать ленту не читая, из-за чего терялись те, где
+    # кандидат действительно ждал ответа.
 
     greeting = f"Здравствуйте!\n\n{INTEREST_QUESTION}"
     err = await _send(db, candidate, src, token, greeting)
     if err:
         log.warning("quick_screening: failed to send greeting to candidate %s: %s", candidate.id, err)
         await send_notification(
-            f"⚠️ <b>Не удалось написать кандидату</b>\n{_candidate_label(candidate, vacancy)}\n\n"
+            f"🛠 <b>СБОЙ · Не удалось написать кандидату</b>\n{_candidate_label(candidate, vacancy)}\n\n"
             f"Ошибка: {err}\nОтветьте вручную на площадке."
         )
         # Mark as needing the admin rather than retrying forever on every sync.
@@ -400,9 +401,9 @@ async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
         state["reason"] = "question"
         save_state(db, candidate, state)
         await send_notification(
-            f"❓ <b>Кандидат задал вопрос — нужен ваш ответ</b>\n"
+            f"🔴 <b>НУЖЕН ОТВЕТ · Вопрос от кандидата</b>\n"
             f"{_candidate_label(candidate, vacancy)}\n\n"
-            f"Вопрос: «{text[:400]}»\n\nБот больше не пишет — отвечайте на площадке."
+            f"«{text[:400]}»\n\nБот больше не пишет — отвечайте на площадке."
         )
         log.info("quick_screening: candidate %s asked a question during interest-check, handed to admin",
                   candidate.id)
@@ -415,10 +416,9 @@ async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
         candidate.stage = "отказ"
         state["status"] = "done"
         save_state(db, candidate, state)
-        await send_notification(
-            f"🚫 <b>Кандидат больше не ищет работу</b>\n{_candidate_label(candidate, vacancy)}\n\n"
-            f"Ответ: «{text[:200]}»\n\nЭтап переведён в «Отказ»."
-        )
+        # Уведомления здесь намеренно нет: бот попрощался и перевёл карточку
+        # в «Отказ» сам, действия от человека не требуется, а сам факт виден
+        # в воронке. В ленте это было чистым шумом.
         log.info("quick_screening: candidate %s no longer looking, declined", candidate.id)
         return
 
@@ -435,7 +435,7 @@ async def _handle_interest_reply(db, candidate, vacancy, src, token: str,
         state["reason"] = "send_failed"
         save_state(db, candidate, state)
         await send_notification(
-            f"⚠️ <b>Не удалось задать первый вопрос</b>\n{_candidate_label(candidate, vacancy)}\n\nОшибка: {err}"
+            f"🛠 <b>СБОЙ · Не удалось задать первый вопрос</b>\n{_candidate_label(candidate, vacancy)}\n\nОшибка: {err}"
         )
         return
 
@@ -520,10 +520,8 @@ async def _process_message(db, candidate, vacancy, src, token: str,
         state["status"] = "done"
         state["reason"] = "not_looking"
         save_state(db, candidate, state)
-        await send_notification(
-            f"🚫 <b>Кандидат больше не ищет работу</b>\n{_candidate_label(candidate, vacancy)}\n\n"
-            f"Сообщение: «{text[:200]}»\n\nОпрос остановлен, этап переведён в «Отказ»."
-        )
+        # Уведомления нет — см. соседний случай в _handle_interest_reply:
+        # бот закрыл вопрос сам.
         log.info("quick_screening: candidate %s announced they are employed mid-screen, declined",
                  candidate.id)
         return
@@ -544,9 +542,9 @@ async def _process_message(db, candidate, vacancy, src, token: str,
         save_state(db, candidate, state)
         collected = _format_answers(state.get("answers") or [])
         await send_notification(
-            f"❓ <b>Кандидат задал вопрос — нужен ваш ответ</b>\n"
+            f"🔴 <b>НУЖЕН ОТВЕТ · Вопрос от кандидата</b>\n"
             f"{_candidate_label(candidate, vacancy)}\n\n"
-            f"Вопрос: «{text[:400]}»\n\n"
+            f"«{text[:400]}»\n\n"
             + (f"Успел ответить:\n{collected}\n\n" if collected else "")
             + "Бот больше не пишет — отвечайте на площадке."
         )
@@ -567,7 +565,7 @@ async def _process_message(db, candidate, vacancy, src, token: str,
             state["reason"] = "send_failed"
             save_state(db, candidate, state)
             await send_notification(
-                f"⚠️ <b>Не удалось задать следующий вопрос</b>\n"
+                f"🛠 <b>СБОЙ · Не удалось задать следующий вопрос</b>\n"
                 f"{_candidate_label(candidate, vacancy)}\n\nОшибка: {err}"
             )
             return
@@ -583,7 +581,7 @@ async def _process_message(db, candidate, vacancy, src, token: str,
     if err:
         log.warning("quick_screening: failed to send closing message to candidate %s: %s", candidate.id, err)
     await send_notification(
-        f"✅ <b>Кандидат ответил на все вопросы</b>\n{_candidate_label(candidate, vacancy)}\n\n"
+        f"🔴 <b>НУЖЕН ОТВЕТ · Анкета готова</b>\n{_candidate_label(candidate, vacancy)}\n\n"
         f"{_format_answers(answers)}\n\nДальше — вы."
     )
     log.info("quick_screening: completed for candidate_id=%s", candidate.id)
@@ -667,6 +665,7 @@ async def check_silence(db) -> None:
     from app.services.notify import send_notification
 
     now = datetime.utcnow()
+    silent: list[str] = []
     candidates = db.query(Candidate).filter(
         Candidate.quick_state_json.isnot(None),
         Candidate.quick_state_json != "",
@@ -697,12 +696,18 @@ async def check_silence(db) -> None:
             pending = questions[idx] if idx < len(questions) else ""
         collected = _format_answers(state.get("answers") or [])
 
-        await send_notification(
-            f"🔇 <b>Кандидат молчит сутки</b>\n{_candidate_label(c, vacancy)}\n\n"
-            + (f"Ждём ответ на: «{pending}»\n\n" if pending else "")
-            + (f"Успел ответить:\n{collected}\n\n" if collected else "")
-            + "Бот больше не пишет."
-        )
+        # Копим и отправляем одним сообщением ниже: молчащих за сутки бывает
+        # сразу несколько, и три подряд одинаковых уведомления — ровно тот
+        # шум, из-за которого лента перестаёт читаться.
+        silent.append(f"• {_candidate_label(c, vacancy)}"
+                      + (f" — ждём ответ на «{pending[:60]}»" if pending else ""))
         state["silence_alerted"] = True
         save_state(db, c, state)
         log.info("quick_screening: silence alert for candidate_id=%s", c.id)
+
+    if silent:
+        await send_notification(
+            f"⚪ <b>Молчат сутки — {len(silent)}</b>\n\n"
+            + "\n".join(silent)
+            + "\n\nБот им больше не пишет."
+        )

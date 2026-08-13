@@ -129,7 +129,7 @@ class PayoutService:
             name = payout_dict.get("payout_type") or "Выплата"
             amount = payout_dict.get("amount", "")
             await send_notification(
-                f"🔗 <b>Выплата привязана к кассовому перемещению</b>\n"
+                f"⚪ <b>Выплата привязана к кассовому перемещению</b>\n"
                 f"{name} · {amount} ₽ → перемещение #{move_id}"
             )
         except Exception:
