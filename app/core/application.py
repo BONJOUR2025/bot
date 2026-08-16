@@ -64,6 +64,7 @@ from ..handlers.admin.asset_actions import handle_asset_ack
 from ..handlers.admin.payment_calendar_actions import handle_payment_calendar_paid
 from ..handlers.quick_task import build_quick_task_handler
 from telegram.request import HTTPXRequest
+from ..utils.tg_request import RetryingHTTPXRequest
 import datetime
 
 
@@ -80,7 +81,11 @@ def create_application(with_jobs: bool = True):
         request_kwargs["proxy"] = proxy_url
         log(f"🌐 Using proxy for Telegram API: {proxy_url}")
 
-    request = HTTPXRequest(**request_kwargs)
+    # Исходящие вызовы — через транспорт с повтором: разовый обрыв связи
+    # не должен ронять обработчик на полуслове (см. app/utils/tg_request.py).
+    request = RetryingHTTPXRequest(**request_kwargs)
+    # А вот getUpdates повторять не надо: у Updater свой цикл переподключения,
+    # наши повторы только задержали бы его.
     get_updates_request = HTTPXRequest(**{
         **request_kwargs,
         "read_timeout": 30.0,

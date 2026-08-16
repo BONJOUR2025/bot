@@ -10,3 +10,11 @@ class HTTPXRequest:
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
+
+    async def do_request(self, url, method, *args, **kwargs):
+        """Точка, которую переопределяет RetryingHTTPXRequest.
+
+        В боевом PTB здесь живёт сам HTTP-вызов; тесты подменяют этот метод,
+        чтобы проверить логику повторов, не выходя в сеть.
+        """
+        raise NotImplementedError("подмените do_request в тесте")

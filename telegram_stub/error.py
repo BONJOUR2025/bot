@@ -10,11 +10,14 @@ class Forbidden(TelegramError):
     pass
 
 
-class TimedOut(TelegramError):
+class NetworkError(TelegramError):
     pass
 
 
-class NetworkError(TelegramError):
+# Иерархия повторяет настоящую: в python-telegram-bot TimedOut — наследник
+# NetworkError. Раньше в стабе он наследовал TelegramError напрямую, и код,
+# который ловит NetworkError, в тестах выглядел сломанным, хотя в бою работал.
+class TimedOut(NetworkError):
     pass
 
 
