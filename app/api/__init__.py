@@ -561,6 +561,14 @@ def create_app() -> FastAPI:
     from app.models.knowledge import KnowledgeDocument  # noqa: F401
     app.include_router(knowledge_router, prefix="/api", dependencies=protected)
 
+    # Живое прослушивание аудио салонов. Намеренно БЕЗ `protected`: WebSocket-
+    # маршруты не проходят через HTTP-зависимость get_current_user (у неё
+    # Request, а не WebSocket), поэтому авторизуются внутри — агент по токену
+    # салона, слушатель по сессии + праву salon-audio. GET-статус несёт своё
+    # require_permission.
+    from .audio import create_audio_router
+    app.include_router(create_audio_router(), prefix="/api")
+
     from app.services import recruitment_sync
 
     @app.on_event("startup")

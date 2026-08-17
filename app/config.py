@@ -89,3 +89,26 @@ DEFAULT_CARD_DISPATCH_CHAT_KEY = (
     CARD_DISPATCH_CHATS[0]["key"] if CARD_DISPATCH_CHATS else None
 )
 SECRET_KEY = settings.secret_key
+
+
+def _load_salon_audio_tokens() -> dict[str, str]:
+    """Токены салонных аудио-агентов: { salon_id: token }.
+
+    Секреты, поэтому живут только в боевом config.json, не в Settings и не
+    в репозитории. Каждый салонный ПК знает свой токен; сервер сверяет по нему
+    входящее соединение агента.
+    """
+    path = Path("config.json")
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    raw = data.get("salon_audio_tokens") or {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): str(v) for k, v in raw.items() if v}
+
+
+SALON_AUDIO_TOKENS = _load_salon_audio_tokens()

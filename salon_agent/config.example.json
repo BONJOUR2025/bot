@@ -1,0 +1,8 @@
+{
+  "salon_id": "8",
+  "token": "ЗАМЕНИТЬ-на-длинный-случайный-секрет-этого-салона",
+  "server_ws": "wss://app.bonjour.pw",
+  "mic_device": "Microphone (USB Audio Device)",
+  "bitrate": "24k",
+  "ffmpeg": "ffmpeg"
+}
