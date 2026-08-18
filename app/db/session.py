@@ -400,7 +400,11 @@ def _migrate_recruitment_kb_and_strategy_defaults() -> None:
     try:
         from app.services.config_service import ConfigService
         cfg_service = ConfigService()
-        cfg = cfg_service.load()
+        # Strict load: if config.json is momentarily unreadable (half-written by
+        # a concurrent writer, locked, corrupt), raise so cfg stays None and the
+        # save below is skipped — never re-run the migration onto {} and persist
+        # a stub that wipes the whole config.
+        cfg = cfg_service.load_strict()
     except Exception:
         cfg = None
 
@@ -461,7 +465,11 @@ def _backfill_builtin_strategy_message_defaults() -> None:
     try:
         from app.services.config_service import ConfigService
         cfg_service = ConfigService()
-        cfg = cfg_service.load()
+        # Strict load: if config.json is momentarily unreadable (half-written by
+        # a concurrent writer, locked, corrupt), raise so cfg stays None and the
+        # save below is skipped — never re-run the migration onto {} and persist
+        # a stub that wipes the whole config.
+        cfg = cfg_service.load_strict()
     except Exception:
         cfg = None
 
