@@ -54,11 +54,17 @@ def load_config() -> dict:
 
 
 def build_ffmpeg_cmd(cfg: dict) -> list[str]:
-    """ffmpeg: микрофон DirectShow → Opus/WebM в stdout.
+    """ffmpeg: микрофон DirectShow → AAC во фрагментированном MP4 в stdout.
 
-    ``device`` — точное имя устройства из
-    ``ffmpeg -list_devices true -f dshow -i dummy``. Битрейт 24–32 кбит/с —
-    речь чистая, канал почти не грузится.
+    Формат — fragmented MP4 / AAC, а НЕ WebM/Opus: MSE в Safari/WKWebView
+    (iOS-приложение на Capacitor, iPad) понимает только fMP4+AAC, WebM/Opus
+    не играет. Desktop Chrome fMP4+AAC тоже поддерживает, так что один формат
+    работает на всех платформах.
+
+    ``empty_moov`` + ``default_base_moof`` дают init-сегмент (ftyp+moov) первым
+    кадром — сервер его кеширует и отдаёт новым слушателям; дальше короткие
+    moof+mdat фрагменты. ``device`` — точное имя из
+    ``ffmpeg -list_devices true -f dshow -i dummy``.
     """
     device = cfg["mic_device"]
     bitrate = str(cfg.get("bitrate", "24k"))
@@ -68,12 +74,12 @@ def build_ffmpeg_cmd(cfg: dict) -> list[str]:
         "-f", "dshow",
         "-i", f"audio={device}",
         "-ac", "1",                     # моно — речь, не музыка
-        "-c:a", "libopus",
+        "-c:a", "aac",
         "-b:a", bitrate,
-        "-application", "voip",         # оптимизация кодека под голос
-        "-f", "webm",
-        # cluster'ы покороче → меньше задержка старта у слушателя
-        "-cluster_time_limit", "200",
+        "-f", "mp4",
+        "-movflags", "empty_moov+default_base_moof+frag_keyframe",
+        # короткие фрагменты (~200мс) → низкая задержка live
+        "-frag_duration", "200000",
         "pipe:1",
     ]
 

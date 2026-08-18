@@ -102,16 +102,34 @@ function useMediaSourcePlayer() {
     if (!activeRef.current || !audioRef.current) return;
     const salonId = salonRef.current;
     const onError = errRef.current;
-    const ms = new MediaSource();
+
+    // Safari/WKWebView (iOS-приложение) отдаёт ManagedMediaSource, а не
+    // MediaSource; на iOS < 17.1 нет ни того, ни другого.
+    const MS = window.ManagedMediaSource || window.MediaSource;
+    if (!MS) {
+      onError?.('Прослушивание недоступно на этой версии iOS (нужен iOS 17.1+) или в этом браузере.');
+      activeRef.current = false;
+      return;
+    }
+    // ManagedMediaSource требует отключённой удалённой передачи на элементе.
+    try { audioRef.current.disableRemotePlayback = true; } catch { /* ignore */ }
+
+    const ms = new MS();
     msRef.current = ms;
     audioRef.current.src = URL.createObjectURL(ms);
 
     ms.addEventListener('sourceopen', () => {
+      // fMP4/AAC — единый формат для desktop и iOS (WebM/Opus в Safari не играет).
+      const mime = 'audio/mp4; codecs="mp4a.40.2"';
+      if (MS.isTypeSupported && !MS.isTypeSupported(mime)) {
+        onError?.('Браузер не поддерживает воспроизведение аудио (AAC/MP4).');
+        return;
+      }
       let sb;
       try {
-        sb = ms.addSourceBuffer('audio/webm; codecs="opus"');
+        sb = ms.addSourceBuffer(mime);
       } catch {
-        onError?.('Браузер не поддерживает WebM/Opus в MediaSource');
+        onError?.('Браузер не поддерживает воспроизведение аудио (AAC/MP4).');
         return;
       }
       sbRef.current = sb;
