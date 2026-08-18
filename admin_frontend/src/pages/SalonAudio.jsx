@@ -29,33 +29,58 @@ function useMediaSourcePlayer() {
   const sbRef = useRef(null);
   const queueRef = useRef([]);
   const wsRef = useRef(null);
+  const activeRef = useRef(false);   // идёт ли сеанс (для авто-переподключения)
+  const salonRef = useRef(null);
+  const errRef = useRef(null);
+  const reconnectRef = useRef(null);
 
   const pump = () => {
     const sb = sbRef.current;
     if (!sb || sb.updating || queueRef.current.length === 0) return;
     try {
       sb.appendBuffer(queueRef.current.shift());
-    } catch (e) {
-      // QuotaExceeded и подобное — подрежем буфер и попробуем снова
+    } catch {
+      // QuotaExceeded — подрежем буфер, кадр придёт следующим проходом
       try {
         if (sb.buffered.length) {
-          sb.remove(0, Math.max(0, sb.buffered.end(0) - 2));
+          sb.remove(sb.buffered.start(0), Math.max(0, sb.buffered.end(sb.buffered.length - 1) - 5));
         }
       } catch { /* ignore */ }
     }
   };
 
-  const stop = () => {
+  // После каждого append: держим плейхед у живого края (иначе латентность
+  // растёт и звук «из кэша»), и подрезаем старое (память не течёт).
+  const onUpdateEnd = () => {
+    const sb = sbRef.current;
+    const audio = audioRef.current;
+    if (!sb) return;
+    if (sb.buffered.length && audio) {
+      const end = sb.buffered.end(sb.buffered.length - 1);
+      if (end - audio.currentTime > 3) {
+        try { audio.currentTime = end - 0.5; } catch { /* ignore */ }
+      }
+      if (!sb.updating) {
+        const start = sb.buffered.start(0);
+        const cutoff = (audio.currentTime || end) - 20;
+        if (cutoff > start + 5) {
+          try { sb.remove(start, cutoff); return; } catch { /* ignore */ }
+        }
+      }
+    }
+    pump();
+  };
+
+  const teardown = () => {
+    if (reconnectRef.current) { clearTimeout(reconnectRef.current); reconnectRef.current = null; }
     if (wsRef.current) {
-      try { wsRef.current.close(); } catch { /* ignore */ }
+      try { wsRef.current.onclose = null; wsRef.current.close(); } catch { /* ignore */ }
       wsRef.current = null;
     }
     queueRef.current = [];
     sbRef.current = null;
     if (msRef.current) {
-      try {
-        if (msRef.current.readyState === 'open') msRef.current.endOfStream();
-      } catch { /* ignore */ }
+      try { if (msRef.current.readyState === 'open') msRef.current.endOfStream(); } catch { /* ignore */ }
       msRef.current = null;
     }
     if (audioRef.current) {
@@ -65,8 +90,18 @@ function useMediaSourcePlayer() {
     }
   };
 
-  const start = (salonId, onError) => {
-    stop();
+  const stop = () => {
+    activeRef.current = false;
+    teardown();
+  };
+
+  // Один заход: свежий MediaSource + WebSocket. Используется и при старте, и при
+  // авто-переподключении — после обрыва нужен НОВЫЙ поток с новым заголовком.
+  const connect = () => {
+    teardown();
+    if (!activeRef.current || !audioRef.current) return;
+    const salonId = salonRef.current;
+    const onError = errRef.current;
     const ms = new MediaSource();
     msRef.current = ms;
     audioRef.current.src = URL.createObjectURL(ms);
@@ -75,13 +110,13 @@ function useMediaSourcePlayer() {
       let sb;
       try {
         sb = ms.addSourceBuffer('audio/webm; codecs="opus"');
-      } catch (e) {
+      } catch {
         onError?.('Браузер не поддерживает WebM/Opus в MediaSource');
         return;
       }
       sbRef.current = sb;
       sb.mode = 'sequence';
-      sb.addEventListener('updateend', pump);
+      sb.addEventListener('updateend', onUpdateEnd);
 
       const token = localStorage.getItem('auth_token') || '';
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -97,11 +132,23 @@ function useMediaSourcePlayer() {
         audioRef.current?.play?.().catch(() => { /* автоплей может требовать жеста */ });
       };
       ws.onclose = (ev) => {
-        if (ev.code === 4403) onError?.('Нет права на прослушивание');
-        else if (ev.code === 4401) onError?.('Сессия истекла, войдите заново');
+        if (ev.code === 4403) { onError?.('Нет права на прослушивание'); return; }
+        if (ev.code === 4401) { onError?.('Сессия истекла, войдите заново'); return; }
+        // Непредвиденный обрыв во время активного сеанса — тихо переподключаемся
+        // свежим потоком (пауза, чтобы не долбить сервер).
+        if (activeRef.current) {
+          reconnectRef.current = setTimeout(connect, 1500);
+        }
       };
-      ws.onerror = () => onError?.('Обрыв соединения с сервером');
+      ws.onerror = () => { /* onclose доберёт */ };
     });
+  };
+
+  const start = (salonId, onError) => {
+    activeRef.current = true;
+    salonRef.current = salonId;
+    errRef.current = onError;
+    connect();
   };
 
   return { audioRef, start, stop };

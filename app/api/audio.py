@@ -226,8 +226,12 @@ def create_audio_router() -> APIRouter:
             })
             log(f"🔇 [audio] {who} перестал слушать салон {salon_id} "
                 f"({round(time.time() - started_at)}с)")
-            # Ушёл последний — гасим микрофон на салоне.
+            # Ушёл последний — гасим микрофон на салоне. И сбрасываем
+            # кешированный init-сегмент: следующий сеанс агент начнёт НОВЫМ
+            # ffmpeg-потоком с новым WebM-заголовком, а старый заголовок не
+            # подходит к новым кластерам (браузер играл бы 1-2 сек и глох).
             if not hub.listeners:
+                hub.header = None
                 await _signal_agent(hub, "STOP")
 
     @router.get("/audio/salons/{salon_id}/status")
