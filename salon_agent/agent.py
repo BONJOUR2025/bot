@@ -26,6 +26,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+# На Windows stdout под службой/pm2/redirect обычно в cp1251, и прямой print
+# эмодзи (✅ / ⚠️) роняет агента с UnicodeEncodeError — а падает он сразу после
+# успешного connect. Переключаем оба потока на UTF-8 с заменой не-кодируемого.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 try:
     import websockets
 except ImportError:  # pragma: no cover
