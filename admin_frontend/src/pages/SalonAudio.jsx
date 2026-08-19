@@ -274,7 +274,7 @@ export default function SalonAudio() {
                   <div className="font-medium text-slate-800 truncate">{salon.name}</div>
                   <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
                     {online ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600">
+                      <span className="inline-flex items-center gap-1 text-green-600">
                         <Radio className="w-3 h-3" /> агент на связи
                       </span>
                     ) : (
@@ -293,7 +293,7 @@ export default function SalonAudio() {
                     (active
                       ? 'bg-red-600 text-white hover:bg-red-700'
                       : online
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        ? 'bg-green-600 text-white hover:bg-green-700'
                         : 'bg-slate-100 text-slate-400 cursor-not-allowed')
                   }
                 >
