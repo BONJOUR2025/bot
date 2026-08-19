@@ -293,7 +293,7 @@ export default function SalonAudio() {
                     (active
                       ? 'bg-red-600 text-white hover:bg-red-700'
                       : online
-                        ? 'bg-slate-800 text-white hover:bg-slate-900'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                         : 'bg-slate-100 text-slate-400 cursor-not-allowed')
                   }
                 >
