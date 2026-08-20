@@ -1527,6 +1527,15 @@ body.viewer3d-fs-active .app-card {
   background: var(--color-surface);
   border-radius: var(--glass-core-radius);
   box-shadow: var(--glass-inner-hi);
+  /* Рамку несёт оболочка. Без обнуления Tailwind-класс border на самом
+     ядре дал бы вторую линию в полутора миллиметрах от первой. */
+  border: 0;
+  /* И размытие подложки тоже снимаем: ядро скроллится вместе с
+     содержимым, а backdrop-filter на скроллящемся блоке заставляет GPU
+     перерисовывать его на каждом кадре. Размытие в этой теме есть только
+     у фиксированных сайдбара и шапки. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 /* Мягкий блик по верхней кромке ядра — читается как отражение, а не
    как градиентная заливка. pointer-events снят, иначе он перехватывал

@@ -1,6 +1,6 @@
 const variantClasses = {
   primary:
-    'border-transparent bg-[color:var(--color-primary)] text-white shadow-[var(--ui-shadow-card)] hover:bg-[color:var(--color-primary-hover)]',
+    'btn--primary border-transparent bg-[color:var(--color-primary)] text-white shadow-[var(--ui-shadow-card)] hover:bg-[color:var(--color-primary-hover)]',
   secondary:
     'border-[color:var(--color-border)] bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:border-[color:var(--color-border-hover)]',
   outline:
@@ -21,15 +21,33 @@ const sizeClasses = {
   lg: 'h-12 px-6 text-base',
 };
 
-export default function Button({ children, variant = 'primary', size = 'md', className = '', ...rest }) {
+/**
+ * Кнопка.
+ *
+ * `trailing` — иконка, которая в теме Ethereal Glass садится не голой рядом с
+ * текстом, а внутрь собственного круга, вплотную к правому краю пилюли, и на
+ * ховере уезжает по диагонали. Круг (.ui-nub) вне стекла — display:contents,
+ * то есть иконка просто оказывается там же, где была бы обычная иконка.
+ * Проверок темы в компоненте нет, всё различие живёт в CSS.
+ */
+export default function Button({
+  children,
+  variant = 'primary',
+  size = 'md',
+  trailing,
+  className = '',
+  ...rest
+}) {
   const base =
     'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--ui-radius-btn)] border font-medium transition-all duration-150 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring-color)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50';
   const v = variantClasses[variant] || variantClasses.primary;
   const s = sizeClasses[size] || sizeClasses.md;
+  const nubbed = trailing ? 'ui-btn--nubbed' : '';
 
   return (
-    <button className={`${base} ${v} ${s} ${className}`.trim()} {...rest}>
+    <button className={`${base} ${v} ${s} ${nubbed} ${className}`.trim()} {...rest}>
       {children}
+      {trailing && <span className="ui-nub">{trailing}</span>}
     </button>
   );
 }
