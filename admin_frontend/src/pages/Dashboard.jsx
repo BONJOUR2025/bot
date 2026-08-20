@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
+import { useAuth } from '../providers/AuthProvider.jsx';
 
 const SALES_COLORS = { repair: 'var(--color-primary)', cosmetics: 'var(--color-success)', shoes: 'var(--color-warning)' };
 const SALES_LABELS = { repair: 'Ремонт', cosmetics: 'Косметика', shoes: 'Обувь' };
@@ -73,46 +74,58 @@ const VACATION_TONE = { Отпуск: 'var(--color-info)', Больничный:
 
 // ── scroll-reveal primitive (IntersectionObserver, transform+opacity only) ──
 
-function useReveal() {
+/**
+ * Появление одного блока. Класс .ui-reveal и его переход описаны в
+ * globals.css, здесь — только момент, когда навесить .is-in, поэтому
+ * анимация одинакова с остальными страницами и меняется в одном месте.
+ *
+ * Порог 0.12 оставлен от прежней реализации: карточки бенто высокие, и
+ * при меньшем значении верхняя кромка засчитывалась бы за появление,
+ * когда сама карточка ещё за экраном.
+ */
+function Reveal({ className = '', delay = 0, children }) {
   const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
+
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el) return undefined;
+
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || typeof IntersectionObserver === 'undefined') {
+      el.classList.add('is-in');
+      return undefined;
+    }
+
     const io = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          io.disconnect();
-        }
+        if (!entry.isIntersecting) return;
+        el.style.setProperty('--reveal-delay', `${delay}ms`);
+        el.classList.add('is-in');
+        io.disconnect();
       },
       { threshold: 0.12 },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, []);
-  return [ref, visible];
-}
+  }, [delay]);
 
-function Reveal({ className = '', delay = 0, children }) {
-  const [ref, visible] = useReveal();
   return (
-    <div
-      ref={ref}
-      className={`transition-all duration-500 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} ${className}`}
-      style={{ transitionDelay: visible ? `${delay}ms` : '0ms' }}
-    >
+    <div ref={ref} className={`ui-reveal ${className}`.trim()}>
       {children}
     </div>
   );
 }
 
-// ── panel (flat, bordered — matches .app-card used app-wide) ─────────────────
+// ── поверхность бенто: оболочка + ядро (вне стекла обёртки инертны) ──────────
 
 function Panel({ className = '', children }) {
   return (
-    <div className={`fui-corners border border-[color:var(--color-border)] bg-[color:var(--color-surface)] ${className}`}>
-      {children}
+    <div className="ui-shell h-full">
+      <div
+        className={`ui-core border border-[color:var(--color-border)] bg-[color:var(--color-surface)] ${className}`}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -124,12 +137,12 @@ function BentoCard({ span = '', eyebrow, title, action, delay = 0, children }) {
         {(title || action || eyebrow) && (
           <div className="mb-4 flex items-start justify-between gap-3 border-b border-[color:var(--color-border)] pb-3">
             <div>
-              {eyebrow && (
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
-                  // {eyebrow}
-                </div>
+              {eyebrow && <div className="ui-label mb-1.5">{eyebrow}</div>}
+              {title && (
+                <h3 className="text-base font-medium tracking-[-0.02em] text-[color:var(--color-text)]">
+                  {title}
+                </h3>
               )}
-              {title && <h3 className="text-base font-semibold text-[color:var(--color-text)]">{title}</h3>}
             </div>
             {action}
           </div>
@@ -150,7 +163,7 @@ function GhostLink({ to, label = 'Все' }) {
       className="group inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-primary)]"
     >
       {label}
-      <ArrowUpRight size={12} weight="bold" className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+      <ArrowUpRight size={12} weight="light" className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
     </button>
   );
 }
@@ -164,7 +177,7 @@ function RefreshButton({ onClick, disabled, spinning, children }) {
       disabled={disabled}
       className="inline-flex items-center gap-2 border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-text)] transition-colors hover:bg-[color:var(--color-control-bg-hover)] disabled:opacity-40"
     >
-      <ArrowsClockwise size={15} weight="bold" className={spinning ? 'animate-spin' : ''} />
+      <ArrowsClockwise size={15} weight="light" className={spinning ? 'animate-spin' : ''} />
       {children}
     </button>
   );
@@ -185,26 +198,44 @@ function StatOrb({ icon: Icon, label, value, sub, tone = 'primary', to, big = fa
 
   return (
     <Reveal delay={delay} className="h-full">
-      <button
-        type="button"
-        onClick={to ? () => navigate(to) : undefined}
-        className={`h-full w-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-5 text-left transition-colors ${big ? 'sm:p-6' : ''} ${
-          to ? 'cursor-pointer hover:bg-[color:var(--color-control-bg-hover)]' : 'cursor-default'
-        }`}
-        style={{ borderLeft: `3px solid ${toneColor}` }}
-      >
-        <div className="flex items-center justify-between">
-          <Icon size={18} weight="bold" style={{ color: toneColor }} />
-          {to && <ArrowUpRight size={13} weight="bold" className="text-[color:var(--color-text-faint)]" />}
-        </div>
-        <div className="mt-4">
-          <div className={`${big ? 'text-4xl' : 'text-3xl'} font-bold leading-none text-[color:var(--color-text)]`}>
-            {value}
+      {/* Полоска-акцент слева убрана намеренно: она была единственным
+          носителем tone, а цветная рамка у карточки читается как
+          статус-индикатор даже там, где tone означает всего лишь раздел.
+          Теперь тон несёт иконка, а показатель остаётся нейтральным. */}
+      <div className="ui-shell h-full">
+        <button
+          type="button"
+          onClick={to ? () => navigate(to) : undefined}
+          className={`ui-core h-full w-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-5 text-left ${big ? 'sm:p-6' : ''} ${
+            to ? 'cursor-pointer hover:bg-[color:var(--color-control-bg-hover)]' : 'cursor-default'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span
+              className="grid h-8 w-8 place-items-center rounded-full"
+              style={{ background: `color-mix(in oklab, ${toneColor} 14%, transparent)` }}
+            >
+              <Icon size={16} weight="light" style={{ color: toneColor }} />
+            </span>
+            {to && (
+              <ArrowUpRight
+                size={13}
+                weight="light"
+                className="text-[color:var(--color-text-faint)]"
+              />
+            )}
           </div>
-          <div className="mt-2 text-sm text-[color:var(--color-text-muted)]">{label}</div>
-          {sub && <div className="mt-0.5 text-xs text-[color:var(--color-text-faint)]">{sub}</div>}
-        </div>
-      </button>
+          <div className="mt-4">
+            <div
+              className={`ui-metric text-[color:var(--color-text)] ${big ? 'sm:text-[2.6rem]' : ''}`}
+            >
+              {value}
+            </div>
+            <div className="mt-2 text-sm text-[color:var(--color-text-muted)]">{label}</div>
+            {sub && <div className="mt-0.5 text-xs text-[color:var(--color-text-faint)]">{sub}</div>}
+          </div>
+        </button>
+      </div>
     </Reveal>
   );
 }
@@ -221,7 +252,7 @@ function TaskRow({ icon: Icon, label, count, tone }) {
   return (
     <div className="flex items-center justify-between border-b border-[color:var(--color-border)] py-2.5 last:border-0">
       <div className="flex items-center gap-2.5 text-sm text-[color:var(--color-text-muted)]">
-        <Icon size={15} weight="bold" style={{ color }} />
+        <Icon size={15} weight="light" style={{ color }} />
         <span>{label}</span>
       </div>
       <span className="text-sm font-semibold" style={{ color }}>
@@ -236,7 +267,7 @@ function TaskRow({ icon: Icon, label, count, tone }) {
 function Empty({ text = 'Нет данных', icon: Icon }) {
   return (
     <div className="flex flex-col items-center gap-2 py-8 text-center">
-      {Icon && <Icon size={22} weight="bold" className="text-[color:var(--color-text-faint)] opacity-50" />}
+      {Icon && <Icon size={22} weight="light" className="text-[color:var(--color-text-faint)] opacity-50" />}
       <p className="text-sm text-[color:var(--color-text-faint)]">{text}</p>
     </div>
   );
@@ -342,6 +373,10 @@ export default function Dashboard() {
   const pendingTotal = pending.reduce((s, p) => s + (p.amount ?? 0), 0);
   const approvedTotal = approved.reduce((s, p) => s + (p.amount ?? 0), 0);
   const today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' });
+  const { user } = useAuth();
+  // Показываем только имя: полное ФИО в приветствии звучит как обращение
+  // из документа, а не из панели, которой человек пользуется каждый день.
+  const displayName = (user?.display_name || user?.login || '').trim().split(/\s+/)[0] || '';
 
   // ── sales aggregation (unchanged from prior logic) ──
   let salesRows = [];
@@ -530,14 +565,21 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      {/* header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      {/* Шапка. Имя берём из учётной записи: раньше здесь было
+          захардкожено «Nick», и приветствие обращалось не к тому, кто вошёл. */}
+      <div className="ui-reveal mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
-            {'>'} Дашборд · {today}
-          </div>
-          <h1 className="text-2xl font-bold text-[color:var(--color-text)] sm:text-3xl">
-            {greeting()}, Nick
+          <span className="ui-eyebrow">Обзор · {today}</span>
+          <h1 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-[color:var(--color-text)] sm:text-[2.6rem]">
+            {greeting()}
+            {displayName ? (
+              <>
+                ,<br />
+                <b>{displayName}</b>.
+              </>
+            ) : (
+              '.'
+            )}
           </h1>
         </div>
         <RefreshButton onClick={() => load(true)} disabled={refreshing} spinning={refreshing}>
@@ -631,7 +673,7 @@ export default function Dashboard() {
                   {topMasters.length > 0 && (
                     <div className="mb-4 space-y-2 border-b border-[color:var(--color-border)] pb-4">
                       <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[color:var(--color-text-faint)]">
-                        <Trophy size={13} weight="bold" /> Топ по выручке
+                        <Trophy size={13} weight="light" /> Топ по выручке
                       </div>
                       {topMasters.map((m) => {
                         const pct = maxKredit > 0 ? ((m.total_kredit ?? 0) / maxKredit) * 100 : 0;
@@ -830,7 +872,7 @@ export default function Dashboard() {
                     return (
                       <div key={b.user_id ?? b.full_name} className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2.5 last:border-0">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <CalendarBlank size={15} weight="bold" className="shrink-0 text-[color:var(--color-text-faint)]" />
+                          <CalendarBlank size={15} weight="light" className="shrink-0 text-[color:var(--color-text-faint)]" />
                           <span className="truncate text-sm text-[color:var(--color-text)]">{b.full_name}</span>
                         </div>
                         <div className="shrink-0 text-right">

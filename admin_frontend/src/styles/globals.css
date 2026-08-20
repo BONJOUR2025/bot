@@ -2104,3 +2104,71 @@ body.viewer3d-fs-active .app-card {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Экран входа: Editorial Split ──────────────────────────────
+   Вне стекла блок-питч скрыт, а .auth-split схлопывается в обычный
+   поток — карточка остаётся ровно там же и той же ширины, что и
+   раньше. Разметка Login.jsx при этом одна на все три мира. */
+.auth-split__pitch {
+  display: none;
+}
+
+.visual-glass .auth-layout {
+  padding: clamp(2rem, 5vw, 5rem) 1.5rem;
+}
+/* Контейнер логина по умолчанию — min(440px, 100%). Для разворота в две
+   колонки его надо расширить, иначе сплит некуда раскладывать. */
+.visual-glass .auth-layout__surface {
+  width: min(1180px, 100%);
+}
+.visual-glass .auth-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: clamp(2rem, 6vw, 5rem);
+}
+.visual-glass .auth-split__pitch {
+  display: block;
+}
+.visual-glass .auth-split__title {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 5.4vw, 4.4rem);
+  font-weight: 300;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  margin-top: 1.75rem;
+  text-wrap: balance;
+}
+.visual-glass .auth-split__title b {
+  font-weight: 600;
+}
+.visual-glass .auth-split__lead {
+  margin-top: 1.5rem;
+  max-width: 42ch;
+  color: var(--color-text-muted);
+  font-size: 15.5px;
+}
+.visual-glass .auth-card {
+  justify-self: end;
+  width: min(420px, 100%);
+  padding: 2rem;
+}
+.visual-glass .auth-card__header h2 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+@media (max-width: 900px) {
+  .visual-glass .auth-split {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+  .visual-glass .auth-card {
+    justify-self: stretch;
+    width: 100%;
+  }
+  .visual-glass .auth-split__title {
+    margin-top: 1.25rem;
+  }
+}

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowUpRight } from 'lucide-react';
+
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 
@@ -52,39 +54,63 @@ export default function Login() {
   };
 
   return (
-    <div className={`auth-card ${isMobile ? 'auth-card--mobile' : ''}`}>
-      <div className="auth-card__logo">ЦУ</div>
-      <div className="auth-card__header">
-        <h1>Добро пожаловать</h1>
-        <p>Введите логин и пароль для входа</p>
+    // Editorial Split: слева — крупная типографика и назначение системы,
+    // справа — сама форма. На узком экране колонки складываются в одну,
+    // текстовый блок остаётся сверху (см. .auth-split в globals.css).
+    <div className="auth-split">
+      <div className="auth-split__pitch">
+        <span className="ui-eyebrow">BONJOUR · Центр управления</span>
+        <h1 className="auth-split__title">
+          Вход в
+          <br />
+          <b>систему</b>.
+        </h1>
+        <p className="auth-split__lead">
+          Персонал, зарплата, продажи и индивидуальный пошив — в одной панели.
+        </p>
       </div>
-      <form className="auth-card__form" onSubmit={handleSubmit}>
-        <label className="form-field">
-          <span>Логин</span>
-          <input
-            name="login"
-            value={form.login}
-            onChange={handleChange}
-            autoComplete="username"
-            required
-          />
-        </label>
-        <label className="form-field">
-          <span>Пароль</span>
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            autoComplete="current-password"
-            required
-          />
-        </label>
-        {error && <div className="form-error">{error}</div>}
-        <button type="submit" className="btn btn--primary" disabled={loading}>
-          {loading ? 'Вход…' : 'Войти'}
-        </button>
-      </form>
+
+      <div className={`auth-card ${isMobile ? 'auth-card--mobile' : ''}`}>
+        <div className="auth-card__logo">ЦУ</div>
+        <div className="auth-card__header">
+          <h2>Добро пожаловать</h2>
+          <p>Введите логин и пароль для входа</p>
+        </div>
+        <form className="auth-card__form" onSubmit={handleSubmit}>
+          <label className="form-field">
+            <span>Логин</span>
+            <input
+              name="login"
+              value={form.login}
+              onChange={handleChange}
+              autoComplete="username"
+              required
+            />
+          </label>
+          <label className="form-field">
+            <span>Пароль</span>
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              autoComplete="current-password"
+              required
+            />
+          </label>
+          {error && (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          )}
+          <button type="submit" className="btn btn--primary ui-btn--nubbed" disabled={loading}>
+            {loading ? 'Вход…' : 'Войти'}
+            <span className="ui-nub">
+              <ArrowUpRight size={14} strokeWidth={1.4} />
+            </span>
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
