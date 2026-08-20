@@ -304,6 +304,91 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow-glow-primary);
 }
 
+/* Список разделов — единственная прокручиваемая часть панели: шапка и
+   подвал должны оставаться на месте, иначе переключатель темы уезжает
+   вверх вместе с меню из сорока с лишним пунктов. */
+.sidebar__sections {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.sidebar__footer {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.sidebar__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.sidebar__icon-btn:hover {
+  background: var(--color-control-bg);
+  color: var(--color-text);
+}
+
+/* Свёрнутое меню: подписи скрыты, иконки по центру, разделы отбиваются
+   линией вместо заголовка. */
+.sidebar--collapsed {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+.sidebar--collapsed .sidebar__header {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sidebar__link--icon {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+.sidebar__divider {
+  height: 1px;
+  background: var(--color-border);
+  margin-bottom: 0.5rem;
+}
+
+.sidebar__theme {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--color-control-bg);
+  border: 1px solid var(--color-border);
+}
+.sidebar__theme--stacked {
+  flex-direction: column;
+}
+.sidebar__theme-btn {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 0.4rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.sidebar__theme-btn:hover {
+  color: var(--color-text);
+}
+.sidebar__theme-btn.is-active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
 /* ================================================================
    Auth layout (login page)
    ================================================================ */
@@ -2171,4 +2256,53 @@ body.viewer3d-fs-active .app-card {
   .visual-glass .auth-split__title {
     margin-top: 1.25rem;
   }
+}
+
+/* ── Навигация в стекле ────────────────────────────────────────
+   Идёт после базовых правил сайдбара, поэтому при равной
+   специфичности побеждает порядком в файле. */
+.visual-glass .sidebar__sections {
+  display: grid;
+  gap: 1.25rem;
+  align-content: start;
+  padding-bottom: 0.5rem;
+}
+.visual-glass .sidebar__sections::-webkit-scrollbar {
+  width: 4px;
+}
+.visual-glass .sidebar__sections::-webkit-scrollbar-thumb {
+  background: var(--glass-hair-strong);
+  border-radius: var(--radius-full);
+}
+.visual-glass .sidebar__footer {
+  border-top-color: var(--glass-hair);
+  padding: 0.75rem 0.25rem 0;
+}
+.visual-glass .sidebar__icon-btn {
+  border-radius: 50%;
+  border-color: var(--glass-hair);
+  background: var(--glass-shell);
+}
+.visual-glass .sidebar__icon-btn:hover {
+  background: var(--glass-shell-hover);
+  border-color: var(--glass-hair-strong);
+}
+.visual-glass .sidebar__divider {
+  background: var(--glass-hair);
+}
+.visual-glass .sidebar__theme {
+  background: var(--glass-shell);
+  border-color: var(--glass-hair);
+  border-radius: var(--radius-md);
+}
+/* Активный режим темы — приподнятая плашка, а не заливка основным
+   цветом: в стекле сплошной фиолетовый прямоугольник читается как
+   призыв к действию, хотя это всего лишь индикатор выбора. */
+.visual-glass .sidebar__theme-btn.is-active {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--glass-inner-hi);
+}
+.visual-glass .sidebar__theme-btn {
+  border-radius: var(--radius-sm);
 }

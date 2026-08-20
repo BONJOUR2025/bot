@@ -6,7 +6,7 @@ import {
   Umbrella, Cake, Package, Calculator, MapPin, Banknote,
   ShieldCheck, Award, ArrowLeftRight, CalendarDays, MessageSquare,
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
-  Hammer, TrendingUp, ListTodo, KeyRound, FileText, Send, LibraryBig, Truck,
+  Hammer, TrendingUp, ListTodo, KeyRound, Send, LibraryBig, Truck,
   Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon, Monitor,
   Landmark, UserSearch, UserCog, SlidersHorizontal, Scan, Headphones,
 } from 'lucide-react';
@@ -142,74 +142,71 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
   const isCollapsed = !isMobile && collapsed;
 
   return (
-    <nav className={`flex h-full min-h-screen flex-col bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-foreground)] shadow-[var(--shadow-xl)] transition-all duration-200 ${isMobile ? 'w-full' : isCollapsed ? 'w-[64px]' : 'w-[280px]'}`}>
-
-      {/* Logo — on the mobile drawer this row's background bleeds under the
-          status bar/notch on purpose, but the logo/title/close button
-          themselves need to clear it, same reasoning as .app-shell__header. */}
+    // Семантические классы вместо набора Tailwind-утилит. Правила для них
+    // уже лежали в globals.css (включая ветку для брутализма), но были
+    // мёртвыми: разметка их не использовала, и каждая тема не могла
+    // повлиять на вид навигации иначе как переопределением токенов.
+    // Панель, фон и скругление даёт .app-shell__sidebar > * — поэтому
+    // здесь ни фона, ни рамки, ни ширины: ширину задаёт грид шелла.
+    <nav className={`sidebar ${isCollapsed ? 'sidebar--collapsed' : ''}`}>
+      {/* Шапка. На мобильном фон строки уходит под вырез экрана
+          намеренно, но сам логотип и кнопка закрытия обязаны его
+          миновать — та же логика, что и в .app-shell__header. */}
       <div
-        className={`flex pb-5 pt-7 ${isCollapsed ? 'flex-col items-center gap-2 px-0' : 'items-center gap-4 px-6'}`}
-        style={isMobile ? { paddingTop: 'calc(1.75rem + env(safe-area-inset-top, 0px))' } : undefined}
+        className="sidebar__header"
+        style={isMobile ? { paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))' } : undefined}
       >
-        <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-[var(--ui-radius-btn)] bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[var(--ui-shadow-card)] text-sm font-bold">
-          ЦУ
-        </div>
+        <div className="sidebar__badge">ЦУ</div>
         {!isCollapsed && (
-          <div className="flex flex-col text-sm min-w-0">
-            <span className="text-base font-semibold leading-tight">Центр управления</span>
-            <span className="text-[13px] text-[color:var(--color-muted-foreground)]">Панель администратора</span>
+          <div className="sidebar__title">
+            <span className="sidebar__title-main">Центр управления</span>
+            <span className="sidebar__title-sub">Панель администратора</span>
           </div>
         )}
         {isMobile && (
           <button
             type="button"
-            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-[var(--ui-radius-badge)] border border-[color:var(--color-sidebar-border)] bg-transparent transition hover:bg-[color:var(--color-sidebar-accent)]"
+            className="sidebar__icon-btn ml-auto"
             onClick={() => typeof onNavigate === 'function' && onNavigate()}
+            aria-label="Закрыть меню"
           >
-            <X size={18} />
+            <X size={18} strokeWidth={1.4} />
           </button>
         )}
-        {!isMobile && (
+        {!isMobile && !isCollapsed && (
           <button
             type="button"
             onClick={onToggleCollapse}
-            title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-            className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)] transition-colors ${isCollapsed ? '' : 'ml-auto'}`}
+            title="Свернуть меню"
+            aria-label="Свернуть меню"
+            className="sidebar__icon-btn ml-auto"
           >
-            {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            <PanelLeftClose size={16} strokeWidth={1.4} />
           </button>
         )}
       </div>
 
-      {/* Nav items */}
-      <div className={`flex-1 space-y-6 overflow-y-auto pb-4 ${isCollapsed ? 'px-2' : 'px-6'}`}>
+      <div className="sidebar__sections">
         {itemsByCategory.map((category) => (
-          <div key={category.name} className="space-y-1">
-            {!isCollapsed && (
-              <div className="text-xs font-medium uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)] mb-2">
-                {category.name}
-              </div>
-            )}
-            {isCollapsed && <div className="h-px bg-[color:var(--color-sidebar-border)] mb-2" />}
-            <div className="space-y-0.5">
+          <div key={category.name} className="sidebar__section">
+            {!isCollapsed && <div className="sidebar__section-label">{category.name}</div>}
+            {isCollapsed && <div className="sidebar__divider" />}
+            <div className="sidebar__links">
               {category.items.map((item) => {
                 const Icon = item.icon;
-                const activeClasses = item.active
-                  ? 'bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)] shadow-[var(--ui-shadow-card)]'
-                  : 'text-[color:var(--color-sidebar-foreground)] opacity-70 hover:bg-[color:var(--color-sidebar-accent)] hover:opacity-100';
-
                 return (
                   <Link
                     key={item.to}
                     to={item.to}
                     onClick={handleNavigate}
                     title={isCollapsed ? item.label : undefined}
-                    className={`flex items-center rounded-[var(--ui-radius-btn)] border border-transparent transition-all duration-150 ${
-                      isCollapsed ? 'justify-center h-10 w-10 mx-auto' : isMobile ? 'gap-3 px-4 py-3' : 'gap-3 px-4 py-2'
-                    } ${activeClasses}`}
+                    aria-current={item.active ? 'page' : undefined}
+                    className={`sidebar__link ${item.active ? 'is-active' : ''} ${
+                      isCollapsed ? 'sidebar__link--icon' : ''
+                    }`}
                   >
-                    {Icon && <Icon size={isCollapsed ? 18 : 16} className="flex-shrink-0" />}
-                    {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
+                    {Icon && <Icon size={16} strokeWidth={1.4} className="shrink-0" />}
+                    {!isCollapsed && <span>{item.label}</span>}
                   </Link>
                 );
               })}
@@ -218,10 +215,11 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
         ))}
       </div>
 
-      {/* Theme toggle — all three modes shown at once, active one highlighted,
-          rather than one button whose label describes a hidden next state. */}
-      <div className={`pb-2 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-        <div className={`flex items-center gap-1 rounded-[var(--ui-radius-btn)] bg-[color:var(--color-sidebar-accent)] p-1 ${isCollapsed ? 'flex-col mx-auto w-10' : ''}`}>
+      {/* Переключатель темы: показаны все три режима сразу, активный
+          подсвечен — вместо одной кнопки, подписанной скрытым следующим
+          состоянием. */}
+      <div className="sidebar__footer">
+        <div className={`sidebar__theme ${isCollapsed ? 'sidebar__theme--stacked' : ''}`}>
           {THEME_MODES.map(({ key, icon: Icon, label }) => (
             <button
               key={key}
@@ -230,43 +228,25 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
               title={label}
               aria-label={label}
               aria-pressed={mode === key}
-              className={`flex flex-1 items-center justify-center rounded-[var(--radius-sm)] py-1.5 transition-colors ${
-                mode === key
-                  ? 'bg-[color:var(--color-sidebar-primary)] text-[color:var(--color-sidebar-primary-foreground)]'
-                  : 'text-[color:var(--color-sidebar-foreground)] opacity-60 hover:opacity-100 hover:bg-[color:var(--color-sidebar-accent-foreground)]/10'
-              }`}
+              className={`sidebar__theme-btn ${mode === key ? 'is-active' : ''}`}
             >
-              <Icon size={16} className="flex-shrink-0" />
+              <Icon size={15} strokeWidth={1.4} />
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Collapse toggle (desktop only) */}
-      {!isMobile && (
-        <div className={`border-t border-[color:var(--color-sidebar-border)] py-3 ${isCollapsed ? 'flex justify-center' : 'px-6 flex justify-between items-center'}`}>
-          {!isCollapsed && (
-            <span className="text-xs text-[color:var(--color-muted-foreground)] opacity-70">
-              © {new Date().getFullYear()} Центр управления
-            </span>
-          )}
+        {isCollapsed && (
           <button
             type="button"
             onClick={onToggleCollapse}
-            title={isCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-            className="w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)] transition-colors"
+            title="Развернуть меню"
+            aria-label="Развернуть меню"
+            className="sidebar__icon-btn mx-auto mt-2"
           >
-            {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            <PanelLeftOpen size={16} strokeWidth={1.4} />
           </button>
-        </div>
-      )}
-
-      {/* Mobile footer */}
-      {isMobile && (
-        <div className="border-t border-[color:var(--color-sidebar-border)] px-6 py-5 text-xs text-[color:var(--color-muted-foreground)] opacity-90">
-          © {new Date().getFullYear()} Центр управления
-        </div>
-      )}
+        )}
+      </div>
     </nav>
   );
 }

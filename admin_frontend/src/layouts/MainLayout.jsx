@@ -28,7 +28,9 @@ export default function MainLayout() {
     try { await logout(); } catch (err) { console.error(err); }
   };
 
-  const userLabel = user?.name || user?.login || 'Администратор';
+  // UserOut отдаёт display_name; поля name у него нет, поэтому здесь
+  // всегда показывался логин, даже когда имя было заполнено.
+  const userLabel = user?.display_name || user?.login || 'Администратор';
 
   return (
     <div className={`app-shell ${isMobile ? 'app-shell--mobile' : ''} ${!isMobile && navCollapsed ? 'app-shell--nav-collapsed' : ''}`}>
