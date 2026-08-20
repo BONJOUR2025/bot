@@ -157,8 +157,13 @@ export default function Vacations() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-semibold">Отпуска и больничные</h2>
-      <div className="text-sm text-[color:var(--color-text-muted)]">Сегодня в отпуске — {todayCount} сотрудника</div>
+      {/* Счётчик поднят в надзаголовок: это состояние на сегодня, ради
+          которого страницу и открывают, — оно должно читаться раньше
+          названия раздела, а не строкой под ним. */}
+      <div>
+        <span className="ui-eyebrow mb-3">Сегодня в отпуске — {todayCount}</span>
+        <h2 className="text-2xl font-semibold">Отпуска и больничные</h2>
+      </div>
       <div className="flex flex-wrap gap-2 items-end">
         <select
           className="input"

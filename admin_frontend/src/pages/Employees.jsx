@@ -548,7 +548,12 @@ export default function Employees() {
   return (
     <div className="space-y-6 max-w-full mx-auto">
       <TopProgressBar active={loading} />
-      <h2 className="text-2xl font-semibold">Сотрудники</h2>
+      <div>
+        <span className="ui-eyebrow mb-3">
+          {activeCount} в штате{employees.length > activeCount ? ` · всего ${employees.length}` : ''}
+        </span>
+        <h2 className="text-2xl font-semibold">Сотрудники</h2>
+      </div>
       <UpcomingBirthdays />
 
       <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />

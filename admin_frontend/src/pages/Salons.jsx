@@ -708,8 +708,13 @@ export default function Salons() {
       {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
+          <span className="ui-eyebrow mb-3">
+            {salons.length ? `Точек в сети: ${salons.length}` : 'Сеть пока пуста'}
+          </span>
           <h1 className="text-2xl font-bold">Управление салонами</h1>
-          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Сеть точек продаж и обслуживания</p>
+          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2">
+            Сеть точек продаж и обслуживания
+          </p>
         </div>
         <button onClick={() => setModal('new')} className="btn btn--primary">+ Добавить салон</button>
       </div>

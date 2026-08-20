@@ -324,8 +324,13 @@ export default function Tasks() {
     <div className="space-y-5">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h2 className="text-2xl font-semibold">Задачи</h2>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <span className="ui-eyebrow mb-3">
+            Активных: {(stats.todo || 0) + (stats.in_progress || 0)}
+          </span>
+          <h2 className="text-2xl font-semibold">Задачи</h2>
+        </div>
         <div className="flex gap-2">
           <button className="btn flex items-center gap-2" onClick={() => setShowCatManager(true)}>
             <Settings2 size={16} />Категории
@@ -339,17 +344,26 @@ export default function Tasks() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 [&>:last-child]:col-span-2 md:[&>:last-child]:col-span-1">
         {[
+          // Цвет здесь семантический, а не декоративный: им помечены
+          // только те состояния, которые требуют внимания. «Всего»,
+          // «К выполнению» и «Неделя» — нейтральный отсчёт, и раньше
+          // фиолетовый у «Недели» читался как тревога наравне с
+          // просрочкой.
           { l: 'Всего',      v: stats.total         || 0, c: '' },
-          { l: 'К выполн.',  v: stats.todo          || 0, c: 'text-[color:var(--color-text-faint)]' },
-          { l: 'В работе',   v: stats.in_progress   || 0, c: 'text-blue-400' },
-          { l: 'Выполнено',  v: stats.done          || 0, c: 'text-green-400' },
-          { l: 'Просрочено', v: stats.overdue       || 0, c: 'text-red-400' },
-          { l: 'Сегодня',    v: stats.due_today     || 0, c: 'text-yellow-400' },
-          { l: 'Неделя',     v: stats.due_this_week || 0, c: 'text-purple-400' },
+          { l: 'К выполн.',  v: stats.todo          || 0, c: '' },
+          { l: 'В работе',   v: stats.in_progress   || 0, c: 'text-[color:var(--color-info)]' },
+          { l: 'Выполнено',  v: stats.done          || 0, c: 'text-[color:var(--color-success)]' },
+          { l: 'Просрочено', v: stats.overdue       || 0, c: 'text-[color:var(--color-danger)]' },
+          { l: 'Сегодня',    v: stats.due_today     || 0, c: 'text-[color:var(--color-warning)]' },
+          { l: 'Неделя',     v: stats.due_this_week || 0, c: '' },
         ].map(s => (
-          <div key={s.l} className="bg-[var(--color-bg-secondary)] rounded-lg p-3 border border-[var(--color-border)]">
-            <div className={`text-2xl font-bold ${s.c}`}>{s.v}</div>
-            <div className="text-xs text-[color:var(--color-text-faint)]">{s.l}</div>
+          <div key={s.l} className="ui-shell ui-shell--sm">
+            <div className="ui-core border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4">
+              <div className={`ui-metric !text-[1.6rem] ${s.c || 'text-[color:var(--color-text)]'}`}>
+                {s.v}
+              </div>
+              <div className="ui-label mt-2">{s.l}</div>
+            </div>
           </div>
         ))}
       </div>
