@@ -8,6 +8,7 @@ import {
   PhoneMissed, PhoneCall, Archive,
 } from 'lucide-react';
 import api from '../api';
+import { formatPhone, telHref, tgHref } from '../utils/phone';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import IntegrationsModal from '../components/recruitment/IntegrationsModal.jsx';
@@ -58,7 +59,7 @@ const fmtDate   = (iso) => iso
   ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
       .replace(/\s*г\.$/, '').replace('.', '')
   : '';
-const tgLink    = (phone) => { const d = (phone || '').replace(/\D/g, ''); return d.length >= 7 ? `https://t.me/+${d}` : null; };
+const tgLink    = tgHref;  // нормализация номера (8→7, 10-значные → +7) — в utils/phone
 
 const SRC_BADGE = {
   hh:     'bg-red-100 text-red-600',
@@ -677,9 +678,9 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
               {candidate.phone && (
                 <div className="flex items-center gap-3 px-4 py-3">
                   <Phone size={15} className="text-[color:var(--color-muted-foreground)] flex-shrink-0" />
-                  <a href={`tel:${candidate.phone}`}
+                  <a href={telHref(candidate.phone) || undefined}
                     className="flex-1 min-w-0 truncate text-sm font-medium text-[color:var(--color-foreground)] hover:text-[color:var(--color-primary)] transition-colors">
-                    {candidate.phone}
+                    {formatPhone(candidate.phone)}
                   </a>
                   {tg && (
                     <a href={tg} target="_blank" rel="noopener noreferrer"
