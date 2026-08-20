@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Headphones, Square, Radio, CircleAlert } from 'lucide-react';
+import { Headphones, Square, CircleAlert } from 'lucide-react';
 import api from '../api';
 
 // Живое прослушивание микрофонов салонов.
@@ -219,6 +219,11 @@ export default function SalonAudio() {
     [salons]
   );
 
+  const onlineCount = useMemo(
+    () => rows.filter(({ id }) => statuses[id]?.agent_online).length,
+    [rows, statuses],
+  );
+
   const toggle = (id) => {
     setError(null);
     if (listening === id) {
@@ -231,29 +236,35 @@ export default function SalonAudio() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-1">
-        <Headphones className="w-6 h-6 text-slate-500" />
-        <h1 className="text-2xl font-semibold">Прослушивание салонов</h1>
-      </div>
-      <p className="text-sm text-slate-500 mb-4">
-        Открытый аудиоконтроль рабочих процессов. Микрофон включается только на
-        время сеанса. Каждое прослушивание фиксируется в аудите: кто, какой
-        салон и когда слушал.
+    <div className="mx-auto max-w-3xl">
+      {/* Надзаголовок считает агентов на связи — это первое, что нужно
+          знать на этом экране, и раньше оно читалось только перебором
+          строк списка. */}
+      <span className="ui-eyebrow mb-3">
+        {onlineCount > 0 ? `На связи: ${onlineCount} из ${rows.length}` : 'Нет агентов на связи'}
+      </span>
+      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
+        Прослушивание салонов
+      </h2>
+      <p className="mt-2 max-w-[60ch] text-sm text-[color:var(--color-text-muted)]">
+        Открытый аудиоконтроль рабочих процессов. Микрофон включается только на время сеанса.
+        Каждое прослушивание фиксируется в аудите: кто, какой салон и когда слушал.
       </p>
 
-      <div className="flex items-start gap-2 mb-5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
-        <CircleAlert className="w-4 h-4 mt-0.5 shrink-0" />
+      <div className="mt-5 flex items-start gap-2.5 rounded-[var(--radius-lg)] border border-[color:var(--color-warning)] bg-[color:var(--color-warning-muted)] px-4 py-3 text-[13px] text-[color:var(--color-warning)]">
+        <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.4} />
         <span>
-          Использование допустимо только при выполненном основании: работники
-          ознакомлены с ЛНА об аудиоконтроле под подпись, посетители уведомлены,
-          цель и порядок зафиксированы. Прослушивайте лишь в предусмотренных
-          правилами ситуациях.
+          Использование допустимо только при выполненном основании: работники ознакомлены с ЛНА
+          об аудиоконтроле под подпись, посетители уведомлены, цель и порядок зафиксированы.
+          Прослушивайте лишь в предусмотренных правилами ситуациях.
         </span>
       </div>
 
       {error && (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div
+          role="alert"
+          className="mt-4 rounded-[var(--radius-lg)] border border-[color:var(--color-danger)] bg-[color:var(--color-danger-muted)] px-4 py-3 text-sm text-[color:var(--color-danger)]"
+        >
           {error}
         </div>
       )}
@@ -261,51 +272,66 @@ export default function SalonAudio() {
       <audio ref={audioRef} className="hidden" />
 
       {loading ? (
-        <div className="text-slate-400">Загрузка…</div>
+        <div className="mt-5 text-[color:var(--color-text-faint)]">Загрузка…</div>
       ) : (
-        <div className="divide-y rounded-lg border border-slate-200 bg-white">
-          {rows.map(({ salon, id }) => {
-            const st = statuses[id] || {};
-            const online = !!st.agent_online;
-            const active = listening === id;
-            return (
-              <div key={id} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="font-medium text-slate-800 truncate">{salon.name}</div>
-                  <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
-                    {online ? (
-                      <span className="inline-flex items-center gap-1 text-green-600">
-                        <Radio className="w-3 h-3" /> агент на связи
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">агент офлайн</span>
-                    )}
-                    {st.listeners > 0 && (
-                      <span className="text-slate-400">· слушают: {st.listeners}</span>
-                    )}
+        <div className="ui-shell mt-5">
+          <div className="ui-core divide-y divide-[color:var(--color-border)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+            {rows.map(({ salon, id }) => {
+              const st = statuses[id] || {};
+              const online = !!st.agent_online;
+              const active = listening === id;
+              return (
+                <div key={id} className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-[color:var(--color-text)]">
+                      {salon.name}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-[color:var(--color-text-faint)]">
+                      {online ? (
+                        <span className="inline-flex items-center gap-1.5 text-[color:var(--color-success)]">
+                          {/* Пульсирующая точка вместо статичной иконки: в
+                              списке из шести салонов «в эфире» должно
+                              выделяться движением, а не только цветом. */}
+                          <i className="ui-live-dot" />
+                          агент на связи
+                        </span>
+                      ) : (
+                        <span>агент офлайн</span>
+                      )}
+                      {st.listeners > 0 && <span>· слушают: {st.listeners}</span>}
+                    </div>
                   </div>
+                  <button
+                    onClick={() => toggle(id)}
+                    disabled={!online && !active}
+                    className={
+                      'inline-flex items-center gap-2 rounded-[var(--ui-radius-btn)] px-4 py-2 text-sm font-medium transition-all duration-300 ' +
+                      (active
+                        ? 'bg-[color:var(--color-danger)] text-white hover:brightness-110'
+                        : online
+                          ? 'bg-[color:var(--color-success)] text-white hover:brightness-110'
+                          : 'cursor-not-allowed bg-[color:var(--color-control-bg)] text-[color:var(--color-text-faint)]')
+                    }
+                  >
+                    {active ? (
+                      <>
+                        <Square className="h-4 w-4" strokeWidth={1.4} /> Остановить
+                      </>
+                    ) : (
+                      <>
+                        <Headphones className="h-4 w-4" strokeWidth={1.4} /> Слушать
+                      </>
+                    )}
+                  </button>
                 </div>
-                <button
-                  onClick={() => toggle(id)}
-                  disabled={!online && !active}
-                  className={
-                    'inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition ' +
-                    (active
-                      ? 'bg-red-600 text-white hover:bg-red-700'
-                      : online
-                        ? 'bg-green-600 text-white hover:bg-green-700'
-                        : 'bg-slate-100 text-slate-400 cursor-not-allowed')
-                  }
-                >
-                  {active ? (<><Square className="w-4 h-4" /> Остановить</>)
-                          : (<><Headphones className="w-4 h-4" /> Слушать</>)}
-                </button>
+              );
+            })}
+            {rows.length === 0 && (
+              <div className="px-5 py-8 text-center text-[color:var(--color-text-faint)]">
+                Нет салонов
               </div>
-            );
-          })}
-          {rows.length === 0 && (
-            <div className="px-4 py-6 text-center text-slate-400">Нет салонов</div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>

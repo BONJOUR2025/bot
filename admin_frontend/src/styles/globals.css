@@ -2383,3 +2383,54 @@ body.viewer3d-fs-active .app-card {
     animation: none;
   }
 }
+
+/* ── Захардкоженные светлые цвета ──────────────────────────────
+   Несколько страниц (SalonAudio, PaymentCalendar, Recruitment,
+   CashMovements) верстались сразу под светлую тему и ставят bg-white
+   и нейтральные рамки slate/gray напрямую. Перечисления цветовых
+   утилит выше их не ловят: там только именованные оттенки, а white —
+   отдельное ключевое слово. В тёмной теме такой блок оставался белым
+   листом с тёмным текстом поверх тёмного фона.
+
+   Правило нейтрализует их через токены поверхности, так что страницы
+   не приходится переписывать по одной ради читаемости. */
+.visual-glass [class~='bg-white'] {
+  background-color: var(--color-surface) !important;
+}
+.visual-glass [class*='border-slate-'],
+.visual-glass [class*='border-gray-'],
+.visual-glass [class*='border-zinc-'],
+.visual-glass [class*='border-neutral-'],
+.visual-glass [class*='border-stone-'] {
+  border-color: var(--color-border) !important;
+}
+/* divide-* задаёт границы между соседями через border-*-width на
+   потомках, а цвет берёт из своей переменной — по тем же причинам. */
+.visual-glass [class*='divide-slate-'],
+.visual-glass [class*='divide-gray-'],
+.visual-glass [class*='divide-y'] > * + * {
+  border-color: var(--color-border) !important;
+}
+
+/* ── Индикатор прямого эфира ───────────────────────────────────
+   Расходящееся кольцо, а не мигание прозрачностью: пульсация
+   box-shadow не трогает раскладку и не заставляет пересчитывать
+   геометрию соседей. Есть во всех темах — это индикатор состояния,
+   а не украшение конкретного оформления. */
+.ui-live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--color-success);
+  animation: ui-live-ring 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes ui-live-ring {
+  0%   { box-shadow: 0 0 0 0 var(--color-success-muted); }
+  70%  { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-live-dot { animation: none; }
+}
