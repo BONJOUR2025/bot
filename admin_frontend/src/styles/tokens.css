@@ -407,3 +407,220 @@
   --shadow-lg: 4px 4px 0 rgba(17, 17, 17, 0.12);
   --shadow-xl: 6px 6px 0 rgba(17, 17, 17, 0.12);
 }
+
+/* ================================================================
+   Ethereal Glass theme
+   ================================================================
+   Третий визуальный мир рядом с legacy (:root/.theme-light) и
+   Tactical Telemetry (.visual-refresh). Включается классом
+   .visual-glass на <html> — см. providers/ThemeProvider.jsx.
+
+   Архетип: Ethereal Glass (тёмный, основной) + Soft Structuralism
+   (.theme-light). Ground — почти OLED-чёрный, поверхности —
+   непрозрачные «ядра» внутри полупрозрачных «оболочек», линии
+   волосяные, тени в тёмной теме отсутствуют вовсе: глубину даёт
+   внутренняя подсветка кромки, а не отброшенная тень.
+
+   Имена переменных те же, что и у двух других тем, поэтому все
+   страницы и компоненты, читающие var(--color-*), перекрашиваются
+   без единой правки. Специфичные для стекла величины (--glass-*)
+   добавлены отдельно и используются слоем .visual-glass в
+   globals.css и общими UI-компонентами.
+   ================================================================ */
+.visual-glass {
+  --color-bg:             #050505;
+  --color-bg-alt:         #08080a;
+  --color-bg-subtle:      #0e0e12;
+  --color-surface:        #0a0a0c;
+  --color-surface-raised: #0e0e12;
+  --color-panel:          rgba(10, 10, 12, 0.72);
+
+  --color-primary:        #8b5cf6;
+  --color-primary-hover:  #a78bfa;
+  --color-primary-strong: #7c3aed;
+  --color-primary-muted:  rgba(139, 92, 246, 0.14);
+  --color-primary-glow:   rgba(139, 92, 246, 0.34);
+
+  --color-accent:         #34d399;
+  --color-accent-strong:  #10b981;
+  --color-accent-muted:   rgba(52, 211, 153, 0.12);
+
+  --color-success:        #34d399;
+  --color-success-muted:  rgba(52, 211, 153, 0.12);
+  --color-warning:        #fbbf24;
+  --color-warning-muted:  rgba(251, 191, 36, 0.12);
+  --color-danger:         #fb7185;
+  --color-danger-muted:   rgba(251, 113, 133, 0.12);
+  --color-info:           #60a5fa;
+  --color-info-muted:     rgba(96, 165, 250, 0.12);
+
+  --color-text:           #f5f5f4;
+  --color-text-muted:     #a2a2a9;
+  --color-text-faint:     #67676f;
+
+  --color-border:         rgba(255, 255, 255, 0.075);
+  --color-border-strong:  rgba(139, 92, 246, 0.34);
+  --color-border-hover:   rgba(255, 255, 255, 0.145);
+
+  --color-table-bg:          transparent;
+  --color-table-header-bg:   transparent;
+  --color-table-border:      rgba(255, 255, 255, 0.075);
+  --color-table-text:        #f5f5f4;
+  --color-table-header-text: #67676f;
+  --color-table-stripe:      transparent;
+  --color-table-hover:       rgba(255, 255, 255, 0.035);
+
+  --color-control-bg:            #08080a;
+  --color-control-bg-hover:      #0e0e12;
+  --color-control-border:        rgba(255, 255, 255, 0.075);
+  --color-control-border-strong: var(--color-primary);
+  --color-control-text:          var(--color-text);
+  --color-control-placeholder:   #67676f;
+
+  --color-modal-bg:       #0a0a0c;
+  --color-modal-text:     var(--color-text);
+  --color-modal-backdrop: rgba(3, 3, 3, 0.7);
+
+  --ring-color: rgba(139, 92, 246, 0.34);
+
+  /* В тёмной теме отброшенных теней нет — глубину задаёт кромка.
+     Токены сохранены (компоненты на них ссылаются), но обнулены. */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-glow-primary: 0 12px 34px -12px rgba(139, 92, 246, 0.34);
+  --shadow-glow-success: 0 12px 34px -12px rgba(52, 211, 153, 0.28);
+  --shadow-glow-danger:  0 12px 34px -12px rgba(251, 113, 133, 0.28);
+
+  /* Мягкая, сквиркловая геометрия — противоположность нулевым
+     углам Tactical Telemetry. */
+  --radius-xs:  8px;
+  --radius-sm:  10px;
+  --radius-md:  14px;
+  --radius-lg:  20px;
+  --radius-xl:  26px;
+  --radius-2xl: 32px;
+  --radius-full: 9999px;
+
+  --ui-radius-card:   var(--radius-2xl);
+  --ui-radius-btn:    var(--radius-full);
+  --ui-radius-badge:  var(--radius-full);
+  --ui-radius-avatar: 50%;
+  --ui-shadow-card:   none;
+  --ui-shadow-card-hover: none;
+  --ui-shadow-table:  none;
+  --ui-blur:          28px;
+
+  --font-sans:    "Geist Variable", "Geist", system-ui, sans-serif;
+  --font-display: "Geist Variable", "Geist", system-ui, sans-serif;
+  --font-mono-ui: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
+
+  /* ── Специфичные для стекла ──────────────────────────────────
+     Вложенная архитектура: оболочка (--glass-shell) с волосяной
+     рамкой и внутренним ядром. Радиус ядра считается от радиуса
+     оболочки минус её падинг, чтобы кривые были концентрическими. */
+  --glass-shell:       rgba(255, 255, 255, 0.035);
+  --glass-shell-hover: rgba(255, 255, 255, 0.06);
+  --glass-hair:        rgba(255, 255, 255, 0.075);
+  --glass-hair-strong: rgba(255, 255, 255, 0.145);
+  --glass-shell-pad:   6px;
+  --glass-core-radius: calc(var(--ui-radius-card) - var(--glass-shell-pad));
+  --glass-inner-hi:      inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --glass-inner-hi-soft: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --glass-core-sheen:  rgba(255, 255, 255, 0.035);
+  --glass-ambient:      none;
+  --glass-ambient-lift: none;
+  --glass-on-soft:     var(--color-primary-hover);
+  --glass-orb-a: rgba(139, 92, 246, 0.20);
+  --glass-orb-b: rgba(52, 211, 153, 0.13);
+  --glass-orb-c: rgba(96, 165, 250, 0.10);
+  --glass-grain-opacity: 0.035;
+  --glass-ease:     cubic-bezier(0.32, 0.72, 0, 1);
+  --glass-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Soft Structuralism — светлый компаньон ─────────────────────
+   Не инверсия тёмной темы: серебристо-серый ground, белые ядра и
+   сильно рассеянные ambient-тени вместо кромочной подсветки. */
+.visual-glass.theme-light {
+  --color-bg:             #f1f1f3;
+  --color-bg-alt:         #ffffff;
+  --color-bg-subtle:      #f7f7f9;
+  --color-surface:        #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-panel:          rgba(255, 255, 255, 0.74);
+
+  --color-primary:        #6d3fea;
+  --color-primary-hover:  #5b2fd6;
+  --color-primary-strong: #4f24c0;
+  --color-primary-muted:  rgba(109, 63, 234, 0.08);
+  --color-primary-glow:   rgba(109, 63, 234, 0.24);
+
+  --color-accent:         #0f9d6b;
+  --color-accent-strong:  #0b7c54;
+  --color-accent-muted:   rgba(15, 157, 107, 0.09);
+
+  --color-success:        #0f9d6b;
+  --color-success-muted:  rgba(15, 157, 107, 0.09);
+  --color-warning:        #b45309;
+  --color-warning-muted:  rgba(180, 83, 9, 0.09);
+  --color-danger:         #d6455c;
+  --color-danger-muted:   rgba(214, 69, 92, 0.09);
+  --color-info:           #2563eb;
+  --color-info-muted:     rgba(37, 99, 235, 0.09);
+
+  --color-text:           #0b0b0d;
+  --color-text-muted:     #55555f;
+  --color-text-faint:     #8b8b95;
+
+  --color-border:         rgba(12, 12, 20, 0.075);
+  --color-border-strong:  rgba(109, 63, 234, 0.24);
+  --color-border-hover:   rgba(12, 12, 20, 0.14);
+
+  --color-table-border:      rgba(12, 12, 20, 0.075);
+  --color-table-text:        #0b0b0d;
+  --color-table-header-text: #8b8b95;
+  --color-table-hover:       rgba(12, 12, 20, 0.03);
+
+  --color-control-bg:          #f7f7f9;
+  --color-control-bg-hover:    #f1f1f3;
+  --color-control-border:      rgba(12, 12, 20, 0.075);
+  --color-control-placeholder: #8b8b95;
+
+  --color-modal-bg:       #ffffff;
+  --color-modal-backdrop: rgba(12, 12, 20, 0.30);
+
+  --ring-color: rgba(109, 63, 234, 0.24);
+
+  /* Сильно рассеянные ambient-тени вместо кромочной подсветки —
+     никаких резких drop-shadow. */
+  --shadow-xs: 0 6px 14px -10px rgba(24, 24, 52, 0.14);
+  --shadow-sm: 0 12px 26px -16px rgba(24, 24, 52, 0.16);
+  --shadow-md: 0 20px 40px -22px rgba(24, 24, 52, 0.18);
+  --shadow-lg: 0 34px 68px -28px rgba(24, 24, 52, 0.20);
+  --shadow-xl: 0 48px 96px -32px rgba(24, 24, 52, 0.22);
+  --shadow-glow-primary: 0 12px 34px -14px rgba(109, 63, 234, 0.28);
+  --shadow-glow-success: 0 12px 34px -14px rgba(15, 157, 107, 0.22);
+  --shadow-glow-danger:  0 12px 34px -14px rgba(214, 69, 92, 0.22);
+
+  --ui-shadow-card:       var(--shadow-sm);
+  --ui-shadow-card-hover: var(--shadow-md);
+  --ui-shadow-table:      var(--shadow-xs);
+
+  --glass-shell:       rgba(12, 12, 20, 0.035);
+  --glass-shell-hover: rgba(12, 12, 20, 0.055);
+  --glass-hair:        rgba(12, 12, 20, 0.075);
+  --glass-hair-strong: rgba(12, 12, 20, 0.14);
+  --glass-inner-hi:      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --glass-inner-hi-soft: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --glass-core-sheen:  rgba(12, 12, 30, 0.018);
+  --glass-ambient:      var(--shadow-sm);
+  --glass-ambient-lift: var(--shadow-md);
+  --glass-on-soft:     var(--color-primary);
+  --glass-orb-a: rgba(109, 63, 234, 0.10);
+  --glass-orb-b: rgba(15, 157, 107, 0.08);
+  --glass-orb-c: rgba(37, 99, 235, 0.07);
+  --glass-grain-opacity: 0.022;
+}

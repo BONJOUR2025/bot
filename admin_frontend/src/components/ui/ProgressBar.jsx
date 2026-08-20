@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
-const VISUAL_REFRESH = import.meta.env.VITE_VISUAL_REFRESH === '1';
+import { isLegacy } from '../../providers/visualTheme.js';
+
+// Индиговый градиент со свечением — деталь только исходной темы. И
+// Tactical Telemetry, и Ethereal Glass рисуют полосу плоско, цветом
+// --color-primary, поэтому проверяем «это legacy?», а не «это refresh?».
+const LEGACY_BAR = isLegacy;
 
 export function TopProgressBar({ active }) {
   const [pct, setPct] = useState(0);
@@ -49,19 +54,23 @@ export function TopProgressBar({ active }) {
         style={{
           height: '100%',
           width: `${pct}%`,
-          background: VISUAL_REFRESH ? 'var(--color-primary)' : 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)',
-          boxShadow: VISUAL_REFRESH ? 'none' : '0 0 14px rgba(99,102,241,0.75), 0 0 4px rgba(99,102,241,0.95)',
-          borderRadius: VISUAL_REFRESH ? 0 : '0 2px 2px 0',
+          background: LEGACY_BAR
+            ? 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #a78bfa 100%)'
+            : 'var(--color-primary)',
+          boxShadow: LEGACY_BAR
+            ? '0 0 14px rgba(99,102,241,0.75), 0 0 4px rgba(99,102,241,0.95)'
+            : 'none',
+          borderRadius: LEGACY_BAR ? '0 2px 2px 0' : 'var(--radius-full)',
           transition: active
             ? 'width 1.5s cubic-bezier(0.08, 0.65, 0.12, 1)'
             : 'width 0.28s ease-out',
           position: 'relative',
         }}
       >
-        {/* Travelling shine — a glossy sweep reads as soft/modern, not
-            brutalist, so it's skipped entirely under visual-refresh
-            rather than just recolored. */}
-        {!VISUAL_REFRESH && (
+        {/* Бегущий блик — глянцевая деталь исходной темы. И брутализм, и
+            стекло рисуют полосу без него: в первом случае он противоречит
+            плоскости, во втором — забирает внимание у ambient-свечения. */}
+        {LEGACY_BAR && (
           <div
             style={{
               position: 'absolute',

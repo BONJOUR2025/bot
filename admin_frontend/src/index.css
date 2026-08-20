@@ -12,6 +12,14 @@
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/600.css';
 
+/* Ethereal Glass (.visual-glass). Вариативные начертания — один файл на
+   всю ось веса 100–900, поэтому две строки заменяют семь статических
+   импортов выше и весят меньше. Остальные семейства оставлены на месте:
+   ими пользуются legacy- и Tactical-Telemetry-темы, а откат дизайна
+   должен возвращать рабочий вид без переустановки пакетов. */
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

@@ -8,8 +8,35 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="theme-color" content="#6366f1" />
+    <meta name="theme-color" content="#050505" />
     <title>Центр управления</title>
+    <script>
+      // Ставим классы темы до первой отрисовки. ThemeProvider делает то же
+      // самое, но в useEffect — то есть уже после монтирования React, и до
+      // этого момента страница успевала мигнуть чужим фоном (белым на
+      // тёмной теме). Значения продублированы намеренно: модуль
+      // providers/visualTheme.js сюда не импортировать, он часть бандла.
+      (function () {
+        try {
+          var mode = localStorage.getItem('theme');
+          var dark =
+            mode === 'dark' ||
+            (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          // Vite подставляет значение из .env; если переменная не задана,
+          // плейсхолдер остаётся строкой и мы попадаем в ветку по умолчанию
+          // — ту же, что и резолвер в providers/visualTheme.js.
+          var world = '%VITE_VISUAL_THEME%';
+          var cls =
+            world === 'refresh' ? 'visual-refresh' : world === 'legacy' ? '' : 'visual-glass';
+          var root = document.documentElement;
+          if (cls) root.classList.add(cls);
+          if (!dark) root.classList.add('theme-light');
+          if (cls === 'visual-glass') root.style.background = dark ? '#050505' : '#f1f1f3';
+        } catch (e) {
+          /* приватный режим или заблокированное хранилище — просто рисуем как есть */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

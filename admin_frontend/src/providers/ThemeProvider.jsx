@@ -1,9 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-// Default ON — the Tactical Telemetry redesign is now the standard look.
-// VITE_VISUAL_REFRESH=0 is the escape hatch to fall back to the old
-// indigo-SaaS theme if something's found broken post-rollout.
-const VISUAL_FLAG = import.meta.env.VITE_VISUAL_REFRESH !== "0";
+import { VISUAL_THEME_CLASS, ALL_VISUAL_CLASSES } from "./visualTheme.js";
+
 const STORAGE_KEY = "theme";
 const VALID_MODES = new Set(["light", "dark", "auto"]);
 
@@ -43,8 +41,11 @@ export default function ThemeProvider({ children }) {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (VISUAL_FLAG) root.classList.add("visual-refresh");
-    else root.classList.remove("visual-refresh");
+    // Снимаем все классы миров, потом ставим выбранный: иначе при смене
+    // темы между сборками на <html> могли бы остаться сразу два класса,
+    // и их палитры перекрыли бы друг друга по порядку в CSS.
+    root.classList.remove(...ALL_VISUAL_CLASSES);
+    if (VISUAL_THEME_CLASS) root.classList.add(VISUAL_THEME_CLASS);
 
     if (theme === "light") root.classList.add("theme-light");
     else root.classList.remove("theme-light");

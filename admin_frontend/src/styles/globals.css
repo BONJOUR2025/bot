@@ -1472,3 +1472,626 @@ body.viewer3d-fs-active .app-card {
   cursor: pointer;
 }
 .viewer3d-fs-fab:hover { background: rgba(30, 41, 66, 0.85); }
+
+/* ================================================================
+   Ethereal Glass — слой .visual-glass
+   ================================================================
+   Аддитивный: каждое правило ниже вложено в html.visual-glass, поэтому
+   при другом значении VITE_VISUAL_THEME ничего выше не меняется.
+
+   Цвета, радиусы и тени приезжают бесплатно из tokens.css. Здесь —
+   то, до чего токены не дотягиваются: вложенная архитектура
+   поверхностей, атмосфера (орбы + зерно), плавающая чрома, хореография
+   появления и нормализация Tailwind-утилит, захардкоженных в страницах.
+
+   Ключевой приём — .ui-shell/.ui-core. Общие компоненты (Card, Modal,
+   Button и т.д.) рендерят их всегда, но по умолчанию это display:
+   contents, то есть обёртки исчезают из раскладки и не рисуют ничего.
+   Настоящими коробками они становятся только внутри .visual-glass. Так
+   разметка остаётся одна на все три мира: добавленные ради стекла узлы
+   в брутализме и legacy не существуют для CSS вообще.
+   ================================================================ */
+
+/* ── Вложенные оболочки: по умолчанию инертны ──────────────────── */
+.ui-shell,
+.ui-core {
+  display: contents;
+}
+
+.visual-glass .ui-shell {
+  display: block;
+  background: var(--glass-shell);
+  border: 1px solid var(--glass-hair);
+  border-radius: var(--ui-radius-card);
+  padding: var(--glass-shell-pad);
+  box-shadow: var(--glass-ambient);
+  transition:
+    border-color 0.7s var(--glass-ease),
+    background 0.7s var(--glass-ease),
+    box-shadow 0.7s var(--glass-ease);
+}
+.visual-glass .ui-shell:hover {
+  border-color: var(--glass-hair-strong);
+  box-shadow: var(--glass-ambient-lift);
+}
+.visual-glass .ui-shell--flush:hover {
+  border-color: var(--glass-hair);
+  box-shadow: var(--glass-ambient);
+}
+
+.visual-glass .ui-core {
+  display: block;
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-surface);
+  border-radius: var(--glass-core-radius);
+  box-shadow: var(--glass-inner-hi);
+}
+/* Мягкий блик по верхней кромке ядра — читается как отражение, а не
+   как градиентная заливка. pointer-events снят, иначе он перехватывал
+   бы клики по содержимому карточки. */
+.visual-glass .ui-core::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(160deg, var(--glass-core-sheen), transparent 44%);
+}
+
+/* Компактный вариант — для мелких блоков, где радиус 32px выглядит
+   пузырём. Радиус ядра пересчитывается, чтобы кривые остались
+   концентрическими. */
+.visual-glass .ui-shell--sm {
+  border-radius: var(--radius-xl);
+  padding: 5px;
+}
+.visual-glass .ui-shell--sm > .ui-core {
+  border-radius: calc(var(--radius-xl) - 5px);
+}
+
+/* ── Типографика ──────────────────────────────────────────────── */
+.visual-glass body {
+  font-family: var(--font-sans);
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+}
+.visual-glass h1,
+.visual-glass h2,
+.visual-glass h3,
+.visual-glass h4 {
+  font-family: var(--font-display);
+  text-transform: none;
+  letter-spacing: -0.032em;
+  font-weight: 500;
+}
+/* Крупный заголовок страницы. Страницы используют h2.text-2xl вместо
+   настоящего h1 — та же пара селекторов, что и в слое брутализма. */
+.visual-glass h1,
+.visual-glass h2.text-2xl {
+  font-weight: 300;
+  letter-spacing: -0.042em;
+  line-height: 1.04;
+}
+.visual-glass h1 b,
+.visual-glass h2.text-2xl b,
+.visual-glass h1 strong,
+.visual-glass h2.text-2xl strong {
+  font-weight: 600;
+}
+/* Цифры в один столбец — на 40+ страницах с суммами это читаемость,
+   а не украшение. */
+.visual-glass table,
+.visual-glass .mono,
+.visual-glass [class*='font-mono'],
+.visual-glass .ui-metric {
+  font-variant-numeric: tabular-nums;
+}
+.visual-glass [class*='font-mono'],
+.visual-glass .mono {
+  font-family: var(--font-mono-ui);
+}
+.visual-glass .ui-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--color-text-faint);
+  font-weight: 500;
+}
+.visual-glass .ui-metric {
+  font-family: var(--font-mono-ui);
+  font-size: clamp(1.75rem, 3.2vw, 2.4rem);
+  font-weight: 300;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+.visual-glass .ui-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-full);
+  padding: 0.3rem 0.75rem;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--color-text-muted);
+  background: var(--glass-shell);
+  border: 1px solid var(--glass-hair);
+}
+.visual-glass .ui-eyebrow::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 12px var(--color-primary);
+}
+
+/* ── Атмосфера: mesh-орбы и зерно ──────────────────────────────
+   Оба слоя — fixed и pointer-events:none, поэтому не участвуют в
+   скролле и не вызывают перерисовку содержимого. #root охватывает и
+   логин, и авторизованный шелл, так что хватает одного места. */
+.visual-glass #root {
+  position: relative;
+}
+.visual-glass body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(52vw 52vw at 8% -6%, var(--glass-orb-a), transparent 62%),
+    radial-gradient(46vw 46vw at 96% 104%, var(--glass-orb-b), transparent 62%),
+    radial-gradient(34vw 34vw at 62% 48%, var(--glass-orb-c), transparent 64%),
+    var(--color-bg);
+}
+.visual-glass #root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: var(--glass-grain-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Шелл: сайдбар-остров ──────────────────────────────────────
+   Сайдбар перестаёт быть колонкой, приклеенной к краю, и становится
+   отдельной плавающей панелью. Ширина колонки грида остаётся прежней,
+   меняются только внутренние отступы самой панели — так не ломается
+   ни collapsed-режим (64px), ни мобильный fixed-оверлей. */
+.visual-glass .app-shell {
+  background: transparent;
+}
+.visual-glass .app-shell__sidebar {
+  background: transparent;
+  border-right: 0;
+  padding: 1.25rem 0 1.25rem 1.25rem;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.visual-glass .app-shell__sidebar > * {
+  height: 100%;
+  background: var(--color-panel);
+  border: 1px solid var(--glass-hair);
+  border-radius: var(--ui-radius-card);
+  box-shadow: var(--glass-ambient);
+  -webkit-backdrop-filter: blur(var(--ui-blur)) saturate(150%);
+  backdrop-filter: blur(var(--ui-blur)) saturate(150%);
+  overflow: hidden;
+}
+.visual-glass .app-shell--nav-collapsed .app-shell__sidebar {
+  padding-right: 0;
+}
+/* Мобильный сайдбар — выезжающий оверлей, ему остров не нужен. */
+.visual-glass .app-shell--mobile .app-shell__sidebar {
+  padding: 0;
+}
+.visual-glass .app-shell--mobile .app-shell__sidebar > * {
+  border: 0;
+  border-radius: 0;
+  height: 100%;
+}
+.visual-glass .app-shell__backdrop {
+  background: var(--color-modal-backdrop);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  backdrop-filter: blur(28px) saturate(140%);
+}
+
+/* ── Шелл: шапка-пилюля ────────────────────────────────────────
+   Отклеиваем от верхнего края и превращаем в остров. Градиентная
+   подложка предыдущей темы убирается — здесь работает стекло. */
+.visual-glass .app-shell__header {
+  margin: 1.25rem 1.5rem 0;
+  padding: 5px 5px 5px 1.25rem;
+  height: auto;
+  min-height: 48px;
+  top: 1.25rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: var(--radius-full);
+  background: var(--color-panel);
+  box-shadow: var(--glass-ambient);
+  -webkit-backdrop-filter: blur(var(--ui-blur)) saturate(150%);
+  backdrop-filter: blur(var(--ui-blur)) saturate(150%);
+  margin-top: calc(1.25rem + env(safe-area-inset-top, 0px));
+}
+.visual-glass .app-shell__brand {
+  font-weight: 500;
+  font-size: 0.9rem;
+  letter-spacing: -0.02em;
+}
+.visual-glass .app-shell__content {
+  padding-top: 2.75rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Сайдбар: внутренности ─────────────────────────────────────── */
+.visual-glass .sidebar {
+  padding: 1.5rem 0.75rem 1rem;
+  gap: 1.25rem;
+}
+.visual-glass .sidebar__header {
+  padding: 0 0.65rem 0.35rem;
+}
+.visual-glass .sidebar__badge {
+  border-radius: 13px;
+  background: linear-gradient(140deg, var(--color-primary), var(--color-primary-hover));
+  box-shadow: var(--shadow-glow-primary), var(--glass-inner-hi);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.visual-glass .sidebar__title-main {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.visual-glass .sidebar__section-label {
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  padding-left: 0.7rem;
+}
+.visual-glass .sidebar__link {
+  border-radius: 11px;
+  border: 1px solid transparent;
+  padding: 0.5rem 0.7rem;
+  transition:
+    color 0.5s var(--glass-ease),
+    background 0.5s var(--glass-ease),
+    border-color 0.5s var(--glass-ease),
+    transform 0.5s var(--glass-ease);
+}
+.visual-glass .sidebar__link:hover {
+  background: var(--glass-shell);
+  transform: translate3d(2px, 0, 0);
+}
+/* Активный пункт — не заливка основным цветом (она в стекле читается
+   как кнопка), а подсвеченная плашка с волосяной рамкой. */
+.visual-glass .sidebar__link.is-active {
+  background: var(--color-primary-muted);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+  box-shadow: var(--glass-inner-hi-soft);
+}
+.visual-glass .sidebar__link.is-active svg {
+  color: var(--glass-on-soft);
+}
+
+/* ── Поверхности: карточки, модалки, тосты, логин ──────────────── */
+.visual-glass .app-card,
+.visual-glass .modal-card,
+.visual-glass .auth-card,
+.visual-glass .toast {
+  background: var(--color-surface);
+  border: 1px solid var(--glass-hair);
+  border-radius: var(--ui-radius-card);
+  box-shadow: var(--glass-ambient);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.visual-glass .modal-backdrop {
+  background: var(--color-modal-backdrop);
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+}
+.visual-glass .auth-card__logo,
+.visual-glass .emp-header__logo {
+  border-radius: 16px;
+  background: linear-gradient(140deg, var(--color-primary), var(--color-primary-hover));
+  box-shadow: var(--shadow-glow-primary), var(--glass-inner-hi);
+}
+
+/* ── Кнопки: пилюля с вложенным кругом ─────────────────────────
+   .ui-nub рендерится Button-ом; вне стекла он display:contents и
+   просто отдаёт иконку наружу, как было раньше. */
+.visual-glass .btn--primary {
+  background: linear-gradient(140deg, var(--color-primary), var(--color-primary-hover));
+  border-color: transparent;
+  box-shadow: var(--shadow-glow-primary), var(--glass-inner-hi);
+}
+.visual-glass .ui-nub {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 50%;
+  background: var(--glass-shell);
+  border: 1px solid var(--glass-hair);
+  transition:
+    transform 0.55s var(--glass-ease),
+    background 0.55s var(--glass-ease),
+    border-color 0.55s var(--glass-ease);
+}
+.visual-glass .ui-btn--nubbed {
+  padding-right: 5px;
+  gap: 0.75rem;
+}
+.visual-glass .ui-btn--nubbed:hover .ui-nub {
+  transform: translate3d(3px, -1px, 0) scale(1.06);
+  background: var(--glass-shell-hover);
+  border-color: var(--glass-hair-strong);
+}
+.visual-glass .ui-btn--nubbed:active {
+  transform: scale(0.98);
+}
+.visual-glass button:not(:disabled),
+.visual-glass [role='button']:not([aria-disabled='true']) {
+  transition:
+    transform 0.5s var(--glass-ease),
+    background 0.5s var(--glass-ease),
+    border-color 0.5s var(--glass-ease),
+    box-shadow 0.5s var(--glass-ease),
+    color 0.5s var(--glass-ease);
+}
+/* Подъём на 1px из legacy-темы здесь не нужен: глубину задаёт кромка,
+   а дрожание строки на ховере в плотных таблицах только мешает. */
+.visual-glass .hover\:-translate-y-px:hover {
+  transform: none;
+}
+
+/* ── Поля ввода ────────────────────────────────────────────────── */
+.visual-glass input,
+.visual-glass select,
+.visual-glass textarea {
+  border-radius: var(--radius-md);
+  background: var(--color-control-bg);
+  border-color: var(--color-control-border);
+  box-shadow: var(--glass-inner-hi-soft);
+}
+.visual-glass input:focus,
+.visual-glass select:focus,
+.visual-glass textarea:focus {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 4px var(--color-primary-muted), var(--glass-inner-hi-soft);
+}
+
+/* ── Таблицы ───────────────────────────────────────────────────
+   Плотный «безрамочный» вид: заголовок капителью, строки разделены
+   волосяной линией, зебра убрана (в стекле она читается грязью). */
+.visual-glass thead th {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  color: var(--color-table-header-text);
+  background: transparent;
+  border-bottom: 1px solid var(--glass-hair);
+}
+.visual-glass tbody tr {
+  transition: background 0.45s var(--glass-ease);
+}
+.visual-glass tbody tr:hover {
+  background: var(--color-table-hover);
+}
+.visual-glass tbody td {
+  border-top: 1px solid var(--glass-hair);
+  border-bottom: 0;
+}
+.visual-glass tbody tr:first-child td {
+  border-top: 0;
+}
+
+/* ── Хореография появления ─────────────────────────────────────
+   Класс навешивает useReveal (hooks/useReveal.js) через
+   IntersectionObserver. Анимируются только transform/opacity/filter —
+   ни одно свойство не вызывает пересчёт раскладки. */
+.visual-glass .ui-reveal {
+  opacity: 0;
+  transform: translate3d(0, 34px, 0);
+  filter: blur(8px);
+  transition:
+    opacity 0.9s var(--glass-ease),
+    transform 0.9s var(--glass-ease),
+    filter 0.9s var(--glass-ease);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: transform, opacity;
+}
+.visual-glass .ui-reveal.is-in {
+  opacity: 1;
+  transform: none;
+  filter: blur(0);
+}
+
+/* ── Нормализация Tailwind-утилит, захардкоженных в страницах ───
+   37 из 44 страниц ставят rounded- и shadow- классы напрямую. В
+   брутализме их схлопывали в ноль одним правилом; здесь наоборот —
+   разводим по трём ступеням радиуса, иначе мелкие бейджи получают
+   тот же 32px, что и крупные карточки, и превращаются в пузыри.
+   Подстрочное совпадение не конфликтует: "rounded-2xl" не содержит
+   подстроки "rounded-xl", так что порядок правил не важен. */
+.visual-glass [class*='rounded-sm'],
+.visual-glass [class*='rounded-md'] {
+  border-radius: var(--radius-sm) !important;
+}
+.visual-glass [class*='rounded-lg'],
+.visual-glass [class*='rounded-xl'] {
+  border-radius: var(--radius-lg) !important;
+}
+.visual-glass [class*='rounded-2xl'],
+.visual-glass [class*='rounded-3xl'] {
+  border-radius: var(--radius-2xl) !important;
+}
+.visual-glass [class*='rounded-full'] {
+  border-radius: var(--radius-full) !important;
+}
+
+/* Тени Tailwind заменяем на ambient-токены (в тёмной теме они none —
+   глубину там несёт кромка, а не тень). */
+.visual-glass [class*='shadow-2xl'],
+.visual-glass [class*='shadow-xl'] {
+  box-shadow: var(--shadow-lg) !important;
+}
+.visual-glass [class*='shadow-lg'] {
+  box-shadow: var(--shadow-md) !important;
+}
+.visual-glass [class*='shadow-md'],
+.visual-glass [class*='shadow-sm'] {
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* Сырые цветовые утилиты — на семантические токены, чтобы палитра
+   оставалась одна. Перечень тот же, что и в слое брутализма. */
+.visual-glass [class*='text-red-'],
+.visual-glass [class*='text-rose-'] {
+  color: var(--color-danger) !important;
+}
+.visual-glass [class*='text-green-'],
+.visual-glass [class*='text-emerald-'] {
+  color: var(--color-success) !important;
+}
+.visual-glass [class*='text-yellow-'],
+.visual-glass [class*='text-amber-'],
+.visual-glass [class*='text-orange-'] {
+  color: var(--color-warning) !important;
+}
+.visual-glass [class*='text-blue-'],
+.visual-glass [class*='text-sky-'],
+.visual-glass [class*='text-cyan-'],
+.visual-glass [class*='text-teal-'] {
+  color: var(--color-info) !important;
+}
+.visual-glass [class*='text-indigo-'],
+.visual-glass [class*='text-purple-'],
+.visual-glass [class*='text-violet-'],
+.visual-glass [class*='text-fuchsia-'] {
+  color: var(--color-primary) !important;
+}
+.visual-glass [class*='text-gray-'],
+.visual-glass [class*='text-slate-'],
+.visual-glass [class*='text-zinc-'],
+.visual-glass [class*='text-neutral-'],
+.visual-glass [class*='text-stone-'] {
+  color: var(--color-text-muted) !important;
+}
+
+.visual-glass [class*='bg-red-'],
+.visual-glass [class*='bg-rose-'] {
+  background-color: var(--color-danger-muted) !important;
+}
+.visual-glass [class*='bg-green-'],
+.visual-glass [class*='bg-emerald-'] {
+  background-color: var(--color-success-muted) !important;
+}
+.visual-glass [class*='bg-yellow-'],
+.visual-glass [class*='bg-amber-'],
+.visual-glass [class*='bg-orange-'] {
+  background-color: var(--color-warning-muted) !important;
+}
+.visual-glass [class*='bg-blue-'],
+.visual-glass [class*='bg-sky-'],
+.visual-glass [class*='bg-cyan-'],
+.visual-glass [class*='bg-teal-'] {
+  background-color: var(--color-info-muted) !important;
+}
+.visual-glass [class*='bg-indigo-'],
+.visual-glass [class*='bg-purple-'],
+.visual-glass [class*='bg-violet-'],
+.visual-glass [class*='bg-fuchsia-'] {
+  background-color: var(--color-primary-muted) !important;
+}
+.visual-glass [class*='bg-gray-'],
+.visual-glass [class*='bg-slate-'],
+.visual-glass [class*='bg-zinc-'],
+.visual-glass [class*='bg-neutral-'],
+.visual-glass [class*='bg-stone-'] {
+  background-color: var(--color-control-bg) !important;
+}
+
+.visual-glass [class*='border-red-'],
+.visual-glass [class*='border-rose-'] {
+  border-color: var(--color-danger) !important;
+}
+.visual-glass [class*='border-green-'],
+.visual-glass [class*='border-emerald-'] {
+  border-color: var(--color-success) !important;
+}
+.visual-glass [class*='border-yellow-'],
+.visual-glass [class*='border-amber-'],
+.visual-glass [class*='border-orange-'] {
+  border-color: var(--color-warning) !important;
+}
+.visual-glass [class*='border-blue-'],
+.visual-glass [class*='border-sky-'],
+.visual-glass [class*='border-cyan-'],
+.visual-glass [class*='border-teal-'] {
+  border-color: var(--color-info) !important;
+}
+.visual-glass [class*='border-indigo-'],
+.visual-glass [class*='border-purple-'],
+.visual-glass [class*='border-violet-'],
+.visual-glass [class*='border-fuchsia-'] {
+  border-color: var(--color-primary) !important;
+}
+
+/* Градиентные заливки Tailwind гасим: в стекле цвет несут орбы фона,
+   а не сами поверхности. Брендовые градиенты кнопки/логотипа заданы
+   именными правилами выше и сюда не попадают. */
+.visual-glass [class*='bg-gradient-to'] {
+  background-image: none !important;
+}
+
+/* ── Мобильная раскладка ───────────────────────────────────────── */
+@media (max-width: 767px) {
+  .visual-glass .app-shell__header {
+    margin: 0.75rem 0.75rem 0;
+    margin-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+    top: 0.75rem;
+  }
+  .visual-glass .app-shell__content {
+    padding-top: 1.75rem;
+  }
+  .visual-glass .ui-shell {
+    border-radius: var(--radius-xl);
+    padding: 5px;
+  }
+  .visual-glass .ui-shell > .ui-core {
+    border-radius: calc(var(--radius-xl) - 5px);
+  }
+}
+
+/* ── Доступность ───────────────────────────────────────────────── */
+.visual-glass :focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visual-glass .ui-reveal {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+  .visual-glass *,
+  .visual-glass *::before,
+  .visual-glass *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
