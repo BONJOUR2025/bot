@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  BarChart2, RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound,
+  RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound,
   SlidersHorizontal, X, Check, Plus, Trash2,
 } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
@@ -450,11 +450,11 @@ function SettingsPanel({
         <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-2">Детализация таблицы</div>
         <div className="flex gap-2">
           <button type="button" onClick={() => onSetShowBreakdown(true)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${showBreakdown ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'}`}>
+            className={`ui-chip ${showBreakdown? 'is-active' : ''}`}>
             Подробно (+ авансы)
           </button>
           <button type="button" onClick={() => onSetShowBreakdown(false)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${!showBreakdown ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'}`}>
+            className={`ui-chip ${!showBreakdown? 'is-active' : ''}`}>
             Кратко (оклад, KPI, премии, штрафы)
           </button>
         </div>
@@ -687,17 +687,27 @@ export default function PayrollSummary() {
       <TopProgressBar active={pnging || (loading && !!data)} />
 
       {/* Controls */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
-            <BarChart2 size={24} /> Сводный отчёт по ФОТ
+      <div className="ui-reveal flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          {/* Надзаголовок несёт выбранный период — то, от чего зависят все
+              числа ниже. Иконка из заголовка убрана: она дублировала уже
+              подсвеченный пункт меню и мешала крупному начертанию. */}
+          <span className="ui-eyebrow mb-3">Зарплата · {periodLabel}</span>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
+            Сводный отчёт по ФОТ
           </h2>
-          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Администраторы, мастера, менеджеры и курьеры за период · настраиваемый PNG-отчёт</p>
+          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2 max-w-[56ch]">
+            Администраторы, мастера, менеджеры и курьеры за период · настраиваемый PNG-отчёт
+          </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           {DATE_PRESETS.map((p) => (
-            <button key={p.key} onClick={() => applyPreset(p)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activePreset === p.key ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}>
+            <button
+              key={p.key}
+              onClick={() => applyPreset(p)}
+              aria-pressed={activePreset === p.key}
+              className={`ui-chip ${activePreset === p.key ? 'is-active' : ''}`}
+            >
               {p.label}
             </button>
           ))}
@@ -709,8 +719,11 @@ export default function PayrollSummary() {
             <span className="block text-[10px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">По</span>
             <input type="date" className="input text-xs h-[30px] py-0" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
-          <button className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activePreset === 'custom' ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}
-            onClick={applyCustomRange}>
+          <button
+            className={`ui-chip ${activePreset === 'custom' ? 'is-active' : ''}`}
+            aria-pressed={activePreset === 'custom'}
+            onClick={applyCustomRange}
+          >
             Применить период
           </button>
           <button className="btn btn--secondary flex items-center gap-1.5" onClick={() => setShowSettings((v) => !v)}>

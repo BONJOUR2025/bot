@@ -404,7 +404,7 @@ export default function CashSummary() {
         <div className="flex flex-wrap items-end gap-2">
           {DATE_PRESETS.map((p) => (
             <button key={p.key} onClick={() => applyPreset(p)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activePreset === p.key ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}>
+              className={`ui-chip ${activePreset === p.key? 'is-active' : ''}`}>
               {p.label}
             </button>
           ))}
@@ -416,7 +416,7 @@ export default function CashSummary() {
             <span className="block text-[10px] font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">По</span>
             <input type="date" className="input text-xs h-[30px] py-0" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
-          <button className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activePreset === 'custom' ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}
+          <button className={`ui-chip ${activePreset === 'custom'? 'is-active' : ''}`}
             onClick={applyCustomRange}>
             Применить период
           </button>

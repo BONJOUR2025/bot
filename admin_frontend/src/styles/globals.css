@@ -389,6 +389,35 @@ a:hover { text-decoration: underline; }
   color: #fff;
 }
 
+/* ── Чип-фильтр ───────────────────────────────────────────────────
+   Пресеты периода, переключатели вкладок, теги отбора — один и тот же
+   элемент, который до сих пор каждая страница собирала своим набором
+   утилит, из-за чего активное состояние выглядело по-разному. */
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.ui-chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-hover);
+}
+.ui-chip.is-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
 /* ================================================================
    Auth layout (login page)
    ================================================================ */
@@ -2305,4 +2334,52 @@ body.viewer3d-fs-active .app-card {
 }
 .visual-glass .sidebar__theme-btn {
   border-radius: var(--radius-sm);
+}
+
+/* ── Появление страницы ────────────────────────────────────────
+   Хореография прокрутки (.ui-reveal) требует правок в разметке
+   конкретной страницы. Это правило работает без них: при монтировании
+   нового содержимого маршрута оно один раз проигрывает мягкий подъём,
+   поэтому переход между разделами не выглядит как мгновенная подмена
+   одного экрана другим.
+
+   Ключ animation-name на .app-shell__content не перезапускается сам по
+   себе при смене маршрута — React переиспользует узел, — поэтому
+   MainLayout отдаёт ему key от pathname (см. layouts/MainLayout.jsx).
+
+   Анимируются только transform и opacity. */
+@keyframes glass-page-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.visual-glass .app-shell__content {
+  animation: glass-page-in 0.55s var(--glass-ease) both;
+}
+
+/* Чипы в стекле: активный — подсвеченная плашка, а не заливка основным
+   цветом (сплошной фиолетовый читается как кнопка действия). */
+.visual-glass .ui-chip {
+  border-color: var(--glass-hair);
+  background: var(--glass-shell);
+}
+.visual-glass .ui-chip:hover {
+  border-color: var(--glass-hair-strong);
+  background: var(--glass-shell-hover);
+}
+.visual-glass .ui-chip.is-active {
+  background: var(--color-primary-muted);
+  border-color: var(--color-border-strong);
+  color: var(--glass-on-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visual-glass .app-shell__content {
+    animation: none;
+  }
 }
