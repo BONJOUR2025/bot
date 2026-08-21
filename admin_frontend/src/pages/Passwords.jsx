@@ -390,17 +390,18 @@ export default function Passwords() {
           const catEntries = entriesByCategory[catName];
 
           return (
-            <div key={catName} className="bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] overflow-hidden">
-              <div
-                className="px-4 py-3 border-b border-[var(--color-border)] flex items-center gap-2"
-                style={{ borderLeftWidth: '4px', borderLeftColor: catInfo?.color || 'var(--color-text-muted)' }}
-              >
-                <span className="text-lg">{catInfo?.icon || '📁'}</span>
-                <h3 className="font-medium">{catName}</h3>
-                <span className="ml-auto text-sm text-[color:var(--color-text-faint)]">{catEntries.length}</span>
-              </div>
+            <div key={catName} className="ui-shell">
+              <div className="ui-core overflow-hidden border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+                <div
+                  className="px-4 py-3 border-b border-[var(--color-border)] flex items-center gap-2"
+                  style={{ borderLeftWidth: '4px', borderLeftColor: catInfo?.color || 'var(--color-text-muted)' }}
+                >
+                  <span className="text-lg">{catInfo?.icon || '📁'}</span>
+                  <h3 className="font-medium">{catName}</h3>
+                  <span className="ml-auto text-sm text-[color:var(--color-text-faint)]">{catEntries.length}</span>
+                </div>
 
-              <ResponsiveTable
+                <ResponsiveTable
                 data={catEntries}
                 keyFn={(entry) => entry.id}
                 emptyText="Нет записей"
@@ -521,7 +522,8 @@ export default function Passwords() {
                     ),
                   },
                 ]}
-              />
+                />
+              </div>
             </div>
           );
         })}
