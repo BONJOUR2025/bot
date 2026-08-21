@@ -2517,3 +2517,64 @@ body.viewer3d-fs-active .app-card {
 .visual-refresh [class*='bg-fuchsia-'][class*='text-white'] {
   background-color: var(--color-primary) !important;
 }
+
+/* ── Атомы: кнопка, иконка-кнопка, поле ────────────────────────
+   Базовый .btn берёт --radius-md напрямую, а не --ui-radius-btn,
+   поэтому 217 кнопок, свёрстанных этим классом, оставались со
+   скруглением 14px, тогда как кнопки через компонент Button стали
+   пилюлями. Одно и то же действие выглядело двумя способами на
+   соседних страницах. */
+.visual-glass .btn,
+.visual-glass .icon-button {
+  border-radius: var(--ui-radius-btn);
+  background: var(--glass-shell);
+  border-color: var(--glass-hair);
+  transition:
+    transform 0.5s var(--glass-ease),
+    background 0.5s var(--glass-ease),
+    border-color 0.5s var(--glass-ease),
+    color 0.5s var(--glass-ease);
+}
+/* Подъём на 1px — приём темы с отброшенными тенями: там кнопка
+   «всплывает» над листом. В стекле глубину несёт кромка, а дрожание
+   строки в плотных панелях инструментов только мешает целиться. */
+.visual-glass .btn:hover,
+.visual-glass .icon-button:hover {
+  transform: none;
+  background: var(--glass-shell-hover);
+  border-color: var(--glass-hair-strong);
+  box-shadow: none;
+}
+.visual-glass .btn:active,
+.visual-glass .icon-button:active {
+  transform: scale(0.98);
+}
+/* Индикатор фокуса должен быть один. Общее правило слоя рисует
+   обводку, поэтому собственное кольцо кнопки здесь снимается —
+   иначе вокруг неё два контура разного радиуса. */
+.visual-glass .btn:focus-visible,
+.visual-glass .icon-button:focus-visible {
+  box-shadow: none;
+}
+.visual-glass .btn--primary:hover {
+  background: linear-gradient(140deg, var(--color-primary-hover), var(--color-primary));
+  border-color: transparent;
+}
+.visual-glass .btn--secondary,
+.visual-glass .btn--surface {
+  background: var(--glass-shell);
+}
+
+/* Поля остаются со скруглением --radius-md: пилюля у текстового поля
+   мешает читать — левый край текста уезжает от края рамки на разное
+   расстояние в зависимости от высоты строки. */
+.visual-glass .input:focus,
+.visual-glass .input-field:focus,
+.visual-glass .modal-control:focus,
+.visual-glass .form-field input:focus,
+.visual-glass .form-field select:focus,
+.visual-glass .form-field textarea:focus {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 4px var(--color-primary-muted), var(--glass-inner-hi-soft);
+  background: var(--color-control-bg);
+}
