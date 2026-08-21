@@ -71,7 +71,11 @@ const DARK = {
   bg: 'var(--color-surface)', bg2: 'var(--color-table-header-bg)', bg3: 'var(--color-control-bg)',
   ink: 'var(--color-text)', muted: 'var(--color-text-muted)', line: 'var(--color-border)',
 };
-const BRAND = 'var(--color-primary)';
+// Фон шапки отчёта, поверх которого идёт белый текст. С основным
+// тоном контраст 4.23 — ниже порога AA; тёмный вариант даёт 5.7 и
+// сохраняет тот же цвет по смыслу. Отчёт выгружается в PNG, поэтому
+// читаемость здесь важна не меньше, чем на экране.
+const BRAND = 'var(--color-primary-strong)';
 const RTC = createContext(DARK);
 
 function loadHiddenCats() {

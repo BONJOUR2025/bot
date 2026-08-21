@@ -392,7 +392,7 @@ function PayrollProgress({ status }) {
               <div className="min-w-0">
                 <div className="text-xs font-semibold truncate text-[color:var(--color-text)]">{cat.title}</div>
                 <div className="text-[10px] mt-0.5" style={{
-                  color: isDone ? 'var(--color-success)' : isError ? 'var(--color-danger)' : isLoading ? 'var(--color-primary)' : 'var(--color-text-faint)',
+                  color: isDone ? 'var(--color-success)' : isError ? 'var(--color-danger)' : isLoading ? 'var(--color-primary-hover)' : 'var(--color-text-faint)',
                 }}>
                   {isDone ? '✓ Готово' : isError ? '✗ Ошибка' : isLoading ? 'Загружаю…' : 'Ожидание'}
                 </div>

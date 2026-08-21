@@ -2123,11 +2123,13 @@ body.viewer3d-fs-active .app-card {
 .visual-glass [class*='text-teal-'] {
   color: var(--color-info) !important;
 }
+/* Этими классами набран текст поверх приглушённой подложки, где
+   основной тон даёт 4.32. Светлый вариант того же тона проходит. */
 .visual-glass [class*='text-indigo-'],
 .visual-glass [class*='text-purple-'],
 .visual-glass [class*='text-violet-'],
 .visual-glass [class*='text-fuchsia-'] {
-  color: var(--color-primary) !important;
+  color: var(--glass-on-soft) !important;
 }
 .visual-glass [class*='text-gray-'],
 .visual-glass [class*='text-slate-'],
@@ -2620,14 +2622,17 @@ body.viewer3d-fs-active .app-card {
    правило выше — (0,2,0), поэтому нейтральная оболочка забирала цвет
    и у кнопок удаления и подтверждения. */
 .visual-glass .btn--danger {
-  background: var(--color-danger);
+  background: var(--fill-danger);
   border-color: transparent;
-  color: #fff;
+  color: var(--color-on-fill);
 }
 .visual-glass .btn--success {
-  background: var(--color-success);
+  background: var(--fill-success);
   border-color: transparent;
-  color: #fff;
+  /* Краска из токена, а не #fff. Этот блок стоит ниже правила выше и
+     той же специфичности, поэтому побеждает — здесь белый цвет и
+     возвращал кнопке «Скачать резервную копию» контраст 1.92. */
+  color: var(--color-on-fill);
 }
 .visual-glass .btn--ghost {
   background: transparent;
