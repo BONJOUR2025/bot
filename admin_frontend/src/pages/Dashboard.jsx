@@ -9,6 +9,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
+import EmptyState from '../components/ui/EmptyState.jsx';
 
 const SALES_COLORS = { repair: 'var(--color-primary)', cosmetics: 'var(--color-success)', shoes: 'var(--color-warning)' };
 const SALES_LABELS = { repair: 'Ремонт', cosmetics: 'Косметика', shoes: 'Обувь' };
@@ -264,13 +265,11 @@ function TaskRow({ icon: Icon, label, count, tone }) {
 
 // ── empty state ───────────────────────────────────────────────────────────────
 
-function Empty({ text = 'Нет данных', icon: Icon }) {
-  return (
-    <div className="flex flex-col items-center gap-2 py-8 text-center">
-      {Icon && <Icon size={22} weight="light" className="text-[color:var(--color-text-faint)] opacity-50" />}
-      <p className="text-sm text-[color:var(--color-text-faint)]">{text}</p>
-    </div>
-  );
+// Обёртка над общим EmptyState: сохраняет прежнюю сигнатуру (text/icon),
+// чтобы не править полтора десятка точек вызова, но рисует то же, что и
+// остальное приложение. Карточки бенто невысокие, поэтому compact.
+function Empty({ text = 'Нет данных', icon: Icon, hint }) {
+  return <EmptyState compact title={text} hint={hint} icon={Icon} />;
 }
 
 // ── loading skeleton ──────────────────────────────────────────────────────────
