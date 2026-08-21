@@ -98,10 +98,17 @@ Older entities (employees, payouts, vacations, adjustments, incentives, messages
 
 Session/token auth is handled by `app/services/access_control_service.py` with roles/permissions from `access_control.json`. API routes get the current user via `app/api/dependencies.py:get_current_user`; device endpoints (visitor counters) authenticate with an API key instead of a session.
 
-### Mobile apps
+### Mobile app
 
-- `admin_frontend/ios/` — Capacitor wrapper around the web admin (app.bonjour.pw).
-- `ios-native/` — a separate, fully native SwiftUI app (own Xcode project) that talks to the same API; it does not replace the Capacitor app.
+`admin_frontend/ios/` — a Capacitor wrapper around the web admin
+(app.bonjour.pw). This is the only mobile client: it renders the same build as
+the browser, so every design/feature change lands on iOS with no extra work.
+
+There used to be a second, fully native SwiftUI app in `ios-native/`. It was
+dropped: two commits over its whole life (a skeleton plus one Sales screen),
+untouched since 2026-07-05, and every screen would have had to be built twice.
+The code is preserved under the `archive/ios-native` tag — restore it with
+`git checkout archive/ios-native -- ios-native` if it's ever wanted back.
 
 ### Shoe-last fitting (3D scan) subsystem
 
