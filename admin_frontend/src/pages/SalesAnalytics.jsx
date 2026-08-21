@@ -12,7 +12,8 @@ import {
   BarChart, PieChart, Pie, Cell,
 } from 'recharts';
 import api from '../api';
-import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { SkeletonTable, SkeletonStats } from '../components/ui/Skeleton.jsx';
+import EmptyState from '../components/ui/EmptyState.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
@@ -1280,13 +1281,24 @@ export default function SalesAnalytics() {
       )}
 
       {!loaded && !loading && (
-        <div className="app-card p-14 text-center">
-          <BarChart3 size={44} className="mx-auto text-[color:var(--color-muted-foreground)] opacity-25 mb-3" />
-          <p className="text-[color:var(--color-muted-foreground)]">Выберите период и нажмите <strong>Загрузить</strong></p>
+        <div className="app-card">
+          <EmptyState
+            icon={BarChart3}
+            title="Отчёт не построен"
+            hint="Выберите период и нажмите «Загрузить» — данные подтягиваются из Firebird и на широком периоде это занимает время."
+          />
         </div>
       )}
 
-      {loading && <SkeletonTable rows={6} />}
+      {/* Заглушка повторяет форму результата: сначала ряд показателей,
+          потом таблица. Раньше здесь была только таблица, а приходил
+          сверху ряд из пяти карточек, и содержимое подпрыгивало. */}
+      {loading && (
+        <div className="space-y-4">
+          <SkeletonStats count={5} />
+          <SkeletonTable rows={6} />
+        </div>
+      )}
 
       {loaded && !loading && (
         <>

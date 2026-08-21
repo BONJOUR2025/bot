@@ -650,6 +650,12 @@ function CashBalancesCard({ balances, loading }) {
           <Wallet size={15} className="text-[color:var(--color-primary)]" />
           Остатки по кассам
         </h3>
+        {/* Блок стоит выше выбора периода и от него не зависит — без
+            этой оговорки остатки читаются как отфильтрованные, и цифра
+            не сходится с показателями ниже. */}
+        <p className="mt-0.5 text-xs text-[color:var(--color-text-faint)]">
+          На текущий момент — не зависят от выбранного периода
+        </p>
       </div>
       <div className="p-3">
         {loading ? <SkeletonTable rows={4} /> : (
