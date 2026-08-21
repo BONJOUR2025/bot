@@ -918,7 +918,11 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 <>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <span className="text-2xl font-semibold">{p.score ?? '?'}</span>
+                      {/* Балл — величина, которую сравнивают между
+                          кандидатами, поэтому моноширинный набор: в
+                          столбце карточек цифры выстраиваются друг под
+                          другом. */}
+                      <span className="ui-metric !text-[1.75rem]">{p.score ?? '?'}</span>
                       <span className="text-sm text-[color:var(--color-muted-foreground)]">/ 100</span>
                     </div>
                     <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${recBadge.color}`}>{recBadge.label}</span>
@@ -1228,21 +1232,42 @@ function FunnelStats({ candidates, activeStage, onSelectStage }) {
     <div className="px-6 sm:px-10 pt-4 pb-1">
       <div className="app-card p-4">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          {/* Отсчёт нейтральный, цветом помечен только результат воронки.
+              «В работе» было основным цветом наравне с «Нанято», из-за чего
+              незавершённый этап читался как достижение. */}
           <div className="shrink-0">
-            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Всего кандидатов</div>
-            <div className="text-xl font-bold text-[color:var(--color-text)]">{total}</div>
+            <div className="ui-label">Всего кандидатов</div>
+            <div className="ui-metric !text-[1.35rem] mt-1 text-[color:var(--color-text)]">{total}</div>
           </div>
           <div className="shrink-0">
-            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">В работе</div>
-            <div className="text-xl font-bold text-[color:var(--color-primary)]">{inProgress}</div>
+            <div className="ui-label">В работе</div>
+            <div className="ui-metric !text-[1.35rem] mt-1 text-[color:var(--color-text)]">
+              {inProgress}
+            </div>
           </div>
           <div className="shrink-0">
-            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Нанято</div>
-            <div className="text-xl font-bold text-[color:var(--color-success)]">{hired}</div>
+            <div className="ui-label">Нанято</div>
+            <div className="ui-metric !text-[1.35rem] mt-1 text-[color:var(--color-success)]">
+              {hired}
+            </div>
           </div>
           <div className="shrink-0">
-            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">Конверсия в найм</div>
-            <div className="text-xl font-bold" style={{ color: hireRate >= 15 ? 'var(--color-success)' : hireRate >= 5 ? 'var(--color-warning)' : 'var(--color-danger)' }}>{hireRate}%</div>
+            <div className="ui-label">Конверсия в найм</div>
+            {/* Здесь цвет — настоящая оценка: пороги 15% и 5% отделяют
+                норму от провала, поэтому его видно и он уместен. */}
+            <div
+              className="ui-metric !text-[1.35rem] mt-1"
+              style={{
+                color:
+                  hireRate >= 15
+                    ? 'var(--color-success)'
+                    : hireRate >= 5
+                      ? 'var(--color-warning)'
+                      : 'var(--color-danger)',
+              }}
+            >
+              {hireRate}%
+            </div>
           </div>
           <div className="flex-1 min-w-[200px] flex items-center gap-1.5 flex-wrap">
             {STAGES.map(stage => {
