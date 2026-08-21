@@ -2748,3 +2748,36 @@ body.viewer3d-fs-active .app-card {
   display: block;
   min-height: 2.65em;
 }
+
+/* ── Заливки, заданные произвольным значением Tailwind ─────────
+   Кроме утилит вида bg-blue-600 страницы используют arbitrary-классы
+   bg-[color:var(--color-primary)] и подобные — 38 таких кнопок и вкладок
+   с белым текстом. Перечисления выше их не ловят: там имена оттенков
+   Tailwind, а здесь имя токена. Проблема та же, что и с утилитами: в
+   тёмной теме белым по этим заливкам нельзя.
+
+   Для основного цвета берём тёмный вариант заливки и оставляем белый
+   текст (5.7 против 4.23), для остальных — тёмную краску. */
+.visual-glass [class*='bg-[color:var(--color-primary)]'][class*='text-white'] {
+  background-color: var(--fill-primary) !important;
+}
+.visual-glass [class*='bg-[color:var(--color-success)]'][class*='text-white'],
+.visual-glass [class*='bg-[color:var(--color-danger)]'][class*='text-white'],
+.visual-glass [class*='bg-[color:var(--color-info)]'][class*='text-white'],
+.visual-glass [class*='bg-[color:var(--color-warning)]'][class*='text-white'] {
+  color: var(--color-on-fill) !important;
+}
+.visual-glass [class*='bg-[color:var(--color-success)]'][class*='text-white'] {
+  background-color: var(--fill-success) !important;
+}
+.visual-glass [class*='bg-[color:var(--color-danger)]'][class*='text-white'] {
+  background-color: var(--fill-danger) !important;
+}
+
+/* Текст основным цветом поверх приглушённой подложки давал 4.14–4.32.
+   Светлый вариант тона поднимает это выше порога, оставаясь тем же
+   цветом по смыслу. */
+.visual-glass [class*='bg-[color:var(--color-primary-muted)]'] [class*='text-[color:var(--color-primary)]'],
+.visual-glass [class*='text-[color:var(--color-primary)]'] {
+  color: var(--glass-on-soft);
+}
