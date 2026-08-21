@@ -309,7 +309,7 @@ export default function SalonAudio() {
                       (active
                         ? 'bg-[color:var(--color-danger)] text-white hover:brightness-110'
                         : online
-                          ? 'bg-[color:var(--color-success)] text-[#07241a] hover:brightness-110'
+                          ? 'bg-[color:var(--color-success)] text-[color:var(--color-on-fill)] hover:brightness-110'
                           : 'cursor-not-allowed bg-[color:var(--color-control-bg)] text-[color:var(--color-text-faint)]')
                     }
                   >
