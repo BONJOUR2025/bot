@@ -92,7 +92,7 @@ function ByComputerCategory({ category, computerId, allComputerIds, open, onTogg
         <div className="flex items-center gap-2 shrink-0 text-xs text-[color:var(--color-muted-foreground)]">
           <span>{category.options.length}</span>
           {diffCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-medium">
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
               {diffCount} отличаются у кого-то
             </span>
           )}
@@ -107,7 +107,7 @@ function ByComputerCategory({ category, computerId, allComputerIds, open, onTogg
             return (
               <div key={o.id}>
                 {showSubgroup && <SubgroupHeader text={o.subgroup} />}
-                <div className={`flex items-center justify-between gap-4 px-4 py-2.5 ${diff ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}>
+                <div className={`flex items-center justify-between gap-4 px-4 py-2.5 ${diff ? 'bg-amber-50/50' : ''}`}>
                   <OptionLabel option={o} />
                   <div className="shrink-0 flex items-center gap-2">
                     {diff && <GitCompareArrows size={12} className="text-amber-500" title="Значение отличается хотя бы на одном ПК" />}
@@ -131,7 +131,7 @@ function CompareRow({ option, computers }) {
   const diff = useMemo(() => hasDiff(option.values, ids), [option, ids]);
 
   return (
-    <tr className={diff ? 'bg-amber-50/40 dark:bg-amber-900/10' : ''}>
+    <tr className={diff ? 'bg-amber-50/40' : ''}>
       <td className="sticky left-0 z-10 bg-[color:var(--color-card)] px-3 py-2 border-r border-[color:var(--color-border)] min-w-[280px] max-w-[420px] align-top">
         <OptionLabel option={option} />
       </td>
@@ -141,7 +141,7 @@ function CompareRow({ option, computers }) {
         return (
           <td
             key={c.id}
-            className={`px-3 py-2 text-xs text-center whitespace-nowrap ${isOutlier ? 'bg-amber-100 dark:bg-amber-900/30 font-semibold rounded' : ''}`}
+            className={`px-3 py-2 text-xs text-center whitespace-nowrap ${isOutlier ? 'bg-amber-100 font-semibold rounded' : ''}`}
           >
             <ValueTag value={cell.value} source={cell.source} />
           </td>
@@ -172,7 +172,7 @@ function CompareCategory({ category, computers, open, onToggle }) {
         <div className="flex items-center gap-2 shrink-0 text-xs text-[color:var(--color-muted-foreground)]">
           <span>{category.options.length} настроек</span>
           {diffCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-medium">
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
               {diffCount} различаются
             </span>
           )}

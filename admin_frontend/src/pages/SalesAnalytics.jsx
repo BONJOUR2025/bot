@@ -263,7 +263,7 @@ function KpiStat({ label, value, delta, sub, accent = 'var(--color-primary)', ic
             <div className="ui-metric !text-[1.5rem] mt-1.5 text-[color:var(--color-text)]">{value}</div>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               {delta != null && Math.abs(delta) >= 0.1 && (
-                // Токены вместо пар emerald-50/dark:emerald-900: у второй
+                // Токены вместо пар emerald-50/ у второй
                 // половины был свой оттенок только в тёмной теме, и при
                 // третьей теме пара расходилась.
                 <span
@@ -791,7 +791,7 @@ function UnclaimedTab() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">{error}</div>
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm">{error}</div>
       )}
 
       {loading && <SkeletonTable rows={6} />}
@@ -1276,7 +1276,7 @@ export default function SalesAnalytics() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">{error}</div>
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm">{error}</div>
       )}
 
       {!loaded && !loading && (

@@ -9,13 +9,13 @@ const MONTHS_RU_GEN = ['января','февраля','марта','апрел�
 
 // Цвета точек — border-left + dot + chip
 const POINT_STYLE = {
-  'П':  { border: 'border-blue-400',   dot: 'bg-blue-500',   chip: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
-  'Ц':  { border: 'border-purple-400', dot: 'bg-purple-500', chip: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
-  'А':  { border: 'border-amber-400',  dot: 'bg-amber-500',  chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
-  'М':  { border: 'border-green-400',  dot: 'bg-green-500',  chip: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
-  'Р':  { border: 'border-orange-400', dot: 'bg-orange-500', chip: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' },
-  'Оз': { border: 'border-yellow-400', dot: 'bg-yellow-500', chip: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' },
-  'Ох': { border: 'border-teal-400',   dot: 'bg-teal-500',   chip: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300' },
+  'П':  { border: 'border-blue-400',   dot: 'bg-blue-500',   chip: 'bg-blue-100 text-blue-800' },
+  'Ц':  { border: 'border-purple-400', dot: 'bg-purple-500', chip: 'bg-purple-100 text-purple-800' },
+  'А':  { border: 'border-amber-400',  dot: 'bg-amber-500',  chip: 'bg-amber-100 text-amber-800' },
+  'М':  { border: 'border-green-400',  dot: 'bg-green-500',  chip: 'bg-green-100 text-green-800' },
+  'Р':  { border: 'border-orange-400', dot: 'bg-orange-500', chip: 'bg-orange-100 text-orange-800' },
+  'Оз': { border: 'border-yellow-400', dot: 'bg-yellow-500', chip: 'bg-yellow-100 text-yellow-800' },
+  'Ох': { border: 'border-teal-400',   dot: 'bg-teal-500',   chip: 'bg-teal-100 text-teal-800' },
 };
 
 function PointChip({ code }) {
@@ -200,14 +200,14 @@ export default function Schedule() {
       )}
 
       {saveError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300 flex items-start justify-between gap-3">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start justify-between gap-3">
           <span>{saveError}</span>
           <button onClick={() => setSaveError(null)} className="opacity-60 leading-none">&times;</button>
         </div>
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -286,7 +286,7 @@ export default function Schedule() {
                               <div key={d.day}
                                 className={`flex items-center gap-2 px-2 py-1.5 rounded
                                   ${isToday ? 'bg-[color:var(--color-primary)]/10' : ''}
-                                  ${d.is_weekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}`}>
+                                  ${d.is_weekend && !isToday ? 'bg-red-50/60' : ''}`}>
                                 <span className="w-14 flex-shrink-0 text-xs text-[color:var(--color-muted-foreground)] tabular-nums">
                                   {d.day} {d.weekday_short}
                                 </span>
@@ -336,7 +336,7 @@ export default function Schedule() {
                           ref={isToday ? todayColRef : null}
                           className={`min-w-[36px] border-b border-r border-[color:var(--color-border)] px-1 py-2 text-center font-semibold
                             ${isToday   ? 'bg-[color:var(--color-primary)] text-white'                    : ''}
-                            ${isWeekend && !isToday ? 'bg-red-50 text-red-500 dark:bg-red-900/20 dark:text-red-400' : ''}
+                            ${isWeekend && !isToday ? 'bg-red-50 text-red-500' : ''}
                             ${!isToday && !isWeekend ? 'bg-[color:var(--color-modal-bg)] text-[color:var(--color-muted-foreground)]' : ''}
                           `}
                         >
@@ -367,7 +367,7 @@ export default function Schedule() {
                             onClick={() => canEdit && !isSaving && setEditing({ emp, day: d.day })}
                             className={`border-b border-r border-[color:var(--color-border)] px-1 py-1.5 text-center
                               ${isToday   ? 'bg-[color:var(--color-primary)]/10' : ''}
-                              ${isWeekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}
+                              ${isWeekend && !isToday ? 'bg-red-50/60' : ''}
                               ${canEdit && !isEditing ? 'cursor-pointer hover:bg-[color:var(--color-primary)]/10' : ''}
                             `}>
                             {isSaving ? (
@@ -409,7 +409,7 @@ export default function Schedule() {
                           <td key={d.day}
                             className={`border-r border-[color:var(--color-border)] px-0.5 py-1 text-center
                               ${isToday ? 'bg-[color:var(--color-primary)]/10' : ''}
-                              ${isWeekend && !isToday ? 'bg-red-50/60 dark:bg-red-900/10' : ''}
+                              ${isWeekend && !isToday ? 'bg-red-50/60' : ''}
                             `}>
                             <div className="flex flex-col gap-0.5 items-center">
                               {Object.entries(counts).map(([code, cnt]) => (

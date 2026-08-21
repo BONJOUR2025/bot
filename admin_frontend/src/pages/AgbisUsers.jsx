@@ -357,7 +357,7 @@ export default function AgbisUsers() {
                   </button>
                 )},
                 { label: 'Статус', render: (r) => (
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.is_working ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]'}`}>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.is_working ? 'bg-green-100 text-green-800' : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]'}`}>
                     {r.is_working ? 'Активен' : 'Неактивен'}
                   </span>
                 )},

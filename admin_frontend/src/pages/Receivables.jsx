@@ -22,8 +22,8 @@ function quickRange(key) {
 const fmtRub = (v) => v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽';
 
 const PAY_STATUS_LABELS = {
-  1: { label: 'Не оплачен', className: 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
-  2: { label: 'Оплачен частично', className: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' },
+  1: { label: 'Не оплачен', className: 'bg-red-50 text-red-600' },
+  2: { label: 'Оплачен частично', className: 'bg-amber-50 text-amber-600' },
   3: { label: 'Оплачен (расхождение)', className: 'bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]' },
 };
 const STATUS_OPTIONS = [
@@ -151,7 +151,7 @@ export default function Receivables() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">{error}</div>
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm">{error}</div>
       )}
 
       {!loaded && !loading && (

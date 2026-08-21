@@ -15,9 +15,9 @@ const fmtDate = (v) => {
 };
 
 // Цвета берутся из токенов, а не задаются шестнадцатеричными литералами:
-// раньше здесь стояли значения палитры брутализма (var(--color-primary), var(--color-success),
-// var(--color-warning)) прямо во встроенных стилях, поэтому при смене темы они
-// оставались прежними — переопределить их через CSS невозможно.
+// раньше здесь стояли значения палитры брутализма прямо во встроенных
+// стилях, поэтому при смене темы они оставались прежними — переопределить
+// встроенный стиль через CSS невозможно.
 function KpiStat({ label, value, accent = 'var(--color-primary)', icon }) {
   return (
     <div className="ui-shell ui-shell--sm">
@@ -202,7 +202,7 @@ function ChurningTab() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">{error}</div>
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm">{error}</div>
       )}
 
       {loading && <SkeletonTable rows={6} />}
@@ -292,7 +292,7 @@ export default function Clients() {
       <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">{error}</div>
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm">{error}</div>
       )}
 
       {activeTab === 'search' && (

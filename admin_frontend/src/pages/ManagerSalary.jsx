@@ -379,13 +379,13 @@ export default function ManagerSalary() {
           {(planEmpty || metricsError) && (
             <div className="space-y-2">
               {planEmpty && (
-                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
                   <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                   План на этот месяц не задан — заполните оклад/KPI/план на странице «Планы продаж».
                 </div>
               )}
               {metricsError && (
-                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
                   <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                   Факт из amoCRM недоступен ({metricsError}). KPI посчитан по нулям — показан только оклад.
                 </div>

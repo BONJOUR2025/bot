@@ -37,9 +37,9 @@ const fmtDt = (v) => {
 };
 
 const STATUS_COLORS = {
-  'Выполнено': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  'В работе':  'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  'Прочее':    'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] dark:text-[color:var(--color-text-faint)]',
+  'Выполнено': 'bg-green-100 text-green-800',
+  'В работе':  'bg-yellow-100 text-yellow-800',
+  'Прочее':    'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]',
 };
 const STATUS_OPTIONS = Object.keys(STATUS_COLORS);
 
@@ -844,13 +844,13 @@ export default function Masters() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm">
           {error}
         </div>
       )}
 
       {stale != null && (
-        <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-amber-800 dark:text-amber-200 text-sm">
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-amber-800 text-sm">
           База Agbis сейчас перегружена, свежий запрос не успел отработать.
           Показаны последние удачно полученные данные
           {stale >= 60 ? ` — ${Math.round(stale / 60)} мин назад` : ' — меньше минуты назад'}.
@@ -1146,7 +1146,7 @@ export default function Masters() {
                 <ResponsiveTable
                   data={sorted.slice(0, 500)}
                   keyFn={(r) => r.service_id ?? `${r.doc_num}-${r.code}-${r.in_time}`}
-                  rowClass={(r) => r.warnings?.length > 0 ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}
+                  rowClass={(r) => r.warnings?.length > 0 ? 'bg-amber-50/60' : ''}
                   emptyText="Работ за период нет" emptyHint="Расчёт строится по чек-инам мастеров — проверьте даты."
                   columns={[
                     {

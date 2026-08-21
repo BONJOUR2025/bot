@@ -70,7 +70,7 @@ export default function SettingsIntegrations() {
         )}
 
         {!loading && amo && !amo.configured && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
             Заполните AMO_* в <code>.env</code> и перезапустите сервер. В интеграции amoCRM укажите Redirect URI:
             <span className="font-mono"> {`{хост}`}/api/amo/auth/callback</span>
           </div>

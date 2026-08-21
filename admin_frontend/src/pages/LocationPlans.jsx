@@ -377,13 +377,13 @@ export default function LocationPlans() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm">
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm">
           {error}
         </div>
       )}
 
       {/* How it works — collapsible on all screen sizes */}
-      <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 overflow-hidden">
+      <div className="rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800 overflow-hidden">
         <button
           className="w-full flex items-center gap-2 px-4 py-3 text-left"
           onClick={() => setShowInfo(v => !v)}
@@ -393,10 +393,10 @@ export default function LocationPlans() {
           {showInfo ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
         </button>
         {showInfo && (
-          <div className="px-4 pb-4 space-y-1.5 border-t border-blue-200 dark:border-blue-800 pt-3">
+          <div className="px-4 pb-4 space-y-1.5 border-t border-blue-200 pt-3">
             <p>Дневной план точки = Месячный план точки ÷ Количество дней в месяце</p>
             <p>Индивидуальный план = Σ (Дневной план точки × Смен сотрудника на этой точке)</p>
-            <p className="text-blue-600 dark:text-blue-400">Если для сотрудника задан ручной план в «Расчёте зарплаты» — он имеет приоритет.</p>
+            <p className="text-blue-600">Если для сотрудника задан ручной план в «Расчёте зарплаты» — он имеет приоритет.</p>
           </div>
         )}
       </div>

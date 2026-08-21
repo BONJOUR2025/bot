@@ -342,7 +342,7 @@ export default function PayrollBySalon() {
           </section>
 
           {data.unknown_codes.length > 0 && (
-            <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
               Не найдены точки графика для кодов: {data.unknown_codes.join(', ')}
             </div>
           )}
