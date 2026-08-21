@@ -1198,6 +1198,9 @@ export default function Payouts() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <TopProgressBar active={loading} />
+      <span className="ui-eyebrow mb-3">
+        {payouts.length ? `Заявок в списке: ${payouts.length}` : 'Заявок нет'}
+      </span>
       <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
         Выплаты
         <button

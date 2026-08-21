@@ -773,8 +773,13 @@ export default function Payroll() {
     <div className="space-y-6 max-w-full">
       <TopProgressBar active={loading || loadingMonths} />
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight flex-1">Расчёт зарплаты</h2>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex-1 min-w-0">
+          <span className="ui-eyebrow mb-3">
+            {selectedMonth ? `Месяц · ${selectedMonth}` : 'Месяц не выбран'}
+          </span>
+          <h2 className="text-2xl font-semibold tracking-tight">Расчёт зарплаты</h2>
+        </div>
         <button onClick={exportPdf} disabled={!selectedMonth || loading}
           className="btn btn--primary flex items-center gap-2 disabled:opacity-50">
           <Download size={16} />PDF

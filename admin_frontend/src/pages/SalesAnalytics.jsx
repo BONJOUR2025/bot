@@ -1165,9 +1165,10 @@ export default function SalesAnalytics() {
       {/* ── Header ────────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 size={22} className="text-[color:var(--color-primary)]" /> Аналитика продаж
-          </h2>
+          <span className="ui-eyebrow mb-3">
+            {dateFrom === dateTo ? `За ${dateFrom}` : `Период · ${dateFrom} — ${dateTo}`}
+          </span>
+          <h2 className="text-2xl font-bold">Аналитика продаж</h2>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
             Выручка по сотрудникам и категориям — динамика, структура, рейтинги
           </p>

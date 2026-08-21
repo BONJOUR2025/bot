@@ -288,8 +288,15 @@ export default function Passwords() {
   return (
     <div className="space-y-6 max-w-full mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-2xl font-semibold">Хранилище паролей</h2>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+          <span className="ui-eyebrow mb-3">
+            {stats.total_entries
+              ? `Записей: ${stats.total_entries} · категорий: ${stats.total_categories || 0}`
+              : 'Хранилище пусто'}
+          </span>
+          <h2 className="text-2xl font-semibold">Хранилище паролей</h2>
+        </div>
         <div className="flex gap-2">
           <button
             className="btn flex items-center gap-2"
@@ -306,26 +313,34 @@ export default function Passwords() {
       </div>
 
       {/* Stats */}
+      {/* Цвет снят с «Категорий» и «Избранного»: это нейтральный отсчёт,
+          а раскрашенные цифры читались как статусы. Акцент оставлен
+          только на «Защищено» — единственном показателе, где значение
+          ниже сотни означало бы проблему. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
-          <div className="text-2xl font-bold">{stats.total_entries || 0}</div>
-          <div className="text-sm text-[color:var(--color-text-faint)]">Всего записей</div>
-        </div>
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
-          <div className="text-2xl font-bold text-purple-400">{stats.total_categories || 0}</div>
-          <div className="text-sm text-[color:var(--color-text-faint)]">Категорий</div>
-        </div>
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
-          <div className="text-2xl font-bold text-yellow-400">{stats.favorites_count || 0}</div>
-          <div className="text-sm text-[color:var(--color-text-faint)]">Избранное</div>
-        </div>
-        <div className="bg-[var(--color-bg-secondary)] rounded-lg p-4 border border-[var(--color-border)]">
-          <div className="flex items-center gap-1.5 text-2xl font-bold text-green-400">
-            <Key size={20} />
-            {stats.total_entries ? '100%' : '0%'}
+        {[
+          { v: stats.total_entries || 0, l: 'Всего записей', c: '' },
+          { v: stats.total_categories || 0, l: 'Категорий', c: '' },
+          { v: stats.favorites_count || 0, l: 'Избранное', c: '' },
+          {
+            v: stats.total_entries ? '100%' : '0%',
+            l: 'Защищено',
+            c: 'text-[color:var(--color-success)]',
+            icon: <Key size={18} strokeWidth={1.4} />,
+          },
+        ].map((s) => (
+          <div key={s.l} className="ui-shell ui-shell--sm">
+            <div className="ui-core border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4">
+              <div
+                className={`ui-metric !text-[1.6rem] flex items-center gap-2 ${s.c || 'text-[color:var(--color-text)]'}`}
+              >
+                {s.icon}
+                {s.v}
+              </div>
+              <div className="ui-label mt-2">{s.l}</div>
+            </div>
           </div>
-          <div className="text-sm text-[color:var(--color-text-faint)]">Защищено</div>
-        </div>
+        ))}
       </div>
 
       {/* Filters */}

@@ -812,8 +812,16 @@ export default function Masters() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2"><Hammer size={24} /> Зарплата мастеров</h2>
-          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Работы по чек-ин/чек-аут, длительность, нарушения и расчёт зарплаты</p>
+          {/* Иконка из заголовка убрана: она дублировала подсвеченный
+              пункт меню и конкурировала с крупным начертанием. Период
+              вынесен наверх — от него зависят все цифры ниже. */}
+          <span className="ui-eyebrow mb-3">Период · {dateFrom} — {dateTo}</span>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
+            Зарплата мастеров
+          </h2>
+          <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2 max-w-[60ch]">
+            Работы по чек-ин/чек-аут, длительность, нарушения и расчёт зарплаты
+          </p>
         </div>
       </div>
 
