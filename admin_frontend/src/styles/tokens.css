@@ -577,11 +577,13 @@
   --color-accent-strong:  #0b7c54;
   --color-accent-muted:   rgba(15, 157, 107, 0.09);
 
-  --color-success:        #0f9d6b;
+  /* Как текст на светлых подложках давал 2.79–3.47. Заливки кнопок
+     берутся из --fill-success и не затронуты. */
+  --color-success:        #0a7350;
   --color-success-muted:  rgba(15, 157, 107, 0.09);
-  --color-warning:        #b45309;
+  --color-warning:        #9a4508;
   --color-warning-muted:  rgba(180, 83, 9, 0.09);
-  --color-danger:         #d6455c;
+  --color-danger:         #bf2b43;
   --color-danger-muted:   rgba(214, 69, 92, 0.09);
   --color-info:           #2563eb;
   --color-info-muted:     rgba(37, 99, 235, 0.09);
@@ -589,7 +591,9 @@
   --color-text:           #0b0b0d;
   --color-text-muted:     #55555f;
   /* 3.37:1 на белом — тоже ниже AA. #75757f даёт 4.56:1. */
-  --color-text-faint:     #75757f;
+  /* На фоне страницы (#f1f1f3) и на приглушённых подложках давал
+     3.62–4.04. #63636d проходит на всех: 4.72–5.94. */
+  --color-text-faint:     #63636d;
 
   --color-border:         rgba(12, 12, 20, 0.075);
   --color-border-strong:  rgba(109, 63, 234, 0.24);

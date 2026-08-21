@@ -6,11 +6,14 @@ import Navigation from '../components/Navigation.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import useReveal from '../hooks/useReveal.js';
+import useDialogChrome from '../hooks/useDialogChrome.js';
 
 export default function MainLayout() {
   const location = useLocation();
   const contentRef = useRef(null);
   useReveal(contentRef);
+  // Поведение модальных окон для тех, что собраны вручную мимо Modal.jsx.
+  useDialogChrome();
   const { isMobile } = useViewport();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);

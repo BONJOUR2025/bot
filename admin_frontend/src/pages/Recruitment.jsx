@@ -734,11 +734,14 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
 
           {/* Notes */}
           {candidate.notes && (
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-100">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 mb-2">
+            // Заметки — нейтральное содержимое. Янтарная заливка
+            // приводилась к токенам предупреждения, и обычный текст вроде
+            // «Авито отклик» выглядел как тревожное уведомление.
+            <div className="p-4 rounded-xl bg-[color:var(--color-control-bg)] border border-[color:var(--color-border)]">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--color-text-faint)] mb-2 uppercase tracking-wide">
                 <FileText size={12} /> Заметки
               </div>
-              <p className="text-sm text-amber-900 whitespace-pre-wrap break-words leading-relaxed">{candidate.notes}</p>
+              <p className="text-sm text-[color:var(--color-text)] whitespace-pre-wrap break-words leading-relaxed">{candidate.notes}</p>
             </div>
           )}
 
@@ -751,10 +754,23 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                   key={s.key}
                   onClick={() => { onStageChange(candidate.id, s.key); onClose(); }}
                   disabled={s.key === candidate.stage}
-                  className={`flex items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.5 py-2 rounded-xl font-medium transition-all border ${s.color} ${
+                  // Этапы — последовательность, а не статусы, поэтому в
+                  // этом ряду они нейтральны. Цветом помечены только два
+                  // исхода, которые действительно что-то утверждают:
+                  // «Нанят» и «Отказ». Раньше здесь стояло восемь разных
+                  // заливок подряд, причём после приведения к токенам две
+                  // пары совпадали — «Новый» с «Опросом» и «Ответил» с
+                  // «Думает» становились одного цвета.
+                  className={`flex items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.5 py-2 rounded-xl font-medium transition-all border ${
+                    s.key === 'нанят'
+                      ? 'bg-[color:var(--color-success-muted)] text-[color:var(--color-success)] border-transparent'
+                      : s.key === 'отказ'
+                        ? 'bg-[color:var(--color-danger-muted)] text-[color:var(--color-danger)] border-transparent'
+                        : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]'
+                  } ${
                     s.key === candidate.stage
                       ? 'opacity-40 cursor-default ring-1 ring-offset-1 ring-current'
-                      : 'hover:scale-[1.03] hover:shadow-sm border-transparent'
+                      : 'hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--color-text)]'
                   }`}
                 >
                   {s.key === candidate.stage && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
