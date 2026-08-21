@@ -2374,8 +2374,12 @@ export default function Recruitment() {
               <CandidateFilters
                 filters={filters}
                 onChange={setFilters}
-                total={candidates.length}
-                shown={visibleCandidates.length}
+                // Считаем в границах доски, без резерва: он живёт на
+                // отдельной вкладке со своим счётчиком, и включать его
+                // сюда значит обещать больше карточек, чем видно. При
+                // поиске это давало «75 из 163» над доской с 61 карточкой.
+                total={candidates.filter((c) => c.stage !== RESERVE.key).length}
+                shown={visibleCandidates.filter((c) => c.stage !== RESERVE.key).length}
               />
             )}
             {!selected ? (
