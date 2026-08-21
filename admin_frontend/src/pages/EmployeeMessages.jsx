@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MessageCircle, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 
@@ -54,9 +54,12 @@ export default function EmployeeMessages() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <h2 className="flex items-center gap-2 text-2xl font-semibold">
-        <MessageCircle size={24} /> Сообщения от сотрудников
-      </h2>
+      <div>
+        <span className="ui-eyebrow mb-3">
+          {messages.length ? `Сообщений: ${messages.length}` : 'Новых сообщений нет'}
+        </span>
+        <h2 className="text-2xl font-semibold">Сообщения от сотрудников</h2>
+      </div>
 
       {loading && <p className="text-[color:var(--color-text-muted)]">Загрузка…</p>}
 

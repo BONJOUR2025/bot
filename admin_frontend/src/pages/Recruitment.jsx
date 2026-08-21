@@ -1908,6 +1908,11 @@ export default function Recruitment() {
       {/* Page header */}
       <div className="px-6 sm:px-10 pt-6 pb-4 border-b border-[color:var(--color-border)] flex items-center justify-between gap-4 flex-wrap">
         <div>
+          <span className="ui-eyebrow mb-3">
+            {candidates.length
+              ? `Кандидатов: ${candidates.length} · вакансий: ${vacancies.length}`
+              : 'Откликов пока нет'}
+          </span>
           <h1 className="text-xl font-bold">Подбор персонала</h1>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">CRM кандидатов по вакансиям</p>
         </div>

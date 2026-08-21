@@ -175,9 +175,10 @@ export default function Scanner3D() {
   const [tab, setTab] = useState('scan');
   return (
     <div className="space-y-6">
-      <h2 className="flex items-center gap-2 text-2xl font-semibold">
-        <Scan size={24} /> 3D сканер
-      </h2>
+      <div>
+        <span className="ui-eyebrow mb-3">Скан стопы и подбор колодки</span>
+        <h2 className="text-2xl font-semibold">3D сканер</h2>
+      </div>
       <Tabs
         tabs={[
           { key: 'scan', label: 'Сканер', icon: <Scan size={14} /> },

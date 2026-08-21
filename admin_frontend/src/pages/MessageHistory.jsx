@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  MessageCircle,
   Users,
   AlertCircle,
   Clock,
@@ -289,9 +288,10 @@ export default function MessageHistory() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold text-[color:var(--color-text)]">
-          <MessageCircle size={24} /> История сообщений
-        </h1>
+        <div>
+          <span className="ui-eyebrow mb-3">Отправленные рассылки и личные сообщения</span>
+          <h1 className="text-2xl font-semibold text-[color:var(--color-text)]">История сообщений</h1>
+        </div>
         <div className="flex items-center gap-2">
           <select
             className="input"

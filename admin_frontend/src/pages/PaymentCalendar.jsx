@@ -596,7 +596,12 @@ export default function PaymentCalendar() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-bold text-[color:var(--color-text)]">Платежный календарь</h1>
+        <div>
+          <span className="ui-eyebrow mb-3">
+            {schedules.length ? `Регулярных платежей: ${schedules.length}` : 'Платежи не заведены'}
+          </span>
+          <h1 className="text-xl font-bold text-[color:var(--color-text)]">Платежный календарь</h1>
+        </div>
         <button onClick={() => setScheduleModal('new')}
           className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
           + Добавить платёж

@@ -157,9 +157,10 @@ export default function VisitorCounters() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-2xl font-semibold">
-          <Users size={24} /> Счётчик посетителей
-        </h2>
+        <div>
+          <span className="ui-eyebrow mb-3">Проходимость точек по датчикам</span>
+          <h2 className="text-2xl font-semibold">Счётчик посетителей</h2>
+        </div>
         <button
           type="button"
           className="btn flex items-center gap-1.5"
