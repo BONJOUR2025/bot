@@ -7,10 +7,9 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
-import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { SkeletonCard } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
-import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const fmt = (v) => (v === null || v === undefined || v === 0 ? '—' : Number(v).toLocaleString('ru-RU'));
@@ -556,38 +555,173 @@ function ExpandedContent({ row }) {
   );
 }
 
-// ── Expanded row (table version) ──────────────────────────────────
-function ExpandedRow({ row, comment }) {
-  const flags = getAnomalyFlags(row);
+// ── Composition mini-bar (доли оклада / комиссии / премий в общей ЗП) ─
+function CompositionBar({ row }) {
+  const gross = grossOf(row);
+  if (!gross) return null;
+  const salary     = row.base_salary || 0;
+  const commission = row.ignore_kpi ? 0 : (row.total_commission || 0);
+  const bonus      = (row.bonuses || 0) + (row.excel_bonus || 0);
+  const rest       = Math.max(0, gross - salary - commission - bonus);
+  const segments = [
+    { value: salary,     color: 'var(--color-primary)' },
+    { value: commission, color: 'var(--color-success)' },
+    { value: bonus,      color: 'var(--color-warning)' },
+    { value: rest,       color: 'var(--color-border)' },
+  ].filter((s) => s.value > 0);
   return (
-    <tr className="bg-[color:var(--color-bg-secondary)]">
-      <td colSpan="100%" className="px-4 py-4">
-        {flags.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {flags.map((f) => (
-              <span key={f} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
-                <AlertTriangle size={11} />
-                {f}
-              </span>
-            ))}
+    <div className="flex h-1.5 rounded-full overflow-hidden bg-[color:var(--color-bg-secondary)]">
+      {segments.map((s, i) => (
+        <div key={i} style={{ width: `${(s.value / gross) * 100}%`, background: s.color }} />
+      ))}
+    </div>
+  );
+}
+
+// ── Карточка администратора — заменяет старую пару mobile-карточка/
+// desktop-таблица одной адаптивной сеткой карточек. ─────────────────
+function AdminPayCard({ row, prevRow, comment, expanded, onToggle, onTogglePaid, onEditPlan, onEditComment }) {
+  const flags = getAnomalyFlags(row);
+  const gross = grossOf(row);
+  const extras = (row.bonuses || 0) + (row.excel_bonus || 0);
+  return (
+    <div
+      className="app-card cursor-pointer"
+      // .app-card's own `border` shorthand (globals.css) is compiled after
+      // Tailwind's utility layer, so a `border-green-300` class would be
+      // silently overridden — inline style is the only thing that reliably
+      // wins here regardless of bundle order.
+      style={row.settlement_paid ? { borderColor: 'rgb(134 239 172)' } : undefined}
+      onClick={onToggle}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="grid place-items-center w-10 h-10 shrink-0 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-sm font-semibold">
+            {(row.employee_name || '?').trim().charAt(0).toUpperCase()}
           </div>
-        )}
-        {comment && (
-          <div className="mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-sm text-indigo-800">
-            <MessageSquare size={14} className="mt-0.5 shrink-0" />
-            <span>{comment}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              {flags.length > 0 && (
+                <span title={flags.join('\n')}>
+                  <AlertTriangle size={13} className="text-amber-500 shrink-0" />
+                </span>
+              )}
+              {comment && (
+                <span title={comment}>
+                  <MessageSquare size={12} className="text-indigo-400 shrink-0" />
+                </span>
+              )}
+              <span className="font-semibold text-sm truncate">{row.employee_name}</span>
+            </div>
+            <div className="text-xs text-[color:var(--color-muted-foreground)] truncate">{row.employee_code}</div>
           </div>
-        )}
-        <ExpandedContent row={row} />
-      </td>
-    </tr>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className={`badge ${row.settlement_paid ? 'badge--success' : 'badge--neutral'}`}>
+            {row.settlement_paid ? 'Выдано' : 'Не выдано'}
+          </span>
+          <span className="text-[color:var(--color-muted-foreground)]">
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Общая ЗП</div>
+          <div className="text-lg font-semibold">{fmtMoney(gross)}</div>
+        </div>
+        <div>
+          <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)]">К выплате</div>
+          <div className="text-lg font-semibold text-[color:var(--color-primary)] flex items-center gap-1.5">
+            <TrendBadge current={row.total_gross} prev={prevRow?.total_gross} />
+            {fmtMoney(row.total_net)}
+          </div>
+        </div>
+      </div>
+
+      <CompositionBar row={row} />
+
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-lg bg-[color:var(--color-bg-secondary)] px-2.5 py-1.5">
+          <div className="text-[9.5px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Оклад</div>
+          <div className="text-xs font-semibold mt-0.5">{fmtMoney(row.base_salary)}</div>
+        </div>
+        <div className="rounded-lg bg-[color:var(--color-bg-secondary)] px-2.5 py-1.5">
+          <div className="text-[9.5px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Комиссия</div>
+          <div className="text-xs font-semibold mt-0.5">{row.ignore_kpi ? '—' : fmtMoney(row.total_commission)}</div>
+        </div>
+        <div className="rounded-lg bg-[color:var(--color-bg-secondary)] px-2.5 py-1.5">
+          <div className="text-[9.5px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Премии</div>
+          <div className="text-xs font-semibold mt-0.5">{extras > 0 ? fmtMoney(extras) : '—'}</div>
+        </div>
+      </div>
+
+      {(row.advances > 0 || row.penalties > 0) && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--color-danger)]">
+          {row.advances > 0 && <span>Авансы: -{fmtMoney(row.advances)}</span>}
+          {row.penalties > 0 && <span>Штрафы: -{fmtMoney(row.penalties)}</span>}
+        </div>
+      )}
+
+      <div
+        className="flex items-center justify-end gap-1 pt-3 border-t border-[color:var(--color-border)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onTogglePaid}
+          title={row.settlement_paid ? 'Расчёт выдан — нажмите для отмены' : 'Отметить как выданный'}
+          className={`p-1.5 rounded transition-colors ${row.settlement_paid ? 'text-green-500' : 'text-[color:var(--color-muted-foreground)] hover:text-green-500'}`}
+        >
+          {row.settlement_paid ? <CheckSquare size={17} /> : <Square size={17} />}
+        </button>
+        <button
+          onClick={onEditPlan}
+          className="p-1.5 rounded text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text-primary)]"
+          title="Настроить план"
+        >
+          <Settings size={16} />
+        </button>
+        <button
+          onClick={onEditComment}
+          className={`p-1.5 rounded transition-colors ${comment ? 'text-indigo-500' : 'text-[color:var(--color-muted-foreground)]'}`}
+          title="Комментарий"
+        >
+          <MessageSquare size={16} />
+        </button>
+      </div>
+
+      {expanded && (
+        <div
+          className="pt-4 border-t border-[color:var(--color-border)]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {flags.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {flags.map((f) => (
+                <span key={f} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                  <AlertTriangle size={11} />
+                  {f}
+                </span>
+              ))}
+            </div>
+          )}
+          {comment && (
+            <div className="mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-sm text-indigo-800">
+              <MessageSquare size={14} className="mt-0.5 shrink-0" />
+              <span>{comment}</span>
+            </div>
+          )}
+          <ExpandedContent row={row} />
+        </div>
+      )}
+    </div>
   );
 }
 
 // ── Main component ────────────────────────────────────────────────
 export default function Payroll() {
   const { toast } = useToast();
-  const { isMobile } = useViewport();
   const [months, setMonths]           = useState([]);
   const [selectedMonth, setSelectedMonth] = useState('');
   const [rows, setRows]               = useState([]);
@@ -856,287 +990,28 @@ export default function Payroll() {
           Выберите месяц для просмотра данных
         </div>
       ) : loading ? (
-        <div className="app-card p-4"><SkeletonTable rows={8} cols={9} /></div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} />)}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
           {query ? 'Сотрудник не найден' : 'Нет данных за этот месяц'}
         </div>
-      ) : isMobile ? (
-        <div className="space-y-3">
-          {filtered.map((row) => (
-            <div
-              key={row.employee_code}
-              className={`border rounded-xl overflow-hidden shadow-sm bg-[color:var(--color-table-bg)] ${row.settlement_paid ? 'border-green-300' : 'border-[color:var(--color-border)]'}`}
-            >
-              {/* Card header — identity only */}
-              <div
-                className="px-4 py-3 flex items-center justify-between gap-2 cursor-pointer bg-[color:var(--color-table-header)]"
-                onClick={() => toggleRow(row.employee_code)}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="grid place-items-center w-9 h-9 shrink-0 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-sm font-semibold">
-                    {(row.employee_name || '?').trim().charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      {row.settlement_paid && <BadgeCheck size={15} className="text-green-500 shrink-0" />}
-                      {getAnomalyFlags(row).length > 0 && (
-                        <span title={getAnomalyFlags(row).join('\n')}>
-                          <AlertTriangle size={14} className="text-amber-500 shrink-0" />
-                        </span>
-                      )}
-                      <span className="font-medium text-sm truncate">{row.employee_name}</span>
-                    </div>
-                    <div className="text-xs text-[color:var(--color-muted-foreground)] truncate">{row.employee_code}</div>
-                  </div>
-                </div>
-                <div className="shrink-0 text-[color:var(--color-muted-foreground)]">
-                  {expandedRows.has(row.employee_code) ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                </div>
-              </div>
-
-              {/* Headline figures — gross vs. net, side by side */}
-              <div className="grid grid-cols-2 divide-x divide-[color:var(--color-border)] border-b border-[color:var(--color-border)]">
-                <div className="px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-0.5">Общая ЗП</div>
-                  <div className="flex items-center gap-1.5 text-lg font-semibold">
-                    <TrendBadge current={row.total_gross} prev={prevRowsMap[row.employee_code]?.total_gross} />
-                    {fmtMoney(grossOf(row))}
-                  </div>
-                </div>
-                <div className="px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-0.5">К выплате</div>
-                  <div className="text-lg font-semibold text-[color:var(--color-primary)]">{fmtMoney(row.total_net)}</div>
-                </div>
-              </div>
-
-              {/* Breakdown — one figure per row, easy to read top-to-bottom */}
-              <div className="px-4 text-sm divide-y divide-[color:var(--color-border)] border-b border-[color:var(--color-border)]">
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-[color:var(--color-muted-foreground)]">Оклад</span>
-                  <span>{fmtMoney(row.base_salary)}</span>
-                </div>
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-[color:var(--color-muted-foreground)]">Комиссия</span>
-                  <span className="flex items-center gap-1.5">
-                    {!row.ignore_kpi && <TrendBadge current={row.total_commission} prev={prevRowsMap[row.employee_code]?.total_commission} />}
-                    {row.ignore_kpi ? '—' : fmtMoney(row.total_commission)}
-                  </span>
-                </div>
-                {(row.bonuses + row.excel_bonus) > 0 && (
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-[color:var(--color-muted-foreground)]">Премии</span>
-                    <span className="text-green-600">+{fmtMoney(row.bonuses + row.excel_bonus)}</span>
-                  </div>
-                )}
-                {row.advances > 0 && (
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-[color:var(--color-muted-foreground)]">Авансы</span>
-                    <span className="text-[color:var(--color-danger)]">-{fmtMoney(row.advances)}</span>
-                  </div>
-                )}
-                {row.penalties > 0 && (
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-[color:var(--color-muted-foreground)]">Штрафы</span>
-                    <span className="text-[color:var(--color-danger)]">-{fmtMoney(row.penalties)}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="px-4 py-2 flex justify-end gap-3">
-                <button
-                  onClick={() => toggleSettlement(row.employee_code, row.settlement_paid)}
-                  title={row.settlement_paid ? 'Расчёт выдан — нажмите для отмены' : 'Отметить как выданный'}
-                  className={`p-1.5 rounded transition-colors ${row.settlement_paid ? 'text-green-500' : 'text-[color:var(--color-muted-foreground)]'}`}
-                >
-                  {row.settlement_paid ? <CheckSquare size={20} /> : <Square size={20} />}
-                </button>
-                <button
-                  onClick={() => setEditingPlan(row)}
-                  className="p-1.5 rounded text-[color:var(--color-muted-foreground)]"
-                  title="Настроить план"
-                >
-                  <Settings size={18} />
-                </button>
-                <button
-                  onClick={() => setEditingComment(row)}
-                  className={`p-1.5 rounded transition-colors ${comments[row.employee_code] ? 'text-indigo-500' : 'text-[color:var(--color-muted-foreground)]'}`}
-                  title="Комментарий"
-                >
-                  <MessageSquare size={18} />
-                </button>
-              </div>
-
-              {/* Expanded detail */}
-              {expandedRows.has(row.employee_code) && (
-                <div className="px-4 py-4 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
-                  {getAnomalyFlags(row).length > 0 && (
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {getAnomalyFlags(row).map((f) => (
-                        <span key={f} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                          <AlertTriangle size={11} />{f}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {comments[row.employee_code] && (
-                    <div className="mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-sm text-indigo-800">
-                      <MessageSquare size={13} className="mt-0.5 shrink-0" />
-                      <span>{comments[row.employee_code]}</span>
-                    </div>
-                  )}
-                  <ExpandedContent row={row} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[color:var(--color-border)] shadow-sm">
-          {/* overflow-visible: global `table { overflow: hidden }` (globals.css) clips the
-              sticky ФИО column once horizontal scroll moves it away from its natural position. */}
-          <table className="min-w-max w-full text-sm divide-y divide-[color:var(--color-border)] bg-[color:var(--color-table-bg)] text-[color:var(--color-table-text)] overflow-visible">
-            <thead>
-              <tr className="bg-[color:var(--color-table-header)]">
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide w-10"></th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide sticky left-0 bg-[color:var(--color-table-header)]">ФИО</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Оклад</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Комиссия</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide">Общая зп</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-danger)]">Авансы</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[color:var(--color-primary)]">К выплате</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-green-600">Зарплата ✓</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide">План</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[color:var(--color-border)]">
-              {filtered.map((row, i) => (
-                <>
-                  <tr
-                    key={row.employee_code}
-                    className={`transition-colors hover:bg-[color:var(--color-table-row-hover)] cursor-pointer ${
-                      row.settlement_paid ? 'bg-green-50/30' :
-                      i % 2 === 0 ? '' : 'bg-[color:var(--color-table-row-alt)]'
-                    }`}
-                    onClick={() => toggleRow(row.employee_code)}
-                  >
-                    <td className="px-3 py-2.5 text-center">
-                      {expandedRows.has(row.employee_code)
-                        ? <ChevronUp size={16} className="text-[color:var(--color-muted-foreground)]" />
-                        : <ChevronDown size={16} className="text-[color:var(--color-muted-foreground)]" />}
-                    </td>
-                    <td className="px-3 py-2.5 sticky left-0 bg-[color:var(--color-table-bg)] font-medium">
-                      <div className="flex items-center gap-2">
-                        {row.settlement_paid && <BadgeCheck size={14} className="text-green-500 shrink-0" />}
-                        {getAnomalyFlags(row).length > 0 && (
-                          <span title={getAnomalyFlags(row).join('\n')}>
-                            <AlertTriangle size={14} className="text-amber-500 shrink-0" />
-                          </span>
-                        )}
-                        {comments[row.employee_code] && (
-                          <span title={comments[row.employee_code]}>
-                            <MessageSquare size={13} className="text-indigo-400 shrink-0" />
-                          </span>
-                        )}
-                        <div>
-                          <div>{row.employee_name}</div>
-                          <div className="text-xs text-[color:var(--color-muted-foreground)]">{row.employee_code}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtMoney(row.base_salary)}</td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      {row.ignore_kpi
-                        ? <span className="text-[color:var(--color-muted-foreground)]" title="KPI не учитывается">—</span>
-                        : (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <TrendBadge current={row.total_commission} prev={prevRowsMap[row.employee_code]?.total_commission} />
-                            {fmtMoney(row.total_commission)}
-                          </div>
-                        )}
-                    </td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <TrendBadge current={row.total_gross} prev={prevRowsMap[row.employee_code]?.total_gross} />
-                        {fmtMoney(grossOf(row))}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap text-[color:var(--color-danger)]">
-                      {row.advances > 0 ? (
-                        <span title={`За этот месяц: ${row.advances_this_month?.toLocaleString('ru-RU') || 0} ₽`}>
-                          -{fmtMoney(row.advances)}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap font-semibold text-[color:var(--color-primary)]">
-                      {fmtMoney(row.total_net)}
-                    </td>
-
-                    {/* ── Зарплата ✓ ── */}
-                    <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => toggleSettlement(row.employee_code, row.settlement_paid)}
-                        title={row.settlement_paid ? 'Расчёт выдан — нажмите для отмены' : 'Отметить как выданный'}
-                        className={`p-1.5 rounded transition-colors ${
-                          row.settlement_paid
-                            ? 'text-green-500 hover:bg-green-100'
-                            : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-bg-secondary)] hover:text-green-500'
-                        }`}
-                      >
-                        {row.settlement_paid
-                          ? <CheckSquare size={18} />
-                          : <Square size={18} />}
-                      </button>
-                    </td>
-
-                    <td className="px-3 py-2.5 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditingPlan(row); }}
-                          className="p-1.5 rounded hover:bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text-primary)]"
-                          title="Настроить план"
-                        >
-                          <Settings size={16} />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditingComment(row); }}
-                          className={`p-1.5 rounded hover:bg-[color:var(--color-bg-secondary)] transition-colors ${comments[row.employee_code] ? 'text-indigo-500' : 'text-[color:var(--color-muted-foreground)]'}`}
-                          title={comments[row.employee_code] ? `Комментарий: ${comments[row.employee_code]}` : 'Добавить комментарий'}
-                        >
-                          <MessageSquare size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedRows.has(row.employee_code) && <ExpandedRow key={`exp-${row.employee_code}`} row={row} comment={comments[row.employee_code]} />}
-                </>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-[color:var(--color-table-header)] font-semibold">
-                <td className="px-3 py-2.5"></td>
-                <td className="px-3 py-2.5 sticky left-0 bg-[color:var(--color-table-header)]">
-                  Итого: {filtered.length}
-                </td>
-                <td className="px-3 py-2.5 text-right">{fmtMoney(filtered.reduce((s, r) => s + r.base_salary, 0))}</td>
-                <td className="px-3 py-2.5 text-right">{fmtMoney(filtered.reduce((s, r) => s + r.total_commission, 0))}</td>
-                <td className="px-3 py-2.5 text-right">
-                  {fmtMoney(filtered.reduce((s, r) => s + grossOf(r), 0))}
-                </td>
-                <td className="px-3 py-2.5 text-right text-[color:var(--color-danger)]">
-                  -{fmtMoney(filtered.reduce((s, r) => s + r.advances, 0))}
-                </td>
-                <td className="px-3 py-2.5 text-right text-[color:var(--color-primary)]">
-                  {fmtMoney(filtered.reduce((s, r) => s + r.total_net, 0))}
-                </td>
-                <td className="px-3 py-2.5 text-center text-green-600">
-                  {filtered.filter((r) => r.settlement_paid).length} / {filtered.length}
-                </td>
-                <td className="px-3 py-2.5"></td>
-              </tr>
-            </tfoot>
-          </table>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((row) => (
+            <AdminPayCard
+              key={row.employee_code}
+              row={row}
+              prevRow={prevRowsMap[row.employee_code]}
+              comment={comments[row.employee_code]}
+              expanded={expandedRows.has(row.employee_code)}
+              onToggle={() => toggleRow(row.employee_code)}
+              onTogglePaid={() => toggleSettlement(row.employee_code, row.settlement_paid)}
+              onEditPlan={() => setEditingPlan(row)}
+              onEditComment={() => setEditingComment(row)}
+            />
+          ))}
         </div>
       )}
 
