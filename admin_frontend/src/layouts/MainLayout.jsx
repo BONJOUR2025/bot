@@ -7,14 +7,19 @@ import { useViewport } from '../providers/ViewportProvider.jsx';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import useReveal from '../hooks/useReveal.js';
 import useDialogChrome from '../hooks/useDialogChrome.js';
+import useSwipeGuard from '../hooks/useSwipeGuard.js';
 
 export default function MainLayout() {
   const location = useLocation();
   const contentRef = useRef(null);
+  const sidebarRef = useRef(null);
   useReveal(contentRef);
   // Поведение модальных окон для тех, что собраны вручную мимо Modal.jsx.
   useDialogChrome();
   const { isMobile } = useViewport();
+  // touch-action: pan-y в CSS не добивает системный edge-свайп Safari —
+  // тут нужен активный preventDefault, см. хук.
+  useSwipeGuard(sidebarRef, isMobile);
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [navCollapsed, setNavCollapsed] = useState(() => {
@@ -41,7 +46,7 @@ export default function MainLayout() {
 
   return (
     <div className={`app-shell ${isMobile ? 'app-shell--mobile' : ''} ${!isMobile && navCollapsed ? 'app-shell--nav-collapsed' : ''}`}>
-      <aside className={`app-shell__sidebar ${sidebarOpen ? 'is-open' : ''}`}>
+      <aside ref={sidebarRef} className={`app-shell__sidebar ${sidebarOpen ? 'is-open' : ''}`}>
         <Navigation
           onNavigate={() => setSidebarOpen(false)}
           collapsed={navCollapsed}
