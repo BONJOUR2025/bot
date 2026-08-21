@@ -11,6 +11,7 @@ import MainLayout from "./layouts/MainLayout.jsx";
 import PlainLayout from "./layouts/PlainLayout.jsx";
 import EmployeeLayout from "./layouts/EmployeeLayout.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import ScrollToTop from "./components/ScrollToTop.jsx";
 
 import { AuthProvider } from "./providers/AuthProvider.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
@@ -91,6 +92,7 @@ export default function App() {
             <AuthProvider>
               <NativeShell />
               <Router>
+              <ScrollToTop />
               <ErrorBoundary>
               <Suspense fallback={<RouteFallback />}>
               <Routes>
