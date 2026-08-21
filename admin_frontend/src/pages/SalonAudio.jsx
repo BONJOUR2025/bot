@@ -307,9 +307,9 @@ export default function SalonAudio() {
                     className={
                       'inline-flex items-center gap-2 rounded-[var(--ui-radius-btn)] px-4 py-2 text-sm font-medium transition-all duration-300 ' +
                       (active
-                        ? 'bg-[color:var(--color-danger)] text-white hover:brightness-110'
+                        ? 'bg-[color:var(--fill-danger)] text-[color:var(--color-on-fill)] hover:brightness-110'
                         : online
-                          ? 'bg-[color:var(--color-success)] text-[color:var(--color-on-fill)] hover:brightness-110'
+                          ? 'bg-[color:var(--fill-success)] text-[color:var(--color-on-fill)] hover:brightness-110'
                           : 'cursor-not-allowed bg-[color:var(--color-control-bg)] text-[color:var(--color-text-faint)]')
                     }
                   >
