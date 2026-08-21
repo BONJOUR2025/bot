@@ -2485,6 +2485,15 @@ body.viewer3d-fs-active .app-card {
 .visual-refresh [class*='bg-teal-'][class*='text-white'] {
   background-color: var(--color-info) !important;
 }
+/* Краска поверх сплошной заливки. В тёмной теме семантические цвета
+   светлые, и белый текст на них нечитаем — см. --color-on-fill. */
+.visual-glass [class*='bg-blue-'][class*='text-white'],
+.visual-glass [class*='bg-sky-'][class*='text-white'],
+.visual-glass [class*='bg-cyan-'][class*='text-white'],
+.visual-glass [class*='bg-teal-'][class*='text-white'] {
+  background-color: var(--fill-info) !important;
+  color: var(--color-on-fill) !important;
+}
 
 .visual-glass [class*='bg-green-'][class*='text-white'],
 .visual-glass [class*='bg-emerald-'][class*='text-white'],
@@ -2492,12 +2501,22 @@ body.viewer3d-fs-active .app-card {
 .visual-refresh [class*='bg-emerald-'][class*='text-white'] {
   background-color: var(--color-success) !important;
 }
+.visual-glass [class*='bg-green-'][class*='text-white'],
+.visual-glass [class*='bg-emerald-'][class*='text-white'] {
+  background-color: var(--fill-success) !important;
+  color: var(--color-on-fill) !important;
+}
 
 .visual-glass [class*='bg-red-'][class*='text-white'],
 .visual-glass [class*='bg-rose-'][class*='text-white'],
 .visual-refresh [class*='bg-red-'][class*='text-white'],
 .visual-refresh [class*='bg-rose-'][class*='text-white'] {
   background-color: var(--color-danger) !important;
+}
+.visual-glass [class*='bg-red-'][class*='text-white'],
+.visual-glass [class*='bg-rose-'][class*='text-white'] {
+  background-color: var(--fill-danger) !important;
+  color: var(--color-on-fill) !important;
 }
 
 .visual-glass [class*='bg-amber-'][class*='text-white'],
@@ -2507,6 +2526,12 @@ body.viewer3d-fs-active .app-card {
 .visual-refresh [class*='bg-yellow-'][class*='text-white'],
 .visual-refresh [class*='bg-orange-'][class*='text-white'] {
   background-color: var(--color-warning) !important;
+}
+.visual-glass [class*='bg-amber-'][class*='text-white'],
+.visual-glass [class*='bg-yellow-'][class*='text-white'],
+.visual-glass [class*='bg-orange-'][class*='text-white'] {
+  background-color: var(--fill-warning) !important;
+  color: var(--color-on-fill) !important;
 }
 
 .visual-glass [class*='bg-indigo-'][class*='text-white'],
@@ -2518,6 +2543,14 @@ body.viewer3d-fs-active .app-card {
 .visual-refresh [class*='bg-violet-'][class*='text-white'],
 .visual-refresh [class*='bg-fuchsia-'][class*='text-white'] {
   background-color: var(--color-primary) !important;
+}
+/* Основной цвет — исключение: тёмная краска на нём даёт всего 3.4,
+   поэтому берём тёмный вариант заливки и оставляем белый текст (5.7). */
+.visual-glass [class*='bg-indigo-'][class*='text-white'],
+.visual-glass [class*='bg-purple-'][class*='text-white'],
+.visual-glass [class*='bg-violet-'][class*='text-white'],
+.visual-glass [class*='bg-fuchsia-'][class*='text-white'] {
+  background-color: var(--fill-primary) !important;
 }
 
 /* ── Атомы: кнопка, иконка-кнопка, поле ────────────────────────

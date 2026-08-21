@@ -469,7 +469,7 @@
   --color-table-header-bg:   transparent;
   --color-table-border:      rgba(255, 255, 255, 0.075);
   --color-table-text:        #f5f5f4;
-  --color-table-header-text: #67676f;
+  --color-table-header-text: #82828b;
   --color-table-stripe:      transparent;
   --color-table-hover:       rgba(255, 255, 255, 0.035);
 
@@ -478,7 +478,7 @@
   --color-control-border:        rgba(255, 255, 255, 0.075);
   --color-control-border-strong: var(--color-primary);
   --color-control-text:          var(--color-text);
-  --color-control-placeholder:   #67676f;
+  --color-control-placeholder:   #82828b;
 
   --color-modal-bg:       #0a0a0c;
   --color-modal-text:     var(--color-text);
@@ -540,6 +540,18 @@
   --glass-orb-b: rgba(52, 211, 153, 0.13);
   --glass-orb-c: rgba(96, 165, 250, 0.10);
   --glass-grain-opacity: 0.035;
+  /* ── Сплошные заливки и краска поверх них ────────────────────
+     В тёмной теме семантические цвета светлые, поэтому белый текст на
+     них нечитаем: 1.92 на зелёном, 1.67 на янтарном, 2.54 на синем.
+     Тёмная краска даёт 7.2–11.6. Исключение — основной цвет: на нём
+     тёмная краска даёт всего 3.4, поэтому он берётся в тёмном варианте
+     и остаётся с белым текстом (5.7). */
+  --color-on-fill:  #0b0f0d;
+  --fill-primary:   var(--color-primary-strong);
+  --fill-success:   var(--color-success);
+  --fill-info:      var(--color-info);
+  --fill-warning:   var(--color-warning);
+  --fill-danger:    var(--color-danger);
   --glass-ease:     cubic-bezier(0.32, 0.72, 0, 1);
   --glass-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -585,13 +597,13 @@
 
   --color-table-border:      rgba(12, 12, 20, 0.075);
   --color-table-text:        #0b0b0d;
-  --color-table-header-text: #8b8b95;
+  --color-table-header-text: #75757f;
   --color-table-hover:       rgba(12, 12, 20, 0.03);
 
   --color-control-bg:          #f7f7f9;
   --color-control-bg-hover:    #f1f1f3;
   --color-control-border:      rgba(12, 12, 20, 0.075);
-  --color-control-placeholder: #8b8b95;
+  --color-control-placeholder: #75757f;
 
   --color-modal-bg:       #ffffff;
   --color-modal-backdrop: rgba(12, 12, 20, 0.30);
@@ -626,5 +638,12 @@
   --glass-orb-a: rgba(109, 63, 234, 0.10);
   --glass-orb-b: rgba(15, 157, 107, 0.08);
   --glass-orb-c: rgba(37, 99, 235, 0.07);
+  /* В светлой теме заливки, наоборот, тёмные — краска белая. Зелёный
+     и розовый пришлось притемнить: с исходными белый давал 3.47 и 4.32.
+     Стало 5.22 и 5.54. */
+  --color-on-fill:  #ffffff;
+  --fill-primary:   var(--color-primary);
+  --fill-success:   #0b7c54;
+  --fill-danger:    #c22f47;
   --glass-grain-opacity: 0.022;
 }
