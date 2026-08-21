@@ -12,7 +12,7 @@ import { useToast } from '../providers/ToastProvider.jsx';
 
 // ── Constants ────────────────────────────────────────────────────
 const PRIORITIES = [
-  { value: 'low',    label: 'Низкий',  dot: '#6b7280' },
+  { value: 'low',    label: 'Низкий',  dot: 'var(--color-text-muted)' },
   { value: 'medium', label: 'Средний', dot: 'var(--color-info)' },
   { value: 'high',   label: 'Высокий', dot: 'var(--color-warning)' },
   { value: 'urgent', label: 'Срочный', dot: 'var(--color-danger)' },
@@ -27,9 +27,13 @@ const STATUSES = [
 const DAY_NAMES   = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTH_NAMES = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
+// Десять различимых оттенков для пользовательской метки категории.
+// Это не семантика (успех/ошибка), а произвольная раскраска, поэтому
+// значения заданы литералами и не берутся из токенов темы: подобраны
+// средней светлоты, чтобы читаться на обоих фонах.
 const DEFAULT_CAT_COLORS = [
-  'var(--color-primary)','var(--color-text-muted)','var(--color-danger)','var(--color-danger)','var(--color-warning)',
-  'var(--color-warning)','var(--color-success)','var(--color-accent-strong)','#22b8b8','var(--color-info)',
+  '#8b5cf6', '#94a3b8', '#f43f5e', '#f97316', '#f59e0b',
+  '#84cc16', '#10b981', '#14b8a6', '#22b8b8', '#3b82f6',
 ];
 const DEFAULT_CAT_ICONS = ['📋','💼','🏠','🎯','🚀','💡','📚','🔧','💰','🎮'];
 

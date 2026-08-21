@@ -18,6 +18,7 @@ import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 import OrderPhotos from '../components/OrderPhotos.jsx';
+import { CHART_PALETTE as CHART_COLORS } from '../utils/chartPalette.js';
 
 /* ── constants ───────────────────────────────────────────── */
 function toLocalDateStr(d) {
@@ -27,8 +28,6 @@ const TODAY = toLocalDateStr(new Date());
 const MONTHS_RU      = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 const MONTHS_KEY_RU  = ['ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ','ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ'];
 const DAY_NAMES      = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-const CHART_COLORS   = ['var(--color-primary)','var(--color-success)','var(--color-warning)','var(--color-danger)','var(--color-info)','var(--color-text-muted)','var(--color-danger)','var(--color-accent-strong)','var(--color-warning)','#d4d44a'];
-
 // Populated from EmployeeRepository (see loadEmployeeNames in the main
 // component) — employee.name in the system is "Имя КОД" (e.g. "Вера 0102"),
 // the same 4-digit code Firebird's sales data is keyed by. Module-level so
@@ -1361,7 +1360,7 @@ export default function SalesAnalytics() {
                             return <Bar  key={e.code} dataKey={e.code} name={e.code} fill={color} isAnimationActive={false} stackId="s" radius={i === employees.length - 1 ? [3,3,0,0] : 0} />;
                           return <Line key={e.code} dataKey={e.code} name={e.code} type="monotone" stroke={color} dot={false} strokeWidth={2} isAnimationActive={false} />;
                         })}
-                        {showMA && <Line dataKey="_ma" name="_ma" type="monotone" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 3" dot={false} isAnimationActive={false} legendType="none" />}
+                        {showMA && <Line dataKey="_ma" name="_ma" type="monotone" stroke="var(--color-text-muted)" strokeWidth={1.5} strokeDasharray="5 3" dot={false} isAnimationActive={false} legendType="none" />}
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>

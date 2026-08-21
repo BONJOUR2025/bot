@@ -2,8 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
-
-const CAT_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-danger)', 'var(--color-text-muted)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-danger)'];
+import { CHART_PALETTE as CAT_COLORS } from '../utils/chartPalette.js';
 
 const MONTH_NAMES = [
   'Январь','Февраль','Март','Апрель','Май','Июнь',

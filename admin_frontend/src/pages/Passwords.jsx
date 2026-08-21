@@ -21,9 +21,13 @@ import api from '../api';
 import Modal from '../components/Modal';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
+// Десять различимых оттенков для пользовательской метки категории.
+// Это не семантика (успех/ошибка), а произвольная раскраска, поэтому
+// значения заданы литералами и не берутся из токенов темы: подобраны
+// средней светлоты, чтобы читаться на обоих фонах.
 const DEFAULT_CATEGORY_COLORS = [
-  'var(--color-primary)', 'var(--color-text-muted)', 'var(--color-danger)', 'var(--color-danger)', 'var(--color-warning)',
-  'var(--color-warning)', 'var(--color-success)', 'var(--color-accent-strong)', '#22b8b8', 'var(--color-info)',
+  '#8b5cf6', '#94a3b8', '#f43f5e', '#f97316', '#f59e0b',
+  '#84cc16', '#10b981', '#14b8a6', '#22b8b8', '#3b82f6',
 ];
 
 const DEFAULT_CATEGORY_ICONS = ['🔐', '💼', '🏠', '💳', '🎮', '📱', '💻', '🌐', '📧', '🛒'];
@@ -389,7 +393,7 @@ export default function Passwords() {
             <div key={catName} className="bg-[var(--color-bg-secondary)] rounded-lg border border-[var(--color-border)] overflow-hidden">
               <div
                 className="px-4 py-3 border-b border-[var(--color-border)] flex items-center gap-2"
-                style={{ borderLeftWidth: '4px', borderLeftColor: catInfo?.color || '#6b7280' }}
+                style={{ borderLeftWidth: '4px', borderLeftColor: catInfo?.color || 'var(--color-text-muted)' }}
               >
                 <span className="text-lg">{catInfo?.icon || '📁'}</span>
                 <h3 className="font-medium">{catName}</h3>

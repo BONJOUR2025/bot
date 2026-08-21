@@ -27,9 +27,7 @@ import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 import KpiCard from '../components/ui/Kpi.jsx';
-
-const CHART_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-danger)', 'var(--color-text-muted)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-danger)'];
-
+import { CHART_PALETTE as CHART_COLORS } from '../utils/chartPalette.js';
 
 function ShareDonut({ data, total, title, icon: Icon, colorOf, activeName, onSelect }) {
   const [hover, setHover] = useState(null);
@@ -614,7 +612,7 @@ export default function Employees() {
                   total={employees.length}
                   title="По статусу"
                   icon={UserCheck}
-                  colorOf={(name) => (name === 'Активные' ? 'var(--color-success)' : '#94a3b8')}
+                  colorOf={(name) => (name === 'Активные' ? 'var(--color-success)' : 'var(--color-text-muted)')}
                   activeName={statusFilterEmp ? (statusFilterEmp === 'active' ? 'Активные' : 'Неактивные') : null}
                   onSelect={(name) => {
                     const status = name === 'Активные' ? 'active' : 'inactive';

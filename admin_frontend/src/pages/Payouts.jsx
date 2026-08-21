@@ -38,12 +38,12 @@ import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 import KpiCard from '../components/ui/Kpi.jsx';
+import { CHART_PALETTE as CHART_COLORS } from '../utils/chartPalette.js';
 
 const MAX_AMOUNT = 100000;
 const STATUS_OPTIONS = ['Ожидает', 'Одобрено', 'Отклонено', 'Выплачено'];
 const MANAGE_DATES_PERMISSION = 'payouts-manage-dates';
 
-const CHART_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-danger)', 'var(--color-text-muted)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-danger)'];
 const METHOD_RAW = { 'На карту': '💳 На карту', 'Из кассы': '🏦 Из кассы', 'Наличными': '🤝 Наличными' };
 const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const STATUS_COLORS = { 'Ожидает': 'var(--color-warning)', 'Одобрено': 'var(--color-success)', 'Отклонено': 'var(--color-danger)', 'Выплачено': 'var(--color-primary)' };
@@ -1281,7 +1281,7 @@ export default function Payouts() {
                     total={payouts.length}
                     title="Статусы"
                     icon={BarChart3}
-                    colorOf={(name) => STATUS_COLORS[name] || '#94a3b8'}
+                    colorOf={(name) => STATUS_COLORS[name] || 'var(--color-text-muted)'}
                     activeName={filters.status || null}
                     onSelect={selectStatus}
                   />

@@ -13,8 +13,8 @@ import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { fmtMoney, Term, StatCard, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
+import { CHART_PALETTE as CHART_COLORS } from '../utils/chartPalette.js';
 
-const CHART_COLORS = ['var(--color-primary)','var(--color-success)','var(--color-warning)','var(--color-danger)','var(--color-text-muted)','var(--color-info)','var(--color-warning)','var(--color-danger)'];
 const DAY_NAMES    = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 
 const fmt    = (v) => (v == null ? '—' : v);
@@ -750,7 +750,7 @@ export default function Masters() {
       const s = r.status || 'Прочее';
       counts[s] = (counts[s] || 0) + 1;
     });
-    return Object.entries(counts).map(([name, value]) => ({ name, value, color: colors[name] || '#94a3b8' }));
+    return Object.entries(counts).map(([name, value]) => ({ name, value, color: colors[name] || 'var(--color-text-muted)' }));
   }, [filtered]);
 
   const categoryDonutData = useMemo(() => {

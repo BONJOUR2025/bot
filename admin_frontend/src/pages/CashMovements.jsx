@@ -19,6 +19,7 @@ import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs, StatCard } from '../components/ui/SalaryUI.jsx';
 import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
 import KpiCard from '../components/ui/Kpi.jsx';
+import { CHART_PALETTE as CHART_COLORS } from '../utils/chartPalette.js';
 
 // ── Formatters ────────────────────────────────────────────────────
 const fmtDate = (v) => {
@@ -50,7 +51,6 @@ const DATE_PRESETS = [
   { label: 'Всё время',     from: () => '',             to: () => '' },
 ];
 
-const CHART_COLORS = ['var(--color-primary)','var(--color-success)','var(--color-warning)','var(--color-danger)','var(--color-text-muted)','var(--color-info)','var(--color-warning)','var(--color-danger)'];
 const DAY_NAMES    = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 
 // ── Sort icon ─────────────────────────────────────────────────────

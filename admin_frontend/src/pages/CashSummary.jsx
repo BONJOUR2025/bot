@@ -8,13 +8,13 @@ import { toPng } from 'html-to-image';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
+import { CHART_PALETTE as CHART_COLORS } from '../utils/chartPalette.js';
 
 const REPORT_WIDTH = 1080;
 const HIDDEN_CATS_KEY = 'cashSummary.hiddenCategories';
 const NO_CATEGORY = '__NONE__';
 const NO_CATEGORY_LABEL = 'Без категории';
 
-const CHART_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-danger)', 'var(--color-text-muted)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-danger)'];
 const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
 // Same scale-to-fit trick as PayrollSummary: the report DOM stays at full
