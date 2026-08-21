@@ -287,11 +287,36 @@ a:hover { text-decoration: underline; }
 }
 .sidebar__links { display: grid; gap: 2px; }
 .sidebar__link {
+  /* <Link> рендерится как <a> — строчный элемент по умолчанию. Без flex
+     иконка (SVG) и подпись текли инлайново и переносились на отдельные
+     строки как обычный текст. min-width:0 на flex-элементе — то, что
+     позволяет подписи сжаться/перенестись вместо раздувания строки шире
+     сайдбара: без него длинные названия («Кассовые перемещения»,
+     «Платежный календарь») растягивали .sidebar__links за границы
+     контейнера, а у него overflow-y:auto без явного overflow-x — браузер
+     сам делал вторую ось скроллящейся, и пункты меню уезжали при свайпе
+     влево-вправо. */
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
   padding: 0.55rem 0.75rem;
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   font-size: 0.875rem;
   transition: all var(--transition-fast);
+}
+.sidebar__link svg {
+  flex-shrink: 0;
+}
+.sidebar__link span {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+/* Страховка на случай другого широкого потомка — сайдбар не должен
+   скроллиться по горизонтали ни при каких обстоятельствах. */
+.sidebar {
+  overflow-x: hidden;
 }
 .sidebar__link:hover {
   background: var(--color-primary-muted);
@@ -1857,7 +1882,14 @@ body.viewer3d-fs-active .app-card {
   padding: 5px 5px 5px 1.25rem;
   height: auto;
   min-height: 48px;
-  top: 1.25rem;
+  /* top учитывает вырез экрана точно так же, как margin-top ниже.
+     margin-top действует только до первого скролла, пока шапка ещё в
+     обычном потоке документа; как только она «прилипает»
+     (position: sticky, унаследовано из базового правила), она цепляется
+     именно за top — и без env() тут шапка на скролле съезжала под
+     статус-бар и Dynamic Island (на iPhone с вырезом это ~59px, а не
+     учитывающий их top давал те же 20px что и на устройстве без выреза). */
+  top: calc(1.25rem + env(safe-area-inset-top, 0px));
   border: 1px solid var(--glass-hair);
   border-radius: var(--radius-full);
   background: var(--color-panel);
@@ -2217,7 +2249,10 @@ body.viewer3d-fs-active .app-card {
   .visual-glass .app-shell__header {
     margin: 0.75rem 0.75rem 0;
     margin-top: calc(0.75rem + env(safe-area-inset-top, 0px));
-    top: 0.75rem;
+    /* Та же причина, что и в десктопном правиле выше: top должен
+       учитывать вырез экрана, иначе на скролле шапка прилипает к
+       фиксированным 12px и уходит под статус-бар/Dynamic Island. */
+    top: calc(0.75rem + env(safe-area-inset-top, 0px));
   }
   .visual-glass .app-shell__content {
     padding-top: 1.75rem;
