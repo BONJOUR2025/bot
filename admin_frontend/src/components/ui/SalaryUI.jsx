@@ -78,18 +78,31 @@ export function MetricBar({ label, note, plan, fact, ratio, contribution, fmt = 
   );
 }
 
+// Семантические классы, а не только утилиты: без них тема не могла
+// повлиять на вкладки. В стекле это было заметно — активная вкладка
+// красилась в --color-surface, а контейнер в --color-bg-secondary,
+// который там СВЕТЛЕЕ. Активная вкладка оказывалась темнее фона и
+// читалась как утопленная, то есть ровно наоборот.
 export function Tabs({ tabs, active, onChange }) {
   return (
-    <div className="flex gap-1 p-1 rounded-[var(--ui-radius-btn)] bg-[color:var(--color-bg-secondary)] overflow-x-auto">
+    <div
+      className="ui-tabs flex gap-1 p-1 rounded-[var(--ui-radius-btn)] bg-[color:var(--color-bg-secondary)] overflow-x-auto"
+      role="tablist"
+    >
       {tabs.map((t) => (
-        <button key={t.key} type="button" onClick={() => onChange(t.key)}
-          className={`px-3 py-2 rounded-[var(--ui-radius-btn)] text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5
+        <button
+          key={t.key}
+          type="button"
+          role="tab"
+          aria-selected={active === t.key}
+          onClick={() => onChange(t.key)}
+          className={`ui-tabs__btn px-3 py-2 rounded-[var(--ui-radius-btn)] text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5
             ${active === t.key
-              ? 'bg-[color:var(--color-surface)] text-[color:var(--color-text)] shadow-[var(--ui-shadow-card)]'
+              ? 'is-active bg-[color:var(--color-surface)] text-[color:var(--color-text)] shadow-[var(--ui-shadow-card)]'
               : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-text)]'}`}>
           {t.icon}{t.label}
           {t.badge != null && t.badge !== 0 && (
-            <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-[var(--ui-radius-badge)] text-[10px] font-semibold bg-[color:var(--color-bg)] text-[color:var(--color-muted-foreground)]">{t.badge}</span>
+            <span className="ui-tabs__badge ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-[var(--ui-radius-badge)] text-[10px] font-semibold bg-[color:var(--color-bg)] text-[color:var(--color-muted-foreground)]">{t.badge}</span>
           )}
         </button>
       ))}

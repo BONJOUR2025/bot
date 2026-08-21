@@ -2578,3 +2578,27 @@ body.viewer3d-fs-active .app-card {
   box-shadow: 0 0 0 4px var(--color-primary-muted), var(--glass-inner-hi-soft);
   background: var(--color-control-bg);
 }
+
+/* ── Вкладки ───────────────────────────────────────────────────
+   Контейнер — утопленный жёлоб, активная вкладка — приподнятая
+   поверхность с подсветкой кромки. Раньше активная красилась в
+   --color-surface поверх --color-bg-secondary, который в стекле
+   светлее, и выбранная вкладка выглядела вдавленной. */
+.visual-glass .ui-tabs {
+  background: var(--glass-shell);
+  border: 1px solid var(--glass-hair);
+}
+.visual-glass .ui-tabs__btn.is-active {
+  background: var(--color-surface-raised) !important;
+  box-shadow: var(--glass-inner-hi) !important;
+  color: var(--color-text) !important;
+}
+.visual-glass .ui-tabs__btn {
+  transition:
+    background 0.45s var(--glass-ease),
+    color 0.45s var(--glass-ease);
+}
+.visual-glass .ui-tabs__badge {
+  background: var(--color-primary-muted) !important;
+  color: var(--glass-on-soft) !important;
+}
