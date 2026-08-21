@@ -6,7 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { StatCard, Tabs } from '../components/ui/SalaryUI.jsx';
 
-const PLAN_COLORS = { repair_plan: '#e61919', cosmetics_plan: '#4af626', shoes_plan: '#ffb347' };
+const PLAN_COLORS = { repair_plan: 'var(--color-primary)', cosmetics_plan: 'var(--color-success)', shoes_plan: 'var(--color-warning)' };
 const PLAN_LABELS = { repair_plan: 'Ремонт / Химчистка', cosmetics_plan: 'Косметика', shoes_plan: 'Обувь' };
 
 function LocationPlansChart({ codes, plans }) {

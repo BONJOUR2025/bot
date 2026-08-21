@@ -212,7 +212,10 @@ export default function ShiftCheckins() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Рабочее время</h2>
+      <div>
+        <span className="ui-eyebrow mb-3">{list.length ? `Отметок за период: ${list.length}` : 'Отметок нет'}</span>
+        <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Рабочее время</h2>
+      </div>
       <div className="flex flex-wrap gap-2 items-end">
         <input
           type="date"

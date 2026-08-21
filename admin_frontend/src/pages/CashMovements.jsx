@@ -49,7 +49,7 @@ const DATE_PRESETS = [
   { label: 'Всё время',     from: () => '',             to: () => '' },
 ];
 
-const CHART_COLORS = ['#e61919','#4af626','#ffb347','#c9502a','#9a9a9a','#6fb8ff','#ff8c42','#ff6b5e'];
+const CHART_COLORS = ['var(--color-primary)','var(--color-success)','var(--color-warning)','var(--color-danger)','var(--color-text-muted)','var(--color-info)','var(--color-warning)','var(--color-danger)'];
 const DAY_NAMES    = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 
 // ── Sort icon ─────────────────────────────────────────────────────
@@ -823,16 +823,16 @@ function DailyBalancesTable({ days, entriesByDate, expanded, onToggle, isMobile 
 
 function KpiCard({ label, value, sub, accent, icon: Icon }) {
   return (
-    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#e61919'}` }}>
+    <div className="app-card p-5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
-          <div className="text-xl font-bold truncate" style={{ color: accent || '#e61919' }}>{value}</div>
+          <div className="text-xl font-bold truncate" style={{ color: accent || 'var(--color-primary)' }}>{value}</div>
           {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
         </div>
         {Icon && (
-          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#e6191918' }}>
-            <Icon size={20} style={{ color: accent || '#e61919' }} />
+          <div className="rounded-xl p-2 shrink-0" style={{ background: `color-mix(in oklab, ${accent || 'var(--color-primary)'} 9%, transparent)` }}>
+            <Icon size={20} style={{ color: accent || 'var(--color-primary)' }} />
           </div>
         )}
       </div>
@@ -864,7 +864,7 @@ function CashDayHeatmap({ data, activeDay, onSelect }) {
               <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
                 <div
                   className="h-full rounded-lg transition-all duration-500"
-                  style={{ width: `${pct}%`, background: isWeekend ? '#ffb347' : '#e61919', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
+                  style={{ width: `${pct}%`, background: isWeekend ? 'var(--color-warning)' : 'var(--color-primary)', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
                 />
               </div>
               <div className="text-xs font-medium text-right shrink-0 whitespace-nowrap">{fmtMoneyShort(d.sum)}</div>
@@ -874,11 +874,11 @@ function CashDayHeatmap({ data, activeDay, onSelect }) {
       </div>
       <div className="flex gap-4 mt-4 text-xs text-[color:var(--color-muted-foreground)]">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#e61919' }} />
+          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'var(--color-primary)' }} />
           Будни
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#ffb347' }} />
+          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'var(--color-warning)' }} />
           Выходные
         </span>
       </div>
@@ -1423,28 +1423,28 @@ export default function CashMovements() {
                   label="Общая сумма"
                   value={fmtMoneyShort(totalSum)}
                   sub={`${filtered.length} записей`}
-                  accent="#e61919"
+                  accent="var(--color-primary)"
                   icon={Wallet}
                 />
                 <KpiCard
                   label="С выплатой"
                   value={withPayoutCnt}
                   sub={filtered.length ? `${((withPayoutCnt/filtered.length)*100).toFixed(0)}% от всех` : '—'}
-                  accent="#4af626"
+                  accent="var(--color-success)"
                   icon={CheckCircle}
                 />
                 <KpiCard
                   label="Без выплаты"
                   value={filtered.filter((r) => !r.has_payout).length}
                   sub="требуют привязки"
-                  accent="#ffb347"
+                  accent="var(--color-warning)"
                   icon={Unlink}
                 />
                 <KpiCard
                   label="Без категории"
                   value={filtered.filter((r) => !r.prefix_ok).length}
                   sub={invalidCount > 0 ? `всего в базе: ${invalidCount}` : 'всё размечено'}
-                  accent="#c9502a"
+                  accent="var(--color-danger)"
                   icon={AlertTriangle}
                 />
               </div>
@@ -1461,8 +1461,8 @@ export default function CashMovements() {
                       <AreaChart data={timeData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
                         <defs>
                           <linearGradient id="cashGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%"  stopColor="#e61919" stopOpacity={0.35} />
-                            <stop offset="95%" stopColor="#e61919" stopOpacity={0.02} />
+                            <stop offset="5%"  stopColor="var(--color-primary)" stopOpacity={0.35} />
+                            <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0.02} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
@@ -1472,7 +1472,7 @@ export default function CashMovements() {
                         <Area
                           type="monotone"
                           dataKey="sum"
-                          stroke="#e61919"
+                          stroke="var(--color-primary)"
                           strokeWidth={2}
                           fill="url(#cashGrad)"
                           dot={false}
@@ -2034,15 +2034,15 @@ export default function CashMovements() {
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard label="На начало периода" value={fmtMoneyShort(daily.opening)}
-                  sub={fmtDate(daily.date_from)} accent="#9a9a9a" icon={Wallet} />
+                  sub={fmtDate(daily.date_from)} accent="var(--color-text-muted)" icon={Wallet} />
                 <KpiCard label="Приход за период"
                   value={fmtMoneyShort(dailyDays.reduce((s, d) => s + d.income, 0))}
-                  sub="без инкассации" accent="#4af626" icon={TrendingUp} />
+                  sub="без инкассации" accent="var(--color-success)" icon={TrendingUp} />
                 <KpiCard label="Инкассация за период"
                   value={fmtMoneyShort(dailyDays.reduce((s, d) => s + d.collection, 0))}
-                  sub="сдано в «Основную»" accent="#ffb347" icon={ArrowUpDown} />
+                  sub="сдано в «Основную»" accent="var(--color-warning)" icon={ArrowUpDown} />
                 <KpiCard label="На конец периода" value={fmtMoneyShort(daily.closing)}
-                  sub={fmtDate(daily.date_to)} accent="#e61919" icon={Wallet} />
+                  sub={fmtDate(daily.date_to)} accent="var(--color-primary)" icon={Wallet} />
               </div>
 
               <div className="text-xs text-[color:var(--color-muted-foreground)]">

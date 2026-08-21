@@ -13,9 +13,9 @@ import { useToast } from '../providers/ToastProvider.jsx';
 
 function KpiCard({ label, value, accent, icon: Icon }) {
   return (
-    <div className="app-card p-4" style={{ borderLeft: `3px solid ${accent}` }}>
+    <div className="app-card p-4">
       <div className="flex items-center gap-3">
-        <div className="rounded-xl p-2.5 shrink-0" style={{ background: `${accent}18` }}>
+        <div className="rounded-xl p-2.5 shrink-0" style={{ background: `color-mix(in oklab, ${accent} 9%, transparent)` }}>
           <Icon size={18} style={{ color: accent }} />
         </div>
         <div className="min-w-0">
@@ -251,9 +251,9 @@ export default function VisitorCounters() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <KpiCard label="Вошло за период" value={totals.in} accent="#4af626" icon={LogIn} />
-        <KpiCard label="Вышло за период" value={totals.out} accent="#ffb347" icon={LogOut} />
-        <KpiCard label="Сейчас в зале" value={Math.max(0, totals.in - totals.out)} accent="#e61919" icon={UsersRound} />
+        <KpiCard label="Вошло за период" value={totals.in} accent="var(--color-success)" icon={LogIn} />
+        <KpiCard label="Вышло за период" value={totals.out} accent="var(--color-warning)" icon={LogOut} />
+        <KpiCard label="Сейчас в зале" value={Math.max(0, totals.in - totals.out)} accent="var(--color-primary)" icon={UsersRound} />
       </div>
 
       {tab === 'table' && (
@@ -319,7 +319,7 @@ function VisitorAnalytics({ summary, loading }) {
             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} width={40} />
             <Tooltip />
-            <Bar dataKey="visits" name="Посещений" fill="#e61919" isAnimationActive={false} />
+            <Bar dataKey="visits" name="Посещений" fill="var(--color-primary)" isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -332,7 +332,7 @@ function VisitorAnalytics({ summary, loading }) {
             <XAxis type="number" tick={{ fontSize: 11 }} />
             <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
             <Tooltip />
-            <Bar dataKey="visits" name="Посещений" fill="#e61919" isAnimationActive={false} />
+            <Bar dataKey="visits" name="Посещений" fill="var(--color-primary)" isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>

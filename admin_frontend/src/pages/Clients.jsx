@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Users, Phone, RefreshCw, TrendingDown, Calendar, Wallet, ShoppingBag, Megaphone, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Phone, RefreshCw, TrendingDown, Calendar, Wallet, ShoppingBag, Megaphone, ChevronDown, ChevronRight } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
@@ -14,14 +14,29 @@ const fmtDate = (v) => {
   return isNaN(d) ? v : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-function KpiStat({ label, value, accent, icon }) {
+// Цвета берутся из токенов, а не задаются шестнадцатеричными литералами:
+// раньше здесь стояли значения палитры брутализма (var(--color-primary), var(--color-success),
+// var(--color-warning)) прямо во встроенных стилях, поэтому при смене темы они
+// оставались прежними — переопределить их через CSS невозможно.
+function KpiStat({ label, value, accent = 'var(--color-primary)', icon }) {
   return (
-    <div className="app-card p-4" style={{ borderLeft: `3px solid ${accent}` }}>
-      <div className="flex gap-3">
-        {icon && <div className="mt-0.5 shrink-0" style={{ color: accent }}>{icon}</div>}
-        <div className="min-w-0 flex-1">
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] font-medium">{label}</div>
-          <div className="text-xl sm:text-2xl font-bold tabular-nums mt-0.5 leading-tight" style={{ color: accent }}>{value}</div>
+    <div className="ui-shell ui-shell--sm">
+      <div className="ui-core border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4">
+        <div className="flex gap-3">
+          {icon && (
+            <span
+              className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full"
+              style={{ color: accent, background: `color-mix(in oklab, ${accent} 14%, transparent)` }}
+            >
+              {icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="ui-label">{label}</div>
+            <div className="ui-metric !text-[1.5rem] mt-1.5 text-[color:var(--color-text)]">
+              {value}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -107,11 +122,11 @@ function ClientCard({ profile }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <KpiStat label="LTV (всего потрачено)" value={fmtRub(profile.total_spent)} accent="#e61919" icon={<Wallet size={18} />} />
-        <KpiStat label="Средний чек" value={fmtRub(profile.avg_check)} accent="#4af626" icon={<ShoppingBag size={18} />} />
-        <KpiStat label="Заказов" value={profile.order_count.toLocaleString('ru-RU')} accent="#ffb347" icon={<Calendar size={18} />} />
+        <KpiStat label="LTV (всего потрачено)" value={fmtRub(profile.total_spent)} accent="var(--color-primary)" icon={<Wallet size={18} />} />
+        <KpiStat label="Средний чек" value={fmtRub(profile.avg_check)} accent="var(--color-success)" icon={<ShoppingBag size={18} />} />
+        <KpiStat label="Заказов" value={profile.order_count.toLocaleString('ru-RU')} accent="var(--color-warning)" icon={<Calendar size={18} />} />
         {profile.acquisition_channel && (
-          <KpiStat label="Канал" value={profile.acquisition_channel} accent="#ff6b5e" icon={<Megaphone size={18} />} />
+          <KpiStat label="Канал" value={profile.acquisition_channel} accent="var(--color-info)" icon={<Megaphone size={18} />} />
         )}
       </div>
 
@@ -265,9 +280,10 @@ export default function Clients() {
       <TopProgressBar active={searching || loadingProfile} />
 
       <div>
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <Users size={22} className="text-[color:var(--color-primary)]" /> Клиенты
-        </h2>
+        <span className="ui-eyebrow mb-3">
+          {results?.length ? `Найдено: ${results.length}` : 'Поиск по базе клиентов'}
+        </span>
+        <h2 className="text-2xl font-bold">Клиенты</h2>
         <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
           Карточка клиента и список тех, кто давно не появлялся (Агбис)
         </p>

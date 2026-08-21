@@ -13,7 +13,7 @@ function KpiRing({ pct, size = 84 }) {
   const r = (size - 10) / 2;
   const c = 2 * Math.PI * r;
   const dash = Math.min(clamped, 100) / 100 * c;
-  const color = clamped >= 100 ? '#4af626' : clamped >= 79 ? '#e61919' : '#ffb347';
+  const color = clamped >= 100 ? 'var(--color-success)' : clamped >= 79 ? 'var(--color-primary)' : 'var(--color-warning)';
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">

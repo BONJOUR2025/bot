@@ -314,7 +314,10 @@ export default function Assets() {
     <div className="space-y-4 max-w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <h2 className="text-2xl font-semibold">Имущество сотрудников</h2>
+        <div>
+          <span className="ui-eyebrow mb-3">{list.length ? `Единиц на руках: ${list.length}` : 'Ничего не выдано'}</span>
+          <h2 className="text-2xl font-semibold">Имущество сотрудников</h2>
+        </div>
         <button className="btn btn--primary flex items-center gap-2 sm:ml-auto w-fit" onClick={openCreate}>
           <Plus size={16} /> Добавить
         </button>

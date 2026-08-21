@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 
-const CAT_COLORS = ['#e61919', '#4af626', '#ffb347', '#c9502a', '#9a9a9a', '#6fb8ff', '#ff8c42', '#ff6b5e'];
+const CAT_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-danger)', 'var(--color-text-muted)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-danger)'];
 
 const MONTH_NAMES = [
   'Январь','Февраль','Март','Апрель','Май','Июнь',

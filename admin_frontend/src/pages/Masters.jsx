@@ -14,7 +14,7 @@ import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { fmtMoney, Term, StatCard, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
 
-const CHART_COLORS = ['#e61919','#4af626','#ffb347','#c9502a','#9a9a9a','#6fb8ff','#ff8c42','#ff6b5e'];
+const CHART_COLORS = ['var(--color-primary)','var(--color-success)','var(--color-warning)','var(--color-danger)','var(--color-text-muted)','var(--color-info)','var(--color-warning)','var(--color-danger)'];
 const DAY_NAMES    = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 
 const fmt    = (v) => (v == null ? '—' : v);
@@ -445,7 +445,7 @@ function ServiceDayHeatmap({ data, activeDay, onSelect }) {
               <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
                 <div
                   className="h-full rounded-lg transition-all duration-500"
-                  style={{ width: `${pct}%`, background: isWeekend ? '#ffb347' : '#e61919', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
+                  style={{ width: `${pct}%`, background: isWeekend ? 'var(--color-warning)' : 'var(--color-primary)', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
                 />
               </div>
               <div className="text-xs font-medium w-16 text-right shrink-0">{d.count} усл.</div>
@@ -454,8 +454,8 @@ function ServiceDayHeatmap({ data, activeDay, onSelect }) {
         })}
       </div>
       <div className="flex gap-4 mt-4 text-xs text-[color:var(--color-muted-foreground)]">
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#e61919' }} />Будни</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: '#ffb347' }} />Выходные</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'var(--color-primary)' }} />Будни</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'var(--color-warning)' }} />Выходные</span>
       </div>
     </div>
   );
@@ -744,7 +744,7 @@ export default function Masters() {
   }, [filtered]);
 
   const statusDonutData = useMemo(() => {
-    const colors = { 'Выполнено': '#4af626', 'В работе': '#ffb347', 'Прочее': '#94a3b8' };
+    const colors = { 'Выполнено': 'var(--color-success)', 'В работе': 'var(--color-warning)', 'Прочее': '#94a3b8' };
     const counts = {};
     filtered.forEach((r) => {
       const s = r.status || 'Прочее';

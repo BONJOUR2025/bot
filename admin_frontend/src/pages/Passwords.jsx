@@ -22,8 +22,8 @@ import Modal from '../components/Modal';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 
 const DEFAULT_CATEGORY_COLORS = [
-  '#e61919', '#9a9a9a', '#ff6b5e', '#c9502a', '#ff8c42',
-  '#ffb347', '#4af626', '#37c418', '#22b8b8', '#6fb8ff',
+  'var(--color-primary)', 'var(--color-text-muted)', 'var(--color-danger)', 'var(--color-danger)', 'var(--color-warning)',
+  'var(--color-warning)', 'var(--color-success)', 'var(--color-accent-strong)', '#22b8b8', 'var(--color-info)',
 ];
 
 const DEFAULT_CATEGORY_ICONS = ['🔐', '💼', '🏠', '💳', '🎮', '📱', '💻', '🌐', '📧', '🛒'];
@@ -44,7 +44,7 @@ export default function Passwords() {
     id: null,
     name: '',
     icon: '🔐',
-    color: '#e61919',
+    color: 'var(--color-primary)',
   };
 
   const [entries, setEntries] = useState([]);

@@ -26,7 +26,7 @@ const TODAY = toLocalDateStr(new Date());
 const MONTHS_RU      = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 const MONTHS_KEY_RU  = ['ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ','ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ'];
 const DAY_NAMES      = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-const CHART_COLORS   = ['#e61919','#4af626','#ffb347','#c9502a','#6fb8ff','#9a9a9a','#ff6b5e','#37c418','#ff8c42','#d4d44a'];
+const CHART_COLORS   = ['var(--color-primary)','var(--color-success)','var(--color-warning)','var(--color-danger)','var(--color-info)','var(--color-text-muted)','var(--color-danger)','var(--color-accent-strong)','var(--color-warning)','#d4d44a'];
 
 // Populated from EmployeeRepository (see loadEmployeeNames in the main
 // component) — employee.name in the system is "Имя КОД" (e.g. "Вера 0102"),
@@ -45,15 +45,15 @@ function buildCodeNameMap(employees) {
 }
 
 const CATEGORIES = [
-  { key:'repair',        label:'Ремонт / Химчистка',   color:'#e61919' },
-  { key:'cosmetics',     label:'Косметика',             color:'#4af626' },
-  { key:'shoes',         label:'Обувь',                 color:'#ffb347' },
-  { key:'insoles',       label:'Стельки',               color:'#6fb8ff' },
-  { key:'slippers',      label:'Тапочки',               color:'#9a9a9a' },
-  { key:'leather_goods', label:'Кожгалантерея на заказ', color:'#c9502a' },
+  { key:'repair',        label:'Ремонт / Химчистка',   color:'var(--color-primary)' },
+  { key:'cosmetics',     label:'Косметика',             color:'var(--color-success)' },
+  { key:'shoes',         label:'Обувь',                 color:'var(--color-warning)' },
+  { key:'insoles',       label:'Стельки',               color:'var(--color-info)' },
+  { key:'slippers',      label:'Тапочки',               color:'var(--color-text-muted)' },
+  { key:'leather_goods', label:'Кожгалантерея на заказ', color:'var(--color-danger)' },
   { key:'certificates',  label:'Сертификаты',           color:'#d4d44a' },
-  { key:'delivery',      label:'Доставка',              color:'#37c418' },
-  { key:'keys',          label:'Ключи',                 color:'#ff6b5e' },
+  { key:'delivery',      label:'Доставка',              color:'var(--color-accent-strong)' },
+  { key:'keys',          label:'Ключи',                 color:'var(--color-danger)' },
 ];
 // Categories with no cost-of-goods concept for get_margin_summary (see its
 // docstring) — excluded from the "Маржа" tab's per-category breakdown.
@@ -240,11 +240,11 @@ const ChartTooltip = ({ active, payload, label, nameMap }) => {
 };
 
 /* ── KPI card with left-border accent ───────────────────── */
-function KpiStat({ label, value, delta, sub, accent = '#e61919', icon }) {
+function KpiStat({ label, value, delta, sub, accent = 'var(--color-primary)', icon }) {
   const up = delta != null && delta > 0;
   const dn = delta != null && delta < 0;
   return (
-    <div className="app-card p-4" style={{ borderLeft: `3px solid ${accent}` }}>
+    <div className="app-card p-4">
       <div className="flex gap-3">
         {icon && <div className="mt-0.5 shrink-0" style={{ color: accent }}>{icon}</div>}
         <div className="min-w-0 flex-1">
@@ -378,7 +378,7 @@ function DayHeatmap({ data }) {
                 <div className="w-full rounded-t-md transition-all group-hover:opacity-70"
                   style={{
                     height: `${h}%`,
-                    background: wkd ? '#ffb347' : '#e61919',
+                    background: wkd ? 'var(--color-warning)' : 'var(--color-primary)',
                   }}
                 />
               </div>
@@ -391,8 +391,8 @@ function DayHeatmap({ data }) {
         })}
       </div>
       <div className="flex gap-3 mt-3 text-[10px] text-[color:var(--color-muted-foreground)]">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#e61919'}} /> Будни</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#ffb347'}} /> Выходные</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'var(--color-primary)'}} /> Будни</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'var(--color-warning)'}} /> Выходные</span>
       </div>
     </div>
   );
@@ -413,7 +413,7 @@ function PlanGauges({ empSummary, planTotals }) {
           const plan = planTotals[e.code];
           const pct  = Math.min(e.total / plan * 100, 130);
           const done = e.total / plan * 100;
-          const color = done >= 100 ? '#4af626' : done >= 75 ? '#ffb347' : '#c9502a';
+          const color = done >= 100 ? 'var(--color-success)' : done >= 75 ? 'var(--color-warning)' : 'var(--color-danger)';
           return (
             <div key={e.code}>
               <div className="flex items-center justify-between mb-1 text-sm">
@@ -695,10 +695,10 @@ function OrdersTab({ params }) {
       {orders && !error && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KpiStat label="Заказов" value={shown.length.toLocaleString('ru-RU')} accent="#e61919" icon={<Package size={18} />} />
-            <KpiStat label="Сумма" value={fmtRub(total)} accent="#4af626" icon={<Wallet size={18} />} />
-            <KpiStat label="Средний чек" value={fmtRub(shown.length ? total / shown.length : 0)} accent="#ffb347" icon={<Target size={18} />} />
-            <KpiStat label="С фотографиями" value={withPhotos.toLocaleString('ru-RU')} accent="#6fb8ff" icon={<Camera size={18} />} />
+            <KpiStat label="Заказов" value={shown.length.toLocaleString('ru-RU')} accent="var(--color-primary)" icon={<Package size={18} />} />
+            <KpiStat label="Сумма" value={fmtRub(total)} accent="var(--color-success)" icon={<Wallet size={18} />} />
+            <KpiStat label="Средний чек" value={fmtRub(shown.length ? total / shown.length : 0)} accent="var(--color-warning)" icon={<Target size={18} />} />
+            <KpiStat label="С фотографиями" value={withPhotos.toLocaleString('ru-RU')} accent="var(--color-info)" icon={<Camera size={18} />} />
           </div>
 
           {orders.length >= 500 && (
@@ -778,8 +778,8 @@ function UnclaimedTab() {
       {!loading && data && (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <KpiStat label="Незабранных заказов" value={data.total_count.toLocaleString('ru-RU')} accent="#c9502a" icon={<PackageX size={18} />} />
-            <KpiStat label="Сумма" value={fmtRub(data.total_amount)} accent="#ffb347" icon={<TrendingDown size={18} />} />
+            <KpiStat label="Незабранных заказов" value={data.total_count.toLocaleString('ru-RU')} accent="var(--color-danger)" icon={<PackageX size={18} />} />
+            <KpiStat label="Сумма" value={fmtRub(data.total_amount)} accent="var(--color-warning)" icon={<TrendingDown size={18} />} />
           </div>
 
           <div className="app-card overflow-hidden">
@@ -1073,9 +1073,9 @@ export default function SalesAnalytics() {
   }, [filteredRows, activeCats]);
 
   const donutData = useMemo(() => [
-    { name: 'Ремонт / Химчистка', value: kpi.repair    || 0, color: '#e61919' },
-    { name: 'Косметика',           value: kpi.cosmetics || 0, color: '#4af626' },
-    { name: 'Обувь',               value: kpi.shoes     || 0, color: '#ffb347' },
+    { name: 'Ремонт / Химчистка', value: kpi.repair    || 0, color: 'var(--color-primary)' },
+    { name: 'Косметика',           value: kpi.cosmetics || 0, color: 'var(--color-success)' },
+    { name: 'Обувь',               value: kpi.shoes     || 0, color: 'var(--color-warning)' },
   ].filter((d) => d.value > 0), [kpi]);
 
   // Маржа/Сроки/Возвраты come back from the API already salon-filtered
@@ -1271,7 +1271,7 @@ export default function SalesAnalytics() {
         <>
           {/* ── KPI row ─────────────────────────────────────── */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <KpiStat label="Итого выручка" value={fmtRub(kpi.total)} delta={kpi.dTotal} accent="#e61919"
+            <KpiStat label="Итого выручка" value={fmtRub(kpi.total)} delta={kpi.dTotal} accent="var(--color-primary)"
               icon={<BarChart3 size={18} />} sub={`∅ ${fmtRub(kpi.avgPerActive)} / ${periodLabel}`} />
             {CATEGORIES.map(({ key, label, color }) => {
               const leader    = categoryLeaders[key];
@@ -1282,7 +1282,7 @@ export default function SalesAnalytics() {
               );
             })}
             {retention && retention.total_clients > 0 && (
-              <KpiStat label="Повторные клиенты" value={fmtPct(retention.repeat_rate)} accent="#9a9a9a"
+              <KpiStat label="Повторные клиенты" value={fmtPct(retention.repeat_rate)} accent="var(--color-text-muted)"
                 icon={<Users size={18} />}
                 sub={`${retention.new_clients} нов. · ${retention.returning_clients} пост.`} />
             )}
@@ -1541,10 +1541,10 @@ export default function SalesAnalytics() {
             ) : filteredMargin && filteredMargin.total.revenue > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  <KpiStat label="Выручка" value={fmtRub(filteredMargin.total.revenue)} accent="#e61919" icon={<BarChart3 size={18} />} />
-                  <KpiStat label="Себестоимость" value={fmtRub(filteredMargin.total.cost)} accent="#c9502a" icon={<Percent size={18} />} />
-                  <KpiStat label="Валовая прибыль" value={fmtRub(filteredMargin.total.margin)} accent="#4af626" icon={<TrendingUp size={18} />} />
-                  <KpiStat label="Маржа" value={fmtPct(filteredMargin.total.margin_pct)} accent="#9a9a9a" icon={<Target size={18} />} />
+                  <KpiStat label="Выручка" value={fmtRub(filteredMargin.total.revenue)} accent="var(--color-primary)" icon={<BarChart3 size={18} />} />
+                  <KpiStat label="Себестоимость" value={fmtRub(filteredMargin.total.cost)} accent="var(--color-danger)" icon={<Percent size={18} />} />
+                  <KpiStat label="Валовая прибыль" value={fmtRub(filteredMargin.total.margin)} accent="var(--color-success)" icon={<TrendingUp size={18} />} />
+                  <KpiStat label="Маржа" value={fmtPct(filteredMargin.total.margin_pct)} accent="var(--color-text-muted)" icon={<Target size={18} />} />
                 </div>
 
                 <div className="app-card overflow-hidden">
@@ -1643,10 +1643,10 @@ export default function SalesAnalytics() {
               ) : filteredTurnaround && filteredTurnaround.total.order_count > 0 ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                    <KpiStat label="Средний срок" value={`${filteredTurnaround.total.avg_days} дн.`} accent="#e61919" icon={<Clock size={18} />} />
-                    <KpiStat label="Просрочено" value={fmtPct(filteredTurnaround.total.late_rate)} accent="#c9502a" icon={<TrendingDown size={18} />}
+                    <KpiStat label="Средний срок" value={`${filteredTurnaround.total.avg_days} дн.`} accent="var(--color-primary)" icon={<Clock size={18} />} />
+                    <KpiStat label="Просрочено" value={fmtPct(filteredTurnaround.total.late_rate)} accent="var(--color-danger)" icon={<TrendingDown size={18} />}
                       sub="работа завершена позже обещанной даты" />
-                    <KpiStat label="Заказов исполнено" value={filteredTurnaround.total.order_count.toLocaleString('ru-RU')} accent="#4af626" icon={<Target size={18} />} />
+                    <KpiStat label="Заказов исполнено" value={filteredTurnaround.total.order_count.toLocaleString('ru-RU')} accent="var(--color-success)" icon={<Target size={18} />} />
                   </div>
 
                   <div className="app-card overflow-hidden">
@@ -1692,9 +1692,9 @@ export default function SalesAnalytics() {
             ) : filteredReturns ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                  <KpiStat label="Возвратов" value={filteredReturns.total.return_count.toLocaleString('ru-RU')} accent="#c9502a" icon={<RotateCcw size={18} />} />
-                  <KpiStat label="% от заказов" value={fmtPct(filteredReturns.total.return_rate)} accent="#ffb347" icon={<Target size={18} />} />
-                  <KpiStat label="Заказов всего" value={filteredReturns.total.order_count.toLocaleString('ru-RU')} accent="#e61919" icon={<BarChart3 size={18} />} />
+                  <KpiStat label="Возвратов" value={filteredReturns.total.return_count.toLocaleString('ru-RU')} accent="var(--color-danger)" icon={<RotateCcw size={18} />} />
+                  <KpiStat label="% от заказов" value={fmtPct(filteredReturns.total.return_rate)} accent="var(--color-warning)" icon={<Target size={18} />} />
+                  <KpiStat label="Заказов всего" value={filteredReturns.total.order_count.toLocaleString('ru-RU')} accent="var(--color-primary)" icon={<BarChart3 size={18} />} />
                 </div>
 
                 {filteredReturns.by_employee.length > 0 ? (
@@ -1742,8 +1742,8 @@ export default function SalesAnalytics() {
             ) : workplaces && workplaces.work_places.length > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <KpiStat label="Выручка через точки" value={fmtRub(workplaces.total_revenue)} accent="#e61919" icon={<Gauge size={18} />} />
-                  <KpiStat label="Операций" value={workplaces.total_operations.toLocaleString('ru-RU')} accent="#4af626" icon={<BarChart3 size={18} />} />
+                  <KpiStat label="Выручка через точки" value={fmtRub(workplaces.total_revenue)} accent="var(--color-primary)" icon={<Gauge size={18} />} />
+                  <KpiStat label="Операций" value={workplaces.total_operations.toLocaleString('ru-RU')} accent="var(--color-success)" icon={<BarChart3 size={18} />} />
                 </div>
 
                 <div className="app-card overflow-hidden">
@@ -1782,8 +1782,8 @@ export default function SalesAnalytics() {
             ) : departments && departments.departments.length > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <KpiStat label="Выручка по всем салонам" value={fmtRub(departments.total_revenue)} accent="#e61919" icon={<Building2 size={18} />} />
-                  <KpiStat label="Салонов" value={departments.departments.length.toLocaleString('ru-RU')} accent="#4af626" icon={<Target size={18} />} />
+                  <KpiStat label="Выручка по всем салонам" value={fmtRub(departments.total_revenue)} accent="var(--color-primary)" icon={<Building2 size={18} />} />
+                  <KpiStat label="Салонов" value={departments.departments.length.toLocaleString('ru-RU')} accent="var(--color-success)" icon={<Target size={18} />} />
                 </div>
 
                 <div className="app-card overflow-hidden">

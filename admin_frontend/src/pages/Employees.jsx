@@ -27,20 +27,20 @@ import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 
-const CHART_COLORS = ['#e61919', '#4af626', '#ffb347', '#c9502a', '#9a9a9a', '#6fb8ff', '#ff8c42', '#ff6b5e'];
+const CHART_COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-warning)', 'var(--color-danger)', 'var(--color-text-muted)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-danger)'];
 
 function KpiCard({ label, value, sub, accent, icon: Icon }) {
   return (
-    <div className="app-card p-5" style={{ borderLeft: `3px solid ${accent || '#e61919'}` }}>
+    <div className="app-card p-5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
-          <div className="text-xl font-bold truncate" style={{ color: accent || '#e61919' }}>{value}</div>
+          <div className="text-xl font-bold truncate" style={{ color: accent || 'var(--color-primary)' }}>{value}</div>
           {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
         </div>
         {Icon && (
-          <div className="rounded-xl p-2 shrink-0" style={{ background: accent ? `${accent}18` : '#e6191918' }}>
-            <Icon size={20} style={{ color: accent || '#e61919' }} />
+          <div className="rounded-xl p-2 shrink-0" style={{ background: `color-mix(in oklab, ${accent || 'var(--color-primary)'} 9%, transparent)` }}>
+            <Icon size={20} style={{ color: accent || 'var(--color-primary)' }} />
           </div>
         )}
       </div>
@@ -567,20 +567,20 @@ export default function Employees() {
           ) : (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard label="Всего сотрудников" value={employees.length} accent="#e61919" icon={Users} />
+                <KpiCard label="Всего сотрудников" value={employees.length} accent="var(--color-primary)" icon={Users} />
                 <KpiCard
                   label="Активных"
                   value={activeCount}
                   sub={employees.length ? `${((activeCount / employees.length) * 100).toFixed(0)}% от всех` : '—'}
-                  accent="#4af626"
+                  accent="var(--color-success)"
                   icon={UserCheck}
                 />
-                <KpiCard label="Администраторов" value={adminCount} accent="#ffb347" icon={ShieldCheck} />
+                <KpiCard label="Администраторов" value={adminCount} accent="var(--color-warning)" icon={ShieldCheck} />
                 <KpiCard
                   label="Без карты"
                   value={noCardCount}
                   sub="требуют заполнения"
-                  accent="#c9502a"
+                  accent="var(--color-danger)"
                   icon={CreditCard}
                 />
               </div>
@@ -595,8 +595,8 @@ export default function Employees() {
                     <AreaChart data={hireTrendData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
                       <defs>
                         <linearGradient id="hireGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#e61919" stopOpacity={0.35} />
-                          <stop offset="95%" stopColor="#e61919" stopOpacity={0.02} />
+                          <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
@@ -606,7 +606,7 @@ export default function Employees() {
                       <Area
                         type="monotone"
                         dataKey="count"
-                        stroke="#e61919"
+                        stroke="var(--color-primary)"
                         strokeWidth={2}
                         fill="url(#hireGrad)"
                         dot={false}
@@ -631,7 +631,7 @@ export default function Employees() {
                   total={employees.length}
                   title="По статусу"
                   icon={UserCheck}
-                  colorOf={(name) => (name === 'Активные' ? '#4af626' : '#94a3b8')}
+                  colorOf={(name) => (name === 'Активные' ? 'var(--color-success)' : '#94a3b8')}
                   activeName={statusFilterEmp ? (statusFilterEmp === 'active' ? 'Активные' : 'Неактивные') : null}
                   onSelect={(name) => {
                     const status = name === 'Активные' ? 'active' : 'inactive';

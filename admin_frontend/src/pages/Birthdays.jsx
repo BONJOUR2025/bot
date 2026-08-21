@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cake, Calendar } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import api from '../api';
 
 export default function Birthdays() {
@@ -27,9 +27,12 @@ export default function Birthdays() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-semibold flex items-center gap-2">
-        <Cake size={24} /> Дни рождения сотрудников
-      </h2>
+      <div>
+        <span className="ui-eyebrow mb-3">
+          {list.length ? `В списке: ${list.length}` : 'Список пуст'}
+        </span>
+        <h2 className="text-2xl font-semibold">Дни рождения сотрудников</h2>
+      </div>
       <div className="flex flex-col gap-2">
         {list.map((b) => (
           <div

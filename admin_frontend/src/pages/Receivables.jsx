@@ -46,7 +46,7 @@ const OVERDUE_BUCKETS = [
 
 function KpiStat({ label, value, accent, icon }) {
   return (
-    <div className="app-card p-4" style={{ borderLeft: `3px solid ${accent}` }}>
+    <div className="app-card p-4">
       <div className="flex gap-3">
         {icon && <div className="mt-0.5 shrink-0" style={{ color: accent }}>{icon}</div>}
         <div className="min-w-0 flex-1">
@@ -167,8 +167,8 @@ export default function Receivables() {
       {loaded && !loading && data && (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <KpiStat label="Не погашено всего" value={fmtRub(filteredTotalAmount)} accent="#c9502a" icon={<AlertTriangle size={18} />} />
-            <KpiStat label="Заказов с долгом" value={filteredOrders.length.toLocaleString('ru-RU')} accent="#ffb347" icon={<Landmark size={18} />} />
+            <KpiStat label="Не погашено всего" value={fmtRub(filteredTotalAmount)} accent="var(--color-danger)" icon={<AlertTriangle size={18} />} />
+            <KpiStat label="Заказов с долгом" value={filteredOrders.length.toLocaleString('ru-RU')} accent="var(--color-warning)" icon={<Landmark size={18} />} />
           </div>
 
           <div className="app-card overflow-hidden">

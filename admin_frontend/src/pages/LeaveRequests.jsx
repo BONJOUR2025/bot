@@ -52,7 +52,10 @@ export default function LeaveRequests() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-semibold">Заявки на отгул/отсутствие</h2>
+      <div>
+        <span className="ui-eyebrow mb-3">{requests.length ? `Заявок: ${requests.length}` : 'Заявок нет'}</span>
+        <h2 className="text-2xl font-semibold">Заявки на отгул/отсутствие</h2>
+      </div>
 
       {loading ? (
         <div className="border rounded shadow bg-[color:var(--color-surface)] p-4">
