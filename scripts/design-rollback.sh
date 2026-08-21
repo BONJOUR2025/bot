@@ -46,7 +46,14 @@ say "  ветка       : $(git rev-parse --abbrev-ref HEAD)"
 say "  снимок      : $TAG ($(git rev-parse --short "$TAG^{commit}"))"
 say ""
 
-CHANGED="$(git diff --name-only "$TAG" -- "$SCOPE" || true)"
+# git diff показывает добавленные после снимка файлы как «изменённые».
+# Они же попадают в список сирот, и без этой фильтрации один и тот же
+# файл выводился дважды: и «будет восстановлен», и «будет удалён».
+# Восстановить его нельзя — в снимке его просто нет.
+CHANGED="$(
+  git diff --name-only "$TAG" -- "$SCOPE" \
+    | grep -vxF -f <(printf '%s\n' "${ORPHANS[@]}") || true
+)"
 
 if [[ -z "$CHANGED" && ${#ORPHANS[@]} -eq 0 ]]; then
   say "Расхождений с снимком нет — откатывать нечего."
