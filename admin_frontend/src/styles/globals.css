@@ -2633,3 +2633,16 @@ body.viewer3d-fs-active .app-card {
   background: var(--color-primary-muted) !important;
   color: var(--glass-on-soft) !important;
 }
+
+/* ── Подписи полей формы ───────────────────────────────────────
+   В прототипе подпись поля — микро-капитель с разрядкой, тот же приём,
+   что и у .ui-label в остальном интерфейсе. В проде она осталась
+   обычным текстом, и экран входа расходился с образцом: два разных
+   способа подписать одно и то же. */
+.visual-glass .form-field span {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--color-text-faint);
+}
