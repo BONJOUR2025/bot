@@ -2434,3 +2434,62 @@ body.viewer3d-fs-active .app-card {
 @media (prefers-reduced-motion: reduce) {
   .ui-live-dot { animation: none; }
 }
+
+/* ── Сплошные цветные кнопки ───────────────────────────────────
+   Нормализация выше переводит bg-blue-600 и подобные в приглушённый
+   фон (--color-*-muted) — это верно для плашек и бейджей, но ломает
+   кнопки: у них рядом стоит text-white, и белый текст оказывается на
+   почти прозрачной подложке. В светлой теме это буквально невидимая
+   кнопка.
+
+   Признак кнопки — сочетание насыщенной заливки с белым текстом.
+   Селектор из двух атрибутов специфичнее одиночного, поэтому побеждает
+   независимо от порядка правил.
+
+   Правило намеренно продублировано для .visual-refresh: там ровно та же
+   ошибка, и в светлом брутализме кнопки «+ Добавить платёж», «Сохранить»
+   и подобные сейчас не видны. Это починка, а не смена оформления. */
+.visual-glass [class*='bg-blue-'][class*='text-white'],
+.visual-glass [class*='bg-sky-'][class*='text-white'],
+.visual-glass [class*='bg-cyan-'][class*='text-white'],
+.visual-glass [class*='bg-teal-'][class*='text-white'],
+.visual-refresh [class*='bg-blue-'][class*='text-white'],
+.visual-refresh [class*='bg-sky-'][class*='text-white'],
+.visual-refresh [class*='bg-cyan-'][class*='text-white'],
+.visual-refresh [class*='bg-teal-'][class*='text-white'] {
+  background-color: var(--color-info) !important;
+}
+
+.visual-glass [class*='bg-green-'][class*='text-white'],
+.visual-glass [class*='bg-emerald-'][class*='text-white'],
+.visual-refresh [class*='bg-green-'][class*='text-white'],
+.visual-refresh [class*='bg-emerald-'][class*='text-white'] {
+  background-color: var(--color-success) !important;
+}
+
+.visual-glass [class*='bg-red-'][class*='text-white'],
+.visual-glass [class*='bg-rose-'][class*='text-white'],
+.visual-refresh [class*='bg-red-'][class*='text-white'],
+.visual-refresh [class*='bg-rose-'][class*='text-white'] {
+  background-color: var(--color-danger) !important;
+}
+
+.visual-glass [class*='bg-amber-'][class*='text-white'],
+.visual-glass [class*='bg-yellow-'][class*='text-white'],
+.visual-glass [class*='bg-orange-'][class*='text-white'],
+.visual-refresh [class*='bg-amber-'][class*='text-white'],
+.visual-refresh [class*='bg-yellow-'][class*='text-white'],
+.visual-refresh [class*='bg-orange-'][class*='text-white'] {
+  background-color: var(--color-warning) !important;
+}
+
+.visual-glass [class*='bg-indigo-'][class*='text-white'],
+.visual-glass [class*='bg-purple-'][class*='text-white'],
+.visual-glass [class*='bg-violet-'][class*='text-white'],
+.visual-glass [class*='bg-fuchsia-'][class*='text-white'],
+.visual-refresh [class*='bg-indigo-'][class*='text-white'],
+.visual-refresh [class*='bg-purple-'][class*='text-white'],
+.visual-refresh [class*='bg-violet-'][class*='text-white'],
+.visual-refresh [class*='bg-fuchsia-'][class*='text-white'] {
+  background-color: var(--color-primary) !important;
+}

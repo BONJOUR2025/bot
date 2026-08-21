@@ -633,14 +633,25 @@ export default function PaymentCalendar() {
           {!loading && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
+                // Цвет только там, где он что-то значит. «Просрочено»
+                // краснеет лишь когда просрочка есть — ноль не должен
+                // выглядеть тревожно; «Оплачено» зелёное как факт.
                 { label: 'Всего платежей', value: records.length, color: 'text-[color:var(--color-text)]' },
-                { label: 'Оплачено', value: paidCount, color: 'text-green-700' },
-                { label: 'Просрочено', value: overdueCount, color: overdueCount > 0 ? 'text-red-700' : 'text-[color:var(--color-text-faint)]' },
+                { label: 'Оплачено', value: paidCount, color: 'text-[color:var(--color-success)]' },
+                {
+                  label: 'Просрочено',
+                  value: overdueCount,
+                  color: overdueCount > 0
+                    ? 'text-[color:var(--color-danger)]'
+                    : 'text-[color:var(--color-text-faint)]',
+                },
                 { label: 'Итого план', value: `${fmt(total)} ₽`, color: 'text-[color:var(--color-text)]' },
               ].map(s => (
-                <div key={s.label} className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl p-3">
-                  <p className="text-xs text-[color:var(--color-text-muted)]">{s.label}</p>
-                  <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                <div key={s.label} className="ui-shell ui-shell--sm">
+                  <div className="ui-core border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4">
+                    <p className="ui-label">{s.label}</p>
+                    <p className={`ui-metric !text-[1.5rem] mt-1.5 ${s.color}`}>{s.value}</p>
+                  </div>
                 </div>
               ))}
             </div>
