@@ -1953,12 +1953,14 @@ body.viewer3d-fs-active .app-card {
 
 /* ── Кнопки: пилюля с вложенным кругом ─────────────────────────
    .ui-nub рендерится Button-ом; вне стекла он display:contents и
-   просто отдаёт иконку наружу, как было раньше. */
-.visual-glass .btn--primary {
-  background: linear-gradient(140deg, var(--color-primary), var(--color-primary-hover));
-  border-color: transparent;
-  box-shadow: var(--shadow-glow-primary), var(--glass-inner-hi);
-}
+   просто отдаёт иконку наружу, как было раньше.
+
+   Заливка основной кнопки задаётся НИЖЕ, в блоке атомов, вместе с
+   общим правилом .btn. Здесь её быть не должно: у «.visual-glass
+   .btn--primary» и «.visual-glass .btn» одинаковая специфичность, и
+   при объявлении в этом месте более позднее общее правило затирало
+   градиент — кнопка оставалась тёмной и наливалась цветом только на
+   наведении. */
 .visual-glass .ui-nub {
   display: grid;
   place-items: center;
@@ -2556,8 +2558,37 @@ body.viewer3d-fs-active .app-card {
 .visual-glass .icon-button:focus-visible {
   box-shadow: none;
 }
+/* Основная кнопка — обязательно ПОСЛЕ общего .btn выше: специфичность
+   у них одинаковая, и объявленный раньше градиент затирался нейтральной
+   заливкой оболочки. В проде это выглядело так, что кнопка «Войти»
+   оставалась тёмной и наливалась фиолетовым только при наведении. */
+.visual-glass .btn--primary {
+  background: linear-gradient(140deg, var(--color-primary), var(--color-primary-hover));
+  border-color: transparent;
+  box-shadow: var(--shadow-glow-primary), var(--glass-inner-hi);
+  color: #fff;
+}
 .visual-glass .btn--primary:hover {
   background: linear-gradient(140deg, var(--color-primary-hover), var(--color-primary));
+  border-color: transparent;
+  box-shadow: var(--shadow-glow-primary), var(--glass-inner-hi);
+}
+/* По той же причине переобъявляем и остальные заливки: базовые
+   .btn--danger / .btn--success имеют специфичность (0,1,0), а общее
+   правило выше — (0,2,0), поэтому нейтральная оболочка забирала цвет
+   и у кнопок удаления и подтверждения. */
+.visual-glass .btn--danger {
+  background: var(--color-danger);
+  border-color: transparent;
+  color: #fff;
+}
+.visual-glass .btn--success {
+  background: var(--color-success);
+  border-color: transparent;
+  color: #fff;
+}
+.visual-glass .btn--ghost {
+  background: transparent;
   border-color: transparent;
 }
 .visual-glass .btn--secondary,
