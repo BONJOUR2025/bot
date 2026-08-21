@@ -44,16 +44,20 @@ function buildCodeNameMap(employees) {
   return map;
 }
 
+// Цвет категории — способ отличить её от соседней в легенде и на
+// диаграмме, а не оценка. Берём из общей палитры по порядку: при
+// переводе на семантические токены «Кожгалантерея» и «Ключи» получили
+// один и тот же --color-danger и стали неразличимы.
 const CATEGORIES = [
-  { key:'repair',        label:'Ремонт / Химчистка',   color:'var(--color-primary)' },
-  { key:'cosmetics',     label:'Косметика',             color:'var(--color-success)' },
-  { key:'shoes',         label:'Обувь',                 color:'var(--color-warning)' },
-  { key:'insoles',       label:'Стельки',               color:'var(--color-info)' },
-  { key:'slippers',      label:'Тапочки',               color:'var(--color-text-muted)' },
-  { key:'leather_goods', label:'Кожгалантерея на заказ', color:'var(--color-danger)' },
-  { key:'certificates',  label:'Сертификаты',           color:'#d4d44a' },
-  { key:'delivery',      label:'Доставка',              color:'var(--color-accent-strong)' },
-  { key:'keys',          label:'Ключи',                 color:'var(--color-danger)' },
+  { key:'repair',        label:'Ремонт / Химчистка',    color: CHART_COLORS[0] },
+  { key:'cosmetics',     label:'Косметика',             color: CHART_COLORS[1] },
+  { key:'shoes',         label:'Обувь',                 color: CHART_COLORS[2] },
+  { key:'insoles',       label:'Стельки',               color: CHART_COLORS[3] },
+  { key:'slippers',      label:'Тапочки',               color: CHART_COLORS[4] },
+  { key:'leather_goods', label:'Кожгалантерея на заказ', color: CHART_COLORS[5] },
+  { key:'certificates',  label:'Сертификаты',           color: CHART_COLORS[6] },
+  { key:'delivery',      label:'Доставка',              color: CHART_COLORS[7] },
+  { key:'keys',          label:'Ключи',                 color: CHART_COLORS[8] },
 ];
 // Categories with no cost-of-goods concept for get_margin_summary (see its
 // docstring) — excluded from the "Маржа" tab's per-category breakdown.
