@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, X, Phone, Mail, FileText,
   Briefcase, ExternalLink, Pencil, Trash2, Settings,
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare,
   Pause, Play, Check, BookOpen, Sparkles, ListChecks, Copy, FileStack,
-  PhoneMissed, PhoneCall, Archive,
+  PhoneMissed, PhoneCall, Archive, Search,
 } from 'lucide-react';
 import api from '../api';
 import { formatPhone, telHref, tgHref } from '../utils/phone';
@@ -1309,6 +1309,132 @@ function FunnelStats({ candidates, activeStage, onSelectStage }) {
 }
 
 // ── Kanban board (desktop) ─────────────────────────────────────────
+// ── Поиск и фильтры по кандидатам ────────────────────────────────────────────
+
+// «Молчит» — это не «давно не писали вообще», а «последнее слово за нами,
+// и ответа нет». Если последним писал кандидат, тишина означает, что мяч
+// на нашей стороне, и в этот фильтр он попадать не должен: там ищут тех,
+// кого мы уже потеребили и не дождались.
+function silentDays(c) {
+  if (!c.last_message_at) return null;          // переписки не было
+  if (c.last_message_from !== 'employer') return null; // ответил последним — не молчит
+  const t = new Date(c.last_message_at);
+  if (Number.isNaN(t.getTime())) return null;
+  return Math.floor((Date.now() - t.getTime()) / 86400000);
+}
+
+const SILENT_OPTIONS = [
+  { value: 3, label: '3+ дня' },
+  { value: 7, label: '7+ дней' },
+  { value: 14, label: '14+ дней' },
+];
+
+const SOURCE_OPTIONS = [
+  { value: 'avito', label: 'Авито' },
+  { value: 'hh', label: 'hh.ru' },
+  { value: 'manual', label: 'Вручную' },
+];
+
+/**
+ * Отбирает кандидатов по строке поиска и фильтрам.
+ * Вынесено из компонента, чтобы счётчики в панели считались тем же кодом,
+ * что и содержимое доски: иначе они разъезжаются при любой правке.
+ */
+function applyCandidateFilters(list, f) {
+  const q = f.query.trim().toLowerCase();
+  return list.filter((c) => {
+    if (q) {
+      const hay = [c.name, c.phone, c.email, c.telegram_username, c.last_message_text]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (f.source && c.source !== f.source) return false;
+    if (f.unanswered && !c.pending_question) return false;
+    if (f.silent) {
+      const d = silentDays(c);
+      if (d === null || d < f.silent) return false;
+    }
+    return true;
+  });
+}
+
+const EMPTY_FILTERS = { query: '', silent: 0, source: '', unanswered: false };
+
+function CandidateFilters({ filters, onChange, total, shown }) {
+  const set = (patch) => onChange({ ...filters, ...patch });
+  const active = filters.query || filters.silent || filters.source || filters.unanswered;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
+        <Search
+          size={14}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-text-faint)]"
+        />
+        <input
+          className="input w-full pl-8"
+          placeholder="Имя, телефон, текст сообщения…"
+          value={filters.query}
+          onChange={(e) => set({ query: e.target.value })}
+        />
+      </div>
+
+      {/* Без ответа: главный запрос — «кого мы потеребили и не дождались». */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-[color:var(--color-text-faint)]">Без ответа</span>
+        {SILENT_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={filters.silent === o.value}
+            onClick={() => set({ silent: filters.silent === o.value ? 0 : o.value })}
+            className={`ui-chip ${filters.silent === o.value ? 'is-active' : ''}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+
+      {SOURCE_OPTIONS.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={filters.source === o.value}
+          onClick={() => set({ source: filters.source === o.value ? '' : o.value })}
+          className={`ui-chip ${filters.source === o.value ? 'is-active' : ''}`}
+        >
+          {o.label}
+        </button>
+      ))}
+
+      <button
+        type="button"
+        aria-pressed={filters.unanswered}
+        onClick={() => set({ unanswered: !filters.unanswered })}
+        className={`ui-chip ${filters.unanswered ? 'is-active' : ''}`}
+        title="Кандидат задал вопрос, на который ИИ не ответил"
+      >
+        Вопрос без ответа
+      </button>
+
+      {active && (
+        <>
+          {/* Счётчик обязателен: без него непонятно, доска пуста потому что
+              кандидатов нет, или потому что их отсеял забытый фильтр. */}
+          <span className="text-xs text-[color:var(--color-text-muted)]">
+            {shown} из {total}
+          </span>
+          <button type="button" onClick={() => onChange(EMPTY_FILTERS)} className="ui-chip">
+            <X size={12} /> Сбросить
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMode, selectedIds, onToggle }) {
   const [dragOver, setDragOver] = useState(null);
   const [dragging, setDragging] = useState(null);
@@ -1690,6 +1816,14 @@ export default function Recruitment() {
   const [vacancies,       setVacancies]       = useState([]);
   const [selectedId,      setSelectedId]      = useState(null);
   const [candidates,      setCandidates]      = useState([]);
+  const [filters,         setFilters]         = useState(EMPTY_FILTERS);
+  // Отбор считается один раз и уходит и в доску, и в счётчики воронки:
+  // если фильтровать только доску, цифры наверху перестанут сходиться с
+  // тем, что под ними нарисовано.
+  const visibleCandidates = useMemo(
+    () => applyCandidateFilters(candidates, filters),
+    [candidates, filters],
+  );
   // Резерв держим отдельно от доски: доска рисует только STAGES, поэтому
   // резервные карточки в неё не попадают сами, а счётчик нужен на кнопке.
   const reserved = candidates.filter(c => c.stage === RESERVE.key);
@@ -2056,7 +2190,7 @@ export default function Recruitment() {
 
       {/* Funnel conversion summary — click a stage to scroll the board to it */}
       {mainView === 'funnel' && selectedId && (
-        <FunnelStats candidates={candidates} onSelectStage={(key) => {
+        <FunnelStats candidates={visibleCandidates} onSelectStage={(key) => {
           if (!key) return;
           document.getElementById(`kanban-col-${key}`)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }} />
@@ -2233,6 +2367,17 @@ export default function Recruitment() {
           )}
 
           <div className="p-4 sm:p-5">
+            {/* Панель стоит над доской: фильтр должен читаться раньше того,
+                что он отобрал, иначе пустая доска выглядит как «кандидатов
+                нет», а не «их отсеял забытый отбор». */}
+            {selected && !cLoading && (
+              <CandidateFilters
+                filters={filters}
+                onChange={setFilters}
+                total={candidates.length}
+                shown={visibleCandidates.length}
+              />
+            )}
             {!selected ? (
               <div className="flex flex-col items-center justify-center py-20 text-[color:var(--color-muted-foreground)]">
                 <Briefcase size={44} className="mb-3 opacity-20" />
@@ -2242,7 +2387,7 @@ export default function Recruitment() {
               <div className="text-center py-16 text-sm text-[color:var(--color-muted-foreground)]">Загрузка...</div>
             ) : isMobile ? (
               <MobileBoard
-                candidates={candidates}
+                candidates={visibleCandidates}
                 onCardClick={c => { if (selectionMode) toggleSelection(c.id); else setDetailModal(c); }}
                 onAddClick={stage => setCandModal({ stage })}
                 selectionMode={selectionMode}
@@ -2251,7 +2396,7 @@ export default function Recruitment() {
               />
             ) : (
               <KanbanBoard
-                candidates={candidates}
+                candidates={visibleCandidates}
                 onCardClick={c => setDetailModal(c)}
                 onAddClick={stage => setCandModal({ stage })}
                 onDrop={handleDrop}
