@@ -1176,6 +1176,7 @@ tbody tr:last-child td { border-bottom: none; }
 .badge--info    { background: rgba(99,102,241,0.15); color: var(--color-primary); }
 .badge--error   { background: rgba(239,68,68,0.12); color: var(--color-danger); }
 .badge--success { background: rgba(34,197,94,0.12); color: var(--color-success); }
+.badge--neutral { background: var(--color-control-bg); color: var(--color-text-faint); }
 
 /* Schedule */
 .emp-schedule-nav { display: flex; align-items: center; gap: 0.5rem; }
@@ -2529,6 +2530,38 @@ body.viewer3d-fs-active .app-card {
 }
 @media (prefers-reduced-motion: reduce) {
   .ui-live-dot { animation: none; }
+}
+
+/* ── Волновой индикатор эфира (Прослушивание салонов) ──────────
+   Декоративный: реального уровня сигнала с агента не приходит, бары
+   лишь читаются как «идёт вещание». Высота отталкивается от --color-
+   border в простое, чтобы карточка офлайн-салона не выглядела пустой. */
+.audio-wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 44px;
+}
+.audio-wave i {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 5px;
+  border-radius: 2px;
+  background: var(--color-border);
+  height: 18%;
+}
+.audio-wave.is-active i,
+.audio-wave.is-idle-live i {
+  background: var(--color-success);
+  animation: audio-wave-bounce 1s ease-in-out infinite alternate;
+}
+.audio-wave.is-idle-live i { opacity: 0.55; }
+@keyframes audio-wave-bounce {
+  from { height: 14%; }
+  to   { height: 92%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .audio-wave i { animation: none !important; height: 40% !important; }
 }
 
 /* ── Сплошные цветные кнопки ───────────────────────────────────

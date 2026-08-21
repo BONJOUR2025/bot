@@ -172,13 +172,31 @@ function useMediaSourcePlayer() {
   return { audioRef, start, stop };
 }
 
+function formatElapsed(totalSeconds) {
+  const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+  const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+  const s = String(totalSeconds % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
 export default function SalonAudio() {
   const [salons, setSalons] = useState([]);
   const [statuses, setStatuses] = useState({}); // id -> {agent_online, listeners}
   const [listening, setListening] = useState(null); // id активного сеанса
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const { audioRef, start, stop } = useMediaSourcePlayer();
+
+  // Счётчик длительности текущего сеанса — с момента, когда нажали
+  // «Слушать», а не с момента появления агента в сети (сервер такое не
+  // отдаёт).
+  useEffect(() => {
+    if (!listening) return undefined;
+    setElapsedSec(0);
+    const t = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [listening]);
 
   useEffect(() => {
     api.get('/salons/')
@@ -273,65 +291,83 @@ export default function SalonAudio() {
 
       {loading ? (
         <div className="mt-5 text-[color:var(--color-text-faint)]">Загрузка…</div>
-      ) : (
+      ) : rows.length === 0 ? (
         <div className="ui-shell mt-5">
-          <div className="ui-core divide-y divide-[color:var(--color-border)] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
-            {rows.map(({ salon, id }) => {
-              const st = statuses[id] || {};
-              const online = !!st.agent_online;
-              const active = listening === id;
-              return (
-                <div key={id} className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-[color:var(--color-text)]">
-                      {salon.name}
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-[color:var(--color-text-faint)]">
-                      {online ? (
-                        <span className="inline-flex items-center gap-1.5 text-[color:var(--color-success)]">
-                          {/* Пульсирующая точка вместо статичной иконки: в
-                              списке из шести салонов «в эфире» должно
-                              выделяться движением, а не только цветом. */}
-                          <i className="ui-live-dot" />
-                          агент на связи
-                        </span>
-                      ) : (
-                        <span>агент офлайн</span>
-                      )}
-                      {st.listeners > 0 && <span>· слушают: {st.listeners}</span>}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => toggle(id)}
-                    disabled={!online && !active}
-                    className={
-                      'inline-flex items-center gap-2 rounded-[var(--ui-radius-btn)] px-4 py-2 text-sm font-medium transition-all duration-300 ' +
-                      (active
-                        ? 'bg-[color:var(--fill-danger)] text-[color:var(--color-on-fill)] hover:brightness-110'
-                        : online
-                          ? 'bg-[color:var(--fill-success)] text-[color:var(--color-on-fill)] hover:brightness-110'
-                          : 'cursor-not-allowed bg-[color:var(--color-control-bg)] text-[color:var(--color-text-faint)]')
-                    }
-                  >
-                    {active ? (
-                      <>
-                        <Square className="h-4 w-4" strokeWidth={1.4} /> Остановить
-                      </>
-                    ) : (
-                      <>
-                        <Headphones className="h-4 w-4" strokeWidth={1.4} /> Слушать
-                      </>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
-            {rows.length === 0 && (
-              <div className="px-5 py-8 text-center text-[color:var(--color-text-faint)]">
-                Нет салонов
-              </div>
-            )}
+          <div className="ui-core border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-5 py-8 text-center text-[color:var(--color-text-faint)]">
+            Нет салонов
           </div>
+        </div>
+      ) : (
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map(({ salon, id }) => {
+            const st = statuses[id] || {};
+            const online = !!st.agent_online;
+            const active = listening === id;
+            return (
+              <div key={id} className="ui-shell">
+                <div className="ui-core border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-5 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-[color:var(--color-text)]">
+                        {salon.name}
+                      </div>
+                      <div className="mt-1 text-xs text-[color:var(--color-text-faint)]">
+                        {online ? 'агент на связи' : 'агент офлайн'}
+                        {st.listeners > 0 && <span> · слушают: {st.listeners}</span>}
+                      </div>
+                    </div>
+                    <span className={`badge ${online ? 'badge--success' : 'badge--neutral'} shrink-0 gap-1.5`}>
+                      {/* Пульсирующая точка вместо статичной иконки: в сетке
+                          из шести салонов «в эфире» должно выделяться
+                          движением, а не только цветом. */}
+                      {online && <i className="ui-live-dot" />}
+                      {online ? 'В эфире' : 'Не в сети'}
+                    </span>
+                  </div>
+
+                  <div
+                    className={`audio-wave mt-4 ${active ? 'is-active' : online ? 'is-idle-live' : ''}`}
+                    aria-hidden="true"
+                  >
+                    {Array.from({ length: 28 }, (_, k) => (
+                      <i
+                        key={k}
+                        style={{ animationDelay: `${(k * 57) % 900}ms`, animationDuration: `${900 + (k % 5) * 160}ms` }}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      onClick={() => toggle(id)}
+                      disabled={!online && !active}
+                      className={
+                        'flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-300 ' +
+                        (active
+                          ? 'bg-[color:var(--fill-danger)] text-[color:var(--color-on-fill)] hover:brightness-110'
+                          : online
+                            ? 'bg-[color:var(--fill-success)] text-[color:var(--color-on-fill)] hover:brightness-110'
+                            : 'cursor-not-allowed bg-[color:var(--color-control-bg)] text-[color:var(--color-text-faint)]')
+                      }
+                    >
+                      {active ? (
+                        <>
+                          <Square className="h-4 w-4" strokeWidth={1.4} /> Остановить
+                        </>
+                      ) : (
+                        <>
+                          <Headphones className="h-4 w-4" strokeWidth={1.4} /> Слушать
+                        </>
+                      )}
+                    </button>
+                    <span className="font-mono text-xs text-[color:var(--color-text-faint)]">
+                      {active ? formatElapsed(elapsedSec) : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
