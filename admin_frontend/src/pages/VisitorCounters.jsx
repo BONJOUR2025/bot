@@ -9,23 +9,8 @@ import {
 } from 'recharts';
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
+import KpiCard from '../components/ui/Kpi.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
-
-function KpiCard({ label, value, accent, icon: Icon }) {
-  return (
-    <div className="app-card p-4">
-      <div className="flex items-center gap-3">
-        <div className="rounded-xl p-2.5 shrink-0" style={{ background: `color-mix(in oklab, ${accent} 9%, transparent)` }}>
-          <Icon size={18} style={{ color: accent }} />
-        </div>
-        <div className="min-w-0">
-          <div className="text-xl font-bold leading-none" style={{ color: accent }}>{value}</div>
-          <div className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">{label}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function fmtDateTime(value) {
   if (!value) return '';
