@@ -233,8 +233,14 @@ export default function SalonAudio() {
     () => salons
       .map((s) => ({ salon: s, id: audioSalonId(s) }))
       .filter((r) => r.id)
-      .sort((a, b) => a.salon.name.localeCompare(b.salon.name, 'ru')),
-    [salons]
+      .sort((a, b) => {
+        const onlineA = statuses[a.id]?.agent_online ? 1 : 0;
+        const onlineB = statuses[b.id]?.agent_online ? 1 : 0;
+        // Салоны на связи — наверх; внутри каждой группы по алфавиту.
+        if (onlineA !== onlineB) return onlineB - onlineA;
+        return a.salon.name.localeCompare(b.salon.name, 'ru');
+      }),
+    [salons, statuses]
   );
 
   const onlineCount = useMemo(
