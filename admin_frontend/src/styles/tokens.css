@@ -197,7 +197,8 @@
   --color-warning-muted:  rgba(217, 119, 6, 0.08);
   --color-danger:         #dc2626;
   --color-danger-muted:   rgba(220, 38, 38, 0.08);
-  --color-info:           #2563eb;
+  /* На приглушённой синей подложке давал 4.07. #1d4ed8 — 5.27. */
+  --color-info:           #1d4ed8;
   --color-info-muted:     rgba(37, 99, 235, 0.08);
 
   --color-text:           #0f172a;
@@ -601,13 +602,13 @@
 
   --color-table-border:      rgba(12, 12, 20, 0.075);
   --color-table-text:        #0b0b0d;
-  --color-table-header-text: #75757f;
+  --color-table-header-text: #63636d;
   --color-table-hover:       rgba(12, 12, 20, 0.03);
 
   --color-control-bg:          #f7f7f9;
   --color-control-bg-hover:    #f1f1f3;
   --color-control-border:      rgba(12, 12, 20, 0.075);
-  --color-control-placeholder: #75757f;
+  --color-control-placeholder: #63636d;
 
   --color-modal-bg:       #ffffff;
   --color-modal-backdrop: rgba(12, 12, 20, 0.30);
