@@ -11,30 +11,13 @@ import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
 import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
+import KpiCard from '../components/ui/Kpi.jsx';
 
 const CHART_COLORS = ['var(--color-success)', 'var(--color-danger)', 'var(--color-primary)', 'var(--color-warning)'];
 const MONTHS_RU = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 
 const fmtMoney = (v) => `${Math.round(Number(v) || 0).toLocaleString('ru-RU')} ₽`;
 
-function KpiCard({ label, value, sub, accent, icon: Icon }) {
-  return (
-    <div className="app-card p-5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs text-[color:var(--color-muted-foreground)] mb-1">{label}</div>
-          <div className="text-xl font-bold truncate" style={{ color: accent || 'var(--color-primary)' }}>{value}</div>
-          {sub && <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{sub}</div>}
-        </div>
-        {Icon && (
-          <div className="rounded-xl p-2 shrink-0" style={{ background: `color-mix(in oklab, ${accent || 'var(--color-primary)'} 9%, transparent)` }}>
-            <Icon size={20} style={{ color: accent || 'var(--color-primary)' }} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function TypeDonut({ data, total, activeName, onSelect }) {
   const [hover, setHover] = useState(null);

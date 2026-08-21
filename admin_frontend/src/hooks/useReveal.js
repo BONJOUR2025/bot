@@ -63,7 +63,6 @@ export default function useReveal({ stagger = 70, max = 10, deps } = {}) {
 
     targets.forEach((el) => io.observe(el));
     return () => io.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stagger, max, deps]);
 
   return ref;

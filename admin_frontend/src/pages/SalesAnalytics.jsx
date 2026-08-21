@@ -244,20 +244,41 @@ function KpiStat({ label, value, delta, sub, accent = 'var(--color-primary)', ic
   const up = delta != null && delta > 0;
   const dn = delta != null && delta < 0;
   return (
-    <div className="app-card p-4">
-      <div className="flex gap-3">
-        {icon && <div className="mt-0.5 shrink-0" style={{ color: accent }}>{icon}</div>}
-        <div className="min-w-0 flex-1">
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-muted-foreground)] font-medium">{label}</div>
-          <div className="text-xl sm:text-2xl font-bold tabular-nums mt-0.5 leading-tight" style={{ color: accent }}>{value}</div>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {delta != null && Math.abs(delta) >= 0.1 && (
-              <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400'}`}>
-                {up ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                {up ? '+' : ''}{delta.toFixed(1)}%
-              </span>
-            )}
-            {sub && <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{sub}</span>}
+    <div className="ui-shell ui-shell--sm">
+      <div className="ui-core app-card p-4">
+        <div className="flex gap-3">
+          {/* Тон живёт в иконке, а не в самой цифре. Раскрашенное значение
+              читалось как оценка («красное — плохо»), хотя accent здесь
+              означает всего лишь принадлежность к разделу отчёта. */}
+          {icon && (
+            <span
+              className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full"
+              style={{ color: accent, background: `color-mix(in oklab, ${accent} 14%, transparent)` }}
+            >
+              {icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="ui-label">{label}</div>
+            <div className="ui-metric !text-[1.5rem] mt-1.5 text-[color:var(--color-text)]">{value}</div>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              {delta != null && Math.abs(delta) >= 0.1 && (
+                // Токены вместо пар emerald-50/dark:emerald-900: у второй
+                // половины был свой оттенок только в тёмной теме, и при
+                // третьей теме пара расходилась.
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full"
+                  style={{
+                    color: up ? 'var(--color-success)' : 'var(--color-danger)',
+                    background: up ? 'var(--color-success-muted)' : 'var(--color-danger-muted)',
+                  }}
+                >
+                  {up ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                  {up ? '+' : ''}{delta.toFixed(1)}%
+                </span>
+              )}
+              {sub && <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{sub}</span>}
+            </div>
           </div>
         </div>
       </div>
