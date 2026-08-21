@@ -1,5 +1,5 @@
-import { Inbox } from 'lucide-react';
 import { useViewport } from '../../providers/ViewportProvider.jsx';
+import EmptyState from './EmptyState.jsx';
 
 /**
  * columns: Array of:
@@ -18,16 +18,17 @@ export default function ResponsiveTable({
   keyFn,
   rowClass,
   emptyText = 'Нет данных',
+  /** Вторая строка: почему пусто и что делать. См. EmptyState. */
+  emptyHint,
+  emptyIcon,
+  emptyAction,
 }) {
   const { isMobile } = useViewport();
 
   if (isMobile) {
     if (data.length === 0) {
       return (
-        <div className="flex flex-col items-center gap-2 py-8 text-center text-[color:var(--color-muted-foreground)] text-sm">
-          <Inbox size={22} className="opacity-40" />
-          {emptyText}
-        </div>
+        <EmptyState title={emptyText} hint={emptyHint} icon={emptyIcon} action={emptyAction} />
       );
     }
 
@@ -98,11 +99,13 @@ export default function ResponsiveTable({
           ))}
           {data.length === 0 && (
             <tr>
-              <td colSpan={columns.length} className="p-6 text-center text-[color:var(--color-muted-foreground)]">
-                <div className="flex flex-col items-center gap-2">
-                  <Inbox size={22} className="opacity-40" />
-                  {emptyText}
-                </div>
+              <td colSpan={columns.length} className="p-0">
+                <EmptyState
+                  title={emptyText}
+                  hint={emptyHint}
+                  icon={emptyIcon}
+                  action={emptyAction}
+                />
               </td>
             </tr>
           )}

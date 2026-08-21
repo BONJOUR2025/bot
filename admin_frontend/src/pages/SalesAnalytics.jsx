@@ -502,7 +502,7 @@ function ProductRankTable({ title, items, showChange }) {
         <ResponsiveTable
           data={items}
           keyFn={(p) => p.tovar_id}
-          emptyText="Нет данных"
+          emptyText="Продаж за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
           columns={[
             { label: 'Товар/услуга', primary: true, render: (p) => (
               expanded ? (
@@ -1481,7 +1481,7 @@ export default function SalesAnalytics() {
                       <ResponsiveTable
                         data={empSummary}
                         keyFn={(e) => e.code}
-                        emptyText="Нет данных"
+                        emptyText="Продаж за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                         columns={[
                           { label: 'Сотрудник', primary: true, render: (e) => (
                             <div className="flex items-center gap-2">
@@ -1530,7 +1530,7 @@ export default function SalesAnalytics() {
                     ]}
                     keyFn={(row) => row.key}
                     rowClass={(row) => row.isTotal ? 'border-t-2 border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 font-semibold' : ''}
-                    emptyText="Нет данных"
+                    emptyText="Продаж за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                     columns={[
                       { label: 'Период', primary: true,
                         headerClass: 'sticky left-0 bg-[color:var(--color-modal-bg)]',
@@ -1576,7 +1576,7 @@ export default function SalesAnalytics() {
                     <ResponsiveTable
                       data={CATEGORIES.filter((c) => !NO_MARGIN_CATEGORY_KEYS.has(c.key)).map((c) => ({ ...c, ...filteredMargin.categories[c.key] }))}
                       keyFn={(c) => c.key}
-                      emptyText="Нет данных"
+                      emptyText="Продаж за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                       columns={[
                         { label: 'Категория', primary: true, render: (c) => (
                           <span className="flex items-center gap-2">
@@ -1606,7 +1606,7 @@ export default function SalesAnalytics() {
                     <ResponsiveTable
                       data={filteredMargin.by_employee}
                       keyFn={(e) => e.code}
-                      emptyText="Нет данных"
+                      emptyText="Продаж за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                       columns={[
                         { label: 'Сотрудник', primary: true, render: (e) => (
                           <div className="flex items-center gap-2">
@@ -1679,7 +1679,7 @@ export default function SalesAnalytics() {
                       <ResponsiveTable
                         data={filteredTurnaround.by_salon}
                         keyFn={(s) => s.salon_id}
-                        emptyText="Нет данных"
+                        emptyText="Продаж за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                         columns={[
                           { label: 'Салон', primary: true, render: (s) => (
                             <div className="flex items-center gap-2">
@@ -1780,7 +1780,7 @@ export default function SalesAnalytics() {
                     <ResponsiveTable
                       data={workplaces.work_places}
                       keyFn={(w) => w.name}
-                      emptyText="Нет данных"
+                      emptyText="Продаж за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                       columns={[
                         { label: 'Точка', primary: true, render: (w) => w.name },
                         { label: 'Операций', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (w) => w.operation_count.toLocaleString('ru-RU') },
@@ -1879,7 +1879,7 @@ export default function SalesAnalytics() {
                       <ResponsiveTable
                         data={topProducts.dead_stock}
                         keyFn={(p) => p.tovar_id}
-                        emptyText="Нет данных"
+                        emptyText="Продаж за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                         columns={[
                           { label: 'Товар', primary: true, render: (p) => (
                             expanded ? (

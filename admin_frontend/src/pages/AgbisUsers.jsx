@@ -343,7 +343,7 @@ export default function AgbisUsers() {
             <ResponsiveTable
               data={filtered}
               keyFn={(r) => r.user_id}
-              emptyText="Нет данных"
+              emptyText="Список пуст" emptyHint="Данные приходят из АГБИС — обновите список, если он должен быть заполнен."
               columns={[
                 { label: 'ID', render: (r) => <span className="text-[color:var(--color-muted-foreground)] tabular-nums">{r.user_id}</span> },
                 { label: 'ФИО', primary: true, render: (r) => (

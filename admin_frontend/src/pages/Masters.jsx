@@ -1147,7 +1147,7 @@ export default function Masters() {
                   data={sorted.slice(0, 500)}
                   keyFn={(r) => r.service_id ?? `${r.doc_num}-${r.code}-${r.in_time}`}
                   rowClass={(r) => r.warnings?.length > 0 ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}
-                  emptyText="Нет данных"
+                  emptyText="Работ за период нет" emptyHint="Расчёт строится по чек-инам мастеров — проверьте даты."
                   columns={[
                     {
                       key: 'status',

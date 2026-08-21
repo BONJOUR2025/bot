@@ -1483,7 +1483,7 @@ export default function Payouts() {
             data={visiblePayouts}
             keyFn={(p) => p.id}
             rowClass={(p) => (selected.has(p.id) ? 'bg-blue-50' : '')}
-            emptyText="Нет данных"
+            emptyText="Заявок нет" emptyHint="Новые заявки приходят из бота и появляются здесь сразу."
             columns={[
               {
                 label: '',

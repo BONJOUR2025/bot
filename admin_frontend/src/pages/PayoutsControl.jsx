@@ -327,7 +327,7 @@ export default function PayoutsControl() {
             data={filtered}
             keyFn={(p) => p.id}
             rowClass={(p) => rowColor(p.warnings)}
-            emptyText="Нет данных"
+            emptyText="Расхождений не найдено" emptyHint="Заявки и фактические выплаты сходятся."
             columns={[
               { label: 'ФИО', key: 'name', primary: true },
               { label: 'Тип', key: 'type' },

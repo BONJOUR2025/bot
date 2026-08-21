@@ -382,7 +382,7 @@ export default function Assets() {
         <ResponsiveTable
           data={grouped}
           keyFn={g => g.employee_id}
-          emptyText="Нет данных"
+          emptyText="Имущество не заведено" emptyHint="Добавьте первую единицу — она появится и в карточке сотрудника."
           rowClass={g => selected.has(String(g.employee_id))
             ? 'bg-[color:var(--color-primary)]/5'
             : 'hover:bg-[color:var(--color-muted)]/10'}

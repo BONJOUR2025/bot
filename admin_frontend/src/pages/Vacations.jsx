@@ -223,7 +223,7 @@ export default function Vacations() {
         <ResponsiveTable
           data={vacations}
           keyFn={(v) => v.id}
-          emptyText="Нет данных"
+          emptyText="Отсутствий нет" emptyHint="За выбранный период отпуска и больничные не оформлялись."
           columns={[
             { label: 'Сотрудник', key: 'name', primary: true },
             { label: 'Тип', key: 'type' },

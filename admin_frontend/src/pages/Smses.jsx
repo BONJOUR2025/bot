@@ -281,7 +281,7 @@ export default function Smses() {
         <ResponsiveTable
           data={filtered}
           keyFn={(row) => row.ID}
-          emptyText="Нет данных"
+          emptyText="Сообщений за период нет" emptyHint="Попробуйте расширить даты или сбросить фильтры."
           columns={[
             {
               label: 'Дата/время',

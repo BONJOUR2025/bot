@@ -297,7 +297,7 @@ export default function ShiftCheckins() {
             data={otherItems}
             keyFn={(item) => item.id}
             rowClass={(item) => (item.penalty_amount ? 'bg-red-50' : '')}
-            emptyText="Нет данных"
+            emptyText="Отметок за период нет" emptyHint="Сотрудники отмечаются через бота — проверьте выбранные даты."
             columns={[
               { label: 'Дата', key: 'date', primary: true },
               { label: 'Сотрудник', key: 'employee_name' },

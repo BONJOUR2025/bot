@@ -656,7 +656,7 @@ function CashBalancesCard({ balances, loading }) {
           <ResponsiveTable
             data={balances}
             keyFn={(b) => b.kassa_id}
-            emptyText="Нет данных"
+            emptyText="Движений за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
             columns={[
               { label: 'Касса', primary: true, render: (b) => b.name || b.kassa_id },
               { label: 'Остаток', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold',
@@ -1869,7 +1869,7 @@ export default function CashMovements() {
               <ResponsiveTable
                 data={breakdown}
                 keyFn={([cat]) => cat}
-                emptyText="Нет данных"
+                emptyText="Движений за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                 columns={[
                   {
                     label: 'Категория',
@@ -1921,7 +1921,7 @@ export default function CashMovements() {
               <ResponsiveTable
                 data={salonBreakdown}
                 keyFn={([dep]) => dep}
-                emptyText="Нет данных"
+                emptyText="Движений за период нет" emptyHint="Попробуйте расширить даты или снять фильтры."
                 columns={[
                   {
                     label: 'Филиал',

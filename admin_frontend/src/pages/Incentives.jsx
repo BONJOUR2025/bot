@@ -411,7 +411,7 @@ export default function Incentives() {
             data={displayList}
             keyFn={(item) => item.id}
             rowClass={(item) => rowColor(item.type)}
-            emptyText="Нет данных"
+            emptyText="Начислений нет" emptyHint="За выбранный период штрафы и премии не заводились."
             columns={[
               { label: 'Сотрудник', key: 'name', primary: true },
               { label: 'Дата', key: 'date' },
