@@ -708,16 +708,42 @@ tbody tr:last-child td { border-bottom: none; }
 /* ================================================================
    Skeleton loading animation
    ================================================================ */
+/* Блик едет через transform дочернего псевдоэлемента, а не через
+   background-position самого блока. Анимация background-position
+   заставляет браузер перерисовывать элемент на каждом кадре, и на
+   экране с десятком скелетонов это складывается в заметную нагрузку;
+   transform уходит на композитор и не трогает отрисовку. */
 .skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-control-bg);
+  border-radius: var(--radius-sm);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translate3d(-100%, 0, 0);
   background: linear-gradient(
     90deg,
-    var(--color-control-bg) 25%,
+    transparent 0%,
     var(--color-border-hover) 50%,
-    var(--color-control-bg) 75%
+    transparent 100%
   );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: var(--radius-sm);
+  animation: skeleton-sweep 1.5s infinite;
+}
+@keyframes skeleton-sweep {
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+/* Мерцание — украшение, а не сообщение: сам блок остаётся видимым и
+   без него, поэтому при выключенной анимации просто убираем блик. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+    opacity: 0;
+  }
 }
 .skeleton-text { height: 1rem; width: 100%; }
 .skeleton-title { height: 1.5rem; width: 60%; }
@@ -785,10 +811,8 @@ tbody tr:last-child td { border-bottom: none; }
   from { opacity: 0; transform: translateX(100%); }
   to   { opacity: 1; transform: translateX(0); }
 }
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+/* @keyframes shimmer удалён вместе с последним использованием —
+   скелетоны теперь ездят через skeleton-sweep (см. .skeleton::after). */
 
 /* ================================================================
    Tailwind utility overrides for theme compatibility

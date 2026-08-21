@@ -17,6 +17,29 @@ export function SkeletonCard() {
   );
 }
 
+/**
+ * Заглушка под ряд карточек-показателей.
+ *
+ * Нужна там, где раньше стояло центрированное «Загрузка…»: текст занимал
+ * одну строку, а приходящий на его место блок — несколько сотен пикселей,
+ * поэтому страница подпрыгивала в момент загрузки. Заглушка держит
+ * примерно ту же высоту и ту же сетку, что и реальные карточки.
+ */
+export function SkeletonStats({ count = 4 }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="ui-shell ui-shell--sm">
+          <div className="ui-core app-card p-5">
+            <Skeleton style={{ width: '55%', height: '0.7rem' }} />
+            <Skeleton style={{ width: '75%', height: '1.5rem', marginTop: '0.75rem' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function SkeletonTable({ rows = 5, cols = 4 }) {
   return (
     <div className="space-y-2">

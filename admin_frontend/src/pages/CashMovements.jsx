@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
-import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { SkeletonTable, SkeletonStats } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
@@ -1385,10 +1385,10 @@ export default function CashMovements() {
       {activeTab === 'overview' && (
         <div className="space-y-5">
           {loading ? (
-            <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
-              <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
-              Загрузка…
-            </div>
+            // Заглушка держит сетку и высоту будущих карточек, поэтому
+            // блок не подпрыгивает в момент появления данных — а
+            // центрированный спиннер занимал одну строку вместо них.
+            <SkeletonStats count={4} />
           ) : (
             <>
               <CashBalancesCard balances={balances} loading={balances === null} />

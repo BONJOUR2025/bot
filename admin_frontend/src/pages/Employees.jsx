@@ -21,7 +21,7 @@ import {
 } from 'recharts';
 import api from '../api';
 import UpcomingBirthdays from '../components/UpcomingBirthdays.jsx';
-import { SkeletonTable } from '../components/ui/Skeleton.jsx';
+import { SkeletonTable, SkeletonStats } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
@@ -544,9 +544,9 @@ export default function Employees() {
       {activeTab === 'overview' && (
         <div className="space-y-5">
           {loading ? (
-            <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
-              Загрузка…
-            </div>
+            // Держит сетку из четырёх карточек, а не подменяет её строкой
+            // текста — иначе содержимое подпрыгивает при загрузке.
+            <SkeletonStats count={4} />
           ) : (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
