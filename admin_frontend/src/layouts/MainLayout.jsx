@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Menu, LogOut } from 'lucide-react';
 
 import Navigation from '../components/Navigation.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import { useAuth } from '../providers/AuthProvider.jsx';
+import useReveal from '../hooks/useReveal.js';
 
 export default function MainLayout() {
   const location = useLocation();
+  const contentRef = useRef(null);
+  useReveal(contentRef);
   const { isMobile } = useViewport();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
@@ -71,8 +74,12 @@ export default function MainLayout() {
         </header>
         {/* key от пути: без него React переиспользует этот узел между
             маршрутами, CSS-анимация появления не перезапускается, и
-            переход между разделами выглядит мгновенной подменой. */}
-        <main className="app-shell__content" key={location.pathname}>
+            переход между разделами выглядит мгновенной подменой.
+
+            Тот же key пересоздаёт и наблюдатель проявления — он один на
+            весь экран и следит за всем поддеревом, поэтому странице
+            достаточно повесить класс .ui-reveal, ничего не подключая. */}
+        <main className="app-shell__content" key={location.pathname} ref={contentRef}>
           <Outlet />
         </main>
       </div>

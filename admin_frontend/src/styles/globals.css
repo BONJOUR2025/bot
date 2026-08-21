@@ -2646,3 +2646,37 @@ body.viewer3d-fs-active .app-card {
   letter-spacing: 0.16em;
   color: var(--color-text-faint);
 }
+
+/* ── Ширина сайдбара-острова ───────────────────────────────────
+   Панель отступает от краёв на 1.25rem слева, то есть внутренней
+   ширины остаётся на 20px меньше, чем закладывал --sidebar-width. На
+   этих двадцати пикселях «Центр управления» переставал помещаться в
+   строку: заголовок переносился на две строки, подпись под ним — тоже,
+   и блок наезжал на кнопку сворачивания.
+
+   Расширяем колонку ровно на съеденный отступ, чтобы внутренняя ширина
+   панели осталась расчётной. Свёрнутый режим трогать не нужно: там
+   подписи скрыты. */
+.visual-glass .app-shell {
+  grid-template-columns: calc(var(--sidebar-width) + 1.25rem) 1fr;
+}
+.visual-glass .app-shell--nav-collapsed {
+  grid-template-columns: calc(64px + 1.25rem) 1fr;
+}
+.visual-glass .app-shell--mobile {
+  grid-template-columns: 1fr;
+}
+/* Заголовок панели не должен ломаться, даже если текст станет длиннее:
+   лучше подрезать хвост, чем разъехаться на две строки. */
+.visual-glass .sidebar__title {
+  min-width: 0;
+}
+.visual-glass .sidebar__title-main,
+.visual-glass .sidebar__title-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.visual-glass .sidebar__header {
+  gap: 0.6rem;
+}

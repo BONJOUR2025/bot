@@ -1,45 +1,43 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 /**
- * Появление блока при въезде в вьюпорт — основа хореографии Ethereal Glass.
+ * Проявление блоков с классом .ui-reveal.
  *
- * Возвращает ref, который надо повесить на контейнер. Все потомки с классом
- * .ui-reveal внутри него получают .is-in по мере появления, со сдвигом по
- * времени, чтобы блоки не «выстреливали» одновременно.
+ * Наблюдатель один на весь экран и следит за всем поддеревом, а не за
+ * заранее собранным списком узлов. Это принципиально: раньше хук
+ * собирал `querySelectorAll('.ui-reveal')` один раз при монтировании, и
+ * любой элемент, добавленный позже, оставался с opacity:0 навсегда.
+ * Так и вышло — заголовки дашборда и сводного отчёта по ФОТ получили
+ * класс, но не попали ни под один наблюдатель и были невидимы,
+ * продолжая занимать место. На странице, где данные приходят после
+ * запроса, это касалось бы вообще всего содержимого.
  *
- * Почему IntersectionObserver, а не слушатель scroll: обработчик скролла
- * срабатывает десятки раз в секунду и на каждом кадре заставляет читать
- * геометрию, то есть провоцирует layout thrashing. Наблюдатель уведомляет
- * только о смене видимости и делает это вне основного потока вёрстки.
+ * Поэтому здесь два наблюдателя: IntersectionObserver проявляет то, что
+ * попало во вьюпорт, а MutationObserver подхватывает узлы, появившиеся
+ * после загрузки данных.
  *
- * Анимируются исключительно transform/opacity/filter (см. .ui-reveal в
- * globals.css) — ни одно из них не вызывает пересчёт раскладки.
- *
+ * @param {import('react').RefObject<HTMLElement>} rootRef контейнер экрана
  * @param {object}  [opts]
- * @param {number}  [opts.stagger=70]  задержка между соседними блоками, мс
- * @param {number}  [opts.max=10]      после скольких блоков задержку не растить
- *                                     (иначе низ длинной страницы ждёт секунды)
- * @param {unknown} [opts.deps]        пересобрать наблюдение при смене данных
+ * @param {number}  [opts.stagger=70] задержка между соседними блоками, мс
+ * @param {number}  [opts.max=8]      после скольких блоков задержку не растить
  */
-export default function useReveal({ stagger = 70, max = 10, deps } = {}) {
-  const ref = useRef(null);
-
+export default function useReveal(rootRef, { stagger = 70, max = 8 } = {}) {
   useEffect(() => {
-    const root = ref.current;
+    const root = rootRef?.current;
     if (!root) return undefined;
 
-    const targets = Array.from(root.querySelectorAll('.ui-reveal:not(.is-in)'));
-    if (!targets.length) return undefined;
-
-    // Без поддержки наблюдателя (очень старый WebView) и при выключенной
-    // анимации показываем всё сразу: пустая страница хуже, чем страница
-    // без эффекта.
     const reduced =
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+    const revealAll = () => {
+      root.querySelectorAll('.ui-reveal:not(.is-in)').forEach((el) => el.classList.add('is-in'));
+    };
+
+    // Без наблюдателя или при выключенной анимации показываем сразу:
+    // пустой экран хуже, чем экран без эффекта.
     if (reduced || typeof IntersectionObserver === 'undefined') {
-      targets.forEach((el) => el.classList.add('is-in'));
+      revealAll();
       return undefined;
     }
 
@@ -50,8 +48,8 @@ export default function useReveal({ stagger = 70, max = 10, deps } = {}) {
           if (!entry.isIntersecting) return;
           const el = entry.target;
           // Задержку считаем в момент появления, а не по позиции в DOM:
-          // иначе блок, до которого доскроллили первым, всё равно ждал бы
-          // очередь всех предшествующих.
+          // иначе блок, до которого доскроллили первым, ждал бы очередь
+          // всех предшествующих.
           el.style.setProperty('--reveal-delay', `${Math.min(shown, max) * stagger}ms`);
           shown += 1;
           el.classList.add('is-in');
@@ -61,9 +59,25 @@ export default function useReveal({ stagger = 70, max = 10, deps } = {}) {
       { rootMargin: '0px 0px -8% 0px', threshold: 0.05 },
     );
 
-    targets.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, [stagger, max, deps]);
+    const observeAll = () => {
+      root.querySelectorAll('.ui-reveal:not(.is-in)').forEach((el) => io.observe(el));
+    };
+    observeAll();
 
-  return ref;
+    // Содержимое почти всегда приходит после запроса к API, то есть
+    // позже монтирования. Без этого наблюдателя оно осталось бы скрытым.
+    const mo = new MutationObserver(observeAll);
+    mo.observe(root, { childList: true, subtree: true });
+
+    // Страховка: если что-то помешает наблюдателю сработать, через пять
+    // секунд показываем всё принудительно. Невидимый контент — куда
+    // худший исход, чем пропущенная анимация.
+    const failsafe = setTimeout(revealAll, 5000);
+
+    return () => {
+      io.disconnect();
+      mo.disconnect();
+      clearTimeout(failsafe);
+    };
+  }, [rootRef, stagger, max]);
 }
