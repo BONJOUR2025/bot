@@ -396,8 +396,9 @@ export default function CashSummary() {
       {/* Controls */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
-            <BarChart3 size={24} /> Сводный отчёт по кассе
+          <span className="ui-eyebrow mb-3">Период · {dateFrom} — {dateTo}</span>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
+            Сводный отчёт по кассе
           </h2>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Кассовые перемещения по категориям и филиалам · настраиваемый PNG-отчёт</p>
         </div>

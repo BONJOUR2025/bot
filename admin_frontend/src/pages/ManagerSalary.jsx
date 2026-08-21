@@ -331,6 +331,7 @@ export default function ManagerSalary() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
+          <span className="ui-eyebrow mb-3">{period ? `Период · ${period}` : 'Период не выбран'}</span>
           <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Зарплата менеджеров</h2>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Оклад и KPI, контроль качества, начисление и выплаты</p>
         </div>

@@ -300,7 +300,10 @@ export default function AgbisSettings() {
     <div className="space-y-6 max-w-full pb-20">
       <TopProgressBar active={loading} />
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight flex-1 min-w-0">Настройки АГБИС</h2>
+        <div className="flex-1 min-w-0">
+          <span className="ui-eyebrow mb-3">{(data.computers||[]).length ? `Компьютеров: ${data.computers.length}` : 'Данные не загружены'}</span>
+          <h2 className="text-2xl font-semibold tracking-tight">Настройки АГБИС</h2>
+        </div>
         <button onClick={load} disabled={loading} className="btn flex items-center gap-1.5 border border-[color:var(--color-border)] px-2.5 py-1.5">
           <RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> <span className="hidden sm:inline">Обновить</span>
         </button>

@@ -104,9 +104,8 @@ export default function Receivables() {
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Landmark size={22} className="text-[color:var(--color-primary)]" /> Дебиторка
-          </h2>
+          <span className="ui-eyebrow mb-3">Период · {dateFrom} — {dateTo}</span>
+          <h2 className="text-2xl font-bold">Дебиторка</h2>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
             Заказы, созданные за период, с неполной оплатой на текущий момент (Агбис)
           </p>

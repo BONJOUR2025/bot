@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Send, User, MessageSquare, Trash2, FileText } from 'lucide-react';
+import { Send, User, Trash2, FileText } from 'lucide-react';
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { groupEmployeesByPosition } from '../utils/employeeGrouping.js';
@@ -142,9 +142,12 @@ export default function Broadcast() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
-        <MessageSquare size={24} /> Рассылка сообщений
-      </h2>
+      <div>
+        <span className="ui-eyebrow mb-3">Сообщение уйдёт сразу после отправки</span>
+        <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
+          Рассылка сообщений
+        </h2>
+      </div>
 
       <div>
         <label className="block text-sm font-medium text-[color:var(--color-text)] mb-1">Текст сообщения</label>

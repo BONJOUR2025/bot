@@ -287,7 +287,12 @@ export default function PayrollBySalon() {
       <TopProgressBar active={loading || loadingMonths} />
 
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight flex-1">ФОТ по салонам</h2>
+        <div className="flex-1 min-w-0">
+          <span className="ui-eyebrow mb-3">
+            {selectedMonth ? `Месяц · ${selectedMonth}` : 'Месяц не выбран'}
+          </span>
+          <h2 className="text-2xl font-semibold tracking-tight">ФОТ по салонам</h2>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

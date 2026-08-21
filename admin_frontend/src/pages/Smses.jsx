@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { RefreshCw, Search, Download, MessageSquare, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { RefreshCw, Search, Download, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -133,10 +133,10 @@ export default function Smses() {
       <TopProgressBar active={loading} />
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight flex-1 flex items-center gap-2">
-          <MessageSquare size={22} className="text-[color:var(--color-primary)]" />
-          СМС Агбис
-        </h2>
+        <div className="flex-1 min-w-0">
+          <span className="ui-eyebrow mb-3">Период · {dateFrom} — {dateTo}</span>
+          <h2 className="text-2xl font-semibold tracking-tight">СМС Агбис</h2>
+        </div>
         <button onClick={exportCsv} disabled={loading || filtered.length === 0}
           className="btn flex items-center gap-2">
           <Download size={15} /> CSV

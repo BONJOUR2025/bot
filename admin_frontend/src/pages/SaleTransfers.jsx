@@ -168,6 +168,7 @@ export default function SaleTransfers() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
+          <span className="ui-eyebrow mb-3">{month ? `Месяц · ${month}` : 'Месяц не выбран'}</span>
           <h1 className="text-xl sm:text-2xl font-bold">Перемещение продажи</h1>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
             Перенос суммы продажи между сотрудниками и/или категориями (например, продажу

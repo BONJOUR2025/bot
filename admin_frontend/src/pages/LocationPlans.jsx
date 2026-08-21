@@ -358,9 +358,8 @@ export default function LocationPlans() {
             <Target size={20} />
           </span>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-              <Target size={20} className="sm:hidden text-[color:var(--color-primary)]" /> Планы продаж
-            </h1>
+            <span className="ui-eyebrow mb-3">{month ? `Месяц · ${month}` : 'Месяц не выбран'}</span>
+            <h1 className="text-xl sm:text-2xl font-bold">Планы продаж</h1>
             {!isMobile && (
               <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
                 Месячные планы по точкам и планы менеджеров (оклад, KPI, выручка, конверсии)

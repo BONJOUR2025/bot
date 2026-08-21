@@ -28,7 +28,10 @@ const TABS = [
 function SettingsLayout() {
   return (
     <div className="space-y-5">
-      <h2 className="text-2xl font-semibold tracking-tight">Настройки</h2>
+      <div>
+        <span className="ui-eyebrow mb-3">Изменения применяются сразу</span>
+        <h2 className="text-2xl font-semibold tracking-tight">Настройки</h2>
+      </div>
 
       <nav className="flex flex-wrap gap-1.5 border-b border-[color:var(--color-border)] pb-3">
         {TABS.map(({ to, label, icon: Icon }) => (

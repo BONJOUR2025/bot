@@ -163,7 +163,8 @@ export default function CourierSalary() {
       <TopProgressBar active={loading} />
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2"><Truck size={24} /> Зарплата курьера</h2>
+          <span className="ui-eyebrow mb-3">{period ? `Период · ${period}` : 'Период не выбран'}</span>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Зарплата курьера</h2>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Оклад, авансы и премии/штрафы · пробег авто из StarLine</p>
         </div>
         <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full ${starline?.configured ? 'bg-[color:var(--color-success-muted)] text-[color:var(--color-success)]' : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)]'}`}>

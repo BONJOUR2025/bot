@@ -44,7 +44,10 @@ export default function ArchivedEmployees() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center gap-3">
-        <h2 className="text-2xl font-semibold">Архив сотрудников</h2>
+        <div>
+          <span className="ui-eyebrow mb-3">{employees.length ? `В архиве: ${employees.length}` : 'Архив пуст'}</span>
+          <h2 className="text-2xl font-semibold">Архив сотрудников</h2>
+        </div>
         <button
           className="btn bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)] flex items-center gap-2"
           onClick={load}

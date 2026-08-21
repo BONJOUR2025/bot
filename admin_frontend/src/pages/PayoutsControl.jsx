@@ -240,9 +240,12 @@ export default function PayoutsControl() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
-        <ShieldAlert size={24} /> Контроль выплат
-      </h2>
+      <div>
+        <span className="ui-eyebrow mb-3">Сверка заявок с фактическими выплатами</span>
+        <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
+          Контроль выплат
+        </h2>
+      </div>
 
       <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
 
