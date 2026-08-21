@@ -2563,10 +2563,19 @@ body.viewer3d-fs-active .app-card {
    заливкой оболочки. В проде это выглядело так, что кнопка «Войти»
    оставалась тёмной и наливалась фиолетовым только при наведении. */
 .visual-glass .btn--primary {
-  background: linear-gradient(140deg, var(--color-primary), var(--color-primary-hover));
+  /* Градиент уходит в тёмный конец, а не в светлый: со светлым
+     --color-primary-hover белый текст давал 4.23:1 — ниже порога AA.
+     С --color-primary-strong выходит 5.7:1, и кнопка плотнее. */
+  background: linear-gradient(140deg, var(--color-primary), var(--color-primary-strong));
   border-color: transparent;
   box-shadow: var(--shadow-glow-primary), var(--glass-inner-hi);
   color: #fff;
+}
+/* Заливки success/warning в тёмной теме светлые — белый текст на них
+   нечитаем (1.92:1 у зелёной). Ставим тёмный текст: 8.6:1. */
+.visual-glass .btn--success,
+.visual-glass .btn--warning {
+  color: #07241a;
 }
 .visual-glass .btn--primary:hover {
   background: linear-gradient(140deg, var(--color-primary-hover), var(--color-primary));
@@ -2679,4 +2688,30 @@ body.viewer3d-fs-active .app-card {
 }
 .visual-glass .sidebar__header {
   gap: 0.6rem;
+}
+
+/* ── Нативные виджеты браузера ─────────────────────────────────
+   color-scheme сообщает браузеру, в какой гамме рисовать то, что не
+   поддаётся стилизации: панель выбора даты, иконку календаря внутри
+   input[type=date], выпадающий список select, полосы прокрутки.
+
+   Без него на тёмной теме иконка календаря оставалась почти чёрной на
+   тёмном поле, а раскрывшийся календарь приходил белым листом. В
+   приложении 48 полей даты и 5 полей времени, так что это касалось
+   почти каждой страницы с периодом. */
+.visual-glass {
+  color-scheme: dark;
+}
+.visual-glass.theme-light {
+  color-scheme: light;
+}
+
+/* ── Ряд показателей: числа на одной линии ─────────────────────
+   Подпись из двух слов переносится на вторую строку, и число под ней
+   уезжало ниже соседних — в ряду из четырёх карточек это сразу видно.
+   Резервируем под подпись две строки, чтобы цифры выстраивались вне
+   зависимости от длины названия. */
+.ui-label--fixed {
+  display: block;
+  min-height: 2.65em;
 }

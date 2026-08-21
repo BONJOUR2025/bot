@@ -456,7 +456,10 @@
 
   --color-text:           #f5f5f4;
   --color-text-muted:     #a2a2a9;
-  --color-text-faint:     #67676f;
+  /* 3.53:1 на фоне ядра — ниже порога AA (4.5) для мелкого текста,
+     а этим цветом набраны подписи, надзаголовки и вторичные строки.
+     #82828b даёт 5.19:1 и остаётся заметно тише основного. */
+  --color-text-faint:     #82828b;
 
   --color-border:         rgba(255, 255, 255, 0.075);
   --color-border-strong:  rgba(139, 92, 246, 0.34);
@@ -573,7 +576,8 @@
 
   --color-text:           #0b0b0d;
   --color-text-muted:     #55555f;
-  --color-text-faint:     #8b8b95;
+  /* 3.37:1 на белом — тоже ниже AA. #75757f даёт 4.56:1. */
+  --color-text-faint:     #75757f;
 
   --color-border:         rgba(12, 12, 20, 0.075);
   --color-border-strong:  rgba(109, 63, 234, 0.24);

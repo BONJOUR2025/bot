@@ -26,7 +26,7 @@ export default function Kpi({
       <div className="ui-core app-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="ui-label">{label}</div>
+            <div className="ui-label ui-label--fixed">{label}</div>
             <div className="ui-metric !text-[1.5rem] mt-1.5 truncate text-[color:var(--color-text)]">
               {value}
             </div>

@@ -770,15 +770,15 @@ export default function PaymentCalendar() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium text-sm truncate">{sc.name}</span>
                                   {sc.category && (
-                                    <span className="text-xs px-2 py-0.5 bg-white/60 rounded-full border border-current/20">
+                                    <span className="text-xs px-2 py-0.5 bg-[color:var(--color-control-bg)] rounded-full border border-current/20">
                                       {sc.category}
                                     </span>
                                   )}
                                   {sc.invoice_file_url && (
-                                    <span className="text-xs px-2 py-0.5 bg-white/60 rounded-full border border-current/20">📎</span>
+                                    <span className="text-xs px-2 py-0.5 bg-[color:var(--color-control-bg)] rounded-full border border-current/20">📎</span>
                                   )}
                                   {(sc.objects || []).map(obj => (
-                                    <span key={obj} className="text-xs px-2 py-0.5 bg-white/40 rounded-full border border-current/20">🏢 {obj}</span>
+                                    <span key={obj} className="text-xs px-2 py-0.5 bg-[color:var(--color-control-bg)] rounded-full border border-current/20">🏢 {obj}</span>
                                   ))}
                                 </div>
                                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs opacity-75">
@@ -801,14 +801,14 @@ export default function PaymentCalendar() {
                                       Оплатить
                                     </button>
                                     <button onClick={() => handleSkip(r.id)}
-                                      className="px-2.5 py-1 text-xs rounded-lg border border-current/30 hover:bg-white/40">
+                                      className="px-2.5 py-1 text-xs rounded-lg border border-current/30 hover:bg-[color:var(--color-control-bg)]">
                                       Пропустить
                                     </button>
                                   </>
                                 )}
                                 {r.status !== 'pending' && (
                                   <button onClick={() => handleReset(r.id)}
-                                    className="px-2.5 py-1 text-xs rounded-lg border border-current/30 hover:bg-white/40">
+                                    className="px-2.5 py-1 text-xs rounded-lg border border-current/30 hover:bg-[color:var(--color-control-bg)]">
                                     Сбросить
                                   </button>
                                 )}
