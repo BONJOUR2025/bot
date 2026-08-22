@@ -44,6 +44,30 @@ const MONTHS = [
   'ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ',
 ];
 
+function daysInMonth(y, monthIdx) {
+  return new Date(y, monthIdx + 1, 0).getDate();
+}
+
+// Обратный отсчёт до конца просматриваемого месяца — считается от
+// реальной сегодняшней даты, а не выдуманное число. Для месяца, который
+// сейчас не идёт (прошлый/будущий год или месяц), отсчёта нет —
+// просто помечаем период как завершённый/предстоящий.
+function periodUrgency(year, month) {
+  const today = new Date();
+  const monthIdx = MONTHS.indexOf(month);
+  const isCurrentMonth = year === today.getFullYear() && monthIdx === today.getMonth();
+  if (isCurrentMonth) {
+    const left = daysInMonth(year, monthIdx) - today.getDate();
+    if (left <= 0) return { tier: 'danger', text: 'последний день периода' };
+    if (left <= 5) return { tier: 'warning', text: `осталось ${left} дн.` };
+    return { tier: 'muted', text: `осталось ${left} дн.` };
+  }
+  const isFuture = year > today.getFullYear() || (year === today.getFullYear() && monthIdx > today.getMonth());
+  return isFuture
+    ? { tier: 'muted', text: 'период впереди' }
+    : { tier: 'muted', text: 'период завершён' };
+}
+
 function fmt(v) {
   if (!v && v !== 0) return '—';
   return Number(v).toLocaleString('ru');
@@ -54,8 +78,16 @@ function fmtInput(v) {
   return String(v);
 }
 
+// Точка «взята в захват» (target locked), когда по ней выставлен план
+// по всем трём категориям — не декоративный порог, а реальная проверка
+// заполненности repair_plan/cosmetics_plan/shoes_plan за месяц.
+function isTargetLocked(plan) {
+  const p = plan || {};
+  return (p.repair_plan || 0) > 0 && (p.cosmetics_plan || 0) > 0 && (p.shoes_plan || 0) > 0;
+}
+
 // ── CodeManager (read-only — codes come from «Салоны») ───────────
-function CodeManager({ codes }) {
+function CodeManager({ codes, plans }) {
   return (
     <div className="app-card p-4 space-y-3">
       <h3 className="font-semibold text-sm flex items-center gap-1.5">
@@ -68,14 +100,29 @@ function CodeManager({ codes }) {
       </p>
 
       <div className="divide-y divide-[color:var(--color-border)]">
-        {codes.map(c => (
+        {codes.map(c => {
+          const locked = isTargetLocked(plans?.[c.code]);
+          return (
           <div key={c.code} className="flex items-center gap-2 py-2">
-            <span className="w-9 h-7 flex items-center justify-center rounded-lg bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold flex-shrink-0">
+            <span className="relative w-9 h-7 flex items-center justify-center rounded-lg bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-xs font-bold flex-shrink-0">
               {c.code}
             </span>
-            <span className="flex-1 text-sm font-medium min-w-0 truncate">{c.name}</span>
+            <span className="flex-1 text-sm font-medium min-w-0 truncate flex items-center gap-1.5">
+              {c.name}
+              {locked && (
+                <span className="plan-fui-radar" title="Цель захвачена — план выставлен по всем трём категориям">
+                  <i /><i /><i /><b />
+                </span>
+              )}
+            </span>
+            {locked && (
+              <span className="plan-fui-locked flex-shrink-0">
+                <Target size={9} /> LOCKED
+              </span>
+            )}
           </div>
-        ))}
+          );
+        })}
         {codes.length === 0 && (
           <p className="text-sm text-[color:var(--color-muted-foreground)] italic py-4 text-center">
             Нет активных салонов с кодом
@@ -267,9 +314,18 @@ export default function LocationPlans() {
   const [error, setError]     = useState(null);
   const [showInfo, setShowInfo] = useState(false);
   const [tab, setTab] = useState('locations');
+  // Живые часы для телеметрии-ридаута ниже — фактическое время страницы,
+  // не выдуманная цифра.
+  const [clock, setClock] = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const monthKey = `${month}_${year}`;
   const managerPeriod = `${year}-${String(MONTHS.indexOf(month) + 1).padStart(2, '0')}`;
+  const urgency = useMemo(() => periodUrgency(year, month), [year, month]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -293,6 +349,15 @@ export default function LocationPlans() {
     shoes: codes.reduce((s, c) => s + (plans[c.code]?.shoes_plan || 0), 0),
   }), [codes, plans]);
   const totalPlan = totals.repair + totals.cosmetics + totals.shoes;
+
+  // Телеметрия захвата целей: сколько точек вообще получили план на месяц
+  // (хотя бы одна категория > 0) и сколько «захвачены» полностью (все три
+  // категории заполнены) — реальные агрегаты по codes/plans, не декорация.
+  const provisionedCount = useMemo(() => codes.filter(c => {
+    const p = plans[c.code] || {};
+    return (p.repair_plan || 0) > 0 || (p.cosmetics_plan || 0) > 0 || (p.shoes_plan || 0) > 0;
+  }).length, [codes, plans]);
+  const lockedCount = useMemo(() => codes.filter(c => isTargetLocked(plans[c.code])).length, [codes, plans]);
 
   function handlePlanChange(locationCode, field, value) {
     setPlans(prev => ({
@@ -369,9 +434,10 @@ export default function LocationPlans() {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={prevMonth} className="btn btn--secondary w-9 h-9 flex items-center justify-center text-lg leading-none">‹</button>
-          <span className="min-w-[140px] sm:min-w-[160px] text-center font-semibold text-sm sm:text-base px-1">
-            {month} {year}
-          </span>
+          <div className="min-w-[140px] sm:min-w-[160px] text-center px-1">
+            <span className="block font-semibold text-sm sm:text-base">{month} {year}</span>
+            <span className={`plan-fui-countdown plan-fui-countdown--${urgency.tier}`}>{urgency.text}</span>
+          </div>
           <button onClick={nextMonth} className="btn btn--secondary w-9 h-9 flex items-center justify-center text-lg leading-none">›</button>
         </div>
       </div>
@@ -419,9 +485,20 @@ export default function LocationPlans() {
           <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
           {tab === 'locations' && (
+            <>
+              {/* Телеметрия захвата целей — реальные агрегаты provisionedCount/
+                  lockedCount/totalPlan за просматриваемый месяц, живые часы. */}
+              <div className="plan-fui-readout">
+                <span>MISSION://sales-targets.{monthKey}</span><span className="sep">·</span>
+                <span>ТОЧЕК: <b>{codes.length}</b></span><span className="sep">·</span>
+                <span>ПЛАН ВЫСТАВЛЕН: <b style={{ color: codes.length > 0 && provisionedCount === codes.length ? 'var(--color-success)' : 'var(--color-warning)' }}>{provisionedCount} из {codes.length}</b></span><span className="sep">·</span>
+                <span>ЦЕЛЬ ЗАХВАЧЕНА: <b style={{ color: 'var(--color-success)' }}>{lockedCount}</b></span><span className="sep">·</span>
+                <span>СУММА ПЛАНА: <b>{fmt(totalPlan)} ₽</b></span><span className="sep">·</span>
+                <span>{clock.toLocaleDateString('ru-RU')} {clock.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="plan-fui-cursor">{String(clock.getSeconds()).padStart(2, '0')}</span></span>
+              </div>
             <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5 items-start">
               {/* Left: code list (read-only, derived from «Салоны») */}
-              <CodeManager codes={codes} />
+              <CodeManager codes={codes} plans={plans} />
 
               {/* Right: plans table + save */}
               <div className="space-y-4">
@@ -441,6 +518,7 @@ export default function LocationPlans() {
                 </div>
               </div>
             </div>
+            </>
           )}
 
           {tab === 'managers' && <ManagerPlansSection period={managerPeriod} />}

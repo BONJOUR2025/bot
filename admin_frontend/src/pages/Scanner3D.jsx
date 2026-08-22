@@ -28,6 +28,9 @@ function ScanTab() {
   const [result, setResult] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [lightbox, setLightbox] = useState(null); // { src, alt } | null
+  // Реальная задержка разбора .stl на сервере (замер клиентом вокруг
+  // самого запроса, не выдуманное число) — идёт в scan-fui-readout ниже.
+  const [parseMs, setParseMs] = useState(null);
 
   async function handleFile(file) {
     if (!file) return;
@@ -37,6 +40,8 @@ function ScanTab() {
     }
     setLoading(true);
     setResult(null);
+    setParseMs(null);
+    const t0 = performance.now();
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -44,6 +49,7 @@ function ScanTab() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setResult(res.data);
+      setParseMs(Math.round(performance.now() - t0));
       if (!res.data.feet.length) {
         toast('Файл разобран, но стопы в нём не найдены', 'error');
       }
@@ -56,6 +62,11 @@ function ScanTab() {
   }
 
   const meta = result?.metadata;
+  // Реальные агрегаты по уже полученному ответу — сумма облака точек по
+  // всем найденным стопам и размер исходного файла — для телеметрии
+  // ниже, не декоративные цифры.
+  const totalPoints = result?.feet?.reduce((sum, f) => sum + (f.point_count || 0), 0) ?? 0;
+  const fileSizeKb = result?.file_size ? result.file_size / 1024 : null;
 
   return (
     <div className="space-y-6">
@@ -66,7 +77,7 @@ function ScanTab() {
       </p>
 
       <label
-        className={`app-card flex flex-col items-center justify-center gap-2 border-2 border-dashed p-10 text-center cursor-pointer transition-colors ${
+        className={`app-card scan-fui-frame flex flex-col items-center justify-center gap-2 border-2 border-dashed p-10 text-center cursor-pointer transition-colors ${
           dragOver ? 'border-[color:var(--color-primary)] bg-[color:var(--color-bg-subtle)]' : 'border-[color:var(--color-border)]'
         }`}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -77,6 +88,12 @@ function ScanTab() {
           handleFile(e.dataTransfer.files?.[0]);
         }}
       >
+        <span className="scan-fui-corner-tr" />
+        <span className="scan-fui-corner-bl" />
+        {/* Развёртка бежит только пока реально идёт захват файла —
+            перетаскивание над зоной или ожидание ответа сервера — а не
+            постоянно, чтобы не изображать работу, когда её нет. */}
+        {(dragOver || loading) && <span className="scan-fui-scan" />}
         <Upload size={28} className="text-[color:var(--color-text-muted)]" />
         <div className="font-medium">Перетащите файл .stl сюда или нажмите, чтобы выбрать</div>
         <input
@@ -91,6 +108,16 @@ function ScanTab() {
 
       {result && (
         <div className="space-y-6">
+          {/* Телеметрия разбора — реальные цифры из ответа сервера
+              (result.file_size, foot.point_count) и клиентского замера
+              задержки запроса (parseMs), не выдуманные для красоты. */}
+          <div className="scan-fui-readout">
+            <span>SYS://scanner.parse</span><span className="sep">·</span>
+            <span>РАЗБОР: <b>{parseMs != null ? `${parseMs} ms` : '—'}</b></span><span className="sep">·</span>
+            <span>ТОЧЕК: <b>{totalPoints.toLocaleString('ru-RU')}</b></span><span className="sep">·</span>
+            <span>ФАЙЛ: <b>{fileSizeKb != null ? `${fileSizeKb.toFixed(1)} КБ` : '—'}</b></span><span className="sep">·</span>
+            <span>СТОП: <b>{result.feet.length}</b></span>
+          </div>
           <div className="app-card p-4 space-y-2">
             <h3 className="font-semibold mb-1">Метаданные скана</h3>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

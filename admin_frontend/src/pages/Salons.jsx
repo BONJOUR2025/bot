@@ -418,7 +418,14 @@ function SalonCard({ salon, employees, onClick }) {
           )}
           <h3 className="font-semibold text-base truncate group-hover:text-[color:var(--color-primary)] transition-colors">{salon.name}</h3>
         </div>
-        <Badge status={salon.status} />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {salon.status === 'active' && (
+            <span className="salon-fui-radar" title="Точка в сети — статус «Работает»">
+              <i /><i /><i /><b />
+            </span>
+          )}
+          <Badge status={salon.status} />
+        </div>
       </div>
 
       {/* Info rows */}
@@ -682,6 +689,25 @@ export default function Salons() {
     closed: salons.filter(s => s.status === 'closed').length,
   }), [salons]);
 
+  // ── FUI: сетевая телеметрия ────────────────────────────────────
+  // Живые часы для строки телеметрии — тот же паттерн, что и на
+  // «Выплатах» (payout-fui-cursor), под своим префиксом salon-fui-.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const networkStats = useMemo(() => {
+    const staffIds = new Set();
+    salons.forEach(s => (s.employees || []).forEach(id => staffIds.add(id)));
+    const withArea = salons.filter(s => s.area_sqm != null && s.area_sqm !== '');
+    const avgArea = withArea.length
+      ? Math.round(withArea.reduce((sum, s) => sum + Number(s.area_sqm), 0) / withArea.length)
+      : null;
+    return { staffCount: staffIds.size, avgArea };
+  }, [salons]);
+
   async function handleSave(payload, id) {
     if (id) {
       const res = await api.patch(`/salons/${id}`, payload);
@@ -717,6 +743,20 @@ export default function Salons() {
           </p>
         </div>
         <button onClick={() => setModal('new')} className="btn btn--primary">+ Добавить салон</button>
+      </div>
+
+      {/* FUI: телеметрия сети точек — реальные агрегаты по salons/employees */}
+      <div className="salon-fui-readout">
+        <span>NET://salons.grid</span><span className="sep">·</span>
+        <span>ТОЧЕК: <b>{stats.total}</b></span><span className="sep">·</span>
+        <span>В СЕТИ: <b style={{ color: 'var(--color-success)' }}>{stats.active}</b></span><span className="sep">·</span>
+        <span>ПЕРСОНАЛ: <b>{networkStats.staffCount}</b></span><span className="sep">·</span>
+        {networkStats.avgArea != null && (
+          <>
+            <span>СР. ПЛОЩАДЬ: <b>{networkStats.avgArea} м²</b></span><span className="sep">·</span>
+          </>
+        )}
+        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="salon-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
       </div>
 
       {/* Stats row — click a card to filter the list by status */}
@@ -791,15 +831,20 @@ export default function Salons() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(s => (
-            <SalonCard
-              key={s.id}
-              salon={s}
-              employees={employees}
-              onClick={() => setDrawer(s)}
-            />
-          ))}
+        <div className="salon-fui-frame p-3">
+          <span className="salon-fui-corner-tr" />
+          <span className="salon-fui-corner-bl" />
+          <span className="salon-fui-scan" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map(s => (
+              <SalonCard
+                key={s.id}
+                salon={s}
+                employees={employees}
+                onClick={() => setDrawer(s)}
+              />
+            ))}
+          </div>
         </div>
       )}
 

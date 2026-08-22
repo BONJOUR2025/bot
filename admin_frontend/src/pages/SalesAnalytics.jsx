@@ -427,6 +427,15 @@ function DayHeatmap({ data }) {
 function PlanGauges({ empSummary, planTotals }) {
   const withPlan = empSummary.filter((e) => (planTotals[e.code] || 0) > 0);
   if (withPlan.length === 0) return null;
+  // Радар-пинг — не декорация, а сигнал «план выполнен» для того, кто
+  // ближе всех к 100% (или уже перевыполнил): реальная проверка порога
+  // по факт/план, а не случайный выбор строки.
+  const leader = withPlan.reduce((best, e) => {
+    const done = e.total / planTotals[e.code] * 100;
+    const bestDone = best ? best.total / planTotals[best.code] * 100 : -Infinity;
+    return done > bestDone ? e : best;
+  }, null);
+  const leaderCode = leader?.code;
   return (
     <div className="app-card p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -439,10 +448,16 @@ function PlanGauges({ empSummary, planTotals }) {
           const pct  = Math.min(e.total / plan * 100, 130);
           const done = e.total / plan * 100;
           const color = done >= 100 ? 'var(--color-success)' : done >= 75 ? 'var(--color-warning)' : 'var(--color-danger)';
+          const targetReached = done >= 100 && e.code === leaderCode;
           return (
             <div key={e.code}>
               <div className="flex items-center justify-between mb-1 text-sm">
-                <span className="font-medium truncate">{empName(e.code)}</span>
+                <span className="font-medium truncate flex items-center gap-1.5">
+                  {targetReached && (
+                    <span className="sales-fui-radar" title="План выполнен"><i /><i /><i /><b /></span>
+                  )}
+                  {empName(e.code)}
+                </span>
                 <span className="font-bold tabular-nums text-xs" style={{ color }}>
                   {done.toFixed(0)}%
                   <span className="text-[color:var(--color-muted-foreground)] font-normal"> · {fmtRub(e.total)} / {fmtRub(plan)}</span>
@@ -860,6 +875,15 @@ export default function SalesAnalytics() {
   const [serviceSearch, setServiceSearch] = useState('');
   const [salonOptions,       setSalonOptions]       = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+  // Живые часы для телеметрической ленты продаж (см. sales-fui-readout
+  // ниже) — тот же приём, что и на «Выплатах» (Payouts.jsx): реальное
+  // время, единственное, что тут анимируется без реальных данных.
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   // Salon list is independent of the date range (used to build the filter's
   // options), so it's fetched once on mount rather than inside load().
@@ -1323,6 +1347,38 @@ export default function SalesAnalytics() {
                 sub={`${retention.new_clients} нов. · ${retention.returning_clients} пост.`} />
             )}
           </div>
+
+          {/* ── FUI: живая телеметрическая лента продаж ──────────────
+              Ничего не выдумываем: те же агрегаты, что уже посчитаны для
+              KPI-строки выше и для графика «Динамика продаж» ниже
+              (kpi.total/dTotal/activePeriods, empSummary.length,
+              chartData._total) — просто в риддер-виде, плюс живые часы. */}
+          <div className="sales-fui-readout">
+            <span>SYS://sales.stream</span><span className="sep">·</span>
+            <span>ВЫРУЧКА: <b style={{ color: 'var(--color-primary)' }}>{fmtRub(kpi.total)}</b></span><span className="sep">·</span>
+            <span>{periodLabel.toUpperCase()}: <b>{kpi.activePeriods}</b></span><span className="sep">·</span>
+            <span>СОТРУДНИКОВ: <b>{empSummary.length}</b></span>
+            {kpi.dTotal != null && (
+              <>
+                <span className="sep">·</span>
+                <span>Δ: <b style={{ color: kpi.dTotal >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{kpi.dTotal >= 0 ? '+' : ''}{kpi.dTotal.toFixed(1)}%</b></span>
+              </>
+            )}
+            <span className="sep">·</span>
+            <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="sales-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+          </div>
+          {chartData.length > 1 && (
+            <div className="sales-fui-ticker">
+              <span className="sales-fui-ticker__label">Динамика, {Math.min(7, chartData.length)} {periodLabel}</span>
+              <div className="sales-fui-spark">
+                {chartData.slice(-7).map((d, i) => {
+                  const max = Math.max(...chartData.slice(-7).map((x) => x._total), 1);
+                  return <i key={d.period ?? i} style={{ height: `${Math.max(4, (d._total / max) * 30)}px`, opacity: 0.4 + (d._total / max) * 0.6 }} title={`${d.label}: ${fmtRub(d._total)}`} />;
+                })}
+              </div>
+              <span className="sales-fui-ticker__label" style={{ marginLeft: 'auto' }}>{fmtRub(kpi.total)} · {kpi.activePeriods} {periodLabel}</span>
+            </div>
+          )}
 
           <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
 

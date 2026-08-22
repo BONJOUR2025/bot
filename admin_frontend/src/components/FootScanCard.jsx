@@ -45,11 +45,27 @@ export function FootCard({ foot, index, onOpenImage }) {
           <div className="text-xl font-bold">{foot.height_mm}</div>
           <div className="text-xs text-[color:var(--color-text-muted)]">высота, мм</div>
         </div>
-        <div>
+        <div className="relative">
+          {/* Пунктирный ретикл вместо простого числа — «пучки»/«подъём»
+              ниже геометрическая оценка, а не прямой замер (см. текст под
+              таблицей), и это должно быть видно на самом значении, а не
+              только в мелкой сноске. */}
+          {foot.ball_girth_mm != null && (
+            <>
+              <span className="scan-fui-reticle" />
+              <span className="scan-fui-reticle__tag" title="Геометрическая оценка (±2–5 мм), не прямой замер">≈</span>
+            </>
+          )}
           <div className="text-xl font-bold">{foot.ball_girth_mm ?? '—'}</div>
           <div className="text-xs text-[color:var(--color-text-muted)]">пучки, мм</div>
         </div>
-        <div>
+        <div className="relative">
+          {foot.instep_girth_mm != null && (
+            <>
+              <span className="scan-fui-reticle" />
+              <span className="scan-fui-reticle__tag" title="Геометрическая оценка (±2–5 мм), не прямой замер">≈</span>
+            </>
+          )}
           <div className="text-xl font-bold">{foot.instep_girth_mm ?? '—'}</div>
           <div className="text-xs text-[color:var(--color-text-muted)]">подъём, мм</div>
         </div>

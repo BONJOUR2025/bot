@@ -62,6 +62,12 @@ export default function VisitorCounters() {
     loadCumulative();
   }, []);
 
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   async function loadSalons() {
     try {
       const res = await api.get('salons/');
@@ -130,6 +136,50 @@ export default function VisitorCounters() {
     }),
     { in: 0, out: 0 }
   );
+
+  // Живые агрегаты по датчикам «на связи» — из cumulative (реально
+  // накопленное состояние каждой точки с последнего сброса), а не из
+  // summary за выбранный период фильтра.
+  const liveTotals = cumulative.reduce(
+    (acc, row) => ({
+      in: acc.in + row.in_count,
+      out: acc.out + row.out_count,
+      net: acc.net + row.net,
+    }),
+    { in: 0, out: 0, net: 0 }
+  );
+
+  // Персональный спарклайн входов по дням для каждой точки — последние
+  // до 7 дней из summary (реальная история за выбранный период фильтра).
+  const sparkBySalon = useMemo(() => {
+    const map = new Map();
+    for (const row of summary) {
+      const arr = map.get(row.salon_id) || [];
+      arr.push(row);
+      map.set(row.salon_id, arr);
+    }
+    for (const [key, arr] of map) {
+      arr.sort((a, b) => a.date.localeCompare(b.date));
+      map.set(key, arr.slice(-7));
+    }
+    return map;
+  }, [summary]);
+
+  // Точка с наибольшим числом входов СЕГОДНЯ — «сейчас здесь больше
+  // всего людей», не просто статичный лидер по накопленному итогу.
+  const hottestSalonId = useMemo(() => {
+    const todayKey = todayStr();
+    let best = null;
+    let bestCount = 0;
+    for (const row of summary) {
+      if (row.date !== todayKey) continue;
+      if (row.in_count > bestCount) {
+        bestCount = row.in_count;
+        best = row.salon_id;
+      }
+    }
+    return bestCount > 0 ? best : null;
+  }, [summary]);
 
   const columns = [
     { label: 'Дата', key: 'date', primary: true },
@@ -209,28 +259,58 @@ export default function VisitorCounters() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {cumulative.map((row) => (
-          <div key={row.salon_id} className="app-card p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-xs text-[color:var(--color-text-muted)]">
-                  {row.salon_name || row.salon_id}{row.reset_at ? ` · с ${fmtDateTime(row.reset_at)}` : ''}
+      <div className="visitor-fui-readout">
+        <span>SYS://visitors.sensors</span><span className="sep">·</span>
+        <span>ТОЧЕК НА СВЯЗИ: <b>{cumulative.length}</b></span><span className="sep">·</span>
+        <span>ВОШЛО: <b style={{ color: 'var(--color-success)' }}>{liveTotals.in}</b></span><span className="sep">·</span>
+        <span>СЕЙЧАС В ЗАЛАХ: <b style={{ color: 'var(--color-primary)' }}>{Math.max(0, liveTotals.net)}</b></span><span className="sep">·</span>
+        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="visitor-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+      </div>
+
+      <div className="visitor-fui-frame grid gap-3 sm:grid-cols-2 lg:grid-cols-3 p-3">
+        <span className="visitor-fui-corner-tr" />
+        <span className="visitor-fui-corner-bl" />
+        <span className="visitor-fui-scan" />
+        {cumulative.map((row) => {
+          const spark = sparkBySalon.get(row.salon_id) || [];
+          const maxSpark = Math.max(...spark.map((d) => d.in_count), 1);
+          const isHottest = row.salon_id === hottestSalonId;
+          return (
+            <div key={row.salon_id} className="app-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs text-[color:var(--color-text-muted)] flex items-center gap-1.5">
+                    {isHottest && (
+                      <span className="visitor-fui-radar" title="Больше всего входов сегодня"><i /><i /><i /><b /></span>
+                    )}
+                    <span>{row.salon_name || row.salon_id}{row.reset_at ? ` · с ${fmtDateTime(row.reset_at)}` : ''}</span>
+                  </div>
+                  <div className="text-2xl font-semibold text-[color:var(--color-text)]">{row.in_count}</div>
+                  <div className="text-xs text-[color:var(--color-text-muted)] mt-1">Вышло: {row.out_count} · Сейчас в зале: {row.net}</div>
+                  {spark.length > 1 && (
+                    <div className="visitor-fui-spark" title="Входы по дням за выбранный период">
+                      {spark.map((d) => (
+                        <i
+                          key={d.date}
+                          style={{ height: `${Math.max(3, (d.in_count / maxSpark) * 20)}px`, opacity: 0.4 + (d.in_count / maxSpark) * 0.6 }}
+                          title={`${fmtDate(d.date)}: ${d.in_count}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="text-2xl font-semibold text-[color:var(--color-text)]">{row.in_count}</div>
-                <div className="text-xs text-[color:var(--color-text-muted)] mt-1">Вышло: {row.out_count} · Сейчас в зале: {row.net}</div>
+                <button
+                  type="button"
+                  className="btn flex items-center gap-1.5"
+                  onClick={() => handleReset(row.salon_id, row.salon_name || row.salon_id)}
+                  disabled={resetting === row.salon_id}
+                >
+                  <RotateCcw size={14} /> Обнулить
+                </button>
               </div>
-              <button
-                type="button"
-                className="btn flex items-center gap-1.5"
-                onClick={() => handleReset(row.salon_id, row.salon_name || row.salon_id)}
-                disabled={resetting === row.salon_id}
-              >
-                <RotateCcw size={14} /> Обнулить
-              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {cumulative.length === 0 && (
           <p className="text-sm text-[color:var(--color-text-muted)]">Нет салонов с данными счётчика.</p>
         )}

@@ -32,6 +32,12 @@ function fmtDateTime(iso) {
   });
 }
 
+function isToday(iso) {
+  if (!iso) return false;
+  const d = new Date(iso);
+  return !Number.isNaN(d.getTime()) && d.toDateString() === new Date().toDateString();
+}
+
 export default function SaleTransfers() {
   const { toast } = useToast();
   const now = new Date();
@@ -47,6 +53,16 @@ export default function SaleTransfers() {
 
   const [employees, setEmployees] = useState([]);     // [{code, name}]
   const [transfers, setTransfers] = useState([]);
+
+  // Живые часы для телеметрии ленты переносов и распознавания «только
+  // что случившегося» переноса — реальное время, а не декоративная
+  // анимация, см. transfer-fui-* ниже. Отдельное имя от `now` выше
+  // (снимок при монтировании для инициализации year/month).
+  const [clockNow, setClockNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setClockNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const loadMonthData = useCallback(async () => {
     try {
@@ -163,6 +179,26 @@ export default function SaleTransfers() {
 
   const rows = categoryRows(order);
 
+  // Телеметрия ленты переносов: реальные агрегаты по уже загруженному
+  // transfers за выбранный месяц — сколько сегодня, сколько всего,
+  // на какую сумму.
+  const transfersToday = transfers.filter((t) => isToday(t.created_at)).length;
+  const transfersAmountTotal = transfers.reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  // Самый свежий перенос и признак «случился в пределах последнего
+  // часа» — тикает вместе с `now`, поэтому маркер сам гаснет через час,
+  // без перезагрузки страницы.
+  const latestTransfer = transfers.reduce((acc, t) => {
+    if (!t.created_at) return acc;
+    const d = new Date(t.created_at);
+    if (Number.isNaN(d.getTime())) return acc;
+    if (!acc || d > acc.date) return { id: t.id, date: d };
+    return acc;
+  }, null);
+  const justHappened = Boolean(
+    latestTransfer && clockNow.getTime() - latestTransfer.date.getTime() < 60 * 60 * 1000
+  );
+
   return (
     <div className="p-4 sm:p-6 space-y-5">
       {/* Header */}
@@ -276,6 +312,18 @@ export default function SaleTransfers() {
       </div>
 
       {/* Existing transfers */}
+      <div className="transfer-fui-readout">
+        <span>ПЕРЕМЕЩЕНИЙ СЕГОДНЯ: <b>{transfersToday}</b></span>
+        <span className="sep">·</span>
+        <span>ВСЕГО ЗА {month}: <b>{transfers.length}</b></span>
+        <span className="sep">·</span>
+        <span>СУММА ЗА ПЕРИОД: <b>{fmt(transfersAmountTotal)} ₽</b></span>
+        <span className="sep">·</span>
+        <span>
+          {clockNow.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          <span className="transfer-fui-cursor">_</span>
+        </span>
+      </div>
       <div className="app-card overflow-hidden">
         <div className="px-4 py-3 border-b border-[color:var(--color-border)] font-semibold text-sm">
           Переносы за {month} {year}
@@ -293,7 +341,10 @@ export default function SaleTransfers() {
               {
                 label: 'Когда',
                 render: (t) => (
-                  <span className="whitespace-nowrap text-xs text-[color:var(--color-muted-foreground)]">
+                  <span className="whitespace-nowrap text-xs text-[color:var(--color-muted-foreground)] inline-flex items-center gap-1.5">
+                    {justHappened && latestTransfer?.id === t.id && (
+                      <span className="transfer-fui-radar" title="Только что"><i /><i /><i /><b /></span>
+                    )}
                     {fmtDateTime(t.created_at)}
                   </span>
                 ),
@@ -305,26 +356,35 @@ export default function SaleTransfers() {
                 render: (t) => <span className="font-mono text-xs">{t.doc_num}</span>,
               },
               {
-                label: 'Из категории',
-                render: (t) => CATEGORY_LABELS[t.from_category] || t.from_category,
-              },
-              {
-                label: 'В категорию',
-                render: (t) => CATEGORY_LABELS[t.to_category] || t.to_category,
+                label: 'Маршрут',
+                render: (t) => {
+                  const live = isToday(t.created_at);
+                  return (
+                    <div className="transfer-fui-route">
+                      <div className="transfer-fui-route__node">
+                        <span className="transfer-fui-route__cat">{CATEGORY_LABELS[t.from_category] || t.from_category}</span>
+                        <span className="transfer-fui-route__who" title={t.from_name || t.from_code || ''}>
+                          {t.from_name || t.from_code || '—'}
+                        </span>
+                      </div>
+                      <div className={`transfer-fui-route__connector${live ? ' transfer-fui-route__connector--live' : ''}`}>
+                        <span className="transfer-fui-route__dot" />
+                      </div>
+                      <div className="transfer-fui-route__node">
+                        <span className="transfer-fui-route__cat">{CATEGORY_LABELS[t.to_category] || t.to_category}</span>
+                        <span className="transfer-fui-route__who" title={t.to_name || t.to_code || ''}>
+                          {t.to_name || t.to_code || '—'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                },
               },
               {
                 label: 'Сумма',
                 headerClass: 'text-right',
                 cellClass: 'text-right whitespace-nowrap',
                 render: (t) => <span className="tabular-nums font-medium">{fmt(t.amount)} ₽</span>,
-              },
-              {
-                label: 'От кого',
-                render: (t) => t.from_name || t.from_code,
-              },
-              {
-                label: 'Кому',
-                render: (t) => t.to_name || t.to_code,
               },
               {
                 label: 'Кто перенёс',

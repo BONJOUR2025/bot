@@ -3359,3 +3359,608 @@ body.viewer3d-fs-active .app-card {
   border-radius: 50%;
   background: var(--color-text-faint);
 }
+
+/* ── FUI-слой салонов (Салоны) ────────────────────────────────────
+   Мотив «стена мониторинга сети точек», под собственным префиксом
+   salon-fui-, независимым от payout-fui-/control-fui-/etc:
+   1) salon-fui-readout — телеметрическая строка сети: реальные
+      агрегаты из уже загруженных salons/employees (кол-во точек,
+      сколько «в сети» = status active, суммарный уникальный персонал,
+      средняя площадь) плюс живые часы (тот же паттерн, что и
+      payout-fui-cursor).
+   2) salon-fui-frame/-corner-tr/-corner-bl/-scan — рамка-viewport
+      вокруг сетки карточек салонов, как «стена мониторинга» точек.
+   3) salon-fui-radar — пульсирующий индикатор «в эфире» на карточке
+      салона, показывается только когда salon.status === 'active' —
+      это реальный статус точки, а не декоративная выдумка. */
+.salon-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.salon-fui-readout b { font-weight: 600; }
+.salon-fui-readout .sep { opacity: 0.4; }
+@keyframes salon-fui-blink { 50% { opacity: 0; } }
+.salon-fui-cursor { animation: salon-fui-blink 1s step-start infinite; color: var(--color-primary); }
+
+.salon-fui-frame { position: relative; overflow: hidden; }
+.salon-fui-corner-tr,
+.salon-fui-corner-bl,
+.salon-fui-frame::before,
+.salon-fui-frame::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  border-color: var(--color-primary);
+  opacity: 0.55;
+  z-index: 1;
+}
+.salon-fui-frame::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+.salon-fui-corner-tr     { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+.salon-fui-frame::after  { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+.salon-fui-corner-bl     { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+.salon-fui-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  opacity: 0.4;
+  animation: salon-fui-scan-move 6s linear infinite;
+}
+@keyframes salon-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
+
+.salon-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.salon-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-success);
+  animation: salon-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.salon-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.salon-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.salon-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-success); }
+@keyframes salon-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .salon-fui-cursor,
+  .salon-fui-scan,
+  .salon-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой клиентов (Клиенты) ──────────────────────────────────
+   Мотив «оперативное досье» — карточка клиента читается как поднятое
+   на экран личное дело, под собственным префиксом client-fui-:
+   1) client-fui-stamp — монохромный штамп рядом с именем клиента,
+      появляется только когда карточка реально открыта (openedAt в
+      Clients.jsx, момент ответа GET /clients/{id}), с реальными
+      кол-вом заказов и LTV из того же профиля.
+   2) client-fui-radar — пульсирующее кольцо риска оттока рядом с
+      именем/в углу карточки. Показывается только когда
+      computeChurnRisk() (Clients.jsx) находит перерыв дольше вдвое
+      обычного интервала между заказами клиента, но не менее 45 дней —
+      та же формула и тот же 45-дневный минимум, что и во вкладке
+      «Уходящие клиенты» (ChurningTab / GET /clients/churning).
+   3) client-fui-frame/-corner-tr/-corner-bl/-scan — рамка-viewport с
+      бегущей сканирующей линией вокруг карточки профиля клиента,
+      «запись поднята на экран». Клон payout-fui-frame/salon-fui-frame
+      под своим префиксом, применяется точечно к шапке ClientCard, а
+      не ко всей странице. */
+.client-fui-stamp {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+}
+.client-fui-stamp b { font-weight: 600; color: var(--color-text); }
+.client-fui-stamp .sep { opacity: 0.4; }
+
+.client-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.client-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
+  animation: client-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.client-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.client-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.client-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
+@keyframes client-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+.client-fui-frame { position: relative; overflow: hidden; }
+.client-fui-corner-tr,
+.client-fui-corner-bl,
+.client-fui-frame::before,
+.client-fui-frame::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  border-color: var(--color-primary);
+  opacity: 0.55;
+  z-index: 1;
+}
+.client-fui-frame::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+.client-fui-corner-tr     { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+.client-fui-frame::after  { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+.client-fui-corner-bl     { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+.client-fui-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  opacity: 0.4;
+  animation: client-fui-scan-move 6s linear infinite;
+}
+@keyframes client-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .client-fui-radar i,
+  .client-fui-scan { animation: none; }
+}
+
+/* ── FUI-слой счётчика посетителей (Счётчик посетителей) ──────────
+   Страница — буквально сеть счётчиков людского потока, так что мотив
+   «живая сенсорная лента» здесь ближе к прямому назначению, чем на
+   любой другой странице. Собственный префикс visitor-fui-, независимый
+   от payout-fui-/salon-fui-/etc. Три элемента:
+   1) visitor-fui-readout — телеметрическая строка над сеткой точек:
+      число точек на связи и агрегаты in/out/net, посчитанные из
+      cumulative (реального накопленного состояния датчиков), плюс
+      тикающие часы с мигающим курсором секунд.
+   2) visitor-fui-spark — мини-спарклайн входов по дням ВНУТРИ каждой
+      карточки точки, из summary (реальная история за period, не
+      выдумка), в отличие от payout-fui-ticker — это один общий
+      спарклайн на странице; здесь спарклайн персональный, per-точка.
+   3) visitor-fui-radar — не индикатор «в эфире» (это уже занято
+      salon-fui-radar), а маркер точки с максимальным числом входов
+      СЕГОДНЯ — «здесь сейчас больше всего людей», реальные данные
+      summary за today, не оформление ради оформления.
+   4) visitor-fui-frame/-corner-tr/-corner-bl/-scan — рамка-viewport
+      сенсорной сетки, тот же приём рамки, что и на других страницах,
+      но обёрнутая вокруг сетки точек, а не вокруг ленты записей. */
+.visitor-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+  margin-bottom: 1rem;
+}
+.visitor-fui-readout b { font-weight: 600; }
+.visitor-fui-readout .sep { opacity: 0.4; }
+@keyframes visitor-fui-blink { 50% { opacity: 0; } }
+.visitor-fui-cursor { animation: visitor-fui-blink 1s step-start infinite; color: var(--color-primary); }
+
+.visitor-fui-frame { position: relative; overflow: hidden; }
+.visitor-fui-corner-tr,
+.visitor-fui-corner-bl,
+.visitor-fui-frame::before,
+.visitor-fui-frame::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  border-color: var(--color-primary);
+  opacity: 0.55;
+  z-index: 1;
+}
+.visitor-fui-frame::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+.visitor-fui-corner-tr     { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+.visitor-fui-frame::after  { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+.visitor-fui-corner-bl     { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+.visitor-fui-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  opacity: 0.4;
+  animation: visitor-fui-scan-move 7s linear infinite;
+}
+@keyframes visitor-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
+
+.visitor-fui-radar { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; }
+.visitor-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
+  animation: visitor-fui-ping 1.8s ease-out infinite; opacity: 0;
+}
+.visitor-fui-radar i:nth-child(2) { animation-delay: 0.6s; }
+.visitor-fui-radar i:nth-child(3) { animation-delay: 1.2s; }
+.visitor-fui-radar b { position: absolute; inset: 1.5px; border-radius: 999px; background: var(--color-danger); }
+@keyframes visitor-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4); opacity: 0; } }
+
+.visitor-fui-spark { display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 0.4rem; }
+.visitor-fui-spark i { display: block; width: 4px; border-radius: 2px 2px 0 0; background: var(--color-primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .visitor-fui-cursor,
+  .visitor-fui-scan,
+  .visitor-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой перемещения продажи (Перемещение продажи) ──
+   Страница переносит сумму продажи из одной категории/сотрудника в
+   другую — «маршрутизация», не поток записей, поэтому мотив здесь
+   ретрансляция сигнала (relay), а не лента/радар статуса. Собственный
+   префикс transfer-fui-, независимый от payout-fui-/incentive-fui-/etc.
+   1) transfer-fui-readout — телеметрическая строка над таблицей
+      переносов: сколько переносов сегодня и всего за выбранный месяц
+      плюс сумма — реальные агрегаты transfers (см. SaleTransfers.jsx),
+      с тикающими часами и мигающим курсором.
+   2) transfer-fui-route — маршрутная плашка в каждой строке таблицы:
+      узел-источник (категория + от кого) — коннектор со стрелкой —
+      узел-назначение (категория + кому), метафора ретрансляции.
+      Точка коннектора «бежит» по линии, только если перенос сделан
+      сегодня (isToday(t.created_at)) — реальный признак свежести, а не
+      анимация ради анимации.
+   3) transfer-fui-radar — маркер «только что» у самого свежего
+      переноса (created_at в пределах последнего часа от тикающих
+      `now`), сам гаснет по истечении часа. */
+.transfer-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.transfer-fui-readout b { font-weight: 600; color: var(--color-text); }
+.transfer-fui-readout .sep { opacity: 0.4; }
+@keyframes transfer-fui-blink { 50% { opacity: 0; } }
+.transfer-fui-cursor { animation: transfer-fui-blink 1s step-start infinite; color: var(--color-primary); }
+
+.transfer-fui-route {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.transfer-fui-route__node {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+.transfer-fui-route__cat {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.transfer-fui-route__who {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+.transfer-fui-route__connector {
+  position: relative;
+  flex: 0 0 24px;
+  height: 2px;
+  background: color-mix(in srgb, var(--color-primary) 35%, var(--glass-hair));
+  margin: 0 0.1rem;
+}
+.transfer-fui-route__connector::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-left: 4px solid color-mix(in srgb, var(--color-primary) 55%, var(--glass-hair));
+}
+.transfer-fui-route__dot {
+  position: absolute;
+  top: 50%;
+  left: 6%;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transform: translate(-50%, -50%);
+  opacity: 0.9;
+}
+.transfer-fui-route__connector--live .transfer-fui-route__dot {
+  animation: transfer-fui-relay 1.4s ease-in-out infinite;
+}
+@keyframes transfer-fui-relay {
+  0%   { left: 6%;  opacity: 0.9; }
+  50%  { left: 94%; opacity: 0.45; }
+  100% { left: 6%;  opacity: 0.9; }
+}
+
+.transfer-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.transfer-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-primary);
+  animation: transfer-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.transfer-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.transfer-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.transfer-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-primary); }
+@keyframes transfer-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .transfer-fui-cursor,
+  .transfer-fui-radar i,
+  .transfer-fui-route__connector--live .transfer-fui-route__dot { animation: none; }
+}
+
+/* ── FUI-слой продаж (Продажи) ────────────────────────────────────
+   Страница уже плотная (KpiStat-ряд, Leaderboard, PlanGauges,
+   DayHeatmap, несколько вкладок с таблицами) — поэтому ровно два
+   элемента, собственный префикс sales-fui-, независимый от
+   payout-fui-/salon-fui-/etc:
+   1) sales-fui-readout + sales-fui-ticker — телеметрическая лента над
+      вкладками: реальные агрегаты, уже посчитанные для KPI-строки и
+      графика «Динамика продаж» (kpi.total/dTotal/activePeriods,
+      empSummary.length, chartData._total), плюс живые часы
+      (тот же приём, что и payout-fui-cursor на «Выплатах»).
+   2) sales-fui-radar — радар-пинг на вкладке «Сотрудники» (PlanGauges),
+      но только у гаунджа, который реально достиг/перевыполнил план
+      (done >= 100%, максимум среди сотрудников с планом) — настоящая
+      проверка порога, а не декоративная отметка на каждой строке. */
+.sales-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+  margin-top: 0.75rem;
+}
+.sales-fui-readout b { font-weight: 600; }
+.sales-fui-readout .sep { opacity: 0.4; }
+@keyframes sales-fui-blink { 50% { opacity: 0; } }
+.sales-fui-cursor { animation: sales-fui-blink 1s step-start infinite; color: var(--color-primary); }
+
+.sales-fui-ticker {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.75rem;
+  background: var(--glass-shell);
+  margin-top: 0.6rem;
+}
+.sales-fui-ticker__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-faint); white-space: nowrap; }
+.sales-fui-spark { display: flex; align-items: flex-end; gap: 2px; height: 30px; }
+.sales-fui-spark i { display: block; width: 5px; border-radius: 2px 2px 0 0; background: var(--color-primary); }
+
+.sales-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.sales-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-success);
+  animation: sales-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.sales-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.sales-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.sales-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-success); }
+@keyframes sales-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sales-fui-cursor,
+  .sales-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой планов продаж (Планы продаж) ────────────────────────
+   Мотив «пункт управления целями», под собственным префиксом
+   plan-fui-, независимым от sales-fui-/salon-fui-/etc:
+   1) plan-fui-readout — телеметрическая строка захвата целей: реальные
+      агрегаты из уже загруженных codes/plans за просматриваемый месяц
+      (кол-во точек, сколько получили план хотя бы по одной категории,
+      сколько «захвачены» полностью — все три категории заполнены —
+      суммарный план) плюс живые часы, тот же паттерн, что и
+      payout-fui-cursor/salon-fui-cursor.
+   2) plan-fui-countdown — обратный отсчёт до конца просматриваемого
+      месяца рядом с переключателем периода, посчитанный от реальной
+      сегодняшней даты (см. periodUrgency() в LocationPlans.jsx) —
+      приглушённый вдали, warning в последние 5 дней, danger в
+      последний день; для не текущего месяца — нейтральная пометка
+      «период завершён/впереди», а не отсчёт.
+   3) plan-fui-radar/-locked — «цель захвачена»: пульсирующий радар и
+      бейдж LOCKED у точки, план которой реально выставлен по всем
+      трём категориям (repair_plan/cosmetics_plan/shoes_plan > 0) —
+      настоящая проверка порога на каждую точку, не декоративная. */
+.plan-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.plan-fui-readout b { font-weight: 600; }
+.plan-fui-readout .sep { opacity: 0.4; }
+@keyframes plan-fui-blink { 50% { opacity: 0; } }
+.plan-fui-cursor { animation: plan-fui-blink 1s step-start infinite; color: var(--color-primary); }
+
+.plan-fui-countdown {
+  display: block;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.plan-fui-countdown--muted   { color: var(--color-text-faint); }
+.plan-fui-countdown--warning { color: var(--color-warning); }
+.plan-fui-countdown--danger  { color: var(--color-danger); }
+
+.plan-fui-radar { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; }
+.plan-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-success);
+  animation: plan-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.plan-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.plan-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.plan-fui-radar b { position: absolute; inset: 1.5px; border-radius: 999px; background: var(--color-success); }
+@keyframes plan-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+.plan-fui-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-success);
+  border: 1px solid color-mix(in srgb, var(--color-success) 50%, transparent);
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-fui-cursor,
+  .plan-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой 3D сканера (3D сканер) ── ────────────────────────────
+   Собственный префикс scan-fui-, независимый от остальных слоёв.
+   Мотив «терминал захвата скана», два элемента:
+   1) scan-fui-readout — телеметрическая строка над результатом
+      разбора: задержка запроса замерена клиентом вокруг самого
+      api.post('scanner/parse') (parseMs в Scanner3D.jsx), сумма
+      point_count по всем найденным стопам (totalPoints), размер файла
+      из ответа сервера (result.file_size) и число найденных стоп
+      (result.feet.length) — реальные цифры конкретного разбора, не
+      декоративные.
+   2) scan-fui-frame/-corner-tr/-corner-bl/-scan — рамка-viewport
+      вокруг зоны загрузки файла, клон payout-fui-frame под своим
+      префиксом. Развёртка (scan-fui-scan) рендерится в JSX только пока
+      dragOver или loading истинны — то есть только когда реально идёт
+      захват файла, а не постоянно.
+   3) scan-fui-reticle/-reticle__tag — пунктирный ретикл поверх значений
+      «пучки»/«подъём» (FootScanCard.jsx), показывается только когда
+      foot.ball_girth_mm / foot.instep_girth_mm не null — те же самые
+      поля, что уже помечены текстом «геометрическая оценка» под
+      таблицей, только теперь видно прямо на самом числе. */
+.scan-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.scan-fui-readout b { font-weight: 600; }
+.scan-fui-readout .sep { opacity: 0.4; }
+
+.scan-fui-frame { position: relative; overflow: hidden; }
+.scan-fui-corner-tr,
+.scan-fui-frame::before,
+.scan-fui-frame::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  border-color: var(--color-primary);
+  opacity: 0.55;
+  z-index: 1;
+}
+.scan-fui-frame::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+.scan-fui-corner-tr     { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+.scan-fui-frame::after  { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+.scan-fui-corner-bl     { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+.scan-fui-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  opacity: 0.5;
+  animation: scan-fui-scan-move 1.6s linear infinite;
+}
+@keyframes scan-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
+
+.scan-fui-reticle { position: absolute; inset: -4px -6px -1px -6px; pointer-events: none; }
+.scan-fui-reticle::before,
+.scan-fui-reticle::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  opacity: 0.7;
+}
+.scan-fui-reticle::before { top: 0; left: 0; border-top: 1px dashed color-mix(in srgb, var(--color-primary) 60%, transparent); border-left: 1px dashed color-mix(in srgb, var(--color-primary) 60%, transparent); }
+.scan-fui-reticle::after  { bottom: 0; right: 0; border-bottom: 1px dashed color-mix(in srgb, var(--color-primary) 60%, transparent); border-right: 1px dashed color-mix(in srgb, var(--color-primary) 60%, transparent); }
+.scan-fui-reticle__tag {
+  position: absolute;
+  top: -3px;
+  right: -6px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-primary);
+  opacity: 0.85;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-fui-scan { animation: none; }
+}

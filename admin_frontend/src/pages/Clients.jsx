@@ -13,6 +13,38 @@ const fmtDate = (v) => {
   const d = new Date(v);
   return isNaN(d) ? v : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
+// Полная метка времени открытия досье — момент реального ответа
+// /clients/{id}, а не декоративное значение.
+const fmtStamp = (d) => {
+  if (!d) return '—';
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+    ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+};
+
+// Риск оттока конкретного клиента — та же формула, что и во вкладке
+// «Уходящие клиенты» ниже (ChurningTab / GET /clients/churning):
+// клиент не появлялся дольше, чем вдвое больше его обычного интервала
+// между заказами, но не менее 45 дней (тот же фиксированный минимум,
+// что описан в подсказке ChurningTab). Считается из уже загруженной
+// истории заказов профиля (profile.orders), без отдельного запроса.
+// Нужно минимум 2 заказа, чтобы вообще был интервал для сравнения.
+function computeChurnRisk(profile) {
+  const dates = (profile?.orders || [])
+    .map((o) => new Date(o.date))
+    .filter((d) => !isNaN(d))
+    .sort((a, b) => a - b);
+  if (dates.length < 2) return null;
+  let totalGapDays = 0;
+  for (let i = 1; i < dates.length; i++) totalGapDays += (dates[i] - dates[i - 1]) / 86400000;
+  const avgGapDays = totalGapDays / (dates.length - 1);
+  const daysSinceLast = Math.floor((Date.now() - dates[dates.length - 1]) / 86400000);
+  const threshold = Math.max(avgGapDays * 2, 45);
+  return {
+    avgGapDays: Math.round(avgGapDays),
+    daysSinceLast,
+    atRisk: daysSinceLast > threshold,
+  };
+}
 
 // Цвета берутся из токенов, а не задаются шестнадцатеричными литералами:
 // раньше здесь стояли значения палитры брутализма прямо во встроенных
@@ -103,21 +135,51 @@ function OrderRow({ contragentId, order }) {
   );
 }
 
-function ClientCard({ profile }) {
+function ClientCard({ profile, openedAt }) {
+  const churn = computeChurnRisk(profile);
   return (
     <div className="space-y-4">
-      <div className="app-card p-4 flex flex-wrap items-center justify-between gap-3">
+      {/* Рамка-viewport + бегущая сканирующая линия — «досье поднято на
+          экран», только вокруг карточки профиля, не всей страницы. */}
+      <div className="app-card p-4 flex flex-wrap items-center justify-between gap-3 client-fui-frame">
+        <span className="client-fui-corner-tr" />
+        <span className="client-fui-corner-bl" />
+        <span className="client-fui-scan" />
         <div>
-          <div className="font-semibold text-lg">{profile.name || '—'}</div>
+          <div className="font-semibold text-lg flex items-center gap-2">
+            {profile.name || '—'}
+            {churn?.atRisk && (
+              <span
+                className="client-fui-radar"
+                title={`Не заказывал ${churn.daysSinceLast} дн. — обычно раз в ${churn.avgGapDays} дн.`}
+              >
+                <i /><i /><i /><b />
+              </span>
+            )}
+          </div>
           {profile.phone && (
             <div className="text-sm text-[color:var(--color-muted-foreground)] flex items-center gap-1.5 mt-0.5">
               <Phone size={13} /> {profile.phone}
+            </div>
+          )}
+          {openedAt && (
+            <div className="client-fui-stamp mt-2">
+              ДОСЬЕ ОТКРЫТО: <b>{fmtStamp(openedAt)}</b>
+              <span className="sep">·</span>
+              ЗАКАЗОВ: <b>{profile.order_count}</b>
+              <span className="sep">·</span>
+              LTV: <b>{fmtRub(profile.total_spent)}</b>
             </div>
           )}
         </div>
         <div className="text-xs text-[color:var(--color-muted-foreground)] text-right">
           <div>Первый заказ: {fmtDate(profile.first_order_date)}</div>
           <div>Последний заказ: {fmtDate(profile.last_order_date)}</div>
+          {churn?.atRisk && (
+            <div className="text-[color:var(--color-danger)] font-medium mt-0.5">
+              Не заказывал {churn.daysSinceLast} дн. (обычно раз в {churn.avgGapDays})
+            </div>
+          )}
         </div>
       </div>
 
@@ -247,6 +309,10 @@ export default function Clients() {
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [error, setError] = useState(null);
+  // Момент, когда карточка клиента реально была открыта (ответ
+  // /clients/{id} пришёл) — для FUI-штампа «ДОСЬЕ ОТКРЫТО», не
+  // выдуманное значение.
+  const [openedAt, setOpenedAt] = useState(null);
 
   async function doSearch(e) {
     e?.preventDefault();
@@ -265,6 +331,7 @@ export default function Clients() {
     try {
       const res = await api.get(`/clients/${contragentId}`);
       setProfile(res.data);
+      setOpenedAt(new Date());
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки карточки');
     } finally { setLoadingProfile(false); }
@@ -329,8 +396,8 @@ export default function Clients() {
           {loadingProfile && <SkeletonTable rows={6} />}
           {profile && !loadingProfile && (
             <>
-              <button onClick={() => setProfile(null)} className="text-sm text-[color:var(--color-primary)] hover:underline">← назад к результатам поиска</button>
-              <ClientCard profile={profile} />
+              <button onClick={() => { setProfile(null); setOpenedAt(null); }} className="text-sm text-[color:var(--color-primary)] hover:underline">← назад к результатам поиска</button>
+              <ClientCard profile={profile} openedAt={openedAt} />
             </>
           )}
         </div>
