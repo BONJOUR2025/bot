@@ -2564,6 +2564,46 @@ body.viewer3d-fs-active .app-card {
   .audio-wave i { animation: none !important; height: 40% !important; }
 }
 
+/* ── Лента заявок на выплату (Выплаты → Заявки) ─────────────────
+   Записи оседают в ленту с лёгким появлением — читается как «сейчас
+   пришло», а не статичный список. Смена статуса подсвечивает бейдж
+   кольцом в цвете нового статуса, ощутимо, но без анимации-мигания. */
+.payout-feed__day {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+  padding: 1.1rem 0 0.5rem;
+}
+.payout-feed__day:first-child { padding-top: 0; }
+@keyframes payout-feed-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.payout-feed__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px dashed var(--color-border);
+  animation: payout-feed-in 0.35s ease both;
+}
+.payout-feed__item:last-child { border-bottom: 0; }
+@keyframes payout-status-flash {
+  0%   { box-shadow: 0 0 0 0 var(--flash-color, transparent); }
+  45%  { box-shadow: 0 0 0 7px var(--flash-color, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.payout-feed__badge-flash {
+  animation: payout-status-flash 0.7s ease-out;
+  border-radius: var(--radius-full);
+}
+@media (prefers-reduced-motion: reduce) {
+  .payout-feed__item { animation: none; }
+  .payout-feed__badge-flash { animation: none; }
+}
+
 /* ── Сплошные цветные кнопки ───────────────────────────────────
    Нормализация выше переводит bg-blue-600 и подобные в приглушённый
    фон (--color-*-muted) — это верно для плашек и бейджей, но ломает

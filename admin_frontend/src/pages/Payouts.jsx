@@ -597,6 +597,102 @@ function NotificationJournal({ entries, open, onToggle, onRefresh }) {
   );
 }
 
+const STATUS_BADGE_CLASS = { 'Ожидает': 'badge--neutral', 'Одобрено': 'badge--info', 'Выплачено': 'badge--success', 'Отклонено': 'badge--error' };
+const STATUS_FLASH_COLOR = {
+  'Ожидает': 'var(--color-text-faint)',
+  'Одобрено': 'var(--color-primary-muted)',
+  'Выплачено': 'var(--color-success-muted)',
+  'Отклонено': 'var(--color-danger-muted)',
+};
+
+// «Сегодня»/«вчера» вместо голой даты — лента читается как поток
+// событий, а не архив.
+function dayLabel(value) {
+  if (!value) return 'Без даты';
+  const d = new Date(value.replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return 'Без даты';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const that = new Date(d); that.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today - that) / 86400000);
+  const label = d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' });
+  if (diffDays === 0) return `${label}, сегодня`;
+  if (diffDays === 1) return `${label}, вчера`;
+  return label;
+}
+
+// ── Одна запись ленты заявок ───────────────────────────────────────
+function PayoutFeedItem({
+  p, selected, onToggleSelect, moveMatch, findingMove, onFindMove, onQuickView,
+  onEdit, onApprove, onReject, onMarkPaid, onRemove, flash,
+}) {
+  const initial = (p.name || '?').trim().charAt(0).toUpperCase();
+  return (
+    <div className="payout-feed__item">
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={onToggleSelect}
+        className="shrink-0"
+        style={{ width: 15, height: 15, marginTop: '0.6rem' }}
+      />
+      <div className="grid place-items-center w-9 h-9 shrink-0 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-sm font-semibold mt-0.5">
+        {initial}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Пульсирующая точка вместо статичной — «Ожидает» это то, что
+              требует внимания прямо сейчас, тот же приём, что и «в эфире»
+              на Прослушивании. */}
+          {p.status === 'Ожидает' && <i className="ui-live-dot" />}
+          <span className="font-medium text-sm">{p.name}</span>
+          <span
+            className={`badge ${STATUS_BADGE_CLASS[p.status] || 'badge--neutral'} ${flash ? 'payout-feed__badge-flash' : ''}`}
+            style={flash ? { '--flash-color': STATUS_FLASH_COLOR[p.status] || 'transparent' } : undefined}
+          >
+            {p.status}
+          </span>
+        </div>
+        <div className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+          {p.payout_type} · {p.method} · {formatDateTime(p.timestamp)}
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="font-semibold text-sm tabular-nums text-[color:var(--color-primary)]">
+          {Number(p.amount || 0).toLocaleString('ru-RU')} ₽
+        </div>
+      </div>
+      <div className="flex items-center gap-1 shrink-0 ml-1">
+        {findingMove ? (
+          <RefreshCw size={13} className="animate-spin text-[color:var(--color-text-faint)]" />
+        ) : moveMatch?.matched ? (
+          <button onClick={onQuickView} title={`Движение привязано: ${moveMatch.move_id} — нажмите для просмотра`} className="p-1 rounded hover:bg-green-500/10">
+            <LinkIcon size={14} className="text-green-500" />
+          </button>
+        ) : moveMatch != null ? (
+          <button onClick={onFindMove} title="Кассовое движение не найдено — нажмите для повторного поиска" className="p-1 rounded">
+            <Unlink size={14} className="text-amber-400 hover:text-amber-600" />
+          </button>
+        ) : (
+          <button onClick={onFindMove} title="Найти кассовое движение" className="p-1 rounded">
+            <Search size={13} className="text-[color:var(--color-text-faint)] hover:text-[color:var(--color-text-muted)]" />
+          </button>
+        )}
+        <button onClick={onEdit} className="p-1 rounded text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-primary)]" title="Редактировать"><Pencil size={15} /></button>
+        {p.status === 'Ожидает' && (
+          <>
+            <button onClick={onApprove} className="p-1 rounded text-[color:var(--color-success)] hover:bg-[color:var(--color-success)]/10" title="Одобрить"><CheckCircle size={16} /></button>
+            <button onClick={onReject} className="p-1 rounded text-[color:var(--color-danger)] hover:bg-[color:var(--color-danger)]/10" title="Отказать"><XCircle size={16} /></button>
+          </>
+        )}
+        {p.status === 'Одобрено' && (
+          <button onClick={onMarkPaid} className="p-1 rounded text-[color:var(--color-primary)] hover:bg-[color:var(--color-primary)]/10" title="Отметить выплаченным"><Download size={16} /></button>
+        )}
+        <button onClick={onRemove} className="p-1 rounded text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-danger)]" title="Удалить"><Trash2 size={15} /></button>
+      </div>
+    </div>
+  );
+}
+
 export default function Payouts() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -646,6 +742,9 @@ export default function Payouts() {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
+  // Подсвечивает бейдж только что изменённой заявки — сбрасывается по
+  // истечении анимации, см. .payout-feed__badge-flash.
+  const [flashId, setFlashId] = useState(null);
   const [activity, setActivity] = useState([]);
   const [showActivity, setShowActivity] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -801,6 +900,21 @@ export default function Payouts() {
       return !isNaN(d) && d.getDay() === dayFilter;
     });
   }, [payouts, dayFilter]);
+
+  // Лента: свежие заявки сверху, сгруппированы по дню.
+  const feedGroups = useMemo(() => {
+    const sorted = [...visiblePayouts].sort(
+      (a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)
+    );
+    const groups = [];
+    for (const p of sorted) {
+      const label = dayLabel(p.timestamp);
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.items.push(p);
+      else groups.push({ label, items: [p] });
+    }
+    return groups;
+  }, [visiblePayouts]);
 
   // Chart-driven drill-down: clicking a chart segment applies the matching filter and jumps to the list.
   function selectStatus(name) {
@@ -969,6 +1083,8 @@ export default function Payouts() {
       }
       await api.post(endpoint);
       toast('Статус обновлён', 'success');
+      setFlashId(id);
+      setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 700);
       load();
       loadActivity();
     } catch (err) {
@@ -1164,19 +1280,6 @@ export default function Payouts() {
       toast('Ошибка обновления', 'error');
     }
   }
-
-  const statusColor = (s) => {
-    switch (s) {
-      case 'Одобрено':
-        return 'bg-green-100 text-green-800';
-      case 'Отклонено':
-        return 'bg-red-100 text-red-800';
-      case 'Выплачено':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-yellow-100 text-yellow-800';
-    }
-  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -1420,13 +1523,13 @@ export default function Payouts() {
       </div>
 
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 bg-blue-50 p-3 rounded border border-blue-200">
-          <span className="text-sm text-blue-800 font-medium">
+        <div className="flex flex-wrap items-center gap-3 bg-[color:var(--color-primary-muted)] p-3 rounded border border-[color:var(--color-primary)]/30">
+          <span className="text-sm text-[color:var(--color-primary)] font-medium">
             Выбрано: <strong>{selected.size}</strong>
           </span>
           <div className="flex items-center gap-2">
             <select
-              className="border border-blue-300 rounded px-2 py-1 text-sm bg-[color:var(--color-surface)]"
+              className="border border-[color:var(--color-primary)]/40 rounded px-2 py-1 text-sm bg-[color:var(--color-surface)]"
               defaultValue=""
               onChange={(e) => { if (e.target.value) { bulkSetStatus(e.target.value); e.target.value = ''; } }}
             >
@@ -1464,96 +1567,52 @@ export default function Payouts() {
       )}
 
       {loading ? (
-        <div className="border rounded shadow bg-[color:var(--color-surface)] p-4">
-          <SkeletonTable rows={8} cols={7} />
-        </div>
+        <div className="ui-shell"><div className="ui-core" style={{ padding: '1.25rem 1.5rem' }}>
+          <SkeletonTable rows={6} cols={3} />
+        </div></div>
       ) : (
         <>
           {visiblePayouts.length > 0 && (
-            <label className="flex items-center gap-2 text-sm text-[color:var(--color-text-muted)]">
+            <label className="flex items-center gap-2 text-sm text-[color:var(--color-muted-foreground)]">
               <input
                 type="checkbox"
                 checked={selected.size === visiblePayouts.length}
                 onChange={toggleSelectAll}
               />
-              Выбрать все
+              Выбрать все ({visiblePayouts.length})
             </label>
           )}
-          <ResponsiveTable
-            data={visiblePayouts}
-            keyFn={(p) => p.id}
-            rowClass={(p) => (selected.has(p.id) ? 'bg-blue-50' : '')}
-            emptyText="Заявок нет" emptyHint="Новые заявки приходят из бота и появляются здесь сразу."
-            columns={[
-              {
-                label: '',
-                render: (p) => (
-                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
-                ),
-              },
-              {
-                label: 'Движение',
-                render: (p) =>
-                  findingMoves.has(p.id) || (moveMatchesLoading && moveMatches[p.id] == null) ? (
-                    <RefreshCw size={13} className="animate-spin text-[color:var(--color-text-faint)]" />
-                  ) : moveMatches[p.id]?.matched ? (
-                    <button
-                      onClick={() => setQuickViewPayout(p)}
-                      title={`Движение привязано: ${moveMatches[p.id].move_id} — нажмите для просмотра`}
-                      className="p-0.5 rounded hover:bg-green-100 transition-colors"
-                    >
-                      <LinkIcon size={14} className="text-green-500" />
-                    </button>
-                  ) : moveMatches[p.id] != null ? (
-                    <button onClick={() => findMoveForPayout(p.id)} title="Кассовое движение не найдено — нажмите для повторного поиска">
-                      <Unlink size={14} className="text-amber-400 hover:text-amber-600" />
-                    </button>
-                  ) : (
-                    <button onClick={() => findMoveForPayout(p.id)} title="Найти кассовое движение">
-                      <Search size={13} className="text-[color:var(--color-text-faint)] hover:text-[color:var(--color-text-muted)]" />
-                    </button>
-                  ),
-              },
-              { label: 'ФИО', key: 'name', primary: true },
-              { label: 'Тип', key: 'payout_type' },
-              { label: 'Способ', key: 'method' },
-              {
-                label: 'Сумма',
-                headerClass: 'text-right',
-                cellClass: 'text-right whitespace-nowrap',
-                render: (p) => <span className="text-[color:var(--color-primary)] font-medium tabular-nums">{Number(p.amount || 0).toLocaleString('ru-RU')} ₽</span>,
-              },
-              {
-                label: 'Статус',
-                render: (p) => (
-                  <span className={`px-2 py-1 rounded text-xs ${statusColor(p.status)}`}>{p.status}</span>
-                ),
-              },
-              {
-                label: 'Дата',
-                render: (p) => <span className="text-xs">{formatDateTime(p.timestamp)}</span>,
-              },
-              {
-                label: '',
-                isAction: true,
-                render: (p) => (
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => openEdit(p)} className="text-blue-600 hover:text-blue-800" title="Редактировать"><Pencil size={16} /></button>
-                    {p.status === 'Ожидает' && (
-                      <button onClick={() => updateStatus(p.id, 'Одобрено')} className="text-green-600 hover:text-green-800" title="Одобрить"><CheckCircle size={16} /></button>
-                    )}
-                    {p.status === 'Ожидает' && (
-                      <button onClick={() => updateStatus(p.id, 'Отклонено')} className="text-red-600 hover:text-red-800" title="Отказать"><XCircle size={16} /></button>
-                    )}
-                    {p.status === 'Одобрено' && (
-                      <button onClick={() => updateStatus(p.id, 'Выплачено')} className="text-indigo-600 hover:text-indigo-800" title="Отметить выплаченным"><Download size={16} /></button>
-                    )}
-                    <button onClick={() => remove(p.id)} className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]" title="Удалить"><Trash2 size={16} /></button>
-                  </div>
-                ),
-              },
-            ]}
-          />
+          {visiblePayouts.length === 0 ? (
+            <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
+              Заявок нет — новые заявки приходят из бота и появляются здесь сразу.
+            </div>
+          ) : (
+            <div className="ui-shell"><div className="ui-core" style={{ padding: '1.1rem 1.5rem' }}>
+              {feedGroups.map((g) => (
+                <div key={g.label}>
+                  <div className="payout-feed__day">{g.label}</div>
+                  {g.items.map((p) => (
+                    <PayoutFeedItem
+                      key={p.id}
+                      p={p}
+                      selected={selected.has(p.id)}
+                      onToggleSelect={() => toggleSelect(p.id)}
+                      moveMatch={moveMatches[p.id]}
+                      findingMove={findingMoves.has(p.id) || (moveMatchesLoading && moveMatches[p.id] == null)}
+                      onFindMove={() => findMoveForPayout(p.id)}
+                      onQuickView={() => setQuickViewPayout(p)}
+                      onEdit={() => openEdit(p)}
+                      onApprove={() => updateStatus(p.id, 'Одобрено')}
+                      onReject={() => updateStatus(p.id, 'Отклонено')}
+                      onMarkPaid={() => updateStatus(p.id, 'Выплачено')}
+                      onRemove={() => remove(p.id)}
+                      flash={flashId === p.id}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div></div>
+          )}
         </>
       )}
 
