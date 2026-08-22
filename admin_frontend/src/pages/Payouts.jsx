@@ -604,6 +604,15 @@ const STATUS_FLASH_COLOR = {
   'Выплачено': 'var(--color-success-muted)',
   'Отклонено': 'var(--color-danger-muted)',
 };
+// Тот же порядок цветов, что у бейджей выше — используется точками
+// статус-рейла ленты (payout-fui-rail), а не донатом на «Обзоре»
+// (у него своя, независимая палитра STATUS_COLORS).
+const STATUS_DOT_COLOR = {
+  'Ожидает': 'var(--color-text-faint)',
+  'Одобрено': 'var(--color-primary)',
+  'Выплачено': 'var(--color-success)',
+  'Отклонено': 'var(--color-danger)',
+};
 
 // «Сегодня»/«вчера» вместо голой даты — лента читается как поток
 // событий, а не архив.
@@ -635,15 +644,20 @@ function PayoutFeedItem({
         className="shrink-0"
         style={{ width: 15, height: 15, marginTop: '0.6rem' }}
       />
-      <div className="grid place-items-center w-9 h-9 shrink-0 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-sm font-semibold mt-0.5">
+      <div className="relative grid place-items-center w-9 h-9 shrink-0 rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] text-sm font-semibold mt-0.5">
         {initial}
+        {/* Пунктирный ретикл вместо просто рамки — «Ожидает» читается как
+            цель, взятая в прицел, а не декоративная обводка. */}
+        {p.status === 'Ожидает' && <span className="payout-fui-reticle" />}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Пульсирующая точка вместо статичной — «Ожидает» это то, что
-              требует внимания прямо сейчас, тот же приём, что и «в эфире»
-              на Прослушивании. */}
-          {p.status === 'Ожидает' && <i className="ui-live-dot" />}
+          {/* Радар-пинг вместо статичной точки — «Ожидает» это то, что
+              требует внимания прямо сейчас, тот же сигнал «живого» статуса,
+              что и «в эфире» на Прослушивании, только в форме радара. */}
+          {p.status === 'Ожидает' && (
+            <span className="payout-fui-radar"><i /><i /><i /><b /></span>
+          )}
           <span className="font-medium text-sm">{p.name}</span>
           <span
             className={`badge ${STATUS_BADGE_CLASS[p.status] || 'badge--neutral'} ${flash ? 'payout-feed__badge-flash' : ''}`}
@@ -752,6 +766,16 @@ export default function Payouts() {
   const [salaryContext, setSalaryContext] = useState(null);
   const [salaryContextLoading, setSalaryContextLoading] = useState(false);
   const [salaryMonth, setSalaryMonth] = useState(currentSalaryMonth);
+  // Живые часы для телеметрии ленты и реальная задержка последнего
+  // запроса payouts/ — не выдуманные цифры для красоты, а фактическое
+  // состояние страницы.
+  const [now, setNow] = useState(() => new Date());
+  const [loadMs, setLoadMs] = useState(null);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     loadEmployees();
@@ -965,6 +989,7 @@ export default function Payouts() {
   async function load() {
     setLoading(true);
     setSelected(new Set());
+    const t0 = performance.now();
     try {
       const params = {
         payout_type: filters.type || undefined,
@@ -974,6 +999,7 @@ export default function Payouts() {
         to_date: filters.to || undefined,
       };
       const res = await api.get('payouts/', { params });
+      setLoadMs(Math.round(performance.now() - t0));
       let list = res.data;
       if (filters.query) {
         const q = filters.query.toLowerCase();
@@ -1284,19 +1310,31 @@ export default function Payouts() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <TopProgressBar active={loading} />
-      <span className="ui-eyebrow mb-3">
-        {payouts.length ? `Заявок в списке: ${payouts.length}` : 'Заявок нет'}
-      </span>
-      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
-        Выплаты
-        <button
-          onClick={checkTelegram}
-          title="Проверить бот"
-          className="ml-2 text-blue-600 hover:text-blue-800"
-        >
-          <RefreshCw size={18} />
-        </button>
-      </h2>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <span className="ui-eyebrow mb-3">
+            {payouts.length ? `Заявок в списке: ${payouts.length}` : 'Заявок нет'}
+          </span>
+          <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
+            Выплаты
+            <button
+              onClick={checkTelegram}
+              title="Проверить бот"
+              className="ml-2 text-blue-600 hover:text-blue-800"
+            >
+              <RefreshCw size={18} />
+            </button>
+          </h2>
+        </div>
+        {/* HUD-кластер: не декоративные цифры — оператор и задержка
+            берутся из реального состояния (useAuth, время последнего
+            payouts/ запроса). */}
+        <div className="payout-fui-hud">
+          <div>УЗЕЛ: <b>ВЫПЛАТЫ</b></div>
+          <div>ОПЕРАТОР: <b>{(user?.display_name || user?.login || '—').toUpperCase()}</b></div>
+          <div>ЗАДЕРЖКА: <b>{loadMs != null ? `${loadMs}ms` : '—'}</b></div>
+        </div>
+      </div>
 
       <NotificationJournal
         entries={activity}
@@ -1441,6 +1479,25 @@ export default function Payouts() {
       {/* ── Заявки ────────────────────────────────────────────── */}
       {activeTab === 'list' && (
         <>
+      <div className="payout-fui-readout">
+        <span>SYS://payouts.stream</span><span className="sep">·</span>
+        <span>ЗАПИСЕЙ: <b>{payouts.length}</b></span><span className="sep">·</span>
+        <span>ОЖИДАЕТ: <b style={{ color: 'var(--color-warning)' }}>{statusSummary['Ожидает']?.count || 0}</b></span><span className="sep">·</span>
+        <span>СИНХРОНИЗАЦИЯ: <b style={{ color: loading ? 'var(--color-warning)' : 'var(--color-success)' }}>{loading ? 'ИДЁТ…' : 'OK'}</b></span><span className="sep">·</span>
+        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="payout-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+      </div>
+      {timeData.length > 1 && (
+        <div className="payout-fui-ticker">
+          <span className="payout-fui-ticker__label">Активность, {Math.min(7, timeData.length)} дн</span>
+          <div className="payout-fui-spark">
+            {timeData.slice(-7).map((d) => {
+              const max = Math.max(...timeData.slice(-7).map((x) => x.sum), 1);
+              return <i key={d.date} style={{ height: `${Math.max(4, (d.sum / max) * 30)}px`, opacity: 0.4 + (d.sum / max) * 0.6 }} title={`${d.label}: ${fmtMoneyShort(d.sum)}`} />;
+            })}
+          </div>
+          <span className="payout-fui-ticker__label" style={{ marginLeft: 'auto' }}>{payouts.length} заявок · {fmtMoneyShort(totalSum)}</span>
+        </div>
+      )}
       {dayFilter != null && (
         <div className="flex items-center gap-2 text-sm">
           <span className="text-[color:var(--color-muted-foreground)]">Фильтр из графика:</span>
@@ -1587,31 +1644,43 @@ export default function Payouts() {
               Заявок нет — новые заявки приходят из бота и появляются здесь сразу.
             </div>
           ) : (
-            <div className="ui-shell"><div className="ui-core" style={{ padding: '1.1rem 1.5rem' }}>
-              {feedGroups.map((g) => (
-                <div key={g.label}>
-                  <div className="payout-feed__day">{g.label}</div>
-                  {g.items.map((p) => (
-                    <PayoutFeedItem
-                      key={p.id}
-                      p={p}
-                      selected={selected.has(p.id)}
-                      onToggleSelect={() => toggleSelect(p.id)}
-                      moveMatch={moveMatches[p.id]}
-                      findingMove={findingMoves.has(p.id) || (moveMatchesLoading && moveMatches[p.id] == null)}
-                      onFindMove={() => findMoveForPayout(p.id)}
-                      onQuickView={() => setQuickViewPayout(p)}
-                      onEdit={() => openEdit(p)}
-                      onApprove={() => updateStatus(p.id, 'Одобрено')}
-                      onReject={() => updateStatus(p.id, 'Отклонено')}
-                      onMarkPaid={() => updateStatus(p.id, 'Выплачено')}
-                      onRemove={() => remove(p.id)}
-                      flash={flashId === p.id}
-                    />
+            <div className="payout-fui-split payout-fui-dotgrid">
+              <div className="payout-fui-rail">
+                {visiblePayouts.map((p) => (
+                  <i key={p.id} style={{ background: STATUS_DOT_COLOR[p.status] || 'var(--color-border)' }} title={`${p.name} · ${p.status}`} />
+                ))}
+              </div>
+              <div className="ui-shell payout-fui-frame" style={{ flex: 1 }}>
+                <span className="payout-fui-corner-tr" />
+                <span className="payout-fui-corner-bl" />
+                <span className="payout-fui-scan" />
+                <div className="ui-core" style={{ padding: '1.1rem 1.5rem', position: 'relative' }}>
+                  {feedGroups.map((g) => (
+                    <div key={g.label}>
+                      <div className="payout-feed__day">{g.label}</div>
+                      {g.items.map((p) => (
+                        <PayoutFeedItem
+                          key={p.id}
+                          p={p}
+                          selected={selected.has(p.id)}
+                          onToggleSelect={() => toggleSelect(p.id)}
+                          moveMatch={moveMatches[p.id]}
+                          findingMove={findingMoves.has(p.id) || (moveMatchesLoading && moveMatches[p.id] == null)}
+                          onFindMove={() => findMoveForPayout(p.id)}
+                          onQuickView={() => setQuickViewPayout(p)}
+                          onEdit={() => openEdit(p)}
+                          onApprove={() => updateStatus(p.id, 'Одобрено')}
+                          onReject={() => updateStatus(p.id, 'Отклонено')}
+                          onMarkPaid={() => updateStatus(p.id, 'Выплачено')}
+                          onRemove={() => remove(p.id)}
+                          flash={flashId === p.id}
+                        />
+                      ))}
+                    </div>
                   ))}
                 </div>
-              ))}
-            </div></div>
+              </div>
+            </div>
           )}
         </>
       )}
