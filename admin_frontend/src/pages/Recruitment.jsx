@@ -61,6 +61,23 @@ const fmtDate   = (iso) => iso
   : '';
 const tgLink    = tgHref;  // нормализация номера (8→7, 10-значные → +7) — в utils/phone
 
+// «Застрял в Новых»: отклик, до которого за STALE_AFTER_DAYS дней с
+// момента создания карточки (created_at — то же поле, что уже подписано
+// на карточке и в детальной карточке как «Добавлен …») так и не дошли
+// руки — бот сам не двигает «Новый» дальше, для этого нужен либо старт
+// опроса, либо ручной перевод. 3 дня — по аналогии с тем, что молчание
+// в переписке (SILENT_AFTER на бэкенде) считается тревожным уже через
+// сутки; здесь порог мягче, потому что «висит без опроса» менее срочно,
+// чем «не ответили на заданный вопрос».
+const STALE_AFTER_DAYS = 3;
+const STALE_CRITICAL_DAYS = 7;
+function daysSince(iso) {
+  if (!iso) return null;
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return null;
+  return Math.floor((Date.now() - t.getTime()) / 86400000);
+}
+
 const SRC_BADGE = {
   hh:     'bg-red-100 text-red-600',
   avito:  'bg-green-100 text-green-600',
@@ -1055,6 +1072,18 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
   // Реплика кандидата выделяется, наша — приглушается: сканируя колонку,
   // ищут именно то, на что ещё не ответили.
   const fromCandidate = c.last_message_from !== 'employer';
+  // ИИ сейчас реально ведёт быстрый опрос: этап «опрос» ставится ботом
+  // ровно на время STAGE_SCREENING (status 'asking'/'waiting_admin' без
+  // send_failed — см. derive_stage в app/services/recruitment_stages.py),
+  // а из «опроса» карточка уходит сама, как только опрос закончится или
+  // человек передвинет её вручную. Поэтому метка не декоративная — она
+  // включена ровно на тех карточках, где ИИ правда сейчас работает.
+  const aiActive = c.stage === 'опрос';
+  // Радар «застрял»: считаем только для «Новый» — остальные этапы либо
+  // уже в работе, либо закрыты человеком, и застой там означает другое.
+  const staleDays = c.stage === 'новый' ? daysSince(c.created_at) : null;
+  const isStale = staleDays != null && staleDays >= STALE_AFTER_DAYS;
+  const isStaleCritical = staleDays != null && staleDays >= STALE_CRITICAL_DAYS;
   return (
     <div
       draggable={!selectionMode}
@@ -1099,8 +1128,13 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
 
       {/* Флаги — то, ради чего карточку и открывают: видно, требует ли она
           действия, ещё до клика. */}
-      {(flags.length > 0 || c.is_new || c.is_paused) && (
+      {(flags.length > 0 || c.is_new || c.is_paused || aiActive) && (
         <div className="flex flex-wrap items-center gap-1 mt-2">
+          {aiActive && (
+            <span className="recruit-fui-ai-tag" title="ИИ сейчас ведёт быстрый опрос кандидата">
+              <i className="recruit-fui-ai-dot" />АНАЛИЗ ИИ
+            </span>
+          )}
           {c.is_new && <CardFlag tone="new" label="новый" />}
           {flags.map(f => (
             <CardFlag
@@ -1145,8 +1179,28 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
       )}
 
       <div className="mt-2 flex items-center justify-between gap-1">
-        <span className="text-[10px] text-[color:var(--color-muted-foreground)] opacity-60">
+        <span className="text-[10px] text-[color:var(--color-muted-foreground)] opacity-60 flex items-center gap-1">
+          {/* Радар-пинг: «Новый» отклик простаивает STALE_AFTER_DAYS+ дней
+              без старта опроса, считая от created_at. Цвет ужесточается
+              на STALE_CRITICAL_DAYS+ — это уже риск потерять кандидата. */}
+          {isStale && (
+            <span
+              className="recruit-fui-radar"
+              style={{ color: isStaleCritical ? 'var(--color-danger)' : 'var(--color-warning)' }}
+              title={`Без движения ${staleDays} дн. с отклика`}
+            >
+              <i /><i /><i /><b />
+            </span>
+          )}
           {fmtDate(c.last_message_at || c.created_at)}
+          {isStale && (
+            <span
+              className="recruit-fui-age"
+              style={{ color: isStaleCritical ? 'var(--color-danger)' : 'var(--color-warning)' }}
+            >
+              · {staleDays} дн.
+            </span>
+          )}
         </span>
         {c.phone && (
           <span className="flex items-center gap-1 text-[10px] text-[color:var(--color-muted-foreground)] opacity-70">
@@ -1828,6 +1882,23 @@ export default function Recruitment() {
   // резервные карточки в неё не попадают сами, а счётчик нужен на кнопке.
   const reserved = candidates.filter(c => c.stage === RESERVE.key);
   const reserveCount = reserved.length;
+  // Телеметрия конвейера (recruit-fui-strip): считаем по всем candidates
+  // текущей вакансии без фильтра поиска — панель показывает состояние
+  // всей воронки, а не только того, что осталось после отбора.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const pipelineTelemetry = useMemo(() => {
+    const pipeline = candidates.filter(c => c.stage !== RESERVE.key);
+    const aiActive = pipeline.filter(c => c.stage === 'опрос').length;
+    const stale = pipeline.filter(
+      c => c.stage === 'новый' && (daysSince(c.created_at) ?? -1) >= STALE_AFTER_DAYS
+    ).length;
+    const active = pipeline.filter(c => c.stage !== 'нанят' && c.stage !== 'отказ').length;
+    return { total: pipeline.length, active, aiActive, stale };
+  }, [candidates]);
   const [loading,         setLoading]         = useState(true);
   const [cLoading,        setCLoading]        = useState(false);
   const [showClosed,      setShowClosed]      = useState(false);
@@ -2367,6 +2438,20 @@ export default function Recruitment() {
           )}
 
           <div className="p-4 sm:p-5">
+            {/* Телеметрия конвейера: реальные агрегаты по всем кандидатам
+                вакансии (candidates, без учёта поискового фильтра) — сколько
+                в работе, сколько сейчас реально в быстром опросе ИИ
+                (stage === 'опрос') и сколько «Новых» простаивает
+                STALE_AFTER_DAYS+ дней без старта опроса. Плюс живые часы. */}
+            {selected && !cLoading && (
+              <div className="recruit-fui-strip">
+                <span>SYS://recruitment.intake</span><span className="sep">·</span>
+                <span>В РАБОТЕ: <b>{pipelineTelemetry.active}</b></span><span className="sep">·</span>
+                <span>ИИ-ОПРОС: <b style={{ color: pipelineTelemetry.aiActive > 0 ? 'var(--color-primary)' : undefined }}>{pipelineTelemetry.aiActive}</b></span><span className="sep">·</span>
+                <span>ЗАСТОЙ {STALE_AFTER_DAYS}+ дн: <b style={{ color: pipelineTelemetry.stale > 0 ? 'var(--color-warning)' : undefined }}>{pipelineTelemetry.stale}</b></span><span className="sep">·</span>
+                <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="recruit-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+              </div>
+            )}
             {/* Панель стоит над доской: фильтр должен читаться раньше того,
                 что он отобрал, иначе пустая доска выглядит как «кандидатов
                 нет», а не «их отсеял забытый отбор». */}

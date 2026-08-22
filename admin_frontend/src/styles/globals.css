@@ -3964,3 +3964,363 @@ body.viewer3d-fs-active .app-card {
 @media (prefers-reduced-motion: reduce) {
   .scan-fui-scan { animation: none; }
 }
+
+/* ── FUI-слой сотрудников (Сотрудники) ─────────────────────────────
+   Мотив «журнал личного состава», собственный префикс employee-fui-,
+   независимый от остальных слоёв:
+   1) employee-fui-strip — телеметрическая строка над таблицей/обзором:
+      реальные employees.length/activeCount/adminCount/noCardCount
+      (те же агрегаты, что уже питают KPI-карточки «Обзора»), плюс
+      живые часы с мигающим курсором (тот же now/setInterval-паттерн,
+      что payout-fui-readout на «Выплатах»).
+   2) employee-fui-tenure — построчный моноширинный «СТАЖ: …» в
+      таблице списка, считается из e.created_at (то же поле, что уже
+      питает график «Динамика найма» на «Обзоре» — здесь оно читается
+      как дата приёма на построчной основе).
+   3) employee-fui-radar — пульсирующее кольцо у ФИО для активных
+      сотрудников без номера карты (!e.card_number && status ===
+      'active') — тот же реальный флаг, что уже посчитан в KPI «Без
+      карты» на «Обзоре», просто вынесенный в строку как сигнал
+      «требует внимания сейчас», а не только сводная цифра. */
+.employee-fui-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.employee-fui-strip b { font-weight: 600; }
+.employee-fui-strip .sep { opacity: 0.4; }
+@keyframes employee-fui-blink { 50% { opacity: 0; } }
+.employee-fui-cursor { animation: employee-fui-blink 1s step-start infinite; color: var(--color-primary); }
+
+.employee-fui-tenure {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.employee-fui-radar { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; }
+.employee-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
+  animation: employee-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.employee-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.employee-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.employee-fui-radar b { position: absolute; inset: 1.5px; border-radius: 999px; background: var(--color-danger); }
+@keyframes employee-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .employee-fui-cursor,
+  .employee-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой имущества (Имущество) ── ─────────────────────────────
+   Мотив «инвентарный учёт/бирки», собственный префикс asset-fui-,
+   независимый от остальных слоёв:
+   1) asset-fui-readout — телеметрическая строка над таблицей: реальные
+      агрегаты из stats (те же цифры, что и блок «Stats» ниже страницы) —
+      всего записей, сотрудников с имуществом на руках, число
+      неподтверждённых (!acked_at), просроченных (return_date < сегодня)
+      и «критично» просроченных (30+ дней, тот же порог, что и aging-бакет
+      receivable-fui-agebar на «Дебиторке») — плюс живые часы с
+      мигающим курсором.
+   2) asset-fui-tag — построчная моноширинная инвентарная бирка в
+      таблице предметов сотрудника (карточка сотрудника): реальный id
+      записи assets.id из hr.db, отформатированный как «AST-00042», не
+      выдуманный серийник.
+   3) asset-fui-radar — пульсирующее кольцо у статуса предметов,
+      просроченных более 30 дней и не подтверждённых сотрудником —
+      тот же реальный флаг criticalOverdue, что и в телеметрии выше,
+      показан построчно (в сводной таблице — по сотруднику, в карточке
+      сотрудника — по конкретному предмету). */
+.asset-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.asset-fui-readout b { font-weight: 600; }
+.asset-fui-readout .sep { opacity: 0.4; }
+@keyframes asset-fui-blink { 50% { opacity: 0; } }
+.asset-fui-cursor { animation: asset-fui-blink 1s step-start infinite; color: var(--color-primary); margin-left: 0.2em; }
+
+.asset-fui-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+  padding: 0.05rem 0.4rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  border: 1px dashed var(--glass-hair-strong);
+  border-radius: 0.3rem;
+  width: fit-content;
+}
+
+.asset-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.asset-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
+  animation: asset-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.asset-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.asset-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.asset-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
+@keyframes asset-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .asset-fui-cursor,
+  .asset-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой архива (Архив) ── ────────────────────────────────────
+   Мотив «опечатанное холодное хранилище», собственный префикс
+   archive-fui-, независимый от employee-fui-/остальных слоёв. Страница
+   маленькая и это не оперативная лента, а список закрытых дел, поэтому
+   ровно два статичных элемента без пульсации/радаров:
+   1) archive-fui-stamp — телеметрическая строка над таблицей: реальное
+      количество загруженных записей (employees.length) и реальные
+      min/max по полю archived_at среди них (archiveStats в
+      ArchivedEmployees.jsx) — «СТАРЕЙШАЯ ЗАПИСЬ»/«НОВЕЙШАЯ», а не
+      выдуманные даты.
+   2) archive-fui-tag — построчная метка «АРХИВ · …» в столбце ФИО:
+      реальный срок хранения, посчитанный от e.archived_at до текущей
+      даты (archiveAgeLabel), с диагональной штриховкой — визуальный
+      аналог сургучной печати/пломбы на закрытом деле. */
+.archive-fui-stamp {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.archive-fui-stamp b { font-weight: 600; color: var(--color-text-muted); }
+.archive-fui-stamp .sep { opacity: 0.4; }
+
+.archive-fui-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  border: 1px solid var(--glass-hair-strong);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--glass-hair),
+    var(--glass-hair) 5px,
+    transparent 5px,
+    transparent 10px
+  );
+}
+
+/* ── FUI-слой дней рождения (Дни рождения) ─────────────────────────
+   Платёжный календарь (calendar-fui-) уже занял связку «обратный
+   отсчёт + радар-пинг + рейл плотности» под похожую по духу задачу
+   «дней до X» — здесь другой набор:
+   1) birthday-fui-strip — ростер-телеметрия над списком: живые часы
+      (тикающее двоеточие) плюс реальные счётчики «СЕГОДНЯ»/«В ЭТОМ
+      МЕСЯЦЕ», посчитанные в Birthdays.jsx из birthdate/now, а не
+      декоративный рейл.
+   2) birthday-fui-pulse/-today-tag — тёплый (--color-warning,
+      золотисто-янтарный) пинг вместо привычного danger/primary,
+      рендерится ТОЛЬКО когда сегодняшняя дата реально совпадает с
+      birthdate (days === 0) — праздничный сигнал, а не тревожный.
+   3) birthday-fui-proximity — компактный индикатор близости в виде
+      столбиков «уровня сигнала» (0–4, чем ближе дата — тем больше
+      заполнено) плюс числом дней рядом, вместо предложения-обратного
+      отсчёта, как на календаре. */
+.birthday-fui-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.birthday-fui-strip b { font-weight: 600; color: var(--color-text-muted); }
+.birthday-fui-strip .sep { opacity: 0.4; }
+.birthday-fui-strip__clock { display: inline-flex; align-items: baseline; font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
+@keyframes birthday-fui-blink { 50% { opacity: 0.15; } }
+.birthday-fui-strip__colon { animation: birthday-fui-blink 1s step-start infinite; }
+.birthday-fui-today-count { color: var(--color-warning); }
+
+.birthday-fui-pulse { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 9px; height: 9px; flex: 0 0 9px; }
+.birthday-fui-pulse i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-warning);
+  animation: birthday-fui-ping 1.8s ease-out infinite; opacity: 0;
+}
+.birthday-fui-pulse i:nth-child(2) { animation-delay: 0.6s; }
+.birthday-fui-pulse i:nth-child(3) { animation-delay: 1.2s; }
+.birthday-fui-pulse b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-warning); }
+@keyframes birthday-fui-ping { 0% { transform: scale(1); opacity: 0.95; } 100% { transform: scale(4.4); opacity: 0; } }
+
+.birthday-fui-today-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-warning);
+  background: var(--color-warning-muted);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  white-space: nowrap;
+}
+
+.birthday-fui-proximity { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.birthday-fui-proximity i { display: block; width: 3px; border-radius: 1px; background: var(--color-bg-secondary); }
+.birthday-fui-proximity i:nth-child(1) { height: 5px; }
+.birthday-fui-proximity i:nth-child(2) { height: 8px; }
+.birthday-fui-proximity i:nth-child(3) { height: 11px; }
+.birthday-fui-proximity i:nth-child(4) { height: 14px; }
+.birthday-fui-proximity i.is-filled { background: var(--color-primary); }
+.birthday-fui-proximity__days {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-text-faint);
+  margin-left: 0.35rem;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .birthday-fui-strip__colon,
+  .birthday-fui-pulse i { animation: none; }
+}
+
+/* ── FUI-слой подбора персонала (Подбор персонала) ── ───────────────
+   Тема «ИИ-конвейер входящих откликов», собственный префикс
+   recruit-fui-, независимый от остальных слоёв:
+   1) recruit-fui-strip — телеметрическая строка над доской (перед
+      CandidateFilters): реальные агрегаты по candidates текущей
+      вакансии (без учёта поискового фильтра, чтобы не расходиться с
+      фильтром отдельно) — «в работе» (все, кроме «нанят»/«отказ»),
+      сколько сейчас реально в быстром опросе ИИ (stage === 'опрос' —
+      тот же STAGE_SCREENING, что ставит derive_stage() в
+      app/services/recruitment_stages.py, пока бот реально ведёт
+      опрос), и сколько «Новых» простаивает STALE_AFTER_DAYS+ дней без
+      старта опроса — плюс живые часы (тот же now/setInterval-паттерн,
+      что payout-fui-readout на «Выплатах»).
+   2) recruit-fui-ai-tag/-ai-dot — пульсирующая HUD-метка «АНАЛИЗ ИИ»
+      на карточке кандидата (CandidateCard), показывается только пока
+      c.stage === 'опрос' — ровно тогда, когда ИИ реально ведёт с этим
+      конкретным кандидатом быстрый опрос, а не декоративно на всех.
+   3) recruit-fui-radar/-age — радар-пинг и подпись «N дн.» в подвале
+      карточки для «Новых» откликов, которые простаивают
+      STALE_AFTER_DAYS (3) и больше дней от c.created_at без старта
+      опроса; цвет уходит в var(--color-danger) на
+      STALE_CRITICAL_DAYS (7)+ — тот же порог, что считает
+      pipelineTelemetry.stale в строке телеметрии выше. */
+.recruit-fui-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+  margin-bottom: 0.85rem;
+}
+.recruit-fui-strip b { font-weight: 600; }
+.recruit-fui-strip .sep { opacity: 0.4; }
+@keyframes recruit-fui-blink { 50% { opacity: 0; } }
+.recruit-fui-cursor { animation: recruit-fui-blink 1s step-start infinite; color: var(--color-primary); }
+
+.recruit-fui-ai-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.4rem 0.15rem 0.3rem;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+.recruit-fui-ai-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  animation: recruit-fui-ai-pulse 1.4s ease-in-out infinite;
+}
+@keyframes recruit-fui-ai-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.6); }
+}
+
+.recruit-fui-radar { position: relative; display: inline-flex; width: 9px; height: 9px; flex: 0 0 9px; }
+.recruit-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid currentColor;
+  animation: recruit-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.recruit-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.recruit-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.recruit-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: currentColor; }
+@keyframes recruit-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+.recruit-fui-age {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recruit-fui-cursor,
+  .recruit-fui-ai-dot,
+  .recruit-fui-radar i { animation: none; }
+}

@@ -211,6 +211,14 @@ export default function Employees() {
   const [positionFilter, setPositionFilter] = useState(null);
   const [statusFilterEmp, setStatusFilterEmp] = useState(null);
   const [workplaceFilter, setWorkplaceFilter] = useState(null);
+  // Живые часы для телеметрической строки ростера (employee-fui-strip) —
+  // тот же now/setInterval-паттерн, что и у payout-fui-readout на «Выплатах».
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     load();
@@ -313,6 +321,26 @@ export default function Employees() {
   function formatDateRu(value) {
     if (!value) return '';
     return new Date(value).toLocaleDateString('ru-RU');
+  }
+
+  // Стаж считается от e.created_at — того же поля, что уже питает
+  // график «Динамика найма» на «Обзоре» (дата приёма в системе), только
+  // здесь оно читается построчно, а не агрегатом по месяцам.
+  function formatTenure(value) {
+    if (!value) return null;
+    const start = new Date(value);
+    if (isNaN(start.getTime())) return null;
+    const nowDate = new Date();
+    let months = (nowDate.getFullYear() - start.getFullYear()) * 12 + (nowDate.getMonth() - start.getMonth());
+    if (nowDate.getDate() < start.getDate()) months -= 1;
+    if (months < 0) months = 0;
+    const years = Math.floor(months / 12);
+    const restMonths = months % 12;
+    if (years === 0 && restMonths === 0) return '< 1 мес.';
+    const parts = [];
+    if (years > 0) parts.push(`${years} г.`);
+    if (restMonths > 0) parts.push(`${restMonths} мес.`);
+    return parts.join(' ');
   }
 
   function startCreate() {
@@ -535,6 +563,18 @@ export default function Employees() {
         </span>
         <h2 className="text-2xl font-semibold">Сотрудники</h2>
       </div>
+
+      {/* Телеметрическая строка ростера — реальные агрегаты (те же, что
+          питают KPI-карточки «Обзора» ниже) плюс живые часы. */}
+      <div className="employee-fui-strip">
+        <span>SYS://employees.roster</span><span className="sep">·</span>
+        <span>ВСЕГО: <b>{employees.length}</b></span><span className="sep">·</span>
+        <span>АКТИВНЫ: <b style={{ color: 'var(--color-success)' }}>{activeCount}</b></span><span className="sep">·</span>
+        <span>АДМИНЫ: <b style={{ color: 'var(--color-warning)' }}>{adminCount}</b></span><span className="sep">·</span>
+        <span>БЕЗ КАРТЫ: <b style={{ color: noCardCount ? 'var(--color-danger)' : 'var(--color-text)' }}>{noCardCount}</b></span><span className="sep">·</span>
+        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="employee-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+      </div>
+
       <UpcomingBirthdays />
 
       <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
@@ -778,7 +818,13 @@ export default function Employees() {
               label: 'ФИО',
               primary: true,
               render: (e) => (
-                <span onClick={() => navigate(`/admin/employees/${e.id}`)}>
+                <span onClick={() => navigate(`/admin/employees/${e.id}`)} className="inline-flex items-center gap-1.5">
+                  {/* Радар-пинг вместо статичной пометки — активный сотрудник
+                      без номера карты (тот же флаг, что и КPI «Без карты» на
+                      «Обзоре») это то, что реально требует внимания сейчас. */}
+                  {!e.card_number && e.status === 'active' && (
+                    <span className="employee-fui-radar" title="Нет номера карты — требует внимания"><i /><i /><i /><b /></span>
+                  )}
                   {e.full_name}
                   {e.is_admin && <span className="ml-2 text-xs text-orange-600 font-medium">Админ</span>}
                 </span>
@@ -791,6 +837,16 @@ export default function Employees() {
               render: (e) => formatDateRu(e.birthdate),
             },
             { label: 'Должность', key: 'position' },
+            {
+              label: 'В компании',
+              mobileHide: true,
+              render: (e) => {
+                const tenure = formatTenure(e.created_at);
+                return tenure
+                  ? <span className="employee-fui-tenure">СТАЖ: {tenure}</span>
+                  : <span className="text-[color:var(--color-text-faint)]">—</span>;
+              },
+            },
             {
               label: 'Роль',
               mobileHide: true,

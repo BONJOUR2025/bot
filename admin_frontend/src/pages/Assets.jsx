@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Pencil, Trash2, Plus, Bell, Search, X, ChevronRight, Package, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, Plus, Bell, Search, X, ChevronRight, Package, AlertTriangle, Tag } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 import Modal from '../components/Modal.jsx';
@@ -67,6 +67,14 @@ export default function Assets() {
   // Detail card
   const [detailEmpId, setDetailEmpId] = useState(null);
 
+  // Живые часы для телеметрической строки инвентарного учёта — тот же
+  // паттерн, что и payout-fui-readout на «Выплатах».
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   useEffect(() => {
     loadEmployees();
     load();
@@ -131,9 +139,15 @@ export default function Assets() {
     return Array.from(map.values()).map(g => {
       const totalQty   = g.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
       const overdue     = g.items.filter(i => i.return_date && i.return_date < t && !i.acked_at).length;
+      // «Критично просрочено» — тот же порог 30+ дней, что и aging-бакет
+      // на «Дебиторке» (receivable-fui-agebar), здесь применён к
+      // return_date не подтверждённых предметов.
+      const criticalOverdue = g.items.filter(i =>
+        i.return_date && !i.acked_at && (new Date(t) - new Date(i.return_date)) / 86400000 > 30
+      ).length;
       const pendingAck  = g.items.filter(i => !i.acked_at).length;
       const lastIssue   = g.items.reduce((max, i) => (i.issue_date || '') > max ? (i.issue_date || '') : max, '');
-      return { ...g, totalQty, overdue, pendingAck, lastIssue };
+      return { ...g, totalQty, overdue, criticalOverdue, pendingAck, lastIssue };
     }).sort((a, b) => (a.employee_name || '').localeCompare(b.employee_name || ''));
   }, [filtered]);
 
@@ -305,6 +319,10 @@ export default function Assets() {
       total:     filtered.length,
       employees: new Set(filtered.map(i => i.employee_id)).size,
       overdue:   filtered.filter(i => i.return_date && i.return_date < t && !i.acked_at).length,
+      pendingAck: filtered.filter(i => !i.acked_at).length,
+      criticalOverdue: filtered.filter(i =>
+        i.return_date && !i.acked_at && (new Date(t) - new Date(i.return_date)) / 86400000 > 30
+      ).length,
     };
   }, [filtered]);
 
@@ -321,6 +339,31 @@ export default function Assets() {
         <button className="btn btn--primary flex items-center gap-2 sm:ml-auto w-fit" onClick={openCreate}>
           <Plus size={16} /> Добавить
         </button>
+      </div>
+
+      {/* Телеметрия инвентарного учёта — реальные агрегаты из stats
+          (те же цифры, что и в блоке «Stats» ниже страницы), плюс живые
+          часы. Не декоративные числа. */}
+      <div className="asset-fui-readout">
+        <span>УЧЁТ: <b>{stats.total}</b></span>
+        <span className="sep">/</span>
+        <span>СОТРУДНИКОВ: <b>{stats.employees}</b></span>
+        <span className="sep">/</span>
+        <span>НЕ ПОДТВ.: <b>{stats.pendingAck}</b></span>
+        {stats.overdue > 0 && (
+          <>
+            <span className="sep">/</span>
+            <span style={{ color: 'var(--color-warning)' }}>ПРОСРОЧЕНО: <b>{stats.overdue}</b></span>
+          </>
+        )}
+        {stats.criticalOverdue > 0 && (
+          <>
+            <span className="sep">/</span>
+            <span style={{ color: 'var(--color-danger)' }}>КРИТИЧНО 30+ ДН.: <b>{stats.criticalOverdue}</b></span>
+          </>
+        )}
+        <span className="sep">/</span>
+        <span>{now.toLocaleTimeString('ru-RU')}<span className="asset-fui-cursor">▮</span></span>
       </div>
 
       {/* Filters */}
@@ -443,6 +486,11 @@ export default function Assets() {
               label: 'Статус',
               render: g => (
                 <div className="flex items-center gap-1.5 flex-wrap">
+                  {g.criticalOverdue > 0 && (
+                    <span className="asset-fui-radar" title={`Просрочено более 30 дней: ${g.criticalOverdue}`}>
+                      <i /><i /><i /><b />
+                    </span>
+                  )}
                   {g.overdue > 0 && (
                     <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
                       <AlertTriangle size={11} /> {g.overdue}
@@ -512,7 +560,20 @@ export default function Assets() {
                 data={detailGroup.items}
                 keyFn={item => item.id}
                 columns={[
-                  { label: 'Предмет', primary: true, render: item => <span className="font-medium">{item.item_name}</span> },
+                  {
+                    label: 'Предмет',
+                    primary: true,
+                    render: item => (
+                      <div>
+                        <span className="font-medium">{item.item_name}</span>
+                        {/* Инвентарная бирка — реальный id записи (assets.id из
+                            hr.db), не выдуманный серийник. */}
+                        <div className="asset-fui-tag">
+                          <Tag size={9} /> AST-{String(item.id ?? 0).padStart(5, '0')}
+                        </div>
+                      </div>
+                    ),
+                  },
                   { label: 'Размер', mobileHide: true, headerClass: 'hidden sm:table-cell', cellClass: 'hidden sm:table-cell', render: item => item.size || '—' },
                   { label: 'Кол-во', headerClass: 'text-center', cellClass: 'text-center', render: item => item.quantity },
                   { label: 'Выдано', cellClass: 'whitespace-nowrap', render: item => fmtDate(item.issue_date) },
@@ -522,11 +583,25 @@ export default function Assets() {
                     mobileHide: true,
                     headerClass: 'hidden md:table-cell',
                     cellClass: 'hidden md:table-cell',
-                    render: item => item.acked_at
-                      ? <span className="text-green-600 text-xs font-medium">✅ {item.acked_at}</span>
-                      : item.notified_at
-                        ? <span className="text-[color:var(--color-muted-foreground)] text-xs">📤 {item.notified_at}</span>
-                        : <span className="text-[color:var(--color-muted-foreground)]">—</span>,
+                    render: item => {
+                      const overdueDays = item.return_date && !item.acked_at
+                        ? Math.floor((new Date(today()) - new Date(item.return_date)) / 86400000)
+                        : 0;
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          {overdueDays > 30 && (
+                            <span className="asset-fui-radar" title={`Просрочено ${overdueDays} дн.`}>
+                              <i /><i /><i /><b />
+                            </span>
+                          )}
+                          {item.acked_at
+                            ? <span className="text-green-600 text-xs font-medium">✅ {item.acked_at}</span>
+                            : item.notified_at
+                              ? <span className="text-[color:var(--color-muted-foreground)] text-xs">📤 {item.notified_at}</span>
+                              : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
+                        </div>
+                      );
+                    },
                   },
                   {
                     label: '',
