@@ -2715,6 +2715,224 @@ body.viewer3d-fs-active .app-card {
   .payout-fui-radar i { animation: none; }
 }
 
+/* ── FUI-слой дебиторки (Дебиторка) ──────────────────────────────
+   Тот же телеметрический мотив, что и на «Выплатах», но с
+   собственным префиксом (receivable-fui-), чтобы не завязываться на
+   payout-fui-*. Значения — реальные агрегаты filteredOrders/data
+   (кол-во долгов, сумма просроченных на 30+ дн., время последней
+   загрузки), радар — реальный флаг «самый просроченный» по тому же
+   порогу, что и бакет 30+ дн. в фильтре. */
+.receivable-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+  margin-bottom: 1rem;
+}
+.receivable-fui-readout b { font-weight: 600; }
+.receivable-fui-readout .sep { opacity: 0.4; }
+
+.receivable-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.receivable-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
+  animation: receivable-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.receivable-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.receivable-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.receivable-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
+@keyframes receivable-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+.receivable-fui-agebar {
+  display: block;
+  width: 100%;
+  min-width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  overflow: hidden;
+  margin-top: 0.3rem;
+}
+.receivable-fui-agebar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .receivable-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой кассовых перемещений (Кассовые перемещения) ────────
+   Тот же визуальный рецепт, что у ленты выплат/дебиторки выше, под
+   собственным префиксом cashmove-fui-, чтобы не пересекаться с ними:
+   телеметрия книги остатков, «вы здесь» на сегодняшнем дне и HUD-бейдж
+   очереди «Без категории». Все цифры — реальные агрегаты из уже
+   загруженных days/daily/rows, не выдуманные для красоты. */
+.cashmove-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+  margin-bottom: 1rem;
+}
+.cashmove-fui-readout b { font-weight: 600; }
+.cashmove-fui-readout .sep { opacity: 0.4; }
+@keyframes cashmove-fui-blink { 50% { opacity: 0; } }
+.cashmove-fui-cursor { animation: cashmove-fui-blink 1s step-start infinite; color: var(--color-primary); }
+
+/* «Вы здесь» — радар-пинг рядом с датой сегодняшнего дня в таблице/
+   карточках остатков. Клон .payout-fui-radar под своим префиксом. */
+.cashmove-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.cashmove-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-primary);
+  animation: cashmove-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.cashmove-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.cashmove-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.cashmove-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-primary); }
+@keyframes cashmove-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+/* HUD-бейдж очереди «Без категории» — не декоративный счётчик, а
+   кликабельный переход к отфильтрованному списку (см. selectCategory
+   в CashMovements.jsx). */
+.cashmove-fui-queue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 45%, var(--glass-hair));
+  border-radius: 999px;
+  background: var(--glass-shell);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.cashmove-fui-queue:hover { background: var(--glass-shell-hover); border-color: var(--color-danger); }
+.cashmove-fui-queue__dot { position: relative; display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; }
+.cashmove-fui-queue__dot i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
+  animation: cashmove-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.cashmove-fui-queue__dot i:nth-child(2) { animation-delay: 0.65s; }
+.cashmove-fui-queue__dot b { position: absolute; inset: 1.5px; border-radius: 999px; background: var(--color-danger); }
+.cashmove-fui-queue__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-faint); white-space: nowrap; }
+.cashmove-fui-queue__count { font-size: 13px; font-weight: 700; color: var(--color-danger); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cashmove-fui-cursor,
+  .cashmove-fui-radar i,
+  .cashmove-fui-queue__dot i { animation: none; }
+}
+
+/* ── FUI-слой платёжного календаря (Платёжный календарь) ─────────
+   Три мотива по аналогии со слоем ленты выплат выше, но с собственным
+   префиксом `calendar-fui-`, чтобы не пересекаться с payout-fui-*:
+   монотонный обратный отсчёт до платежа на карточке, радар-пинг на
+   просроченных/срочных карточках и рейл плотности графика рядом со
+   списком дней. Все значения — реальный расчёт даты платежа
+   (day_of_month просматриваемого месяца) относительно сегодняшней
+   даты, не декоративные цифры. */
+.calendar-fui-countdown {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.calendar-fui-countdown--muted   { color: var(--color-text-faint); }
+.calendar-fui-countdown--warning { color: var(--color-warning); }
+.calendar-fui-countdown--danger  { color: var(--color-danger); }
+
+.calendar-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.calendar-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
+  animation: calendar-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.calendar-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.calendar-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.calendar-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
+@keyframes calendar-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+.calendar-fui-split { display: flex; gap: 0; align-items: stretch; }
+.calendar-fui-rail { flex: 0 0 6px; display: flex; flex-direction: column; gap: 3px; padding: 0.2rem 0; margin-right: 0.9rem; }
+.calendar-fui-rail i { display: block; width: 6px; height: 10px; border-radius: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой штрафов и премий (Штрафы и премии) ─────────────────
+   Тот же рецепт, что у payout-fui-* (телеметрия-ридаут, HUD-метка),
+   но под собственным префиксом incentive-fui-, чтобы не пересекаться
+   с лентой выплат. Значения — реальные агрегаты по отображаемому
+   списку (нетто/кол-во) и per-сотрудник хронология записей, а не
+   декоративные цифры. */
+.incentive-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.incentive-fui-readout b { font-weight: 600; }
+.incentive-fui-readout .sep { opacity: 0.4; }
+
+/* Инлайн-спарклайн в лидерборде — высота и цвет каждого бара
+   вычисляются в JS из реальных подписанных сумм последних записей
+   сотрудника (премия +, штраф −), см. Incentives.jsx. */
+.incentive-fui-spark { display: flex; align-items: flex-end; gap: 2px; height: 18px; }
+.incentive-fui-spark i { display: block; width: 4px; border-radius: 1px 1px 0 0; }
+
+/* HUD-метка «LOCKED» — диагональная штриховка низкой прозрачности
+   поверх приглушённого предупреждающего цвета, сигнализирует реальное
+   ограничение (запись нельзя удалить), а не декоративный акцент. */
+.incentive-fui-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-warning);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 55%, transparent);
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.4rem;
+  white-space: nowrap;
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--color-warning) 14%, transparent),
+    color-mix(in srgb, var(--color-warning) 14%, transparent) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
 /* ── Сплошные цветные кнопки ───────────────────────────────────
    Нормализация выше переводит bg-blue-600 и подобные в приглушённый
    фон (--color-*-muted) — это верно для плашек и бейджей, но ломает
@@ -3037,4 +3255,107 @@ body.viewer3d-fs-active .app-card {
 .visual-glass [class*='bg-[color:var(--color-primary-muted)]'] [class*='text-[color:var(--color-primary)]'],
 .visual-glass [class*='text-[color:var(--color-primary)]'] {
   color: var(--glass-on-soft);
+}
+
+/* ── FUI-слой контроля выплат (Контроль выплат) ──────────────────
+   Собственный префикс control-fui-, чтобы не привязывать эту страницу
+   к payout-fui-* (переиспользуется только генерик .payout-fui-cursor —
+   он не несёт специфики ленты выплат). Три элемента: скан-телеметрия
+   над таблицей «Список» (реальные счётчики по filtered), шкала угрозы
+   в отдельной колонке строки (замена нетокенизированного rowColor()/
+   bg-red-50 и т.п. — невидимого в тёмной теме), радар-пинг у ФИО для
+   заявок с manual_created/changed_bank_data. */
+.control-fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--glass-hair);
+  border-radius: 0.6rem;
+  background: var(--glass-shell);
+}
+.control-fui-readout b { font-weight: 600; }
+.control-fui-readout .sep { opacity: 0.4; }
+
+.control-fui-threatbar {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  overflow: hidden;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.control-fui-threatbar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease, background 0.4s ease;
+}
+
+.control-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
+.control-fui-radar i {
+  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
+  animation: control-fui-ping 2s ease-out infinite; opacity: 0;
+}
+.control-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
+.control-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
+.control-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
+@keyframes control-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .control-fui-radar i { animation: none; }
+}
+
+/* ── FUI-слой сводного отчёта по кассе (Сводный отчёт (касса)) ────
+   Ровно два элемента, потому что жанр страницы — не оперативная лента,
+   а экспортируемый в PNG документ-отчёт (ScaledReport), и лишний HUD
+   тут будет шумом:
+   1) cashsum-fui-stamp — строка метаданных формирования отчёта. Живёт
+      ВНУТРИ экспортируемого блока (между шапкой и телом отчёта), поэтому
+      только статичный текст без анимации — цвета берутся из RTC-контекста
+      (T.line/T.bg2/T.muted/T.ink), а не из var(--color-*), чтобы совпадать
+      с принудительной светлой палитрой на экспорте, как и остальные части
+      отчёта (см. KpiCard/Section/BarRow в CashSummary.jsx).
+   2) cashsum-fui-freshness — индикатор актуальности данных в экранной
+      панели управления, ВНЕ ScaledReport, поэтому пульсирующая точка
+      (.ui-live-dot) безопасна. Показывает, разошлись ли поля периода
+      с диапазоном последнего успешного load(). */
+.cashsum-fui-stamp {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+.cashsum-fui-stamp b { font-weight: 600; }
+.cashsum-fui-stamp__sep { opacity: 0.4; }
+
+.cashsum-fui-freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  padding: 0 0.3rem;
+  white-space: nowrap;
+}
+.cashsum-fui-freshness__dot--stale {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
 }

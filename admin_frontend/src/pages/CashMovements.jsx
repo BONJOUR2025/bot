@@ -682,6 +682,15 @@ const fmtDayLabel = (iso) => {
   if (isNaN(d)) return iso;
   return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}, ${DAY_NAMES[d.getDay()]}`;
 };
+// A real "you are here" comparison against the current calendar date —
+// drives the FUI radar-ping marker on today's row/card in the daily
+// balances table, not a hardcoded flag.
+const isTodayIso = (iso) => {
+  const d = new Date(iso);
+  if (isNaN(d)) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+};
 // Zero turnover renders muted rather than as "0,00 ₽" — a day of nothing
 // should read as nothing at a glance, so the days that did move stand out.
 const fmtTurnover = (v) =>
@@ -744,6 +753,9 @@ function DailyBalancesTable({ days, entriesByDate, expanded, onToggle, isMobile 
                 <span className="flex items-center gap-1.5 font-medium text-sm">
                   {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   {fmtDayLabel(d.date)}
+                  {isTodayIso(d.date) && (
+                    <span className="cashmove-fui-radar" title="Сегодня"><i /><i /><b /></span>
+                  )}
                 </span>
                 <span className="tabular-nums font-semibold text-sm">{fmtMoney(d.closing)}</span>
               </button>
@@ -805,7 +817,12 @@ function DailyBalancesTable({ days, entriesByDate, expanded, onToggle, isMobile 
                   {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </td>
                 <td className={`px-3 py-2 whitespace-nowrap ${quiet ? 'text-[color:var(--color-muted-foreground)]' : 'font-medium'}`}>
-                  {fmtDayLabel(d.date)}
+                  <span className="inline-flex items-center gap-1.5">
+                    {fmtDayLabel(d.date)}
+                    {isTodayIso(d.date) && (
+                      <span className="cashmove-fui-radar" title="Сегодня"><i /><i /><b /></span>
+                    )}
+                  </span>
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(d.opening)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-green-600">{fmtTurnover(d.income)}</td>
@@ -1044,6 +1061,14 @@ export default function CashMovements() {
   const [daily, setDaily]               = useState(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [expandedDays, setExpandedDays] = useState(() => new Set());
+  // Живые часы для телеметрии книги остатков — не выдуманные цифры для
+  // красоты, как и на ленте выплат (см. Payouts.jsx).
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     api.get('cash-moves/meta').then((r) => setCategories(r.data.categories || [])).catch(() => {});
@@ -1322,6 +1347,10 @@ export default function CashMovements() {
 
   const invalidCount  = useMemo(() => safeRows.filter((r) => !r.prefix_ok).length, [safeRows]);
   const noPayoutCount = useMemo(() => safeRows.filter((r) => !r.has_payout).length, [safeRows]);
+  // Реальная очередь совсем без категории (в отличие от invalidCount,
+  // который также ловит записи с уже назначенной, но «протухшей»
+  // категорией — см. prefix_ok) — основа для HUD-бейджа очереди ниже.
+  const uncategorizedCount = useMemo(() => safeRows.filter((r) => !r.category).length, [safeRows]);
   const totalSum      = useMemo(() => filtered.reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered]);
   const withPayoutCnt = useMemo(() => filtered.filter((r) => r.has_payout).length, [filtered]);
   const selectedSum   = useMemo(() => filtered.filter((r) => selected.has(r.ID_KASSES_MOVE)).reduce((s, r) => s + (Number(r.SUMM)||0), 0), [filtered, selected]);
@@ -1383,6 +1412,23 @@ export default function CashMovements() {
           </button>
         </div>
       </div>
+
+      {/* HUD-бейдж очереди «Без категории» — реальный счётчик записей
+          без назначенной категории среди загруженных rows (не путать с
+          invalidCount, который также ловит записи с уже назначенной, но
+          «протухшей» категорией). Клик переиспользует существующий
+          механизм drill-down по категориям (selectCategory), тот же,
+          что у донат-графика на «Обзоре». */}
+      <button
+        type="button"
+        onClick={() => selectCategory('__invalid__')}
+        className="cashmove-fui-queue"
+        title="Показать записи без категории"
+      >
+        <span className="cashmove-fui-queue__dot"><i /><i /><b /></span>
+        <span className="cashmove-fui-queue__label">Очередь без категории</span>
+        <span className="cashmove-fui-queue__count">{uncategorizedCount}</span>
+      </button>
 
       {/* Tabs */}
       <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
@@ -2037,6 +2083,16 @@ export default function CashMovements() {
               <div className="text-xs text-[color:var(--color-muted-foreground)]">
                 Нажмите на день, чтобы увидеть проводки. «Инкассация» показана нетто:
                 отрицательное значение — пополнение кассы из «Основной».
+              </div>
+
+              {/* Телеметрия книги остатков — реальные агрегаты уже
+                  загруженных dailyDays/daily, живые часы с мигающим
+                  курсором как на ленте выплат (см. Payouts.jsx). */}
+              <div className="cashmove-fui-readout">
+                <span>КНИГА: <b>{dailyDays.length} дн.</b></span><span className="sep">·</span>
+                <span>ОБОРОТ ЗА ПЕРИОД: <b>{fmtMoneyShort(dailyDays.reduce((s, d) => s + (d.income || 0) + (d.expense || 0), 0))}</b></span><span className="sep">·</span>
+                <span>ОСТАТОК СЕЙЧАС: <b>{fmtMoneyShort(dailyDays[dailyDays.length - 1]?.closing ?? daily.closing)}</b></span><span className="sep">·</span>
+                <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="cashmove-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
               </div>
 
               <DailyBalancesTable

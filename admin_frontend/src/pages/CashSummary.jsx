@@ -253,10 +253,18 @@ export default function CashSummary() {
   const [showSettings, setShowSettings] = useState(false);
   const [hidden, setHidden] = useState(loadHiddenCats);
   const [generatedAt, setGeneratedAt] = useState('');
+  // Свежесть данных: диапазон, с которым реально был выполнен последний
+  // успешный load() — сравнивается с полями ввода периода, чтобы понять,
+  // разошлись ли они (пользователь подвинул даты, но не нажал «Применить»/
+  // «Обновить»). Категории отфильтровываются на клиенте из уже загруженных
+  // строк, поэтому их изменение не требует повторной загрузки и не влияет
+  // на этот индикатор.
+  const [lastLoadedRange, setLastLoadedRange] = useState({ from: dateFrom, to: dateTo });
   const reportRef = useRef(null);
 
   const T = exporting ? LIGHT : DARK;
   const periodLabel = activePreset === 'all' ? 'за всё время' : `${dateFrom || '…'} – ${dateTo || '…'}`;
+  const isStale = rows !== null && (dateFrom !== lastLoadedRange.from || dateTo !== lastLoadedRange.to);
 
   const load = useCallback(async (from = dateFrom, to = dateTo) => {
     setLoading(true);
@@ -271,6 +279,7 @@ export default function CashSummary() {
       setRows(Array.isArray(movesRes.data) ? movesRes.data : []);
       setCategories(metaRes.data?.categories || []);
       setGeneratedAt(new Date().toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
+      setLastLoadedRange({ from, to });
     } catch {
       toast('Ошибка загрузки данных', 'error');
     } finally {
@@ -428,6 +437,19 @@ export default function CashSummary() {
           <button className="btn btn--secondary flex items-center gap-1.5" onClick={() => setShowSettings((v) => !v)}>
             <SlidersHorizontal size={14} /> Категории{hidden.size > 0 ? ` (${hidden.size} скрыто)` : ''}
           </button>
+          {/* FUI: индикатор свежести — экранный, не часть PNG-отчёта, поэтому
+              анимация точки безопасна. Реальный булев признак: совпадает ли
+              загруженный диапазон с полями «С»/«По» прямо сейчас. */}
+          <span
+            className="cashsum-fui-freshness"
+            title={isStale
+              ? 'Поля периода изменены — нажмите «Применить период» или «Обновить», чтобы отчёт их подхватил'
+              : 'Отчёт соответствует выбранному периоду'}
+          >
+            {isStale
+              ? <><span className="cashsum-fui-freshness__dot cashsum-fui-freshness__dot--stale" />Требуется обновление</>
+              : <><span className="ui-live-dot" />Данные актуальны</>}
+          </span>
           <button className="btn btn--secondary flex items-center gap-1.5" onClick={() => load()} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Обновить
           </button>
@@ -474,6 +496,18 @@ export default function CashSummary() {
                     <div className="text-[40px] font-extrabold leading-none tabular-nums">{fmtMoney(totalSum)}</div>
                     <div className="mt-1 text-sm opacity-90">{visibleRows.length} записей</div>
                   </div>
+                </div>
+
+                {/* FUI: метаданные формирования отчёта — статичный текст,
+                    вычисляется при рендере, живёт внутри экспортируемого
+                    блока, поэтому без анимации (иначе PNG мог бы поймать
+                    рамку скана/курсора в произвольный момент). */}
+                <div className="cashsum-fui-stamp px-10" style={{ borderBottom: `1px solid ${T.line}`, background: T.bg2, color: T.muted }}>
+                  <span>ОТЧЁТ СФОРМИРОВАН: <b style={{ color: T.ink }}>{generatedAt || '—'}</b></span>
+                  <span className="cashsum-fui-stamp__sep">·</span>
+                  <span>ПЕРИОД: <b style={{ color: T.ink }}>{periodLabel}</b></span>
+                  <span className="cashsum-fui-stamp__sep">·</span>
+                  <span>ЗАПИСЕЙ: <b style={{ color: T.ink }}>{totalRows}</b></span>
                 </div>
 
                 <div className="px-10 py-8 space-y-8">

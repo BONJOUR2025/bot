@@ -86,6 +86,10 @@ function EmployeeLeaderboard({ data, activeName, onSelect }) {
       <div className="space-y-3">
         {data.slice(0, 8).map((r, i) => {
           const isActive = activeName === r.name;
+          // Спарклайн — реальные подписанные суммы последних записей этого
+          // сотрудника (премия — положительная, штраф — отрицательная),
+          // хронологический порядок, не выдуманные бары.
+          const trendMax = r.trend?.length ? Math.max(...r.trend.map((v) => Math.abs(v)), 1) : 1;
           return (
             <button key={r.name} type="button" onClick={() => onSelect?.(r.name)}
               className={`w-full text-left rounded-md -mx-1 px-1 py-1 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
@@ -94,8 +98,24 @@ function EmployeeLeaderboard({ data, activeName, onSelect }) {
                   {i < 3 ? <span className="text-base shrink-0">{medals[i]}</span> : <span className="w-5 text-center text-xs font-bold text-[color:var(--color-muted-foreground)] shrink-0">{i + 1}</span>}
                   <span className="text-sm font-medium truncate">{r.name}</span>
                 </div>
-                <div className={`text-sm font-bold shrink-0 ml-3 ${r.net >= 0 ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}>
-                  {r.net >= 0 ? '+' : ''}{fmtMoney(r.net)}
+                <div className="flex items-center gap-2 shrink-0 ml-3">
+                  {r.trend?.length > 0 && (
+                    <div className="incentive-fui-spark" title={`Последние ${r.trend.length} записей`}>
+                      {r.trend.map((v, ti) => (
+                        <i
+                          key={ti}
+                          style={{
+                            height: `${Math.max(3, (Math.abs(v) / trendMax) * 18)}px`,
+                            background: v >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                            opacity: 0.5 + (Math.abs(v) / trendMax) * 0.5,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className={`text-sm font-bold whitespace-nowrap ${r.net >= 0 ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}>
+                    {r.net >= 0 ? '+' : ''}{fmtMoney(r.net)}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-1 h-1.5 rounded-full overflow-hidden bg-[color:var(--color-bg-secondary)]">
@@ -225,7 +245,11 @@ export default function Incentives() {
     setShowForm(true);
   }
 
-  const rowColor = (type) => (type === 'bonus' ? 'bg-green-50' : 'bg-red-50');
+  // Токенизированные фоны строк вместо bg-green-50/bg-red-50 — те были
+  // не завязаны на CSS-переменные темы и оставались светлыми (по сути
+  // невидимыми) поверх тёмного фона таблицы. Тот же класс уже
+  // используется в CourierSalary.jsx/ManagerSalary.jsx/Recruitment.jsx.
+  const rowColor = (type) => (type === 'bonus' ? 'bg-[color:var(--color-success-muted)]' : 'bg-[color:var(--color-danger-muted)]');
   const typeLabel = (t) => (t === 'bonus' ? '💰 Премия' : '⚠️ Штраф');
 
   // ── Derived analytics ──────────────────────────────────────────
@@ -248,12 +272,22 @@ export default function Incentives() {
     const map = {};
     for (const r of list) {
       const name = r.name || '—';
-      if (!map[name]) map[name] = { name, bonuses: 0, penalties: 0 };
+      if (!map[name]) map[name] = { name, bonuses: 0, penalties: 0, records: [] };
       const amt = Number(r.amount) || 0;
       if (r.type === 'bonus') map[name].bonuses += amt;
       else map[name].penalties += amt;
+      // Подписанная сумма (премия +, штраф −) с датой — сырьё для
+      // спарклайна: реальная хронология записей этого сотрудника, а не
+      // синтетические одинаковые бары.
+      map[name].records.push({ date: r.date || '', signed: r.type === 'bonus' ? amt : -amt });
     }
-    return Object.values(map).map((r) => ({ ...r, net: r.bonuses - r.penalties })).sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+    return Object.values(map).map((r) => {
+      const trend = [...r.records]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-6)
+        .map((x) => x.signed);
+      return { name: r.name, bonuses: r.bonuses, penalties: r.penalties, net: r.bonuses - r.penalties, trend };
+    }).sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
   }, [list]);
 
   const monthlyData = useMemo(() => {
@@ -278,6 +312,19 @@ export default function Incentives() {
     if (employeeFilter) rows = rows.filter((r) => (r.name || '—') === employeeFilter);
     return rows;
   }, [list, typeFilter, employeeFilter]);
+
+  // Нетто-телеметрия ленты «Список» — реальный агрегат по тому, что
+  // сейчас видно в таблице (учитывает и серверные фильтры, и клик по
+  // донату/лидерборду), пересчитывается на каждое изменение displayList.
+  const visibleTotals = useMemo(() => {
+    let bonuses = 0, bonusCount = 0, penalties = 0, penaltyCount = 0;
+    for (const r of displayList) {
+      const amt = Number(r.amount) || 0;
+      if (r.type === 'bonus') { bonuses += amt; bonusCount++; }
+      else { penalties += amt; penaltyCount++; }
+    }
+    return { bonuses, bonusCount, penalties, penaltyCount, net: bonuses - penalties };
+  }, [displayList]);
 
   function selectType(name) {
     setTypeFilter((prev) => (prev === name ? null : name));
@@ -343,6 +390,17 @@ export default function Incentives() {
 
       {activeTab === 'list' && (
         <div className="space-y-4">
+          <div className="incentive-fui-readout">
+            <span>SYS://incentives.stream</span><span className="sep">·</span>
+            <span>
+              НЕТТО ЗА ПЕРИОД:{' '}
+              <b style={{ color: visibleTotals.net >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                {visibleTotals.net >= 0 ? '+' : ''}{fmtMoney(visibleTotals.net)}
+              </b>
+            </span><span className="sep">·</span>
+            <span>ПРЕМИЙ: <b>{visibleTotals.bonusCount}</b></span><span className="sep">·</span>
+            <span>ШТРАФОВ: <b>{visibleTotals.penaltyCount}</b></span>
+          </div>
           <div className="flex flex-wrap gap-2 items-end">
             <select
               className="input"
@@ -434,6 +492,11 @@ export default function Incentives() {
                 cellClass: 'text-right',
                 render: (item) => (
                   <>
+                    {item.locked && (
+                      <span className="incentive-fui-locked mr-1" title="Запись защищена от удаления">
+                        🔒 LOCKED
+                      </span>
+                    )}
                     <button className="text-blue-600 mr-1" onClick={() => startEdit(item)}>✏️</button>
                     {!item.locked && (
                       <button className="text-red-600" onClick={() => remove(item.id)}>🗑️</button>

@@ -42,6 +42,39 @@ function dotColor(records, day) {
   return null;
 }
 
+// Обратный отсчёт до платежа — считается от реальной даты (day_of_month
+// в контексте просматриваемого месяца) относительно сегодняшней даты.
+// Для paid/skipped тайминг уже неактуален, поэтому у них свои тиры без
+// текста отсчёта — используются только рейлом плотности (FUI-элемент 3).
+function paymentUrgency(dom, status, year, month, today) {
+  if (status === 'paid') return { tier: 'paid' };
+  if (status === 'skipped') return { tier: 'skipped' };
+  const due = new Date(year, month, dom);
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const diffDays = Math.round((due - t) / 86400000);
+  if (diffDays < 0) return { tier: 'danger', diffDays, text: `ПРОСРОЧЕНО ${Math.abs(diffDays)} дн.` };
+  if (diffDays === 0) return { tier: 'danger', diffDays, text: 'СЕГОДНЯ' };
+  if (diffDays <= 3) return { tier: 'warning', diffDays, text: `через ${diffDays} дн.` };
+  return { tier: 'muted', diffDays, text: `через ${diffDays} дн.` };
+}
+
+// Цвета/непрозрачность точек рейла плотности графика — тот же tier, что
+// у calendar-fui-countdown, плюс paid/skipped для завершённых платежей.
+const RAIL_TICK_COLOR = {
+  paid: 'var(--color-success)',
+  skipped: 'var(--color-text-faint)',
+  danger: 'var(--color-danger)',
+  warning: 'var(--color-warning)',
+  muted: 'var(--color-primary)',
+};
+const RAIL_TICK_OPACITY = {
+  paid: 0.85,
+  skipped: 0.4,
+  danger: 0.95,
+  warning: 0.9,
+  muted: 0.35,
+};
+
 function buildCalendarWeeks(year, month) {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
@@ -464,6 +497,13 @@ export default function PaymentCalendar() {
   }
   const sortedDays = Object.keys(byDay).map(Number).sort((a, b) => a - b);
 
+  // Тот же порядок, что и в списке ниже (день → позиция внутри дня) —
+  // источник тиков для calendar-fui-rail, привязанных к реально
+  // отображаемым карточкам с учётом фильтра по дню.
+  const visibleRecords = sortedDays
+    .filter((day) => highlightDay === null || day === highlightDay)
+    .flatMap((day) => byDay[day]);
+
   const weeks = buildCalendarWeeks(year, month);
 
   // Stats
@@ -750,7 +790,24 @@ export default function PaymentCalendar() {
 
           {/* List */}
           {loading ? null : (
-            <div className="space-y-4">
+            <div className="calendar-fui-split">
+              {/* Рейл плотности графика: один тик на каждый видимый платёж,
+                  цвет — по тому же тиру срочности, что и у отсчёта в
+                  карточке (плюс paid/skipped) — реальная картина загрузки
+                  графика без прокрутки списка. */}
+              <div className="calendar-fui-rail" aria-hidden="true">
+                {visibleRecords.map((r) => {
+                  const u = paymentUrgency(r.schedule?.day_of_month, r.status, year, month, today);
+                  return (
+                    <i
+                      key={r.id}
+                      style={{ background: RAIL_TICK_COLOR[u.tier], opacity: RAIL_TICK_OPACITY[u.tier] }}
+                      title={`${r.schedule?.name || ''} · ${u.text || (u.tier === 'paid' ? 'Оплачено' : 'Пропущено')}`}
+                    />
+                  );
+                })}
+              </div>
+              <div className="space-y-4" style={{ flex: 1, minWidth: 0 }}>
               {sortedDays
                 .filter(day => highlightDay === null || day === highlightDay)
                 .map(day => (
@@ -762,13 +819,24 @@ export default function PaymentCalendar() {
                       {byDay[day].map(r => {
                         const sc = r.schedule ?? {};
                         const cls = statusColor(r.status, day, today, year, month);
+                        const urgency = paymentUrgency(day, r.status, year, month, today);
                         return (
                           <div key={r.id} onClick={() => setDetailItem({ schedule: sc, record: r })}
                             className={`border rounded-xl p-3 sm:p-4 cursor-pointer hover:brightness-95 transition-[filter] ${cls}`}>
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
+                                  {/* Радар-пинг — только для неоплаченных платежей,
+                                      срок которых наступил сегодня или уже прошёл. */}
+                                  {r.status === 'pending' && urgency.tier === 'danger' && (
+                                    <span className="calendar-fui-radar" title="Требует внимания — срок наступил"><i /><i /><i /><b /></span>
+                                  )}
                                   <span className="font-medium text-sm truncate">{sc.name}</span>
+                                  {r.status === 'pending' && (
+                                    <span className={`calendar-fui-countdown calendar-fui-countdown--${urgency.tier}`}>
+                                      {urgency.text}
+                                    </span>
+                                  )}
                                   {sc.category && (
                                     <span className="text-xs px-2 py-0.5 bg-[color:var(--color-control-bg)] rounded-full border border-current/20">
                                       {sc.category}
@@ -827,6 +895,7 @@ export default function PaymentCalendar() {
                   <p className="text-sm mt-1">Добавьте регулярные платежи через кнопку выше</p>
                 </div>
               )}
+              </div>
             </div>
           )}
         </>

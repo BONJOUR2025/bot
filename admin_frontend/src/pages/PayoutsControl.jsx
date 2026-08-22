@@ -126,6 +126,14 @@ export default function PayoutsControl() {
   });
   const [activeTab, setActiveTab] = useState('overview');
   const [severityFilter, setSeverityFilter] = useState(null);
+  // Живые часы для мигающего курсора телеметрии скана — реальное
+  // время, а не выдуманная анимация, см. .payout-fui-cursor.
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     load();
@@ -175,13 +183,15 @@ export default function PayoutsControl() {
     setActiveTab('list');
   }
 
-  function rowColor(ws) {
-    if (ws.includes('limit_exceeded') || ws.includes('inactive_employee'))
-      return 'bg-red-50';
-    if (ws.includes('pending_too_long') || ws.includes('changed_bank_data'))
-      return 'bg-orange-50';
-    if (ws.includes('manual_created')) return 'bg-blue-50';
-    return '';
+  // Заменяет прежний rowColor() (нетокенизированные bg-red-50/orange-50/
+  // blue-50 — невидимые в тёмной теме): теперь серьёзность строки
+  // показывает шкала угрозы control-fui-threatbar в отдельной колонке
+  // таблицы, см. threatLevel() и колонку «Угроза» ниже.
+  function threatLevel(ws) {
+    const n = ws.length;
+    const pct = Math.min(100, (n / 3) * 100);
+    const color = n === 0 ? 'var(--color-text-faint)' : n === 1 ? 'var(--color-warning)' : 'var(--color-danger)';
+    return { n, pct, color };
   }
 
   // ── Derived analytics ──────────────────────────────────────────
@@ -221,6 +231,17 @@ export default function PayoutsControl() {
     { key: 'list', label: 'Список', icon: <ListChecks size={14} />, badge: filtered.length },
   ];
 
+  // Телеметрия скана над таблицей «Список» — считается по реально
+  // отфильтрованным строкам (filtered), не по всему списку.
+  const scanTelemetry = useMemo(() => {
+    let flagsTotal = 0, highRisk = 0;
+    for (const p of filtered) {
+      flagsTotal += p.warnings.length;
+      if (p.warnings.length >= 2) highRisk++;
+    }
+    return { flagsTotal, highRisk };
+  }, [filtered]);
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <div>
@@ -250,6 +271,20 @@ export default function PayoutsControl() {
 
       {activeTab === 'list' && (
         <div className="space-y-4">
+          {/* Скан-телеметрия: реальные счётчики по отфильтрованным строкам
+              (filtered), не выдуманные цифры. Мигающий курсор — реальные
+              текущие часы, см. .payout-fui-cursor. */}
+          <div className="control-fui-readout">
+            <span>SCAN://payouts.control</span><span className="sep">·</span>
+            <span>СКАНИРОВАНИЕ: <b>{filtered.length}</b> заявок</span><span className="sep">·</span>
+            <span>ФЛАГОВ: <b style={{ color: scanTelemetry.flagsTotal ? 'var(--color-warning)' : undefined }}>{scanTelemetry.flagsTotal}</b></span><span className="sep">·</span>
+            <span>ВЫСОКИЙ РИСК: <b style={{ color: scanTelemetry.highRisk ? 'var(--color-danger)' : undefined }}>{scanTelemetry.highRisk}</b></span><span className="sep">·</span>
+            <span>
+              {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:
+              <span className="payout-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span>
+            </span>
+          </div>
+
           <div className="flex flex-wrap gap-2 items-end">
             <select
               className="input text-sm"
@@ -326,12 +361,44 @@ export default function PayoutsControl() {
           <ResponsiveTable
             data={filtered}
             keyFn={(p) => p.id}
-            rowClass={(p) => rowColor(p.warnings)}
             emptyText="Расхождений не найдено" emptyHint="Заявки и фактические выплаты сходятся."
             columns={[
-              { label: 'ФИО', key: 'name', primary: true },
+              {
+                label: 'ФИО',
+                primary: true,
+                render: (p) => {
+                  // Радар-пинг — заявка с ручным созданием или сменой
+                  // реквизитов флагуется на ручную проверку прямо сейчас,
+                  // не декоративная точка.
+                  const isCritical = p.warnings.includes('manual_created') || p.warnings.includes('changed_bank_data');
+                  return (
+                    <span className="inline-flex items-center gap-1.5">
+                      {isCritical && (
+                        <span className="control-fui-radar" title="Требует ручной проверки: смена реквизитов или ручное создание заявки">
+                          <i /><i /><i /><b />
+                        </span>
+                      )}
+                      <span>{p.name}</span>
+                    </span>
+                  );
+                },
+              },
               { label: 'Тип', key: 'type' },
               { label: 'Способ', key: 'method' },
+              {
+                label: 'Угроза',
+                headerClass: 'text-right',
+                cellClass: 'text-right',
+                render: (p) => {
+                  const { n, pct, color } = threatLevel(p.warnings);
+                  return (
+                    <span className="inline-flex items-center justify-end gap-2">
+                      <span className="control-fui-threatbar"><i style={{ width: `${pct}%`, background: color }} /></span>
+                      <span className="text-xs tabular-nums" style={{ color }}>{n}</span>
+                    </span>
+                  );
+                },
+              },
               {
                 label: 'Сумма',
                 headerClass: 'text-right',

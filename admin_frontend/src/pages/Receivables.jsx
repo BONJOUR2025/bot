@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { RefreshCw, Landmark, AlertTriangle, Phone } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
@@ -20,6 +20,30 @@ function quickRange(key) {
 }
 
 const fmtRub = (v) => v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽';
+
+// Живой индикатор свежести данных — секунды/минуты с момента реальной
+// успешной загрузки (loadedAt), а не статичная метка.
+function fmtElapsed(loadedAt, now) {
+  if (!loadedAt) return '—';
+  const secs = Math.max(0, Math.floor((now - loadedAt) / 1000));
+  if (secs < 60) return `${secs}с назад`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}мин назад`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}ч назад`;
+}
+
+// Ширина/цвет мини-полосы давности долга: линейно от 0 до порога
+// "30+ дн." (та же граница, что и в OVERDUE_BUCKETS), с плавным
+// градиентом success → warning → danger.
+function agingBarStyle(daysOverdue) {
+  const ratio = Math.min((daysOverdue || 0) / 30, 1);
+  let color;
+  if (ratio < 0.5) color = 'var(--color-success)';
+  else if (ratio < 1) color = 'var(--color-warning)';
+  else color = 'var(--color-danger)';
+  return { width: `${Math.round(ratio * 100)}%`, background: color };
+}
 
 const PAY_STATUS_LABELS = {
   1: { label: 'Не оплачен', className: 'bg-red-50 text-red-600' },
@@ -43,6 +67,11 @@ const OVERDUE_BUCKETS = [
   { value: 'm1', label: '16–30 дн.', test: (d) => d >= 16 && d <= 30 },
   { value: 'm1p', label: '30+ дн.', test: (d) => d > 30 },
 ];
+
+// Хостится на уровне модуля (не пересчитывается в рендере), чтобы
+// useMemo ниже мог безопасно зависеть от неё без предупреждения
+// exhaustive-deps.
+const WORST_OVERDUE_TEST = OVERDUE_BUCKETS.find((b) => b.value === 'm1p').test;
 
 function KpiStat({ label, value, accent, icon }) {
   return (
@@ -70,6 +99,15 @@ export default function Receivables() {
   const [error,    setError]    = useState(null);
   const [statusFilter,  setStatusFilter]  = useState('');
   const [overdueFilter, setOverdueFilter] = useState('');
+  // Реальное время последней успешной загрузки (не выдуманная цифра) —
+  // используется телеметрической лентой ниже вместе с живыми часами.
+  const [loadedAt, setLoadedAt] = useState(null);
+  const [nowTick,  setNowTick]  = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const filteredOrders = useMemo(() => {
     if (!data) return [];
@@ -85,6 +123,18 @@ export default function Receivables() {
     [filteredOrders]
   );
 
+  // Самый просроченный уровень (тот же порог, что и бакет "30+ дн." в
+  // OVERDUE_BUCKETS) — реальный агрегат для телеметрии и радар-пинга,
+  // не отдельный придуманный порог.
+  const worstOverdueOrders = useMemo(
+    () => filteredOrders.filter((o) => WORST_OVERDUE_TEST(o.days_overdue)),
+    [filteredOrders]
+  );
+  const worstOverdueAmount = useMemo(
+    () => worstOverdueOrders.reduce((s, o) => s + (o.amount || 0), 0),
+    [worstOverdueOrders]
+  );
+
   async function load() {
     setLoading(true); setError(null);
     try {
@@ -92,7 +142,7 @@ export default function Receivables() {
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo)   params.date_to   = dateTo;
       const res = await api.get('/sales/receivables', { params });
-      setData(res.data); setLoaded(true);
+      setData(res.data); setLoaded(true); setLoadedAt(new Date());
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'Ошибка загрузки');
     } finally { setLoading(false); }
@@ -170,6 +220,20 @@ export default function Receivables() {
             <KpiStat label="Заказов с долгом" value={filteredOrders.length.toLocaleString('ru-RU')} accent="var(--color-warning)" icon={<Landmark size={18} />} />
           </div>
 
+          {/* Телеметрическая лента дебиторки — реальные счётчики
+              filteredOrders/data, не декоративные цифры (см.
+              receivable-fui-readout в globals.css и Payouts.jsx для
+              исходного паттерна). */}
+          <div className="receivable-fui-readout">
+            <span>SYS://receivables.stream</span><span className="sep">·</span>
+            <span>ДОЛГОВ: <b>{filteredOrders.length}</b></span><span className="sep">·</span>
+            <span>
+              30+ ДН.: <b style={{ color: 'var(--color-danger)' }}>{worstOverdueOrders.length}</b>
+              {' '}(Σ {fmtRub(worstOverdueAmount)})
+            </span><span className="sep">·</span>
+            <span>ОБНОВЛЕНО: <b>{fmtElapsed(loadedAt, nowTick)}</b></span>
+          </div>
+
           <div className="app-card overflow-hidden">
             <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
               <h3 className="font-semibold">Список заказов</h3>
@@ -183,7 +247,15 @@ export default function Receivables() {
                 columns={[
                   { label: '№ заказа', primary: true, render: (o) => (
                     <div>
-                      <div className="font-medium">{o.doc_num}</div>
+                      <div className="font-medium flex items-center gap-1.5">
+                        {/* Радар-пинг — реальный флаг "самый просроченный"
+                            (тот же порог > 30 дн., что и худший бакет
+                            OVERDUE_BUCKETS), а не декорация. */}
+                        {WORST_OVERDUE_TEST(o.days_overdue) && (
+                          <span className="receivable-fui-radar" title="Просрочка 30+ дней"><i /><i /><i /><b /></span>
+                        )}
+                        {o.doc_num}
+                      </div>
                       <div className="text-xs text-[color:var(--color-muted-foreground)]">{o.date}</div>
                     </div>
                   )},
@@ -211,7 +283,14 @@ export default function Receivables() {
                       </div>
                     );
                   }},
-                  { label: 'Просрочка', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (o) => `${o.days_overdue} дн.` },
+                  { label: 'Просрочка', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (o) => (
+                    <div className="inline-block text-right min-w-[70px]">
+                      <div>{o.days_overdue} дн.</div>
+                      <div className="receivable-fui-agebar">
+                        <span style={agingBarStyle(o.days_overdue)} />
+                      </div>
+                    </div>
+                  )},
                   { label: 'Долг', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold text-red-500', render: (o) => fmtRub(o.amount) },
                 ]}
               />
