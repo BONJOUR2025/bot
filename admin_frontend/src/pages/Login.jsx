@@ -71,7 +71,7 @@ export default function Login() {
       </div>
 
       <div className={`auth-card ${isMobile ? 'auth-card--mobile' : ''}`}>
-        <div className="auth-card__logo">ЦУ</div>
+        <div className="auth-card__logo">B</div>
         <div className="auth-card__header">
           <h2>Добро пожаловать</h2>
           <p>Введите логин и пароль для входа</p>

@@ -1,11 +1,11 @@
 {
   "name": "Центр управления",
-  "short_name": "ЦУ",
+  "short_name": "Бонжур",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#6366f1",
-  "theme_color": "#6366f1",
+  "background_color": "#050505",
+  "theme_color": "#050505",
   "icons": [
     {
       "src": "/icons/icon-192.png",

@@ -371,8 +371,13 @@ a:hover { text-decoration: underline; }
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
+  /* Кегль и трекинг заданы под одну букву: раньше в плитке стояли две,
+     им нужен был мелкий кегль и разрядка. Одиночная «B» при тех же
+     значениях терялась в центре. 0.6 стороны — та же пропорция, что
+     у иконки приложения, поэтому плитка в интерфейсе и иконка на
+     домашнем экране читаются как один и тот же знак. */
+  font-size: 1.5rem;
+  letter-spacing: 0;
   background: linear-gradient(135deg, var(--color-primary) 0%, #a78bfa 100%);
   color: #fff;
   box-shadow: var(--shadow-glow-primary);
@@ -600,8 +605,9 @@ a:hover { text-decoration: underline; }
   place-items: center;
   border-radius: var(--radius-lg);
   font-weight: 700;
-  font-size: 1.1rem;
-  letter-spacing: 0.04em;
+  /* 0.6 стороны плитки — как в .sidebar__badge и в иконке приложения. */
+  font-size: 2.1rem;
+  letter-spacing: 0;
   background: linear-gradient(135deg, var(--color-primary) 0%, #a78bfa 100%);
   color: #fff;
   box-shadow: var(--shadow-glow-primary);
@@ -1132,7 +1138,8 @@ tbody tr:last-child td { border-bottom: none; }
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
   border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 700; font-size: 0.75rem;
+  /* 0.6 стороны плитки — как в .sidebar__badge и в иконке приложения. */
+  color: #fff; font-weight: 700; font-size: 1.2rem;
 }
 .emp-header__title { font-weight: 600; font-size: 0.95rem; }
 .emp-header__right { display: flex; align-items: center; gap: 1rem; min-width: 0; }
@@ -2108,7 +2115,9 @@ body.viewer3d-fs-active .app-card {
   background: linear-gradient(140deg, var(--color-primary), var(--color-primary-hover));
   box-shadow: var(--shadow-glow-primary), var(--glass-inner-hi);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  /* Трекинг на одиночной букве только сдвигает её от центра: он входит в
+     ширину строки, и центрирование съезжает на его половину. */
+  letter-spacing: 0;
 }
 .visual-glass .sidebar__title-main {
   font-weight: 500;

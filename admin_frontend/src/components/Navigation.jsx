@@ -156,7 +156,7 @@ export default function Navigation({ onNavigate, collapsed, onToggleCollapse }) 
         className="sidebar__header"
         style={isMobile ? { paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))' } : undefined}
       >
-        <div className="sidebar__badge">ЦУ</div>
+        <div className="sidebar__badge">B</div>
         {!isCollapsed && (
           <div className="sidebar__title">
             <span className="sidebar__title-main">Центр управления</span>
