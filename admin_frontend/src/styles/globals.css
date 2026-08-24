@@ -580,9 +580,19 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   padding: 4rem 1.5rem;
+  /* Экран входа — единственная страница вне .app-shell, и вырез экрана
+     ему приходится учитывать самому: у шапки приложения для этого есть
+     своё правило, а здесь верхний элемент упирался прямо в статус-бар и
+     Dynamic Island. На устройстве без выреза env() = 0 и отступы
+     остаются прежними. */
+  padding-top: calc(4rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
 }
 .auth-layout__surface { width: min(440px, 100%); }
-.auth-layout--mobile { align-items: flex-start; padding-top: 3rem; }
+.auth-layout--mobile {
+  align-items: flex-start;
+  padding-top: calc(3rem + env(safe-area-inset-top, 0px));
+}
 
 .auth-card {
   position: relative;
@@ -1123,9 +1133,14 @@ tbody tr:last-child td { border-bottom: none; }
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
+  /* Фон шапки доходит до верхнего края экрана, а строка с логотипом и
+     именем опускается ниже выреза — ровно так же, как в .app-shell__header.
+     Без этого на iPhone с Dynamic Island содержимое шапки оказывалось
+     под статус-баром. */
+  padding-top: env(safe-area-inset-top, 0px);
   /* min-height, не height — та же причина, что у .app-shell__header:
      длинное имя должно раздвинуть шапку, а не обрезаться. */
-  min-height: 56px;
+  min-height: calc(56px + env(safe-area-inset-top, 0px));
   background: var(--color-panel);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
@@ -2494,6 +2509,10 @@ body.viewer3d-fs-active .app-card {
 
 .visual-glass .auth-layout {
   padding: clamp(2rem, 5vw, 5rem) 1.5rem;
+  /* Это правило специфичнее базового и перебивало бы его padding вместе
+     с поправкой на вырез — поэтому env() повторён и здесь. */
+  padding-top: calc(clamp(2rem, 5vw, 5rem) + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(clamp(2rem, 5vw, 5rem) + env(safe-area-inset-bottom, 0px));
 }
 /* Контейнер логина по умолчанию — min(440px, 100%). Для разворота в две
    колонки его надо расширить, иначе сплит некуда раскладывать. */
