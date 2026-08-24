@@ -179,6 +179,12 @@ a:hover { text-decoration: underline; }
   touch-action: pan-y;
 }
 .app-shell--mobile .app-shell__sidebar.is-open { transform: translateX(0); }
+/* Пункты меню в мобильной шторке — 44pt по высоте (минимум Apple HIG).
+   На десктопе список остаётся плотным: там мышь, а лишние 10px на
+   каждом из ~35 пунктов заметно удлинили бы сайдбар. */
+.app-shell--mobile .sidebar__link {
+  min-height: 44px;
+}
 
 .app-shell__backdrop {
   position: fixed;
@@ -224,7 +230,11 @@ a:hover { text-decoration: underline; }
      battery/signal icons, which are unreadable and untappable when
      overlapped. Background = edge-to-edge, content = clear of the OS chrome. */
   padding-top: env(safe-area-inset-top, 0px);
-  height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+  /* min-height, не height: у длинного имени пользователя должна быть
+     возможность раздвинуть шапку/перенестись на вторую строку, а не
+     обрезаться жёсткой рамкой. При коротком имени (обычный случай)
+     высота остаётся прежней — 100% совпадает с исходным height. */
+  min-height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
   position: sticky;
   top: 0;
   z-index: 5;
@@ -240,6 +250,18 @@ a:hover { text-decoration: underline; }
   gap: 0.75rem;
   font-weight: 600;
   font-size: 1rem;
+  /* Уступает место имени пользователя. flex-shrink:100 — чтобы при
+     нехватке ширины сжималось (переносилось на вторую строку, шапка
+     растёт по min-height) именно название раздела, а не имя: при
+     одинаковом shrink=1 браузер ужимал оба, и даже «Nick» превращался
+     в «Ni…».
+     min-width НЕ обнуляем: auto = min-content не даёт названию ужаться
+     уже самого длинного слова — иначе «управления» вылезало из своей
+     колонки и наезжало на имя пользователя. */
+  flex-shrink: 100;
+}
+.app-shell__header > .icon-button {
+  flex-shrink: 0;
 }
 
 .app-shell__user {
@@ -247,8 +269,29 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
-.app-shell__user-name { font-size: 0.875rem; color: var(--color-text-muted); }
+.app-shell__user-name {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  /* max-width не даёт длинному имени вытолкнуть «Выход» за экран,
+     сжимается оно в последнюю очередь (см. flex-shrink:100 у .brand),
+     поэтому короткое имя видно целиком, а длинное обрезается многоточием.
+     nowrap+ellipsis, а не перенос по словам: имя — одно слово, перенос
+     рвал его посимвольно («Ni / ck»).
+     min-width — «пол», ниже которого имя не ужимается. Без него flex
+     отнимал у «Nick» доли пикселя (28.44 при нужных 28.47) — этого
+     хватало, чтобы WebKit нарисовал многоточие вместо последней буквы.
+     Длинные имена пол не задевает: им и так достаётся больше.
+     text-align:right — чтобы «лишняя» ширина пола уходила влево и
+     короткое имя оставалось вплотную к кнопке «Выход», как раньше. */
+  min-width: 4rem;
+  max-width: 40vw;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── Content area ─────────────────────────────────────────────── */
 .app-shell__content {
@@ -374,6 +417,20 @@ a:hover { text-decoration: underline; }
   color: var(--color-text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
+  /* Визуально кнопка остаётся 32×32 (перерисовывать иконку/кружок не
+     нужно), но кликабельная зона — 44×44 через невидимый псевдоэлемент.
+     Кнопка всегда одна в своём углу (открыть/закрыть меню, свернуть
+     сайдбар) — соседей рядом нет, расширение зоны ничего не перекрывает. */
+  position: relative;
+}
+.sidebar__icon-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 .sidebar__icon-btn:hover {
   background: var(--color-control-bg);
@@ -417,6 +474,11 @@ a:hover { text-decoration: underline; }
   display: grid;
   place-items: center;
   padding: 0.4rem;
+  /* Три кнопки стоят плотно в ряд — расширять зону клика по горизонтали
+     рискованно (можно перекрыть соседнюю). По вертикали соседей нет,
+     поэтому min-height безопасно поднимает высоту тапа к 44pt, не
+     трогая ширину/визуальный вид ряда. */
+  min-height: 44px;
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
@@ -947,6 +1009,13 @@ tbody tr:last-child td { border-bottom: none; }
     padding-left: calc(1.25rem + env(safe-area-inset-left, 0px));
     padding-right: calc(1.25rem + env(safe-area-inset-right, 0px));
   }
+  /* На узких экранах (375px и меньше) шапке не хватает буквально пары
+     пикселей: название раздела уже перенесено на две строки и упёрлось в
+     самое длинное слово, и лишнее отбирается у имени пользователя —
+     даже «Nick» превращался в «Ni…». Отступы между элементами шапки
+     здесь чисто декоративные, поэтому уменьшаем их, а не текст. */
+  .app-shell__header { gap: 0.6rem; }
+  .app-shell__user { gap: 0.5rem; }
   .app-shell__content {
     padding: 1.5rem 1.25rem 2rem;
     padding-top: 1.5rem;
@@ -990,7 +1059,9 @@ tbody tr:last-child td { border-bottom: none; }
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
-  height: 56px;
+  /* min-height, не height — та же причина, что у .app-shell__header:
+     длинное имя должно раздвинуть шапку, а не обрезаться. */
+  min-height: 56px;
   background: var(--color-panel);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
@@ -1006,8 +1077,16 @@ tbody tr:last-child td { border-bottom: none; }
   color: #fff; font-weight: 700; font-size: 0.75rem;
 }
 .emp-header__title { font-weight: 600; font-size: 0.95rem; }
-.emp-header__right { display: flex; align-items: center; gap: 1rem; }
-.emp-header__name { font-size: 0.85rem; color: var(--color-text-muted); }
+.emp-header__right { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+.emp-header__name {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  min-width: 0;
+  max-width: 40vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Body layout */
 .emp-body {
@@ -1797,6 +1876,25 @@ body.viewer3d-fs-active .app-card {
   letter-spacing: -0.045em;
   line-height: 1;
 }
+/* Значение в Kpi-карточке: та же тема (моно-цифры, лёгкий вес), но своя
+   шкала — карточка вдвое уже, чем то, для чего рассчитан clamp выше, и
+   верхняя граница (1.5rem) сохраняет прежний вид на десктопе, где место
+   есть. Ниже минимума не сжимаем — вместо этого переносим на вторую
+   строку (но не обрезаем: невидимая часть суммы для пользователя просто
+   не существует).
+   overflow-wrap: break-word, а НЕ anywhere: anywhere разрешает разрыв
+   даже там, где рядом есть пробел, и «30 133 ₽» рвалось как «30 1 / 33 ₽».
+   break-word ломает слово только когда иначе оно не влезает вовсе, так
+   что перенос случается по пробелам между разрядами. */
+.visual-glass .ui-metric--kpi {
+  font-size: clamp(1.05rem, 5vw, 1.5rem);
+  font-weight: 400;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+@media (min-width: 640px) {
+  .visual-glass .ui-metric--kpi { font-size: 1.5rem; }
+}
 .visual-glass .ui-eyebrow {
   display: inline-flex;
   align-items: center;
@@ -1886,6 +1984,11 @@ body.viewer3d-fs-active .app-card {
   border: 0;
   border-radius: 0;
   height: 100%;
+  /* Полноэкранный оверлей, а не плавающая карточка — обычная 72%-
+     прозрачность --color-panel (нужна плавающим десктоп-панелям) здесь
+     давала бы контенту страницы просвечивать сквозь пункты меню. Блюр
+     не трогаем, он остаётся из базового правила выше по каскаду. */
+  background: var(--color-panel-solid);
 }
 .visual-glass .app-shell__backdrop {
   background: var(--color-modal-backdrop);
@@ -2904,8 +3007,8 @@ body.viewer3d-fs-active .app-card {
 /* Инлайн-спарклайн в лидерборде — высота и цвет каждого бара
    вычисляются в JS из реальных подписанных сумм последних записей
    сотрудника (премия +, штраф −), см. Incentives.jsx. */
-.incentive-fui-spark { display: flex; align-items: flex-end; gap: 2px; height: 18px; }
-.incentive-fui-spark i { display: block; width: 4px; border-radius: 1px 1px 0 0; }
+.incentive-fui-spark { display: flex; align-items: flex-end; gap: 1.5px; height: 18px; }
+.incentive-fui-spark i { display: block; width: 3px; border-radius: 1px 1px 0 0; }
 
 /* HUD-метка «LOCKED» — диагональная штриховка низкой прозрачности
    поверх приглушённого предупреждающего цвета, сигнализирует реальное
@@ -3654,6 +3757,11 @@ body.viewer3d-fs-active .app-card {
   flex-direction: column;
   gap: 0.05rem;
   min-width: 0;
+  /* Раньше оба узла (откуда/куда) делили место по auto-ширине контента —
+     тот, чья подпись категории короче, забирал себе больше, а второй
+     обрезался сильнее (94px против 55px на одинаковых по длине именах).
+     flex:1 1 0 делит место поровну независимо от контента. */
+  flex: 1 1 0;
 }
 .transfer-fui-route__cat {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -3670,7 +3778,10 @@ body.viewer3d-fs-active .app-card {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 110px;
+  /* 110px обрезал короткие подписи вроде «Екатерина 2201» на пару
+     пикселей раньше, чем нужно — запас побольше, ellipsis остаётся на
+     тот случай, если имя всё же длиннее. */
+  max-width: 132px;
 }
 .transfer-fui-route__connector {
   position: relative;

@@ -2386,7 +2386,19 @@ export default function Recruitment() {
               <div className="min-w-0">
                 <h2 className="font-bold text-base truncate">{selected.title}</h2>
                 {selected.description && (
-                  <p className="text-xs text-[color:var(--color-muted-foreground)] truncate">{selected.description}</p>
+                  // Раньше описание обрезалось однострочным truncate — почти
+                  // весь текст вакансии был не виден и никак не доступен.
+                  // Превью в 3 строки + клик открывает ту же VacancyModal,
+                  // где поле описания уже показывает текст целиком — без
+                  // отдельного read-only модального окна специально под это.
+                  <button
+                    type="button"
+                    onClick={() => setVacancyModal(selected)}
+                    title="Открыть описание вакансии полностью"
+                    className="text-xs text-left text-[color:var(--color-muted-foreground)] line-clamp-3 hover:text-[color:var(--color-primary)] transition-colors"
+                  >
+                    {selected.description}
+                  </button>
                 )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">

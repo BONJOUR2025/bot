@@ -80,7 +80,7 @@ export default function ArchivedEmployees() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div>
           <span className="ui-eyebrow mb-3">{employees.length ? `В архиве: ${employees.length}` : 'Архив пуст'}</span>
           <h2 className="text-2xl font-semibold">Архив сотрудников</h2>

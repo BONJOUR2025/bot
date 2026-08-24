@@ -98,9 +98,23 @@ export default function SettingsGeneral() {
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">Excel-файл расчёта зарплаты</div>
                 {status?.payroll_excel?.path && (
-                  <div className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5 font-mono truncate">
+                  // title — подсказка при наведении на desktop; клик —
+                  // скопировать путь целиком (на мобильном подсказка при
+                  // наведении недоступна в принципе, поэтому tap-to-copy —
+                  // единственный способ получить полный путь без нового
+                  // модального окна ради одной строки текста).
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(status.payroll_excel.path)
+                        .then(() => toast('Путь скопирован', 'success'))
+                        .catch(() => {});
+                    }}
+                    title={status.payroll_excel.path}
+                    className="block w-full text-left text-xs text-[color:var(--color-muted-foreground)] mt-0.5 font-mono truncate hover:text-[color:var(--color-text)] transition-colors"
+                  >
                     {status.payroll_excel.path}
-                  </div>
+                  </button>
                 )}
                 {status?.payroll_excel?.error && (
                   <div className="text-xs text-red-600 mt-0.5 break-words">{status.payroll_excel.error}</div>

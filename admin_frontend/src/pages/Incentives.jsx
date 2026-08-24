@@ -94,11 +94,11 @@ function EmployeeLeaderboard({ data, activeName, onSelect }) {
             <button key={r.name} type="button" onClick={() => onSelect?.(r.name)}
               className={`w-full text-left rounded-md -mx-1 px-1 py-1 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
               <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                   {i < 3 ? <span className="text-base shrink-0">{medals[i]}</span> : <span className="w-5 text-center text-xs font-bold text-[color:var(--color-muted-foreground)] shrink-0">{i + 1}</span>}
                   <span className="text-sm font-medium truncate">{r.name}</span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 ml-3">
+                <div className="flex items-center gap-2 shrink-0 ml-2">
                   {r.trend?.length > 0 && (
                     <div className="incentive-fui-spark" title={`Последние ${r.trend.length} записей`}>
                       {r.trend.map((v, ti) => (

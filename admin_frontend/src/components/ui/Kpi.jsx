@@ -1,4 +1,18 @@
 /**
+ * toLocaleString('ru-RU') разделяет разряды неразрывным пробелом, поэтому
+ * «10 577 249 ₽» с точки зрения переноса — одно слово целиком. Когда оно
+ * не влезает в узкую карточку, браузер рвёт его в произвольном месте:
+ * «10 577 2 / 49 ₽» — цифры все на месте, но число не прочитать. Заменяем
+ * неразрывные пробелы обычными: точки переноса появляются на границах
+ * разрядов, и перенос выглядит как «10 577 249 / ₽» или «10 577 / 249 ₽».
+ * Ширина обычного и неразрывного пробела в моношрифте одинакова, поэтому
+ * там, где значение и так помещалось в строку, ничего не меняется.
+ */
+function breakableNumber(value) {
+  return typeof value === 'string' ? value.replace(/[\u00A0\u202F]/g, ' ') : value;
+}
+
+/**
  * Карточка показателя.
  *
  * До этого её определение было скопировано в пяти страницах байт в байт
@@ -24,15 +38,17 @@ export default function Kpi({
   return (
     <div className={`ui-shell ui-shell--sm ${className}`.trim()} {...rest}>
       <div className="ui-core app-card p-5">
-        <div className="flex items-start justify-between gap-3">
+        {/* Иконку делит строка только с подписью, а не со значением.
+            Раньше значение лежало в той же колонке, что и подпись, и на
+            узком экране (две карточки в ряд на 375px) на него оставалось
+            46px из 94px — сумма рвалась посреди числа. Иконка занимает
+            место лишь на высоте подписи, ниже карточка всё равно пустая,
+            поэтому значение и нижняя подпись занимают всю ширину.
+            min-h-9 = высота иконки: гарантирует, что значение начинается
+            под ней, а не наезжает. На десктопе вид не меняется. */}
+        <div className="flex min-h-9 items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="ui-label ui-label--fixed">{label}</div>
-            <div className="ui-metric !text-[1.5rem] mt-1.5 truncate text-[color:var(--color-text)]">
-              {value}
-            </div>
-            {sub && (
-              <div className="mt-1.5 text-xs text-[color:var(--color-muted-foreground)]">{sub}</div>
-            )}
           </div>
           {Icon && (
             <span
@@ -46,6 +62,18 @@ export default function Kpi({
             </span>
           )}
         </div>
+        {/* Денежную сумму нельзя обрезать многоточием — часть числа,
+            которую не видно, для пользователя не существует. Вместо
+            truncate + фиксированного размера: сначала подстраиваем кегль
+            под ширину карточки (clamp, тот же максимум 1.5rem, что был
+            раньше — на десктопе выглядит как прежде), а если значение всё
+            равно не влезло — переносим на вторую строку вместо обрезки. */}
+        <div className="ui-metric ui-metric--kpi mt-1.5 text-[color:var(--color-text)]">
+          {breakableNumber(value)}
+        </div>
+        {sub && (
+          <div className="mt-1.5 text-xs text-[color:var(--color-muted-foreground)]">{sub}</div>
+        )}
       </div>
     </div>
   );
