@@ -162,7 +162,7 @@ export default function ArchivedEmployees() {
             cellClass: 'text-right',
             render: (e) => (
               <button
-                className="text-green-600 hover:text-green-800 flex items-center gap-1"
+                className="ui-tap-44 text-green-600 hover:text-green-800 flex items-center gap-1"
                 onClick={() => restore(e.id)}
               >
                 <ArchiveRestore size={16} /> Вернуть

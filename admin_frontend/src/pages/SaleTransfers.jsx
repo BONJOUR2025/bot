@@ -398,7 +398,7 @@ export default function SaleTransfers() {
                 isAction: true,
                 render: (t) => (
                   <button onClick={() => removeTransfer(t.id)}
-                    className="text-red-400 hover:text-red-600" title="Отменить">
+                    className="ui-tap-44 text-red-400 hover:text-red-600" title="Отменить">
                     <Trash2 size={15} />
                   </button>
                 ),

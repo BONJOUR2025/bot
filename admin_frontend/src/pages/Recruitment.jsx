@@ -1665,9 +1665,39 @@ function MobileBoard({ candidates, onCardClick, onAddClick, selectionMode, selec
   const stage = stageOf(activeStage);
   const filtered = candidates.filter(c => c.stage === activeStage);
 
+  /* Семь этапов занимают ~700px при 424px экрана, то есть три последних
+     («Собеседование», «Нанят», «Отказ») не видно вообще — и ничто не
+     намекает, что лента прокручивается. Тот же приём, что у десктопной
+     доски (см. syncOverflow выше), только вместо стрелок — растворение
+     края: стрелки поверх узкой ленты закрыли бы собой этап целиком.
+     Класс вешается только с той стороны, куда реально можно прокрутить,
+     поэтому когда всё влезло, подсказки нет. */
+  const stripRef = useRef(null);
+  const [edge, setEdge] = useState({ left: false, right: false });
+  const syncEdge = useCallback(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    setEdge({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+  }, []);
+  useEffect(() => {
+    syncEdge();
+    const el = stripRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(syncEdge);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncEdge, candidates.length]);
+
   return (
     <div className="space-y-3">
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
+      <div
+        ref={stripRef}
+        onScroll={syncEdge}
+        className={`flex gap-1.5 overflow-x-auto pb-1 ui-hscroll${edge.left ? ' is-fade-left' : ''}${edge.right ? ' is-fade-right' : ''}`}
+      >
         {STAGES.map(s => {
           const count = candidates.filter(c => c.stage === s.key).length;
           const active = s.key === activeStage;
@@ -2401,10 +2431,17 @@ export default function Recruitment() {
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              {/* flex-wrap, а не flex-shrink-0: пять кнопок в ряд — это
+                  619px, и на телефоне последние две («Выбрать» и
+                  «Кандидат») уезжали за 440px, где их срезал
+                  overflow-x:hidden у .app-shell__content. Не «мелкая
+                  кнопка», а недоступная: ни прокрутки, ни переноса не
+                  было. На десктопе ряд как помещался в строку, так и
+                  помещается. */}
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => toggleVacancy(selected)}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+                  className={`ui-tap-44 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
                     selected.is_open
                       ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                       : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)]'
@@ -2415,14 +2452,14 @@ export default function Recruitment() {
                 <button
                   onClick={() => duplicateVacancy(selected.id)}
                   title="Создать новую вакансию с теми же данными — для повторной публикации"
-                  className="text-xs font-medium px-3 py-1.5 rounded-full bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)] transition-colors flex items-center gap-1"
+                  className="ui-tap-44 text-xs font-medium px-3 py-1.5 rounded-full bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)] transition-colors flex items-center gap-1"
                 >
                   <Copy size={12} /> Дублировать
                 </button>
                 <button
                   onClick={() => saveVacancyAsTemplate(selected)}
                   title="Сохранить в постоянное хранилище шаблонов — переживёт закрытие или удаление вакансии"
-                  className="text-xs font-medium px-3 py-1.5 rounded-full bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)] transition-colors flex items-center gap-1"
+                  className="ui-tap-44 text-xs font-medium px-3 py-1.5 rounded-full bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-control-bg-hover)] transition-colors flex items-center gap-1"
                 >
                   <FileStack size={12} /> Сохранить как шаблон
                 </button>

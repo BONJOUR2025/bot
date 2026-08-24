@@ -76,12 +76,18 @@ function TypeDonut({ data, total, activeName, onSelect }) {
 
 function EmployeeLeaderboard({ data, activeName, onSelect }) {
   const medals = ['🥇', '🥈', '🥉'];
+  /* Тап по строке уже занят — он фильтрует и уводит на вкладку «Список»,
+     поэтому развернуть ФИО им нельзя. Отдельный жест по самому имени:
+     клик по нему разворачивает строку на месте и не всплывает до кнопки.
+     Многоточие остаётся визуальным — для VoiceOver и поиска по странице
+     текст всё это время полный, text-overflow ничего не удаляет. */
+  const [expanded, setExpanded] = useState(null);
   return (
     <div className="app-card p-5">
-      <div className="text-sm font-semibold mb-4 flex items-center gap-2">
-        <Trophy size={15} className="text-[color:var(--color-primary)]" />
+      <div className="text-sm font-semibold mb-4 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <Trophy size={15} className="text-[color:var(--color-primary)] shrink-0" />
         По сотрудникам (чистый итог)
-        {activeName && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)]">· фильтр: {activeName}</span>}
+        {activeName && <span className="text-xs font-normal text-[color:var(--color-muted-foreground)] break-words">· фильтр: {activeName}</span>}
       </div>
       <div className="space-y-3">
         {data.slice(0, 8).map((r, i) => {
@@ -92,11 +98,17 @@ function EmployeeLeaderboard({ data, activeName, onSelect }) {
           const trendMax = r.trend?.length ? Math.max(...r.trend.map((v) => Math.abs(v)), 1) : 1;
           return (
             <button key={r.name} type="button" onClick={() => onSelect?.(r.name)}
-              className={`w-full text-left rounded-md -mx-1 px-1 py-1 transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
+              className={`w-full text-left rounded-md -mx-1 px-1 py-1 min-h-[44px] transition-colors hover:bg-[color:var(--color-bg-secondary)] cursor-pointer ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {i < 3 ? <span className="text-base shrink-0">{medals[i]}</span> : <span className="w-5 text-center text-xs font-bold text-[color:var(--color-muted-foreground)] shrink-0">{i + 1}</span>}
-                  <span className="text-sm font-medium truncate">{r.name}</span>
+                  <span
+                    className={`text-sm font-medium ${expanded === r.name ? 'whitespace-normal break-words' : 'truncate'}`}
+                    title={r.name}
+                    onClick={(e) => { e.stopPropagation(); setExpanded((p) => (p === r.name ? null : r.name)); }}
+                  >
+                    {r.name}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-2">
                   {r.trend?.length > 0 && (

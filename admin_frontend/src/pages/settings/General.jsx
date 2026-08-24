@@ -111,9 +111,13 @@ export default function SettingsGeneral() {
                         .catch(() => {});
                     }}
                     title={status.payroll_excel.path}
-                    className="block w-full text-left text-xs text-[color:var(--color-muted-foreground)] mt-0.5 font-mono truncate hover:text-[color:var(--color-text)] transition-colors"
+                    className="ui-tap-44 block w-full text-left text-xs text-[color:var(--color-muted-foreground)] mt-0.5 font-mono hover:text-[color:var(--color-text)] transition-colors"
                   >
-                    {status.payroll_excel.path}
+                    {/* truncate висит на внутреннем span, а не на кнопке:
+                        на кнопке он приносит overflow:hidden, который
+                        обрезает псевдоэлемент зоны нажатия от .ui-tap-44,
+                        и она перестаёт ловить тап выше/ниже строки. */}
+                    <span className="block truncate">{status.payroll_excel.path}</span>
                   </button>
                 )}
                 {status?.payroll_excel?.error && (

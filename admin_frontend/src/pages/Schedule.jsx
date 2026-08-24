@@ -141,7 +141,10 @@ export default function Schedule() {
           <span className="ui-eyebrow mb-3">{String(month).padStart(2,'0')}.{year}</span>
           <h2 className="text-2xl font-semibold">Расписание</h2>
         </div>
-        <div className="flex items-center gap-2">
+        {/* flex-wrap: стрелки месяца после доведения до 44pt стали шире, и
+            на 375px строка «‹ Август 2026 › обновить» перестала помещаться
+            — кнопка обновления уезжала под обрез .app-shell__content. */}
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={prevMonth} className="btn btn-outline p-2" aria-label="Предыдущий месяц">
             <ChevronLeft size={16} />
           </button>

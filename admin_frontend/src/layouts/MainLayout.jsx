@@ -73,7 +73,11 @@ export default function MainLayout() {
             Центр управления
           </div>
           <div className="app-shell__user">
-            <span className="app-shell__user-name">{userLabel}</span>
+            {/* title — для десктопа: имя сокращается многоточием только
+                когда не помещается, и наведение показывает его целиком.
+                Скринридеру многоточие не мешает в принципе: text-overflow
+                прячет текст визуально, в DOM он остаётся полным. */}
+            <span className="app-shell__user-name" title={userLabel}>{userLabel}</span>
             <button type="button" className="icon-button icon-button--ghost" onClick={handleLogout} aria-label="Выйти">
               <LogOut size={18} />
               <span>Выход</span>

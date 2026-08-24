@@ -1320,7 +1320,7 @@ export default function Payouts() {
             <button
               onClick={checkTelegram}
               title="Проверить бот"
-              className="ml-2 text-blue-600 hover:text-blue-800"
+              className="ui-tap-44 ml-2 text-blue-600 hover:text-blue-800"
             >
               <RefreshCw size={18} />
             </button>
