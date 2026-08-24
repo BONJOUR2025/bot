@@ -745,7 +745,14 @@ select option { color: #0f172a; background-color: #ffffff; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
+  /* Единственное место, где для модалки учитывается вырез. Карточка
+     ограничена высотой этого content-box (max-height: 100% ниже),
+     поэтому вставка применяется ровно один раз — добавлять её ещё и
+     карточке значило бы отнять высоту дважды. */
+  padding: calc(1.5rem + env(safe-area-inset-top, 0px))
+           calc(1.5rem + env(safe-area-inset-right, 0px))
+           calc(1.5rem + env(safe-area-inset-bottom, 0px))
+           calc(1.5rem + env(safe-area-inset-left, 0px));
   background: var(--color-modal-backdrop);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
@@ -753,8 +760,18 @@ select option { color: #0f172a; background-color: #ffffff; }
 }
 .modal-card {
   width: 100%;
-  max-height: min(95dvh, 900px);
+  /* 100%, а не 95dvh: dvh считает всю высоту экрана и не знает ни про
+     отступы подложки, ни про вырез, поэтому высокая карточка вылезала
+     за них — верхний край оказывался на 24px, ниже границы безопасной
+     области. Процент считается от content-box подложки, где вставки уже
+     вычтены, так что карточка физически не может в них попасть.
+     Ограничение в 900px оставлено — на десктопе вид не меняется. */
+  max-height: min(100%, 900px);
+  /* Карточка и есть внутренний контейнер прокрутки: содержимое выше
+     доступной высоты прокручивается внутри неё, а не обрезается.
+     overscroll-behavior не пускает жест дальше, на страницу под окном. */
   overflow-y: auto;
+  overscroll-behavior: contain;
   overflow-x: hidden;
   background: var(--color-modal-bg);
   color: var(--color-modal-text);
@@ -2065,6 +2082,16 @@ body.viewer3d-fs-active .app-card {
 /* Мобильный сайдбар — выезжающий оверлей, ему остров не нужен. */
 .visual-glass .app-shell--mobile .app-shell__sidebar {
   padding: 0;
+  /* padding-обнуление выше — шорткат, и он стирал padding-bottom с
+     env(safe-area-inset-bottom) из базового правила: последний пункт меню
+     и переключатель темы уезжали под home indicator. Повторяем его здесь
+     явно — замысел базового правила («низ под жест держим чистым»)
+     сохраняется, а обнуление боковых и верхнего отступов остаётся. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Панель внутри — height:100%, то есть ровно content-box контейнера, и
+     до нижней полосы она теперь не достаёт. Чтобы там не появилась
+     полупрозрачная щель, красим сам контейнер тем же непрозрачным тоном. */
+  background: var(--color-panel-solid);
 }
 .visual-glass .app-shell--mobile .app-shell__sidebar > * {
   border: 0;

@@ -51,11 +51,17 @@
 	<array>
 		<string>armv7</string>
 	</array>
+	<!-- Только портрет. В альбомной ориентации ширина вьюпорта становится
+	     956pt, приложение переключается на десктопную раскладку с
+	     постоянным сайдбаром — интерфейс, рассчитанный на мышь, — и при
+	     этом боковые safe-area вставки (по 62pt) не учитываются ни
+	     сайдбаром, ни шапкой, ни экраном входа. Вместо того чтобы верстать
+	     отдельный альбомный макет, ориентация отключена целиком.
+	     Ключ без суффикса действует только на iPhone: у iPad ниже свой
+	     ~ipad, и он этим не затронут. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
