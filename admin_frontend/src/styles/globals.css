@@ -3630,7 +3630,9 @@ body.viewer3d-fs-active .app-card {
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
   opacity: 0.4;
   top: 0;
-  animation: fui-scan-line 6s linear infinite;
+  /* Однократно: линия означает «досье поднято на экран», а это
+     событие. Крутившаяся вечно, она сообщала только сама себя. */
+  animation: fui-scan-line 1100ms var(--glass-ease-out) 1;
 }
 
 /* ── FUI-слой счётчика посетителей (Счётчик посетителей) ──────────
@@ -6363,3 +6365,356 @@ body.viewer3d-fs-active .app-card {
   .pay-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pay-filters__q { grid-column: 1 / -1; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   КЛИЕНТЫ · ДОСЬЕ
+   ═══════════════════════════════════════════════════════════════
+   Главный объект страницы — карточка клиента, поиск лишь вход в неё.
+   Раньше карточка была разложена на три поверхности, которые
+   пересказывали друг друга: штамп печатал «ЗАКАЗОВ · LTV», под ним
+   те же LTV и «Заказов» стояли в KPI-карточках, а даты первого и
+   последнего заказа висели отдельным столбиком справа. Плюс каждая
+   карточка красилась в свой цвет — LTV фиолетовый, средний чек
+   зелёный, заказы янтарные, — то есть цвет означал категорию.
+
+   Здесь досье — одна поверхность: имя и телефон, затем показания на
+   общей шкале. LTV крупнее остальных, потому что это и есть ответ на
+   вопрос «кто этот клиент для нас». */
+
+.dossier {
+  position: relative;
+  border: 1px solid var(--fui-edge);
+  border-radius: 0.85rem;
+  overflow: hidden;
+  background:
+    radial-gradient(90% 120% at 4% 0%, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 58%),
+    var(--color-surface);
+}
+.dossier__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  padding: 1.25rem 1.4rem 1.1rem;
+}
+.dossier__name {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  min-width: 0;
+}
+.dossier__phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono-ui);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+}
+.dossier__span {
+  text-align: right;
+  font-family: var(--font-mono-ui);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.dossier__span b { font-weight: 500; color: var(--color-text-muted); }
+
+/* Показания досье. Общая кромка сверху связывает их в шкалу — это
+   один объект с разных сторон, а не четыре независимых показателя. */
+.dossier__reads {
+  display: flex;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--fui-edge);
+}
+.dossier__read {
+  flex: 1 1 8.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.95rem 1.4rem 1.05rem;
+  border-left: 1px solid var(--fui-edge);
+}
+.dossier__read:first-child { border-left: 0; }
+.dossier__read-k {
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.dossier__read-v {
+  font-size: 1.2rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+/* Ведущее показание — LTV: ради него досье и открывают. */
+.dossier__read--lead { flex: 1.4 1 12rem; }
+.dossier__read--lead .dossier__read-v {
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  letter-spacing: -0.03em;
+}
+/* Риск оттока помечает досье кромкой, а не отдельной красной строкой
+   в углу и не вторым бейджем рядом с именем. */
+.dossier--risk { border-color: color-mix(in srgb, var(--color-danger) 40%, var(--fui-edge)); }
+.dossier--risk::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3.5rem;
+  height: 1px;
+  background: var(--color-danger);
+  box-shadow: 0 0 9px -1px var(--color-danger);
+  z-index: 2;
+}
+
+/* ── Реестр результатов поиска ──────────────────────────────────
+   Волосяные разделители вместо рамки на каждой строке; телефон
+   моношкалой, чтобы номера стояли колонкой. */
+.cli-hit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.8rem 1.1rem;
+  border-top: 1px solid var(--fui-edge);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fui-t-normal) var(--glass-ease-out);
+}
+.cli-hit:first-child { border-top: 0; }
+.cli-hit:hover { background: var(--color-control-bg-hover); }
+.cli-hit__n { font-size: 13.5px; font-weight: 500; color: var(--color-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cli-hit__p {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  font-family: var(--font-mono-ui);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+}
+
+/* Полоса «насколько давно не был» в списке уходящих. Раньше это
+   число было красным во всех строках сразу — но в этой таблице по
+   определению все строки в зоне риска, и сплошной красный столбец
+   не отличал тех, кого ещё можно вернуть, от безнадёжных. */
+.cli-lag { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+.cli-lag__v { font-family: var(--font-mono-ui); font-variant-numeric: tabular-nums; color: var(--color-text); }
+.cli-lag__t { width: 2.6rem; height: 3px; flex-shrink: 0; background: var(--fui-edge); overflow: hidden; }
+.cli-lag__t i { display: block; height: 100%; background: color-mix(in srgb, var(--color-danger) 65%, transparent); }
+
+@media (max-width: 640px) {
+  .dossier__head { padding: 1.05rem 1.05rem 0.95rem; }
+  .dossier__span { text-align: left; }
+  .dossier__read { flex: 1 1 50%; padding: 0.85rem 1.05rem 0.9rem; }
+  .dossier__read:nth-child(odd) { border-left: 0; }
+  .dossier__read--lead { flex: 1 1 100%; }
+}
+
+/* Строка поиска как один прибор: иконка, поле и действие в общем
+   корпусе. Кнопка была во всю ширину под полем и весила как главная
+   операция страницы, хотя главный объект здесь — досье. */
+.cli-search {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.6rem 0.5rem 1rem;
+  border: 1px solid var(--fui-edge-strong);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  transition: border-color var(--fui-t-normal) var(--glass-ease-out), box-shadow var(--fui-t-normal) var(--glass-ease-out);
+}
+.cli-search:focus-within {
+  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  box-shadow: var(--fui-glow-subtle);
+}
+.cli-search__i {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--color-text);
+}
+.cli-search__i::placeholder { color: var(--color-text-faint); }
+
+/* ═══════════════════════════════════════════════════════════════
+   МАСТЕРА · РЕЕСТР ЗАГРУЗКИ
+   ═══════════════════════════════════════════════════════════════
+   Таблица была светофором: имя фиолетовой ссылкой, «выполнено»
+   зелёным, «в работе» жёлтым, «нарушений» янтарным со значком в
+   каждой строке. Четыре цвета на строку при том, что три из них
+   описывали не состояние, а всего лишь название колонки.
+
+   Здесь цвет остался одному столбцу — тому, где он означает, что с
+   мастером надо разобраться. Остальное различается набором и
+   выравниванием, а загрузка — длиной шкалы. */
+
+.mas-reg { width: 100%; font-size: 13px; border-collapse: collapse; }
+.mas-reg th {
+  padding: 0.5rem 0.9rem;
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  border-bottom: 1px solid var(--fui-edge-strong);
+  white-space: nowrap;
+}
+.mas-reg th.r, .mas-reg td.r { text-align: right; }
+.mas-reg td {
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--fui-edge);
+  color: var(--color-text-muted);
+  vertical-align: middle;
+}
+.mas-reg tbody tr { transition: background var(--fui-t-micro) var(--glass-ease-out); }
+.mas-reg tbody tr:hover { background: var(--color-control-bg-hover); }
+.mas-reg .n {
+  font-family: var(--font-mono-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+.mas-reg .dim { color: var(--color-text-faint); }
+.mas-reg__name {
+  font-weight: 500;
+  color: var(--color-text);
+  text-align: left;
+  transition: color var(--fui-t-micro) var(--glass-ease-out);
+}
+.mas-reg__name:hover { color: var(--color-primary); }
+
+/* Загрузка мастера относительно самого загруженного за период.
+   Шкала под именем связывает строки между собой: видно не только
+   «сколько», но и «кто тянет основную массу». */
+/* Гаснет вправо и держится приглушённой: сплошная полоса ровного тона
+   под именем читается как подчёркивание текста, а не как шкала. */
+.mas-load { display: block; width: 100%; max-width: 8rem; height: 2px; margin-top: 0.35rem; background: var(--fui-edge); overflow: hidden; opacity: 0.75; }
+.mas-load i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(to right, color-mix(in srgb, var(--color-text) 34%, transparent), color-mix(in srgb, var(--color-text) 10%, transparent));
+}
+.mas-load--lead i {
+  background: linear-gradient(to right, var(--color-primary), color-mix(in srgb, var(--color-primary) 18%, transparent));
+}
+
+/* Нарушения — единственный сигнал в реестре. Значок стоит только у
+   тех, у кого счёт заметно выше остальных: десять одинаковых
+   треугольников в столбце означали лишь наличие столбца. */
+.mas-warn { font-family: var(--font-mono-ui); font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
+.mas-warn--hot { color: var(--color-warning); font-weight: 500; }
+
+/* Панель периода: поля и действия в одном корпусе. */
+.mas-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--fui-edge);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+}
+.mas-bar__f { display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.mas-bar__k {
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.mas-bar__f .input { width: auto; min-width: 9.5rem; }
+.mas-bar__gap { flex: 1 1 0; min-width: 0; }
+@media (max-width: 560px) {
+  .mas-bar__gap { display: none; }
+  .mas-bar__f { flex: 1 1 100%; }
+  .mas-bar__f .input { flex: 1; min-width: 0; }
+}
+
+@media (max-width: 560px) {
+  /* Подпись ячейки переносится вместо обрезания: на 375px строка
+     «выполнено 1434 · в работе 109» не помещается в одну строку, и
+     половина показателя пропадала за многоточием. */
+  .fui-cellstat__m { white-space: normal; overflow: visible; line-height: 1.45; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ПОДБОР · СТАДИИ ВОРОНКИ
+   ═══════════════════════════════════════════════════════════════
+   Шкала продвижения вместо семи независимых оттенков. Рабочие стадии
+   набраны графитом, светлеющим к концу воронки: чем дальше кандидат
+   прошёл, тем плотнее метка. Цвет достаётся двум исходам — наняли и
+   отказали, — и обоим сдержанно: найм это редкое событие, а отказ не
+   авария, чтобы гореть красным на всю колонку. */
+
+.stage-chip {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--stage-ink) 15%, transparent);
+  color: var(--stage-ink);
+}
+.stage-dot { border-radius: 999px; background: var(--stage-ink); }
+/* Кромка колонки — не двухпиксельная цветная планка, а волосяная
+   линия той же шкалы: она отмечает стадию, но не спорит с карточками. */
+.stage-rail { box-shadow: inset 0 2px 0 0 var(--stage-ink); }
+
+.stage-chip--s1, .stage-dot--s1, .stage-rail--s1 { --stage-ink: color-mix(in srgb, var(--color-text) 26%, transparent); }
+.stage-chip--s2, .stage-dot--s2, .stage-rail--s2 { --stage-ink: color-mix(in srgb, var(--color-text) 36%, transparent); }
+.stage-chip--s3, .stage-dot--s3, .stage-rail--s3 { --stage-ink: color-mix(in srgb, var(--color-text) 48%, transparent); }
+.stage-chip--s4, .stage-dot--s4, .stage-rail--s4 { --stage-ink: color-mix(in srgb, var(--color-text) 60%, transparent); }
+/* Собеседование — последняя рабочая стадия перед решением, и
+   единственная в воронке, где уместен акцент: дальше только исход. */
+.stage-chip--s5, .stage-dot--s5, .stage-rail--s5 { --stage-ink: var(--color-primary); }
+.stage-chip--ok, .stage-dot--ok, .stage-rail--ok { --stage-ink: var(--color-success); }
+.stage-chip--no, .stage-dot--no, .stage-rail--no { --stage-ink: color-mix(in srgb, var(--color-danger) 55%, var(--color-text-faint)); }
+.stage-chip--rs, .stage-dot--rs, .stage-rail--rs { --stage-ink: var(--color-text-faint); }
+
+/* Метка источника кандидата: служебная подпись, а не сигнал. */
+.src-tag {
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  background: var(--color-control-bg);
+  border-radius: 999px;
+}
+
+/* Превью описания вакансии: три строки, дальше — по клику. */
+.vac-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+  transition: color var(--fui-t-micro) var(--glass-ease-out);
+}
+button:hover > .vac-desc { color: var(--color-text); }

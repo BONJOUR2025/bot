@@ -23,14 +23,23 @@ import useAiCheckGate from '../components/recruitment/useAiCheckGate.js';
 // Этапы синхронизированы с app/services/recruitment_stages.py (воронка
 // «5 этапов + флаги» — старая телеграм-привязка/общение убраны вместе со
 // старым интервью-флоу, единственный живой источник теперь быстрый режим).
+// Стадии — это движение кандидата, а не семь независимых категорий.
+// Раньше каждой колонке был назначен свой оттенок (синий, циан,
+// янтарный, оранжевый, фиолетовый, изумрудный, красный) литералами
+// Tailwind: цвет означал «в какой колонке лежит карточка», не отвечал
+// на смену темы и превращал воронку в радугу.
+//
+// Теперь рабочие стадии набраны одной графитовой шкалой, светлеющей к
+// концу воронки — так видно продвижение. Цвет остался двум исходам,
+// где он действительно что-то означает: наняли и отказали.
 const STAGES = [
-  { key: 'новый',         label: 'Новый',          color: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-400',     border: 'border-t-blue-400'   },
-  { key: 'опрос',         label: 'Опрос',          color: 'bg-cyan-100 text-cyan-700',       dot: 'bg-cyan-400',     border: 'border-t-cyan-400'   },
-  { key: 'ответил',       label: 'Ответил',        color: 'bg-amber-100 text-amber-700',     dot: 'bg-amber-400',    border: 'border-t-amber-400'  },
-  { key: 'думает',        label: 'Думает',         color: 'bg-orange-100 text-orange-700',   dot: 'bg-orange-400',   border: 'border-t-orange-400' },
-  { key: 'собеседование', label: 'Собеседование',  color: 'bg-violet-100 text-violet-700',   dot: 'bg-violet-400',   border: 'border-t-violet-400' },
-  { key: 'нанят',         label: 'Нанят ✓',        color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-400',  border: 'border-t-emerald-400'},
-  { key: 'отказ',         label: 'Отказ',          color: 'bg-red-100 text-red-700',         dot: 'bg-red-400',      border: 'border-t-red-400'    },
+  { key: 'новый',         label: 'Новый',          color: 'stage-chip stage-chip--s1', dot: 'stage-dot stage-dot--s1', border: 'stage-rail stage-rail--s1' },
+  { key: 'опрос',         label: 'Опрос',          color: 'stage-chip stage-chip--s2', dot: 'stage-dot stage-dot--s2', border: 'stage-rail stage-rail--s2' },
+  { key: 'ответил',       label: 'Ответил',        color: 'stage-chip stage-chip--s3', dot: 'stage-dot stage-dot--s3', border: 'stage-rail stage-rail--s3' },
+  { key: 'думает',        label: 'Думает',         color: 'stage-chip stage-chip--s4', dot: 'stage-dot stage-dot--s4', border: 'stage-rail stage-rail--s4' },
+  { key: 'собеседование', label: 'Собеседование',  color: 'stage-chip stage-chip--s5', dot: 'stage-dot stage-dot--s5', border: 'stage-rail stage-rail--s5' },
+  { key: 'нанят',         label: 'Нанят ✓',        color: 'stage-chip stage-chip--ok', dot: 'stage-dot stage-dot--ok', border: 'stage-rail stage-rail--ok' },
+  { key: 'отказ',         label: 'Отказ',          color: 'stage-chip stage-chip--no', dot: 'stage-dot stage-dot--no', border: 'stage-rail stage-rail--no' },
 ];
 
 // Резерв намеренно НЕ колонка на доске: он заведён ровно затем, чтобы
@@ -38,7 +47,7 @@ const STAGES = [
 // Отдельной колонкой он засорял бы доску тем же самым, от чего избавляет.
 // Смотреть его — через кнопку «Резерв», переводить туда — из карточки и
 // массовых действий.
-const RESERVE = { key: 'резерв', label: 'Резерв', color: 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]', dot: 'bg-gray-400', border: 'border-t-gray-400' };
+const RESERVE = { key: 'резерв', label: 'Резерв', color: 'stage-chip stage-chip--rs', dot: 'stage-dot stage-dot--rs', border: 'stage-rail stage-rail--rs' };
 const ALL_STAGES = [...STAGES, RESERVE];
 
 const SOURCES = [
@@ -78,11 +87,15 @@ function daysSince(iso) {
   return Math.floor((Date.now() - t.getTime()) / 86400000);
 }
 
+// Источник — это откуда пришёл кандидат, а не его состояние. Зелёный
+// «avito» и красный «hh» стояли на каждой из ста шестидесяти девяти
+// карточек и читались как оценка: с авито хорошо, с хедхантера плохо.
+// Метка осталась, цвет ушёл.
 const SRC_BADGE = {
-  hh:     'bg-red-100 text-red-600',
-  avito:  'bg-green-100 text-green-600',
-  manual: 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]',
-  other:  'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]',
+  hh:     'src-tag',
+  avito:  'src-tag',
+  manual: 'src-tag',
+  other:  'src-tag',
 };
 const srcBadgeLabel = (s) => s === 'manual' ? 'руч.' : s;
 
@@ -1153,8 +1166,18 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
       {progressTotal > 0 && (
         <div className="mt-2 flex items-center gap-1.5">
           <div className="flex-1 h-1 rounded-full bg-[color:var(--color-bg-secondary)] overflow-hidden">
-            <div className="h-full rounded-full bg-[color:var(--color-primary)]"
-                 style={{ width: `${Math.round((progressAnswered / progressTotal) * 100)}%` }} />
+            {/* Акцент — пока опрос идёт. Завершённый набирается графитом:
+                полный фиолетовый прогресс стоял на каждой карточке
+                колонки и переставал что-либо выделять. */}
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.round((progressAnswered / progressTotal) * 100)}%`,
+                background: progressAnswered >= progressTotal
+                  ? 'color-mix(in srgb, var(--color-text) 30%, transparent)'
+                  : 'var(--color-primary)',
+              }}
+            />
           </div>
           <span className="text-[10px] text-[color:var(--color-muted-foreground)] flex-shrink-0">
             {progressAnswered}/{progressTotal}
@@ -1605,7 +1628,7 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
                   if (id) onDrop(id, stage.key);
                   setDragOver(null);
                 }}
-                className={`flex-1 rounded-xl border-t-2 ${stage.border} bg-[color:var(--color-muted)]/20 p-2 flex flex-col gap-2 min-h-[120px] transition-all ${
+                className={`flex-1 rounded-xl ${stage.border} bg-[color:var(--color-muted)]/20 p-2 flex flex-col gap-2 min-h-[120px] transition-all ${
                   isTarget && !isDragSrc ? 'ring-2 ring-inset ring-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/5' : ''
                 }`}
               >
@@ -2424,13 +2447,20 @@ export default function Recruitment() {
                   // Превью в 3 строки + клик открывает ту же VacancyModal,
                   // где поле описания уже показывает текст целиком — без
                   // отдельного read-only модального окна специально под это.
+                  // WebKit не применяет -webkit-line-clamp к <button>:
+                  // класс стоял, вычисленный стиль показывал clamp:3, а
+                  // высота оставалась 176px — всё описание вакансии
+                  // разворачивалось на весь экран и оттесняло воронку,
+                  // ради которой на страницу и заходят. Плюс цвет кнопки
+                  // перебивал приглушённый и красил абзац в акцент.
+                  // Текст переехал в span, обрезка и цвет — на нём.
                   <button
                     type="button"
                     onClick={() => setVacancyModal(selected)}
                     title="Открыть описание вакансии полностью"
-                    className="text-xs text-left text-[color:var(--color-muted-foreground)] line-clamp-3 hover:text-[color:var(--color-primary)] transition-colors"
+                    className="block text-left"
                   >
-                    {selected.description}
+                    <span className="vac-desc">{selected.description}</span>
                   </button>
                 )}
               </div>

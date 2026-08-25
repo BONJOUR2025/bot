@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Phone, RefreshCw, TrendingDown, Calendar, Wallet, ShoppingBag, Megaphone, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Phone, RefreshCw, TrendingDown, ChevronDown, ChevronRight } from 'lucide-react';
 import api from '../api';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
@@ -44,35 +44,6 @@ function computeChurnRisk(profile) {
     daysSinceLast,
     atRisk: daysSinceLast > threshold,
   };
-}
-
-// Цвета берутся из токенов, а не задаются шестнадцатеричными литералами:
-// раньше здесь стояли значения палитры брутализма прямо во встроенных
-// стилях, поэтому при смене темы они оставались прежними — переопределить
-// встроенный стиль через CSS невозможно.
-function KpiStat({ label, value, accent = 'var(--color-primary)', icon }) {
-  return (
-    <div className="ui-shell ui-shell--sm">
-      <div className="ui-core border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4">
-        <div className="flex gap-3">
-          {icon && (
-            <span
-              className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full"
-              style={{ color: accent, background: `color-mix(in oklab, ${accent} 14%, transparent)` }}
-            >
-              {icon}
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="ui-label">{label}</div>
-            <div className="ui-metric !text-[1.5rem] mt-1.5 text-[color:var(--color-text)]">
-              {value}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function OrderRow({ contragentId, order }) {
@@ -139,65 +110,72 @@ function ClientCard({ profile, openedAt }) {
   const churn = computeChurnRisk(profile);
   return (
     <div className="space-y-4">
-      {/* Рамка-viewport + бегущая сканирующая линия — «досье поднято на
-          экран», только вокруг карточки профиля, не всей страницы. */}
-      <div className="app-card p-4 flex flex-wrap items-center justify-between gap-3 client-fui-frame">
+      {/* Досье одной поверхностью. Прежде те же данные лежали в трёх
+          блоках, которые пересказывали друг друга: штамп печатал
+          «ЗАКАЗОВ · LTV», под ним LTV и «Заказов» повторялись в
+          KPI-карточках, а даты висели отдельным столбиком справа. */}
+      <div className={`dossier client-fui-frame ${churn?.atRisk ? 'dossier--risk' : ''}`}>
         <span className="client-fui-corner-tr" />
         <span className="client-fui-corner-bl" />
         <span className="client-fui-scan" />
-        <div>
-          <div className="font-semibold text-lg flex items-center gap-2">
-            {profile.name || '—'}
-            {churn?.atRisk && (
-              <span
-                className="fui-radar fui-radar--alert"
-                title={`Не заказывал ${churn.daysSinceLast} дн. — обычно раз в ${churn.avgGapDays} дн.`}
-              >
-                <i /><i /><i /><b />
-              </span>
+
+        <div className="dossier__head">
+          <div className="min-w-0">
+            <div className="dossier__name">
+              <span className="truncate">{profile.name || '—'}</span>
+              {churn?.atRisk && (
+                <span
+                  className="fui-status fui-status--always fui-status--error shrink-0"
+                  title={`Не заказывал ${churn.daysSinceLast} дн.`}
+                >
+                  <span className="fui-status__t">Риск оттока</span>
+                </span>
+              )}
+            </div>
+            {profile.phone && (
+              <span className="dossier__phone"><Phone size={12} /> {profile.phone}</span>
             )}
           </div>
-          {profile.phone && (
-            <div className="text-sm text-[color:var(--color-muted-foreground)] flex items-center gap-1.5 mt-0.5">
-              <Phone size={13} /> {profile.phone}
-            </div>
-          )}
-          {openedAt && (
-            <div className="client-fui-stamp mt-2">
-              ДОСЬЕ ОТКРЫТО: <b>{fmtStamp(openedAt)}</b>
-              <span className="sep">·</span>
-              ЗАКАЗОВ: <b>{profile.order_count}</b>
-              <span className="sep">·</span>
-              LTV: <b>{fmtRub(profile.total_spent)}</b>
-            </div>
-          )}
-        </div>
-        <div className="text-xs text-[color:var(--color-muted-foreground)] text-right">
-          <div>Первый заказ: {fmtDate(profile.first_order_date)}</div>
-          <div>Последний заказ: {fmtDate(profile.last_order_date)}</div>
-          {churn?.atRisk && (
-            <div className="text-[color:var(--color-danger)] font-medium mt-0.5">
-              Не заказывал {churn.daysSinceLast} дн. (обычно раз в {churn.avgGapDays})
-            </div>
-          )}
-        </div>
-      </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <KpiStat label="LTV (всего потрачено)" value={fmtRub(profile.total_spent)} accent="var(--color-primary)" icon={<Wallet size={18} />} />
-        <KpiStat label="Средний чек" value={fmtRub(profile.avg_check)} accent="var(--color-success)" icon={<ShoppingBag size={18} />} />
-        <KpiStat label="Заказов" value={profile.order_count.toLocaleString('ru-RU')} accent="var(--color-warning)" icon={<Calendar size={18} />} />
-        {profile.acquisition_channel && (
-          <KpiStat label="Канал" value={profile.acquisition_channel} accent="var(--color-info)" icon={<Megaphone size={18} />} />
-        )}
+          <div className="dossier__span">
+            <div>Первый заказ <b>{fmtDate(profile.first_order_date)}</b></div>
+            <div>Последний <b>{fmtDate(profile.last_order_date)}</b></div>
+            {churn?.atRisk && (
+              <div>Тишина <b>{churn.daysSinceLast} дн.</b> · обычно раз в {churn.avgGapDays}</div>
+            )}
+            {openedAt && <div>Досье открыто <b>{fmtStamp(openedAt)}</b></div>}
+          </div>
+        </div>
+
+        <div className="dossier__reads">
+          <div className="dossier__read dossier__read--lead">
+            <span className="dossier__read-k">LTV</span>
+            <span className="dossier__read-v">{fmtRub(profile.total_spent)}</span>
+          </div>
+          <div className="dossier__read">
+            <span className="dossier__read-k">Средний чек</span>
+            <span className="dossier__read-v">{fmtRub(profile.avg_check)}</span>
+          </div>
+          <div className="dossier__read">
+            <span className="dossier__read-k">Заказов</span>
+            <span className="dossier__read-v">{profile.order_count.toLocaleString('ru-RU')}</span>
+          </div>
+          {profile.acquisition_channel && (
+            <div className="dossier__read">
+              <span className="dossier__read-k">Канал</span>
+              <span className="dossier__read-v" style={{ fontSize: '0.95rem' }}>{profile.acquisition_channel}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="app-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+        <div className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] px-4 py-3">
           <h3 className="font-semibold">История заказов</h3>
+          <span className="fui-readout">{profile.orders.length}</span>
         </div>
         {profile.orders.length === 0 ? (
-          <div className="py-6 text-center text-[color:var(--color-muted-foreground)] text-sm">Нет заказов</div>
+          <div className="py-6 text-center text-sm text-[color:var(--color-muted-foreground)]">Нет заказов</div>
         ) : (
           <div className="divide-y divide-[color:var(--color-border)]">
             {profile.orders.map((o) => (
@@ -287,11 +265,29 @@ function ChurningTab() {
                     {c.phone && <div className="text-xs text-[color:var(--color-muted-foreground)] flex items-center gap-1"><Phone size={10} /> {c.phone}</div>}
                   </div>
                 )},
-                { label: 'Заказов', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (c) => c.order_count },
-                { label: 'Потрачено', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (c) => fmtRub(c.total_spent) },
-                { label: 'Обычно раз в', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (c) => `${c.avg_gap_days} дн.` },
-                { label: 'Последний заказ', headerClass: 'text-right', cellClass: 'text-right whitespace-nowrap', render: (c) => fmtDate(c.last_order_date) },
-                { label: 'Не был', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold text-red-500', render: (c) => `${c.days_since_last_order} дн.` },
+                { label: 'Заказов', numeric: true, render: (c) => c.order_count },
+                { label: 'Потрачено', numeric: true, render: (c) => fmtRub(c.total_spent) },
+                { label: 'Обычно раз в', numeric: true, render: (c) => `${c.avg_gap_days} дн.` },
+                { label: 'Последний заказ', numeric: true, render: (c) => fmtDate(c.last_order_date) },
+                // Не красное число в каждой строке: в этой таблице все
+                // строки по определению в зоне риска, и сплошной красный
+                // столбец не отличал тех, кого ещё можно вернуть, от
+                // безнадёжных. Отличает длина полосы — во сколько раз
+                // тишина превысила обычный интервал клиента.
+                { label: 'Не был', numeric: true, render: (c) => {
+                  // Шкала от порога (тишина = 2 обычных интервала) до
+                  // четырёхкратного превышения: при линейной шкале от нуля
+                  // почти все строки упирались в максимум и полоса
+                  // переставала различать.
+                  const over = c.avg_gap_days > 0 ? c.days_since_last_order / (c.avg_gap_days * 2) : 1;
+                  const w = Math.min(100, Math.max(14, 22 + (over - 1) * 26));
+                  return (
+                    <span className="cli-lag">
+                      <span className="cli-lag__v">{c.days_since_last_order} дн.</span>
+                      <span className="cli-lag__t"><i style={{ width: `${w}%` }} /></span>
+                    </span>
+                  );
+                } },
               ]}
             />
           </div>
@@ -364,32 +360,52 @@ export default function Clients() {
 
       {activeTab === 'search' && (
         <div className="space-y-4">
-          <form onSubmit={doSearch} className="app-card p-4 flex gap-2">
+          {/* Поиск одной строкой-прибором: поле и действие в одном
+              корпусе. Раньше кнопка «Найти» растягивалась во всю ширину
+              под полем и весила как основная операция страницы, хотя
+              главный объект здесь — досье, которое она открывает. */}
+          <form onSubmit={doSearch} className="cli-search">
+            <Search size={15} className="shrink-0 text-[color:var(--color-text-faint)]" />
             <input
-              className="input flex-1"
-              placeholder="Имя, телефон или номер заказа…"
+              className="cli-search__i"
+              placeholder="Имя, телефон или номер заказа"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <button type="submit" className="btn btn--primary flex items-center gap-1.5" disabled={searching || query.trim().length < 2}>
-              <Search size={14} /> {searching ? 'Ищу…' : 'Найти'}
+            <button
+              type="submit"
+              className="btn btn--primary btn--sm shrink-0"
+              disabled={searching || query.trim().length < 2}
+            >
+              {searching ? 'Ищу…' : 'Найти'}
             </button>
           </form>
 
+          {/* Вместо экрана, на котором ничего нет, — что именно ищет
+              этот инструмент. */}
+          {!results.length && !profile && !searching && (
+            <div className="fui-datastate">
+              <span className="fui-datastate__code">База готова</span>
+              <span className="fui-datastate__rule" />
+              <span className="fui-datastate__title">Найдите клиента</span>
+              <span className="fui-datastate__text">
+                Поиск идёт по имени, телефону и номеру заказа. В досье — LTV, средний чек, история заказов и риск оттока.
+              </span>
+            </div>
+          )}
+
           {results.length > 0 && !profile && (
             <div className="app-card overflow-hidden">
-              <div className="divide-y divide-[color:var(--color-border)]">
-                {results.map((r) => (
-                  <button
-                    key={r.contragent_id}
-                    onClick={() => selectClient(r.contragent_id)}
-                    className="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-[color:var(--color-muted)]/30 transition-colors"
-                  >
-                    <span className="font-medium">{r.name}</span>
-                    {r.phone && <span className="text-sm text-[color:var(--color-muted-foreground)] flex items-center gap-1"><Phone size={12} /> {r.phone}</span>}
-                  </button>
-                ))}
-              </div>
+              {results.map((r) => (
+                <button
+                  key={r.contragent_id}
+                  onClick={() => selectClient(r.contragent_id)}
+                  className="cli-hit fui-press"
+                >
+                  <span className="cli-hit__n">{r.name}</span>
+                  {r.phone && <span className="cli-hit__p"><Phone size={11} /> {r.phone}</span>}
+                </button>
+              ))}
             </div>
           )}
 

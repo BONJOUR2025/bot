@@ -144,47 +144,54 @@ function MastersSummaryTable({ rows, onMasterClick, advancesByMaster }) {
                   </button>
                 </div>
                 <div className="px-4 py-2 space-y-1.5 text-sm">
-                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Всего</span><span>{m.total}</span></div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Выполнено</span><span className="text-green-600">{m.done}</span></div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">В работе</span><span className="text-yellow-600">{m.inWork}</span></div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]" title="Услуги короче 15 минут не учитываются">Медиана</span><span>{fmtMin(median(m.durations))}</span></div>
-                  <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Нарушений</span><span>{m.warnings > 0 ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span> : <span className="text-[color:var(--color-muted-foreground)]">—</span>}</span></div>
+                  {/* Тот же принцип, что в реестре: цвет только там, где
+                      он означает, что с мастером надо разобраться. */}
+                  <div className="fui-micro"><span className="fui-micro__k">Всего</span><span className="fui-micro__v">{m.total}</span></div>
+                  <div className="fui-micro"><span className="fui-micro__k">Выполнено</span><span className="fui-micro__v">{m.done}</span></div>
+                  <div className="fui-micro"><span className="fui-micro__k">В работе</span><span className="fui-micro__v">{m.inWork || '—'}</span></div>
+                  <div className="fui-micro"><span className="fui-micro__k" title="Услуги короче 15 минут не учитываются">Медиана</span><span className="fui-micro__v">{fmtMin(median(m.durations))}</span></div>
+                  <div className="fui-micro"><span className="fui-micro__k">Нарушений</span><span className={`fui-micro__v ${m.warnings > 0 ? 'mas-warn--hot' : ''}`}>{m.warnings > 0 ? m.warnings : '—'}</span></div>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <table className="w-full text-sm min-w-[540px]">
+          <table className="mas-reg min-w-[560px]">
             <thead>
-              <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
-                <th className="px-4 py-2 text-left">Мастер</th>
-                <th className="px-4 py-2 text-right">Всего</th>
-                <th className="px-4 py-2 text-right">Выполнено</th>
-                <th className="px-4 py-2 text-right">В работе</th>
-                <th className="px-4 py-2 text-right" title="Услуги короче 15 минут не учитываются">Медиана</th>
-                <th className="px-4 py-2 text-right text-amber-600">Нарушений</th>
+              <tr>
+                <th>Мастер</th>
+                <th className="r">Всего</th>
+                <th className="r">Выполнено</th>
+                <th className="r">В работе</th>
+                <th className="r" title="Услуги короче 15 минут не учитываются">Медиана</th>
+                <th className="r">Нарушений</th>
               </tr>
             </thead>
             <tbody>
-              {byMaster.map((m, i) => (
-                <tr key={m.name} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
-                  <td className="px-4 py-2 font-medium">
-                    <button onClick={() => onMasterClick(m.name)}
-                      className="text-left hover:text-[color:var(--color-primary)] hover:underline transition-colors">
-                      {m.name}
-                    </button>
-                  </td>
-                  <td className="px-4 py-2 text-right">{m.total}</td>
-                  <td className="px-4 py-2 text-right text-green-600">{m.done}</td>
-                  <td className="px-4 py-2 text-right text-yellow-600">{m.inWork}</td>
-                  <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtMin(median(m.durations))}</td>
-                  <td className="px-4 py-2 text-right">
-                    {m.warnings > 0
-                      ? <span className="inline-flex items-center gap-1 text-amber-600 font-medium"><AlertTriangle size={12} />{m.warnings}</span>
-                      : <span className="text-[color:var(--color-muted-foreground)]">—</span>}
-                  </td>
-                </tr>
-              ))}
+              {byMaster.map((m, i) => {
+                const maxTotal = Math.max(1, ...byMaster.map((x) => x.total));
+                const maxWarn = Math.max(1, ...byMaster.map((x) => x.warnings || 0));
+                return (
+                  <tr key={m.name}>
+                    <td>
+                      <button onClick={() => onMasterClick(m.name)} className="mas-reg__name">{m.name}</button>
+                      {/* Загрузка относительно самого загруженного за период */}
+                      <span className={`mas-load ${i === 0 ? 'mas-load--lead' : ''}`}>
+                        <i style={{ width: `${Math.max(3, (m.total / maxTotal) * 100)}%` }} />
+                      </span>
+                    </td>
+                    <td className="r n">{m.total}</td>
+                    <td className="r n">{m.done}</td>
+                    <td className="r n">{m.inWork || <span className="dim">—</span>}</td>
+                    <td className="r n dim">{fmtMin(median(m.durations))}</td>
+                    <td className="r">
+                      {m.warnings > 0
+                        ? <span className={`mas-warn ${m.warnings >= maxWarn * 0.5 ? 'mas-warn--hot' : ''}`}>{m.warnings}</span>
+                        : <span className="dim">—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )
@@ -290,12 +297,20 @@ function TopMastersChart({ data, activeNames, onSelect }) {
       </div>
       <ResponsiveContainer width="100%" height={Math.max(150, data.length * 38)}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
-          <XAxis type="number" tickFormatter={fmtRub} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
-          <YAxis type="category" dataKey="master" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={120} />
+          <CartesianGrid horizontal={false} stroke="var(--fui-edge)" />
+          <XAxis type="number" tickFormatter={fmtRub} tick={{ fontSize: 9.5, fill: 'var(--color-text-faint)' }} tickLine={false} axisLine={false} />
+          <YAxis type="category" dataKey="master" tick={{ fontSize: 11, fill: 'var(--color-text-faint)' }} tickLine={false} axisLine={false} width={120} />
           <Tooltip formatter={(v) => [fmtRub(v), 'Зарплата']} />
           <Bar dataKey="total_salary" radius={[0, 4, 4, 0]} onClick={(entry) => onSelect?.(entry.master)} cursor={onSelect ? 'pointer' : 'default'}>
-            {data.map((d, i) => <Cell key={d.master} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={activeNames?.size && !activeNames.has(d.master) ? 0.35 : 1} />)}
+            {/* Акцент — только лидеру, остальные графитом по убыванию:
+                это ранжирование, а не набор независимых категорий. */}
+            {data.map((d, i) => (
+              <Cell
+                key={d.master}
+                fill={i === 0 ? 'var(--color-primary)' : `color-mix(in srgb, var(--color-text) ${Math.max(12, 32 - i * 3)}%, transparent)`}
+                opacity={activeNames?.size && !activeNames.has(d.master) ? 0.35 : 1}
+              />
+            ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -445,7 +460,9 @@ function ServiceDayHeatmap({ data, activeDay, onSelect }) {
               <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
                 <div
                   className="h-full rounded-lg transition-all duration-500"
-                  style={{ width: `${pct}%`, background: isWeekend ? 'var(--color-warning)' : 'var(--color-primary)', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
+                  /* Выходные графитом: янтарный здесь означал бы
+                     предупреждение, а суббота — просто другой день. */
+                  style={{ width: `${pct}%`, background: isWeekend ? 'color-mix(in srgb, var(--color-text) 26%, transparent)' : 'var(--color-primary)', opacity: activeDay != null && !isActive ? 0.35 : 0.85 }}
                 />
               </div>
               <div className="text-xs font-medium w-16 text-right shrink-0">{d.count} усл.</div>
@@ -455,7 +472,7 @@ function ServiceDayHeatmap({ data, activeDay, onSelect }) {
       </div>
       <div className="flex gap-4 mt-4 text-xs text-[color:var(--color-muted-foreground)]">
         <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'var(--color-primary)' }} />Будни</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'var(--color-warning)' }} />Выходные</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'color-mix(in srgb, var(--color-text) 26%, transparent)' }} />Выходные</span>
       </div>
     </div>
   );
@@ -744,7 +761,10 @@ export default function Masters() {
   }, [filtered]);
 
   const statusDonutData = useMemo(() => {
-    const colors = { 'Выполнено': 'var(--color-success)', 'В работе': 'var(--color-warning)', 'Прочее': '#94a3b8' };
+    // Выполнено — норма и 92% объёма: ярко-зелёное кольцо почти целиком
+    // окрашивало экран в «успех», а «в работе» янтарным читалось как
+    // проблема, хотя это просто текущая стадия.
+    const colors = { 'Выполнено': 'color-mix(in srgb, var(--color-text) 26%, transparent)', 'В работе': 'var(--color-primary)', 'Прочее': 'var(--fui-processing)' };
     const counts = {};
     filtered.forEach((r) => {
       const s = r.status || 'Прочее';
@@ -825,20 +845,25 @@ export default function Masters() {
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="app-card p-3 flex flex-col sm:flex-row sm:items-end gap-3">
-        <label className="block sm:flex-1">
-          <span className="block text-xs font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Дата от</span>
-          <input type="date" className="input w-full" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+      {/* Панель периода одной строкой-прибором. Раньше здесь стояли
+          .app-card и flex одновременно, но .app-card задаёт display:grid
+          и грузится после утилит — flex не применялся, и два поля с
+          двумя кнопками выстраивались столбиком во всю ширину, а
+          «Загрузить» весила как главное действие страницы. */}
+      <div className="mas-bar">
+        <label className="mas-bar__f">
+          <span className="mas-bar__k">Период с</span>
+          <input type="date" className="input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         </label>
-        <label className="block sm:flex-1">
-          <span className="block text-xs font-medium uppercase tracking-wide text-[color:var(--color-muted-foreground)] mb-1">Дата до</span>
-          <input type="date" className="input w-full" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        <label className="mas-bar__f">
+          <span className="mas-bar__k">по</span>
+          <input type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </label>
-        <button className="btn btn--secondary flex items-center justify-center gap-1.5" onClick={downloadCsv} disabled={!filtered.length}>
+        <span className="mas-bar__gap" />
+        <button className="btn btn--secondary btn--sm" onClick={downloadCsv} disabled={!filtered.length}>
           <Download size={14} /> CSV
         </button>
-        <button className="btn btn--primary flex items-center justify-center gap-1.5" onClick={load} disabled={loading}>
+        <button className="btn btn--primary btn--sm" onClick={load} disabled={loading}>
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {loaded ? 'Обновить' : 'Загрузить'}
         </button>
       </div>
@@ -910,28 +935,39 @@ export default function Masters() {
 
           {tab === 'overview' && (
             <div className="space-y-4">
-              <div>
-                <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Услуги</p>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                  <StatCard icon={<ListChecks size={18} />} label="Всего услуг" value={kpi.total} />
-                  <StatCard icon={<CheckCircle2 size={18} />} label="Выполнено" value={kpi.done} tone={TONE_TEXT.success} />
-                  <StatCard icon={<Clock size={18} />} label="В работе" value={kpi.inWork} />
-                  <StatCard icon={<Users size={18} />} label="Мастеров" value={kpi.masters} />
-                  <StatCard
-                    icon={<AlertTriangle size={18} />} label="Нарушений" value={kpi.warnings}
-                    tone={kpi.warnings ? TONE_TEXT.danger : ''}
-                    sub={warningsOnly ? 'фильтр вкл.' : undefined}
-                    onClick={() => setWarningsOnly((v) => !v)} active={warningsOnly}
-                  />
+              {/* Восемь одинаковых карточек в двух сетках сведены в одну
+                  решётку: услуги и заказы — один класс информации, и
+                  разделять их подзаголовками значило дважды объяснять то,
+                  что видно по подписям. Цвет остался единственному
+                  показателю, который требует действия. */}
+              <div className="fui-lattice">
+                <button
+                  type="button"
+                  style={{ '--sig': 'var(--color-danger)' }}
+                  className={`fui-cellstat fui-cellstat--lead fui-press ${kpi.warnings ? 'fui-cellstat--sig' : ''}`}
+                  onClick={() => setWarningsOnly((v) => !v)}
+                >
+                  <span className="fui-cellstat__k">
+                    <AlertTriangle size={12} className="mr-1.5 inline-block align-[-1px]" style={{ color: 'var(--color-danger)' }} />
+                    Нарушений
+                  </span>
+                  <span className="fui-cellstat__v">{kpi.warnings}</span>
+                  <span className="fui-cellstat__m">{warningsOnly ? 'фильтр вкл.' : 'нажмите, чтобы отфильтровать'}</span>
+                </button>
+                <div className="fui-cellstat">
+                  <span className="fui-cellstat__k">Услуг всего</span>
+                  <span className="fui-cellstat__v">{kpi.total}</span>
+                  <span className="fui-cellstat__m">выполнено {kpi.done} · в работе {kpi.inWork}</span>
                 </div>
-              </div>
-
-              <div>
-                <p className="text-xs text-[color:var(--color-muted-foreground)] mb-2 font-medium uppercase tracking-wide">Заказы</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <StatCard icon={<ClipboardList size={18} />} label="Всего заказов" value={kpi.ordersTotal} />
-                  <StatCard icon={<CheckCircle2 size={18} />} label="Выполнено" value={kpi.ordersDone} tone={TONE_TEXT.success} />
-                  <StatCard icon={<Clock size={18} />} label="В работе" value={kpi.ordersInWork} />
+                <div className="fui-cellstat">
+                  <span className="fui-cellstat__k">Заказов</span>
+                  <span className="fui-cellstat__v">{kpi.ordersTotal}</span>
+                  <span className="fui-cellstat__m">выполнено {kpi.ordersDone} · в работе {kpi.ordersInWork}</span>
+                </div>
+                <div className="fui-cellstat">
+                  <span className="fui-cellstat__k">Мастеров</span>
+                  <span className="fui-cellstat__v">{kpi.masters}</span>
+                  <span className="fui-cellstat__m">в смене за период</span>
                 </div>
               </div>
 
