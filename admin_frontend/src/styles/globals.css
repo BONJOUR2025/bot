@@ -1353,6 +1353,8 @@ tbody tr:last-child td { border-bottom: none; }
 .badge--error   { background: rgba(239,68,68,0.12); color: var(--color-danger); }
 .badge--success { background: rgba(34,197,94,0.12); color: var(--color-success); }
 .badge--neutral { background: var(--color-control-bg); color: var(--color-text-faint); }
+/* Обработка: заявка в очереди — это стадия, а не предупреждение. */
+.badge--processing { background: color-mix(in srgb, var(--fui-processing) 14%, transparent); color: var(--fui-processing); }
 
 /* Schedule */
 .emp-schedule-nav { display: flex; align-items: center; gap: 0.5rem; }
@@ -5935,4 +5937,429 @@ body.viewer3d-fs-active .app-card {
   .fui-cellstat__k { min-height: 0; }
   .fui-band__cell { padding: 1.15rem 1.15rem 1.25rem; }
   .fui-band__cell--flag::after { left: 1.15rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   СОТРУДНИКИ · СОСТАВ КОМАНДЫ
+   ═══════════════════════════════════════════════════════════════
+   Верх страницы повторял сам себя: телеметрическая строка ростера
+   печатала ВСЕГО / АКТИВНЫ / АДМИНЫ / БЕЗ КАРТЫ, а сразу под ней те
+   же четыре числа стояли в четырёх одинаковых карточках с иконками.
+   Плюс диаграмма «По статусу» рисовала кольцо из одного сектора на
+   100% — фигура, которая не может ничего показать.
+
+   Здесь это один блок: численность крупно, состав по должностям
+   полосой долей, остальное — спокойные показания. Композиция другая,
+   чем на дашборде (там две денежные ячейки), язык тот же. */
+
+.team-head {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+  border-top: 1px solid var(--fui-edge-strong);
+  border-bottom: 1px solid var(--fui-edge);
+  isolation: isolate;
+}
+.team-head::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(80% 130% at 3% 0%, color-mix(in srgb, var(--color-primary) 6%, transparent), transparent 60%);
+}
+
+/* Численность — якорь страницы. Раньше это число стояло в карточке
+   наравне со счётчиком администраторов, хотя отвечает на первый
+   вопрос, с которым сюда приходят. */
+.team-head__count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  padding: 1.35rem 1.5rem;
+  flex: 0 0 auto;
+}
+.team-head__n {
+  font-size: clamp(2.6rem, 4vw, 3.6rem);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  color: var(--color-text);
+}
+.team-head__u {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--color-text-faint);
+  max-width: 5rem;
+}
+
+/* Состав по должностям одной полосой: доли сравниваются на общей
+   шкале, а не переводом взгляда между секторами кольца и легендой. */
+.team-head__mix {
+  flex: 1 1 20rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 1.35rem 1.5rem;
+  border-left: 1px solid var(--fui-edge);
+}
+.team-head__bar {
+  display: flex;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--fui-edge);
+}
+.team-head__seg {
+  height: 100%;
+  min-width: 2px;
+  transition: opacity var(--fui-t-normal) var(--glass-ease-out);
+}
+.team-head__seg:hover { opacity: 0.72; }
+.team-head__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  min-width: 0;
+}
+.team-head__li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+.team-head__li i {
+  width: 2px;
+  height: 11px;
+  flex-shrink: 0;
+  background: var(--cat);
+}
+.team-head__li b {
+  font-family: var(--font-mono-ui);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+/* Спокойные показания. Отдельная колонка, а не ещё три карточки. */
+.team-head__reads {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: stretch;
+  border-left: 1px solid var(--fui-edge);
+}
+.team-head__read {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 1.35rem 1.25rem;
+  border-left: 1px solid var(--fui-edge);
+  text-align: left;
+  background: none;
+  cursor: pointer;
+  transition: background var(--fui-t-normal) var(--glass-ease-out);
+}
+.team-head__reads > .team-head__read:first-child { border-left: 0; }
+.team-head__read:hover { background: color-mix(in srgb, var(--color-text) 3%, transparent); }
+.team-head__read-k {
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.team-head__read-v {
+  font-size: 1.35rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--color-text);
+}
+/* Показание, требующее действия, помечается кромкой, а не заливкой
+   и не красной цифрой: цвет остаётся сигналом, а не окраской. */
+.team-head__read--flag {
+  position: relative;
+  box-shadow: inset 0 1px 0 0 var(--color-warning);
+}
+.team-head__read--flag .team-head__read-v { color: var(--color-warning); }
+/* Активное состояние фильтра — тонкая световая отметка снизу. */
+.team-head__read.is-on { background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
+.team-head__read.is-on::after {
+  content: '';
+  position: absolute;
+  left: 1.25rem;
+  right: 1.25rem;
+  bottom: 0;
+  height: 1px;
+  background: var(--color-primary);
+}
+
+/* ── Строка человека ────────────────────────────────────────────
+   Инициалы вместо прочерка, имя весит больше служебных полей,
+   роль набрана моношкалой. */
+.employee-avatar {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--fui-edge-strong);
+  background: var(--glass-shell);
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+}
+.employee-name { font-weight: 500; color: var(--color-text); }
+.employee-role {
+  margin-left: 0.55rem;
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 700px) {
+  /* На телефоне состав команды складывается по вертикали, а полоса
+     долей теряет легенду: семь подписей в две колонки — вторичная
+     информация, ради которой не стоит занимать первый экран. */
+  .team-head__count { flex: 1 1 100%; padding: 1.1rem 1.15rem; }
+  .team-head__mix { flex: 1 1 100%; border-left: 0; border-top: 1px solid var(--fui-edge); padding: 1.1rem 1.15rem; }
+  .team-head__legend { display: none; }
+  .team-head__reads { flex: 1 1 100%; border-left: 0; border-top: 1px solid var(--fui-edge); }
+  .team-head__read { flex: 1 1 0; padding: 0.9rem 1rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ВЫПЛАТЫ · ПОТОК ДЕНЕГ
+   ═══════════════════════════════════════════════════════════════
+   Раньше страница открывалась четырьмя равными карточками: общая
+   сумма в 10,6 млн стояла в такой же коробке, как счётчик «ожидает:
+   1», и весила столько же. И это был светофор — янтарный, зелёный,
+   синий, — хотя «одобрено» не успех, а «ожидает» не предупреждение:
+   это стадии одной операции.
+
+   Здесь сумма — якорь страницы, а три состояния выстроены в конвейер
+   слева направо, в том порядке, в котором заявка по ним идёт. Цвет
+   означает стадию: ожидание — обработка, одобрено — активная
+   операция, выплачено — норма, то есть нейтраль. */
+
+.pay-flow {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  border-top: 1px solid var(--fui-edge-strong);
+  border-bottom: 1px solid var(--fui-edge);
+  isolation: isolate;
+}
+.pay-flow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(75% 130% at 2% 0%, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 58%);
+}
+
+.pay-flow__total {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.4rem 1.6rem 1.5rem;
+  min-width: 0;
+}
+.pay-flow__k {
+  font-family: var(--font-mono-ui);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+.pay-flow__n {
+  font-size: clamp(2rem, 3.3vw, 3.3rem);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+.pay-flow__n small {
+  font-size: 0.4em;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--color-text-faint);
+  margin-left: 0.35em;
+}
+.pay-flow__m {
+  font-family: var(--font-mono-ui);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+}
+
+/* ── Конвейер стадий ────────────────────────────────────────────
+   Стадии разделены волосяной линией и связаны шевроном: он показывает
+   направление, в котором движется заявка. Без него три ячейки рядом
+   читались бы как три независимых счётчика, чем они и были. */
+.pay-flow__stages {
+  flex: 1 1 24rem;
+  display: flex;
+  min-width: 0;
+}
+.pay-flow__stage {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 1.4rem 1.25rem;
+  border-left: 1px solid var(--fui-edge);
+  text-align: left;
+  background: none;
+  cursor: pointer;
+  transition: background var(--fui-t-normal) var(--glass-ease-out);
+}
+.pay-flow__stage:hover { background: color-mix(in srgb, var(--color-text) 3%, transparent); }
+.pay-flow__stage + .pay-flow__stage::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid var(--fui-edge-strong);
+  border-right: 1px solid var(--fui-edge-strong);
+  background: var(--color-bg);
+  transform: translateY(-50%) rotate(45deg);
+  pointer-events: none;
+}
+.pay-flow__stage-k {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.pay-flow__stage-v {
+  font-size: 1.6rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--color-text);
+}
+.pay-flow__stage-m {
+  font-family: var(--font-mono-ui);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Стадия, в которой сейчас что-то стоит, помечается световой чертой
+   на верхней кромке. Пустая стадия остаётся приглушённой: ноль в
+   очереди — это норма, а не показатель. */
+.pay-flow__stage--live .pay-flow__stage-v { color: var(--stage); }
+.pay-flow__stage--live::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 1.25rem;
+  width: 2rem;
+  height: 1px;
+  background: var(--stage);
+  box-shadow: 0 0 9px -1px var(--stage);
+}
+.pay-flow__stage--idle .pay-flow__stage-v { color: var(--color-text-faint); font-weight: 200; }
+
+/* Ранг в списке получателей. */
+.payout-rank {
+  flex-shrink: 0;
+  width: 1.6rem;
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 760px) {
+  /* Телефон: сумма своей строкой во всю ширину, конвейер под ней.
+     Шеврон между стадиями снимается — на трёх узких колонках он
+     превращается в шум на кромке. */
+  .pay-flow__total { flex: 1 1 100%; padding: 1.15rem 1.15rem 1.2rem; }
+  .pay-flow__stages { flex: 1 1 100%; border-top: 1px solid var(--fui-edge); }
+  .pay-flow__stage { padding: 0.95rem 0.9rem; }
+  .pay-flow__stage + .pay-flow__stage::before { display: none; }
+  .pay-flow__stage-v { font-size: 1.25rem; }
+  .pay-flow__stage--live::after { left: 0.9rem; width: 1.4rem; }
+}
+
+/* Полоса долей: одна шкала, на которой доли сравниваются напрямую.
+   Кольцо для разбивки вида 99 / 1 / 0,2 не работает — сектор меньше
+   процента не имеет видимой площади. */
+.fui-mixbar {
+  display: flex;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--fui-edge);
+}
+.fui-mixbar > span {
+  height: 100%;
+  min-width: 2px;
+  transition: opacity var(--fui-t-normal) var(--glass-ease-out);
+}
+.fui-mixbar > span:hover { opacity: 0.72; }
+.fui-breakdown__row.is-on { background: color-mix(in srgb, var(--color-primary) 9%, transparent); }
+
+/* Решётка фильтров ленты выплат. */
+.pay-filters {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+}
+.pay-filters__q { grid-column: span 2; }
+
+/* Сумма в строке ленты: якорь, к которому идёт взгляд. Моношкала и
+   табличные цифры — разряды соседних строк стоят друг под другом. */
+.payout-feed__sum {
+  font-family: var(--font-mono-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .pay-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pay-filters__q { grid-column: 1 / -1; }
 }

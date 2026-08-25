@@ -8,15 +8,13 @@ import {
   Archive,
   Users,
   UserCheck,
-  ShieldCheck,
-  CreditCard,
   BarChart3,
   Layers,
   TrendingUp,
   X,
 } from 'lucide-react';
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LabelList,
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import api from '../api';
@@ -26,7 +24,6 @@ import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import { Tabs } from '../components/ui/SalaryUI.jsx';
-import KpiCard from '../components/ui/Kpi.jsx';
 import { CHART_PALETTE as CHART_COLORS } from '../utils/chartPalette.js';
 
 function ShareDonut({ data, total, title, icon: Icon, colorOf, activeName, onSelect }) {
@@ -323,6 +320,14 @@ export default function Employees() {
     return new Date(value).toLocaleDateString('ru-RU');
   }
 
+  // Инициалы из ФИО для строк без фотографии. Данные не выдумываются —
+  // это то же имя, что стоит в соседней ячейке, просто сжатое до метки.
+  function initialsOf(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '·';
+    return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+  }
+
   // Стаж считается от e.created_at — того же поля, что уже питает
   // график «Динамика найма» на «Обзоре» (дата приёма в системе), только
   // здесь оно читается построчно, а не агрегатом по месяцам.
@@ -511,14 +516,15 @@ export default function Employees() {
       .map(([name, value]) => ({ name, value }));
   }, [employees]);
 
-  const statusDonutData = useMemo(() => {
-    const active = employees.filter((e) => e.status === 'active').length;
-    const inactive = employees.length - active;
-    return [
-      { name: 'Активные', value: active },
-      { name: 'Неактивные', value: inactive },
-    ].filter((d) => d.value > 0);
-  }, [employees]);
+  // Полоса состава в шапке: шесть крупнейших должностей плюс свёрнутый
+  // хвост. Полный разрез остаётся на «Обзоре» — здесь нужна пропорция,
+  // а не перечисление одиннадцати позиций, половина из которых по одному
+  // человеку.
+  const positionMix = useMemo(() => {
+    const top = positionDonutData.slice(0, 6);
+    const restValue = positionDonutData.slice(6).reduce((s, d) => s + d.value, 0);
+    return restValue > 0 ? [...top, { name: 'Прочие', value: restValue }] : top;
+  }, [positionDonutData]);
 
   const workplaceData = useMemo(() => {
     const map = {};
@@ -557,25 +563,73 @@ export default function Employees() {
   return (
     <div className="space-y-6 max-w-full mx-auto">
       <TopProgressBar active={loading} />
-      <div>
-        <span className="ui-eyebrow mb-3">
-          {activeCount} в штате{employees.length > activeCount ? ` · всего ${employees.length}` : ''}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <span className="ui-eyebrow mb-3">Команда</span>
+          <h2 className="text-2xl font-semibold">Сотрудники</h2>
+        </div>
+        <span className="employee-fui-strip">
+          <span>SYS://employees.roster</span><span className="sep">·</span>
+          <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
         </span>
-        <h2 className="text-2xl font-semibold">Сотрудники</h2>
       </div>
 
-      {/* Телеметрическая строка ростера — реальные агрегаты (те же, что
-          питают KPI-карточки «Обзора» ниже) плюс живые часы. */}
-      <div className="employee-fui-strip">
-        <span>SYS://employees.roster</span><span className="sep">·</span>
-        <span>ВСЕГО: <b>{employees.length}</b></span><span className="sep">·</span>
-        <span>АКТИВНЫ: <b style={{ color: 'var(--color-success)' }}>{activeCount}</b></span><span className="sep">·</span>
-        <span>АДМИНЫ: <b style={{ color: 'var(--color-warning)' }}>{adminCount}</b></span><span className="sep">·</span>
-        <span>БЕЗ КАРТЫ: <b style={{ color: noCardCount ? 'var(--color-danger)' : 'var(--color-text)' }}>{noCardCount}</b></span><span className="sep">·</span>
-        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+      {/* Состав команды одним блоком. Прежде эти же четыре числа стояли
+          и в телеметрической строке, и в четырёх карточках «Обзора»,
+          а состав по должностям дублировался кольцом. */}
+      <div className="team-head">
+        <div className="team-head__count">
+          <span className="team-head__n">{employees.length}</span>
+          <span className="team-head__u">{employees.length === 1 ? 'сотрудник' : 'сотрудников'} в&nbsp;штате</span>
+        </div>
+
+        <div className="team-head__mix">
+          <div className="team-head__bar">
+            {positionMix.map((d, i) => (
+              <span
+                key={d.name}
+                className="team-head__seg"
+                title={`${d.name}: ${d.value}`}
+                style={{ width: `${(d.value / Math.max(1, employees.length)) * 100}%`, background: CHART_COLORS[i % CHART_COLORS.length] }}
+              />
+            ))}
+          </div>
+          <div className="team-head__legend">
+            {positionMix.map((d, i) => (
+              <span key={d.name} className="team-head__li" style={{ '--cat': CHART_COLORS[i % CHART_COLORS.length] }}>
+                <i />{d.name} <b>{d.value}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="team-head__reads">
+          <button
+            type="button"
+            className={`team-head__read ${statusFilterEmp === 'active' ? 'is-on' : ''}`}
+            onClick={() => { setStatusFilterEmp((p) => (p === 'active' ? null : 'active')); setActiveTab('list'); }}
+          >
+            <span className="team-head__read-k">Активны</span>
+            <span className="team-head__read-v">{activeCount}</span>
+          </button>
+          <button type="button" className="team-head__read" onClick={() => setActiveTab('list')}>
+            <span className="team-head__read-k">Админов</span>
+            <span className="team-head__read-v">{adminCount}</span>
+          </button>
+          <button
+            type="button"
+            className={`team-head__read ${noCardCount ? 'team-head__read--flag' : ''}`}
+            onClick={() => setActiveTab('list')}
+          >
+            <span className="team-head__read-k">Без карты</span>
+            <span className="team-head__read-v">{noCardCount}</span>
+          </button>
+        </div>
       </div>
 
-      <UpcomingBirthdays />
+      {/* Дни рождения — на «Обзоре». В списке они занимали 330px над
+          самой таблицей, ради которой на вкладку и переходят. */}
+      {activeTab === 'overview' && <UpcomingBirthdays />}
 
       <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
 
@@ -587,25 +641,6 @@ export default function Employees() {
             <SkeletonStats count={4} />
           ) : (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard label="Всего сотрудников" value={employees.length} accent="var(--color-primary)" icon={Users} />
-                <KpiCard
-                  label="Активных"
-                  value={activeCount}
-                  sub={employees.length ? `${((activeCount / employees.length) * 100).toFixed(0)}% от всех` : '—'}
-                  accent="var(--color-success)"
-                  icon={UserCheck}
-                />
-                <KpiCard label="Администраторов" value={adminCount} accent="var(--color-warning)" icon={ShieldCheck} />
-                <KpiCard
-                  label="Без карты"
-                  value={noCardCount}
-                  sub="требуют заполнения"
-                  accent="var(--color-danger)"
-                  icon={CreditCard}
-                />
-              </div>
-
               {hireTrendData.length > 0 && (
                 <div className="app-card p-5">
                   <div className="text-sm font-semibold mb-4 flex items-center gap-2">
@@ -620,25 +655,34 @@ export default function Employees() {
                           <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={30} />
+                      {/* Только горизонтальные волосяные линии. Пунктирная
+                          клетка «3 3» — заводская настройка библиотеки: она
+                          дробит поле и спорит с самой линией графика. */}
+                      <CartesianGrid vertical={false} stroke="var(--fui-edge)" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-text-faint)' }} tickLine={false} axisLine={{ stroke: 'var(--fui-edge)' }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--color-text-faint)' }} tickLine={false} axisLine={false} width={30} />
                       <Tooltip formatter={(v) => [v, 'Принято']} />
                       <Area
                         type="monotone"
                         dataKey="count"
                         stroke="var(--color-primary)"
-                        strokeWidth={2}
+                        strokeWidth={1.75}
                         fill="url(#hireGrad)"
                         dot={false}
-                        activeDot={{ r: 4, strokeWidth: 0 }}
+                        activeDot={{ r: 3.5, strokeWidth: 2, stroke: 'var(--color-surface)' }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Кольцо «По статусу» убрано: все сотрудники активны, и
+                  оно рисовало один сектор на 100% — фигура, которая не
+                  может ничего показать. Фильтр по статусу переехал в
+                  показание «Активны» в шапке. Разрез по должностям и
+                  разрез по местам работы стоят рядом: это один вопрос
+                  «как распределена команда», заданный дважды. */}
+              <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
                 <ShareDonut
                   data={positionDonutData}
                   total={employees.length}
@@ -647,20 +691,6 @@ export default function Employees() {
                   activeName={positionFilter}
                   onSelect={(name) => { setPositionFilter((prev) => (prev === name ? null : name)); setActiveTab('list'); }}
                 />
-                <ShareDonut
-                  data={statusDonutData}
-                  total={employees.length}
-                  title="По статусу"
-                  icon={UserCheck}
-                  colorOf={(name) => (name === 'Активные' ? 'var(--color-success)' : 'var(--color-text-muted)')}
-                  activeName={statusFilterEmp ? (statusFilterEmp === 'active' ? 'Активные' : 'Неактивные') : null}
-                  onSelect={(name) => {
-                    const status = name === 'Активные' ? 'active' : 'inactive';
-                    setStatusFilterEmp((prev) => (prev === status ? null : status));
-                    setActiveTab('list');
-                  }}
-                />
-              </div>
 
               {workplaceData.length > 0 && (
                 <div className="app-card p-5">
@@ -675,24 +705,34 @@ export default function Employees() {
                       layout="vertical"
                       margin={{ top: 0, right: 12, bottom: 0, left: 0 }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--color-border)" />
-                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} width={130} />
+                      <CartesianGrid horizontal={false} stroke="var(--fui-edge)" />
+                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--color-text-faint)' }} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-text-faint)' }} tickLine={false} axisLine={false} width={130} />
                       <Tooltip formatter={(v) => [v, 'Сотрудников']} />
                       <Bar
                         dataKey="count"
-                        radius={[0, 4, 4, 0]}
+                        radius={[0, 2, 2, 0]}
+                        barSize={14}
                         onClick={(entry) => { setWorkplaceFilter((prev) => (prev === entry.name ? null : entry.name)); setActiveTab('list'); }}
                         cursor="pointer"
                       >
+                        {/* Акцент — только у крупнейшей точки, остальные
+                            графитом по убыванию. Семь полос разных цветов
+                            сообщали различие там, где важен ранг. */}
                         {workplaceData.map((d, i) => (
-                          <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} opacity={workplaceFilter && workplaceFilter !== d.name ? 0.35 : 1} />
+                          <Cell
+                            key={d.name}
+                            fill={i === 0 ? 'var(--color-primary)' : `color-mix(in srgb, var(--color-text) ${Math.max(12, 34 - i * 4)}%, transparent)`}
+                            opacity={workplaceFilter && workplaceFilter !== d.name ? 0.35 : 1}
+                          />
                         ))}
+                        <LabelList dataKey="count" position="right" offset={8} style={{ fontSize: 10, fill: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               )}
+              </div>
             </>
           )}
         </div>
@@ -723,21 +763,24 @@ export default function Employees() {
           )}
         </div>
       )}
-      <div className="flex flex-wrap gap-2 items-center">
+      {/* Поиск и действия разведены на две строки. Раньше три поля и
+          четыре кнопки стояли одним переносящимся рядом, и порядок
+          зависел от ширины экрана: экспорт мог оказаться раньше поиска. */}
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
         <input
-          className="input flex-1 min-w-[140px]"
+          className="input"
           placeholder="Фильтр по ФИО"
           value={filterName}
           onChange={(e) => setFilterName(e.target.value)}
         />
         <input
-          className="input flex-1 min-w-[140px]"
+          className="input"
           placeholder="Фильтр по телефону"
           value={filterPhone}
           onChange={(e) => setFilterPhone(e.target.value)}
         />
         <select
-          className="input w-full sm:w-auto"
+          className="input sm:w-48"
           value={sort}
           onChange={(e) => setSort(e.target.value)}
         >
@@ -745,30 +788,36 @@ export default function Employees() {
           <option value="name">По имени</option>
           <option value="position">По должности</option>
         </select>
-        <button className="btn w-full sm:w-auto" onClick={downloadPdf}>
-          <FileDown size={16} /> Экспорт PDF
-        </button>
-        <button className="btn w-full sm:w-auto" onClick={startCreate}>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn btn--primary" onClick={startCreate}>
           <UserPlus size={16} /> Добавить сотрудника
         </button>
+        <button className="btn btn--secondary" onClick={downloadPdf}>
+          <FileDown size={16} /> Экспорт PDF
+        </button>
+        <Link className="btn btn--secondary" to="/admin/archive">
+          <Archive size={16} /> Архив
+        </Link>
+        <span className="hidden flex-1 sm:block" />
+        {/* Деструктивное действие набирает цвет только когда ему есть
+            что удалять. Красная кнопка, горевшая при пустом выборе,
+            всё время просила внимания и ничего не значила. */}
         <button
-          className="btn w-full sm:w-auto bg-red-600 hover:bg-red-700 disabled:opacity-50"
+          className={`btn ${selected.length ? 'btn--danger' : 'btn--ghost'}`}
           disabled={!selected.length}
           onClick={deleteSelected}
         >
-          <Trash2 size={16} /> Удалить выбранных
+          <Trash2 size={16} /> Удалить{selected.length ? ` · ${selected.length}` : ''}
         </button>
-        <Link
-          className="btn w-full sm:w-auto bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text)] hover:bg-[color:var(--color-control-bg-hover)]"
-          to="/admin/archive"
-        >
-          <Archive size={16} /> Архив
-        </Link>
       </div>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
-        Чтобы отправить сотрудника в архив, сначала переведите его в статус{' '}
-        <span className="font-medium">inactive</span>.
-      </p>
+
+      {selected.length > 0 && (
+        <p className="fui-readout">
+          Чтобы отправить сотрудника в архив, сначала переведите его в статус <b>inactive</b>.
+        </p>
+      )}
 
       {loading ? (
         <div className="border rounded shadow bg-[color:var(--color-surface)] p-4">
@@ -808,9 +857,10 @@ export default function Employees() {
                       onClick={() => window.open(e.photo_url, '_blank')}
                     />
                   ) : (
-                    <div className="w-8 h-8 bg-[color:var(--color-control-bg)] rounded-full flex items-center justify-center">
-                      <span className="text-[color:var(--color-text-muted)] text-xs">—</span>
-                    </div>
+                    /* Инициалы вместо прочерка: колонка из тридцати
+                       четырёх одинаковых «—» ничего не сообщала, а
+                       человек в списке людей должен быть узнаваем. */
+                    <div className="employee-avatar">{initialsOf(e.full_name)}</div>
                   )}
                 </span>
               ),
@@ -820,6 +870,14 @@ export default function Employees() {
               primary: true,
               render: (e) => (
                 <span onClick={() => navigate(`/admin/employees/${e.id}`)} className="inline-flex items-center gap-1.5">
+                  {/* На телефоне колонка «Фото» скрыта, и человек в списке
+                      людей оставался без лица — метка едет вместе с именем
+                      в шапку карточки. */}
+                  <span className="mr-1 sm:hidden">
+                    {e.photo_url
+                      ? <img src={e.photo_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                      : <span className="employee-avatar">{initialsOf(e.full_name)}</span>}
+                  </span>
                   {/* Радар-пинг вместо статичной пометки — активный сотрудник
                       без номера карты (тот же флаг, что и КPI «Без карты» на
                       «Обзоре») это то, что реально требует внимания сейчас. */}
@@ -829,38 +887,32 @@ export default function Employees() {
                        в кадре. Состояние строки помечает статичный маркер. */
                     <span className="fui-status fui-status--warning" title="Нет номера карты - требует внимания" />
                   )}
-                  {e.full_name}
-                  {e.is_admin && <span className="ml-2 text-xs text-orange-600 font-medium">Админ</span>}
+                  <span className="employee-name">{e.full_name}</span>
+                  {/* Роль набрана служебной моношкалой, а не оранжевым:
+                      цвет в этой системе означает состояние, а админ —
+                      это признак, а не тревога. */}
+                  {e.is_admin && <span className="employee-role">админ</span>}
                 </span>
               ),
             },
             { label: 'Имя', key: 'name', mobileHide: true },
-            { label: 'Телефон', key: 'phone' },
+            { label: 'Телефон', key: 'phone', numeric: true },
             {
               label: 'День рождения',
+              numeric: true,
               render: (e) => formatDateRu(e.birthdate),
             },
             { label: 'Должность', key: 'position' },
             {
               label: 'В компании',
               mobileHide: true,
+              numeric: true,
               render: (e) => {
                 const tenure = formatTenure(e.created_at);
-                return tenure
-                  ? <span className="employee-fui-tenure">СТАЖ: {tenure}</span>
-                  : <span className="text-[color:var(--color-text-faint)]">—</span>;
+                // Без префикса «СТАЖ:»: заголовок колонки уже сказал это
+                // один раз, в строках он повторялся тридцать четыре раза.
+                return tenure || <span className="text-[color:var(--color-text-faint)]">—</span>;
               },
-            },
-            {
-              label: 'Роль',
-              mobileHide: true,
-              render: (e) => (e.is_admin ? 'Админ' : 'Польз.'),
-            },
-            {
-              label: 'Создан',
-              mobileHide: true,
-              cellClass: 'text-[color:var(--color-text-faint)] text-xs',
-              render: (e) => new Date(e.created_at).toLocaleDateString(),
             },
             {
               label: '',
@@ -873,7 +925,10 @@ export default function Employees() {
                   : 'Переведите сотрудника в статус inactive, чтобы архивировать';
                 return (
                   <span className="inline-flex items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
-                    <button className="text-blue-600" onClick={() => startEdit(e)} title="Редактировать">
+                    {/* Иконки действий — одной нейтральной шкалой. Синий и
+                        янтарный литералами не входят в палитру и читались
+                        как состояния, которых у строки нет. */}
+                    <button className="text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-primary)]" onClick={() => startEdit(e)} title="Редактировать">
                       <Pencil size={16} />
                     </button>
                     <a
@@ -886,7 +941,7 @@ export default function Employees() {
                     <button
                       className={
                         canArchive
-                          ? 'text-amber-600 hover:text-amber-800'
+                          ? 'text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text)]'
                           : 'cursor-not-allowed text-[color:var(--color-text-faint)]'
                       }
                       onClick={() => { if (canArchive) moveToArchive(e.id); }}

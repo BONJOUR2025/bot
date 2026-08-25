@@ -46,7 +46,27 @@ const MANAGE_DATES_PERMISSION = 'payouts-manage-dates';
 
 const METHOD_RAW = { 'На карту': '💳 На карту', 'Из кассы': '🏦 Из кассы', 'Наличными': '🤝 Наличными' };
 const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-const STATUS_COLORS = { 'Ожидает': 'var(--color-warning)', 'Одобрено': 'var(--color-success)', 'Отклонено': 'var(--color-danger)', 'Выплачено': 'var(--color-primary)' };
+// Один статус — один цвет на всей странице: конвейер, полоса долей,
+// бейджи ленты и рейка. Прежде «Выплачено» было акцентом, и полоса
+// долей выходила сплошь фиолетовой — 99% площади в цвете, который
+// должен означать исключение.
+const STATUS_COLORS = {
+  'Ожидает': 'var(--fui-processing)',
+  'Одобрено': 'var(--color-primary)',
+  'Отклонено': 'var(--color-danger)',
+  'Выплачено': 'color-mix(in srgb, var(--color-text) 24%, transparent)',
+};
+
+// Стадии в том порядке, в котором по ним идёт заявка. Цвет описывает
+// стадию, а не оценку: ожидание — обработка, одобрено — активная
+// операция, выплачено — норма и потому нейтраль. Прежний светофор
+// (янтарный / зелёный / синий) читал «одобрено» как успех, а
+// «ожидает» как проблему.
+const PAYOUT_STAGES = [
+  { key: 'Ожидает', ink: 'var(--fui-processing)' },
+  { key: 'Одобрено', ink: 'var(--color-primary)' },
+  { key: 'Выплачено', ink: 'var(--color-text-muted)' },
+];
 
 const fmtMoneyShort = (v) => (!v ? '—' : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽');
 
@@ -130,7 +150,10 @@ function PayoutDayHeatmap({ data, activeDay, onSelect }) {
               <div className="flex-1 h-6 rounded-lg bg-[color:var(--color-bg-secondary)] overflow-hidden">
                 <div
                   className="h-full rounded-lg transition-all duration-500"
-                  style={{ width: `${pct}%`, background: isWeekend ? 'var(--color-warning)' : 'var(--color-primary)', opacity: activeDay != null && !isActive ? 0.35 : 0.75 }}
+                  /* Выходные — графитом, а не янтарным: янтарный в этой
+                     системе означает предупреждение, и суббота выглядела
+                     проблемой, хотя это просто другой день. */
+                  style={{ width: `${pct}%`, background: isWeekend ? 'color-mix(in srgb, var(--color-text) 26%, transparent)' : 'var(--color-primary)', opacity: activeDay != null && !isActive ? 0.35 : 0.85 }}
                 />
               </div>
               <div className="text-xs font-medium text-right shrink-0 whitespace-nowrap">{fmtMoneyShort(d.sum)}</div>
@@ -144,7 +167,7 @@ function PayoutDayHeatmap({ data, activeDay, onSelect }) {
           Будни
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'var(--color-warning)' }} />
+          <span className="inline-block w-3 h-3 rounded-sm opacity-75" style={{ background: 'color-mix(in srgb, var(--color-text) 26%, transparent)' }} />
           Выходные
         </span>
       </div>
@@ -153,7 +176,6 @@ function PayoutDayHeatmap({ data, activeDay, onSelect }) {
 }
 
 function EmployeeLeaderboard({ data, total, activeName, onSelect }) {
-  const medals = ['🥇', '🥈', '🥉'];
   return (
     <div className="app-card p-5">
       <div className="text-sm font-semibold mb-4 flex items-center gap-2">
@@ -173,10 +195,10 @@ function EmployeeLeaderboard({ data, total, activeName, onSelect }) {
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2 min-w-0">
-                  {i < 3
-                    ? <span className="text-base shrink-0">{medals[i]}</span>
-                    : <span className="w-5 text-center text-xs font-bold text-[color:var(--color-muted-foreground)] shrink-0">{i + 1}</span>
-                  }
+                  {/* Ранг моношкалой вместо медалей-эмодзи: на финансовом
+                      экране золото-серебро-бронза читаются как игровая
+                      награда, а порядок и так задан позицией в списке. */}
+                  <span className="payout-rank">{String(i + 1).padStart(2, '0')}</span>
                   <span className="text-sm font-medium truncate">{name}</span>
                 </div>
                 <div className="text-right shrink-0 ml-3">
@@ -597,7 +619,12 @@ function NotificationJournal({ entries, open, onToggle, onRefresh }) {
   );
 }
 
-const STATUS_BADGE_CLASS = { 'Ожидает': 'badge--neutral', 'Одобрено': 'badge--info', 'Выплачено': 'badge--success', 'Отклонено': 'badge--error' };
+// «Выплачено» — нормальный исход, и он же 548 строк из 555. Зелёный
+// бейдж на каждой строке превращал ленту в сплошную зелёную колонку и
+// обесценивал сам цвет: раз подсвечено всё, подсвечено ничего. Норма
+// набрана нейтрально, цвет остаётся тем строкам, где он что-то значит —
+// заявка ждёт решения или отклонена.
+const STATUS_BADGE_CLASS = { 'Ожидает': 'badge--processing', 'Одобрено': 'badge--info', 'Выплачено': 'badge--neutral', 'Отклонено': 'badge--error' };
 const STATUS_FLASH_COLOR = {
   'Ожидает': 'var(--color-text-faint)',
   'Одобрено': 'var(--color-primary-muted)',
@@ -608,9 +635,12 @@ const STATUS_FLASH_COLOR = {
 // статус-рейла ленты (payout-fui-rail), а не донатом на «Обзоре»
 // (у него своя, независимая палитра STATUS_COLORS).
 const STATUS_DOT_COLOR = {
-  'Ожидает': 'var(--color-text-faint)',
+  'Ожидает': 'var(--fui-processing)',
   'Одобрено': 'var(--color-primary)',
-  'Выплачено': 'var(--color-success)',
+  // Норма — графитом. Рейка из 548 зелёных засечек читалась как
+  // сплошная зелёная полоса вдоль всей ленты и не сообщала ничего,
+  // кроме собственного присутствия.
+  'Выплачено': 'color-mix(in srgb, var(--color-text) 22%, transparent)',
   'Отклонено': 'var(--color-danger)',
 };
 
@@ -671,7 +701,11 @@ function PayoutFeedItem({
         </div>
       </div>
       <div className="text-right shrink-0">
-        <div className="font-semibold text-sm tabular-nums text-[color:var(--color-primary)]">
+        {/* Сумма — якорь строки, поэтому набрана основным цветом текста
+            и моношкалой. Фиолетовой она была у всех 555 строк подряд, и
+            акцент переставал быть акцентом ровно там, где взгляд ищет
+            деньги. */}
+        <div className="payout-feed__sum">
           {Number(p.amount || 0).toLocaleString('ru-RU')} ₽
         </div>
       </div>
@@ -1355,35 +1389,32 @@ export default function Payouts() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard
-                  label="Общая сумма"
-                  value={fmtMoneyShort(totalSum)}
-                  sub={`${payouts.length} заявок`}
-                  accent="var(--color-primary)"
-                  icon={Wallet}
-                />
-                <KpiCard
-                  label="Ожидает"
-                  value={statusSummary['Ожидает']?.count || 0}
-                  sub={fmtMoneyShort(statusSummary['Ожидает']?.sum || 0)}
-                  accent="var(--color-warning)"
-                  icon={Clock}
-                />
-                <KpiCard
-                  label="Одобрено"
-                  value={statusSummary['Одобрено']?.count || 0}
-                  sub={fmtMoneyShort(statusSummary['Одобрено']?.sum || 0)}
-                  accent="var(--color-success)"
-                  icon={CheckCircle}
-                />
-                <KpiCard
-                  label="Выплачено"
-                  value={statusSummary['Выплачено']?.count || 0}
-                  sub={fmtMoneyShort(statusSummary['Выплачено']?.sum || 0)}
-                  accent="var(--color-info)"
-                  icon={Download}
-                />
+              {/* Сумма-якорь и конвейер стадий вместо четырёх равных
+                  карточек-светофоров. Порядок стадий — путь заявки. */}
+              <div className="pay-flow">
+                <div className="pay-flow__total">
+                  <span className="pay-flow__k">Общая сумма</span>
+                  <span className="pay-flow__n">{fmtMoneyShort(totalSum)}</span>
+                  <span className="pay-flow__m">{payouts.length} заявок за период</span>
+                </div>
+                <div className="pay-flow__stages">
+                  {PAYOUT_STAGES.map((st) => {
+                    const count = statusSummary[st.key]?.count || 0;
+                    return (
+                      <button
+                        key={st.key}
+                        type="button"
+                        style={{ '--stage': st.ink }}
+                        className={`pay-flow__stage fui-press ${count > 0 ? 'pay-flow__stage--live' : 'pay-flow__stage--idle'}`}
+                        onClick={() => selectStatus(st.key)}
+                      >
+                        <span className="pay-flow__stage-k">{st.key}</span>
+                        <span className="pay-flow__stage-v">{count}</span>
+                        <span className="pay-flow__stage-m">{fmtMoneyShort(statusSummary[st.key]?.sum || 0)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {timeData.length > 0 && (
@@ -1401,31 +1432,68 @@ export default function Payouts() {
                             <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0.02} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} />
-                        <YAxis tickFormatter={fmtMoneyShort} tick={{ fontSize: 10, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={90} />
-                        <Tooltip content={<CustomTooltip />} />
+                        <CartesianGrid vertical={false} stroke="var(--fui-edge)" />
+                        {/* Подписи через одну и без наклона: тридцать дат
+                            подряд слипались в «01.1216.1204.0121.01» —
+                            строку, которую нельзя прочитать. */}
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 9.5, fill: 'var(--color-text-faint)' }}
+                          tickLine={false}
+                          axisLine={{ stroke: 'var(--fui-edge)' }}
+                          interval="preserveStartEnd"
+                          minTickGap={28}
+                        />
+                        <YAxis tickFormatter={fmtMoneyShort} tick={{ fontSize: 9.5, fill: 'var(--color-text-faint)' }} tickLine={false} axisLine={false} width={78} />
+                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--fui-edge-strong)', strokeWidth: 1 }} />
                         <Area
                           type="monotone"
                           dataKey="sum"
                           stroke="var(--color-primary)"
-                          strokeWidth={2}
+                          strokeWidth={1.5}
                           fill="url(#payoutGrad)"
                           dot={false}
-                          activeDot={{ r: 4, strokeWidth: 0 }}
+                          activeDot={{ r: 3.5, strokeWidth: 2, stroke: 'var(--color-surface)' }}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
-                  <StatusDonut
-                    data={statusDonutData}
-                    total={payouts.length}
-                    title="Статусы"
-                    icon={BarChart3}
-                    colorOf={(name) => STATUS_COLORS[name] || 'var(--color-text-muted)'}
-                    activeName={filters.status || null}
-                    onSelect={selectStatus}
-                  />
+                  {/* Шкала долей вместо кольца. На разбивке 548 / 5 / 1 / 1
+                      сектор в 0,2% физически не виден, а легенда кольца
+                      резала названия до «Ожида…» и «Одобре…». Полоса
+                      показывает ту же пропорцию честно, а проценты стоят
+                      колонкой и сравниваются. */}
+                  <div className="app-card p-5">
+                    <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                      <BarChart3 size={15} className="text-[color:var(--color-primary)]" />
+                      Статусы
+                    </div>
+                    <div className="fui-mixbar mb-4">
+                      {statusDonutData.map((d) => (
+                        <span
+                          key={d.name}
+                          title={`${d.name}: ${d.value}`}
+                          style={{ width: `${(d.value / Math.max(1, payouts.length)) * 100}%`, background: STATUS_COLORS[d.name] || 'var(--color-text-muted)' }}
+                        />
+                      ))}
+                    </div>
+                    <div className="fui-breakdown">
+                      {statusDonutData.map((d) => (
+                        <button
+                          key={d.name}
+                          type="button"
+                          onClick={() => selectStatus(d.name)}
+                          style={{ '--cat': STATUS_COLORS[d.name] || 'var(--color-text-muted)' }}
+                          className={`fui-breakdown__row fui-press ${filters.status === d.name ? 'is-on' : ''}`}
+                        >
+                          <span className="fui-breakdown__sw" />
+                          <span className="fui-breakdown__k">{d.name}</span>
+                          <span className="fui-breakdown__v">{d.value}</span>
+                          <span className="fui-breakdown__p">{payouts.length ? `${((d.value / payouts.length) * 100).toFixed(d.value / payouts.length < 0.01 ? 1 : 0)}%` : '—'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1507,9 +1575,12 @@ export default function Payouts() {
           </span>
         </div>
       )}
-      <div className="flex flex-wrap gap-2 items-end">
+      {/* Фильтры решёткой, а не переносящимся рядом: поля .input тянутся
+          на всю ширину, поэтому каждое вставало отдельной строкой — шесть
+          контролов в столбик занимали 380px до первой строки данных. */}
+      <div className="pay-filters">
         <input
-          className="input flex-grow"
+          className="input pay-filters__q"
           placeholder="Поиск по ФИО"
           value={filters.query}
           onChange={(e) => setFilters({ ...filters, query: e.target.value })}
@@ -1557,25 +1628,26 @@ export default function Payouts() {
             </option>
           ))}
         </select>
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto">
-          <input
-            type="date"
-            className="input w-full sm:w-auto"
-            value={filters.from}
-            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-          />
-          <input
-            type="date"
-            className="input w-full sm:w-auto"
-            value={filters.to}
-            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-          />
-        </div>
-        <button className="btn btn-secondary" onClick={resetFilters}>
-          Сбросить
+        <input
+          type="date"
+          className="input"
+          value={filters.from}
+          onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+        />
+        <input
+          type="date"
+          className="input"
+          value={filters.to}
+          onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn btn--primary" onClick={openCreate}>
+          Новая заявка
         </button>
-        <button className="btn btn--primary ml-auto" onClick={openCreate}>
-          ➕ Новая
+        <button className="btn btn--secondary" onClick={resetFilters}>
+          Сбросить фильтры
         </button>
       </div>
 
