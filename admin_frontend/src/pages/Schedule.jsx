@@ -167,22 +167,21 @@ export default function Schedule() {
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
             Сегодня — {todayDay} {MONTHS_RU_GEN[month - 1]}
           </p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {/* Расстановка на сегодня — компактной рейкой, а не восемью
+              карточками на 250px. Карточки повторяли то, что стоит в
+              сегодняшней колонке сетки ниже, и были самым крупным
+              элементом страницы при том, что это сводка одного дня. */}
+          <div className="sch-today">
             {Object.entries(data.points).map(([code, name]) => {
-              const s   = POINT_STYLE[code] || {};
+              const st  = POINT_STYLE[code] || {};
               const emp = todayByPoint[code];
               return (
-                <div key={code}
-                  className={`app-card border-l-4 p-3 ${s.border || 'border-[color:var(--color-border)]'}`}>
-                  <div className="mb-1 flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${s.dot || 'bg-gray-400'}`} />
-                    <span className="text-xs font-semibold text-[color:var(--color-muted-foreground)]">
-                      {name}
-                    </span>
-                  </div>
-                  <div className={`text-sm font-medium ${emp ? '' : 'italic text-[color:var(--color-muted-foreground)]'}`}>
-                    {emp || 'Не назначен'}
-                  </div>
+                <div key={code} className={`sch-today__cell ${emp ? '' : 'sch-today__cell--empty'}`}>
+                  <span className="sch-today__k">
+                    <i className={`sch-today__dot ${st.dot || 'bg-gray-400'}`} />
+                    {name}
+                  </span>
+                  <span className="sch-today__v">{emp || '—'}</span>
                 </div>
               );
             })}
@@ -269,7 +268,7 @@ export default function Schedule() {
                       {!isOpen && assignments.length > 0 && (
                         <div className="flex flex-wrap gap-1 pt-1">
                           {assignments.map(a => (
-                            <span key={a.day} className={`text-xs px-1.5 py-0.5 rounded border ${a.isToday ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 font-semibold' : a.isWeekend ? 'border-red-200 bg-red-50' : 'border-[color:var(--color-border)]'}`}>
+                            <span key={a.day} className={`text-xs px-1.5 py-0.5 rounded border ${a.isToday ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 font-semibold' : a.isWeekend ? 'border-[color:var(--fui-edge-strong)] bg-[color:var(--color-control-bg)]' : 'border-[color:var(--color-border)]'}`}>
                               {a.day} <PointChip code={a.code} />
                             </span>
                           ))}
@@ -289,7 +288,7 @@ export default function Schedule() {
                               <div key={d.day}
                                 className={`flex items-center gap-2 px-2 py-1.5 rounded
                                   ${isToday ? 'bg-[color:var(--color-primary)]/10' : ''}
-                                  ${d.is_weekend && !isToday ? 'bg-red-50/60' : ''}`}>
+                                  ${d.is_weekend && !isToday ? 'sch-weekend' : ''}`}>
                                 <span className="w-14 flex-shrink-0 text-xs text-[color:var(--color-muted-foreground)] tabular-nums">
                                   {d.day} {d.weekday_short}
                                 </span>
@@ -339,7 +338,7 @@ export default function Schedule() {
                           ref={isToday ? todayColRef : null}
                           className={`min-w-[36px] border-b border-r border-[color:var(--color-border)] px-1 py-2 text-center font-semibold
                             ${isToday   ? 'bg-[color:var(--color-primary)] text-white'                    : ''}
-                            ${isWeekend && !isToday ? 'bg-red-50 text-red-500' : ''}
+                            ${isWeekend && !isToday ? 'sch-weekend sch-weekend-h' : ''}
                             ${!isToday && !isWeekend ? 'bg-[color:var(--color-modal-bg)] text-[color:var(--color-muted-foreground)]' : ''}
                           `}
                         >
@@ -381,7 +380,7 @@ export default function Schedule() {
                             onClick={() => canEdit && !isSaving && setEditing({ emp, day: d.day })}
                             className={`border-b border-r border-[color:var(--color-border)] px-1 py-1.5 text-center
                               ${isToday   ? 'bg-[color:var(--color-primary)]/10' : ''}
-                              ${isWeekend && !isToday ? 'bg-red-50/60' : ''}
+                              ${isWeekend && !isToday ? 'sch-weekend' : ''}
                               ${canEdit && !isEditing ? 'cursor-pointer hover:bg-[color:var(--color-primary)]/10' : ''}
                             `}>
                             {isSaving ? (
@@ -423,7 +422,7 @@ export default function Schedule() {
                           <td key={d.day}
                             className={`border-r border-[color:var(--color-border)] px-0.5 py-1 text-center
                               ${isToday ? 'bg-[color:var(--color-primary)]/10' : ''}
-                              ${isWeekend && !isToday ? 'bg-red-50/60' : ''}
+                              ${isWeekend && !isToday ? 'sch-weekend' : ''}
                             `}>
                             <div className="flex flex-col gap-0.5 items-center">
                               {Object.entries(counts).map(([code, cnt]) => (

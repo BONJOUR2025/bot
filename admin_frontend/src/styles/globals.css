@@ -6874,3 +6874,57 @@ button:hover > .vac-desc { color: var(--color-text); }
   line-height: 0.95;
   color: var(--color-text);
 }
+
+/* Выходные в графике месяца. Красная подложка и красные подписи дней
+   означали в этой системе тревогу: суббота и воскресенье выглядели
+   проблемой, хотя это просто нерабочие дни. Отличие даётся плотностью
+   подложки, а не цветом. */
+.sch-weekend { background: color-mix(in srgb, var(--color-text) 5%, transparent) !important; }
+.sch-weekend-h { color: var(--color-text-faint) !important; }
+
+/* Расстановка на сегодня: одна рейка вместо восьми карточек. Тот же
+   язык, что у телеметрической рейки дашборда — ячейки разделены
+   волосяными линиями, подпись сверху, значение снизу. */
+.sch-today {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--fui-edge);
+  border-radius: 0.7rem;
+  overflow: hidden;
+  background: var(--glass-shell);
+}
+.sch-today__cell {
+  flex: 1 1 9.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.65rem 0.9rem 0.75rem;
+  border-left: 1px solid var(--fui-edge);
+}
+.sch-today__cell:first-child { border-left: 0; }
+.sch-today__k {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  min-width: 0;
+}
+.sch-today__k > i:not(.sch-today__dot) { display: none; }
+.sch-today__dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+.sch-today__v {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Незакрытая точка — приглушена, но не italic: наклон здесь читался
+   как примечание, а это состояние. */
+.sch-today__cell--empty .sch-today__v { color: var(--color-text-faint); font-weight: 400; }
