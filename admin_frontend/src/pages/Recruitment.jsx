@@ -1331,15 +1331,17 @@ function FunnelStats({ candidates, activeStage, onSelectStage }) {
           {/* Отсчёт нейтральный, цветом помечен только результат воронки.
               «В работе» было основным цветом наравне с «Нанято», из-за чего
               незавершённый этап читался как достижение. */}
-          <div className="shrink-0">
-            <div className="ui-label">Всего кандидатов</div>
-            <div className="ui-metric !text-[1.35rem] mt-1 text-[color:var(--color-text)]">{total}</div>
-          </div>
+          {/* «В работе» — главное число воронки: это те, кем сейчас
+              занимаются. Оно и получает массу, «всего» остаётся
+              контекстом рядом. Раньше оба стояли одним кеглем 1.35rem,
+              и страница не отвечала, на что смотреть первым. */}
           <div className="shrink-0">
             <div className="ui-label">В работе</div>
-            <div className="ui-metric !text-[1.35rem] mt-1 text-[color:var(--color-text)]">
-              {inProgress}
-            </div>
+            <div className="rec-lead">{inProgress}</div>
+          </div>
+          <div className="shrink-0">
+            <div className="ui-label">Всего кандидатов</div>
+            <div className="ui-metric !text-[1.35rem] mt-1 text-[color:var(--color-text-muted)]">{total}</div>
           </div>
           <div className="shrink-0">
             <div className="ui-label">Нанято</div>
@@ -2226,28 +2228,28 @@ export default function Recruitment() {
           )}
           <button
             onClick={() => setShowIntegrations(true)}
-            className="btn btn-secondary text-sm flex items-center gap-1.5"
+            className="btn btn--ghost btn--sm flex items-center gap-1.5"
             title="Настройка автоимпорта hh.ru и Авито"
           >
             <Settings size={15} /> Интеграции
           </button>
           <button
             onClick={() => setShowStrategies(true)}
-            className="btn btn-secondary text-sm flex items-center gap-1.5"
+            className="btn btn--ghost btn--sm flex items-center gap-1.5"
             title="Управление стратегиями найма"
           >
             <ListChecks size={15} /> Стратегии найма
           </button>
           <button
             onClick={() => setShowGlobalKb(true)}
-            className="btn btn-secondary text-sm flex items-center gap-1.5"
+            className="btn btn--ghost btn--sm flex items-center gap-1.5"
             title="Общая база знаний для ИИ-ассистента (все вакансии)"
           >
             <BookOpen size={15} /> Общая база знаний
           </button>
           <button
             onClick={() => setShowTemplates(true)}
-            className="btn btn-secondary text-sm flex items-center gap-1.5"
+            className="btn btn--ghost btn--sm flex items-center gap-1.5"
             title="Сохранённые шаблоны вакансий — создать новую вакансию на основе одного из них"
           >
             <FileStack size={15} /> Шаблоны вакансий
@@ -2278,7 +2280,10 @@ export default function Recruitment() {
               )}
             </button>
           </div>
-          <button onClick={() => setVacancyModal('new')} className="btn btn--primary text-sm flex items-center gap-1.5">
+          {/* Главное действие прижато к правому краю ряда: инструментальные
+              кнопки слева заполняют строку, и «Вакансия» переносилась на
+              вторую строку сиротой у левого края. */}
+          <button onClick={() => setVacancyModal('new')} className="btn btn--primary btn--sm ml-auto flex items-center gap-1.5">
             <Plus size={15} /> Вакансия
           </button>
         </div>

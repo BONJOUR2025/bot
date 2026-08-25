@@ -98,6 +98,16 @@ a:hover { text-decoration: underline; }
   color: var(--color-text);
 }
 .btn--secondary:hover { border-color: var(--color-border-hover); }
+/* В разметке в двадцати двух местах написано btn-secondary с одним
+   дефисом — такого модификатора в системе нет, и эти кнопки всё это
+   время рендерились голым .btn. Псевдоним чинит их разом, не трогая
+   разметку: намерение автора было именно «вторичная». */
+.btn-secondary {
+  background: var(--color-control-bg);
+  border: var(--border-soft);
+  color: var(--color-text);
+}
+.btn-secondary:hover { border-color: var(--color-border-hover); }
 
 .btn--ghost { background: transparent; border-color: transparent; color: var(--color-text-muted); }
 .btn--ghost:hover { background: var(--color-control-bg); color: var(--color-text); }
@@ -6846,4 +6856,15 @@ button:hover > .vac-desc { color: var(--color-text); }
   letter-spacing: 0;
   color: var(--color-text-faint);
   margin-left: 0.35em;
+}
+
+/* Главное число воронки. */
+.rec-lead {
+  margin-top: 0.25rem;
+  font-size: clamp(2.2rem, 3.2vw, 2.9rem);
+  font-weight: 250;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  color: var(--color-text);
 }
