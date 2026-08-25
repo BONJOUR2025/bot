@@ -54,7 +54,7 @@ const STATUS_COLORS = {
   'Ожидает': 'var(--fui-processing)',
   'Одобрено': 'var(--color-primary)',
   'Отклонено': 'var(--color-danger)',
-  'Выплачено': 'color-mix(in srgb, var(--color-text) 24%, transparent)',
+  'Выплачено': 'color-mix(in srgb, var(--color-text) 34%, transparent)',
 };
 
 // Стадии в том порядке, в котором по ним идёт заявка. Цвет описывает
@@ -202,7 +202,9 @@ function EmployeeLeaderboard({ data, total, activeName, onSelect }) {
                   <span className="text-sm font-medium truncate">{name}</span>
                 </div>
                 <div className="text-right shrink-0 ml-3">
-                  <div className="text-sm font-bold text-[color:var(--color-primary)] whitespace-nowrap">{fmtMoneyShort(sum)}</div>
+                  {/* Сумма — якорь строки, а не акцент: фиолетовой она
+                      была у всех шести получателей сразу. */}
+                  <div className="payout-feed__sum">{fmtMoneyShort(sum)}</div>
                   <div className="text-xs text-[color:var(--color-muted-foreground)]">{count} зап.</div>
                 </div>
               </div>
@@ -1370,18 +1372,11 @@ export default function Payouts() {
         </div>
       </div>
 
-      <NotificationJournal
-        entries={activity}
-        open={showActivity}
-        onToggle={() => setShowActivity((v) => !v)}
-        onRefresh={loadActivity}
-      />
-
       <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
 
       {/* ── Обзор ─────────────────────────────────────────────── */}
       {activeTab === 'overview' && (
-        <div className="space-y-5">
+        <div className="space-y-8">
           {loading ? (
             <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
               <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
@@ -1394,7 +1389,12 @@ export default function Payouts() {
               <div className="pay-flow">
                 <div className="pay-flow__total">
                   <span className="pay-flow__k">Общая сумма</span>
-                  <span className="pay-flow__n">{fmtMoneyShort(totalSum)}</span>
+                  {/* Знак валюты отдельным лёгким начертанием: в строке
+                      «10 829 467 ₽» он весил как разряды суммы, хотя
+                      единица измерения не должна спорить с величиной. */}
+                  <span className="pay-flow__n">
+                    {Number(totalSum || 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 })}<small>₽</small>
+                  </span>
                   <span className="pay-flow__m">{payouts.length} заявок за период</span>
                 </div>
                 <div className="pay-flow__stages">
@@ -1541,6 +1541,17 @@ export default function Payouts() {
               </div>
             </>
           )}
+
+          {/* Журнал уведомлений — в подвал. Он стоял между шапкой и
+              вкладками, то есть на втором по значимости месте страницы,
+              и красный счётчик ошибок доставки перетягивал внимание с
+              суммы выплат. Это служебный лог, а не показатель. */}
+          <NotificationJournal
+            entries={activity}
+            open={showActivity}
+            onToggle={() => setShowActivity((v) => !v)}
+            onRefresh={loadActivity}
+          />
         </div>
       )}
 

@@ -561,7 +561,7 @@ export default function Employees() {
   ];
 
   return (
-    <div className="space-y-6 max-w-full mx-auto">
+    <div className="space-y-9 max-w-full mx-auto">
       <TopProgressBar active={loading} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -627,9 +627,6 @@ export default function Employees() {
         </div>
       </div>
 
-      {/* Дни рождения — на «Обзоре». В списке они занимали 330px над
-          самой таблицей, ради которой на вкладку и переходят. */}
-      {activeTab === 'overview' && <UpcomingBirthdays />}
 
       <Tabs tabs={mainTabs} active={activeTab} onChange={setActiveTab} />
 
@@ -733,6 +730,12 @@ export default function Employees() {
                 </div>
               )}
               </div>
+
+              {/* Дни рождения — в подвал обзора. Блок стоял над вкладками,
+                  сразу под составом команды, то есть на втором по
+                  значимости месте страницы, хотя это самая необязательная
+                  информация здесь. */}
+              <UpcomingBirthdays />
             </>
           )}
         </div>
@@ -895,7 +898,10 @@ export default function Employees() {
                 </span>
               ),
             },
-            { label: 'Имя', key: 'name', mobileHide: true },
+            // Служебное имя (логин в боте) — вторичное поле: набрано
+            // тем же весом, что ФИО, и две колонки имён спорили между
+            // собой за то, какая из них настоящая.
+            { label: 'Имя', key: 'name', mobileHide: true, cellClass: 'text-[color:var(--color-text-faint)]' },
             { label: 'Телефон', key: 'phone', numeric: true },
             {
               label: 'День рождения',

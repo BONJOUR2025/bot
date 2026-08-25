@@ -6002,16 +6002,19 @@ body.viewer3d-fs-active .app-card {
 .team-head__count {
   display: flex;
   align-items: baseline;
-  gap: 0.65rem;
-  padding: 1.35rem 1.5rem;
+  gap: 0.8rem;
+  padding: 1.75rem 1.8rem;
   flex: 0 0 auto;
 }
+/* Численность — главное число страницы, и по массе оно должно
+   соответствовать деньгам на дашборде: там сумма набрана 4.4rem, здесь
+   счёт стоял почти на треть мельче и читался как подпись к полосе. */
 .team-head__n {
-  font-size: clamp(2.6rem, 4vw, 3.6rem);
-  font-weight: 300;
+  font-size: clamp(3rem, 4.6vw, 4.2rem);
+  font-weight: 250;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.04em;
-  line-height: 0.9;
+  letter-spacing: -0.045em;
+  line-height: 0.88;
   color: var(--color-text);
 }
 .team-head__u {
@@ -6204,8 +6207,8 @@ body.viewer3d-fs-active .app-card {
   flex: 0 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 1.4rem 1.6rem 1.5rem;
+  gap: 0.7rem;
+  padding: 1.85rem 1.8rem 1.8rem;
   min-width: 0;
 }
 .pay-flow__k {
@@ -6216,17 +6219,18 @@ body.viewer3d-fs-active .app-card {
   text-transform: uppercase;
   color: var(--color-text-faint);
 }
+/* Главная сумма страницы по массе равна деньгам на дашборде. */
 .pay-flow__n {
-  font-size: clamp(2rem, 3.3vw, 3.3rem);
-  font-weight: 300;
+  font-size: clamp(2.4rem, 4.2vw, 4.2rem);
+  font-weight: 250;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.035em;
-  line-height: 0.98;
+  letter-spacing: -0.045em;
+  line-height: 0.94;
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
 .pay-flow__n small {
-  font-size: 0.4em;
+  font-size: 0.34em;
   font-weight: 400;
   letter-spacing: 0;
   color: var(--color-text-faint);
@@ -6349,12 +6353,15 @@ body.viewer3d-fs-active .app-card {
 /* Полоса долей: одна шкала, на которой доли сравниваются напрямую.
    Кольцо для разбивки вида 99 / 1 / 0,2 не работает — сектор меньше
    процента не имеет видимой площади. */
+/* Толщина и плотность: при 6px и графитовой заливке полоса 99/1
+   читалась как разделительная линейка, а не как заполненная шкала. */
 .fui-mixbar {
   display: flex;
-  height: 6px;
+  height: 10px;
   border-radius: 999px;
   overflow: hidden;
   background: var(--fui-edge);
+  box-shadow: inset 0 0 0 1px var(--fui-edge);
 }
 .fui-mixbar > span {
   height: 100%;
@@ -6761,3 +6768,49 @@ button:hover > .vac-desc { color: var(--color-text); }
   letter-spacing: 0.06em;
   color: var(--color-text-faint);
 }
+
+/* ── Чекбокс ────────────────────────────────────────────────────
+   Единственный оставшийся системный контрол: браузерная галочка
+   рисуется своим синим и своим радиусом и выпадала из набора в
+   каждой таблице со множественным выбором. */
+.visual-glass input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border: 1px solid var(--fui-edge-strong);
+  border-radius: 4px;
+  background: var(--color-control-bg);
+  cursor: pointer;
+  position: relative;
+  transition: border-color var(--fui-t-micro) var(--glass-ease-out),
+              background var(--fui-t-micro) var(--glass-ease-out);
+}
+.visual-glass input[type='checkbox']:hover { border-color: var(--fui-edge-active); }
+.visual-glass input[type='checkbox']:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+/* Галочка рисуется кромками псевдоэлемента: так она масштабируется
+   вместе с рамкой и не требует картинки. */
+.visual-glass input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(42deg);
+}
+.visual-glass input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+/* Плотность реестра. Строка в 49px читается как список, а не как
+   реестр: на экран помещается вдвое меньше данных, чем должно. */
+.visual-glass table th,
+.visual-glass table td { padding-top: 0.55rem; padding-bottom: 0.55rem; }
