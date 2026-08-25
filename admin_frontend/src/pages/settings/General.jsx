@@ -188,10 +188,21 @@ export default function SettingsGeneral() {
         </Field>
       </Section>
 
-      <div>
+      {/* Действие привязано к форме и прижато к правому краю. Кнопка
+          висела в промежутке между карточками, слева, и читалась как
+          часть блока резервного копирования под ней — то есть было
+          непонятно, что именно она сохраняет. */}
+      <div className="settings-actions">
         <button type="submit" className="btn btn--primary">Сохранить настройки</button>
       </div>
     </form>
+
+      {/* Обслуживание — отдельная группа: это не поля формы выше, и
+          кнопка «Сохранить» на них не распространяется. */}
+      <div className="fui-section">
+        <span className="fui-section__label">Обслуживание</span>
+        <span className="fui-section__line" />
+      </div>
 
       <Section title="Резервное копирование">
         <p className="text-sm text-[color:var(--color-muted-foreground)]">
@@ -203,7 +214,7 @@ export default function SettingsGeneral() {
              действие, а зелёный в этой системе означает успешный исход.
              Кнопка была самым громким элементом страницы, громче, чем
              «Сохранить настройки», то есть громче главного действия. */
-          className="btn btn--secondary flex items-center gap-2 disabled:opacity-50">
+          className="btn btn--secondary btn--sm inline-flex w-fit items-center gap-2 disabled:opacity-50">
           <Download size={16} className={downloading ? 'animate-bounce' : ''} />
           {downloading ? 'Подготовка…' : 'Скачать резервную копию'}
         </button>

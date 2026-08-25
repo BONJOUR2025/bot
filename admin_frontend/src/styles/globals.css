@@ -6952,3 +6952,11 @@ button:hover > .vac-desc { color: var(--color-text); }
   overflow: hidden;
   transition: color var(--fui-t-micro) var(--glass-ease-out);
 }
+
+/* Подвал формы настроек: действие у правого края, отделено от полей
+   волосяной линией — видно, где заканчивается то, что оно сохраняет. */
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
