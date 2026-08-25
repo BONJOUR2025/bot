@@ -2310,6 +2310,20 @@ body.viewer3d-fs-active .app-card {
   background: transparent;
   border-bottom: 1px solid var(--glass-hair);
 }
+/* Закреплённая шапка должна перекрывать то, что под неё уезжает.
+   Прозрачный фон выше задан намеренно — заголовок обычной таблицы
+   стоит на стекле, — но у sticky-ячейки он ломает саму суть закрепления:
+   в «Расписании» таблица прокручена на 288px, и сквозь заголовок
+   «Сотрудник» просвечивали дни, а имена сотрудников накладывались на
+   метки смен. Правило по специфичности выше утилиты Tailwind, поэтому
+   класс bg-* на самой ячейке до неё не доходил. */
+.visual-glass thead th.sticky { background: var(--color-modal-bg); }
+/* То же для закреплённых ячеек тела и подвала: у сводной строки «В
+   точках» фон был задан с прозрачностью 30%, и метки смен уехавших
+   под неё дней проступали сквозь имена сотрудников. */
+.visual-glass tbody td.sticky,
+.visual-glass tfoot td.sticky { background: var(--color-modal-bg); }
+
 .visual-glass tbody tr {
   transition: background 0.45s var(--glass-ease);
 }
@@ -3564,7 +3578,9 @@ body.viewer3d-fs-active .app-card {
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
   opacity: 0.4;
   top: 0;
-  animation: fui-scan-line 6s linear infinite;
+  /* Однократно, при открытии сетки точек: бегущая без конца линия
+     пересекала карточки и читалась как артефакт отрисовки. */
+  animation: fui-scan-line 1200ms var(--glass-ease-out) 1;
 }
 
 /* ── FUI-слой клиентов (Клиенты) ──────────────────────────────────
@@ -6718,3 +6734,23 @@ body.viewer3d-fs-active .app-card {
   transition: color var(--fui-t-micro) var(--glass-ease-out);
 }
 button:hover > .vac-desc { color: var(--color-text); }
+
+/* Изменение к прошлому периоду: без плашки-таблетки — в строке разбивки
+   она бы весила больше самого значения. */
+.delta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Лидер категории — служебная подпись рядом с названием, а не бейдж. */
+.cat-lead {
+  font-family: var(--font-mono-ui);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+}

@@ -3,10 +3,13 @@ import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 
 // ── Status config ────────────────────────────────────────────────
+// «Работает» — норма и все восемь точек из восьми: зелёная плашка
+// стояла на каждой карточке и подсвечивала то, что и так по умолчанию.
+// Цвет остался двум состояниям, о которых нужно знать.
 const STATUS = {
-  active:     { label: 'Работает',   cls: 'bg-emerald-100 text-emerald-700' },
-  renovation: { label: 'Ремонт',     cls: 'bg-amber-100 text-amber-700' },
-  closed:     { label: 'Закрыт',     cls: 'bg-red-100 text-red-700' },
+  active:     { label: 'Работает',   cls: 'badge--neutral' },
+  renovation: { label: 'Ремонт',     cls: 'badge--warning' },
+  closed:     { label: 'Закрыт',     cls: 'badge--error' },
 };
 
 const POINT_TYPE_OPTIONS = ['ТЦ', 'Улица', 'Рынок', 'Другое'];
@@ -762,10 +765,14 @@ export default function Salons() {
       {/* Stats row — click a card to filter the list by status */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Всего',    value: stats.total,      cls: 'text-[color:var(--color-foreground)]', status: '' },
-          { label: 'Работает', value: stats.active,     cls: 'text-emerald-600', status: 'active' },
-          { label: 'Ремонт',   value: stats.renovation, cls: 'text-amber-600', status: 'renovation' },
-          { label: 'Закрыт',   value: stats.closed,     cls: 'text-red-500', status: 'closed' },
+          // Счётчик, равный нулю, не должен гореть цветом: цвет
+          // появляется только когда точка действительно в ремонте или
+          // закрыта. Раньше «0 Ремонт» янтарным и «0 Закрыт» красным
+          // требовали внимания к тому, чего нет.
+          { label: 'Всего',    value: stats.total,      cls: 'text-[color:var(--color-text)]', status: '' },
+          { label: 'Работает', value: stats.active,     cls: 'text-[color:var(--color-text)]', status: 'active' },
+          { label: 'Ремонт',   value: stats.renovation, cls: stats.renovation ? 'text-[color:var(--color-warning)]' : 'text-[color:var(--color-text-faint)]', status: 'renovation' },
+          { label: 'Закрыт',   value: stats.closed,     cls: stats.closed ? 'text-[color:var(--color-danger)]' : 'text-[color:var(--color-text-faint)]', status: 'closed' },
         ].map(({ label, value, cls, status }) => (
           <button key={label} type="button" onClick={() => setStatusFilter((prev) => (prev === status ? '' : status))}
             className={`app-card p-4 text-center transition-colors hover:border-[color:var(--color-primary)] ${statusFilter === status ? 'border-[color:var(--color-primary)]' : ''}`}>

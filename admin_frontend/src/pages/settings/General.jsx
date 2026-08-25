@@ -76,7 +76,10 @@ export default function SettingsGeneral() {
   if (!loaded) return <p className="text-center p-10 text-[color:var(--color-muted-foreground)]">Загрузка…</p>;
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    /* Колонка по центру: при выравнивании влево справа оставалось около
+       трети экрана пустого поля, и оно читалось как незавершённая
+       вёрстка, а не как поле формы. */
+    <div className="space-y-6 max-w-3xl mx-auto">
     <form onSubmit={handleSubmit(save)} className="space-y-6">
       <Section title="Состояние системы">
         <div className="space-y-3">
@@ -196,7 +199,11 @@ export default function SettingsGeneral() {
           Рекомендуется делать перед масштабными изменениями и в начале каждого месяца.
         </p>
         <button type="button" onClick={downloadBackup} disabled={downloading}
-          className="btn btn--success flex items-center gap-2 disabled:opacity-50">
+          /* Не зелёная во всю ширину: резервная копия — служебное
+             действие, а зелёный в этой системе означает успешный исход.
+             Кнопка была самым громким элементом страницы, громче, чем
+             «Сохранить настройки», то есть громче главного действия. */
+          className="btn btn--secondary flex items-center gap-2 disabled:opacity-50">
           <Download size={16} className={downloading ? 'animate-bounce' : ''} />
           {downloading ? 'Подготовка…' : 'Скачать резервную копию'}
         </button>

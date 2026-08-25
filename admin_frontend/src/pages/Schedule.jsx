@@ -356,7 +356,18 @@ export default function Schedule() {
                     <tr key={emp}
                       className={ri % 2 === 1 ? 'bg-[color:var(--color-muted)]/20' : ''}>
                       <td className="sticky left-0 z-10 border-b border-r border-[color:var(--color-border)] bg-[color:var(--color-modal-bg)] px-3 py-1.5 font-medium whitespace-nowrap"
-                        style={{ background: ri % 2 === 1 ? 'var(--color-table-header-bg)' : 'var(--color-modal-bg)' }}>
+                        /* Полоска чётных строк не должна быть прозрачной:
+                           колонка закреплена, и сквозь неё проступали метки
+                           смен уехавших под неё дней — имена сотрудников
+                           накладывались на чужие ячейки. В стеклянной теме
+                           --color-table-header-bg объявлен прозрачным, а
+                           инлайновый стиль перебивал любое правило CSS.
+                           Чередование даётся поверх непрозрачной подложки. */
+                        style={{
+                          background: ri % 2 === 1
+                            ? 'color-mix(in srgb, var(--color-text) 4%, var(--color-modal-bg))'
+                            : 'var(--color-modal-bg)',
+                        }}>
                         {emp}
                       </td>
                       {data.days.map(d => {

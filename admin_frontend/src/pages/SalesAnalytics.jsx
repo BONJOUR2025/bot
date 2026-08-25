@@ -244,6 +244,23 @@ const ChartTooltip = ({ active, payload, label, nameMap }) => {
 };
 
 /* ── KPI card with left-border accent ───────────────────── */
+// Изменение к прошлому периоду. Здесь цвет — настоящая оценка (выросло
+// или упало), поэтому он уместен; в отличие от категорий, где цвет
+// означал бы всего лишь «это другая строка».
+function Delta({ value }) {
+  if (value == null || Math.abs(value) < 0.1) return null;
+  const up = value > 0;
+  return (
+    <span
+      className="delta-chip"
+      style={{ color: up ? 'var(--color-success)' : 'var(--color-danger)' }}
+    >
+      {up ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
+      {up ? '+' : ''}{value.toFixed(1)}%
+    </span>
+  );
+}
+
 function KpiStat({ label, value, delta, sub, accent = 'var(--color-primary)', icon }) {
   const up = delta != null && delta > 0;
   const dn = delta != null && delta < 0;
@@ -328,7 +345,7 @@ function CatBar({ row }) {
 /* ── Employee leaderboard ────────────────────────────────── */
 function Leaderboard({ empSummary, planTotals, activeCodes, onSelect }) {
   const maxTotal = empSummary.length > 0 ? empSummary[0].total : 1;
-  const medals   = ['🥇', '🥈', '🥉'];
+
   return (
     <div className="app-card overflow-hidden">
       <div className="px-5 py-3.5 border-b border-[color:var(--color-border)] flex items-center gap-2">
@@ -351,7 +368,10 @@ function Leaderboard({ empSummary, planTotals, activeCodes, onSelect }) {
               className={`w-full text-left px-5 py-3 flex items-center gap-3 transition-colors ${onSelect ? 'hover:bg-[color:var(--color-muted)]/30 cursor-pointer' : ''} ${isActive ? 'bg-[color:var(--color-primary-muted)]' : ''}`}
             >
               <span className="w-7 text-center text-lg leading-none shrink-0">
-                {medals[i] ?? <span className="text-sm font-semibold text-[color:var(--color-muted-foreground)]">{i+1}</span>}
+                {/* Ранг моношкалой вместо медалей: золото-серебро-бронза
+                    на финансовом рейтинге читаются как игровая награда, а
+                    порядок и так задан позицией в списке. */}
+                <span className="payout-rank">{String(i + 1).padStart(2, '0')}</span>
               </span>
               <EmpAvatar name={empName(e.code)} color={color} size={36} />
               <div className="flex-1 min-w-0">
@@ -403,7 +423,9 @@ function DayHeatmap({ data }) {
                 <div className="w-full rounded-t-md transition-all group-hover:opacity-70"
                   style={{
                     height: `${h}%`,
-                    background: wkd ? 'var(--color-warning)' : 'var(--color-primary)',
+                    /* Выходные графитом: янтарный в этой системе означает
+                       предупреждение, а суббота — просто другой день. */
+                    background: wkd ? 'color-mix(in srgb, var(--color-text) 26%, transparent)' : 'var(--color-primary)',
                   }}
                 />
               </div>
@@ -417,7 +439,7 @@ function DayHeatmap({ data }) {
       </div>
       <div className="flex gap-3 mt-3 text-[10px] text-[color:var(--color-muted-foreground)]">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'var(--color-primary)'}} /> Будни</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'var(--color-warning)'}} /> Выходные</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'color-mix(in srgb, var(--color-text) 26%, transparent)'}} /> Выходные</span>
       </div>
     </div>
   );
@@ -1329,23 +1351,65 @@ export default function SalesAnalytics() {
 
       {loaded && !loading && (
         <>
-          {/* ── KPI row ─────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <KpiStat label="Итого выручка" value={fmtRub(kpi.total)} delta={kpi.dTotal} accent="var(--color-primary)"
-              icon={<BarChart3 size={18} />} sub={`∅ ${fmtRub(kpi.avgPerActive)} / ${periodLabel}`} />
-            {CATEGORIES.map(({ key, label, color }) => {
-              const leader    = categoryLeaders[key];
-              const deltaKey  = `d${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-              return (
-                <KpiStat key={key} label={label} value={fmtRub(kpi[key])} delta={kpi[deltaKey]} accent={color}
-                  sub={leader ? `👤 ${empName(leader.code)}` : undefined} />
-              );
-            })}
+          {/* Выручка полосой с разбивкой вместо одиннадцати карточек.
+              Раньше «Итого выручка» в 4,4 млн стояла в такой же коробке,
+              как «Тапочки: 0 ₽», и весила столько же; девять категорий
+              занимали два ряда, третий ряд держал одну карточку, а справа
+              оставалась дыра. Здесь итог — якорь, категории сравниваются
+              на общей шкале, и нулевые сами уходят вниз. */}
+          <div className="fui-band">
+            <div className="fui-band__cell" style={{ cursor: 'default' }}>
+              <span className="fui-band__k">Итого выручка</span>
+              <span className="fui-band__v">{fmtRub(kpi.total)}</span>
+              <span className="fui-band__m">
+                <span>∅ {fmtRub(kpi.avgPerActive)} / {periodLabel}</span>
+                {kpi.dTotal != null && <Delta value={kpi.dTotal} />}
+              </span>
+            </div>
             {retention && retention.total_clients > 0 && (
-              <KpiStat label="Повторные клиенты" value={fmtPct(retention.repeat_rate)} accent="var(--color-text-muted)"
-                icon={<Users size={18} />}
-                sub={`${retention.new_clients} нов. · ${retention.returning_clients} пост.`} />
+              <div className="fui-band__cell" style={{ cursor: 'default' }}>
+                <span className="fui-band__k">Повторные клиенты</span>
+                <span className="fui-band__v">{fmtPct(retention.repeat_rate)}</span>
+                <span className="fui-band__m"><span>{retention.new_clients} нов. · {retention.returning_clients} пост.</span></span>
+              </div>
             )}
+          </div>
+
+          <div className="app-card">
+            <div className="fui-section">
+              <span className="fui-section__label">По категориям</span>
+              <span className="fui-section__line" />
+              <span className="fui-section__meta">{CATEGORIES.filter((c) => (kpi[c.key] || 0) > 0).length} из {CATEGORIES.length}</span>
+            </div>
+            <div className="fui-mixbar mb-4">
+              {CATEGORIES.filter((c) => (kpi[c.key] || 0) > 0).map((c) => (
+                <span
+                  key={c.key}
+                  title={`${c.label}: ${fmtRub(kpi[c.key])}`}
+                  style={{ width: `${((kpi[c.key] || 0) / Math.max(1, kpi.total)) * 100}%`, background: c.color }}
+                />
+              ))}
+            </div>
+            <div className="fui-breakdown" style={{ maxWidth: 'none' }}>
+              {[...CATEGORIES].sort((a, b) => (kpi[b.key] || 0) - (kpi[a.key] || 0)).map((c) => {
+                const v = kpi[c.key] || 0;
+                const leader = categoryLeaders[c.key];
+                const deltaKey = `d${c.key.charAt(0).toUpperCase()}${c.key.slice(1)}`;
+                return (
+                  <div key={c.key} className="fui-breakdown__row" style={{ '--cat': c.color, opacity: v > 0 ? 1 : 0.45 }}>
+                    <span className="fui-breakdown__sw" />
+                    <span className="fui-breakdown__k">
+                      {c.label}
+                      {leader && v > 0 && <span className="cat-lead"> {empName(leader.code)}</span>}
+                    </span>
+                    <span className="fui-breakdown__v">{fmtRub(v)}</span>
+                    <span className="fui-breakdown__p">
+                      {kpi[deltaKey] != null && v > 0 ? <Delta value={kpi[deltaKey]} /> : (kpi.total ? `${Math.round((v / kpi.total) * 100)}%` : '—')}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* ── FUI: живая телеметрическая лента продаж ──────────────
@@ -1400,25 +1464,51 @@ export default function SalesAnalytics() {
                         <defs>
                           {employees.map((e, i) => (
                             <linearGradient key={e.code} id={`ag${i}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%"  stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.35} />
-                              <stop offset="95%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.02} />
+                              {/* Сложенные области должны читаться заливкой,
+                                  а не яркой кромкой сверху: при почти
+                                  прозрачной заливке от графика оставались
+                                  только контуры, и шестнадцать серий
+                                  выглядели клубком линий. */}
+                              <stop offset="5%"  stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.62} />
+                              <stop offset="95%" stopColor={CHART_COLORS[i % CHART_COLORS.length]} stopOpacity={0.3} />
                             </linearGradient>
                           ))}
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border,#e5e7eb)" vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} angle={-40} textAnchor="end" height={60} interval="preserveStartEnd" />
-                        <YAxis tickFormatter={(v) => v.toLocaleString('ru-RU')} tick={{ fontSize: 11 }} width={64} axisLine={false} tickLine={false} />
+                        <CartesianGrid stroke="var(--fui-edge)" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 9.5, fill: 'var(--color-text-faint)' }} tickLine={false} axisLine={{ stroke: 'var(--fui-edge)' }} height={34} interval="preserveStartEnd" minTickGap={26} />
+                        <YAxis tickFormatter={(v) => v.toLocaleString('ru-RU')} tick={{ fontSize: 9.5, fill: 'var(--color-text-faint)' }} width={64} axisLine={false} tickLine={false} />
                         <Tooltip content={<ChartTooltip nameMap={nameMap} />} />
                         {employees.length > 1 && (
                           <Legend formatter={(code) => nameMap[code] || code} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                         )}
+                        {/* В линейном режиме шестнадцать серий одинаковой
+                            толщины и яркости превращались в клубок, из
+                            которого нельзя было прочитать ни одну. Ведущий
+                            сотрудник набран акцентом и полной толщиной,
+                            остальные — тонкими графитовыми нитями: они
+                            остаются как контекст, но не спорят за внимание.
+                            В режимах площадей и столбцов серии сложены друг
+                            на друга, там нужна различимость — палитра
+                            остаётся. */}
                         {employees.map((e, i) => {
-                          const color = CHART_COLORS[i % CHART_COLORS.length];
+                          const stacked = CHART_COLORS[i % CHART_COLORS.length];
                           if (chartMode === 'area')
-                            return <Area key={e.code} dataKey={e.code} name={e.code} type="monotone" stroke={color} fill={`url(#ag${i})`} strokeWidth={2} dot={false} isAnimationActive={false} stackId="s" />;
+                            return <Area key={e.code} dataKey={e.code} name={e.code} type="monotone" stroke={stacked} strokeOpacity={0.55} fill={`url(#ag${i})`} strokeWidth={0.75} dot={false} isAnimationActive={false} stackId="s" />;
                           if (chartMode === 'bar')
-                            return <Bar  key={e.code} dataKey={e.code} name={e.code} fill={color} isAnimationActive={false} stackId="s" radius={i === employees.length - 1 ? [3,3,0,0] : 0} />;
-                          return <Line key={e.code} dataKey={e.code} name={e.code} type="monotone" stroke={color} dot={false} strokeWidth={2} isAnimationActive={false} />;
+                            return <Bar  key={e.code} dataKey={e.code} name={e.code} fill={stacked} isAnimationActive={false} stackId="s" radius={i === employees.length - 1 ? [3,3,0,0] : 0} />;
+                          const lead = i === 0;
+                          return (
+                            <Line
+                              key={e.code}
+                              dataKey={e.code}
+                              name={e.code}
+                              type="monotone"
+                              stroke={lead ? 'var(--color-primary)' : `color-mix(in srgb, var(--color-text) ${Math.max(13, 30 - i * 2)}%, transparent)`}
+                              dot={false}
+                              strokeWidth={lead ? 2 : 1}
+                              isAnimationActive={false}
+                            />
+                          );
                         })}
                         {showMA && <Line dataKey="_ma" name="_ma" type="monotone" stroke="var(--color-text-muted)" strokeWidth={1.5} strokeDasharray="5 3" dot={false} isAnimationActive={false} legendType="none" />}
                       </ComposedChart>
@@ -1482,12 +1572,12 @@ export default function SalesAnalytics() {
                     </div>
                     <div className="space-y-3">
                       {empSummary.slice(0, 3).map((e, i) => {
-                        const medals = ['🥇','🥈','🥉'];
+
                         const color  = CHART_COLORS[i % CHART_COLORS.length];
                         const share  = empSummary[0].total > 0 ? e.total / empSummary[0].total : 0;
                         return (
                           <div key={e.code} className="flex items-center gap-2.5">
-                            <span className="text-lg leading-none">{medals[i]}</span>
+                            <span className="payout-rank">{String(i + 1).padStart(2, '0')}</span>
                             <EmpAvatar name={empName(e.code)} color={color} size={32} />
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between text-sm font-semibold">
