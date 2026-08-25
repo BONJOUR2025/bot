@@ -1143,10 +1143,14 @@ export default function SalesAnalytics() {
     return DAY_NAMES.map((name, i) => ({ name, total: totals[i], avg: counts[i] > 0 ? totals[i]/counts[i] : 0, count: counts[i] }));
   }, [filteredRows, activeCats]);
 
+  // Цвета берутся из общей шкалы категорий, а не назначаются отдельно:
+  // «Косметика» была зелёной в кольце и синей в полосе долей над ним, а
+  // «Обувь» — янтарной и сланцевой. Одна категория на одной странице
+  // должна иметь один цвет, иначе разрез читается как два разных отчёта.
   const donutData = useMemo(() => [
-    { name: 'Ремонт / Химчистка', value: kpi.repair    || 0, color: 'var(--color-primary)' },
-    { name: 'Косметика',           value: kpi.cosmetics || 0, color: 'var(--color-success)' },
-    { name: 'Обувь',               value: kpi.shoes     || 0, color: 'var(--color-warning)' },
+    { name: 'Ремонт / Химчистка', value: kpi.repair    || 0, color: CATEGORIES[0].color },
+    { name: 'Косметика',           value: kpi.cosmetics || 0, color: CATEGORIES[1].color },
+    { name: 'Обувь',               value: kpi.shoes     || 0, color: CATEGORIES[2].color },
   ].filter((d) => d.value > 0), [kpi]);
 
   // Маржа/Сроки/Возвраты come back from the API already salon-filtered
@@ -1360,7 +1364,11 @@ export default function SalesAnalytics() {
           <div className="fui-band">
             <div className="fui-band__cell" style={{ cursor: 'default' }}>
               <span className="fui-band__k">Итого выручка</span>
-              <span className="fui-band__v">{fmtRub(kpi.total)}</span>
+              {/* Знак валюты отдельным лёгким начертанием, как на всех
+                  остальных экранах с деньгами. */}
+              <span className="fui-band__v">
+                {Math.round(kpi.total ?? 0).toLocaleString('ru-RU')}<small>₽</small>
+              </span>
               <span className="fui-band__m">
                 <span>∅ {fmtRub(kpi.avgPerActive)} / {periodLabel}</span>
                 {kpi.dTotal != null && <Delta value={kpi.dTotal} />}
@@ -1582,10 +1590,20 @@ export default function SalesAnalytics() {
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between text-sm font-semibold">
                                 <span className="truncate">{empName(e.code)}</span>
-                                <span style={{ color }}>{fmtRub(e.total)}</span>
+                                {/* Сумма — величина, а не серия графика: цвет
+                                    ряда на ней делал из денег легенду. */}
+                                <span className="payout-feed__sum">{fmtRub(e.total)}</span>
                               </div>
                               <div className="mt-1 h-1 rounded-full bg-[color:var(--color-border)] overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width: `${share*100}%`, background: color }} />
+                                {/* Акцент — только лидеру, остальные графитом:
+                                    это рейтинг, а не три независимые серии. */}
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{
+                                    width: `${share * 100}%`,
+                                    background: i === 0 ? 'var(--color-primary)' : `color-mix(in srgb, var(--color-text) ${30 - i * 6}%, transparent)`,
+                                  }}
+                                />
                               </div>
                             </div>
                           </div>
