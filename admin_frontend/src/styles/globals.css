@@ -6928,3 +6928,27 @@ button:hover > .vac-desc { color: var(--color-text); }
 /* Незакрытая точка — приглушена, но не italic: наклон здесь читался
    как примечание, а это состояние. */
 .sch-today__cell--empty .sch-today__v { color: var(--color-text-faint); font-weight: 400; }
+
+/* Счёт внутри чипа фильтра. */
+.sl-chip-n {
+  margin-left: 0.45rem;
+  font-family: var(--font-mono-ui);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+}
+
+/* Название точки: до двух строк, дальше многоточие. */
+.sl-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text);
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  transition: color var(--fui-t-micro) var(--glass-ease-out);
+}

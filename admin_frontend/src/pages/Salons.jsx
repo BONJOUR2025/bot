@@ -419,14 +419,17 @@ function SalonCard({ salon, employees, onClick }) {
               {salon.code}
             </span>
           )}
-          <h3 className="font-semibold text-base truncate group-hover:text-[color:var(--color-primary)] transition-colors">{salon.name}</h3>
+          {/* Название переносится, а не срезается: «Бестужевская (Цех)»
+              и «ТЦ "Академ Парк"» теряли хвост, хотя это единственное,
+              чем карточки отличаются друг от друга. */}
+          <h3 className="sl-name group-hover:text-[color:var(--color-primary)]">{salon.name}</h3>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {salon.status === 'active' && (
-            <span className="fui-radar fui-radar--live" title="Точка в сети — статус «Работает»">
-              <i /><i /><i /><b />
-            </span>
-          )}
+          {/* Радар снят с карточек. Он стоял на каждой работающей точке —
+              восемь радаров по три кольца дали двадцать четыре
+              бесконечные анимации в кадре, — и все они сообщали одно:
+              «всё нормально». Радар означает наблюдение за исключением,
+              а нормальный статус уже написан рядом словом. */}
           <Badge status={salon.status} />
         </div>
       </div>
@@ -762,25 +765,11 @@ export default function Salons() {
         <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
       </div>
 
-      {/* Stats row — click a card to filter the list by status */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          // Счётчик, равный нулю, не должен гореть цветом: цвет
-          // появляется только когда точка действительно в ремонте или
-          // закрыта. Раньше «0 Ремонт» янтарным и «0 Закрыт» красным
-          // требовали внимания к тому, чего нет.
-          { label: 'Всего',    value: stats.total,      cls: 'text-[color:var(--color-text)]', status: '' },
-          { label: 'Работает', value: stats.active,     cls: 'text-[color:var(--color-text)]', status: 'active' },
-          { label: 'Ремонт',   value: stats.renovation, cls: stats.renovation ? 'text-[color:var(--color-warning)]' : 'text-[color:var(--color-text-faint)]', status: 'renovation' },
-          { label: 'Закрыт',   value: stats.closed,     cls: stats.closed ? 'text-[color:var(--color-danger)]' : 'text-[color:var(--color-text-faint)]', status: 'closed' },
-        ].map(({ label, value, cls, status }) => (
-          <button key={label} type="button" onClick={() => setStatusFilter((prev) => (prev === status ? '' : status))}
-            className={`app-card p-4 text-center transition-colors hover:border-[color:var(--color-primary)] ${statusFilter === status ? 'border-[color:var(--color-primary)]' : ''}`}>
-            <div className={`text-3xl font-bold ${cls}`}>{value}</div>
-            <div className="text-xs text-[color:var(--color-muted-foreground)] mt-1">{label}</div>
-          </button>
-        ))}
-      </div>
+      {/* Четыре карточки-счётчика удалены. Они говорили ровно то же,
+          что телеметрическая рейка над ними («ТОЧЕК: 8 · В СЕТИ: 8») и
+          что чипы фильтра под ними, — одно утверждение в трёх местах, —
+          и при этом две из четырёх показывали ноль крупным кеглем.
+          Счёт переехал в сами чипы: один контрол делает одну работу. */}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
@@ -791,7 +780,12 @@ export default function Salons() {
           className="input text-sm w-64"
         />
         <div className="flex gap-1.5">
-          {[{ value: '', label: 'Все' }, ...STATUS_OPTIONS].map(o => (
+          {[{ value: '', label: 'Все' }, ...STATUS_OPTIONS].map(o => {
+            const n = o.value === '' ? stats.total
+              : o.value === 'active' ? stats.active
+              : o.value === 'renovation' ? stats.renovation
+              : stats.closed;
+            return (
             <button
               key={o.value}
               onClick={() => setStatusFilter(o.value)}
@@ -802,8 +796,11 @@ export default function Salons() {
               }`}
             >
               {o.label}
+              {/* Счёт внутри чипа: он и фильтрует, и говорит сколько. */}
+              <span className="sl-chip-n">{n}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -842,7 +839,10 @@ export default function Salons() {
           <span className="salon-fui-corner-tr" />
           <span className="salon-fui-corner-bl" />
           <span className="salon-fui-scan" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* items-start: карточки берут высоту своего содержимого. При
+              растяжении «Пассаж» с одной строкой вытягивался до высоты
+              «Гранд Паласа» с пятью и держал под собой пустое поле. */}
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map(s => (
               <SalonCard
                 key={s.id}
