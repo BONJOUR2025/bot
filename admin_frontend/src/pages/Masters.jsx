@@ -175,12 +175,16 @@ function MastersSummaryTable({ rows, onMasterClick, advancesByMaster }) {
                   <tr key={m.name}>
                     <td>
                       <button onClick={() => onMasterClick(m.name)} className="mas-reg__name">{m.name}</button>
-                      {/* Загрузка относительно самого загруженного за период */}
+                    </td>
+                    {/* Шкала переехала под число, которое измеряет. Под
+                        именем она читалась как подчёркивание текста, а не
+                        как загрузка относительно самого занятого мастера. */}
+                    <td className="r n">
+                      {m.total}
                       <span className={`mas-load ${i === 0 ? 'mas-load--lead' : ''}`}>
                         <i style={{ width: `${Math.max(3, (m.total / maxTotal) * 100)}%` }} />
                       </span>
                     </td>
-                    <td className="r n">{m.total}</td>
                     <td className="r n">{m.done}</td>
                     <td className="r n">{m.inWork || <span className="dim">—</span>}</td>
                     <td className="r n dim">{fmtMin(median(m.durations))}</td>
@@ -827,7 +831,7 @@ export default function Masters() {
   ];
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto pb-12">
+    <div className="space-y-8 max-w-5xl mx-auto pb-12">
       <TopProgressBar active={loading} />
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -915,8 +919,12 @@ export default function Masters() {
               <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
                 Зарплата мастеров · {kpi.masters} {kpi.masters === 1 ? 'мастер' : 'мастеров'}
               </div>
-              <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
-                {fmtMoney(kpi.totalSalary)}
+              {/* Деньги набраны основным цветом, а не акцентом: фиолетовый
+                  в этой системе означает активное состояние, а сумма —
+                  величина. Масса даётся размером, знак рубля — лёгким
+                  начертанием, как на дашборде и в выплатах. */}
+              <div className="mas-total">
+                {Math.round(kpi.totalSalary ?? 0).toLocaleString('ru-RU')}<small>₽</small>
               </div>
               <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
                 {kpi.done} услуг учтено в ЗП за период
@@ -926,7 +934,10 @@ export default function Masters() {
               <Term label="Услуг всего" value={kpi.total} fmt={(v) => String(v)} />
               <Term op="·" label="Учтено в ЗП" value={kpi.done} fmt={(v) => String(v)} />
               <Term op="·" label="Сумма услуг" value={kpi.totalKredit} />
-              <Term op="=" label="Зарплата" value={kpi.totalSalary} tone={TONE_TEXT.primary} strong />
+              {/* Итог формулы не повторяет заголовок цветом и жиром: та же
+                  сумма уже стоит крупно строкой выше, и второй фиолетовый
+                  экземпляр делал из вывода второй заголовок. */}
+              <Term op="=" label="Зарплата" value={kpi.totalSalary} strong />
             </div>
           </section>
 
@@ -934,7 +945,7 @@ export default function Masters() {
           <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
           {tab === 'overview' && (
-            <div className="space-y-4">
+            <div className="space-y-7">
               {/* Восемь одинаковых карточек в двух сетках сведены в одну
                   решётку: услуги и заказы — один класс информации, и
                   разделять их подзаголовками значило дважды объяснять то,

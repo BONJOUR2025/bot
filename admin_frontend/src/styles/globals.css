@@ -6653,14 +6653,16 @@ body.viewer3d-fs-active .app-card {
    «сколько», но и «кто тянет основную массу». */
 /* Гаснет вправо и держится приглушённой: сплошная полоса ровного тона
    под именем читается как подчёркивание текста, а не как шкала. */
-.mas-load { display: block; width: 100%; max-width: 8rem; height: 2px; margin-top: 0.35rem; background: var(--fui-edge); overflow: hidden; opacity: 0.75; }
+.mas-load { display: block; width: 100%; max-width: 4.5rem; height: 2px; margin: 0.3rem 0 0 auto; background: var(--fui-edge); overflow: hidden; opacity: 0.8; }
+/* Шкала растёт справа налево — от разряда числа, под которым стоит. */
 .mas-load i {
   display: block;
   height: 100%;
-  background: linear-gradient(to right, color-mix(in srgb, var(--color-text) 34%, transparent), color-mix(in srgb, var(--color-text) 10%, transparent));
+  margin-left: auto;
+  background: linear-gradient(to left, color-mix(in srgb, var(--color-text) 38%, transparent), color-mix(in srgb, var(--color-text) 12%, transparent));
 }
 .mas-load--lead i {
-  background: linear-gradient(to right, var(--color-primary), color-mix(in srgb, var(--color-primary) 18%, transparent));
+  background: linear-gradient(to left, var(--color-primary), color-mix(in srgb, var(--color-primary) 22%, transparent));
 }
 
 /* Нарушения — единственный сигнал в реестре. Значок стоит только у
@@ -6826,3 +6828,22 @@ button:hover > .vac-desc { color: var(--color-text); }
    реестр: на экран помещается вдвое меньше данных, чем должно. */
 .visual-glass table th,
 .visual-glass table td { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+
+/* Итоговая зарплата за период — главное число страницы. */
+.mas-total {
+  margin-top: 0.55rem;
+  font-size: clamp(2.4rem, 4.2vw, 4rem);
+  font-weight: 250;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  line-height: 0.94;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.mas-total small {
+  font-size: 0.34em;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--color-text-faint);
+  margin-left: 0.35em;
+}
