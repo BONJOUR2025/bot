@@ -6495,10 +6495,22 @@ body.viewer3d-fs-active .app-card {
   overflow-wrap: anywhere;
 }
 /* Ведущее показание — LTV: ради него досье и открывают. */
-.dossier__read--lead { flex: 1.4 1 12rem; }
+/* LTV — ответ на вопрос «кто этот клиент для нас», ради него досье и
+   открывают. Кегль был втрое меньше денег на дашборде, и главное число
+   страницы читалось наравне со счётчиком заказов рядом. */
+.dossier__read--lead { flex: 1.5 1 14rem; padding-top: 1.15rem; padding-bottom: 1.25rem; }
 .dossier__read--lead .dossier__read-v {
-  font-size: clamp(1.8rem, 3vw, 2.5rem);
-  letter-spacing: -0.03em;
+  font-size: clamp(2.4rem, 4vw, 3.6rem);
+  font-weight: 250;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+.dossier__read--lead .dossier__read-v small {
+  font-size: 0.34em;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--color-text-faint);
+  margin-left: 0.35em;
 }
 /* Риск оттока помечает досье кромкой, а не отдельной красной строкой
    в углу и не вторым бейджем рядом с именем. */

@@ -108,8 +108,11 @@ function OrderRow({ contragentId, order }) {
 
 function ClientCard({ profile, openedAt }) {
   const churn = computeChurnRisk(profile);
+  // Досье и история заказов — одна группа: интервал внутри неё меньше
+  // общего шага страницы, поэтому они читаются как один документ, а не
+  // как две независимые карточки подряд.
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Досье одной поверхностью. Прежде те же данные лежали в трёх
           блоках, которые пересказывали друг друга: штамп печатал
           «ЗАКАЗОВ · LTV», под ним LTV и «Заказов» повторялись в
@@ -150,7 +153,11 @@ function ClientCard({ profile, openedAt }) {
         <div className="dossier__reads">
           <div className="dossier__read dossier__read--lead">
             <span className="dossier__read-k">LTV</span>
-            <span className="dossier__read-v">{fmtRub(profile.total_spent)}</span>
+            {/* Знак валюты отдельным лёгким начертанием, как у денег на
+                дашборде: единица измерения не должна весить как разряды. */}
+            <span className="dossier__read-v">
+              {Math.round(profile.total_spent ?? 0).toLocaleString('ru-RU')}<small>₽</small>
+            </span>
           </div>
           <div className="dossier__read">
             <span className="dossier__read-k">Средний чек</span>
@@ -339,7 +346,7 @@ export default function Clients() {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <TopProgressBar active={searching || loadingProfile} />
 
       <div>
@@ -412,7 +419,16 @@ export default function Clients() {
           {loadingProfile && <SkeletonTable rows={6} />}
           {profile && !loadingProfile && (
             <>
-              <button onClick={() => { setProfile(null); setOpenedAt(null); }} className="text-sm text-[color:var(--color-primary)] hover:underline">← назад к результатам поиска</button>
+              {/* Возврат — контрол, а не фиолетовая строчка текста между
+                  поиском и досье: подчёркнутая ссылка посреди приборной
+                  панели читается как вставленный HTML. */}
+              <button
+                type="button"
+                onClick={() => { setProfile(null); setOpenedAt(null); }}
+                className="btn btn--ghost btn--sm"
+              >
+                ← К результатам поиска
+              </button>
               <ClientCard profile={profile} openedAt={openedAt} />
             </>
           )}
