@@ -5575,9 +5575,11 @@ body.viewer3d-fs-active .app-card {
    Один блок с волосяными разделителями. Цифры — моноширинные и
    табличные, колонки фиксированной ширины, поэтому разряды стоят
    друг под другом по всему столбцу. */
+/* Реестр стоит внутри карточки, у которой уже есть кромка и радиус:
+   собственная рамка давала вторую рамку в двадцати пикселях от первой.
+   Границу держит верхняя волосяная линия и разделители строк. */
 .fui-ledger {
-  border: 1px solid var(--fui-edge);
-  border-radius: 0.6rem;
+  border-top: 1px solid var(--fui-edge);
   overflow: hidden;
 }
 /* Колонки заданы в ch, а не по содержимому: каждая строка — свой grid,
@@ -5647,9 +5649,8 @@ body.viewer3d-fs-active .app-card {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.7rem 0.85rem;
+  padding: 0.85rem 0.85rem 0.2rem;
   border-top: 1px solid var(--fui-edge-strong);
-  background: var(--glass-shell);
 }
 .fui-ledger__foot-k {
   font-family: var(--font-mono-ui);
@@ -5745,8 +5746,8 @@ body.viewer3d-fs-active .app-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding: 1.5rem 1.6rem 1.6rem;
+  gap: 0.7rem;
+  padding: 1.9rem 1.8rem 1.85rem;
   min-width: 0;
   border-left: 1px solid var(--fui-edge);
   text-align: left;
@@ -5767,18 +5768,22 @@ body.viewer3d-fs-active .app-card {
   text-transform: uppercase;
   color: var(--color-text-faint);
 }
+/* Главное число страницы должно иметь массу. Прежний кегль давал
+   сумму легче заголовка «Добрый день, Nick», и деньги проигрывали
+   приветствию. Начертание оставлено светлым: массу даёт размер и
+   плотная трекинг-настройка, а не жир. */
 .fui-band__v {
-  font-size: clamp(2.1rem, 3.4vw, 3.5rem);
-  font-weight: 300;
+  font-size: clamp(2.6rem, 4.4vw, 4.4rem);
+  font-weight: 250;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.035em;
-  line-height: 0.98;
+  letter-spacing: -0.045em;
+  line-height: 0.94;
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
 /* Знак валюты не должен весить как разряды суммы. */
 .fui-band__v small {
-  font-size: 0.42em;
+  font-size: 0.34em;
   font-weight: 400;
   letter-spacing: 0;
   color: var(--color-text-faint);
@@ -5892,9 +5897,13 @@ body.viewer3d-fs-active .app-card {
   gap: 1px;
   background: var(--fui-edge);
 }
+/* Подписи «Ожидают одобрения выплаты» и «Сообщения Telegram» не
+   помещались в 126px и срезались многоточием: пяти ячейкам в ряд не
+   хватало ширины. Базис увеличен — в ряд встаёт меньше ячеек, зато
+   каждая читается целиком. */
 .fui-quiet {
   position: relative;
-  flex: 1 1 11rem;
+  flex: 1 1 15rem;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -5909,13 +5918,11 @@ body.viewer3d-fs-active .app-card {
 .fui-quiet:hover { background: var(--color-control-bg-hover); }
 .fui-quiet__k {
   font-size: 10.5px;
+  line-height: 1.35;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-text-faint);
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .fui-quiet__v {
   font-family: var(--font-mono-ui);

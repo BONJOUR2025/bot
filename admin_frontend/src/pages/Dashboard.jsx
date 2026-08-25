@@ -294,13 +294,20 @@ function TaskRow({ icon: Icon, label, count, tone }) {
     info: 'var(--color-info)',
     neutral: 'var(--color-text-faint)',
   }[tone];
+  // Ноль не требует действия и не берёт цвет: «Сегодня 0» янтарным и
+  // «В работе 0» синим подсвечивали пустые очереди наравне с двумя
+  // реально просроченными задачами.
+  const live = Number(count) > 0;
   return (
     <div className="flex items-center justify-between border-b border-[color:var(--color-border)] py-2.5 last:border-0">
       <div className="flex items-center gap-2.5 text-sm text-[color:var(--color-text-muted)]">
-        <Icon size={15} weight="light" style={{ color }} />
+        <Icon size={15} weight="light" style={{ color: live ? color : 'var(--color-text-faint)' }} />
         <span>{label}</span>
       </div>
-      <span className="text-sm font-semibold" style={{ color }}>
+      <span
+        className="font-mono text-sm font-medium tabular-nums"
+        style={{ color: live ? color : 'var(--color-text-faint)' }}
+      >
         {count}
       </span>
     </div>
@@ -676,8 +683,12 @@ export default function Dashboard() {
     </BentoCard>
   );
 
+  // Ритм страницы: интервал между смысловыми группами — деньги,
+  // операции, приборы, списки — заметно больше прежнего. Раньше все
+  // блоки стояли с одинаковым шагом, и страница читалась как ровная
+  // стопка коробок без начала и конца.
   return (
-    <div className="relative space-y-5">
+    <div className="relative space-y-9">
       {sweep > 0 && (
         <span
           key={sweep}
@@ -692,11 +703,15 @@ export default function Dashboard() {
           источников ответило, за сколько, когда и кто оператор. */}
       <div className="ui-reveal mb-7">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          {/* Приветствие в одну строку и вдвое меньшим кеглем. В две
+              строки по 2.6rem оно занимало лучшее место страницы и
+              весило больше, чем касса и дебиторка, при том что не несёт
+              ни одной величины. */}
           <div className="min-w-0">
             <span className="ui-eyebrow">Обзор · {today}</span>
-            <h1 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-[color:var(--color-text)] sm:text-[2.6rem]">
+            <h1 className="mt-3 text-xl font-medium tracking-[-0.02em] text-[color:var(--color-text-muted)] sm:text-2xl">
               {greeting()}
-              {displayName ? (<>,<br /><b>{displayName}</b>.</>) : '.'}
+              {displayName ? (<>, <b className="font-semibold text-[color:var(--color-text)]">{displayName}</b>.</>) : '.'}
             </h1>
           </div>
           <RefreshButton onClick={() => load(true)} disabled={refreshing} spinning={refreshing}>
@@ -765,6 +780,56 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
+          {/* Деньги идут первыми. Раньше касса и дебиторка стояли на
+              1230-й точке страницы — ниже двух больших таблиц, — и самые
+              весомые числа дня оказывались под сгибом, легче, чем реестр
+              продаж над ними. */}
+          {/* business snapshot: cash on hand, outstanding receivables */}
+          {(cashBalances || receivables) && (
+            <div className="space-y-3">
+              <div className="fui-section">
+                <span className="fui-section__label">Обзор бизнеса</span>
+                <span className="fui-section__line" />
+                <span className="fui-section__meta">
+                  {[cashBalances && 'касса', receivables && 'дебиторка'].filter(Boolean).length} узла
+                </span>
+              </div>
+              {/* Деньги стоят на поверхности крупным набором, без рамок:
+                  это главные числа страницы, и контейнер вокруг них
+                  ничего не добавляет — только уравнивает со счётчиками. */}
+              <div className="fui-band">
+                {cashBalances && (
+                  <button type="button" className="fui-band__cell" onClick={() => navigate('/admin/cash-summary')}>
+                    <span className="fui-band__k">Касса</span>
+                    <span className="fui-band__v">{fmt(cashTotal)}<small>₽</small></span>
+                    <span className="fui-band__m">
+                      {topCashRegister && <span>{topCashRegister.name} · {fmt(Math.round(topCashRegister.balance))} ₽</span>}
+                    </span>
+                  </button>
+                )}
+                {receivables && (
+                  <button
+                    type="button"
+                    className={`fui-band__cell ${receivables.total_count > 0 ? 'fui-band__cell--flag' : ''}`}
+                    style={{ '--flag': 'var(--color-warning)' }}
+                    onClick={() => navigate('/admin/receivables')}
+                  >
+                    <span className="fui-band__k">Дебиторская задолженность</span>
+                    <span className="fui-band__v">{fmt(receivables.total_amount)}<small>₽</small></span>
+                    <span className="fui-band__m">
+                      <span>{receivables.total_count} заказов · 30 дн.</span>
+                      {receivables.total_count > 0 && (
+                        <span className="fui-status fui-status--always fui-status--warning shrink-0">
+                          <span className="fui-status__t">Внимание</span>
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* sales today */}
           {sales !== null && (
             <BentoCard eyebrow="Продажи" title="Продажи сегодня" action={<GhostLink to="/admin/sales" label="Подробнее" />}>
@@ -886,7 +951,9 @@ export default function Dashboard() {
                         <div className="flex shrink-0 items-center gap-4 text-xs text-[color:var(--color-text-faint)]">
                           <span>{m.services_done} усл.</span>
                           <span className="font-semibold text-[color:var(--color-text-muted)]">{fmt(m.total_kredit)} ₽</span>
-                          <span className="font-semibold" style={{ color: 'var(--color-success)' }}>{fmt(m.total_salary)} ₽</span>
+                          {/* Зарплата мастера — не «успех», а просто сумма. Зелёное число
+                              стояло в каждой строке и делало колонку светофором. */}
+                          <span className="font-semibold text-[color:var(--color-text)]">{fmt(m.total_salary)} ₽</span>
                           {m.warnings_count > 0 && (
                             <span className="border px-1.5 py-0.5 font-semibold" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>{m.warnings_count}</span>
                           )}
@@ -895,7 +962,7 @@ export default function Dashboard() {
                     ))}
                     <div className="flex items-center justify-between border border-[color:var(--color-border)] bg-[color:var(--color-bg-subtle)] px-3 py-2.5">
                       <span className="text-sm font-semibold text-[color:var(--color-text)]">Итого · {mastersTotals.done} усл.</span>
-                      <span className="text-sm font-semibold" style={{ color: 'var(--color-success)' }}>{fmt(mastersTotals.salary)} ₽</span>
+                      <span className="text-sm font-semibold text-[color:var(--color-text)]">{fmt(mastersTotals.salary)} ₽</span>
                     </div>
                   </div>
                   {hiddenMastersCount > 0 && (
@@ -904,52 +971,6 @@ export default function Dashboard() {
                 </>
               )}
             </BentoCard>
-          )}
-
-          {/* business snapshot: cash on hand, outstanding receivables */}
-          {(cashBalances || receivables) && (
-            <div className="space-y-3">
-              <div className="fui-section">
-                <span className="fui-section__label">Обзор бизнеса</span>
-                <span className="fui-section__line" />
-                <span className="fui-section__meta">
-                  {[cashBalances && 'касса', receivables && 'дебиторка'].filter(Boolean).length} узла
-                </span>
-              </div>
-              {/* Деньги стоят на поверхности крупным набором, без рамок:
-                  это главные числа страницы, и контейнер вокруг них
-                  ничего не добавляет — только уравнивает со счётчиками. */}
-              <div className="fui-band">
-                {cashBalances && (
-                  <button type="button" className="fui-band__cell" onClick={() => navigate('/admin/cash-summary')}>
-                    <span className="fui-band__k">Касса</span>
-                    <span className="fui-band__v">{fmt(cashTotal)}<small>₽</small></span>
-                    <span className="fui-band__m">
-                      {topCashRegister && <span>{topCashRegister.name} · {fmt(Math.round(topCashRegister.balance))} ₽</span>}
-                    </span>
-                  </button>
-                )}
-                {receivables && (
-                  <button
-                    type="button"
-                    className={`fui-band__cell ${receivables.total_count > 0 ? 'fui-band__cell--flag' : ''}`}
-                    style={{ '--flag': 'var(--color-warning)' }}
-                    onClick={() => navigate('/admin/receivables')}
-                  >
-                    <span className="fui-band__k">Дебиторская задолженность</span>
-                    <span className="fui-band__v">{fmt(receivables.total_amount)}<small>₽</small></span>
-                    <span className="fui-band__m">
-                      <span>{receivables.total_count} заказов · 30 дн.</span>
-                      {receivables.total_count > 0 && (
-                        <span className="fui-status fui-status--always fui-status--warning shrink-0">
-                          <span className="fui-status__t">Внимание</span>
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                )}
-              </div>
-            </div>
           )}
 
           {/* Одна решётка вместо трёх сеток подряд: показатели задач,
