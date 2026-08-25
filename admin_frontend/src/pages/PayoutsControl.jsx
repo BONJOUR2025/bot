@@ -127,7 +127,7 @@ export default function PayoutsControl() {
   const [activeTab, setActiveTab] = useState('overview');
   const [severityFilter, setSeverityFilter] = useState(null);
   // Живые часы для мигающего курсора телеметрии скана — реальное
-  // время, а не выдуманная анимация, см. .payout-fui-cursor.
+  // время, а не выдуманная анимация, см. .fui-cursor.
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -273,7 +273,7 @@ export default function PayoutsControl() {
         <div className="space-y-4">
           {/* Скан-телеметрия: реальные счётчики по отфильтрованным строкам
               (filtered), не выдуманные цифры. Мигающий курсор — реальные
-              текущие часы, см. .payout-fui-cursor. */}
+              текущие часы, см. .fui-cursor. */}
           <div className="control-fui-readout">
             <span>SCAN://payouts.control</span><span className="sep">·</span>
             <span>СКАНИРОВАНИЕ: <b>{filtered.length}</b> заявок</span><span className="sep">·</span>
@@ -281,7 +281,7 @@ export default function PayoutsControl() {
             <span>ВЫСОКИЙ РИСК: <b style={{ color: scanTelemetry.highRisk ? 'var(--color-danger)' : undefined }}>{scanTelemetry.highRisk}</b></span><span className="sep">·</span>
             <span>
               {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:
-              <span className="payout-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span>
+              <span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span>
             </span>
           </div>
 
@@ -374,7 +374,7 @@ export default function PayoutsControl() {
                   return (
                     <span className="inline-flex items-center gap-1.5">
                       {isCritical && (
-                        <span className="control-fui-radar" title="Требует ручной проверки: смена реквизитов или ручное создание заявки">
+                        <span className="fui-radar fui-radar--alert" title="Требует ручной проверки: смена реквизитов или ручное создание заявки">
                           <i /><i /><i /><b />
                         </span>
                       )}

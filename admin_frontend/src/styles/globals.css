@@ -1993,7 +1993,11 @@ body.viewer3d-fs-active .app-card {
   container-type: inline-size;
 }
 .visual-glass .ui-metric--kpi {
-  font-size: clamp(0.8rem, calc(100cqw / (var(--kpi-len, 8) * 0.62)), 1.5rem);
+  /* Верхняя граница вынесена в переменную: механизм подгонки один на
+     всё приложение, а предел кегля у разных приборов свой — ведущий
+     показатель дашборда крупнее рядовой карточки. По умолчанию 1.5rem,
+     как было. */
+  font-size: clamp(0.8rem, calc(100cqw / (var(--kpi-len, 8) * 0.62)), var(--fui-value-max, 1.5rem));
   font-weight: 400;
   white-space: normal;
   overflow-wrap: break-word;
@@ -2291,6 +2295,11 @@ body.viewer3d-fs-active .app-card {
    Плотный «безрамочный» вид: заголовок капителью, строки разделены
    волосяной линией, зебра убрана (в стекле она читается грязью). */
 .visual-glass thead th {
+  /* Моноширинный набор заголовков распространяет язык таблиц ResponsiveTable
+     на восемь оставшихся сырых <table>: у них своя разметка (закреплённые
+     колонки, сводные строки), переносить их в общий компонент небезопасно,
+     а шапку они делят через это правило. */
+  font-family: var(--font-mono-ui);
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -2848,8 +2857,6 @@ body.viewer3d-fs-active .app-card {
 }
 .payout-fui-readout b { font-weight: 600; }
 .payout-fui-readout .sep { opacity: 0.4; }
-@keyframes payout-fui-blink { 50% { opacity: 0; } }
-.payout-fui-cursor { animation: payout-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
 .payout-fui-hud {
   display: flex;
@@ -2903,19 +2910,9 @@ body.viewer3d-fs-active .app-card {
   z-index: 1;
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
   opacity: 0.45;
-  animation: payout-fui-scan-move 5s linear infinite;
+  top: 0;
+  animation: fui-scan-line 5s linear infinite;
 }
-@keyframes payout-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
-
-.payout-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.payout-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-primary);
-  animation: payout-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.payout-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.payout-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.payout-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-primary); }
-@keyframes payout-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
 
 .payout-fui-reticle { position: absolute; inset: -4px; border: 1px dashed color-mix(in srgb, var(--color-primary) 55%, transparent); border-radius: 999px; pointer-events: none; }
 .payout-fui-reticle::before, .payout-fui-reticle::after { content: ''; position: absolute; background: var(--color-primary); opacity: 0.6; }
@@ -2929,12 +2926,6 @@ body.viewer3d-fs-active .app-card {
 .payout-fui-dotgrid {
   background-image: radial-gradient(color-mix(in srgb, var(--color-primary) 18%, transparent) 1px, transparent 1px);
   background-size: 22px 22px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .payout-fui-cursor,
-  .payout-fui-scan,
-  .payout-fui-radar i { animation: none; }
 }
 
 /* ── FUI-слой дебиторки (Дебиторка) ──────────────────────────────
@@ -2962,15 +2953,9 @@ body.viewer3d-fs-active .app-card {
 .receivable-fui-readout b { font-weight: 600; }
 .receivable-fui-readout .sep { opacity: 0.4; }
 
-.receivable-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.receivable-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
-  animation: receivable-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.receivable-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.receivable-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.receivable-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
-@keyframes receivable-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+
+
 
 .receivable-fui-agebar {
   display: block;
@@ -2987,10 +2972,6 @@ body.viewer3d-fs-active .app-card {
   height: 100%;
   border-radius: 999px;
   transition: width 0.4s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .receivable-fui-radar i { animation: none; }
 }
 
 /* ── FUI-слой кассовых перемещений (Кассовые перемещения) ────────
@@ -3016,20 +2997,10 @@ body.viewer3d-fs-active .app-card {
 }
 .cashmove-fui-readout b { font-weight: 600; }
 .cashmove-fui-readout .sep { opacity: 0.4; }
-@keyframes cashmove-fui-blink { 50% { opacity: 0; } }
-.cashmove-fui-cursor { animation: cashmove-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
-/* «Вы здесь» — радар-пинг рядом с датой сегодняшнего дня в таблице/
-   карточках остатков. Клон .payout-fui-radar под своим префиксом. */
-.cashmove-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.cashmove-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-primary);
-  animation: cashmove-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.cashmove-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.cashmove-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.cashmove-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-primary); }
-@keyframes cashmove-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+
+
 
 /* HUD-бейдж очереди «Без категории» — не декоративный счётчик, а
    кликабельный переход к отфильтрованному списку (см. selectCategory
@@ -3050,18 +3021,12 @@ body.viewer3d-fs-active .app-card {
 .cashmove-fui-queue__dot { position: relative; display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; }
 .cashmove-fui-queue__dot i {
   position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
-  animation: cashmove-fui-ping 2s ease-out infinite; opacity: 0;
+  animation: fui-ping 2s ease-out infinite; opacity: 0;
 }
 .cashmove-fui-queue__dot i:nth-child(2) { animation-delay: 0.65s; }
 .cashmove-fui-queue__dot b { position: absolute; inset: 1.5px; border-radius: 999px; background: var(--color-danger); }
 .cashmove-fui-queue__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-faint); white-space: nowrap; }
 .cashmove-fui-queue__count { font-size: 13px; font-weight: 700; color: var(--color-danger); }
-
-@media (prefers-reduced-motion: reduce) {
-  .cashmove-fui-cursor,
-  .cashmove-fui-radar i,
-  .cashmove-fui-queue__dot i { animation: none; }
-}
 
 /* ── FUI-слой платёжного календаря (Платёжный календарь) ─────────
    Три мотива по аналогии со слоем ленты выплат выше, но с собственным
@@ -3082,23 +3047,13 @@ body.viewer3d-fs-active .app-card {
 .calendar-fui-countdown--warning { color: var(--color-warning); }
 .calendar-fui-countdown--danger  { color: var(--color-danger); }
 
-.calendar-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.calendar-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
-  animation: calendar-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.calendar-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.calendar-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.calendar-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
-@keyframes calendar-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+
+
 
 .calendar-fui-split { display: flex; gap: 0; align-items: stretch; }
 .calendar-fui-rail { flex: 0 0 6px; display: flex; flex-direction: column; gap: 3px; padding: 0.2rem 0; margin-right: 0.9rem; }
 .calendar-fui-rail i { display: block; width: 6px; height: 10px; border-radius: 2px; }
-
-@media (prefers-reduced-motion: reduce) {
-  .calendar-fui-radar i { animation: none; }
-}
 
 /* ── FUI-слой штрафов и премий (Штрафы и премии) ─────────────────
    Тот же рецепт, что у payout-fui-* (телеметрия-ридаут, HUD-метка),
@@ -3478,29 +3433,6 @@ body.viewer3d-fs-active .app-card {
 .visual-glass [class*='text-[color:var(--color-primary)]'] {
   color: var(--glass-on-soft);
 }
-
-/* ── FUI-слой контроля выплат (Контроль выплат) ──────────────────
-   Собственный префикс control-fui-, чтобы не привязывать эту страницу
-   к payout-fui-* (переиспользуется только генерик .payout-fui-cursor —
-   он не несёт специфики ленты выплат). Три элемента: скан-телеметрия
-   над таблицей «Список» (реальные счётчики по filtered), шкала угрозы
-   в отдельной колонке строки (замена нетокенизированного rowColor()/
-   bg-red-50 и т.п. — невидимого в тёмной теме), радар-пинг у ФИО для
-   заявок с manual_created/changed_bank_data. */
-.control-fui-readout {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11px;
-  letter-spacing: 0.03em;
-  color: var(--color-text-faint);
-  padding: 0.55rem 0.9rem;
-  border: 1px solid var(--glass-hair);
-  border-radius: 0.6rem;
-  background: var(--glass-shell);
-}
 .control-fui-readout b { font-weight: 600; }
 .control-fui-readout .sep { opacity: 0.4; }
 
@@ -3522,19 +3454,9 @@ body.viewer3d-fs-active .app-card {
   transition: width 0.4s ease, background 0.4s ease;
 }
 
-.control-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.control-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
-  animation: control-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.control-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.control-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.control-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
-@keyframes control-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .control-fui-radar i { animation: none; }
-}
+
+
 
 /* ── FUI-слой сводного отчёта по кассе (Сводный отчёт (касса)) ────
    Ровно два элемента, потому что жанр страницы — не оперативная лента,
@@ -3611,8 +3533,6 @@ body.viewer3d-fs-active .app-card {
 }
 .salon-fui-readout b { font-weight: 600; }
 .salon-fui-readout .sep { opacity: 0.4; }
-@keyframes salon-fui-blink { 50% { opacity: 0; } }
-.salon-fui-cursor { animation: salon-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
 .salon-fui-frame { position: relative; overflow: hidden; }
 .salon-fui-corner-tr,
@@ -3641,24 +3561,8 @@ body.viewer3d-fs-active .app-card {
   z-index: 1;
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
   opacity: 0.4;
-  animation: salon-fui-scan-move 6s linear infinite;
-}
-@keyframes salon-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
-
-.salon-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.salon-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-success);
-  animation: salon-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.salon-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.salon-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.salon-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-success); }
-@keyframes salon-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .salon-fui-cursor,
-  .salon-fui-scan,
-  .salon-fui-radar i { animation: none; }
+  top: 0;
+  animation: fui-scan-line 6s linear infinite;
 }
 
 /* ── FUI-слой клиентов (Клиенты) ──────────────────────────────────
@@ -3692,15 +3596,9 @@ body.viewer3d-fs-active .app-card {
 .client-fui-stamp b { font-weight: 600; color: var(--color-text); }
 .client-fui-stamp .sep { opacity: 0.4; }
 
-.client-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.client-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
-  animation: client-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.client-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.client-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.client-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
-@keyframes client-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+
+
 
 .client-fui-frame { position: relative; overflow: hidden; }
 .client-fui-corner-tr,
@@ -3729,13 +3627,8 @@ body.viewer3d-fs-active .app-card {
   z-index: 1;
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
   opacity: 0.4;
-  animation: client-fui-scan-move 6s linear infinite;
-}
-@keyframes client-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .client-fui-radar i,
-  .client-fui-scan { animation: none; }
+  top: 0;
+  animation: fui-scan-line 6s linear infinite;
 }
 
 /* ── FUI-слой счётчика посетителей (Счётчик посетителей) ──────────
@@ -3775,8 +3668,6 @@ body.viewer3d-fs-active .app-card {
 }
 .visitor-fui-readout b { font-weight: 600; }
 .visitor-fui-readout .sep { opacity: 0.4; }
-@keyframes visitor-fui-blink { 50% { opacity: 0; } }
-.visitor-fui-cursor { animation: visitor-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
 .visitor-fui-frame { position: relative; overflow: hidden; }
 .visitor-fui-corner-tr,
@@ -3805,28 +3696,12 @@ body.viewer3d-fs-active .app-card {
   z-index: 1;
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
   opacity: 0.4;
-  animation: visitor-fui-scan-move 7s linear infinite;
+  top: 0;
+  animation: fui-scan-line 7s linear infinite;
 }
-@keyframes visitor-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
-
-.visitor-fui-radar { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; }
-.visitor-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
-  animation: visitor-fui-ping 1.8s ease-out infinite; opacity: 0;
-}
-.visitor-fui-radar i:nth-child(2) { animation-delay: 0.6s; }
-.visitor-fui-radar i:nth-child(3) { animation-delay: 1.2s; }
-.visitor-fui-radar b { position: absolute; inset: 1.5px; border-radius: 999px; background: var(--color-danger); }
-@keyframes visitor-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4); opacity: 0; } }
 
 .visitor-fui-spark { display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 0.4rem; }
 .visitor-fui-spark i { display: block; width: 4px; border-radius: 2px 2px 0 0; background: var(--color-primary); }
-
-@media (prefers-reduced-motion: reduce) {
-  .visitor-fui-cursor,
-  .visitor-fui-scan,
-  .visitor-fui-radar i { animation: none; }
-}
 
 /* ── FUI-слой перемещения продажи (Перемещение продажи) ──
    Страница переносит сумму продажи из одной категории/сотрудника в
@@ -3862,8 +3737,6 @@ body.viewer3d-fs-active .app-card {
 }
 .transfer-fui-readout b { font-weight: 600; color: var(--color-text); }
 .transfer-fui-readout .sep { opacity: 0.4; }
-@keyframes transfer-fui-blink { 50% { opacity: 0; } }
-.transfer-fui-cursor { animation: transfer-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
 .transfer-fui-route {
   display: flex;
@@ -3941,21 +3814,9 @@ body.viewer3d-fs-active .app-card {
   100% { left: 6%;  opacity: 0.9; }
 }
 
-.transfer-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.transfer-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-primary);
-  animation: transfer-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.transfer-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.transfer-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.transfer-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-primary); }
-@keyframes transfer-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .transfer-fui-cursor,
-  .transfer-fui-radar i,
-  .transfer-fui-route__connector--live .transfer-fui-route__dot { animation: none; }
-}
+
+
 
 /* ── FUI-слой продаж (Продажи) ────────────────────────────────────
    Страница уже плотная (KpiStat-ряд, Leaderboard, PlanGauges,
@@ -3988,8 +3849,6 @@ body.viewer3d-fs-active .app-card {
 }
 .sales-fui-readout b { font-weight: 600; }
 .sales-fui-readout .sep { opacity: 0.4; }
-@keyframes sales-fui-blink { 50% { opacity: 0; } }
-.sales-fui-cursor { animation: sales-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
 .sales-fui-ticker {
   display: flex;
@@ -4005,20 +3864,9 @@ body.viewer3d-fs-active .app-card {
 .sales-fui-spark { display: flex; align-items: flex-end; gap: 2px; height: 30px; }
 .sales-fui-spark i { display: block; width: 5px; border-radius: 2px 2px 0 0; background: var(--color-primary); }
 
-.sales-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.sales-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-success);
-  animation: sales-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.sales-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.sales-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.sales-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-success); }
-@keyframes sales-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .sales-fui-cursor,
-  .sales-fui-radar i { animation: none; }
-}
+
+
 
 /* ── FUI-слой планов продаж (Планы продаж) ────────────────────────
    Мотив «пункт управления целями», под собственным префиксом
@@ -4055,8 +3903,6 @@ body.viewer3d-fs-active .app-card {
 }
 .plan-fui-readout b { font-weight: 600; }
 .plan-fui-readout .sep { opacity: 0.4; }
-@keyframes plan-fui-blink { 50% { opacity: 0; } }
-.plan-fui-cursor { animation: plan-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
 .plan-fui-countdown {
   display: block;
@@ -4070,15 +3916,9 @@ body.viewer3d-fs-active .app-card {
 .plan-fui-countdown--warning { color: var(--color-warning); }
 .plan-fui-countdown--danger  { color: var(--color-danger); }
 
-.plan-fui-radar { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; }
-.plan-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-success);
-  animation: plan-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.plan-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.plan-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.plan-fui-radar b { position: absolute; inset: 1.5px; border-radius: 999px; background: var(--color-success); }
-@keyframes plan-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+
+
+
 
 .plan-fui-locked {
   display: inline-flex;
@@ -4094,11 +3934,6 @@ body.viewer3d-fs-active .app-card {
   border-radius: 999px;
   padding: 0.12rem 0.5rem;
   background: color-mix(in srgb, var(--color-success) 10%, transparent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .plan-fui-cursor,
-  .plan-fui-radar i { animation: none; }
 }
 
 /* ── FUI-слой 3D сканера (3D сканер) ── ────────────────────────────
@@ -4164,10 +3999,9 @@ body.viewer3d-fs-active .app-card {
   z-index: 1;
   background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
   opacity: 0.5;
-  animation: scan-fui-scan-move 1.6s linear infinite;
+  top: 0;
+  animation: fui-scan-line 1.6s linear infinite;
 }
-@keyframes scan-fui-scan-move { 0% { top: 0%; } 100% { top: 100%; } }
-
 .scan-fui-reticle { position: absolute; inset: -4px -6px -1px -6px; pointer-events: none; }
 .scan-fui-reticle::before,
 .scan-fui-reticle::after {
@@ -4228,8 +4062,6 @@ body.viewer3d-fs-active .app-card {
 }
 .employee-fui-strip b { font-weight: 600; }
 .employee-fui-strip .sep { opacity: 0.4; }
-@keyframes employee-fui-blink { 50% { opacity: 0; } }
-.employee-fui-cursor { animation: employee-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
 .employee-fui-tenure {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -4239,20 +4071,9 @@ body.viewer3d-fs-active .app-card {
   white-space: nowrap;
 }
 
-.employee-fui-radar { position: relative; display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; }
-.employee-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
-  animation: employee-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.employee-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.employee-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.employee-fui-radar b { position: absolute; inset: 1.5px; border-radius: 999px; background: var(--color-danger); }
-@keyframes employee-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .employee-fui-cursor,
-  .employee-fui-radar i { animation: none; }
-}
+
+
 
 /* ── FUI-слой имущества (Имущество) ── ─────────────────────────────
    Мотив «инвентарный учёт/бирки», собственный префикс asset-fui-,
@@ -4289,8 +4110,6 @@ body.viewer3d-fs-active .app-card {
 }
 .asset-fui-readout b { font-weight: 600; }
 .asset-fui-readout .sep { opacity: 0.4; }
-@keyframes asset-fui-blink { 50% { opacity: 0; } }
-.asset-fui-cursor { animation: asset-fui-blink 1s step-start infinite; color: var(--color-primary); margin-left: 0.2em; }
 
 .asset-fui-tag {
   display: inline-flex;
@@ -4307,20 +4126,9 @@ body.viewer3d-fs-active .app-card {
   width: fit-content;
 }
 
-.asset-fui-radar { position: relative; display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; }
-.asset-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-danger);
-  animation: asset-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.asset-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.asset-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.asset-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-danger); }
-@keyframes asset-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .asset-fui-cursor,
-  .asset-fui-radar i { animation: none; }
-}
+
+
 
 /* ── FUI-слой архива (Архив) ── ────────────────────────────────────
    Мотив «опечатанное холодное хранилище», собственный префикс
@@ -4410,19 +4218,17 @@ body.viewer3d-fs-active .app-card {
 .birthday-fui-strip b { font-weight: 600; color: var(--color-text-muted); }
 .birthday-fui-strip .sep { opacity: 0.4; }
 .birthday-fui-strip__clock { display: inline-flex; align-items: baseline; font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
-@keyframes birthday-fui-blink { 50% { opacity: 0.15; } }
-.birthday-fui-strip__colon { animation: birthday-fui-blink 1s step-start infinite; }
+.birthday-fui-strip__colon { animation: fui-blink 1s step-start infinite; }
 .birthday-fui-today-count { color: var(--color-warning); }
 
 .birthday-fui-pulse { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 9px; height: 9px; flex: 0 0 9px; }
 .birthday-fui-pulse i {
   position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--color-warning);
-  animation: birthday-fui-ping 1.8s ease-out infinite; opacity: 0;
+  animation: fui-ping 1.8s ease-out infinite; opacity: 0;
 }
 .birthday-fui-pulse i:nth-child(2) { animation-delay: 0.6s; }
 .birthday-fui-pulse i:nth-child(3) { animation-delay: 1.2s; }
 .birthday-fui-pulse b { position: absolute; inset: 2px; border-radius: 999px; background: var(--color-warning); }
-@keyframes birthday-fui-ping { 0% { transform: scale(1); opacity: 0.95; } 100% { transform: scale(4.4); opacity: 0; } }
 
 .birthday-fui-today-tag {
   display: inline-flex;
@@ -4500,8 +4306,6 @@ body.viewer3d-fs-active .app-card {
 }
 .recruit-fui-strip b { font-weight: 600; }
 .recruit-fui-strip .sep { opacity: 0.4; }
-@keyframes recruit-fui-blink { 50% { opacity: 0; } }
-.recruit-fui-cursor { animation: recruit-fui-blink 1s step-start infinite; color: var(--color-primary); }
 
 .recruit-fui-ai-tag {
   display: inline-flex;
@@ -4519,29 +4323,6 @@ body.viewer3d-fs-active .app-card {
   white-space: nowrap;
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
-.recruit-fui-ai-dot {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--color-primary);
-  animation: recruit-fui-ai-pulse 1.4s ease-in-out infinite;
-}
-@keyframes recruit-fui-ai-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(1.6); }
-}
-
-.recruit-fui-radar { position: relative; display: inline-flex; width: 9px; height: 9px; flex: 0 0 9px; }
-.recruit-fui-radar i {
-  position: absolute; inset: 0; border-radius: 999px; border: 1px solid currentColor;
-  animation: recruit-fui-ping 2s ease-out infinite; opacity: 0;
-}
-.recruit-fui-radar i:nth-child(2) { animation-delay: 0.65s; }
-.recruit-fui-radar i:nth-child(3) { animation-delay: 1.3s; }
-.recruit-fui-radar b { position: absolute; inset: 2px; border-radius: 999px; background: currentColor; }
-@keyframes recruit-fui-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
-
 .recruit-fui-age {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 10px;
@@ -4549,8 +4330,1609 @@ body.viewer3d-fs-active .app-card {
   white-space: nowrap;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   FUI: РОЛЕВОЙ СЛОЙ
+   ═══════════════════════════════════════════════════════════════
+   Примитивы названы по роли, а не по странице. Существующие
+   *-fui-* (payout-, salon-, …) остаются как есть и мигрируют
+   отдельно — здесь только новая система, поверх которой строится
+   дашборд.
+
+   Принцип движения: STATIC BY DEFAULT, ALIVE WHEN SOMETHING
+   HAPPENS. Бесконечные циклы разрешены ровно двум примитивам —
+   .fui-radar (идёт наблюдение) и .fui-status--live (эфир), и оба
+   рассчитаны на единичные экземпляры в кадре. Всё остальное
+   запускается классом-событием и само снимается.
+
+   Каждый элемент несёт смысл:
+     radar    → идёт наблюдение
+     scan     → идёт обработка
+     reticle  → объект выбран
+     readout  → техническая метаинформация
+     frame    → важный модуль данных
+     pulse    → значение только что изменилось
+     sweep    → переход завершён успешно
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Анимационные примитивы ─────────────────────────────────────
+   Шесть кейфреймов на всю систему. Только transform и opacity:
+   на iOS анимация filter/box-shadow заставляет перерисовывать
+   слой на каждом кадре, а transform уходит на композитор. */
+@keyframes fui-ping   { 0% { transform: scale(1); opacity: 0.55; } 100% { transform: scale(2.8); opacity: 0; } }
+@keyframes fui-blink  { 50% { opacity: 0; } }
+@keyframes fui-scan-line { 0% { top: 0%; } 100% { top: 100%; } }
+@keyframes fui-scan   { 0% { transform: translate3d(0, -100%, 0); } 100% { transform: translate3d(0, 1100%, 0); } }
+@keyframes fui-sweep  { 0% { transform: translate3d(-110%, 0, 0); } 100% { transform: translate3d(110%, 0, 0); } }
+@keyframes fui-lift   { 0% { opacity: 0; transform: translate3d(0, 6px, 0); } 100% { opacity: 1; transform: none; } }
+@keyframes fui-accent { 0% { opacity: 0; transform: scale(0.94); } 40% { opacity: 1; } 100% { opacity: 0; transform: scale(1.04); } }
+
+/* ── Рамка модуля + угловые скобки ──────────────────────────────
+   Два псевдоэлемента рисуют пару углов: каждый несёт две стороны.
+   Дешевле отдельных узлов и не мешает содержимому. */
+.fui-frame { position: relative; }
+.fui-frame::before,
+.fui-frame::after {
+  content: '';
+  position: absolute;
+  width: var(--fui-bracket-len);
+  height: var(--fui-bracket-len);
+  border: 1px solid transparent;
+  pointer-events: none;
+  opacity: 0.9;
+  transition: border-color var(--fui-t-normal) var(--glass-ease);
+}
+.fui-frame::before {
+  top: 7px;
+  left: 7px;
+  border-top-color: var(--fui-bracket);
+  border-left-color: var(--fui-bracket);
+}
+.fui-frame::after {
+  bottom: 7px;
+  right: 7px;
+  border-bottom-color: var(--fui-bracket);
+  border-right-color: var(--fui-bracket);
+}
+/* Полный набор из четырёх углов — для модулей уровня PRIMARY. */
+.fui-frame__c {
+  position: absolute;
+  width: var(--fui-bracket-len);
+  height: var(--fui-bracket-len);
+  border: 1px solid transparent;
+  pointer-events: none;
+}
+.fui-frame__c--tr { top: 7px; right: 7px; border-top-color: var(--fui-bracket); border-right-color: var(--fui-bracket); }
+.fui-frame__c--bl { bottom: 7px; left: 7px; border-bottom-color: var(--fui-bracket); border-left-color: var(--fui-bracket); }
+
+/* ── Техническая сетка ──────────────────────────────────────────
+   Маска гасит сетку к краям, чтобы она не выглядела наклеенной
+   плашкой. Статична: анимировать background-position — это
+   перерисовка всего блока каждый кадр. */
+.fui-grid { position: relative; }
+.fui-grid__ink {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--fui-grid-ink) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--fui-grid-ink) 1px, transparent 1px);
+  background-size: var(--fui-grid-size) var(--fui-grid-size);
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 0%, #000 15%, transparent 78%);
+  mask-image: radial-gradient(120% 90% at 50% 0%, #000 15%, transparent 78%);
+}
+/* Точечный вариант — для мелких модулей, где линии дают муар. */
+.fui-grid__ink--dots {
+  background-image: radial-gradient(var(--fui-grid-ink) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* ── Радар: идёт наблюдение ─────────────────────────────────────
+   Три кольца со сдвигом фазы. Модификатор задаёт смысл, а не вкус
+   страницы: раньше один и тот же радар был primary на выплатах,
+   success на салонах и danger на счётчиках. */
+.fui-radar {
+  position: relative;
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  --fui-radar-ink: var(--fui-active);
+}
+.fui-radar--live  { --fui-radar-ink: var(--fui-live); }
+.fui-radar--warn  { --fui-radar-ink: var(--fui-warning); }
+.fui-radar--alert { --fui-radar-ink: var(--fui-error); }
+.fui-radar i {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 1px solid var(--fui-radar-ink);
+  opacity: 0;
+  animation: fui-ping 2.4s ease-out infinite;
+}
+.fui-radar i:nth-child(2) { animation-delay: 0.8s; }
+.fui-radar i:nth-child(3) { animation-delay: 1.6s; }
+.fui-radar b {
+  position: absolute;
+  inset: 2px;
+  border-radius: 999px;
+  background: var(--fui-radar-ink);
+}
+
+/* ── Статусы ────────────────────────────────────────────────────
+   Цвет — только половина языка. Вторую несут форма метки (круг,
+   кольцо, квадрат, ромб) и наличие движения, поэтому состояния
+   различимы и без цветовосприятия. */
+.fui-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono-ui);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fui-status-ink, var(--color-text-faint));
+  white-space: nowrap;
+}
+.fui-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: var(--fui-status-ink, currentColor);
+}
+.fui-status--live       { --fui-status-ink: var(--fui-live); }
+.fui-status--active     { --fui-status-ink: var(--fui-active); }
+.fui-status--processing { --fui-status-ink: var(--fui-processing); }
+.fui-status--paused     { --fui-status-ink: var(--fui-paused); }
+.fui-status--warning    { --fui-status-ink: var(--fui-warning); }
+.fui-status--error      { --fui-status-ink: var(--fui-error); }
+.fui-status--success    { --fui-status-ink: var(--fui-success); }
+/* Форма как второй канал различения. */
+.fui-status--paused::before     { border-radius: 1px; }
+.fui-status--processing::before { border-radius: 1px; transform: rotate(45deg); }
+.fui-status--warning::before,
+.fui-status--error::before      { background: transparent; border: 1.5px solid var(--fui-status-ink); }
+.fui-status--live::before       { animation: fui-blink 2.6s steps(1, end) infinite; }
+/* Компактный режим: на узкой карточке остаётся только метка-точка.
+   Класс Tailwind hidden здесь не годится — ролевой слой подключён
+   ниже утилит, и его display: inline-flex переспорил бы hidden,
+   из-за чего подпись прибора схлопывалась до одной буквы. */
+/* Подпись прибора. Отдельный класс, а не .ui-label: разрядка здесь
+   вдвое тише (0.08em против 0.16em) — в колонке шириной 123px на 375px
+   слово «ЗАДОЛЖЕННОСТЬ» с полной разрядкой не помещается даже во всю
+   ширину модуля. Две строки максимум, дальше многоточие; фиксированная
+   высота держит значения соседних приборов на одной линии. */
+.fui-instrument__label {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.4em;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  overflow-wrap: break-word;
+}
+
+.fui-status__t { display: none; }
+@media (min-width: 640px) {
+  .fui-status__t { display: inline; }
+}
+.fui-status--always .fui-status__t { display: inline; }
+
+/* ── Показание: техническая метаинформация ──────────────────────
+   Моноширинная строка под данными. Разделители — точки-паузы, а не
+   палки: палка читается как граница таблицы. */
+.fui-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.fui-readout b {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+.fui-readout__sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--fui-hair);
+  flex: 0 0 3px;
+}
+/* Строка в оправе. */
+.fui-readout--cased {
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--fui-edge);
+  border-radius: 0.55rem;
+  background: var(--glass-shell);
+}
+
+/* ── Курсор терминала ───────────────────────────────────────────*/
+.fui-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  vertical-align: -0.14em;
+  background: var(--color-primary);
+  opacity: 0.75;
+  animation: fui-blink 1.15s steps(1, end) infinite;
+}
+
+/* ── Прицел: объект выбран ──────────────────────────────────────*/
+.fui-reticle {
+  position: absolute;
+  inset: -4px;
+  border: 1px dashed var(--fui-edge-active);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.fui-reticle::before,
+.fui-reticle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  height: 4px;
+  background: var(--color-primary);
+  opacity: 0.6;
+  transform: translateX(-50%);
+}
+.fui-reticle::before { top: -3px; }
+.fui-reticle::after  { bottom: -3px; }
+
+/* ── Рейка: сегментированный индикатор объёма ───────────────────*/
+.fui-rail {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 14px;
+}
+.fui-rail i {
+  display: block;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--fui-hair);
+  transition: background var(--fui-t-normal) var(--glass-ease);
+}
+.fui-rail i.is-on { background: var(--color-primary); }
+
+/* ── Штамп: неизменяемая техническая метка ──────────────────────*/
+.fui-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--fui-edge-strong);
+  border-radius: 0.3rem;
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  background: repeating-linear-gradient(-45deg, transparent 0 4px, var(--fui-grid-ink) 4px 8px);
+}
+
+/* ── Скан: идёт обработка ───────────────────────────────────────
+   Только на время процесса: класс снимается по завершении. */
+.fui-scan {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.fui-scan::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 9%;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-primary) 22%, transparent), transparent);
+  animation: fui-scan 2.6s linear infinite;
+}
+
+/* ── Проход света: переход завершён ─────────────────────────────
+   Однократно, по классу-событию. */
+.fui-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.fui-sweep::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent);
+  animation: fui-sweep 900ms var(--glass-ease-out) 1;
+}
+
+/* ── Пульс значения: данные только что обновились ───────────────
+   Локальная вспышка вокруг конкретного числа, а не всей карточки.
+   Кольцо рисуется псевдоэлементом и не влияет на раскладку. */
+.fui-pulse { position: relative; }
+.fui-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -6px -10px;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
+  pointer-events: none;
+  animation: fui-accent 820ms var(--glass-ease-out) 1;
+}
+.fui-pulse--up::after   { border-color: color-mix(in srgb, var(--color-success) 60%, transparent); }
+.fui-pulse--down::after { border-color: color-mix(in srgb, var(--color-danger) 55%, transparent); }
+
+/* ── Дельта ─────────────────────────────────────────────────────*/
+.fui-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono-ui);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.fui-delta--up   { color: var(--color-success); }
+.fui-delta--down { color: var(--color-danger); }
+.fui-delta--flat { color: var(--color-text-faint); }
+
+/* ── Технический разделитель ────────────────────────────────────
+   Линия с засечкой: отделяет группы внутри модуля заметнее
+   обычного border, но тише заголовка. */
+.fui-sep {
+  position: relative;
+  height: 1px;
+  background: var(--fui-edge);
+}
+.fui-sep::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 14px;
+  height: 5px;
+  border-left: 1px solid var(--fui-bracket);
+  border-top: 1px solid var(--fui-bracket);
+}
+
+/* ── Реакция нажатия ────────────────────────────────────────────*/
+.fui-press { transition: transform var(--fui-t-micro) var(--glass-ease); }
+.fui-press:active { transform: scale(0.985); }
+
+/* ── Появление модуля ───────────────────────────────────────────
+   Короче и суше, чем .ui-reveal: приборный щиток собирается, а не
+   выплывает. Задержка задаётся переменной на элементе. */
+.fui-in {
+  animation: fui-lift 420ms var(--glass-ease-out) both;
+  animation-delay: var(--fui-in-delay, 0ms);
+}
+
+/* ── Единый reduced-motion для всего ролевого слоя ──────────────
+   Состояния сохраняются, движение снимается: радар остаётся точкой
+   в кольце, скан — статичной полосой, пульс не проигрывается,
+   появление становится мгновенным. */
 @media (prefers-reduced-motion: reduce) {
-  .recruit-fui-cursor,
-  .recruit-fui-ai-dot,
-  .recruit-fui-radar i { animation: none; }
+  .fui-radar i,
+  .fui-status--live::before,
+  .fui-cursor,
+  .fui-scan::before,
+  .fui-sweep::before,
+  .fui-in {
+    animation: none;
+  }
+  .fui-radar i:first-child { opacity: 0.5; }
+  .fui-in { opacity: 1; transform: none; }
+  .fui-scan::before { top: 45%; }
+  .fui-pulse::after { display: none; }
+  .fui-press:active { transform: none; }
+}
+
+/* ── Среда: очень медленный дрейф фона ──────────────────────────
+   Орбы разнесены по двум слоям и расходятся в противоположные
+   стороны — получается едва заметный параллакс, из-за которого фон
+   перестаёт читаться как приклеенная картинка. Цикл 78 секунд:
+   в кадре движение неразличимо, но интерфейс перестаёт быть мёртвым.
+
+   Оба слоя увеличены (scale 1.12): при сдвиге на 1.5% край
+   гарантированно не выезжает и не открывает голый фон.
+
+   Анимируется только transform — слой уходит на композитор и не
+   перерисовывается. Это принципиально для iOS: анимация
+   background-position или filter здесь стоила бы перерисовки
+   полноэкранного слоя каждый кадр. */
+@keyframes fui-drift-a {
+  0%   { transform: scale(1.12) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.12) translate3d(1.4%, -1.1%, 0); }
+  100% { transform: scale(1.12) translate3d(0, 0, 0); }
+}
+@keyframes fui-drift-b {
+  0%   { transform: scale(1.14) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.14) translate3d(-1.6%, 1.3%, 0); }
+  100% { transform: scale(1.14) translate3d(0, 0, 0); }
+}
+
+.visual-glass body::before {
+  /* Базовый цвет ушёл на сам body (см. ниже): слой со свечениями
+     теперь двигается, и держать на нём заливку нельзя. */
+  background:
+    radial-gradient(52vw 52vw at 8% -6%, var(--glass-orb-a), transparent 62%),
+    radial-gradient(46vw 46vw at 96% 104%, var(--glass-orb-b), transparent 62%);
+  will-change: transform;
+  animation: fui-drift-a var(--fui-t-ambient) ease-in-out infinite;
+}
+.visual-glass body {
+  background-color: var(--color-bg);
+}
+.visual-glass body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(34vw 34vw at 62% 48%, var(--glass-orb-c), transparent 64%);
+  will-change: transform;
+  animation: fui-drift-b calc(var(--fui-t-ambient) * 1.35) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visual-glass body::before,
+  .visual-glass body::after {
+    animation: none;
+  }
+}
+
+/* ── FUI: слой графиков ─────────────────────────────────────────
+   До сих пор графиков в дизайн-системе не существовало вовсе: ни
+   одного правила recharts в CSS, пятнадцать страниц настраивали оси
+   и подсказки инлайном, и только одной сетки нашлось семь разных
+   вариантов. Два графика вообще рисовали подсказку браузерным
+   умолчанием — белую коробку поверх тёмной темы.
+
+   Слой намеренно сделан на CSS, а не на пропсах: так он действует и
+   на те графики, которые ещё не переведены на общую тему. Данные
+   остаются главным слоем — сетка тише текста, подсказка не светится,
+   активная точка лишь обозначается кольцом. */
+
+/* Подсказка. Инлайновых стилей у графиков больше нет — единственный
+   оставался на дашборде и снят, поэтому !important здесь не нужен. */
+.recharts-default-tooltip,
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--color-modal-bg);
+  border: 1px solid var(--fui-edge-strong);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  box-shadow: var(--glass-ambient);
+}
+.recharts-tooltip-label {
+  font-family: var(--font-mono-ui);
+  font-size: 10px !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-faint) !important;
+  margin-bottom: 0.35rem !important;
+}
+.recharts-tooltip-item {
+  font-size: 12px !important;
+  color: var(--color-text) !important;
+  padding: 0.1rem 0 !important;
+}
+.recharts-tooltip-item-value,
+.recharts-tooltip-item-separator {
+  font-family: var(--font-mono-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text) !important;
+}
+/* Появление подсказки — короткое и без движения по горизонтали:
+   она и так следует за курсором, и любой сдвиг читается как рывок. */
+.recharts-tooltip-wrapper {
+  transition: transform var(--fui-t-micro) var(--glass-ease);
+  outline: none;
+}
+
+/* Сетка и оси: единая трактовка вместо семи. */
+.recharts-cartesian-grid line {
+  stroke: var(--fui-edge);
+}
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  stroke: var(--fui-edge);
+}
+.recharts-cartesian-axis-tick-value {
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  fill: var(--color-text-faint);
+}
+
+/* Подсветка наведения: у полос — заливка тише фона, у линий —
+   вертикальная нить, а не серый прямоугольник во всю высоту. */
+.recharts-rectangle.recharts-tooltip-cursor {
+  fill: var(--glass-shell-hover);
+}
+.recharts-curve.recharts-tooltip-cursor {
+  stroke: var(--fui-edge-active);
+  stroke-dasharray: 3 3;
+}
+
+/* Активная точка — кольцо, а не жирная клякса. */
+.recharts-active-dot circle {
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
+/* Легенда в общей типографике. */
+.recharts-legend-item-text {
+  font-size: 11px !important;
+  color: var(--color-text-muted) !important;
+}
+
+/* Отрисовка линии при появлении: recharts анимирует свои пути сам,
+   здесь только гасим это при reduced-motion — иначе график
+   «рисуется» даже у тех, кто движение отключил. */
+@media (prefers-reduced-motion: reduce) {
+  .recharts-layer * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .recharts-tooltip-wrapper {
+    transition: none;
+  }
+}
+
+/* ── FUI: строки, ячейки и состояния данных ─────────────────────
+   Таблица — не HUD. Обычная строка остаётся спокойной: тонкий шов
+   между записями и всё. FUI проявляется на СОСТОЯНИИ, а не постоянно.
+
+   Правило плотности то же, что и везде: ни одной бесконечной
+   анимации на строку. Сто строк на экране — это практически
+   статичный интерфейс. Движение допускается только по нажатию и на
+   реальном изменении значения, и всегда один раз.
+
+   Состояния несут не только цвет: выделение и тревога добавляют
+   вертикальную кромку слева, поэтому различимы и без цвета. */
+
+/* Одна новая анимация на весь слой: вспышка изменившейся ячейки.
+   Работает на opacity псевдоэлемента — композитный слой, без
+   перерисовки текста под ним. */
+@keyframes fui-cell-flash {
+  0%   { opacity: 0; }
+  18%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Строка ─────────────────────────────────────────────────────*/
+.fui-row {
+  position: relative;
+  transition:
+    background-color var(--fui-t-normal) var(--glass-ease),
+    box-shadow var(--fui-t-normal) var(--glass-ease);
+}
+.fui-row > * {
+  transition: color var(--fui-t-normal) var(--glass-ease);
+}
+/* Наведение — едва заметный подъём поверхности, не подсветка. */
+.fui-row:hover {
+  background-color: var(--glass-shell);
+}
+/* Кромка состояния. Рисуется вставкой тени на первой ячейке, а не
+   отдельным узлом: в <tr> лишний элемент невалиден, а box-shadow на
+   строке в разных движках обрезается по-разному. */
+.fui-row--selected > :first-child,
+.fui-row--active > :first-child,
+.fui-row--warning > :first-child,
+.fui-row--error > :first-child {
+  box-shadow: inset 2px 0 0 0 var(--fui-row-ink, var(--color-primary));
+}
+.fui-row--selected {
+  --fui-row-ink: var(--color-primary);
+  background-color: var(--color-primary-muted);
+}
+.fui-row--selected:hover {
+  background-color: color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+.fui-row--active {
+  --fui-row-ink: var(--color-primary);
+  background-color: var(--glass-shell-hover);
+}
+.fui-row--warning {
+  --fui-row-ink: var(--fui-warning);
+  background-color: var(--color-warning-muted);
+}
+.fui-row--error {
+  --fui-row-ink: var(--fui-error);
+  background-color: var(--color-danger-muted);
+}
+.fui-row--disabled {
+  opacity: 0.45;
+}
+.fui-row--disabled:hover {
+  background-color: transparent;
+}
+/* Клавиатурный фокус виден отдельно от наведения. */
+.fui-row:focus-visible,
+.fui-row:focus-within:not(:focus) {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--fui-edge-active);
+}
+
+/* Однократный проход света по строке: запись только что изменилась.
+   Класс снимается вызывающим кодом по animationend. */
+.fui-row--updated > * {
+  position: relative;
+}
+.fui-row--updated > :first-child::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--color-primary) 16%, transparent),
+    transparent
+  );
+  animation: fui-cell-flash 900ms var(--glass-ease-out) 1;
+}
+
+/* ── Ячейки ─────────────────────────────────────────────────────*/
+.fui-cell--numeric {
+  font-family: var(--font-mono-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+.fui-cell--status {
+  white-space: nowrap;
+}
+.fui-cell--action {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Вспышка одной ячейки: подсвечивается именно изменившееся значение,
+   а не вся строка. idle → update → settle → idle, один раз. */
+.fui-cell-update {
+  position: relative;
+}
+.fui-cell-update::after {
+  content: '';
+  position: absolute;
+  inset: -2px -6px;
+  border-radius: 0.35rem;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  animation: fui-cell-flash 900ms var(--glass-ease-out) 1;
+}
+.fui-cell-update--up::after   { background: color-mix(in srgb, var(--color-success) 20%, transparent); }
+.fui-cell-update--down::after { background: color-mix(in srgb, var(--color-danger) 18%, transparent); }
+
+/* ── Шапка таблицы ──────────────────────────────────────────────
+   Заголовки набраны как технические метки: те же прописные с
+   разрядкой, что у подписей приборов. Плотность не меняется. */
+.fui-thead th {
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+/* ── Состояния данных: пусто / загрузка / ошибка ────────────────
+   Единый операционный вид вместо голой строки «Нет данных».
+   Код состояния — моноширинный, объяснение — обычным текстом. */
+.fui-datastate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 2.25rem 1.25rem;
+  text-align: center;
+}
+.fui-datastate__code {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--fui-datastate-ink, var(--color-text-faint));
+}
+.fui-datastate__code::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--fui-datastate-ink, var(--color-text-faint));
+}
+.fui-datastate__rule {
+  width: 116px;
+  height: 1px;
+  background: var(--fui-edge);
+}
+.fui-datastate__text {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  max-width: 34ch;
+}
+/* Иконка вместо маркера-точки: она несёт смысл раздела, а точка —
+   ничего. Свой ::before в этом варианте не нужен. */
+.fui-datastate__code--icon::before { content: none; }
+.fui-datastate__code--icon > svg { opacity: 0.75; }
+/* Формулировка страницы: обычный текст, не код состояния. */
+.fui-datastate__title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+.fui-datastate--compact {
+  gap: 0.45rem;
+  padding: 1.35rem 1rem;
+}
+.fui-datastate--compact .fui-datastate__title { font-size: 13px; }
+
+.fui-datastate--error { --fui-datastate-ink: var(--fui-error); }
+.fui-datastate--loading { --fui-datastate-ink: var(--fui-processing); }
+/* У ошибки метка-кольцо, у загрузки — ромб: состояние различимо и
+   без цвета, как и в .fui-status. */
+.fui-datastate--error .fui-datastate__code::before {
+  background: transparent;
+  border: 1.5px solid var(--fui-error);
+}
+.fui-datastate--loading .fui-datastate__code::before {
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fui-row,
+  .fui-row > * {
+    transition: none;
+  }
+  /* .visual-glass tbody tr задаёт свой переход фона и специфичнее
+     одиночного .fui-row — без этой строки строки таблицы продолжали
+     плавно перекрашиваться даже при отключённом движении. */
+  .visual-glass tbody tr,
+  .visual-glass .fui-row {
+    transition: none;
+  }
+  .fui-row--updated > :first-child::after,
+  .fui-cell-update::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ── FUI: поля ввода ────────────────────────────────────────────
+   Спокойное состояние поля не меняется: то же скругление, та же
+   заливка, та же волосяная рамка. FUI появляется только там, где
+   есть что сообщить — фокус, проверка, обработка.
+
+   Фокус до сих пор передавался ровно одним каналом — цветом рамки и
+   кольцом того же цвета. Для дальтоника и на ярком солнце это
+   единственный признак, и он слабый. Добавлена кромка на ведущем
+   крае: тот же приём, что помечает выбранную строку таблицы, то есть
+   сигнал структурный, а не цветовой, и одинаково работает в обеих
+   темах. Кольцо остаётся — вместе они дают два независимых канала. */
+.visual-glass .input:focus,
+.visual-glass .input-field:focus,
+.visual-glass .modal-control:focus,
+.visual-glass .form-field input:focus,
+.visual-glass .form-field select:focus,
+.visual-glass .form-field textarea:focus,
+.visual-glass input:focus,
+.visual-glass select:focus,
+.visual-glass textarea:focus {
+  box-shadow:
+    inset 2px 0 0 0 var(--color-primary),
+    0 0 0 4px var(--color-primary-muted),
+    var(--glass-inner-hi-soft);
+}
+
+/* Проверка. Состояние берётся из aria-invalid — атрибут и так нужен
+   скринридеру, поэтому отдельного класса не заводим. Кромка меняет
+   цвет и остаётся на месте: положение сигнала одно и то же во всех
+   состояниях, меняется только его смысл. */
+.visual-glass .input[aria-invalid='true'],
+.visual-glass .input-field[aria-invalid='true'],
+.visual-glass input[aria-invalid='true'],
+.visual-glass select[aria-invalid='true'],
+.visual-glass textarea[aria-invalid='true'],
+.visual-glass .is-invalid {
+  border-color: var(--fui-edge-alert);
+  box-shadow: inset 2px 0 0 0 var(--fui-error), var(--glass-inner-hi-soft);
+}
+.visual-glass .input[aria-invalid='true']:focus,
+.visual-glass input[aria-invalid='true']:focus,
+.visual-glass select[aria-invalid='true']:focus,
+.visual-glass textarea[aria-invalid='true']:focus,
+.visual-glass .is-invalid:focus {
+  box-shadow:
+    inset 2px 0 0 0 var(--fui-error),
+    0 0 0 4px color-mix(in srgb, var(--color-danger) 22%, transparent),
+    var(--glass-inner-hi-soft);
+}
+.visual-glass .is-valid {
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+  box-shadow: inset 2px 0 0 0 var(--fui-success), var(--glass-inner-hi-soft);
+}
+
+/* Обработка: поле ждёт ответа сервера. Тонкая полоса по нижней кромке
+   — единственный движущийся сигнал на поверхности, transform, один
+   слой. Ставится классом и снимается по завершении. */
+.visual-glass .is-busy {
+  position: relative;
+}
+.visual-glass .is-busy::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--color-primary) 65%, transparent),
+    transparent
+  );
+  background-size: 45% 100%;
+  background-repeat: no-repeat;
+  animation: fui-sweep 1.1s linear infinite;
+  pointer-events: none;
+}
+
+/* Недоступное поле: приглушено и без кромки — сообщать нечего. */
+.visual-glass .input:disabled,
+.visual-glass input:disabled,
+.visual-glass select:disabled,
+.visual-glass textarea:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Техническая подпись поля — та же типографика, что у меток приборов
+   и заголовков таблиц, чтобы форма читалась той же системой. */
+.fui-field-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visual-glass .is-busy::after {
+    animation: none;
+    background-position: center;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ПРИБОРНАЯ ПАНЕЛЬ: визуальный слой дашборда
+   ═══════════════════════════════════════════════════════════════
+   Дисциплина цвета. Техническая графика — скобки, сетка, засечки,
+   линейки — набрана графитом, а не акцентом. Раньше фиолетовым было
+   всё сразу, и интерфейс читался как «фиолетовая тема», а не как
+   прибор: акцент, который стоит везде, перестаёт быть акцентом.
+   Теперь фиолетовый остаётся за состоянием — эфир, активность,
+   выделение, — а корпус прибора металлический. */
+
+/* ── Телеметрическая рейка системы ──────────────────────────────
+   Верхняя полоса дашборда. Сегменты разделены волосяными линиями,
+   как шкала прибора, а не запятыми. Значения реальные: сколько
+   источников ответило, за сколько, когда, кто оператор. */
+.fui-rail-telemetry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  border: 1px solid var(--fui-edge);
+  border-radius: 0.7rem;
+  background: var(--glass-shell);
+  overflow: hidden;
+}
+.fui-rail-telemetry__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  padding: 0.6rem 0.95rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  border-left: 1px solid var(--fui-edge);
+}
+.fui-rail-telemetry__cell:first-child { border-left: 0; }
+.fui-rail-telemetry__k {
+  font-family: var(--font-mono-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.fui-rail-telemetry__v {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+/* Ведущий сегмент — состояние потока. Единственное место в рейке,
+   где появляется цвет. */
+.fui-rail-telemetry__cell--lead { flex: 0 0 auto; background: var(--glass-shell); }
+
+/* ── Заголовок секции ───────────────────────────────────────────
+   Метка, за которой волосяная линия уходит до края блока: связывает
+   приборы в группу вместо россыпи независимых коробок. */
+.fui-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+.fui-section__label {
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.fui-section__line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--fui-edge-strong), var(--fui-edge) 35%, transparent);
+}
+.fui-section__meta {
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+/* ── Шкала прибора ──────────────────────────────────────────────
+   Корпусная графика, не данные: ряд засечек с более длинной каждой
+   пятой. Даёт крупному значению физическое основание — число
+   перестаёт висеть в воздухе. */
+.fui-ticks {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 12px;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, #000 62%, transparent);
+  mask-image: linear-gradient(to right, #000 62%, transparent);
+}
+.fui-ticks i {
+  flex: 0 0 1px;
+  height: 4px;
+  background: var(--fui-hair);
+}
+.fui-ticks i:nth-child(5n + 1) { height: 10px; }
+/* Шкала ведущего прибора: длиннее, реже, с выраженными пятыми
+   засечками — читается как измерительная линейка, а не как штриховка. */
+.fui-ticks--lg { height: 18px; gap: 5px; }
+.fui-ticks--lg i { height: 6px; }
+.fui-ticks--lg i:nth-child(5n + 1) { height: 16px; background: var(--fui-edge-strong); }
+/* Шкала источников в рейке: реже и толще, иначе читается строкой
+   палочек, а не шкалой. */
+.fui-rail-telemetry .fui-ticks { height: 11px; gap: 2.5px; }
+.fui-rail-telemetry .fui-ticks i { flex-basis: 2px; height: 6px; }
+
+/* ── Ведущий прибор ─────────────────────────────────────────────
+   Отличается не рамкой, а весом: своя подложка, более глубокая
+   внутренняя тень и подсвеченная верхняя кромка. */
+.fui-instrument--primary {
+  background:
+    radial-gradient(120% 80% at 12% 0%, var(--glass-shell-hover), transparent 62%),
+    var(--color-surface);
+  box-shadow: var(--glass-inner-hi);
+}
+.fui-instrument--primary::before,
+.fui-instrument--primary::after { opacity: 1; }
+
+/* ── Единый проход света по панели ──────────────────────────────
+   Один раз после обновления данных: узкая полоса пробегает поперёк
+   дашборда. Ровно один движущийся объект на весь экран, transform,
+   композитный слой. Это и есть «данные пришли» — вместо того чтобы
+   мигать каждым прибором по отдельности. */
+.fui-dash-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  border-radius: inherit;
+}
+.fui-dash-sweep::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--color-primary) 9%, transparent),
+    transparent
+  );
+  animation: fui-sweep 1150ms var(--glass-ease-out) 1;
+}
+
+/* ── Микропоказатель ────────────────────────────────────────────
+   Третий уровень иерархии: не карточка, а строка приборного щитка.
+   Несколько таких в ряд читаются как второстепенная телеметрия и не
+   спорят с ведущим значением. */
+.fui-micro {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--fui-edge);
+}
+.fui-micro:last-child { border-bottom: 0; }
+.fui-micro__k {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fui-micro__v {
+  font-family: var(--font-mono-ui);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fui-dash-sweep::before { animation: none; opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   РАЗРЕЗ ПО КАТЕГОРИЯМ И РЕЕСТР ВЫРУЧКИ
+   ═══════════════════════════════════════════════════════════════
+   Было: донат 76px без подписи, легенда в строку и шесть одинаковых
+   коробок под ней. Кольцо ничего не показывало (итог лежал отдельной
+   строкой внизу), доли не читались — только рубли, без процентов, —
+   а рамка вокруг каждой строки превращала список в лестницу и на
+   375px съедала имена до «Юли…».
+
+   Стало: кольцо — прибор с показанием в центре, легенда — шкала
+   долей, список — реестр с волосяными разделителями и табличными
+   цифрами в колонках. */
+
+/* ── Кольцевой прибор ───────────────────────────────────────────
+   Обод (::before) — корпусная графика, тонкая окружность чуть шире
+   самого кольца: она отделяет прибор от подложки и даёт ему край,
+   которого у голого SVG нет. */
+.fui-donut {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.fui-donut::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border: 1px solid var(--fui-edge);
+  border-radius: 50%;
+  pointer-events: none;
+}
+/* Засечка на ободе: точка отсчёта, от которой кольцо читается по
+   часовой стрелке. Recharts начинает первый сегмент сверху. */
+.fui-donut::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 1px;
+  height: 5px;
+  background: var(--fui-edge-strong);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.fui-donut__core {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
+  text-align: center;
+}
+.fui-donut__v {
+  font-family: var(--font-mono-ui);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--color-text);
+}
+.fui-donut__k {
+  font-family: var(--font-mono-ui);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--color-text-faint);
+}
+
+/* ── Шкала долей ────────────────────────────────────────────────
+   Вертикальный стек вместо строки: категории сравниваются между
+   собой, а для сравнения им нужна общая левая кромка и общая
+   колонка процентов. Метка доли — узкая планка в цвете сегмента,
+   а не квадрат: квадрат читается как чекбокс. */
+.fui-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+  /* Без потолка ширины подпись и сумма расходятся к краям карточки на
+     900px друг от друга, и пара перестаёт читаться как одна строка. */
+  max-width: 26rem;
+}
+.fui-breakdown__row {
+  display: grid;
+  grid-template-columns: 2px minmax(0, 1fr) auto 2.6rem;
+  align-items: center;
+  gap: 0.55rem;
+}
+.fui-breakdown__sw {
+  width: 2px;
+  height: 14px;
+  background: var(--cat, var(--fui-cat-1));
+}
+.fui-breakdown__k {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fui-breakdown__v {
+  font-family: var(--font-mono-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.fui-breakdown__p {
+  font-family: var(--font-mono-ui);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+/* ── Реестр ─────────────────────────────────────────────────────
+   Один блок с волосяными разделителями. Цифры — моноширинные и
+   табличные, колонки фиксированной ширины, поэтому разряды стоят
+   друг под другом по всему столбцу. */
+.fui-ledger {
+  border: 1px solid var(--fui-edge);
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+/* Колонки заданы в ch, а не по содержимому: каждая строка — свой grid,
+   поэтому auto-ширины подгонялись под свою строку и разряды соседних
+   строк не вставали друг под друга. Шрифт моноширинный, так что ch
+   здесь — точная мера, а не запас на глаз. */
+.fui-ledger__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 9ch) 10ch;
+  align-items: center;
+  gap: 0.25rem 1.1rem;
+  padding: 0.62rem 0.85rem 0.72rem;
+  border-top: 1px solid var(--fui-edge);
+}
+.fui-ledger__row:first-child { border-top: 0; }
+.fui-ledger__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.fui-ledger__n {
+  font-family: var(--font-mono-ui);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--color-text-faint);
+}
+/* Префикс категории набран той же шкалой, что и кольцо: строка
+   реестра и сегмент доната говорят об одном и том же одним цветом. */
+.fui-ledger__n b {
+  font-weight: 500;
+  color: var(--cat, var(--color-text-faint));
+  opacity: 0.85;
+  margin-right: 0.3rem;
+}
+.fui-ledger__total {
+  font-family: var(--font-mono-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+/* Доля строки в выручке дня — полоса по нижней кромке. Связывает
+   реестр с кольцом: видно не только «сколько», но и «какая часть». */
+/* Гаснет вправо и держится приглушённой: сплошная полоса ровного тона
+   вставала прямо под именем и читалась как подчёркивание, а не как
+   доля. Индикатор должен показывать длину, но не спорить с текстом. */
+.fui-ledger__share {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(to right, var(--fui-cat-1), color-mix(in srgb, var(--fui-cat-1) 15%, transparent));
+  opacity: 0.4;
+  max-width: 100%;
+}
+.fui-ledger__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-top: 1px solid var(--fui-edge-strong);
+  background: var(--glass-shell);
+}
+.fui-ledger__foot-k {
+  font-family: var(--font-mono-ui);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+.fui-ledger__foot-v {
+  font-family: var(--font-mono-ui);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+/* На узком экране имя занимает свою строку целиком, а цифры уходят
+   под него в четыре колонки. Раньше имя и цифры делили одну строку,
+   и на 375px от «Виктория 2502» оставалось «Викт…». */
+@media (max-width: 560px) {
+  /* Итог получает ширину по содержимому, а не четверть строки: при
+     четырёх равных колонках «34 998 ₽» не помещался в свою ячейку и
+     вылезал в отступ карточки. Сжиматься должны категории — они
+     короче и стоят слева, где место есть. */
+  .fui-ledger__row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, auto);
+    column-gap: 0.7rem;
+  }
+  .fui-ledger__name {
+    grid-column: 1 / -1;
+    white-space: normal;
+    overflow: visible;
+  }
+  /* Категории прижаты влево: цветной префикс работает якорем, и три
+     значения читаются одним рядом. По правому краю равнялся только
+     итог — иначе между колонками появлялись рваные просветы. */
+  .fui-ledger__n { text-align: left; }
+
+  /* Кольцо занимает треть узкой карточки, и на разбивку остаётся около
+     190px. Шкала ужимается по всем трём колонкам сразу, иначе подписи
+     срезались до «Рем…» и «Косм…» — а название категории здесь и есть
+     то, ради чего строку читают. */
+  .fui-breakdown__row {
+    grid-template-columns: 2px minmax(0, 1fr) auto 1.9rem;
+    gap: 0.32rem;
+  }
+  .fui-breakdown__k { font-size: 11.5px; }
+  .fui-breakdown__v { font-size: 12px; }
+  .fui-breakdown__p { font-size: 10px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE I · КОМПОЗИЦИЯ ДАШБОРДА
+   ═══════════════════════════════════════════════════════════════
+   Две правки уровня композиции, а не отделки.
+
+   Первая: главным числом страницы было «просрочено задач — 2», под
+   него отдавался прибор в половину экрана, а выручка и дебиторка
+   в миллион рублей лежали в средних карточках рядом. Вес был не на
+   том показателе. Деньги вынесены в полосу с очень крупными
+   числами, счётчики задач ушли в общий ряд.
+
+   Вторая: KPI занимали три независимые сетки подряд — 4 колонки,
+   потом 3, потом 1 из 3, — и справа оставались рваные дыры, а
+   каждый из двенадцати показателей нёс собственную рамку с тем же
+   радиусом. Теперь это одна решётка: рамка снаружи одна, ячейки
+   разделены волосяными просветами. */
+
+/* ── Денежная полоса ────────────────────────────────────────────
+   Число стоит на поверхности, а не в коробке: контейнер здесь
+   ничего не добавляет к смыслу, а рамка вокруг каждой суммы
+   уравнивает её со счётчиком отпусков. */
+.fui-band {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  border-top: 1px solid var(--fui-edge-strong);
+  border-bottom: 1px solid var(--fui-edge);
+  isolation: isolate;
+}
+/* Источник света — один, в левом верхнем углу полосы: свет должен
+   откуда-то падать, иначе подсветка читается как ровная заливка. */
+.fui-band::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(90% 140% at 4% 0%, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 58%);
+}
+.fui-band__cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1.5rem 1.6rem 1.6rem;
+  min-width: 0;
+  border-left: 1px solid var(--fui-edge);
+  text-align: left;
+  background: none;
+  cursor: pointer;
+  transition: background var(--fui-t-normal) var(--glass-ease-out);
+}
+.fui-band__cell:first-child { border-left: 0; }
+.fui-band__cell:hover { background: color-mix(in srgb, var(--color-text) 3%, transparent); }
+.fui-band__k {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono-ui);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+.fui-band__v {
+  font-size: clamp(2.1rem, 3.4vw, 3.5rem);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+/* Знак валюты не должен весить как разряды суммы. */
+.fui-band__v small {
+  font-size: 0.42em;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--color-text-faint);
+  margin-left: 0.35em;
+}
+.fui-band__m {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--font-mono-ui);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  min-width: 0;
+}
+.fui-band__m span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Тонкая световая отметка ячейки, требующей внимания: короткая
+   черта на верхней кромке вместо заливки или бейджа. */
+.fui-band__cell--flag::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 1.6rem;
+  width: 2.2rem;
+  height: 1px;
+  background: var(--flag, var(--color-primary));
+  box-shadow: 0 0 8px -1px var(--flag, var(--color-primary));
+}
+
+/* ── Решётка приборов ───────────────────────────────────────────
+   Одна рамка на всю группу. Просветы в 1px показывают подложку и
+   работают разделителями, поэтому у ячейки нет своей рамки — и
+   двенадцать одинаковых прямоугольников перестают дробить экран. */
+/* Раскладка на flex, а не на grid: число показателей приходит из
+   данных и почти никогда не делится на число колонок нацело, поэтому
+   в сетке последний ряд заканчивался пустой ячейкой — та же рваная
+   дыра, от которой уходили. Здесь ячейки последнего ряда дотягивают
+   ряд до края, и решётка всегда выглядит замкнутой. */
+.fui-lattice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--fui-edge);
+  border: 1px solid var(--fui-edge);
+  border-radius: 0.8rem;
+  overflow: hidden;
+}
+.fui-cellstat {
+  position: relative;
+  display: flex;
+  flex: 1 1 11rem;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.95rem 1rem 1.05rem;
+  min-width: 0;
+  background: var(--color-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fui-t-normal) var(--glass-ease-out);
+}
+.fui-cellstat:hover { background: var(--color-control-bg-hover); }
+.fui-cellstat__k {
+  font-size: 10.5px;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  min-height: 2.1em;
+}
+.fui-cellstat__v {
+  font-size: 1.7rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--color-text);
+}
+.fui-cellstat__m {
+  font-family: var(--font-mono-ui);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Ведущая ячейка — не отдельная карточка, а более широкий участок
+   той же решётки с более крупным числом. Вес задаётся размером и
+   светом, а не второй рамкой. */
+.fui-cellstat--lead {
+  flex: 1.8 1 16rem;
+  justify-content: space-between;
+  padding: 1.15rem 1.2rem 1.25rem;
+  background:
+    radial-gradient(120% 130% at 0% 0%, color-mix(in srgb, var(--sig, var(--color-primary)) 9%, transparent), transparent 62%),
+    var(--color-surface);
+}
+.fui-cellstat--lead .fui-cellstat__v { font-size: 2.9rem; }
+/* Показатель в покое — приглушён: ноль не должен весить как
+   единица, требующая действия. */
+/* Спокойные показания — отдельной полосой в подвале той же решётки, а
+   не вперемешку с приборами. Смешанные в одном ряду, они ломали ритм:
+   рядом с ячейкой в три строки одностроч­ная растягивалась по высоте
+   и висела пустотой. Здесь ноль остаётся доступным для перехода, но
+   не претендует на внимание. */
+.fui-lattice__quiet {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--fui-edge);
+}
+.fui-quiet {
+  position: relative;
+  flex: 1 1 11rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.7rem 1rem 0.75rem;
+  background: var(--color-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fui-t-normal) var(--glass-ease-out);
+}
+.fui-quiet:hover { background: var(--color-control-bg-hover); }
+.fui-quiet__k {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fui-quiet__v {
+  font-family: var(--font-mono-ui);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+/* Сигнал: тонкая световая черта на кромке ячейки. Локально, без
+   заливки всей плитки цветом состояния. */
+.fui-cellstat--sig::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(to right, var(--sig), transparent 70%);
+}
+.fui-cellstat--sig::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.4rem;
+  height: 1px;
+  background: var(--sig);
+  box-shadow: 0 0 9px -1px var(--sig);
+}
+
+@media (max-width: 560px) {
+  /* На узком экране решётка складывается в две колонки, ведущая
+     ячейка занимает обе: телефону нужна сильная иерархия, а не
+     сохранение десктопной раскладки. */
+  .fui-cellstat { flex: 1 1 calc(50% - 1px); }
+  .fui-cellstat--lead { flex: 1 1 100%; }
+  .fui-cellstat__k { min-height: 0; }
+  .fui-band__cell { padding: 1.15rem 1.15rem 1.25rem; }
+  .fui-band__cell--flag::after { left: 1.15rem; }
 }

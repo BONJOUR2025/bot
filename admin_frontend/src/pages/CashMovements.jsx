@@ -754,7 +754,7 @@ function DailyBalancesTable({ days, entriesByDate, expanded, onToggle, isMobile 
                   {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   {fmtDayLabel(d.date)}
                   {isTodayIso(d.date) && (
-                    <span className="cashmove-fui-radar" title="Сегодня"><i /><i /><b /></span>
+                    <span className="fui-radar" title="Сегодня"><i /><i /><b /></span>
                   )}
                 </span>
                 <span className="tabular-nums font-semibold text-sm">{fmtMoney(d.closing)}</span>
@@ -820,7 +820,7 @@ function DailyBalancesTable({ days, entriesByDate, expanded, onToggle, isMobile 
                   <span className="inline-flex items-center gap-1.5">
                     {fmtDayLabel(d.date)}
                     {isTodayIso(d.date) && (
-                      <span className="cashmove-fui-radar" title="Сегодня"><i /><i /><b /></span>
+                      <span className="fui-radar" title="Сегодня"><i /><i /><b /></span>
                     )}
                   </span>
                 </td>
@@ -2092,7 +2092,7 @@ export default function CashMovements() {
                 <span>КНИГА: <b>{dailyDays.length} дн.</b></span><span className="sep">·</span>
                 <span>ОБОРОТ ЗА ПЕРИОД: <b>{fmtMoneyShort(dailyDays.reduce((s, d) => s + (d.income || 0) + (d.expense || 0), 0))}</b></span><span className="sep">·</span>
                 <span>ОСТАТОК СЕЙЧАС: <b>{fmtMoneyShort(dailyDays[dailyDays.length - 1]?.closing ?? daily.closing)}</b></span><span className="sep">·</span>
-                <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="cashmove-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+                <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
               </div>
 
               <DailyBalancesTable

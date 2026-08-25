@@ -454,7 +454,7 @@ function PlanGauges({ empSummary, planTotals }) {
               <div className="flex items-center justify-between mb-1 text-sm">
                 <span className="font-medium truncate flex items-center gap-1.5">
                   {targetReached && (
-                    <span className="sales-fui-radar" title="План выполнен"><i /><i /><i /><b /></span>
+                    <span className="fui-radar fui-radar--live" title="План выполнен"><i /><i /><i /><b /></span>
                   )}
                   {empName(e.code)}
                 </span>
@@ -1365,7 +1365,7 @@ export default function SalesAnalytics() {
               </>
             )}
             <span className="sep">·</span>
-            <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="sales-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+            <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
           </div>
           {chartData.length > 1 && (
             <div className="sales-fui-ticker">

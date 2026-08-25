@@ -466,7 +466,7 @@ function MovementPickerModal({ payout, onLink, onClose }) {
             <ResponsiveTable
               data={moves}
               keyFn={(m) => m.ID_KASSES_MOVE}
-              rowClass={(m) => (m.has_payout ? 'opacity-50' : '')}
+              rowState={(m) => (m.has_payout ? 'disabled' : null)}
               columns={[
                 { label: 'Дата', primary: true, render: (m) => <span className="whitespace-nowrap text-xs">{m.DK_DATE}</span> },
                 { label: 'Филиал', render: (m) => m.dep_name || '—' },
@@ -656,7 +656,7 @@ function PayoutFeedItem({
               требует внимания прямо сейчас, тот же сигнал «живого» статуса,
               что и «в эфире» на Прослушивании, только в форме радара. */}
           {p.status === 'Ожидает' && (
-            <span className="payout-fui-radar"><i /><i /><i /><b /></span>
+            <span className="fui-radar"><i /><i /><i /><b /></span>
           )}
           <span className="font-medium text-sm">{p.name}</span>
           <span
@@ -1484,7 +1484,7 @@ export default function Payouts() {
         <span>ЗАПИСЕЙ: <b>{payouts.length}</b></span><span className="sep">·</span>
         <span>ОЖИДАЕТ: <b style={{ color: 'var(--color-warning)' }}>{statusSummary['Ожидает']?.count || 0}</b></span><span className="sep">·</span>
         <span>СИНХРОНИЗАЦИЯ: <b style={{ color: loading ? 'var(--color-warning)' : 'var(--color-success)' }}>{loading ? 'ИДЁТ…' : 'OK'}</b></span><span className="sep">·</span>
-        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="payout-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
       </div>
       {timeData.length > 1 && (
         <div className="payout-fui-ticker">

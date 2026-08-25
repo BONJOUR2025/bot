@@ -110,7 +110,7 @@ function CodeManager({ codes, plans }) {
             <span className="flex-1 text-sm font-medium min-w-0 truncate flex items-center gap-1.5">
               {c.name}
               {locked && (
-                <span className="plan-fui-radar" title="Цель захвачена — план выставлен по всем трём категориям">
+                <span className="fui-radar fui-radar--live" title="Цель захвачена — план выставлен по всем трём категориям">
                   <i /><i /><i /><b />
                 </span>
               )}
@@ -494,7 +494,7 @@ export default function LocationPlans() {
                 <span>ПЛАН ВЫСТАВЛЕН: <b style={{ color: codes.length > 0 && provisionedCount === codes.length ? 'var(--color-success)' : 'var(--color-warning)' }}>{provisionedCount} из {codes.length}</b></span><span className="sep">·</span>
                 <span>ЦЕЛЬ ЗАХВАЧЕНА: <b style={{ color: 'var(--color-success)' }}>{lockedCount}</b></span><span className="sep">·</span>
                 <span>СУММА ПЛАНА: <b>{fmt(totalPlan)} ₽</b></span><span className="sep">·</span>
-                <span>{clock.toLocaleDateString('ru-RU')} {clock.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="plan-fui-cursor">{String(clock.getSeconds()).padStart(2, '0')}</span></span>
+                <span>{clock.toLocaleDateString('ru-RU')} {clock.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(clock.getSeconds()).padStart(2, '0')}</span></span>
               </div>
             <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5 items-start">
               {/* Left: code list (read-only, derived from «Салоны») */}

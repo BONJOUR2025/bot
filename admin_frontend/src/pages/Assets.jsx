@@ -363,7 +363,7 @@ export default function Assets() {
           </>
         )}
         <span className="sep">/</span>
-        <span>{now.toLocaleTimeString('ru-RU')}<span className="asset-fui-cursor">▮</span></span>
+        <span>{now.toLocaleTimeString('ru-RU')}<span className="fui-cursor">▮</span></span>
       </div>
 
       {/* Filters */}
@@ -487,7 +487,7 @@ export default function Assets() {
               render: g => (
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {g.criticalOverdue > 0 && (
-                    <span className="asset-fui-radar" title={`Просрочено более 30 дней: ${g.criticalOverdue}`}>
+                    <span className="fui-radar fui-radar--alert" title={`Просрочено более 30 дней: ${g.criticalOverdue}`}>
                       <i /><i /><i /><b />
                     </span>
                   )}
@@ -590,7 +590,7 @@ export default function Assets() {
                       return (
                         <div className="flex items-center gap-1.5">
                           {overdueDays > 30 && (
-                            <span className="asset-fui-radar" title={`Просрочено ${overdueDays} дн.`}>
+                            <span className="fui-radar fui-radar--alert" title={`Просрочено ${overdueDays} дн.`}>
                               <i /><i /><i /><b />
                             </span>
                           )}

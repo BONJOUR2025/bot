@@ -1132,7 +1132,7 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
         <div className="flex flex-wrap items-center gap-1 mt-2">
           {aiActive && (
             <span className="recruit-fui-ai-tag" title="ИИ сейчас ведёт быстрый опрос кандидата">
-              <i className="recruit-fui-ai-dot" />АНАЛИЗ ИИ
+              <i className="fui-status fui-status--processing" />АНАЛИЗ ИИ
             </span>
           )}
           {c.is_new && <CardFlag tone="new" label="новый" />}
@@ -1184,13 +1184,16 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
               без старта опроса, считая от created_at. Цвет ужесточается
               на STALE_CRITICAL_DAYS+ — это уже риск потерять кандидата. */}
           {isStale && (
+            /* Был радар — по одному на каждый просроченный отклик, до 24
+               работающих анимаций в кадре одновременно. Радар означает
+               «идёт наблюдение» и уместен один на поверхность; здесь же
+               нужно пометить состояние конкретной карточки, а для этого
+               достаточно статичного маркера. Форма маркера у warning и
+               error разная, поэтому состояние различимо и без цвета. */
             <span
-              className="recruit-fui-radar"
-              style={{ color: isStaleCritical ? 'var(--color-danger)' : 'var(--color-warning)' }}
+              className={`fui-status fui-status--${isStaleCritical ? 'error' : 'warning'}`}
               title={`Без движения ${staleDays} дн. с отклика`}
-            >
-              <i /><i /><i /><b />
-            </span>
+            />
           )}
           {fmtDate(c.last_message_at || c.created_at)}
           {isStale && (
@@ -2498,7 +2501,7 @@ export default function Recruitment() {
                 <span>В РАБОТЕ: <b>{pipelineTelemetry.active}</b></span><span className="sep">·</span>
                 <span>ИИ-ОПРОС: <b style={{ color: pipelineTelemetry.aiActive > 0 ? 'var(--color-primary)' : undefined }}>{pipelineTelemetry.aiActive}</b></span><span className="sep">·</span>
                 <span>ЗАСТОЙ {STALE_AFTER_DAYS}+ дн: <b style={{ color: pipelineTelemetry.stale > 0 ? 'var(--color-warning)' : undefined }}>{pipelineTelemetry.stale}</b></span><span className="sep">·</span>
-                <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="recruit-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+                <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
               </div>
             )}
             {/* Панель стоит над доской: фильтр должен читаться раньше того,

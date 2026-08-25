@@ -10,14 +10,33 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import EmptyState from '../components/ui/EmptyState.jsx';
+import { breakableNumber } from '../utils/metricValue.js';
 
-const SALES_COLORS = { repair: 'var(--color-primary)', cosmetics: 'var(--color-success)', shoes: 'var(--color-warning)' };
+// Шкала категорий, а не светофор: «Обувь» раньше красилась в
+// --color-warning и обычная строка читалась как предупреждение.
+const SALES_COLORS = { repair: 'var(--fui-cat-1)', cosmetics: 'var(--fui-cat-2)', shoes: 'var(--fui-cat-3)' };
 const SALES_LABELS = { repair: 'Ремонт', cosmetics: 'Косметика', shoes: 'Обувь' };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n) {
   return Number(n ?? 0).toLocaleString('ru-RU');
+}
+
+// Показание в центре кольца: там помещается около шести знаков, поэтому
+// сотни тысяч сокращаются до «170 к», а не режутся многоточием. Точная
+// сумма всё равно стоит в подвале реестра.
+function compactMoney(n) {
+  const v = Number(n ?? 0);
+  if (v >= 1000000) return `${(v / 1000000).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} млн`;
+  if (v >= 10000) return `${Math.round(v / 1000).toLocaleString('ru-RU')} к`;
+  return fmt(v);
+}
+
+function sharePct(part, total) {
+  if (!total) return '—';
+  const v = (Number(part ?? 0) / total) * 100;
+  return `${v < 1 ? v.toFixed(1) : Math.round(v)}%`;
 }
 
 function fmtDate(val) {
@@ -131,24 +150,31 @@ function Panel({ className = '', children }) {
   );
 }
 
+/* Панель данных. От прежней отличается двумя вещами: угловые скобки
+   помечают её как модуль приборного щитка, а разделитель под шапкой
+   получил засечку (.fui-sep) — граница читается как технический шов,
+   а не как линия таблицы. Скобки декоративны и не ловят нажатия. */
 function BentoCard({ span = '', eyebrow, title, action, delay = 0, children }) {
   return (
     <Reveal delay={delay} className={span}>
-      <Panel className="flex h-full flex-col p-5 sm:p-6">
+      <Panel className="fui-frame flex h-full flex-col p-5 sm:p-6">
         {(title || action || eyebrow) && (
-          <div className="mb-4 flex items-start justify-between gap-3 border-b border-[color:var(--color-border)] pb-3">
-            <div>
-              {eyebrow && <div className="ui-label mb-1.5">{eyebrow}</div>}
-              {title && (
-                <h3 className="text-base font-medium tracking-[-0.02em] text-[color:var(--color-text)]">
-                  {title}
-                </h3>
-              )}
+          <div className="relative mb-4">
+            <div className="flex items-start justify-between gap-3 pb-3">
+              <div className="min-w-0">
+                {eyebrow && <div className="ui-label mb-1.5">{eyebrow}</div>}
+                {title && (
+                  <h3 className="text-base font-medium tracking-[-0.02em] text-[color:var(--color-text)]">
+                    {title}
+                  </h3>
+                )}
+              </div>
+              {action}
             </div>
-            {action}
+            <div className="fui-sep" />
           </div>
         )}
-        <div className="flex-1">{children}</div>
+        <div className="relative flex-1">{children}</div>
       </Panel>
     </Reveal>
   );
@@ -161,7 +187,7 @@ function GhostLink({ to, label = 'Все' }) {
   return (
     <button
       onClick={() => navigate(to)}
-      className="group inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-primary)]"
+      className="ui-tap-44 group inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-primary)]"
     >
       {label}
       <ArrowUpRight size={12} weight="light" className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -176,7 +202,7 @@ function RefreshButton({ onClick, disabled, spinning, children }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-2 border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-text)] transition-colors hover:bg-[color:var(--color-control-bg-hover)] disabled:opacity-40"
+      className="fui-press inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-text)] transition-colors hover:bg-[color:var(--color-control-bg-hover)] disabled:opacity-40"
     >
       <ArrowsClockwise size={15} weight="light" className={spinning ? 'animate-spin' : ''} />
       {children}
@@ -186,58 +212,76 @@ function RefreshButton({ onClick, disabled, spinning, children }) {
 
 // ── KPI cell ──────────────────────────────────────────────────────────────────
 
-function StatOrb({ icon: Icon, label, value, sub, tone = 'primary', to, big = false, delay = 0 }) {
+/* Приборный модуль: подпись сверху, крупное значение, техническая
+   подложка. Порядок чтения перевёрнут относительно прежней карточки
+   (было «число → подпись») — у прибора сначала читается, что за
+   величина, и только потом сама величина.
+
+   Статус показывается не всегда: он появляется, когда tone говорит
+   «сюда надо смотреть» (внимание/тревога), и молчит, когда показатель
+   в норме. Иначе шесть одинаковых «НОРМА» в ряду превращаются в шум и
+   перестают что-либо значить.
+
+   Радар (идёт наблюдение) — только у ведущего показателя: в кадре он
+   должен быть один, иначе повторяется ошибка «Подбора персонала», где
+   24 радара крутились одновременно. */
+const TONE_INK = {
+  primary: 'var(--color-primary)',
+  warning: 'var(--color-warning)',
+  danger: 'var(--color-danger)',
+  success: 'var(--color-success)',
+  info: 'var(--color-info)',
+  neutral: 'var(--color-text-faint)',
+};
+const TONE_STATUS = {
+  danger: ['error', 'Тревога'],
+  warning: ['warning', 'Внимание'],
+};
+
+// ── ячейка решётки приборов ───────────────────────────────────────────────────
+// Показатели раньше жили в трёх независимых сетках подряд (4 колонки,
+// потом 3, потом одна ячейка из трёх), и справа оставались рваные дыры,
+// а каждая из двенадцати плиток несла собственную рамку. Здесь ячейка
+// намеренно без рамки: её край задают просветы решётки.
+
+// Показатель «в покое» — тот, по которому делать нечего: ноль заявок,
+// ноль опозданий. Он не исчезает (по нему всё ещё переходят в раздел),
+// но уходит в подвальную полосу и не весит как сигнал.
+function isIdleStat(value) {
+  return value === 0 || value === '0' || value === '—' || value == null;
+}
+
+function Signal({ icon: Icon, label, value, sub, tone = 'neutral', to, lead = false }) {
   const navigate = useNavigate();
-  const toneColor = {
-    primary: 'var(--color-primary)',
-    warning: 'var(--color-warning)',
-    danger: 'var(--color-danger)',
-    success: 'var(--color-success)',
-    info: 'var(--color-info)',
-    neutral: 'var(--color-text-faint)',
-  }[tone];
+  const ink = TONE_INK[tone];
+  const signal = tone !== 'neutral';
 
   return (
-    <Reveal delay={delay} className="h-full">
-      {/* Полоска-акцент слева убрана намеренно: она была единственным
-          носителем tone, а цветная рамка у карточки читается как
-          статус-индикатор даже там, где tone означает всего лишь раздел.
-          Теперь тон несёт иконка, а показатель остаётся нейтральным. */}
-      <div className="ui-shell h-full">
-        <button
-          type="button"
-          onClick={to ? () => navigate(to) : undefined}
-          className={`ui-core h-full w-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-5 text-left ${big ? 'sm:p-6' : ''} ${
-            to ? 'cursor-pointer hover:bg-[color:var(--color-control-bg-hover)]' : 'cursor-default'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span
-              className="grid h-8 w-8 place-items-center rounded-full"
-              style={{ background: `color-mix(in oklab, ${toneColor} 14%, transparent)` }}
-            >
-              <Icon size={16} weight="light" style={{ color: toneColor }} />
-            </span>
-            {to && (
-              <ArrowUpRight
-                size={13}
-                weight="light"
-                className="text-[color:var(--color-text-faint)]"
-              />
-            )}
-          </div>
-          <div className="mt-4">
-            <div
-              className={`ui-metric text-[color:var(--color-text)] ${big ? 'sm:text-[2.6rem]' : ''}`}
-            >
-              {value}
-            </div>
-            <div className="mt-2 text-sm text-[color:var(--color-text-muted)]">{label}</div>
-            {sub && <div className="mt-0.5 text-xs text-[color:var(--color-text-faint)]">{sub}</div>}
-          </div>
-        </button>
-      </div>
-    </Reveal>
+    <button
+      type="button"
+      onClick={to ? () => navigate(to) : undefined}
+      style={{ '--sig': ink }}
+      className={`fui-cellstat fui-press ${lead ? 'fui-cellstat--lead' : ''} ${signal ? 'fui-cellstat--sig' : ''}`}
+    >
+      <span className="fui-cellstat__k">
+        {Icon && <Icon size={12} weight="light" className="mr-1.5 inline-block align-[-1px]" style={{ color: ink }} />}
+        {label}
+      </span>
+      <span className="fui-cellstat__v">{breakableNumber(value)}</span>
+      {sub && <span className="fui-cellstat__m">{sub}</span>}
+    </button>
+  );
+}
+
+function QuietStat({ label, value, to }) {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={to ? () => navigate(to) : undefined} className="fui-quiet fui-press">
+      <span className="fui-quiet__k">{label}</span>
+      {/* Прочерк, а не пустое место: часть счётчиков приходит из API
+          без значения, и ячейка выглядела сломанной. */}
+      <span className="fui-quiet__v">{value ?? '—'}</span>
+    </button>
   );
 }
 
@@ -285,6 +329,7 @@ function SkeletonBento({ span = '', h = 'h-40' }) {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [pending, setPending] = useState([]);
   const [approved, setApproved] = useState([]);
   const [vacations, setVacations] = useState([]);
@@ -300,10 +345,20 @@ export default function Dashboard() {
   const [cashBalances, setCashBalances] = useState(null);
   const [visitorSummary, setVisitorSummary] = useState(null);
   const [receivables, setReceivables] = useState(null);
+  // Состояние канала данных: сколько источников ответило, за сколько и когда.
+  const [link, setLink] = useState(null);
+  /* Один проход света по всей панели после обновления — ровно один
+     движущийся объект на экран вместо того, чтобы мигать каждым
+     прибором отдельно. Слой снимает сам себя по завершении: класс,
+     оставшийся висеть, превратил бы событие в постоянное состояние. */
+  const [sweep, setSweep] = useState(0);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
     else setRefreshing(true);
+    // Телеметрия командной строки — реальные величины этой загрузки, а не
+    // декоративные цифры: сколько источников ответило и за сколько.
+    const startedAt = performance.now();
     try {
       const today = new Date().toISOString().slice(0, 10);
       const [
@@ -341,6 +396,17 @@ export default function Dashboard() {
       if (cashRes.status === 'fulfilled') setCashBalances(cashRes.value.data ?? []);
       if (visitorRes.status === 'fulfilled') setVisitorSummary(visitorRes.value.data ?? []);
       if (receivablesRes.status === 'fulfilled') setReceivables(receivablesRes.value.data ?? null);
+      const results = [
+        pendRes, vacRes, taskRes, bdRes, mastersRes, salesRes, notifRes,
+        shiftRes, leaveRes, cashRes, visitorRes, receivablesRes,
+      ];
+      setSweep((n) => n + 1);
+      setLink({
+        ok: results.filter((r) => r.status === 'fulfilled').length,
+        total: results.length,
+        ms: Math.round(performance.now() - startedAt),
+        at: new Date(),
+      });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -422,18 +488,6 @@ export default function Dashboard() {
     maxKredit = Math.max(1, ...topMasters.map((m) => m.total_kredit ?? 0));
   }
 
-  const tooltipStyle = {
-    contentStyle: {
-      background: 'var(--color-modal-bg)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 0,
-      fontSize: 12,
-      color: 'var(--color-text)',
-    },
-    itemStyle: { color: 'var(--color-text)' },
-    labelStyle: { color: 'var(--color-text-muted)' },
-  };
-
   // ── extra operational metrics (attendance, leave requests, cash, footfall, receivables) ──
   const lateCheckins = shiftCheckins ? shiftCheckins.filter((c) => (c.delay_minutes ?? 0) > 0) : null;
   const pendingLeave = leaveRequests ? leaveRequests.filter((r) => r.status === 'Ожидает') : null;
@@ -506,7 +560,67 @@ export default function Dashboard() {
       priority: 20,
     },
   ];
-  const [heroStat, ...secondaryStats] = [...statDefs].sort((a, b) => b.priority - a.priority);
+  // Показатели подбора и посещаемости досыпаются в тот же список, а не
+  // живут отдельными сетками: приоритет решает порядок, ведущей
+  // становится первая ячейка решётки.
+  const latticeStats = [
+    ...statDefs,
+    ...(recruitNotifs
+      ? [
+          {
+            key: 'newCandidates',
+            icon: UserPlus,
+            label: 'Новые отклики (24ч)',
+            value: recruitNotifs.new_candidates,
+            tone: recruitNotifs.new_candidates > 0 ? 'info' : 'neutral',
+            to: '/admin/recruitment',
+            priority: recruitNotifs.new_candidates > 0 ? 60 : 22,
+          },
+          {
+            key: 'unreadHh',
+            icon: ChatCircle,
+            label: 'Сообщения hh.ru',
+            value: recruitNotifs.unread_hh,
+            tone: recruitNotifs.unread_hh > 0 ? 'warning' : 'neutral',
+            to: '/admin/recruitment',
+            priority: recruitNotifs.unread_hh > 0 ? 65 : 21,
+          },
+          {
+            key: 'unreadTg',
+            icon: PaperPlaneTilt,
+            label: 'Сообщения Telegram',
+            value: recruitNotifs.unread_tg,
+            tone: recruitNotifs.unread_tg > 0 ? 'warning' : 'neutral',
+            to: '/admin/recruitment',
+            priority: recruitNotifs.unread_tg > 0 ? 64 : 20,
+          },
+          ...(recruitNotifs.pending_tg_24h > 0
+            ? [{
+                key: 'pendingTg',
+                icon: Clock,
+                label: 'Ждут TG-привязки >24ч',
+                value: recruitNotifs.pending_tg_24h,
+                tone: 'danger',
+                to: '/admin/recruitment',
+                priority: 92,
+              }]
+            : []),
+        ]
+      : []),
+    ...(visitorSummary
+      ? [{
+          key: 'visitors',
+          icon: Users,
+          label: 'Посетители сегодня',
+          value: fmt(visitorsToday),
+          tone: visitorsToday > 0 ? 'info' : 'neutral',
+          to: '/admin/visitor-counters',
+          priority: 18,
+        }]
+      : []),
+  ].sort((a, b) => b.priority - a.priority);
+  const activeStats = latticeStats.filter((s) => !isIdleStat(s.value));
+  const idleStats = latticeStats.filter((s) => isIdleStat(s.value));
 
   // same idea for the payouts-list vs tasks-list panels below: whichever
   // needs action more right now takes the wider, leading position.
@@ -563,27 +677,77 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="space-y-5">
-      {/* Шапка. Имя берём из учётной записи: раньше здесь было
-          захардкожено «Nick», и приветствие обращалось не к тому, кто вошёл. */}
-      <div className="ui-reveal mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <span className="ui-eyebrow">Обзор · {today}</span>
-          <h1 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-[color:var(--color-text)] sm:text-[2.6rem]">
-            {greeting()}
-            {displayName ? (
-              <>
-                ,<br />
-                <b>{displayName}</b>.
-              </>
-            ) : (
-              '.'
-            )}
-          </h1>
+    <div className="relative space-y-5">
+      {sweep > 0 && (
+        <span
+          key={sweep}
+          aria-hidden
+          className="fui-dash-sweep"
+          onAnimationEnd={(e) => e.currentTarget.remove()}
+        />
+      )}
+      {/* Системная шапка. Приветствие осталось — но над ним теперь
+          рейка состояния потока данных, а не строка мелким шрифтом.
+          Все четыре величины реальные и снимаются в load(): сколько
+          источников ответило, за сколько, когда и кто оператор. */}
+      <div className="ui-reveal mb-7">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <span className="ui-eyebrow">Обзор · {today}</span>
+            <h1 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-[color:var(--color-text)] sm:text-[2.6rem]">
+              {greeting()}
+              {displayName ? (<>,<br /><b>{displayName}</b>.</>) : '.'}
+            </h1>
+          </div>
+          <RefreshButton onClick={() => load(true)} disabled={refreshing} spinning={refreshing}>
+            Обновить
+          </RefreshButton>
         </div>
-        <RefreshButton onClick={() => load(true)} disabled={refreshing} spinning={refreshing}>
-          Обновить
-        </RefreshButton>
+
+        {link && (
+          <div className="fui-rail-telemetry mt-6">
+            <div className="fui-rail-telemetry__cell fui-rail-telemetry__cell--lead">
+              <span className="fui-rail-telemetry__k">Поток данных</span>
+              <span className="fui-rail-telemetry__v">
+                <span
+                  className={`fui-status fui-status--always fui-status--${
+                    refreshing ? 'processing' : link.ok === link.total ? 'live' : 'warning'
+                  }`}
+                >
+                  <span className="fui-status__t">
+                    {refreshing ? 'Обновление' : link.ok === link.total ? 'В сети' : 'Частично'}
+                  </span>
+                </span>
+              </span>
+            </div>
+            <div className="fui-rail-telemetry__cell">
+              <span className="fui-rail-telemetry__k">Источники</span>
+              <span className="fui-rail-telemetry__v">
+                {link.ok} / {link.total}
+                <span aria-hidden className="fui-ticks ml-1 hidden sm:flex">
+                  {Array.from({ length: link.total }, (_, i) => (
+                    <i key={i} style={i < link.ok ? { background: 'var(--color-success)', height: '10px' } : undefined} />
+                  ))}
+                </span>
+              </span>
+            </div>
+            <div className="fui-rail-telemetry__cell">
+              <span className="fui-rail-telemetry__k">Отклик</span>
+              <span className="fui-rail-telemetry__v">{link.ms} мс</span>
+            </div>
+            <div className="fui-rail-telemetry__cell">
+              <span className="fui-rail-telemetry__k">Синхронизация</span>
+              <span className="fui-rail-telemetry__v">
+                {link.at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                <span aria-hidden className="fui-cursor" />
+              </span>
+            </div>
+            <div className="fui-rail-telemetry__cell hidden lg:flex">
+              <span className="fui-rail-telemetry__k">Оператор</span>
+              <span className="fui-rail-telemetry__v">{(displayName || '—').toUpperCase()}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -610,48 +774,62 @@ export default function Dashboard() {
                 <>
                   {salesDonut.length > 0 && (
                     <div className="mb-4 flex items-center gap-5 border-b border-[color:var(--color-border)] pb-4">
-                      <div style={{ width: 76, height: 76, flexShrink: 0 }}>
+                      <div className="fui-donut" style={{ width: 104, height: 104 }}>
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
-                            <Pie data={salesDonut} dataKey="value" nameKey="key" innerRadius="55%" outerRadius="90%" paddingAngle={2} isAnimationActive={false}>
+                            <Pie data={salesDonut} dataKey="value" nameKey="key" innerRadius="66%" outerRadius="92%" paddingAngle={2} isAnimationActive={false}>
                               {salesDonut.map((d) => (
                                 <Cell key={d.key} fill={SALES_COLORS[d.key]} stroke="none" />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(v, n, p) => [`${fmt(v)} ₽`, SALES_LABELS[p.payload.key]]} {...tooltipStyle} />
+                            <Tooltip formatter={(v, n, p) => [`${fmt(v)} ₽`, SALES_LABELS[p.payload.key]]} />
                           </PieChart>
                         </ResponsiveContainer>
+                        {/* Показание внутри кольца, а не отдельной строкой под
+                            списком: прибор должен отвечать на «сколько всего»
+                            сам, без поиска итога глазами. */}
+                        <span className="fui-donut__core">
+                          <span className="fui-donut__v">{compactMoney(totTotal)}</span>
+                          <span className="fui-donut__k">Итог</span>
+                        </span>
                       </div>
-                      <div className="flex flex-1 flex-wrap gap-x-5 gap-y-1.5">
+                      <div className="fui-breakdown">
                         {salesDonut.map((d) => (
-                          <div key={d.key} className="flex items-center gap-1.5 text-xs">
-                            <span className="h-2.5 w-2.5 shrink-0" style={{ background: SALES_COLORS[d.key] }} />
-                            <span className="text-[color:var(--color-text-faint)]">{SALES_LABELS[d.key]}</span>
-                            <span className="font-semibold text-[color:var(--color-text)]">{fmt(d.value)} ₽</span>
+                          <div key={d.key} className="fui-breakdown__row" style={{ '--cat': SALES_COLORS[d.key] }}>
+                            <span className="fui-breakdown__sw" />
+                            <span className="fui-breakdown__k">{SALES_LABELS[d.key]}</span>
+                            <span className="fui-breakdown__v">{fmt(d.value)} ₽</span>
+                            <span className="fui-breakdown__p">{sharePct(d.value, totTotal)}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-2">
+                  <div className="fui-ledger">
                     {salesRows.map((r) => {
                       const total = r.repair + r.cosmetics + r.shoes;
                       return (
-                        <div key={r.description} className="flex items-center justify-between gap-3 border border-[color:var(--color-border)] px-3 py-2.5">
-                          <span className="min-w-0 truncate text-sm font-medium text-[color:var(--color-text)]">{r.description}</span>
-                          <div className="flex shrink-0 items-center gap-4 text-xs text-[color:var(--color-text-faint)]">
-                            <span>Р {r.repair ? fmt(r.repair) : '—'}</span>
-                            <span>К {r.cosmetics ? fmt(r.cosmetics) : '—'}</span>
-                            <span>О {r.shoes ? fmt(r.shoes) : '—'}</span>
-                            <span className="font-semibold text-[color:var(--color-text)]">{fmt(total)} ₽</span>
-                          </div>
+                        <div key={r.description} className="fui-ledger__row">
+                          <span className="fui-ledger__name">{r.description}</span>
+                          <span className="fui-ledger__n" style={{ '--cat': SALES_COLORS.repair }}>
+                            <b>Р</b>{r.repair ? fmt(r.repair) : '—'}
+                          </span>
+                          <span className="fui-ledger__n" style={{ '--cat': SALES_COLORS.cosmetics }}>
+                            <b>К</b>{r.cosmetics ? fmt(r.cosmetics) : '—'}
+                          </span>
+                          <span className="fui-ledger__n" style={{ '--cat': SALES_COLORS.shoes }}>
+                            <b>О</b>{r.shoes ? fmt(r.shoes) : '—'}
+                          </span>
+                          <span className="fui-ledger__total">{fmt(total)} ₽</span>
+                          {/* Доля строки в выручке дня: связывает реестр с кольцом. */}
+                          <span className="fui-ledger__share" style={{ width: totTotal ? `${(total / totTotal) * 100}%` : 0 }} />
                         </div>
                       );
                     })}
-                    <div className="flex items-center justify-between border border-[color:var(--color-border)] bg-[color:var(--color-bg-subtle)] px-3 py-2.5">
-                      <span className="text-sm font-semibold text-[color:var(--color-text)]">Итого</span>
-                      <span className="text-sm font-semibold text-[color:var(--color-text)]">{fmt(totTotal)} ₽</span>
+                    <div className="fui-ledger__foot">
+                      <span className="fui-ledger__foot-k">Итого</span>
+                      <span className="fui-ledger__foot-v">{fmt(totTotal)} ₽</span>
                     </div>
                   </div>
                   {hiddenSalesCount > 0 && (
@@ -674,15 +852,24 @@ export default function Dashboard() {
                       <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[color:var(--color-text-faint)]">
                         <Trophy size={13} weight="light" /> Топ по выручке
                       </div>
-                      {topMasters.map((m) => {
+                      {topMasters.map((m, i) => {
                         const pct = maxKredit > 0 ? ((m.total_kredit ?? 0) / maxKredit) * 100 : 0;
                         return (
                           <div key={m.master} className="flex items-center gap-3">
                             <span className="w-24 shrink-0 truncate text-xs text-[color:var(--color-text-muted)]">{m.master}</span>
                             <div className="h-1.5 flex-1 overflow-hidden bg-[color:var(--color-bg-subtle)]">
+                              {/* Акцент достаётся только лидеру. Пять полос одного
+                                  насыщенного цвета не сообщали ранга и делали
+                                  фиолетовый фоновым цветом страницы, а не
+                                  выделением. Остальные набраны графитом. */}
                               <div
                                 className="h-full transition-[width] duration-700 ease-out"
-                                style={{ width: `${pct}%`, background: 'var(--color-primary)' }}
+                                style={{
+                                  width: `${pct}%`,
+                                  background: i === 0
+                                    ? 'var(--color-primary)'
+                                    : `color-mix(in srgb, var(--color-text) ${34 - i * 5}%, transparent)`,
+                                }}
                               />
                             </div>
                             <span className="w-20 shrink-0 text-right text-xs font-semibold text-[color:var(--color-text)]">{fmt(m.total_kredit)} ₽</span>
@@ -722,101 +909,80 @@ export default function Dashboard() {
           {/* business snapshot: cash on hand, outstanding receivables */}
           {(cashBalances || receivables) && (
             <div className="space-y-3">
-              <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
-                // Обзор бизнеса
+              <div className="fui-section">
+                <span className="fui-section__label">Обзор бизнеса</span>
+                <span className="fui-section__line" />
+                <span className="fui-section__meta">
+                  {[cashBalances && 'касса', receivables && 'дебиторка'].filter(Boolean).length} узла
+                </span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              {/* Деньги стоят на поверхности крупным набором, без рамок:
+                  это главные числа страницы, и контейнер вокруг них
+                  ничего не добавляет — только уравнивает со счётчиками. */}
+              <div className="fui-band">
                 {cashBalances && (
-                  <StatOrb
-                    icon={Wallet}
-                    label="Касса, ₽"
-                    value={fmt(cashTotal)}
-                    sub={topCashRegister ? `${topCashRegister.name}: ${fmt(Math.round(topCashRegister.balance))} ₽` : undefined}
-                    tone="neutral"
-                    to="/admin/cash-summary"
-                  />
+                  <button type="button" className="fui-band__cell" onClick={() => navigate('/admin/cash-summary')}>
+                    <span className="fui-band__k">Касса</span>
+                    <span className="fui-band__v">{fmt(cashTotal)}<small>₽</small></span>
+                    <span className="fui-band__m">
+                      {topCashRegister && <span>{topCashRegister.name} · {fmt(Math.round(topCashRegister.balance))} ₽</span>}
+                    </span>
+                  </button>
                 )}
                 {receivables && (
-                  <StatOrb
-                    icon={Receipt}
-                    label="Дебиторская задолженность, ₽"
-                    value={fmt(receivables.total_amount)}
-                    sub={`${receivables.total_count} заказов · 30 дн.`}
-                    tone={receivables.total_count > 0 ? 'warning' : 'neutral'}
-                    to="/admin/receivables"
-                    delay={60}
-                  />
+                  <button
+                    type="button"
+                    className={`fui-band__cell ${receivables.total_count > 0 ? 'fui-band__cell--flag' : ''}`}
+                    style={{ '--flag': 'var(--color-warning)' }}
+                    onClick={() => navigate('/admin/receivables')}
+                  >
+                    <span className="fui-band__k">Дебиторская задолженность</span>
+                    <span className="fui-band__v">{fmt(receivables.total_amount)}<small>₽</small></span>
+                    <span className="fui-band__m">
+                      <span>{receivables.total_count} заказов · 30 дн.</span>
+                      {receivables.total_count > 0 && (
+                        <span className="fui-status fui-status--always fui-status--warning shrink-0">
+                          <span className="fui-status__t">Внимание</span>
+                        </span>
+                      )}
+                    </span>
+                  </button>
                 )}
               </div>
             </div>
           )}
 
-          {/* KPI bento: hero + secondary cells, ranked by what needs attention now */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-12">
-            <div className="col-span-2 lg:col-span-5">
-              <StatOrb {...heroStat} big />
-            </div>
-            <div className="col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:col-span-7">
-              {secondaryStats.map((s, i) => (
-                <StatOrb key={s.key} {...s} delay={60 * (i + 1)} />
-              ))}
-            </div>
+          {/* Одна решётка вместо трёх сеток подряд: показатели задач,
+              подбора и посещаемости — один класс информации и должны
+              читаться одной группой, а не тремя блоками с разным числом
+              колонок и дырами по правому краю. */}
+          <div className="fui-section">
+            <span className="fui-section__label">Ключевые показатели</span>
+            <span className="fui-section__line" />
+            <span className="fui-section__meta">{latticeStats.length} приборов</span>
           </div>
-
-          {/* recruitment notifications */}
-          {recruitNotifs && (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatOrb
-                icon={UserPlus}
-                label="Новые отклики (24ч)"
-                value={recruitNotifs.new_candidates}
-                tone={recruitNotifs.new_candidates > 0 ? 'info' : 'neutral'}
-                to="/admin/recruitment"
-              />
-              <StatOrb
-                icon={ChatCircle}
-                label="Сообщения hh.ru"
-                value={recruitNotifs.unread_hh}
-                tone={recruitNotifs.unread_hh > 0 ? 'warning' : 'neutral'}
-                to="/admin/recruitment"
-                delay={60}
-              />
-              <StatOrb
-                icon={PaperPlaneTilt}
-                label="Сообщения Telegram"
-                value={recruitNotifs.unread_tg}
-                tone={recruitNotifs.unread_tg > 0 ? 'warning' : 'neutral'}
-                to="/admin/recruitment"
-                delay={120}
-              />
-              {recruitNotifs.pending_tg_24h > 0 && (
-                <StatOrb
-                  icon={Clock}
-                  label="Ждут TG-привязки >24ч"
-                  value={recruitNotifs.pending_tg_24h}
-                  tone="danger"
-                  to="/admin/recruitment"
-                  delay={180}
-                />
+          <Reveal>
+            <div className="fui-lattice">
+              {activeStats.map(({ key, ...s }, i) => (
+                <Signal key={key} {...s} lead={i === 0} />
+              ))}
+              {idleStats.length > 0 && (
+                <div className="fui-lattice__quiet">
+                  {idleStats.map((s) => (
+                    <QuietStat key={s.key} label={s.label} value={s.value} to={s.to} />
+                  ))}
+                </div>
               )}
             </div>
-          )}
-
-          {/* footfall */}
-          {visitorSummary && (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <StatOrb
-                icon={Users}
-                label="Посетители сегодня"
-                value={fmt(visitorsToday)}
-                tone="info"
-                to="/admin/visitor-counters"
-              />
-            </div>
-          )}
+          </Reveal>
 
           {/* payouts + tasks: whichever needs action more right now leads */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {/* items-start: панели берут высоту своего содержимого. При
+              растяжении короткая панель («ожидают выплаты» с одной
+              строкой) вытягивалась до высоты соседней и держала под
+              собой пустое поле — пустота не композиционная, а от
+              выравнивания. */}
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
             {financeFirst ? (
               <>
                 <div className="lg:col-span-7">{renderFinancePanel(0)}</div>
@@ -831,7 +997,7 @@ export default function Dashboard() {
           </div>
 
           {/* vacations + birthdays */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
             <BentoCard eyebrow="Персонал" title="Кто сейчас отсутствует" action={<GhostLink to="/admin/vacations" />}>
               {vacations.length === 0 ? (
                 <Empty text="Никто не в отпуске" icon={Umbrella} />

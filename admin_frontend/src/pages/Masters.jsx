@@ -1146,7 +1146,7 @@ export default function Masters() {
                 <ResponsiveTable
                   data={sorted.slice(0, 500)}
                   keyFn={(r) => r.service_id ?? `${r.doc_num}-${r.code}-${r.in_time}`}
-                  rowClass={(r) => r.warnings?.length > 0 ? 'bg-amber-50/60' : ''}
+                  rowState={(r) => (r.warnings?.length > 0 ? 'warning' : null)}
                   emptyText="Работ за период нет" emptyHint="Расчёт строится по чек-инам мастеров — проверьте даты."
                   columns={[
                     {
@@ -1203,25 +1203,28 @@ export default function Masters() {
                     {
                       key: 'in_time',
                       label: sortLabel('in_time', 'Приём'),
-                      cellClass: 'text-right text-[color:var(--color-muted-foreground)]',
+                      numeric: true,
+                      cellClass: 'text-[color:var(--color-muted-foreground)]',
                       render: (r) => fmtDt(r.in_time),
                     },
                     {
                       key: 'out_time',
                       label: sortLabel('out_time', 'Выдача'),
-                      cellClass: 'text-right text-[color:var(--color-muted-foreground)]',
+                      numeric: true,
+                      cellClass: 'text-[color:var(--color-muted-foreground)]',
                       render: (r) => fmtDt(r.out_time),
                     },
                     {
                       key: 'duration_min',
                       label: sortLabel('duration_min', 'Длит.'),
-                      cellClass: 'text-right',
+                      numeric: true,
                       render: (r) => fmtMin(r.duration_min),
                     },
                     {
                       key: 'master_salary',
                       label: sortLabel('master_salary', 'ЗП'),
-                      cellClass: 'text-right font-medium text-[color:var(--color-primary)]',
+                      numeric: true,
+                      cellClass: 'font-medium text-[color:var(--color-primary)]',
                       render: (r) => fmtRub(r.master_salary),
                     },
                   ]}

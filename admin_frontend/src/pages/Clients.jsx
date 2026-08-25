@@ -150,7 +150,7 @@ function ClientCard({ profile, openedAt }) {
             {profile.name || '—'}
             {churn?.atRisk && (
               <span
-                className="client-fui-radar"
+                className="fui-radar fui-radar--alert"
                 title={`Не заказывал ${churn.daysSinceLast} дн. — обычно раз в ${churn.avgGapDays} дн.`}
               >
                 <i /><i /><i /><b />

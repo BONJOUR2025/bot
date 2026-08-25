@@ -321,7 +321,7 @@ export default function SaleTransfers() {
         <span className="sep">·</span>
         <span>
           {clockNow.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          <span className="transfer-fui-cursor">_</span>
+          <span className="fui-cursor">_</span>
         </span>
       </div>
       <div className="app-card overflow-hidden">
@@ -343,7 +343,7 @@ export default function SaleTransfers() {
                 render: (t) => (
                   <span className="whitespace-nowrap text-xs text-[color:var(--color-muted-foreground)] inline-flex items-center gap-1.5">
                     {justHappened && latestTransfer?.id === t.id && (
-                      <span className="transfer-fui-radar" title="Только что"><i /><i /><i /><b /></span>
+                      <span className="fui-radar" title="Только что"><i /><i /><i /><b /></span>
                     )}
                     {fmtDateTime(t.created_at)}
                   </span>

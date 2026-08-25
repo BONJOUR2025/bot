@@ -420,7 +420,7 @@ function SalonCard({ salon, employees, onClick }) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {salon.status === 'active' && (
-            <span className="salon-fui-radar" title="Точка в сети — статус «Работает»">
+            <span className="fui-radar fui-radar--live" title="Точка в сети — статус «Работает»">
               <i /><i /><i /><b />
             </span>
           )}
@@ -691,7 +691,7 @@ export default function Salons() {
 
   // ── FUI: сетевая телеметрия ────────────────────────────────────
   // Живые часы для строки телеметрии — тот же паттерн, что и на
-  // «Выплатах» (payout-fui-cursor), под своим префиксом salon-fui-.
+  // «Выплатах» (fui-cursor), под своим префиксом salon-fui-.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -756,7 +756,7 @@ export default function Salons() {
             <span>СР. ПЛОЩАДЬ: <b>{networkStats.avgArea} м²</b></span><span className="sep">·</span>
           </>
         )}
-        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="salon-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
       </div>
 
       {/* Stats row — click a card to filter the list by status */}

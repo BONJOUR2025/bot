@@ -264,7 +264,7 @@ export default function VisitorCounters() {
         <span>ТОЧЕК НА СВЯЗИ: <b>{cumulative.length}</b></span><span className="sep">·</span>
         <span>ВОШЛО: <b style={{ color: 'var(--color-success)' }}>{liveTotals.in}</b></span><span className="sep">·</span>
         <span>СЕЙЧАС В ЗАЛАХ: <b style={{ color: 'var(--color-primary)' }}>{Math.max(0, liveTotals.net)}</b></span><span className="sep">·</span>
-        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="visitor-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
       </div>
 
       <div className="visitor-fui-frame grid gap-3 sm:grid-cols-2 lg:grid-cols-3 p-3">
@@ -281,7 +281,7 @@ export default function VisitorCounters() {
                 <div className="min-w-0">
                   <div className="text-xs text-[color:var(--color-text-muted)] flex items-center gap-1.5">
                     {isHottest && (
-                      <span className="visitor-fui-radar" title="Больше всего входов сегодня"><i /><i /><i /><b /></span>
+                      <span className="fui-radar fui-radar--alert" title="Больше всего входов сегодня"><i /><i /><i /><b /></span>
                     )}
                     <span>{row.salon_name || row.salon_id}{row.reset_at ? ` · с ${fmtDateTime(row.reset_at)}` : ''}</span>
                   </div>

@@ -252,7 +252,7 @@ export default function Receivables() {
                             (тот же порог > 30 дн., что и худший бакет
                             OVERDUE_BUCKETS), а не декорация. */}
                         {WORST_OVERDUE_TEST(o.days_overdue) && (
-                          <span className="receivable-fui-radar" title="Просрочка 30+ дней"><i /><i /><i /><b /></span>
+                          <span className="fui-radar fui-radar--alert" title="Просрочка 30+ дней"><i /><i /><i /><b /></span>
                         )}
                         {o.doc_num}
                       </div>

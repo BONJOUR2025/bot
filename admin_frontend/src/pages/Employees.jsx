@@ -572,7 +572,7 @@ export default function Employees() {
         <span>АКТИВНЫ: <b style={{ color: 'var(--color-success)' }}>{activeCount}</b></span><span className="sep">·</span>
         <span>АДМИНЫ: <b style={{ color: 'var(--color-warning)' }}>{adminCount}</b></span><span className="sep">·</span>
         <span>БЕЗ КАРТЫ: <b style={{ color: noCardCount ? 'var(--color-danger)' : 'var(--color-text)' }}>{noCardCount}</b></span><span className="sep">·</span>
-        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="employee-fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
+        <span>{now.toLocaleDateString('ru-RU')} {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}:<span className="fui-cursor">{String(now.getSeconds()).padStart(2, '0')}</span></span>
       </div>
 
       <UpcomingBirthdays />
@@ -779,7 +779,8 @@ export default function Employees() {
           data={sortedList}
           keyFn={(e) => e.id}
           emptyText="Нет сотрудников"
-          rowClass={(e) => `cursor-pointer ${e.is_admin ? 'bg-orange-50 hover:bg-orange-100' : 'hover:bg-blue-50'} ${e.status !== 'active' ? 'opacity-60' : ''}`}
+          rowClass={() => 'cursor-pointer'}
+          rowState={(e) => (e.status !== 'active' ? 'disabled' : e.is_admin ? 'selected' : null)}
           columns={[
             {
               label: '',
@@ -823,7 +824,10 @@ export default function Employees() {
                       без номера карты (тот же флаг, что и КPI «Без карты» на
                       «Обзоре») это то, что реально требует внимания сейчас. */}
                   {!e.card_number && e.status === 'active' && (
-                    <span className="employee-fui-radar" title="Нет номера карты — требует внимания"><i /><i /><i /><b /></span>
+                    /* Тот же случай, что и в подборе персонала: радар стоял
+                       на каждой строке без номера карты — девять анимаций
+                       в кадре. Состояние строки помечает статичный маркер. */
+                    <span className="fui-status fui-status--warning" title="Нет номера карты - требует внимания" />
                   )}
                   {e.full_name}
                   {e.is_admin && <span className="ml-2 text-xs text-orange-600 font-medium">Админ</span>}

@@ -829,7 +829,7 @@ export default function PaymentCalendar() {
                                   {/* Радар-пинг — только для неоплаченных платежей,
                                       срок которых наступил сегодня или уже прошёл. */}
                                   {r.status === 'pending' && urgency.tier === 'danger' && (
-                                    <span className="calendar-fui-radar" title="Требует внимания — срок наступил"><i /><i /><i /><b /></span>
+                                    <span className="fui-radar fui-radar--alert" title="Требует внимания — срок наступил"><i /><i /><i /><b /></span>
                                   )}
                                   <span className="font-medium text-sm truncate">{sc.name}</span>
                                   {r.status === 'pending' && (

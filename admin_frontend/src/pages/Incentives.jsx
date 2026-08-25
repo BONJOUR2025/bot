@@ -261,7 +261,6 @@ export default function Incentives() {
   // не завязаны на CSS-переменные темы и оставались светлыми (по сути
   // невидимыми) поверх тёмного фона таблицы. Тот же класс уже
   // используется в CourierSalary.jsx/ManagerSalary.jsx/Recruitment.jsx.
-  const rowColor = (type) => (type === 'bonus' ? 'bg-[color:var(--color-success-muted)]' : 'bg-[color:var(--color-danger-muted)]');
   const typeLabel = (t) => (t === 'bonus' ? '💰 Премия' : '⚠️ Штраф');
 
   // ── Derived analytics ──────────────────────────────────────────
@@ -480,18 +479,16 @@ export default function Incentives() {
           <ResponsiveTable
             data={displayList}
             keyFn={(item) => item.id}
-            rowClass={(item) => rowColor(item.type)}
             emptyText="Начислений нет" emptyHint="За выбранный период штрафы и премии не заводились."
             columns={[
               { label: 'Сотрудник', key: 'name', primary: true },
-              { label: 'Дата', key: 'date' },
+              { label: 'Дата', key: 'date', numeric: true },
               { label: 'Тип', render: (item) => <span className="font-medium">{typeLabel(item.type)}</span> },
               {
                 label: 'Сумма',
-                headerClass: 'text-right',
-                cellClass: 'text-right whitespace-nowrap',
+                numeric: true,
                 render: (item) => (
-                  <span className={`font-medium tabular-nums ${item.type === 'bonus' ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}>
+                  <span className={`font-medium ${item.type === 'bonus' ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-danger)]'}`}>
                     {item.type === 'bonus' ? '+' : '−'}{Number(item.amount || 0).toLocaleString('ru-RU')} ₽
                   </span>
                 ),

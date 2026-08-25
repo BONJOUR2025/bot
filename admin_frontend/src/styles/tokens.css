@@ -562,6 +562,58 @@
   --fill-danger:    var(--color-danger);
   --glass-ease:     cubic-bezier(0.32, 0.72, 0, 1);
   --glass-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── FUI: ролевой слой ──────────────────────────────────────
+     Тёмная тема — командный центр: приборы читаются как подсвеченные
+     кромки на почти чёрном, свечение направленное и скупое.
+     Значения намеренно тише, чем кажется нужным: деталей много, и
+     каждая, взятая чуть ярче, в сумме даёт «неоновую панель». */
+
+  /* Кромки модулей: покой → внимание → активность → тревога. */
+  --fui-edge:          rgba(255, 255, 255, 0.075);
+  --fui-edge-strong:   rgba(255, 255, 255, 0.145);
+  --fui-edge-active:   color-mix(in srgb, var(--color-primary) 45%, transparent);
+  --fui-edge-selected: color-mix(in srgb, var(--color-primary) 72%, transparent);
+  --fui-edge-alert:    color-mix(in srgb, var(--color-danger) 55%, transparent);
+
+  /* Свечение. Только как кромка или короткая вспышка — никаких
+     больших ореолов: они на тёмном фоне читаются как гало вокруг
+     карточки, а не как подсветка прибора. */
+  --fui-glow-subtle: 0 0 0 1px color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --fui-glow-active: 0 0 18px -6px color-mix(in srgb, var(--color-primary) 60%, transparent);
+  --fui-glow-alert:  0 0 18px -6px color-mix(in srgb, var(--color-danger) 60%, transparent);
+
+  /* Техническая графика. */
+  --fui-grid-ink:    rgba(255, 255, 255, 0.032);
+  --fui-grid-size:   26px;
+  --fui-hair:        rgba(255, 255, 255, 0.10);
+  --fui-bracket:     rgba(255, 255, 255, 0.24);
+  --fui-bracket-len: 10px;
+
+  /* Тайминги. ambient — фон, его никто не должен замечать. */
+  --fui-t-micro:    120ms;
+  --fui-t-normal:   240ms;
+  --fui-t-emphasis: 520ms;
+  --fui-t-ambient:  78s;
+
+  /* Статусы. Цвет — только половина языка, вторую несут форма и
+     движение (см. .fui-status в globals.css). */
+  --fui-live:       var(--color-success);
+  --fui-active:     var(--color-primary);
+  --fui-processing: var(--color-info);
+  --fui-paused:     var(--color-text-faint);
+  --fui-warning:    var(--color-warning);
+  --fui-error:      var(--color-danger);
+  --fui-success:    var(--color-success);
+
+  /* Категории в разрезах (донат, доли, легенды). Отдельная шкала, а не
+     светофор: раньше третья категория брала --color-warning, и обычная
+     строка «Обувь» читалась как предупреждение. Здесь цвет означает
+     только «это другая доля», поэтому шкала одна — акцент, холодный,
+     нейтральный — и упорядочена по убыванию веса. */
+  --fui-cat-1: var(--color-primary);
+  --fui-cat-2: var(--color-info);
+  --fui-cat-3: rgba(255, 255, 255, 0.38);
 }
 
 /* ── Soft Structuralism — светлый компаньон ─────────────────────
@@ -662,4 +714,31 @@
   --fill-success:   #0b7c54;
   --fill-danger:    #c22f47;
   --glass-grain-opacity: 0.022;
+
+  /* ── FUI: светлый вариант ────────────────────────────────────
+     Не «тот же FUI, только белый». Тёмная тема освещает приборы
+     изнутри — здесь освещения нет вообще: точный измерительный
+     инструмент, где всё держится на графитовых линиях и печатной
+     сетке. Поэтому свечение почти обнуляется, а кромки становятся
+     темнее фона, а не светлее. */
+  --fui-edge:          rgba(12, 12, 20, 0.085);
+  --fui-edge-strong:   rgba(12, 12, 20, 0.16);
+  --fui-edge-active:   color-mix(in srgb, var(--color-primary) 40%, transparent);
+  --fui-edge-selected: color-mix(in srgb, var(--color-primary) 65%, transparent);
+  --fui-edge-alert:    color-mix(in srgb, var(--color-danger) 45%, transparent);
+
+  /* Свечения как такового нет: на белом оно читается грязным пятном.
+     Вместо него — уплотнение кромки и мягкая тень под модулем. */
+  --fui-glow-subtle: 0 0 0 1px color-mix(in srgb, var(--color-primary) 10%, transparent);
+  --fui-glow-active: 0 6px 18px -10px color-mix(in srgb, var(--color-primary) 55%, transparent);
+  --fui-glow-alert:  0 6px 18px -10px color-mix(in srgb, var(--color-danger) 50%, transparent);
+
+  --fui-grid-ink:    rgba(12, 12, 30, 0.032);
+  --fui-hair:        rgba(12, 12, 20, 0.12);
+  --fui-bracket:     rgba(12, 12, 20, 0.30);
+
+  /* Нейтральная ступень шкалы категорий: на белом ground'е она должна
+     быть тёмной, иначе доля пропадает. Акцент и холодный берутся из
+     светлой палитры сами. */
+  --fui-cat-3: rgba(12, 12, 20, 0.34);
 }

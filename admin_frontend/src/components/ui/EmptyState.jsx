@@ -1,17 +1,28 @@
 import { Inbox } from 'lucide-react';
 
+const KIND_CODE = {
+  empty: 'Нет данных',
+  loading: 'Загрузка',
+  error: 'Данные недоступны',
+};
+
 /**
- * Состояние пустоты.
+ * Состояние поверхности данных: пусто, загрузка, ошибка.
  *
- * До этого по страницам было раскидано 54 повтора строки «Нет данных».
- * Она не отвечает ни на один вопрос, который в этот момент возникает:
- * данных нет вообще, или их отсеяли фильтры, или период выбран не тот,
- * или что-то нужно сначала завести. Поэтому здесь два уровня текста:
- * `title` называет факт, `hint` объясняет причину или следующий шаг.
+ * Раньше это была отдельная композиция «иконка в кружке + заголовок +
+ * подсказка», не связанная ни с чем в системе, а страницы вдобавок
+ * писали свои пустые состояния голым текстом. Теперь компонент рисует
+ * тот же операционный вид, что и таблицы (.fui-datastate): моношиный
+ * код состояния, техническая черта, объяснение обычным текстом.
  *
- * `action` — кнопка, если из этого места действительно можно что-то
- * сделать (завести первую запись, сбросить фильтры). Если сделать
- * нечего, кнопку лучше не показывать, чем показывать неработающую.
+ * Подпись состояния и формулировка разделены намеренно. Код («Нет
+ * данных») говорит, ЧТО со стороны системы, и одинаков везде; title
+ * остаётся тем, что написала страница («Работ за период нет»), поэтому
+ * ни одна из трёх десятков точек вызова не переписывается.
+ *
+ * Иконка встала на место маркера состояния: она несёт смысл раздела,
+ * а держать её в отдельном кружке над кодом значило бы городить пятый
+ * ярус в блоке, который по смыслу должен быть тихим.
  */
 export default function EmptyState({
   title = 'Нет данных',
@@ -19,35 +30,25 @@ export default function EmptyState({
   icon: Icon = Inbox,
   action,
   compact = false,
+  kind = 'empty',
   className = '',
 }) {
+  const code = KIND_CODE[kind] ?? KIND_CODE.empty;
+  const showTitle = title && title !== code;
+
   return (
     <div
-      className={`flex flex-col items-center justify-center text-center ${
-        compact ? 'gap-2 py-6' : 'gap-3 py-12'
+      className={`fui-datastate${kind !== 'empty' ? ` fui-datastate--${kind}` : ''}${
+        compact ? ' fui-datastate--compact' : ''
       } ${className}`.trim()}
     >
-      <span
-        className={`grid place-items-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-control-bg)] text-[color:var(--color-text-faint)] ${
-          compact ? 'h-9 w-9' : 'h-12 w-12'
-        }`}
-      >
-        <Icon size={compact ? 16 : 20} strokeWidth={1.3} />
+      <span className="fui-datastate__code fui-datastate__code--icon">
+        <Icon size={compact ? 13 : 14} strokeWidth={1.5} aria-hidden />
+        {code}
       </span>
-      <div>
-        <div
-          className={`font-medium text-[color:var(--color-text-muted)] ${
-            compact ? 'text-sm' : 'text-[15px]'
-          }`}
-        >
-          {title}
-        </div>
-        {hint && (
-          <div className="mx-auto mt-1 max-w-[46ch] text-xs text-[color:var(--color-text-faint)]">
-            {hint}
-          </div>
-        )}
-      </div>
+      <span className="fui-datastate__rule" />
+      {showTitle && <span className="fui-datastate__title">{title}</span>}
+      {hint && <span className="fui-datastate__text">{hint}</span>}
       {action && <div className="mt-1">{action}</div>}
     </div>
   );
