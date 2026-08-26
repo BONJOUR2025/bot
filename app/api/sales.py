@@ -152,6 +152,8 @@ def create_sales_router() -> APIRouter:
         salon_ids: Optional[str] = Query(default=None, description="Comma-separated salon order-number suffixes"),
         search: Optional[str] = Query(default=None, description="Поиск по номеру заказа или клиенту"),
         limit: int = Query(default=500, ge=1, le=2000),
+        employee_codes: Optional[str] = Query(default=None, description="Comma-separated employee codes"),
+        categories: Optional[str] = Query(default=None, description="Comma-separated category keys"),
     ):
         """Список заказов за период для вкладки «Заказы».
 
@@ -166,6 +168,7 @@ def create_sales_router() -> APIRouter:
             svc = get_firebird_service()
             return await run_with_timeout(
                 svc.get_orders_for_period, df, dt, _parse_salon_ids(salon_ids), search, limit,
+                _parse_csv_list(employee_codes), _parse_csv_list(categories),
             )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Запрос выполняется слишком долго. Сузьте период и попробуйте снова.")

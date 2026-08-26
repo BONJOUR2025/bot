@@ -948,8 +948,13 @@ export default function SalesAnalytics() {
     if (dateTo)   params.date_to   = dateTo;
     const salonIds = selectedSalons.size ? [...selectedSalons].join(',') : undefined;
     if (salonIds) params.salon_ids = salonIds;
-    // Only /sales/top-products reads this — the other lazy endpoints just
-    // ignore an unused query param, so it's simplest to always include it
+    // Not every lazy endpoint reads every one of these (turnaround/returns/
+    // departments/top-products/orders read `categories`; departments/
+    // top-products/orders read `employee_codes`; only turnaround reads
+    // `service_search` — see EMPLOYEES_INAPPLICABLE_TABS/
+    // CATEGORIES_INAPPLICABLE_TABS above for which tab's own filter UI is
+    // disabled instead of silently no-oped). A route that doesn't declare a
+    // param just drops it, so it's simplest to always build the full set
     // here rather than special-case buildParams per tab.
     const categories = selectedCategories.size ? [...selectedCategories].join(',') : undefined;
     if (categories) params.categories = categories;

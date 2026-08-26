@@ -1521,6 +1521,8 @@ class FirebirdService:
         salon_ids: list[str] | None = None,
         search: str | None = None,
         limit: int = 500,
+        employee_codes: list[str] | None = None,
+        categories: list[str] | None = None,
     ) -> list[dict]:
         """Orders accepted in a date range, one row per order, for the sales
         page's «Заказы» tab.
@@ -1538,6 +1540,16 @@ class FirebirdService:
         matching _order_salon_code and the payroll-by-salon report, not
         DOCS.DEP_ID — mixing the two conventions is how the same order ends
         up counted under different salons in different reports.
+
+        `employee_codes`/`categories` used to be accepted by the frontend's
+        shared filter bar and silently dropped here — this function didn't
+        take either param, so the «Сотрудники»/«Категории» filters had no
+        effect on this tab at all. Both must live in SQL (not a Python
+        post-filter after fetch), for the same reason the date/salon
+        filters already do: ROWS {limit} truncates the result set
+        server-side, so filtering afterward could show zero matches for an
+        employee/category that has orders in range but not among the first
+        `limit` rows overall.
         """
         if not FIREBIRD_AVAILABLE:
             return []
@@ -1561,6 +1573,21 @@ class FirebirdService:
         if needle:
             where.append("(LOWER(d.doc_num) LIKE ? OR LOWER(c.name) LIKE ?)")
             params.extend([f"%{needle}%", f"%{needle}%"])
+
+        emp_codes = [str(e).strip() for e in (employee_codes or []) if str(e).strip()]
+        if emp_codes:
+            # Код — последние 4 цифры USERS.DESCRIPTION (см. _code_from_description).
+            # TRIM важен: _code_from_description сначала .strip()'ит строку, а
+            # хвостовой пробел в самой базе не редкость — без TRIM LIKE не совпал бы.
+            where.append("(" + " OR ".join(["TRIM(u.description) LIKE ?"] * len(emp_codes)) + ")")
+            params.extend(f"%{c}" for c in emp_codes)
+
+        cat_set = {c for c in (categories or []) if c}
+        if cat_set:
+            cat_sql, cat_params = _category_exists_sql(cat_set, order_id_col='dor.id')
+            if cat_sql:
+                where.append(cat_sql)
+                params.extend(cat_params)
 
         sql = f"""
             SELECT
