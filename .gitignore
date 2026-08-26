@@ -11,6 +11,7 @@ payroll_audit.json
 manager_salary_accruals.json
 manager_plans.json
 lasts.json
+apprentice_attendance_marks.json
 static/uploads/lasts/
 
 # Runtime logs (see app/utils/logger.py — categorized under logs/<category>/)

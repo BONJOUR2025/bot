@@ -455,7 +455,14 @@ def get_apprentice_stipends(date_from: date, date_to: date, rate: float = APPREN
     values, so a report for a month after someone graduated to "Мастер"
     will no longer find them here. Known limitation, not a bug: fixing it
     would mean adding position-change history, which nobody asked for.
+
+    Turnstile presence is the primary source but not the only one: a
+    forgotten badge, a broken turnstile, or a training day spent off-site
+    all leave no DOC_REGISTR_EMPLOYEES row, so an admin can add a manual
+    mark for a day (ApprenticeAttendanceRepository) and it counts exactly
+    like a badge-in. A day with both is still one day, not two.
     """
+    from app.data.apprentice_attendance_repository import get_apprentice_attendance_repository
     from app.data.employee_repository import EmployeeRepository
 
     apprentices = [e for e in EmployeeRepository().list_employees(archived=False) if e.position == APPRENTICE_POSITION]
@@ -493,17 +500,39 @@ def get_apprentice_stipends(date_from: date, date_to: date, rate: float = APPREN
         except Exception:
             logger.exception("Не удалось получить регистрации учеников из Firebird")
 
+    manual_days_by_employee: dict[str, set] = {e.id: set() for e in apprentices}
+    manual_notes: dict[tuple[str, str], str] = {}
+    for rec in get_apprentice_attendance_repository().list_for_range(date_from, date_to):
+        eid = str(rec.get("employee_id"))
+        if eid not in apprentice_ids:
+            continue
+        try:
+            d = date.fromisoformat(str(rec.get("date")))
+        except ValueError:
+            continue
+        manual_days_by_employee[eid].add(d)
+        manual_notes[(eid, d.isoformat())] = rec.get("note") or ""
+        days_by_employee[eid].add(d)
+
     repo = PayoutRepository()
     result = []
     for e in apprentices:
-        days = sorted(days_by_employee.get(e.id, ()))
-        stipend = round(len(days) * rate, 2)
+        all_days = sorted(days_by_employee.get(e.id, ()))
+        manual_set = manual_days_by_employee.get(e.id, set())
+        stipend = round(len(all_days) * rate, 2)
         advances = repo.advances_since_last_salary(e.id)["total"]
         result.append({
             "employee_id": e.id,
             "name": e.full_name or e.name,
-            "days_count": len(days),
-            "days": [d.isoformat() for d in days],
+            "days_count": len(all_days),
+            "days": [
+                {
+                    "date": d.isoformat(),
+                    "manual": d in manual_set,
+                    "note": manual_notes.get((e.id, d.isoformat()), ""),
+                }
+                for d in all_days
+            ],
             "rate": rate,
             "stipend": stipend,
             "advances_since_last_salary": advances,

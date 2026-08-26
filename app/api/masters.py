@@ -6,9 +6,16 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
-from .dependencies import require_permission
+from .dependencies import get_current_user, require_permission
+from app.services.access_control_service import ResolvedUser
 from app.services.masters_service import resolve_works_range
+
+
+class AttendanceMarkInput(BaseModel):
+    date: date
+    note: str = ""
 
 
 def create_masters_router() -> APIRouter:
@@ -109,5 +116,42 @@ def create_masters_router() -> APIRouter:
             raise HTTPException(status_code=500, detail=str(exc))
 
         return {"apprentices": rows, **extra}
+
+    @router.post("/apprentices/{employee_id}/attendance")
+    async def add_apprentice_mark(
+        employee_id: str,
+        data: AttendanceMarkInput,
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        """Manually mark a training day for an apprentice — turnstile
+        presence is the primary source (see get_apprentice_stipends) but
+        misses a forgotten badge, a broken turnstile, or a day spent
+        off-site. Idempotent per (employee_id, date): adding again just
+        updates the note.
+        """
+        from app.data.employee_repository import EmployeeRepository
+        from app.data.apprentice_attendance_repository import get_apprentice_attendance_repository
+        from app.services.masters_service import APPRENTICE_POSITION
+
+        emp = EmployeeRepository().get_employee(employee_id)
+        if emp is None:
+            raise HTTPException(status_code=404, detail="Сотрудник не найден")
+        if emp.position != APPRENTICE_POSITION:
+            raise HTTPException(status_code=400, detail=f'У сотрудника не должность «{APPRENTICE_POSITION}»')
+
+        author = getattr(current, "login", None) or getattr(current, "id", "admin")
+        rec = get_apprentice_attendance_repository().add_mark(
+            employee_id, data.date, note=data.note.strip(), author=str(author),
+        )
+        return rec
+
+    @router.delete("/apprentices/{employee_id}/attendance/{mark_date}")
+    async def remove_apprentice_mark(employee_id: str, mark_date: date):
+        from app.data.apprentice_attendance_repository import get_apprentice_attendance_repository
+
+        removed = get_apprentice_attendance_repository().remove_mark(employee_id, mark_date)
+        if not removed:
+            raise HTTPException(status_code=404, detail="Отметка не найдена")
+        return {"status": "deleted"}
 
     return router

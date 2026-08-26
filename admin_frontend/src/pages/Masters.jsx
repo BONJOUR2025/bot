@@ -35,6 +35,13 @@ const fmtDt = (v) => {
   try { return new Date(v).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
   catch { return v; }
 };
+// Дата приходит как «YYYY-MM-DD» — парсить через `new Date(iso)` небезопасно
+// (UTC-полночь сдвигается на день назад в часовых поясах западнее UTC),
+// поэтому режем строку напрямую.
+const fmtDay = (iso) => {
+  const [, m, d] = String(iso || '').split('-');
+  return m && d ? `${d}.${m}` : '—';
+};
 
 const STATUS_COLORS = {
   'Выполнено': 'bg-green-100 text-green-800',
@@ -512,6 +519,63 @@ function splitIntoMonthlyRanges(fromStr, toStr) {
   return ranges;
 }
 
+// Дни ученика: чипы с датами (ручные — с крестиком на удаление, турникетные —
+// только для чтения, они приходят из Agbis и корректируются не отсюда) плюс
+// форма добавления новой отметки. Общий для мобильной карточки и десктопной
+// строки таблицы — сама панель раскрывается только для одного ученика за
+// раз (expandedApprenticeId), остальное дублировать незачем.
+function ApprenticeMarksPanel({
+  apprentice, dateFrom, dateTo,
+  newMarkDate, setNewMarkDate, newMarkNote, setNewMarkNote,
+  markBusy, markError, onAdd, onRemove,
+}) {
+  return (
+    <div className="px-4 py-3 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-subtle)] space-y-3">
+      {apprentice.days.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {apprentice.days.map((d) => (
+            <span key={d.date}
+              className={`inline-flex items-center gap-1 pl-2 pr-1.5 py-0.5 rounded-full text-xs font-medium border ${
+                d.manual
+                  ? 'border-dashed border-amber-400 text-amber-700 bg-amber-50'
+                  : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'
+              }`}
+              title={d.manual ? (d.note || 'Добавлено вручную') : 'Отметка турникета'}>
+              {fmtDay(d.date)}
+              {d.manual && (
+                <button type="button" disabled={markBusy} onClick={() => onRemove(apprentice.employee_id, d.date)}
+                  className="hover:opacity-70 disabled:opacity-40" title="Удалить отметку">
+                  <X size={11} />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="text-xs text-[color:var(--color-muted-foreground)]">Дней ещё нет</div>
+      )}
+
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs">
+          <span className="block text-[color:var(--color-muted-foreground)] mb-1">Добавить день</span>
+          <input type="date" className="input" min={dateFrom} max={dateTo}
+            value={newMarkDate} onChange={(e) => setNewMarkDate(e.target.value)} />
+        </label>
+        <label className="text-xs flex-1 min-w-[140px]">
+          <span className="block text-[color:var(--color-muted-foreground)] mb-1">Комментарий (необязательно)</span>
+          <input className="input w-full" placeholder="Забыл пропуск, обучение вне салона…"
+            value={newMarkNote} onChange={(e) => setNewMarkNote(e.target.value)} />
+        </label>
+        <button type="button" className="btn btn--secondary btn--sm" disabled={!newMarkDate || markBusy}
+          onClick={() => onAdd(apprentice.employee_id)}>
+          <ListChecks size={13} /> Отметить
+        </button>
+      </div>
+      {markError && <div className="text-xs text-red-600">{markError}</div>}
+    </div>
+  );
+}
+
 export default function Masters() {
   const { isMobile } = useViewport();
   const now = new Date();
@@ -556,6 +620,11 @@ export default function Masters() {
   const [apprenticesLoading, setApprenticesLoading] = useState(false);
   const [apprenticesError, setApprenticesError]     = useState(null);
   const [apprenticesLoadedRange, setApprenticesLoadedRange] = useState(null);
+  const [expandedApprenticeId, setExpandedApprenticeId] = useState(null);
+  const [newMarkDate, setNewMarkDate] = useState('');
+  const [newMarkNote, setNewMarkNote] = useState('');
+  const [markBusy, setMarkBusy]       = useState(false);
+  const [markError, setMarkError]     = useState(null);
   const [loaded, setLoaded]               = useState(false);
   const [warningsOnly, setWarningsOnly]   = useState(false);
   const [tab, setTab] = useState('overview');
@@ -826,6 +895,42 @@ export default function Masters() {
     }
   }
 
+  function toggleApprenticeExpand(employeeId) {
+    setExpandedApprenticeId((cur) => (cur === employeeId ? null : employeeId));
+    setNewMarkDate('');
+    setNewMarkNote('');
+    setMarkError(null);
+  }
+
+  async function addApprenticeMark(employeeId) {
+    if (!newMarkDate) return;
+    setMarkBusy(true);
+    setMarkError(null);
+    try {
+      await api.post(`/masters/apprentices/${employeeId}/attendance`, { date: newMarkDate, note: newMarkNote });
+      setNewMarkDate('');
+      setNewMarkNote('');
+      await loadApprentices();
+    } catch (e) {
+      setMarkError(e?.response?.data?.detail || 'Не удалось добавить отметку');
+    } finally {
+      setMarkBusy(false);
+    }
+  }
+
+  async function removeApprenticeMark(employeeId, dateStr) {
+    setMarkBusy(true);
+    setMarkError(null);
+    try {
+      await api.delete(`/masters/apprentices/${employeeId}/attendance/${dateStr}`);
+      await loadApprentices();
+    } catch (e) {
+      setMarkError(e?.response?.data?.detail || 'Не удалось удалить отметку');
+    } finally {
+      setMarkBusy(false);
+    }
+  }
+
   // Лёгкий запрос (одна таблица турникета, без джойнов на доки/услуги
   // мастеров), в отличие от «works» выше — грузим сам при открытии
   // вкладки или смене периода, не дожидаясь отдельного клика.
@@ -989,7 +1094,11 @@ export default function Masters() {
                 <div className="space-y-3">
                   {apprentices.map((a) => (
                     <div key={a.employee_id} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
-                      <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium">{a.name}</div>
+                      <button type="button" onClick={() => toggleApprenticeExpand(a.employee_id)}
+                        className="w-full px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium flex items-center justify-between text-left">
+                        {a.name}
+                        {expandedApprenticeId === a.employee_id ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      </button>
                       <div className="px-4 py-2 space-y-1.5 text-sm">
                         <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Дней обучения</span><span>{a.days_count}</span></div>
                         <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Ставка</span><span className="text-[color:var(--color-muted-foreground)]">{fmtRub(a.rate)}/день</span></div>
@@ -997,6 +1106,13 @@ export default function Masters() {
                         <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]" title="Авансы («Выплачено»/«Одобрено»), выданные после последней выплаты типа «Зарплата»">Аванс с посл. ЗП</span><span className="text-amber-600">{fmtRub(a.advances_since_last_salary)}</span></div>
                         <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">К выплате</span><span className="font-semibold text-emerald-600">{fmtRub(a.to_pay)}</span></div>
                       </div>
+                      {expandedApprenticeId === a.employee_id && (
+                        <ApprenticeMarksPanel apprentice={a} dateFrom={dateFrom} dateTo={dateTo}
+                          newMarkDate={newMarkDate} setNewMarkDate={setNewMarkDate}
+                          newMarkNote={newMarkNote} setNewMarkNote={setNewMarkNote}
+                          markBusy={markBusy} markError={markError}
+                          onAdd={addApprenticeMark} onRemove={removeApprenticeMark} />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1014,16 +1130,34 @@ export default function Masters() {
                       </tr>
                     </thead>
                     <tbody>
-                      {apprentices.map((a, i) => (
-                        <tr key={a.employee_id} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
-                          <td className="px-4 py-2 font-medium">{a.name}</td>
-                          <td className="px-4 py-2 text-right">{a.days_count}</td>
-                          <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtRub(a.rate)}/день</td>
-                          <td className="px-4 py-2 text-right font-semibold text-[color:var(--color-primary)]">{fmtRub(a.stipend)}</td>
-                          <td className="px-4 py-2 text-right text-amber-600">{fmtRub(a.advances_since_last_salary)}</td>
-                          <td className="px-4 py-2 text-right font-semibold text-emerald-600">{fmtRub(a.to_pay)}</td>
-                        </tr>
-                      ))}
+                      {apprentices.map((a, i) => [
+                          <tr key={a.employee_id}
+                            className={`cursor-pointer hover:bg-[color:var(--color-primary-muted)]/40 ${i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}`}
+                            onClick={() => toggleApprenticeExpand(a.employee_id)}>
+                            <td className="px-4 py-2 font-medium">
+                              <span className="inline-flex items-center gap-1.5">
+                                {expandedApprenticeId === a.employee_id ? <ChevronUp size={13} /> : <ChevronDown size={13} className="opacity-40" />}
+                                {a.name}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-right">{a.days_count}</td>
+                            <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtRub(a.rate)}/день</td>
+                            <td className="px-4 py-2 text-right font-semibold text-[color:var(--color-primary)]">{fmtRub(a.stipend)}</td>
+                            <td className="px-4 py-2 text-right text-amber-600">{fmtRub(a.advances_since_last_salary)}</td>
+                            <td className="px-4 py-2 text-right font-semibold text-emerald-600">{fmtRub(a.to_pay)}</td>
+                          </tr>,
+                          expandedApprenticeId === a.employee_id && (
+                            <tr key={`${a.employee_id}-panel`}>
+                              <td colSpan={6} className="p-0">
+                                <ApprenticeMarksPanel apprentice={a} dateFrom={dateFrom} dateTo={dateTo}
+                                  newMarkDate={newMarkDate} setNewMarkDate={setNewMarkDate}
+                                  newMarkNote={newMarkNote} setNewMarkNote={setNewMarkNote}
+                                  markBusy={markBusy} markError={markError}
+                                  onAdd={addApprenticeMark} onRemove={removeApprenticeMark} />
+                              </td>
+                            </tr>
+                          ),
+                        ])}
                       <tr className="border-t border-[color:var(--color-border)] font-semibold bg-[color:var(--color-muted)]/20">
                         <td className="px-4 py-2">Итого</td>
                         <td className="px-4 py-2 text-right">{apprentices.reduce((s, a) => s + (a.days_count || 0), 0)}</td>
