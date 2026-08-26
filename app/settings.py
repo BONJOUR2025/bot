@@ -163,6 +163,17 @@ class Settings(BaseSettings):
     hh_client_id: str = Field("", validation_alias="HH_CLIENT_ID")
     hh_client_secret: str = Field("", validation_alias="HH_CLIENT_SECRET")
 
+    # Публичный адрес этого сервера — нужен там, где код сам строит свой же
+    # внешний URL (сейчас только hh/Avito webhook-подписки в
+    # api/recruitment.py). request.base_url для этого не годится: xtunnel
+    # проксирует запрос на localhost:8000 и не сохраняет исходный Host, так
+    # что base_url всегда получался бы "https://localhost:8000" независимо
+    # от того, через какой домен реально обратился браузер — из-за этого
+    # подписка либо регистрировалась по недоступному извне адресу, либо (при
+    # проверке статуса) не находила себя же среди уже оформленных подписок
+    # и вечно показывала "не подключено", даже когда всё уже было подключено.
+    public_base_url: str = Field("https://app.bonjour.pw", validation_alias="PUBLIC_BASE_URL")
+
     # StarLine (телематика: пробег авто курьера)
     starline_app_id: str = Field("", validation_alias="STARLINE_APP_ID")
     starline_app_secret: str = Field("", validation_alias="STARLINE_APP_SECRET")

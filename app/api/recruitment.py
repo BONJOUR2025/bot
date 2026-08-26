@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import RedirectResponse
 
 log = logging.getLogger(__name__)
@@ -760,7 +760,7 @@ def update_candidate_hours(data: CandidateHoursUpdate):
 
 
 @router.get("/integrations/hh/webhook")
-async def get_hh_webhook(request: Request, db: Session = Depends(get_db)):
+async def get_hh_webhook(db: Session = Depends(get_db)):
     """Состояние подписки hh на мгновенные уведомления о сообщениях."""
     from app.api.hh_webhook import webhook_path
     from app.services import hh_api
@@ -770,7 +770,7 @@ async def get_hh_webhook(request: Request, db: Session = Depends(get_db)):
     ).first()
     if not src or not src.access_token:
         raise HTTPException(400, "hh.ru не подключён")
-    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    our_url = settings.public_base_url.rstrip("/") + webhook_path()
     try:
         subs = await hh_api.list_webhook_subscriptions(src.access_token)
     except Exception as exc:
@@ -782,7 +782,7 @@ async def get_hh_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/integrations/hh/webhook")
-async def subscribe_hh_webhook(request: Request, db: Session = Depends(get_db)):
+async def subscribe_hh_webhook(db: Session = Depends(get_db)):
     """Подписаться на CHAT_MESSAGE_CREATED — ответ кандидата обрабатывается
     за секунды вместо ожидания цикла синхронизации. Опрос остаётся
     подстраховкой: hh прямо предупреждает, что доставка не гарантируется."""
@@ -794,12 +794,12 @@ async def subscribe_hh_webhook(request: Request, db: Session = Depends(get_db)):
     ).first()
     if not src or not src.access_token:
         raise HTTPException(400, "hh.ru не подключён")
-    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    our_url = settings.public_base_url.rstrip("/") + webhook_path()
     if not our_url.startswith("https://"):
         raise HTTPException(
             400,
-            "Вебхук требует публичный https-адрес. Открывайте админку по внешнему адресу "
-            "(app.bonjour.pw), а не по localhost — hh.ru должен достучаться до этого URL.",
+            f"Вебхук требует публичный https-адрес, а в настройках PUBLIC_BASE_URL сейчас "
+            f"{settings.public_base_url!r} — hh.ru не сможет достучаться до такого URL.",
         )
     try:
         await hh_api.subscribe_webhook(src.access_token, our_url, [EVENT_NEW_MESSAGE])
@@ -811,7 +811,7 @@ async def subscribe_hh_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 @router.delete("/integrations/hh/webhook")
-async def unsubscribe_hh_webhook(request: Request, db: Session = Depends(get_db)):
+async def unsubscribe_hh_webhook(db: Session = Depends(get_db)):
     from app.api.hh_webhook import webhook_path
     from app.services import hh_api
 
@@ -820,7 +820,7 @@ async def unsubscribe_hh_webhook(request: Request, db: Session = Depends(get_db)
     ).first()
     if not src or not src.access_token:
         raise HTTPException(400, "hh.ru не подключён")
-    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    our_url = settings.public_base_url.rstrip("/") + webhook_path()
     try:
         subs = await hh_api.list_webhook_subscriptions(src.access_token)
         for s in subs:
@@ -849,12 +849,12 @@ async def _avito_source_and_token(db):
 
 
 @router.get("/integrations/avito/webhook")
-async def get_avito_webhook(request: Request, db: Session = Depends(get_db)):
+async def get_avito_webhook(db: Session = Depends(get_db)):
     """Текущее состояние подписки на мгновенные уведомления о сообщениях."""
     from app.api.avito_webhook import webhook_path
     from app.services import avito_api
 
-    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    our_url = settings.public_base_url.rstrip("/") + webhook_path()
     _src, token = await _avito_source_and_token(db)
     try:
         subs = await avito_api.list_messenger_subscriptions(token)
@@ -865,7 +865,7 @@ async def get_avito_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/integrations/avito/webhook")
-async def subscribe_avito_webhook(request: Request, db: Session = Depends(get_db)):
+async def subscribe_avito_webhook(db: Session = Depends(get_db)):
     """Подписаться на мгновенные уведомления о сообщениях кандидатов.
 
     Опрос при этом НЕ выключается: недоставленный вебхук (туннель лежал)
@@ -874,12 +874,12 @@ async def subscribe_avito_webhook(request: Request, db: Session = Depends(get_db
     from app.api.avito_webhook import webhook_path
     from app.services import avito_api
 
-    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    our_url = settings.public_base_url.rstrip("/") + webhook_path()
     if not our_url.startswith("https://"):
         raise HTTPException(
             400,
-            "Вебхук требует публичный https-адрес. Открывайте админку по внешнему адресу "
-            "(app.bonjour.pw), а не по localhost — Авито должен достучаться до этого URL.",
+            f"Вебхук требует публичный https-адрес, а в настройках PUBLIC_BASE_URL сейчас "
+            f"{settings.public_base_url!r} — Авито не сможет достучаться до такого URL.",
         )
     _src, token = await _avito_source_and_token(db)
     try:
@@ -892,11 +892,11 @@ async def subscribe_avito_webhook(request: Request, db: Session = Depends(get_db
 
 
 @router.delete("/integrations/avito/webhook")
-async def unsubscribe_avito_webhook(request: Request, db: Session = Depends(get_db)):
+async def unsubscribe_avito_webhook(db: Session = Depends(get_db)):
     from app.api.avito_webhook import webhook_path
     from app.services import avito_api
 
-    our_url = str(request.base_url).rstrip("/") + webhook_path()
+    our_url = settings.public_base_url.rstrip("/") + webhook_path()
     _src, token = await _avito_source_and_token(db)
     try:
         await avito_api.unsubscribe_messenger_webhook(token, our_url)
