@@ -513,6 +513,7 @@ function splitIntoMonthlyRanges(fromStr, toStr) {
 }
 
 export default function Masters() {
+  const { isMobile } = useViewport();
   const now = new Date();
   const today = toLocalDateStr(now);
   const monthStart = toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
