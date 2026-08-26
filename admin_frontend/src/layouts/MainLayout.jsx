@@ -13,7 +13,12 @@ export default function MainLayout() {
   const location = useLocation();
   const contentRef = useRef(null);
   const sidebarRef = useRef(null);
-  useReveal(contentRef);
+  // resetKey = location.pathname: тот же ключ, что пересоздаёт <main> ниже
+  // (key={location.pathname}) — без него хук один раз наблюдал бы за самым
+  // первым <main> и после возврата на уже посещённую страницу её .ui-reveal
+  // содержимое (например, приветствие на дашборде) навсегда оставалось бы
+  // невидимым — см. useReveal.js.
+  useReveal(contentRef, { resetKey: location.pathname });
   // Поведение модальных окон для тех, что собраны вручную мимо Modal.jsx.
   useDialogChrome();
   const { isMobile } = useViewport();

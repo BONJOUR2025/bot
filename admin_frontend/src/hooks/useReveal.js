@@ -18,10 +18,19 @@ import { useEffect } from 'react';
  *
  * @param {import('react').RefObject<HTMLElement>} rootRef контейнер экрана
  * @param {object}  [opts]
- * @param {number}  [opts.stagger=70] задержка между соседними блоками, мс
- * @param {number}  [opts.max=8]      после скольких блоков задержку не растить
+ * @param {number}  [opts.stagger=70]  задержка между соседними блоками, мс
+ * @param {number}  [opts.max=8]       после скольких блоков задержку не растить
+ * @param {*}       [opts.resetKey]    меняется при каждой навигации (MainLayout
+ *   передаёт location.pathname). `rootRef` — стабильный объект, его identity
+ *   не меняется, когда `<main key={location.pathname}>` пересоздаёт DOM-узел
+ *   при переходе на другую страницу и обратно, поэтому без этого ключа во
+ *   вторых зависимостях эффект отработал бы только один раз за всю жизнь
+ *   MainLayout: наблюдатели остались бы висеть на самом первом, уже
+ *   отключённом от DOM `<main>`, и .ui-reveal на свежесмонтированной
+ *   странице никогда не получал бы .is-in — ровно то, что произошло с
+ *   приветствием на дашборде при возврате на него.
  */
-export default function useReveal(rootRef, { stagger = 70, max = 8 } = {}) {
+export default function useReveal(rootRef, { stagger = 70, max = 8, resetKey } = {}) {
   useEffect(() => {
     const root = rootRef?.current;
     if (!root) return undefined;
@@ -79,5 +88,5 @@ export default function useReveal(rootRef, { stagger = 70, max = 8 } = {}) {
       mo.disconnect();
       clearTimeout(failsafe);
     };
-  }, [rootRef, stagger, max]);
+  }, [rootRef, stagger, max, resetKey]);
 }
