@@ -201,6 +201,11 @@ export default function Employees() {
   const [sort, setSort] = useState('');
   const [selected, setSelected] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  // «Должность» — выпадающий список уже существующих значений плюс ручной
+  // ввод новой: этот флаг переключает поле между select и text input,
+  // отдельно от form.position (который во время ввода новой должности
+  // временно пуст и потому неотличим от «Не выбрано» сам по себе).
+  const [positionCustom, setPositionCustom] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmWarnings, setConfirmWarnings] = useState([]);
@@ -350,12 +355,14 @@ export default function Employees() {
 
   function startCreate() {
     setForm({ ...emptyForm, id_original: '' });
+    setPositionCustom(false);
     setShowForm(true);
   }
 
   function startEdit(emp) {
     const isBotUser = emp.bot_user ?? (!String(emp.id).startsWith('nb_') && !!emp.id);
     setForm({ ...emp, id: emp.id, id_original: emp.id, bot_user: isBotUser, payout_chat_key: emp.payout_chat_key || '' });
+    setPositionCustom(!!emp.position && !positions.includes(emp.position));
     setShowForm(true);
   }
 
@@ -1024,9 +1031,27 @@ export default function Employees() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Должность</label>
-                <input className="modal-control" list="employee-positions" placeholder="Не выбрано"
-                  value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
-                <datalist id="employee-positions">{positions.map((pos) => <option key={pos} value={pos} />)}</datalist>
+                {positionCustom ? (
+                  <div className="flex gap-1.5">
+                    <input className="modal-control flex-1" autoFocus placeholder="Новая должность"
+                      value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+                    <button type="button" className="btn btn--secondary btn--sm shrink-0"
+                      onClick={() => { setPositionCustom(false); setForm({ ...form, position: '' }); }}
+                      title="Выбрать из списка">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <select className="modal-control" value={form.position}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') { setPositionCustom(true); setForm({ ...form, position: '' }); }
+                      else setForm({ ...form, position: e.target.value });
+                    }}>
+                    <option value="">Не выбрано</option>
+                    {positions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
+                    <option value="__custom__">+ Новая должность…</option>
+                  </select>
+                )}
               </div>
               {(form.position || '').trim().toLowerCase() === 'менеджер по работе с клиентами' && (
                 <div>
