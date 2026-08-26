@@ -1024,10 +1024,9 @@ export default function Employees() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1">Должность</label>
-                <select className="modal-control" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}>
-                  <option value="">Не выбрано</option>
-                  {positions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
-                </select>
+                <input className="modal-control" list="employee-positions" placeholder="Не выбрано"
+                  value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+                <datalist id="employee-positions">{positions.map((pos) => <option key={pos} value={pos} />)}</datalist>
               </div>
               {(form.position || '').trim().toLowerCase() === 'менеджер по работе с клиентами' && (
                 <div>

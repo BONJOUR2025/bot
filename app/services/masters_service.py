@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
@@ -10,6 +11,8 @@ import pandas as pd
 
 from app.data.payout_repository import PayoutRepository
 from app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 try:
     import fdb  # noqa: F401 -- import-availability probe only, see FIREBIRD_AVAILABLE
@@ -429,6 +432,85 @@ def _build_salary_summary(service_df: pd.DataFrame) -> list[dict]:
     summary["to_pay"] = (summary["total_salary"] - summary["advances_since_last_salary"]).round(2)
 
     return summary.sort_values("total_salary", ascending=False).to_dict(orient="records")
+
+
+APPRENTICE_POSITION = "Ученик мастера"
+APPRENTICE_DAY_RATE = 2000.0
+
+
+def get_apprentice_stipends(date_from: date, date_to: date, rate: float = APPRENTICE_DAY_RATE) -> list[dict]:
+    """Stipend report for employees on trainee status: 2000₽ for each
+    calendar day they badged in at any salon during the period (turnstile
+    presence, not billable work -- an apprentice doesn't scan services
+    yet, so they never show up in `_build_salary_summary` at all).
+
+    Attendance comes from Agbis's own DOC_REGISTR_EMPLOYEES (see the
+    "Регистрация сотрудников" screen this mirrors) rather than anything
+    scan-based like the rest of this module. A day counts once per
+    employee even if they badged at several salons or several times the
+    same day -- the stipend is per day of training, not per checkpoint.
+
+    Roster is every non-archived employee with position == "Ученик
+    мастера" *right now* -- this system has no history of past position
+    values, so a report for a month after someone graduated to "Мастер"
+    will no longer find them here. Known limitation, not a bug: fixing it
+    would mean adding position-change history, which nobody asked for.
+    """
+    from app.data.employee_repository import EmployeeRepository
+
+    apprentices = [e for e in EmployeeRepository().list_employees(archived=False) if e.position == APPRENTICE_POSITION]
+    if not apprentices:
+        return []
+
+    exact, by_surname_initial = _employee_lookup_for_masters()
+    days_by_employee: dict[str, set] = {e.id: set() for e in apprentices}
+    apprentice_ids = set(days_by_employee)
+
+    if FIREBIRD_AVAILABLE:
+        from app.services.firebird_service import _connect
+
+        next_day = date_to + timedelta(days=1)
+        try:
+            con = _connect()
+            try:
+                cur = con.cursor()
+                cur.execute(
+                    """
+                    SELECT u.description, dre.dt_in
+                    FROM doc_registr_employees dre
+                        LEFT JOIN users u ON u.user_id = dre.user_id
+                    WHERE dre.dt_in >= ? AND dre.dt_in < ?
+                        AND (dre.is_delete IS NULL OR dre.is_delete = 0)
+                    """,
+                    (str(date_from), str(next_day)),
+                )
+                for description, dt_in in cur.fetchall():
+                    employee_id = _resolve_master_employee_id(description or "", exact, by_surname_initial)
+                    if employee_id in apprentice_ids:
+                        days_by_employee[employee_id].add(dt_in.date())
+            finally:
+                con.close()
+        except Exception:
+            logger.exception("Не удалось получить регистрации учеников из Firebird")
+
+    repo = PayoutRepository()
+    result = []
+    for e in apprentices:
+        days = sorted(days_by_employee.get(e.id, ()))
+        stipend = round(len(days) * rate, 2)
+        advances = repo.advances_since_last_salary(e.id)["total"]
+        result.append({
+            "employee_id": e.id,
+            "name": e.full_name or e.name,
+            "days_count": len(days),
+            "days": [d.isoformat() for d in days],
+            "rate": rate,
+            "stipend": stipend,
+            "advances_since_last_salary": advances,
+            "to_pay": round(stipend - advances, 2),
+        })
+    result.sort(key=lambda r: r["name"])
+    return result
 
 
 # Longer than the 45s the search/daily-sales caches use. Those back a

@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Search, RefreshCw, Download, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle,
   Hammer, ListChecks, CheckCircle2, Clock, Users, Receipt, ClipboardList,
-  BarChart3, Trophy, Layers, X,
+  BarChart3, Trophy, Layers, X, GraduationCap,
 } from 'lucide-react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -547,6 +547,14 @@ export default function Masters() {
   const [loadProgress, setLoadProgress]   = useState(null);
   const [error, setError]                 = useState(null);
   const [stale, setStale]                 = useState(null);
+
+  // Стипендия учеников — отдельный ростер и отдельный источник данных
+  // (турникетные регистрации, а не сканы услуг), поэтому не переиспользует
+  // ни `rows`, ни `load()` выше: своя загрузка, свой период тот же.
+  const [apprentices, setApprentices]         = useState([]);
+  const [apprenticesLoading, setApprenticesLoading] = useState(false);
+  const [apprenticesError, setApprenticesError]     = useState(null);
+  const [apprenticesLoadedRange, setApprenticesLoadedRange] = useState(null);
   const [loaded, setLoaded]               = useState(false);
   const [warningsOnly, setWarningsOnly]   = useState(false);
   const [tab, setTab] = useState('overview');
@@ -803,6 +811,30 @@ export default function Masters() {
     return map;
   }, [filtered]);
 
+  async function loadApprentices() {
+    setApprenticesLoading(true);
+    setApprenticesError(null);
+    try {
+      const res = await api.get('/masters/apprentices', { params: { date_from: dateFrom, date_to: dateTo } });
+      setApprentices(res.data.apprentices || []);
+      setApprenticesLoadedRange(`${dateFrom}_${dateTo}`);
+    } catch (e) {
+      setApprenticesError(e?.response?.data?.detail || 'Не удалось загрузить стипендии учеников');
+    } finally {
+      setApprenticesLoading(false);
+    }
+  }
+
+  // Лёгкий запрос (одна таблица турникета, без джойнов на доки/услуги
+  // мастеров), в отличие от «works» выше — грузим сам при открытии
+  // вкладки или смене периода, не дожидаясь отдельного клика.
+  useEffect(() => {
+    if (tab !== 'apprentices') return;
+    if (apprenticesLoadedRange === `${dateFrom}_${dateTo}`) return;
+    loadApprentices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, dateFrom, dateTo]);
+
   function downloadCsv() {
     if (!filtered.length) return;
     const cols = ['status', 'description', 'doc_num', 'code', 'name', 'service_group', 'in_time', 'out_time', 'duration_min', 'master_salary', 'warnings'];
@@ -828,6 +860,7 @@ export default function Masters() {
   const tabs = [
     { key: 'overview', label: 'Обзор', icon: <ListChecks size={15} /> },
     { key: 'services', label: 'Список услуг', icon: <Receipt size={15} />, badge: filtered.length },
+    { key: 'apprentices', label: 'Ученики', icon: <GraduationCap size={15} />, badge: apprentices.length || undefined },
   ];
 
   return (
@@ -887,14 +920,19 @@ export default function Masters() {
         </div>
       )}
 
-      {!loaded && !loading && (
+      {/* Tabs — вкладка «Ученики» не зависит от тяжёлой загрузки works
+          выше, поэтому переключатель виден сразу, а не только после
+          первого «Загрузить». */}
+      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+
+      {!loaded && !loading && tab !== 'apprentices' && (
         <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
           <Hammer size={28} className="mx-auto mb-2 opacity-60" />
           Выберите период и нажмите <strong>Загрузить</strong>
         </div>
       )}
 
-      {loading && loadProgress && (
+      {loading && loadProgress && tab !== 'apprentices' && (
         <div className="app-card p-3 flex items-center gap-3 text-sm">
           <RefreshCw size={14} className="animate-spin shrink-0" />
           <div className="flex-1">
@@ -909,9 +947,100 @@ export default function Masters() {
           </div>
         </div>
       )}
-      {loading && <SkeletonTable rows={8} />}
+      {loading && tab !== 'apprentices' && <SkeletonTable rows={8} />}
 
-      {loaded && !loading && (
+      {tab === 'apprentices' && (
+        <div className="space-y-4">
+          {apprenticesError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm">
+              {apprenticesError}
+            </div>
+          )}
+          {apprenticesLoading ? (
+            <SkeletonTable rows={4} />
+          ) : apprentices.length === 0 ? (
+            <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+              <GraduationCap size={28} className="mx-auto mb-2 opacity-60" />
+              {apprenticesError ? 'Не удалось загрузить данные' : 'Нет сотрудников с должностью «Ученик мастера»'}
+            </div>
+          ) : (
+            <>
+              <section className="app-card overflow-hidden">
+                <div className="p-5 sm:p-6">
+                  <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                    Стипендия учеников · {apprentices.length} {apprentices.length === 1 ? 'ученик' : 'учеников'}
+                  </div>
+                  <div className="mas-total">
+                    {Math.round(apprentices.reduce((s, a) => s + (a.to_pay || 0), 0)).toLocaleString('ru-RU')}<small>₽</small>
+                  </div>
+                  <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
+                    к выплате за период, за вычетом авансов
+                  </div>
+                </div>
+                <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
+                  <Term label="Дней обучения всего" value={apprentices.reduce((s, a) => s + (a.days_count || 0), 0)} fmt={(v) => String(v)} />
+                  <Term op="·" label="Стипендия начислена" value={apprentices.reduce((s, a) => s + (a.stipend || 0), 0)} />
+                  <Term op="−" label="Авансы с посл. ЗП" value={apprentices.reduce((s, a) => s + (a.advances_since_last_salary || 0), 0)} />
+                </div>
+              </section>
+
+              {isMobile ? (
+                <div className="space-y-3">
+                  {apprentices.map((a) => (
+                    <div key={a.employee_id} className="border rounded-xl bg-[color:var(--color-surface)] shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b bg-[color:var(--color-bg-subtle)] text-sm font-medium">{a.name}</div>
+                      <div className="px-4 py-2 space-y-1.5 text-sm">
+                        <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Дней обучения</span><span>{a.days_count}</span></div>
+                        <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Ставка</span><span className="text-[color:var(--color-muted-foreground)]">{fmtRub(a.rate)}/день</span></div>
+                        <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">Стипендия</span><span className="font-semibold text-[color:var(--color-primary)]">{fmtRub(a.stipend)}</span></div>
+                        <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]" title="Авансы («Выплачено»/«Одобрено»), выданные после последней выплаты типа «Зарплата»">Аванс с посл. ЗП</span><span className="text-amber-600">{fmtRub(a.advances_since_last_salary)}</span></div>
+                        <div className="flex justify-between"><span className="text-[color:var(--color-text-muted)]">К выплате</span><span className="font-semibold text-emerald-600">{fmtRub(a.to_pay)}</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="app-card overflow-x-auto">
+                  <table className="w-full text-sm min-w-[620px]">
+                    <thead>
+                      <tr className="border-b border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]">
+                        <th className="px-4 py-2 text-left">Ученик</th>
+                        <th className="px-4 py-2 text-right">Дней обучения</th>
+                        <th className="px-4 py-2 text-right">Ставка</th>
+                        <th className="px-4 py-2 text-right text-[color:var(--color-primary)]">Стипендия</th>
+                        <th className="px-4 py-2 text-right text-amber-600" title="Авансы («Выплачено»/«Одобрено»), выданные после последней выплаты типа «Зарплата»">Аванс с посл. ЗП</th>
+                        <th className="px-4 py-2 text-right text-emerald-600">К выплате</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {apprentices.map((a, i) => (
+                        <tr key={a.employee_id} className={i % 2 === 1 ? 'bg-[color:var(--color-muted)]/30' : ''}>
+                          <td className="px-4 py-2 font-medium">{a.name}</td>
+                          <td className="px-4 py-2 text-right">{a.days_count}</td>
+                          <td className="px-4 py-2 text-right text-[color:var(--color-muted-foreground)]">{fmtRub(a.rate)}/день</td>
+                          <td className="px-4 py-2 text-right font-semibold text-[color:var(--color-primary)]">{fmtRub(a.stipend)}</td>
+                          <td className="px-4 py-2 text-right text-amber-600">{fmtRub(a.advances_since_last_salary)}</td>
+                          <td className="px-4 py-2 text-right font-semibold text-emerald-600">{fmtRub(a.to_pay)}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t border-[color:var(--color-border)] font-semibold bg-[color:var(--color-muted)]/20">
+                        <td className="px-4 py-2">Итого</td>
+                        <td className="px-4 py-2 text-right">{apprentices.reduce((s, a) => s + (a.days_count || 0), 0)}</td>
+                        <td className="px-4 py-2 text-right" />
+                        <td className="px-4 py-2 text-right text-[color:var(--color-primary)]">{fmtRub(apprentices.reduce((s, a) => s + (a.stipend || 0), 0))}</td>
+                        <td className="px-4 py-2 text-right text-amber-600">{fmtRub(apprentices.reduce((s, a) => s + (a.advances_since_last_salary || 0), 0))}</td>
+                        <td className="px-4 py-2 text-right text-emerald-600">{fmtRub(apprentices.reduce((s, a) => s + (a.to_pay || 0), 0))}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {loaded && !loading && tab !== 'apprentices' && (
         <>
           {/* Hero: payout summary */}
           <section className="app-card overflow-hidden">
@@ -940,9 +1069,6 @@ export default function Masters() {
               <Term op="=" label="Зарплата" value={kpi.totalSalary} strong />
             </div>
           </section>
-
-          {/* Tabs */}
-          <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
           {tab === 'overview' && (
             <div className="space-y-7">

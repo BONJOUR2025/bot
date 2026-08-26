@@ -76,4 +76,38 @@ def create_masters_router() -> APIRouter:
 
         return {**result, **extra} if extra else result
 
+    @router.get("/apprentices")
+    async def get_apprentices(
+        date_from: Optional[date] = Query(default=None),
+        date_to: Optional[date] = Query(default=None),
+    ):
+        """Stipend report for «Ученик мастера» employees: 2000₽ per calendar
+        day of turnstile attendance in the period, minus advances since
+        their last salary payout. See masters_service.get_apprentice_stipends
+        for the attendance/matching rules.
+        """
+        from app.services.firebird_service import run_with_timeout
+        from app.services.masters_service import FIREBIRD_AVAILABLE, get_apprentice_stipends
+
+        if not FIREBIRD_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="Firebird недоступен: драйвер fdb не установлен.",
+            )
+
+        df, dt, clamped = resolve_works_range(date_from, date_to)
+        extra = {"range_clamped": True, "date_from": df.isoformat(), "date_to": dt.isoformat()} if clamped else {}
+
+        try:
+            rows = await run_with_timeout(get_apprentice_stipends, df, dt, timeout=30)
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail="Запрос выполняется слишком долго. Выберите период покороче и попробуйте снова.",
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+        return {"apprentices": rows, **extra}
+
     return router
