@@ -6960,3 +6960,39 @@ button:hover > .vac-desc { color: var(--color-text); }
   justify-content: flex-end;
   padding-top: 0.25rem;
 }
+
+/* ── Расчёт ЗП администраторов: раскрытая карточка ──────────────────
+   Разбивка внутри карточки — три колонки. Раньше они включались по
+   md: (ширина экрана), а карточка при этом сидела в колонке сетки
+   шириной 345px на 1440 — и три колонки по ~100px наезжали друг на
+   друга: «Продажи 685 336 ₽» перекрывалось «Выполнение 188%».
+   Теперь порог считается от ширины самой карточки. */
+.pay-card { container-type: inline-size; }
+
+.pay-breakdown {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@container (min-width: 560px) {
+  .pay-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container (min-width: 860px) {
+  .pay-breakdown { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Раскрытая карточка — это уже не плитка в ряду, а развёрнутый документ:
+   подсвечиваем её кромкой, чтобы взгляд не терял, что именно раскрыто. */
+.visual-glass .pay-card--open {
+  border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+}
+
+/* Раскрытая карточка широкая, но шапка-сводка от этого не должна
+   растягиваться на метр: «Премии —» в чипе на 330px выглядит как дыра. */
+@container (min-width: 860px) {
+  .pay-card--open .pay-sum,
+  .pay-card--open .pay-chips { max-width: 44rem; }
+}

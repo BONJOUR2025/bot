@@ -480,7 +480,7 @@ function ExpandedContent({ row }) {
           )}
         </DetailCard>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+      <div className="pay-breakdown">
       {/* Ремонт */}
       <DetailCard title="Ремонт / Химчистка">
         <DetailRow label="Продажи" value={fmtMoney(row.repair_sales)} />
@@ -586,7 +586,11 @@ function AdminPayCard({ row, prevRow, comment, expanded, onToggle, onTogglePaid,
   const extras = (row.bonuses || 0) + (row.excel_bonus || 0);
   return (
     <div
-      className="app-card cursor-pointer"
+      // Раскрытая карточка занимает всю ширину ряда: подробная разбивка
+      // внутри — это три колонки, и в узкой колонке сетки (345px на 1440)
+      // они налезали друг на друга. `pay-card` заводит container-query,
+      // чтобы три колонки включались по ширине карточки, а не экрана.
+      className={`app-card cursor-pointer pay-card${expanded ? ' pay-card--open sm:col-span-2 xl:col-span-3' : ''}`}
       // .app-card's own `border` shorthand (globals.css) is compiled after
       // Tailwind's utility layer, so a `border-green-300` class would be
       // silently overridden — inline style is the only thing that reliably
@@ -626,7 +630,7 @@ function AdminPayCard({ row, prevRow, comment, expanded, onToggle, onTogglePaid,
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="pay-sum grid grid-cols-2 gap-3">
         <div>
           <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Общая ЗП</div>
           <div className="text-lg font-semibold">{fmtMoney(gross)}</div>
@@ -642,7 +646,7 @@ function AdminPayCard({ row, prevRow, comment, expanded, onToggle, onTogglePaid,
 
       <CompositionBar row={row} />
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="pay-chips grid grid-cols-3 gap-2">
         <div className="rounded-lg bg-[color:var(--color-bg-secondary)] px-2.5 py-1.5">
           <div className="text-[9.5px] uppercase tracking-wide text-[color:var(--color-muted-foreground)]">Оклад</div>
           <div className="text-xs font-semibold mt-0.5">{fmtMoney(row.base_salary)}</div>
@@ -657,7 +661,7 @@ function AdminPayCard({ row, prevRow, comment, expanded, onToggle, onTogglePaid,
         </div>
       </div>
 
-      {(row.advances > 0 || row.penalties > 0) && (
+      {!expanded && (row.advances > 0 || row.penalties > 0) && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--color-danger)]">
           {row.advances > 0 && <span>Авансы: -{fmtMoney(row.advances)}</span>}
           {row.penalties > 0 && <span>Штрафы: -{fmtMoney(row.penalties)}</span>}
