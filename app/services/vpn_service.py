@@ -19,8 +19,10 @@ the user before this was built).
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import socket
 import subprocess
 import zipfile
 from io import BytesIO
@@ -355,18 +357,14 @@ def build_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -
                 "mtu": 1500,
                 # Capture the whole default route — required for process
                 # matching to see traffic that was never pointed at a proxy
-                # in the first place, not just our own httpx clients.
+                # in the first place, not just our own httpx clients. Per
+                # Xray's own proxy/tun/README: "You can't just route
+                # 0.0.0.0/0 through xray0 ... that will result Xray-core
+                # itself try to reach its uplink through xray0 interface,
+                # resulting infinite network loop" — start_tun() below adds
+                # the documented fix (a host route to the proxy server
+                # itself via the real gateway) before this ever starts.
                 "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
-                # Re-emit "direct" traffic via the real physical interface,
-                # not back into the TUN adapter itself (routing loop). "auto"
-                # sounds like it should self-detect this, but on this box it
-                # fails outright ("Failed to find matching adapter name",
-                # caught by hand in testing) and "direct" traffic loops back
-                # into the TUN adapter instead of leaving — seen as an
-                # unbounded NetBIOS broadcast storm in the log and no real
-                # traffic (proxied OR direct) actually going anywhere. A
-                # literal adapter name (Get-NetAdapter's Name column) works.
-                "autoOutboundsInterface": settings.vpn_tun_outbound_interface,
             },
         }],
         "outbounds": [
@@ -413,9 +411,97 @@ def register_tun_task() -> None:
         )
 
 
+def _extract_outbound_server_ip(proxy_outbound: dict[str, Any]) -> str | None:
+    """Best-effort: pull the proxy server's own address out of an xray
+    outbound object (vless/vmess use "vnext", trojan/shadowsocks use
+    "servers" — same shape otherwise), resolving a hostname to an IP if
+    it isn't one already. Used to exclude the VPN server's own connection
+    from the TUN's 0.0.0.0/0 capture — see build_tun_config's comment."""
+    settings_obj = proxy_outbound.get("settings") or {}
+    for entry in (settings_obj.get("vnext") or settings_obj.get("servers") or []):
+        address = entry.get("address")
+        if not address:
+            continue
+        try:
+            ipaddress.ip_address(address)
+            return address
+        except ValueError:
+            pass
+        try:
+            return socket.gethostbyname(address)
+        except OSError:
+            return None
+    return None
+
+
+def _physical_gateway() -> str | None:
+    """The real default gateway's own IP for settings.vpn_tun_outbound_interface
+    (the physical NIC) — queried fresh each time rather than cached, since
+    the whole point is finding it independent of whatever 0.0.0.0/0 route
+    the TUN adapter itself may currently hold."""
+    script = (
+        f"(Get-NetRoute -InterfaceAlias '{settings.vpn_tun_outbound_interface}' "
+        "-DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=15,
+    )
+    gateway = result.stdout.strip()
+    return gateway or None
+
+
+def _set_uplink_exclusion_route(server_ip: str) -> None:
+    """A host route (/32) to the VPN server itself via the real physical
+    gateway — always wins over the TUN's later 0.0.0.0/0 route regardless
+    of interface metric, since Windows picks the most specific prefix
+    first. This is the fix Xray's own proxy/tun/README prescribes for
+    "Xray-core itself try[ing] to reach its uplink through xray0 ...
+    resulting infinite network loop" — without it, Xray's own connection
+    to its proxy server gets recaptured by the very TUN adapter it just
+    created, which is what an unbounded NetBIOS-broadcast storm in
+    tun.log turned out to actually be (caught by hand in testing)."""
+    gateway = _physical_gateway()
+    if not gateway:
+        raise VpnServiceError(
+            f"Не удалось определить настоящий шлюз для интерфейса «{settings.vpn_tun_outbound_interface}» "
+            "— без него сам VPN-сервер зациклится через TUN на себя."
+        )
+    subprocess.run(["route", "delete", server_ip], capture_output=True, timeout=10)
+    result = subprocess.run(
+        ["route", "add", server_ip, "mask", "255.255.255.255", gateway, "metric", "1"],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        raise VpnServiceError(
+            f"Не удалось добавить исключающий маршрут к {server_ip}: {result.stderr.strip()[:200]}"
+        )
+
+
+def _clear_uplink_exclusion_route_for_current_config() -> None:
+    """Best-effort cleanup of whatever exclusion route the *previous*
+    config-tun.json (still on disk at this point — the caller hasn't
+    overwritten it yet) set up, before it's replaced. Silent no-op if
+    there's nothing to clean, which is the common/expected case."""
+    if not _tun_config_path().exists():
+        return
+    try:
+        config = json.loads(_tun_config_path().read_text(encoding="utf-8"))
+    except Exception:
+        return
+    for outbound in config.get("outbounds") or []:
+        if outbound.get("tag") == "proxy":
+            ip = _extract_outbound_server_ip(outbound)
+            if ip:
+                subprocess.run(["route", "delete", ip], capture_output=True, timeout=10)
+            break
+
+
 def start_tun(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
+    stop_tun()  # end any previous run + its exclusion route (reads the OLD config, still on disk here)
     _write_tun_config(proxy_outbound, process_paths)
-    stop_tun()  # end any previous run first so /run always starts fresh under the new config
+    server_ip = _extract_outbound_server_ip(proxy_outbound)
+    if server_ip:
+        _set_uplink_exclusion_route(server_ip)
     result = subprocess.run(
         ["schtasks", "/run", "/tn", TUN_TASK_NAME], capture_output=True, text=True, timeout=20,
     )
@@ -432,22 +518,36 @@ def stop_tun() -> None:
     network interface's own default route. Safe to call even if nothing
     is running (schtasks just reports it wasn't)."""
     subprocess.run(["schtasks", "/end", "/tn", TUN_TASK_NAME], capture_output=True, timeout=15)
+    _clear_uplink_exclusion_route_for_current_config()
 
 
 def tun_status() -> dict[str, Any]:
+    # Deliberately NOT schtasks.exe's text table — this box's Windows is
+    # Russian-localized, so its "Status" column comes back as "Выполняется"
+    # (and mis-decoded on top of that under Python's default subprocess
+    # text mode), so a plain "Running" in line check silently never
+    # matched and the UI showed "off" for a task that was actually running
+    # — caught by hand when it disagreed with a direct PowerShell check.
+    # Get-ScheduledTask's .State is a CLR enum: its name ("Running",
+    # "Ready", ...) doesn't get localized, so this is locale-proof.
     result = subprocess.run(
-        ["schtasks", "/query", "/tn", TUN_TASK_NAME, "/fo", "LIST", "/v"],
+        ["powershell", "-NoProfile", "-Command",
+         f"(Get-ScheduledTask -TaskName '{TUN_TASK_NAME}' -ErrorAction SilentlyContinue).State.ToString()"],
         capture_output=True, text=True, timeout=15,
     )
-    if result.returncode != 0:
+    state = result.stdout.strip()
+    if result.returncode != 0 or not state:
         return {"installed": False, "running": False, "log_tail": ""}
-    running = any(
-        line.strip().startswith("Status:") and "Running" in line for line in result.stdout.splitlines()
-    )
+    running = state == "Running"
     log_tail = ""
     if _tun_log_path().exists():
         try:
-            lines = _tun_log_path().read_text(encoding="utf-8", errors="replace").splitlines()
+            # PowerShell's `*>` redirect writes this file as UTF-16 (BOM),
+            # not UTF-8 — reading it as UTF-8 "worked" (no decode error,
+            # every other byte is ASCII) but produced a NUL between every
+            # character, unreadable in the UI. "utf-16" auto-detects the
+            # BOM's endianness rather than assuming LE.
+            lines = _tun_log_path().read_text(encoding="utf-16", errors="replace").splitlines()
             log_tail = "\n".join(lines[-25:])
         except Exception:
             pass

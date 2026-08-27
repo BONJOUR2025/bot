@@ -197,12 +197,12 @@ class Settings(BaseSettings):
     # это внутренний loopback-контракт между нашим кодом и тут же
     # сгенерированным конфигом, снаружи их никто не читает.
     vpn_socks_proxy: str = "socks5://127.0.0.1:10808"
-    # Реальная сетевая карта для "прямого" исходящего трафика в TUN-режиме
-    # (см. vpn_service.build_tun_config) — "auto" в самом xray-core у нас на
-    # этой машине не резолвится ("Failed to find matching adapter name"),
-    # из-за чего direct-трафик зацикливался обратно в тот же TUN-адаптер
-    # вместо выхода в сеть. Имя — как в `Get-NetAdapter` (Name), не
-    # InterfaceDescription; сменится при переустановке сетевой карты.
+    # Имя реальной физической сетевой карты (как в `Get-NetAdapter`, колонка
+    # Name — не InterfaceDescription) — используется для поиска настоящего
+    # шлюза, через который vpn_service.start_tun добавляет маршрут-исключение
+    # к самому VPN-серверу в обход TUN-адаптера (иначе Xray зацикливает
+    # соединение к своему же серверу сам на себя — см. build_tun_config).
+    # Сменится при переустановке сетевой карты.
     vpn_tun_outbound_interface: str = Field("Ethernet", validation_alias="VPN_TUN_OUTBOUND_INTERFACE")
 
     # StarLine (телематика: пробег авто курьера)
