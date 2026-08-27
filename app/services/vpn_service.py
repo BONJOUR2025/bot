@@ -280,6 +280,210 @@ def apply_profile(config: dict[str, Any]) -> dict[str, str | None]:
     return {"socks_proxy": socks_proxy, "http_proxy": http_proxy}
 
 
+def extract_proxy_outbound(config: dict[str, Any]) -> dict[str, Any]:
+    """Pull just the proxy server's own outbound object (not the profile's
+    freedom/blackhole ones) out of a full xray-core profile config, tagged
+    "proxy" — reused as-is to build the separate TUN config below, so a
+    server switch doesn't need to re-fetch the subscription a second time."""
+    for outbound in config.get("outbounds") or []:
+        if outbound.get("protocol") not in ("freedom", "blackhole"):
+            out = dict(outbound)
+            out["tag"] = "proxy"
+            return out
+    raise VpnServiceError("В профиле не найден outbound прокси-сервера")
+
+
+# ── TUN mode: routing ANY OS process (browser, third-party apps — not just
+# our own pm2 fleet) through the VPN ────────────────────────────────────
+#
+# The SOCKS/HTTP proxy above only helps a process that already knows to use
+# a proxy (our own httpx/requests-based services). A browser or an unrelated
+# third-party exe generally doesn't — and it can't be retrofitted by setting
+# an env var, since it's already running and wasn't started by us. xray-core
+# has a "tun" inbound (uses the same wintun.dll already sitting next to
+# xray.exe) that captures the machine's own default route and re-emits
+# "direct" traffic itself, plus a routing rule type ("process") that matches
+# by the OS process issuing the connection — so instead of asking each app
+# to cooperate, we intercept everything and only steer the processes an
+# admin explicitly picked into the "proxy" outbound; everything else falls
+# through with no matching rule to outbounds[0] ("direct"/freedom), which is
+# xray's documented behavior for unmatched traffic — i.e. safe-by-default:
+# nothing is captured into the VPN unless a process was explicitly added.
+#
+# This has to run as a genuinely separate, elevated Windows Scheduled Task
+# rather than another pm2 process: creating a TUN network adapter needs an
+# admin token, and pm2 itself runs as this (non-elevated) Windows user —
+# a pm2-spawned child can't silently grant itself that. The task is
+# registered once (by an administrator — see docs/vpn_tun_setup, done as
+# part of building this feature) with a trigger that never fires on its
+# own (a one-time date far in the future); `schtasks /run`/`/end`/`/query`
+# — which do NOT need the caller to be elevated once the task itself is
+# registered at "highest" privileges — are all bot-app (non-elevated) ever
+# calls at runtime. If the task isn't registered yet, /run fails with a
+# clear "task not found" error rather than silently trying to self-elevate.
+TUN_TASK_NAME = "BonjourVpnTun"
+
+
+def _tun_config_path() -> Path:
+    return _vpn_dir() / "config-tun.json"
+
+
+def _tun_log_path() -> Path:
+    return _vpn_dir() / "tun.log"
+
+
+def _tun_script_path() -> Path:
+    return _vpn_dir() / "tun_run.ps1"
+
+
+def build_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -> dict[str, Any]:
+    # Xray's process matcher keys off whether the string contains a "/" to
+    # decide name vs. absolute-path vs. folder mode, and the docs call out
+    # Windows specifically for needing "/" instead of "\" — our paths come
+    # from PowerShell's Get-Process (backslashes), so normalize here rather
+    # than relying on every caller to remember to.
+    normalized = [p.replace("\\", "/") for p in process_paths]
+    rules = [{"type": "field", "process": normalized, "outboundTag": "proxy"}] if normalized else []
+    return {
+        "log": {"loglevel": "warning"},
+        "inbounds": [{
+            "port": 0,
+            "protocol": "tun",
+            "settings": {
+                "name": "BonjourVpnTun",
+                "desc": "Wintun",
+                "mtu": 1500,
+                # Capture the whole default route — required for process
+                # matching to see traffic that was never pointed at a proxy
+                # in the first place, not just our own httpx clients.
+                "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
+                # Re-emit "direct" traffic via the real physical interface,
+                # not back into the TUN adapter itself (routing loop).
+                "autoOutboundsInterface": "auto",
+            },
+        }],
+        "outbounds": [
+            {"protocol": "freedom", "tag": "direct"},  # unmatched traffic falls through here
+            proxy_outbound,
+        ],
+        "routing": {"domainStrategy": "AsIs", "rules": rules},
+    }
+
+
+def _write_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
+    config = build_tun_config(proxy_outbound, process_paths)
+    with open(_tun_config_path(), "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+
+
+def _ensure_tun_script() -> Path:
+    exe = ensure_xray_binary()
+    script = _tun_script_path()
+    script.write_text(
+        f'& "{exe}" run -c "{_tun_config_path()}" *> "{_tun_log_path()}"\n',
+        encoding="utf-8",
+    )
+    return script
+
+
+def register_tun_task() -> None:
+    """One-time setup (needs an elevated caller — see module docstring
+    above): (re)register the Scheduled Task that runs xray-core's TUN
+    config as SYSTEM. Idempotent (/f overwrites), safe to call again after
+    a redeploy — registering never starts anything by itself."""
+    script = _ensure_tun_script()
+    tr = f'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{script}"'
+    result = subprocess.run(
+        ["schtasks", "/create", "/tn", TUN_TASK_NAME, "/tr", tr,
+         "/sc", "once", "/st", "23:59", "/sd", "01/01/2099",
+         "/ru", "SYSTEM", "/rl", "highest", "/f"],
+        capture_output=True, text=True, timeout=20,
+    )
+    if result.returncode != 0:
+        raise VpnServiceError(
+            "Не удалось зарегистрировать задачу планировщика для TUN-режима "
+            f"(нужны права администратора для разового шага настройки): {result.stderr.strip()[:300]}"
+        )
+
+
+def start_tun(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
+    _write_tun_config(proxy_outbound, process_paths)
+    stop_tun()  # end any previous run first so /run always starts fresh under the new config
+    result = subprocess.run(
+        ["schtasks", "/run", "/tn", TUN_TASK_NAME], capture_output=True, text=True, timeout=20,
+    )
+    if result.returncode != 0:
+        raise VpnServiceError(
+            "Не удалось запустить перехват на уровне ОС — если задача ещё не зарегистрирована, "
+            f"нужен разовый шаг настройки от администратора: {result.stderr.strip()[:300]}"
+        )
+
+
+def stop_tun() -> None:
+    """The kill switch — ends the scheduled task's process tree, which
+    tears down the TUN adapter and lets Windows fall back to the real
+    network interface's own default route. Safe to call even if nothing
+    is running (schtasks just reports it wasn't)."""
+    subprocess.run(["schtasks", "/end", "/tn", TUN_TASK_NAME], capture_output=True, timeout=15)
+
+
+def tun_status() -> dict[str, Any]:
+    result = subprocess.run(
+        ["schtasks", "/query", "/tn", TUN_TASK_NAME, "/fo", "LIST", "/v"],
+        capture_output=True, text=True, timeout=15,
+    )
+    if result.returncode != 0:
+        return {"installed": False, "running": False, "log_tail": ""}
+    running = any(
+        line.strip().startswith("Status:") and "Running" in line for line in result.stdout.splitlines()
+    )
+    log_tail = ""
+    if _tun_log_path().exists():
+        try:
+            lines = _tun_log_path().read_text(encoding="utf-8", errors="replace").splitlines()
+            log_tail = "\n".join(lines[-25:])
+        except Exception:
+            pass
+    return {"installed": True, "running": running, "log_tail": log_tail}
+
+
+def list_os_processes() -> list[dict[str, str]]:
+    """Live snapshot of running processes with a resolvable exe path, for
+    the "route this process" picker — always freshly queried, since what's
+    running changes constantly and a stale list would let the admin "add"
+    a process that already exited."""
+    script = (
+        "Get-Process | Where-Object { $_.Path } | "
+        "Select-Object -Property Name, Path -Unique | ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True, text=True, timeout=15,
+        )
+    except Exception as exc:
+        raise VpnServiceError(f"Не удалось получить список процессов: {exc}") from exc
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    try:
+        data = json.loads(result.stdout)
+    except ValueError:
+        return []
+    if isinstance(data, dict):
+        data = [data]
+    seen: set[str] = set()
+    out: list[dict[str, str]] = []
+    for item in data:
+        path = item.get("Path")
+        name = item.get("Name")
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        out.append({"path": path, "label": name or Path(path).name})
+    out.sort(key=lambda x: x["label"].lower())
+    return out
+
+
 # ── Wiring the split into ANY of our own pm2 processes ─────────────────
 #
 # Earlier this was two hardcoded env vars (TELEGRAM_PROXY, CLAUDE_PROXY)

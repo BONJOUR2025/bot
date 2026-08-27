@@ -30,8 +30,14 @@ DEFAULT_FILE = "vpn_settings.json"
 
 _DEFAULT_DOC: dict[str, Any] = {
     "subscription_url": "",
-    "active_profile": None,  # {"remarks": str, "socks_proxy": str, "http_proxy": str}
+    "active_profile": None,  # {"remarks", "socks_proxy", "http_proxy", "outbound"} — "outbound" is
+    # the raw xray-core outbound object for the selected server, kept around so the TUN config (below)
+    # can be rebuilt without re-fetching the subscription every time a process is added/removed.
     "route": {},  # {pm2_process_key: bool} — arbitrary keys, not a fixed set
+    # Arbitrary OS processes (browser, third-party apps — not just our own pm2
+    # fleet) routed through xray-core's TUN inbound by process path. See
+    # vpn_service's TUN section: [{"path": str, "label": str}].
+    "tun_processes": [],
     # Random per-install id sent as X-Hwid when fetching a subscription —
     # some providers gate the real server list behind a device-registration
     # check keyed on this (see vpn_service.SUBSCRIPTION_HEADERS). Generated
@@ -57,6 +63,7 @@ class VpnSettingsRepository:
         merged = dict(_DEFAULT_DOC)
         merged.update(doc)
         merged["route"] = dict(doc.get("route") or {})
+        merged["tun_processes"] = list(doc.get("tun_processes") or [])
         return merged
 
     def _save(self) -> None:
@@ -77,10 +84,21 @@ class VpnSettingsRepository:
         self._save()
         return self.get()
 
-    def set_active_profile(self, remarks: str, socks_proxy: str, http_proxy: str) -> dict[str, Any]:
+    def set_active_profile(
+        self, remarks: str, socks_proxy: str, http_proxy: str | None, outbound: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         self._data["active_profile"] = {
-            "remarks": remarks, "socks_proxy": socks_proxy, "http_proxy": http_proxy,
+            "remarks": remarks, "socks_proxy": socks_proxy, "http_proxy": http_proxy, "outbound": outbound,
         }
+        self._save()
+        return self.get()
+
+    def active_outbound(self) -> dict[str, Any] | None:
+        profile = self._data.get("active_profile")
+        return (profile or {}).get("outbound")
+
+    def set_tun_processes(self, processes: list[dict[str, str]]) -> dict[str, Any]:
+        self._data["tun_processes"] = processes
         self._save()
         return self.get()
 
