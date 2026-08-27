@@ -348,7 +348,20 @@ def build_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -
     normalized = [p.replace("\\", "/") for p in process_paths]
     rules = [{"type": "field", "process": normalized, "outboundTag": "proxy"}] if normalized else []
     return {
-        "log": {"loglevel": "warning"},
+        # "access": "none" turns off the per-connection access log (the
+        # "from udp:... accepted ... [direct]" lines) — separate from
+        # loglevel, which only governs [Warning]/[Info]/[Error] system
+        # messages and doesn't touch these. Without it: this adapter gets
+        # an APIPA (169.254.x.x) address regardless of the "gateway"
+        # setting below (confirmed by hand — Get-NetIPAddress showed
+        # 169.254.191.101 even with an explicit gateway configured), and
+        # Windows' own NetBIOS self-announcement for that address retries
+        # in a tight loop nothing ever answers — tens of thousands of
+        # access-log lines a minute, multiple MB of tun.log inside two
+        # minutes. Harmless to routing, just noisy; this is the fix for
+        # the noise that doesn't risk breaking routing the way excluding
+        # 169.254.0.0/16 from autoSystemRoutingTable did.
+        "log": {"loglevel": "warning", "access": "none"},
         "inbounds": [{
             "port": 0,
             "protocol": "tun",
