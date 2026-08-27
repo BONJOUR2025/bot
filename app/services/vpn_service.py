@@ -579,6 +579,49 @@ def _set_uplink_exclusion_route(server_ip: str) -> None:
         )
 
 
+# Destinations that must never be captured by the TUN's default-route
+# takeover, regardless of which processes are explicitly routed —
+# production infrastructure this very box depends on. Discovered by hand:
+# xtunnel's own long-lived tunnel connection went from a rock-steady ~2s
+# per request (confirmed via its own diagnostics, not just external
+# timing) down to 230ms the moment it stopped being captured — while
+# short one-shot connections through the same TUN (a plain curl to
+# google.com, or even a bare TLS probe straight to this same relay IP)
+# were unaffected the whole time. Whatever the exact mechanism, it's
+# specific to a sustained/multiplexed connection like xtunnel's, not TUN
+# capture in general — so excluding it here beats trying to fully
+# understand it. cname.xtunnel.ru is xtunnel's relay; may need updating
+# if their infrastructure changes.
+ALWAYS_DIRECT_HOSTS = ["cname.xtunnel.ru"]
+
+
+def _resolve_host(host: str) -> str | None:
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except ValueError:
+        pass
+    try:
+        return socket.gethostbyname(host)
+    except OSError:
+        return None
+
+
+def _set_static_exclusion_routes() -> None:
+    gateway = _physical_gateway()
+    if not gateway:
+        return
+    for host in ALWAYS_DIRECT_HOSTS:
+        ip = _resolve_host(host)
+        if not ip:
+            continue
+        subprocess.run(["route", "delete", ip], capture_output=True, timeout=10)
+        subprocess.run(
+            ["route", "add", ip, "mask", "255.255.255.255", gateway, "metric", "1"],
+            capture_output=True, timeout=10,
+        )
+
+
 def _clear_uplink_exclusion_route_for_current_config() -> None:
     """Best-effort cleanup of whatever exclusion route the *previous*
     config-tun.json (still on disk at this point — the caller hasn't
@@ -623,6 +666,7 @@ def start_tun(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
     server_ip = _extract_outbound_server_ip(proxy_outbound)
     if server_ip:
         _set_uplink_exclusion_route(server_ip)
+    _set_static_exclusion_routes()
     # Before /run — the launch script itself checks this flag (see
     # _ensure_tun_script) and no-ops if it's false, which is also what
     # makes the at-startup trigger safe: it has to already be true by the
