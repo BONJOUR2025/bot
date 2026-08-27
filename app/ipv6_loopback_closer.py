@@ -10,27 +10,54 @@ Windows doesn't send back an immediate refusal — it silently drops the SYN,
 so the caller sits on its own connect timeout before falling back. Measured
 by hand: every request through xtunnel was paying a rock-steady ~2s for
 exactly this (confirmed via `curl -6 http://[::1]:8000/...` hanging for the
-same ~2s, unrelated to xtunnel or any of our own network/VPN code), and it
-dropped to instant the moment anything at all was listening on that address.
+same ~2s, unrelated to xtunnel or any of our own network/VPN code).
 
-This isn't a real service — it doesn't need to speak HTTP or do anything
-with what it accepts, just exist so the OS can complete the handshake
-immediately instead of leaving the caller to time out.
+First version of this just accepted and immediately closed the connection —
+fast, but wrong: Windows/Python's abrupt close (data arrives in the
+just-accepted socket's receive buffer before our thread gets to close() it)
+sends a TCP RST, and clients that treat "connection refused" as retry-worthy
+treat a mid-handshake RST as a hard failure instead — traded a 2s hang for
+outright 502s (xtunnel's own log literally labelled it "reset"). This
+version transparently proxies to the real IPv4 listener instead, so ::1:8000
+just... works, the same as 127.0.0.1:8000 — no special-casing needed on
+either end, and no behavior for a client to misinterpret.
 """
-import socket
-import threading
+import asyncio
+
+BACKEND_HOST = "127.0.0.1"
+BACKEND_PORT = 8000
+LISTEN_PORT = 8000
 
 
-def main() -> None:
-    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("::1", 8000))
-    sock.listen(16)
-    print("Listening on [::1]:8000 — nothing else, just closing the IPv6-loopback timeout hole.", flush=True)
-    while True:
-        conn, _ = sock.accept()
-        threading.Thread(target=conn.close, daemon=True).start()
+async def _pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    try:
+        while chunk := await reader.read(65536):
+            writer.write(chunk)
+            await writer.drain()
+    except (ConnectionResetError, BrokenPipeError):
+        pass
+    finally:
+        writer.close()
+
+
+async def _handle(client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter) -> None:
+    try:
+        backend_reader, backend_writer = await asyncio.open_connection(BACKEND_HOST, BACKEND_PORT)
+    except OSError:
+        client_writer.close()
+        return
+    await asyncio.gather(
+        _pipe(client_reader, backend_writer),
+        _pipe(backend_reader, client_writer),
+    )
+
+
+async def main() -> None:
+    server = await asyncio.start_server(_handle, "::1", LISTEN_PORT)
+    print(f"Proxying [::1]:{LISTEN_PORT} -> {BACKEND_HOST}:{BACKEND_PORT}", flush=True)
+    async with server:
+        await server.serve_forever()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
