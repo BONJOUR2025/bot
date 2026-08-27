@@ -12,6 +12,8 @@ manager_salary_accruals.json
 manager_plans.json
 lasts.json
 apprentice_attendance_marks.json
+vpn_settings.json
+vpn/
 static/uploads/lasts/
 
 # Runtime logs (see app/utils/logger.py — categorized under logs/<category>/)

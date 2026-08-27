@@ -68,6 +68,12 @@ class Settings(BaseSettings):
 
     # Proxy для Telegram API (например: "socks5://127.0.0.1:1080" или "http://127.0.0.1:8080")
     telegram_proxy: str | None = Field(None, validation_alias="TELEGRAM_PROXY")
+    # Отдельный (не переиспользующий telegram_proxy) прокси для обращений к
+    # Anthropic API — сплит-туннель VPN держит эти два переключателя
+    # независимыми: у Телеграма и у Клода разные требования к сети, и до
+    # этого поля llm_client.py читал именно telegram_proxy, из-за чего
+    # включить прокси только для одного из двух было нельзя.
+    claude_proxy: str | None = Field(None, validation_alias="CLAUDE_PROXY")
 
     # amoCRM (расчёт ЗП менеджеров). Токены обновляются автоматически и
     # дописываются обратно в .env.
@@ -173,6 +179,24 @@ class Settings(BaseSettings):
     # проверке статуса) не находила себя же среди уже оформленных подписок
     # и вечно показывала "не подключено", даже когда всё уже было подключено.
     public_base_url: str = Field("https://app.bonjour.pw", validation_alias="PUBLIC_BASE_URL")
+
+    # Сплит-туннель VPN (см. app/services/vpn_service.py): какие свои
+    # исходящие соединения (Telegram, Claude API, ...) идут через локальный
+    # прокси xray-core, а какие — напрямую. Файл — не токены/секреты, а
+    # ссылка на подписку + выбранный сервер + флаги "что через VPN"; сама
+    # подписка тем не менее содержит боевой VLESS-ключ, поэтому файл в
+    # .gitignore, как и остальные новые runtime-данные этого приложения.
+    vpn_settings_file: str = Field("vpn_settings.json", validation_alias="VPN_SETTINGS_FILE")
+    # Каталог с бинарником xray-core и сгенерированным из подписки
+    # config.json — вне app/ и admin_frontend/, чтобы деплой (robocopy /MIR
+    # тех двух папок) их не трогал, и вне git, потому что config.json несёт
+    # тот же боевой VLESS-ключ.
+    vpn_dir: str = Field("vpn", validation_alias="VPN_DIR")
+    # Локальные порты xray-core поднимает сам по нашему config.json — см.
+    # vpn_service.BASE_XRAY_CONFIG. Не заводить под них env-переменные:
+    # это внутренний loopback-контракт между нашим кодом и тут же
+    # сгенерированным конфигом, снаружи их никто не читает.
+    vpn_socks_proxy: str = "socks5://127.0.0.1:10808"
 
     # StarLine (телематика: пробег авто курьера)
     starline_app_id: str = Field("", validation_alias="STARLINE_APP_ID")

@@ -599,6 +599,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Split-tunnel VPN (subscription, server selection, per-function routing)
+    from .vpn import create_vpn_router
+
+    app.include_router(
+        create_vpn_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # SPA фронтенд (Vite/React)
     # NOTE: We use explicit routes instead of app.mount() so that SPA routes
     # like /admin/login are served correctly (mount intercepts and returns 404

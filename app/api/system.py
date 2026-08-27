@@ -27,6 +27,7 @@ PROCESS_LABELS = {
     "api_server": "Веб-сервер / админка",
     "xtunnel": "Туннель (xtunnel)",
     "fdb_warmer": "Прогрев кэша Agbis",
+    "vpn_proxy": "VPN-прокси (сплит-туннель)",
 }
 # Heartbeat name -> pm2 process name (see deploy.ps1 for the pm2 fleet).
 PROCESS_TO_PM2 = {
@@ -35,11 +36,14 @@ PROCESS_TO_PM2 = {
     "api_server": "bot-app",
     "xtunnel": "xtunnel",
     "fdb_warmer": "bot-warmer",
+    "vpn_proxy": "vpn-proxy",
 }
 # xtunnel is a compiled binary, not one of our own processes — there's no
 # write_heartbeat() call we can add to it, so its status/restart-detection
 # comes from pm2's own view (pid/uptime/status) instead of a heartbeat file.
-PM2_STATUS_PROCESSES = {"xtunnel"}
+# vpn_proxy (xray-core, see app/services/vpn_service.py) is the same story —
+# started by that service directly via pm2, not through deploy.ps1's fleet.
+PM2_STATUS_PROCESSES = {"xtunnel", "vpn_proxy"}
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

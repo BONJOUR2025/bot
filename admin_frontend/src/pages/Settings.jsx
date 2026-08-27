@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import {
-  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope, Plug, Coins,
+  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope, Plug, Coins, Shield,
 } from 'lucide-react';
 
 import SettingsGeneral from './settings/General.jsx';
@@ -12,6 +12,7 @@ import SettingsDictionary from './settings/DictionarySettings.jsx';
 import SettingsAccessControl from './settings/AccessControl.jsx';
 import SettingsDiagnostics from './settings/Diagnostics.jsx';
 import SettingsIntegrations from './settings/Integrations.jsx';
+import SettingsVpn from './settings/Vpn.jsx';
 
 const TABS = [
   { to: '/admin/settings/general',     label: 'Общие',         icon: SlidersHorizontal },
@@ -19,6 +20,7 @@ const TABS = [
   { to: '/admin/settings/automation',  label: 'Автоматизация', icon: Sparkles },
   { to: '/admin/settings/ai-usage',    label: 'Расход AI',     icon: Coins },
   { to: '/admin/settings/integrations', label: 'Интеграции',   icon: Plug },
+  { to: '/admin/settings/vpn',         label: 'VPN',           icon: Shield },
   { to: '/admin/settings/templates',   label: 'Шаблоны',       icon: FileText },
   { to: '/admin/settings/dictionary',  label: 'Словарь',       icon: BookOpen },
   { to: '/admin/settings/access',      label: 'Доступ',        icon: Lock },
@@ -68,6 +70,7 @@ export default function Settings() {
         <Route path="automation" element={<SettingsAutomation />} />
         <Route path="ai-usage" element={<SettingsAiUsage />} />
         <Route path="integrations" element={<SettingsIntegrations />} />
+        <Route path="vpn" element={<SettingsVpn />} />
         <Route path="templates" element={<SettingsTemplates />} />
         <Route path="dictionary" element={<SettingsDictionary />} />
         <Route path="access" element={<SettingsAccessControl />} />

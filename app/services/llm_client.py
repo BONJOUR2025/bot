@@ -51,7 +51,7 @@ def get_client(cfg: dict):
     proxy_url = None
     try:
         from app.settings import settings as _s
-        proxy_url = getattr(_s, "telegram_proxy", None)
+        proxy_url = getattr(_s, "claude_proxy", None)
     except Exception:
         pass
 
