@@ -24,6 +24,7 @@ import json
 import logging
 import socket
 import subprocess
+import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -516,6 +517,48 @@ def _clear_uplink_exclusion_route_for_current_config() -> None:
             break
 
 
+def _wait_for_tun_adapter(timeout: float = 15.0) -> int | None:
+    """Poll for the TUN adapter to actually appear and return its
+    ifIndex — `schtasks /run` is fire-and-forget, it doesn't wait for the
+    process it launched (let alone for wintun to finish creating the
+    adapter), so anything that needs the adapter to exist has to poll."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             f"(Get-NetAdapter -Name '{TUN_TASK_NAME}' -ErrorAction SilentlyContinue).ifIndex"],
+            capture_output=True, text=True, timeout=10,
+        )
+        idx = result.stdout.strip()
+        if idx.isdigit():
+            return int(idx)
+        time.sleep(0.5)
+    return None
+
+
+def _install_default_route(if_index: int) -> None:
+    """xray-core's own `autoSystemRoutingTable` claims to install this —
+    per its Windows README section, it doesn't reliably do so on this
+    machine: `route print` showed no route via BonjourVpnTun at all, with
+    or without Happ competing, confirmed twice by hand (once with the
+    literal "0.0.0.0/0" value, once with an equivalent split CIDR list).
+    That same README section teaches this exact manual fallback for
+    Windows (`route add ... if <id>`) rather than relying on the
+    automatic feature, so do it ourselves instead of trusting it. Gateway
+    "0.0.0.0" means on-link (no next hop) — right for a point-to-point
+    TUN adapter. Metric 1 needs to beat whatever's currently on Ethernet
+    (interface metric 35 in testing) and Happ's own competing tunnel."""
+    result = subprocess.run(
+        ["route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", str(if_index), "metric", "1"],
+        capture_output=True, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        raise VpnServiceError(
+            f"Адаптер поднялся, но не удалось установить маршрут по умолчанию через него: "
+            f"{(result.stderr or result.stdout).strip()[:200]}"
+        )
+
+
 def start_tun(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
     stop_tun()  # end any previous run + its exclusion route (reads the OLD config, still on disk here)
     _write_tun_config(proxy_outbound, process_paths)
@@ -530,13 +573,23 @@ def start_tun(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
             "Не удалось запустить перехват на уровне ОС — если задача ещё не зарегистрирована, "
             f"нужен разовый шаг настройки от администратора: {result.stderr.strip()[:300]}"
         )
+    if_index = _wait_for_tun_adapter()
+    if if_index is None:
+        raise VpnServiceError(
+            "Задача запущена, но TUN-адаптер не появился за 15 секунд — смотрите vpn/tun.log"
+        )
+    _install_default_route(if_index)
 
 
 def stop_tun() -> None:
     """The kill switch — ends the scheduled task's process tree, which
-    tears down the TUN adapter and lets Windows fall back to the real
-    network interface's own default route. Safe to call even if nothing
-    is running (schtasks just reports it wasn't)."""
+    tears down the TUN adapter (taking the default route _install_default_
+    route added for it down along with it — Windows drops routes scoped
+    to an interface that disappears, and the adapter's ifIndex changes
+    every run anyway so there's nothing stable left to `route delete`
+    after the fact) and lets Windows fall back to the real network
+    interface's own default route. Safe to call even if nothing is
+    running (schtasks just reports it wasn't)."""
     subprocess.run(["schtasks", "/end", "/tn", TUN_TASK_NAME], capture_output=True, timeout=15)
     _clear_uplink_exclusion_route_for_current_config()
 
