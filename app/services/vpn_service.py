@@ -358,8 +358,15 @@ def build_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -
                 # in the first place, not just our own httpx clients.
                 "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
                 # Re-emit "direct" traffic via the real physical interface,
-                # not back into the TUN adapter itself (routing loop).
-                "autoOutboundsInterface": "auto",
+                # not back into the TUN adapter itself (routing loop). "auto"
+                # sounds like it should self-detect this, but on this box it
+                # fails outright ("Failed to find matching adapter name",
+                # caught by hand in testing) and "direct" traffic loops back
+                # into the TUN adapter instead of leaving — seen as an
+                # unbounded NetBIOS broadcast storm in the log and no real
+                # traffic (proxied OR direct) actually going anywhere. A
+                # literal adapter name (Get-NetAdapter's Name column) works.
+                "autoOutboundsInterface": settings.vpn_tun_outbound_interface,
             },
         }],
         "outbounds": [
