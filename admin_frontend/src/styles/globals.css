@@ -2224,6 +2224,20 @@ body.viewer3d-fs-active .app-card {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
+/* .toast's own color:#fff (or the warning variant's #1a1a2e) assumes a
+   solid, opaque type color as the background — swapping that to the
+   neutral --color-surface above without also touching text color left
+   white-on-near-white (or dark-on-dark in the dark glass theme), reading
+   as invisible. Same neutral surface for every type now, so the type
+   reads from text color + a left accent bar instead of the fill. */
+.visual-glass .toast {
+  color: var(--color-text);
+  border-left: 3px solid var(--glass-hair);
+}
+.visual-glass .toast--success { border-left-color: var(--color-success); }
+.visual-glass .toast--error   { border-left-color: var(--color-danger); }
+.visual-glass .toast--info    { border-left-color: var(--color-info); }
+.visual-glass .toast--warning { border-left-color: var(--color-warning); color: var(--color-text); }
 .visual-glass .modal-backdrop {
   background: var(--color-modal-backdrop);
   -webkit-backdrop-filter: blur(30px);
