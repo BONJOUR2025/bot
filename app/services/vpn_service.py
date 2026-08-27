@@ -280,33 +280,35 @@ def apply_profile(config: dict[str, Any]) -> dict[str, str | None]:
     return {"socks_proxy": socks_proxy, "http_proxy": http_proxy}
 
 
-# ── Wiring the split into our own processes ────────────────────────────
+# ── Wiring the split into ANY of our own pm2 processes ─────────────────
+#
+# Earlier this was two hardcoded env vars (TELEGRAM_PROXY, CLAUDE_PROXY)
+# that only telegram_bot/api_server knew to read, each needing its own
+# bit of application code — adding a third routable "function" meant a
+# new settings.py field and a new call site. Generalized instead: httpx
+# (and requests) trust HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the process's
+# own environment by default (verified — neither python-telegram-bot's
+# HTTPXRequest nor the Anthropic SDK's default client override
+# trust_env), so setting those for *any* pm2 process and restarting it
+# under them routes that process's outbound traffic through the proxy
+# with zero code in the process itself. "Any process, not just the ones
+# we hardcoded" becomes true for the whole fleet at once instead of one
+# at a time.
 
-def sync_env_proxy_vars() -> dict[str, bool]:
-    """Write TELEGRAM_PROXY/CLAUDE_PROXY into .env to match the saved
-    route flags (blank when a function's toggle is off or no server is
-    selected yet). Does NOT restart telegram_bot/api_server — those cache
-    the value in the settings singleton at process start, same as every
-    other .env-backed setting in this app, so the caller must still hit the
-    existing POST /system/process-status/{name}/restart for the change to
-    take effect. Returns {"telegram": changed, "claude": changed} so the
-    caller/UI knows which processes actually need that restart.
+PROXY_ENV_VARS = ("ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY")
+
+
+def sync_process_proxy(pm2_name: str, heartbeat_name: str, label: str, mode: str, want: bool) -> None:
+    """Set/clear HTTP(S)_PROXY+ALL_PROXY for one pm2 process and restart
+    it under the new value — via app.api.system's existing detached
+    restart-and-notify helper, so this composes with (not duplicates) the
+    exact same "restart bot-app without killing the request that asked
+    for it" handling already built there.
     """
-    from dotenv import set_key
     from app.data.vpn_settings_repository import get_vpn_settings_repository
+    from app.api.system import _launch_restart_watcher
 
-    repo = get_vpn_settings_repository()
-    doc = repo.get()
-    socks = repo.socks_proxy_url()
-
-    env_path = Path(".env")
-    changed = {}
-    for key, env_name in (("telegram", "TELEGRAM_PROXY"), ("claude", "CLAUDE_PROXY")):
-        want = socks if doc["route"].get(key) and socks else ""
-        current = getattr(settings, f"{key}_proxy", None) or ""
-        changed[key] = want != current
-        try:
-            set_key(str(env_path), env_name, want)
-        except Exception as exc:
-            log.warning("Не удалось записать %s в .env: %s", env_name, exc)
-    return changed
+    socks = get_vpn_settings_repository().socks_proxy_url()
+    value = socks if (want and socks) else ""
+    extra_env = {name: value for name in PROXY_ENV_VARS}
+    _launch_restart_watcher(pm2_name, heartbeat_name, label, mode, extra_env=extra_env)

@@ -4,9 +4,6 @@ import api from '../../api';
 import { useToast } from '../../providers/ToastProvider.jsx';
 import { Section, Field } from './shared.jsx';
 
-const PROCESS_BY_FUNCTION = { telegram: 'telegram_bot', claude: 'api_server' };
-const PROCESS_LABELS = { telegram_bot: 'Telegram-бот', api_server: 'Веб-сервер / админка' };
-
 export default function SettingsVpn() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -16,8 +13,7 @@ export default function SettingsVpn() {
   const [profiles, setProfiles] = useState(null); // [{remarks}]
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [selectedRemarks, setSelectedRemarks] = useState('');
-  const [restartNeeded, setRestartNeeded] = useState([]);
-  const [restarting, setRestarting] = useState(null);
+  const [restarting, setRestarting] = useState([]); // process keys currently restarting
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
@@ -64,14 +60,26 @@ export default function SettingsVpn() {
     }
   }
 
+  // Перезапуск после применения сервера/переключения маршрута теперь
+  // происходит сам (detached-процесс на бэкенде) — здесь просто держим
+  // ключи, которые сейчас в процессе рестарта, и снимаем через паузу:
+  // отдельного «нажмите перезапустить» больше нет.
+  function markRestarting(keys) {
+    if (!keys?.length) return;
+    setRestarting((prev) => [...new Set([...prev, ...keys])]);
+    setTimeout(() => {
+      setRestarting((prev) => prev.filter((k) => !keys.includes(k)));
+    }, 8000);
+  }
+
   async function applyProfile() {
     if (!selectedRemarks) return;
     setSaving(true);
     try {
       const res = await api.post('vpn/profile', { remarks: selectedRemarks });
       setDoc((d) => ({ ...d, active_profile: res.data.active_profile }));
-      setRestartNeeded((prev) => [...new Set([...prev, ...res.data.restart_needed])]);
-      toast('Сервер применён, прокси перезапущен', 'success');
+      markRestarting(res.data.restarting);
+      toast('Сервер применён', 'success');
     } catch (err) {
       toast(err?.response?.data?.detail || 'Не удалось применить сервер', 'error');
     } finally {
@@ -82,26 +90,13 @@ export default function SettingsVpn() {
   async function toggleRoute(key, value) {
     setSaving(true);
     try {
-      const res = await api.put('vpn/route', { [key]: value });
+      const res = await api.put('vpn/route', { route: { [key]: value } });
       setDoc((d) => ({ ...d, route: res.data.route }));
-      setRestartNeeded((prev) => [...new Set([...prev, ...res.data.restart_needed])]);
+      markRestarting(res.data.restarting);
     } catch (err) {
       toast(err?.response?.data?.detail || 'Не удалось сохранить', 'error');
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function restartProcess(name) {
-    setRestarting(name);
-    try {
-      await api.post(`system/process-status/${name}/restart`);
-      toast(`${PROCESS_LABELS[name]}: перезапуск запущен`, 'success');
-      setRestartNeeded((prev) => prev.filter((k) => PROCESS_BY_FUNCTION[k] !== name));
-    } catch (err) {
-      toast(err?.response?.data?.detail || 'Не удалось перезапустить процесс', 'error');
-    } finally {
-      setRestarting(null);
     }
   }
 
@@ -113,8 +108,7 @@ export default function SettingsVpn() {
     );
   }
 
-  const routableFunctions = doc?.routable_functions || {};
-  const restartProcessNames = [...new Set(restartNeeded.map((k) => PROCESS_BY_FUNCTION[k]).filter(Boolean))];
+  const routableProcesses = doc?.routable_processes || {};
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -155,7 +149,7 @@ export default function SettingsVpn() {
             </div>
 
             {profiles && profiles.length > 0 && (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 max-h-80 overflow-y-auto">
                 {profiles.map((p) => {
                   const active = doc?.active_profile?.remarks === p.remarks;
                   const selected = selectedRemarks === p.remarks;
@@ -201,37 +195,29 @@ export default function SettingsVpn() {
 
       <Section title="Что идёт через VPN">
         <p className="text-sm text-[color:var(--color-muted-foreground)]">
-          Переключение вступает в силу только после перезапуска соответствующего процесса —
-          он кэширует настройку при старте, как и остальные значения из <code>.env</code>.
+          Список — весь наш пул процессов (тот же, что на вкладке «Диагностика»), не заранее
+          выбранные два-три пункта: любой процесс здесь можно пустить через прокси. Переключатель
+          сам перезапускает нужный процесс на новом значении — подождите несколько секунд.
         </p>
         <div className="space-y-2">
-          {Object.entries(routableFunctions).map(([key, label]) => (
+          {Object.entries(routableProcesses).map(([key, label]) => (
             <label key={key} className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--color-border)] px-3 py-2.5 text-sm">
-              <span>{label}</span>
+              <span className="flex items-center gap-2">
+                {label}
+                {restarting.includes(key) && (
+                  <span className="text-xs text-[color:var(--color-muted-foreground)] flex items-center gap-1">
+                    <RefreshCw size={11} className="animate-spin" /> перезапуск…
+                  </span>
+                )}
+              </span>
               <input type="checkbox" checked={!!doc?.route?.[key]}
                 onChange={(e) => toggleRoute(key, e.target.checked)}
-                disabled={saving || !doc?.active_profile} />
+                disabled={saving || !doc?.active_profile || restarting.includes(key)} />
             </label>
           ))}
         </div>
         {!doc?.active_profile && (
           <p className="text-xs text-amber-600">Сначала примените сервер выше — без него переключатели ни на что не повлияют.</p>
-        )}
-
-        {restartProcessNames.length > 0 && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-            <div className="flex-1">
-              Изменения не подхватятся, пока не перезапущены: {restartProcessNames.map((n) => PROCESS_LABELS[n]).join(', ')}.
-            </div>
-            <div className="flex flex-col gap-1.5 shrink-0">
-              {restartProcessNames.map((n) => (
-                <button key={n} className="btn btn--secondary btn--sm flex items-center gap-1.5"
-                  onClick={() => restartProcess(n)} disabled={restarting === n}>
-                  <RefreshCw size={12} className={restarting === n ? 'animate-spin' : ''} /> Перезапустить «{PROCESS_LABELS[n]}»
-                </button>
-              ))}
-            </div>
-          </div>
         )}
       </Section>
 

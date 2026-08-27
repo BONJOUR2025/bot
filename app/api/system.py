@@ -47,19 +47,30 @@ PM2_STATUS_PROCESSES = {"xtunnel", "vpn_proxy"}
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _launch_restart_watcher(pm2_name: str, heartbeat_name: str, label: str, mode: str) -> None:
+def _launch_restart_watcher(
+    pm2_name: str, heartbeat_name: str, label: str, mode: str, extra_env: dict[str, str] | None = None,
+) -> None:
     """Spawn app/utils/restart_watcher.py as a fully detached process.
     Must be detached (not an asyncio task in this process) since
     restarting "api_server" restarts the very process handling this
     request — an in-process task would die with it before it could notify
-    anyone."""
+    anyone.
+
+    `extra_env`, when given, is passed through as a 5th argv (JSON) so the
+    restart also flips env vars for that one process (see
+    restart_watcher.py's module docstring) — used by the VPN split-tunnel
+    to turn a process's proxy on/off and restart it in a single call.
+    """
     creationflags = 0
     if sys.platform == "win32":
         creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     log_path = PROCESSES_LOG_DIR / "restart_watcher.log"
+    args = [sys.executable, "-m", "app.utils.restart_watcher", pm2_name, heartbeat_name, label, mode]
+    if extra_env is not None:
+        args.append(json.dumps(extra_env))
     with open(log_path, "a", encoding="utf-8") as logf:
         subprocess.Popen(
-            [sys.executable, "-m", "app.utils.restart_watcher", pm2_name, heartbeat_name, label, mode],
+            args,
             cwd=str(REPO_ROOT),
             stdin=subprocess.DEVNULL,
             stdout=logf,

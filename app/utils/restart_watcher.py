@@ -18,11 +18,19 @@ mode is "heartbeat" (poll logs/processes/<heartbeat_name>.status.json,
 used for our own processes) or "pm2status" (poll `pm2 jlist` for a
 fresh pid — used for xtunnel, a compiled binary with no
 write_heartbeat() call we can add to it).
+
+An optional 5th argv is a JSON object of extra environment variables —
+used by the VPN split-tunnel (app/services/vpn_service.py) to flip a
+process's HTTP(S)_PROXY/ALL_PROXY on or off (empty string = clear) and
+restart it under the new value in one step, via `pm2 restart --update-env`.
+Without this 5th arg the restart behaves exactly as before (plain
+`pm2 restart`, no env change) — existing callers are unaffected.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -129,17 +137,27 @@ def main() -> None:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     pm2_name, heartbeat_name, label, mode = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+    extra_env = json.loads(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else None
     trigger_time = datetime.now()
-    print(f"[restart_watcher] Restarting {pm2_name} ({label}, mode={mode}) at {trigger_time.isoformat()}")
+    env_note = f", env={sorted(extra_env)}" if extra_env else ""
+    print(f"[restart_watcher] Restarting {pm2_name} ({label}, mode={mode}{env_note}) at {trigger_time.isoformat()}")
 
     old_pid = None
     if mode == "pm2status":
         _, old_pid = _pm2_status(pm2_name)
 
-    result = subprocess.run(
-        ["pm2", "restart", pm2_name], shell=True, capture_output=True,
-        encoding="utf-8", errors="replace", timeout=30,
-    )
+    restart_cmd = ["pm2", "restart", pm2_name]
+    run_kwargs = {"shell": True, "capture_output": True, "encoding": "utf-8", "errors": "replace", "timeout": 30}
+    if extra_env is not None:
+        # --update-env tells pm2 to recapture env vars from *this* process
+        # (the one issuing the restart) rather than reuse whatever it
+        # captured at the process's original `pm2 start` — passing our own
+        # env dict here, not mutating os.environ, keeps the change scoped
+        # to this one restarted process instead of every pm2 app.
+        restart_cmd.append("--update-env")
+        run_kwargs["env"] = {**os.environ, **extra_env}
+
+    result = subprocess.run(restart_cmd, **run_kwargs)
     if result.returncode != 0:
         print(f"[restart_watcher] pm2 restart failed: {result.stderr}")
         send_telegram(
