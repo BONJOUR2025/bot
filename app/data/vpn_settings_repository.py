@@ -38,6 +38,15 @@ _DEFAULT_DOC: dict[str, Any] = {
     # fleet) routed through xray-core's TUN inbound by process path. See
     # vpn_service's TUN section: [{"path": str, "label": str}].
     "tun_processes": [],
+    # Whether OS-level TUN capture should be running — persisted (not just
+    # inferred from "is the scheduled task currently running") so a reboot
+    # can tell "was on, bring it back" apart from "was off, stay off": the
+    # Scheduled Task itself is registered with an at-startup trigger for
+    # autostart, and the launch script checks this flag before actually
+    # starting xray, rather than the task's mere existence being enough to
+    # silently turn system-wide capture back on after every reboot
+    # regardless of the admin's last explicit choice.
+    "tun_enabled": False,
     # Random per-install id sent as X-Hwid when fetching a subscription —
     # some providers gate the real server list behind a device-registration
     # check keyed on this (see vpn_service.SUBSCRIPTION_HEADERS). Generated
@@ -99,6 +108,11 @@ class VpnSettingsRepository:
 
     def set_tun_processes(self, processes: list[dict[str, str]]) -> dict[str, Any]:
         self._data["tun_processes"] = processes
+        self._save()
+        return self.get()
+
+    def set_tun_enabled(self, enabled: bool) -> dict[str, Any]:
+        self._data["tun_enabled"] = bool(enabled)
         self._save()
         return self.get()
 

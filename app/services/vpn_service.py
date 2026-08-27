@@ -446,10 +446,41 @@ def _write_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) 
         json.dump(config, f, ensure_ascii=False, indent=2)
 
 
+def _tun_settings_path() -> Path:
+    return Path(settings.vpn_settings_file).resolve()
+
+
 def _ensure_tun_script() -> Path:
+    """The task's actual action — self-sufficient rather than a thin
+    wrapper the Python side has to babysit, because it also has to work
+    unattended right after a boot (see register_tun_task's at-startup
+    trigger), when nothing of ours has run yet to call start_tun():
+      1. Checks vpn_settings.json's own "tun_enabled" flag first and exits
+         immediately if it's false — so a reboot after an explicit
+         "Выключить" stays off instead of the task's mere existence
+         silently turning system-wide capture back on every time.
+      2. Kicks off a background job that waits for the adapter to appear
+         and installs the default route through it — the same fix
+         start_tun() used to do itself over the API, moved here so it
+         also runs on a cold boot before bot-app is even listening.
+      3. Runs xray in the foreground as before, streaming to tun.log.
+    """
     exe = ensure_xray_binary()
     script = _tun_script_path()
     script.write_text(
+        f"$cfg = $null\n"
+        f'try {{ $cfg = Get-Content -Raw -Path "{_tun_settings_path()}" -Encoding UTF8 | ConvertFrom-Json }} catch {{}}\n'
+        f"if (-not $cfg -or -not $cfg.tun_enabled) {{ exit 0 }}\n"
+        f"Start-Job -ScriptBlock {{\n"
+        f"    $deadline = (Get-Date).AddSeconds(20)\n"
+        f"    $idx = $null\n"
+        f"    while ((Get-Date) -lt $deadline) {{\n"
+        f"        $idx = (Get-NetAdapter -Name '{TUN_TASK_NAME}' -ErrorAction SilentlyContinue).ifIndex\n"
+        f"        if ($idx) {{ break }}\n"
+        f"        Start-Sleep -Milliseconds 500\n"
+        f"    }}\n"
+        f"    if ($idx) {{ route add 0.0.0.0 mask 0.0.0.0 0.0.0.0 if $idx metric 1 | Out-Null }}\n"
+        f"}} | Out-Null\n"
         f'& "{exe}" run -c "{_tun_config_path()}" *> "{_tun_log_path()}"\n',
         encoding="utf-8",
     )
@@ -459,13 +490,19 @@ def _ensure_tun_script() -> Path:
 def register_tun_task() -> None:
     """One-time setup (needs an elevated caller — see module docstring
     above): (re)register the Scheduled Task that runs xray-core's TUN
-    config as SYSTEM. Idempotent (/f overwrites), safe to call again after
-    a redeploy — registering never starts anything by itself."""
+    config as SYSTEM, with an at-startup trigger for autostart across
+    reboots (the launch script itself, see _ensure_tun_script, checks
+    vpn_settings.json's tun_enabled flag before actually doing anything,
+    so this trigger firing doesn't mean capture silently comes back on
+    when it was last turned off). `/run` still works on demand regardless
+    of this trigger — that's how POST /vpn/tun/start uses it day to day.
+    Idempotent (/f overwrites), safe to call again after a redeploy —
+    registering never starts anything by itself."""
     script = _ensure_tun_script()
     tr = f'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{script}"'
     result = subprocess.run(
         ["schtasks", "/create", "/tn", TUN_TASK_NAME, "/tr", tr,
-         "/sc", "once", "/st", "23:59", "/sd", "01/01/2099",
+         "/sc", "onstart", "/delay", "0001:00",
          "/ru", "SYSTEM", "/rl", "highest", "/f"],
         capture_output=True, text=True, timeout=20,
     )
@@ -580,35 +617,19 @@ def _wait_for_tun_adapter(timeout: float = 15.0) -> int | None:
     return None
 
 
-def _install_default_route(if_index: int) -> None:
-    """xray-core's own `autoSystemRoutingTable` claims to install this —
-    per its Windows README section, it doesn't reliably do so on this
-    machine: `route print` showed no route via BonjourVpnTun at all, with
-    or without Happ competing, confirmed twice by hand (once with the
-    literal "0.0.0.0/0" value, once with an equivalent split CIDR list).
-    That same README section teaches this exact manual fallback for
-    Windows (`route add ... if <id>`) rather than relying on the
-    automatic feature, so do it ourselves instead of trusting it. Gateway
-    "0.0.0.0" means on-link (no next hop) — right for a point-to-point
-    TUN adapter. Metric 1 needs to beat whatever's currently on Ethernet
-    (interface metric 35 in testing) and Happ's own competing tunnel."""
-    result = subprocess.run(
-        ["route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0", "if", str(if_index), "metric", "1"],
-        capture_output=True, text=True, timeout=10,
-    )
-    if result.returncode != 0:
-        raise VpnServiceError(
-            f"Адаптер поднялся, но не удалось установить маршрут по умолчанию через него: "
-            f"{(result.stderr or result.stdout).strip()[:200]}"
-        )
-
-
 def start_tun(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
     stop_tun()  # end any previous run + its exclusion route (reads the OLD config, still on disk here)
     _write_tun_config(proxy_outbound, process_paths)
     server_ip = _extract_outbound_server_ip(proxy_outbound)
     if server_ip:
         _set_uplink_exclusion_route(server_ip)
+    # Before /run — the launch script itself checks this flag (see
+    # _ensure_tun_script) and no-ops if it's false, which is also what
+    # makes the at-startup trigger safe: it has to already be true by the
+    # time the task's own logic reads it, whether that's now or after the
+    # next reboot.
+    from app.data.vpn_settings_repository import get_vpn_settings_repository
+    get_vpn_settings_repository().set_tun_enabled(True)
     result = subprocess.run(
         ["schtasks", "/run", "/tn", TUN_TASK_NAME], capture_output=True, text=True, timeout=20,
     )
@@ -617,25 +638,31 @@ def start_tun(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
             "Не удалось запустить перехват на уровне ОС — если задача ещё не зарегистрирована, "
             f"нужен разовый шаг настройки от администратора: {result.stderr.strip()[:300]}"
         )
-    if_index = _wait_for_tun_adapter()
-    if if_index is None:
+    # The script's own background job installs the default route (see
+    # _ensure_tun_script) — this just waits for the adapter to confirm
+    # xray actually started, for a fast/clear error here instead of the
+    # caller finding out only from a later status check.
+    if _wait_for_tun_adapter() is None:
         raise VpnServiceError(
             "Задача запущена, но TUN-адаптер не появился за 15 секунд — смотрите vpn/tun.log"
         )
-    _install_default_route(if_index)
 
 
 def stop_tun() -> None:
     """The kill switch — ends the scheduled task's process tree, which
-    tears down the TUN adapter (taking the default route _install_default_
-    route added for it down along with it — Windows drops routes scoped
-    to an interface that disappears, and the adapter's ifIndex changes
-    every run anyway so there's nothing stable left to `route delete`
-    after the fact) and lets Windows fall back to the real network
-    interface's own default route. Safe to call even if nothing is
-    running (schtasks just reports it wasn't)."""
+    tears down the TUN adapter (taking the default route the launch
+    script's background job added for it down along with it — Windows
+    drops routes scoped to an interface that disappears, and the
+    adapter's ifIndex changes every run anyway so there's nothing stable
+    left to `route delete` after the fact) and lets Windows fall back to
+    the real network interface's own default route. Also flips
+    tun_enabled off, so the at-startup trigger stays a no-op after the
+    next reboot until explicitly turned on again. Safe to call even if
+    nothing is running (schtasks just reports it wasn't)."""
     subprocess.run(["schtasks", "/end", "/tn", TUN_TASK_NAME], capture_output=True, timeout=15)
     _clear_uplink_exclusion_route_for_current_config()
+    from app.data.vpn_settings_repository import get_vpn_settings_repository
+    get_vpn_settings_repository().set_tun_enabled(False)
 
 
 def tun_status() -> dict[str, Any]:
