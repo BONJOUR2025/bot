@@ -338,29 +338,6 @@ def _tun_script_path() -> Path:
     return _vpn_dir() / "tun_run.ps1"
 
 
-# Ranges the TUN's default-route capture below must NOT swallow, even
-# though "capture everything" is otherwise the point — see
-# build_tun_config's comment. 169.254.0.0/16 (APIPA/link-local): once
-# captured, ordinary NetBIOS self-announcement chatter from some other
-# already-APIPA-addressed adapter on this box turns into a tight,
-# unthrottled retry storm (tens of thousands of udp:169.254.x.x:137 lines
-# a minute in tun.log) since a "direct" freedom outbound can never
-# actually deliver a link-local broadcast anywhere — caught by hand in
-# testing, after "auto-assigned adapter address" and "server itself loops
-# back" were both ruled out first.
-_TUN_ROUTE_EXCLUSIONS_V4 = [ipaddress.ip_network("169.254.0.0/16")]
-
-
-def _tun_default_route_v4() -> list[str]:
-    """0.0.0.0/0 minus _TUN_ROUTE_EXCLUSIONS_V4, as the minimal CIDR list
-    covering the rest — computed rather than hand-maintained so adding
-    another excluded range later is a one-line change above."""
-    nets = [ipaddress.ip_network("0.0.0.0/0")]
-    for excl in _TUN_ROUTE_EXCLUSIONS_V4:
-        nets = [n for base in nets for n in (base.address_exclude(excl) if excl.subnet_of(base) else [base])]
-    return [str(n) for n in sorted(nets, key=lambda n: n.network_address)]
-
-
 def build_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -> dict[str, Any]:
     # Xray's process matcher keys off whether the string contains a "/" to
     # decide name vs. absolute-path vs. folder mode, and the docs call out
@@ -396,7 +373,18 @@ def build_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -
                 # resulting infinite network loop" — start_tun() below adds
                 # the documented fix (a host route to the proxy server
                 # itself via the real gateway) before this ever starts.
-                "autoSystemRoutingTable": _tun_default_route_v4() + ["::/0"],
+                # A literal "0.0.0.0/0" here, specifically — swapping it for
+                # a computed list of equivalent-but-narrower CIDR blocks
+                # (tried, to exclude 169.254.0.0/16 and quiet down noisy-but-
+                # harmless APIPA broadcast logging) silently stopped Xray
+                # from installing ANY system route at all: `route print`
+                # with this active showed nothing for BonjourVpnTun, no
+                # traffic reached it, routing simply didn't happen. Xray's
+                # "become the default route" handling apparently keys off
+                # this exact literal value rather than prefix coverage —
+                # caught by hand, so noisy-log-but-working beats quiet-but-
+                # broken here.
+                "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
             },
         }],
         "outbounds": [
