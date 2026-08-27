@@ -37,16 +37,42 @@ PM2_PROCESS_NAME = "vpn-proxy"
 XRAY_LATEST_RELEASE_API = "https://api.github.com/repos/XTLS/Xray-core/releases/latest"
 XRAY_WINDOWS_ASSET = "Xray-windows-64.zip"
 
-# The subscription host this was built against sits behind a generic
-# anti-bot layer (Yandex Cloud Smart Web Security) that keys off User-Agent
-# alone — a plain curl/httpx UA gets a 403 challenge page, this exact UA
-# (what the real Happ client sends) does not. Kept even though other
-# providers may not need it: a UA that looks like a real VPN client is
-# never the wrong choice for a subscription endpoint.
+# A bare "looks like a VPN client" User-Agent is only enough for the least
+# strict providers. Both providers this was tested against actually run a
+# device-registration check keyed on more than just UA — without the full
+# header set below, they don't error, they silently return a *placeholder*
+# profile (valid JSON, valid xray shape, `remarks: "App not supported"`,
+# dummy 0.0.0.0 outbound addresses) instead of the real server list. Caught
+# by hand: one provider went from 1 fake profile to 17 real ones, the other
+# from a 403 antibot challenge to the actual config, once every header below
+# was present. X-Hwid is a stable random id (see _device_hwid), not the
+# literal value some public writeups use — reusing that exact string would
+# make every install running this code look like the same device to a
+# provider that watches for it.
 SUBSCRIPTION_HEADERS = {
-    "User-Agent": "Happ/2.4 (Windows NT 10.0; Win64; x64)",
+    "User-Agent": "Happ/3.13.0",
     "Accept": "*/*",
+    "X-Device-Os": "Android",
+    "X-Device-Locale": "ru",
+    "X-Device-Model": "SM-A146U",
+    "X-Ver-Os": "15",
 }
+
+
+def _device_hwid() -> str:
+    """A stable-per-install random id for the X-Hwid header some
+    subscription providers require — generated once and cached in
+    VpnSettingsRepository rather than hardcoded, so this install doesn't
+    share a fingerprint with every other deployment of this same code."""
+    from app.data.vpn_settings_repository import get_vpn_settings_repository
+
+    repo = get_vpn_settings_repository()
+    hwid = repo.get().get("device_hwid")
+    if not hwid:
+        import secrets
+        hwid = secrets.token_hex(8)
+        repo.set_device_hwid(hwid)
+    return hwid
 
 
 class VpnServiceError(RuntimeError):
@@ -91,8 +117,9 @@ def fetch_profiles(subscription_url: str) -> list[dict[str, Any]]:
     url = (subscription_url or "").strip()
     if not url:
         raise VpnServiceError("Не задана ссылка на подписку")
+    headers = {**SUBSCRIPTION_HEADERS, "X-Hwid": _device_hwid()}
     try:
-        resp = httpx.get(url, headers=SUBSCRIPTION_HEADERS, timeout=20.0, follow_redirects=True)
+        resp = httpx.get(url, headers=headers, timeout=20.0, follow_redirects=True)
     except httpx.HTTPError as exc:
         raise VpnServiceError(f"Не удалось обратиться к подписке: {exc}") from exc
     if resp.status_code != 200:
@@ -121,7 +148,36 @@ def fetch_profiles(subscription_url: str) -> list[dict[str, Any]]:
         profiles.append({"remarks": str(remarks), "config": entry})
     if not profiles:
         raise VpnServiceError("В подписке не нашлось ни одного распознаваемого профиля")
-    return profiles
+
+    # A provider that doesn't like the request often still answers 200 with
+    # valid-shaped JSON — a single placeholder profile with a dummy
+    # 0.0.0.0-address outbound and remarks like "App not supported" —
+    # rather than an error. Surface that as a real error instead of letting
+    # an obviously-fake server sit in the picker looking like a real choice.
+    real = [p for p in profiles if not _looks_like_placeholder(p["config"])]
+    if not real:
+        raise VpnServiceError(
+            f'Подписка ответила, но без рабочих серверов (профиль «{profiles[0]["remarks"]}» — '
+            "похоже на служебную заглушку). Этому провайдеру нужны другие заголовки запроса, "
+            "которых мы ещё не подобрали."
+        )
+    return real
+
+
+def _looks_like_placeholder(config: dict[str, Any]) -> bool:
+    """True if every proxy outbound in this profile points at 0.0.0.0 (or
+    has no address at all) — the shape a provider serves back when it
+    rejected the request but still wants to answer 200 with something
+    parseable, rather than a real server."""
+    proxy_outbounds = [o for o in (config.get("outbounds") or []) if o.get("protocol") not in ("freedom", "blackhole")]
+    if not proxy_outbounds:
+        return True
+    for outbound in proxy_outbounds:
+        vnext = (outbound.get("settings") or {}).get("vnext") or []
+        addresses = {str(v.get("address") or "") for v in vnext}
+        if addresses - {"", "0.0.0.0", "127.0.0.1"}:
+            return False
+    return True
 
 
 def _extract_local_proxies(config: dict[str, Any]) -> tuple[str, str | None]:

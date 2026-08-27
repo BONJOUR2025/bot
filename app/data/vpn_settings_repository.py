@@ -32,6 +32,11 @@ _DEFAULT_DOC: dict[str, Any] = {
     "subscription_url": "",
     "active_profile": None,  # {"remarks": str, "socks_proxy": str, "http_proxy": str}
     "route": {k: False for k in ROUTABLE_FUNCTIONS},
+    # Random per-install id sent as X-Hwid when fetching a subscription —
+    # some providers gate the real server list behind a device-registration
+    # check keyed on this (see vpn_service.SUBSCRIPTION_HEADERS). Generated
+    # once on first use, not user-facing.
+    "device_hwid": None,
     "updated_at": None,
 }
 
@@ -64,6 +69,11 @@ class VpnSettingsRepository:
 
     def set_subscription_url(self, url: str) -> dict[str, Any]:
         self._data["subscription_url"] = url.strip()
+        self._save()
+        return self.get()
+
+    def set_device_hwid(self, hwid: str) -> dict[str, Any]:
+        self._data["device_hwid"] = hwid
         self._save()
         return self.get()
 
