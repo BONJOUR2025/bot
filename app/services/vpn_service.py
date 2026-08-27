@@ -388,12 +388,43 @@ def build_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -
                 "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
             },
         }],
-        "outbounds": [
-            {"protocol": "freedom", "tag": "direct"},  # unmatched traffic falls through here
-            proxy_outbound,
-        ],
+        "outbounds": [_bind_to_physical_nic({"protocol": "freedom", "tag": "direct"}), _bind_to_physical_nic(proxy_outbound)],
         "routing": {"domainStrategy": "AsIs", "rules": rules},
     }
+
+
+def _bind_to_physical_nic(outbound: dict[str, Any]) -> dict[str, Any]:
+    """Bind an outbound's egress to the real physical NIC's own local IP
+    (xray's "sendThrough" — a plain OutboundObject field, forces the OS to
+    route that outbound's own sockets via whichever interface owns that
+    address) rather than letting it follow the ambient default route —
+    which, once start_tun installs a route through BonjourVpnTun itself
+    (see _install_default_route), IS that same TUN adapter. Without this,
+    "direct" traffic loops back into the very adapter it was trying to
+    leave through — caught by hand when xtunnel (not one of the routed
+    processes, should've gone straight out via freedom) got stuck in
+    "Connecting" the moment our TUN route went live. The host-route
+    exclusion added separately for the proxy server's own IP predates
+    this and stays as a second, independent safety net — this fixes the
+    same root problem for every "direct" destination, not just that one.
+    """
+    local_ip = _physical_local_ip()
+    if not local_ip:
+        return outbound
+    return {**outbound, "sendThrough": local_ip}
+
+
+def _physical_local_ip() -> str | None:
+    """The real physical NIC's own IPv4 address, for _bind_to_physical_nic."""
+    script = (
+        f"(Get-NetIPAddress -InterfaceAlias '{settings.vpn_tun_outbound_interface}' "
+        "-AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1).IPAddress"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=15,
+    )
+    ip = result.stdout.strip()
+    return ip or None
 
 
 def _write_tun_config(proxy_outbound: dict[str, Any], process_paths: list[str]) -> None:
