@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import {
-  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope, Plug, Coins, Shield,
+  SlidersHorizontal, Send, Sparkles, FileText, BookOpen, Lock, Stethoscope, Plug, Coins, Shield, Scissors,
 } from 'lucide-react';
 
 import SettingsGeneral from './settings/General.jsx';
@@ -13,6 +13,7 @@ import SettingsAccessControl from './settings/AccessControl.jsx';
 import SettingsDiagnostics from './settings/Diagnostics.jsx';
 import SettingsIntegrations from './settings/Integrations.jsx';
 import SettingsVpn from './settings/Vpn.jsx';
+import SettingsPoshivBot from './settings/PoshivBot.jsx';
 
 const TABS = [
   { to: '/admin/settings/general',     label: 'Общие',         icon: SlidersHorizontal },
@@ -21,6 +22,7 @@ const TABS = [
   { to: '/admin/settings/ai-usage',    label: 'Расход AI',     icon: Coins },
   { to: '/admin/settings/integrations', label: 'Интеграции',   icon: Plug },
   { to: '/admin/settings/vpn',         label: 'VPN',           icon: Shield },
+  { to: '/admin/settings/poshiv-bot',  label: 'Бот пошива',    icon: Scissors },
   { to: '/admin/settings/templates',   label: 'Шаблоны',       icon: FileText },
   { to: '/admin/settings/dictionary',  label: 'Словарь',       icon: BookOpen },
   { to: '/admin/settings/access',      label: 'Доступ',        icon: Lock },
@@ -71,6 +73,7 @@ export default function Settings() {
         <Route path="ai-usage" element={<SettingsAiUsage />} />
         <Route path="integrations" element={<SettingsIntegrations />} />
         <Route path="vpn" element={<SettingsVpn />} />
+        <Route path="poshiv-bot" element={<SettingsPoshivBot />} />
         <Route path="templates" element={<SettingsTemplates />} />
         <Route path="dictionary" element={<SettingsDictionary />} />
         <Route path="access" element={<SettingsAccessControl />} />

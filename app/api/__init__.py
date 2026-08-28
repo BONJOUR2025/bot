@@ -608,6 +608,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Настройки и диагностика бота пошива (сторонний бот, Агбис -> amoCRM)
+    from .poshiv_bot import create_poshiv_bot_router
+
+    app.include_router(
+        create_poshiv_bot_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # SPA фронтенд (Vite/React)
     # NOTE: We use explicit routes instead of app.mount() so that SPA routes
     # like /admin/login are served correctly (mount intercepts and returns 404

@@ -192,6 +192,14 @@ class Settings(BaseSettings):
     # тех двух папок) их не трогал, и вне git, потому что config.json несёт
     # тот же боевой VLESS-ключ.
     vpn_dir: str = Field("vpn", validation_alias="VPN_DIR")
+    # Каталог стороннего бота пошива (Агбис → amoCRM). Он живёт на рабочем
+    # столе, вне этого репозитория, и деплоем не мирроится — админка только
+    # читает его логи/настройки и пишет poshiv_settings.json (оверлей, который
+    # его config.py накатывает поверх своих дефолтов). Абсолютный путь, потому
+    # что относительный резолвился бы от CWD процесса bot-app, а не от бота.
+    poshiv_bot_dir: str = Field(
+        r"C:\Users\User\Desktop\ПОШИВ БОТ", validation_alias="POSHIV_BOT_DIR"
+    )
     # Локальные порты xray-core поднимает сам по нашему config.json — см.
     # vpn_service.BASE_XRAY_CONFIG. Не заводить под них env-переменные:
     # это внутренний loopback-контракт между нашим кодом и тут же
