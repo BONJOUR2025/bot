@@ -153,11 +153,11 @@ export default function SettingsPoshivBot() {
         </div>
 
         <div className="flex flex-wrap gap-2 pt-1">
-          <button className="ui-btn ui-btn--ghost text-sm" onClick={loadHealth}>
+          <button className="btn btn--secondary btn--sm flex items-center gap-1.5" onClick={loadHealth}>
             <RefreshCw size={14} /> Обновить
           </button>
           <button
-            className="ui-btn ui-btn--ghost text-sm"
+            className="btn btn--secondary btn--sm flex items-center gap-1.5"
             onClick={restart}
             disabled={restarting}
             title="pm2 restart poshiv-bot"
@@ -165,7 +165,7 @@ export default function SettingsPoshivBot() {
             <Power size={14} className={restarting ? 'animate-pulse' : ''} /> Перезапустить бота
           </button>
           <button
-            className="ui-btn ui-btn--ghost text-sm"
+            className="btn btn--secondary btn--sm flex items-center gap-1.5"
             onClick={() => setLogOpen((v) => !v)}
           >
             {logOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Лог
@@ -186,7 +186,7 @@ export default function SettingsPoshivBot() {
         >
           <input
             type="time"
-            className="ui-input w-40"
+            className="input max-w-[10rem]"
             value={checkTime}
             onChange={(e) => edit(setCheckTime)(e.target.value)}
           />
@@ -198,7 +198,7 @@ export default function SettingsPoshivBot() {
         >
           <input
             type="text"
-            className="ui-input"
+            className="input"
             value={managers}
             onChange={(e) => edit(setManagers)(e.target.value)}
             placeholder="699539809, 5495663985"
@@ -215,12 +215,15 @@ export default function SettingsPoshivBot() {
         </p>
         <div className="space-y-2">
           {stages.map((s) => (
-            <div key={s.key} className="flex items-center gap-3">
-              <span className="text-sm w-48 shrink-0">{s.label}</span>
+            <div
+              key={s.key}
+              className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3"
+            >
+              <span className="text-sm sm:w-48 sm:shrink-0">{s.label}</span>
               <input
                 type="text"
                 inputMode="numeric"
-                className="ui-input w-56"
+                className="input sm:max-w-[14rem]"
                 value={masters[s.key] ?? ''}
                 onChange={(e) =>
                   edit(setMasters)((m) => ({
@@ -242,11 +245,16 @@ export default function SettingsPoshivBot() {
         </p>
         <div className="space-y-2">
           {stages.map((s) => (
-            <div key={s.key} className="flex items-center gap-3">
-              <span className="text-sm w-48 shrink-0">{s.label}</span>
-              <span className="text-[color:var(--color-muted-foreground)] text-sm">→</span>
+            <div
+              key={s.key}
+              className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3"
+            >
+              <span className="text-sm sm:w-48 sm:shrink-0">{s.label}</span>
+              <span className="hidden sm:inline text-[color:var(--color-muted-foreground)] text-sm">
+                →
+              </span>
               <select
-                className="ui-input w-56"
+                className="input sm:max-w-[14rem]"
                 value={stageNext[s.key] || ''}
                 onChange={(e) =>
                   edit(setStageNext)((n) => ({ ...n, [s.key]: e.target.value || null }))
@@ -267,7 +275,7 @@ export default function SettingsPoshivBot() {
       </Section>
 
       <div className="flex items-center gap-3">
-        <button className="ui-btn ui-btn--primary" onClick={save} disabled={saving || !dirty}>
+        <button className="btn btn--primary flex items-center gap-2" onClick={save} disabled={saving || !dirty}>
           <Save size={15} /> Сохранить
         </button>
         {dirty && (
