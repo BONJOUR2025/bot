@@ -23,6 +23,18 @@ function fmt(n) {
   return Number(n ?? 0).toLocaleString('ru-RU');
 }
 
+// Русское склонение по числу: «1 узел», «2 узла», «5 узлов». Раньше в
+// счётчике полосы стояло жёсткое «узла», и при одном показателе выходило
+// «1 узла».
+function plural(n, one, few, many) {
+  const a = Math.abs(n) % 100;
+  if (a > 10 && a < 20) return many;
+  const b = a % 10;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+}
+
 // Показание в центре кольца: там помещается около шести знаков, поэтому
 // сотни тысяч сокращаются до «170 к», а не режутся многоточием. Точная
 // сумма всё равно стоит в подвале реестра.
@@ -477,6 +489,12 @@ export default function Dashboard() {
       { key: 'shoes', value: totShoes },
     ].filter((d) => d.value > 0);
   }
+  // Подпись под выручкой держим той же формы, что у кассы («самый крупный
+  // узел · сумма»), чтобы соседние ячейки полосы читались одинаково.
+  const topSalesCategory = salesDonut.length
+    ? salesDonut.reduce((a, b) => (b.value > a.value ? b : a))
+    : null;
+  const bandNodes = [cashBalances, sales, receivables].filter(Boolean).length;
 
   // ── masters aggregation (unchanged from prior logic) ──
   let topMasters = [];
@@ -785,13 +803,13 @@ export default function Dashboard() {
               весомые числа дня оказывались под сгибом, легче, чем реестр
               продаж над ними. */}
           {/* business snapshot: cash on hand, outstanding receivables */}
-          {(cashBalances || receivables) && (
+          {(cashBalances || receivables || sales) && (
             <div className="space-y-3">
               <div className="fui-section">
                 <span className="fui-section__label">Обзор бизнеса</span>
                 <span className="fui-section__line" />
                 <span className="fui-section__meta">
-                  {[cashBalances && 'касса', receivables && 'дебиторка'].filter(Boolean).length} узла
+                  {bandNodes} {plural(bandNodes, 'узел', 'узла', 'узлов')}
                 </span>
               </div>
               {/* Деньги стоят на поверхности крупным набором, без рамок:
@@ -799,11 +817,22 @@ export default function Dashboard() {
                   ничего не добавляет — только уравнивает со счётчиками. */}
               <div className="fui-band">
                 {cashBalances && (
-                  <button type="button" className="fui-band__cell" onClick={() => navigate('/admin/cash-summary')}>
+                  <button type="button" className="fui-band__cell" onClick={() => navigate('/admin/cash-moves')}>
                     <span className="fui-band__k">Касса</span>
                     <span className="fui-band__v">{fmt(cashTotal)}<small>₽</small></span>
                     <span className="fui-band__m">
                       {topCashRegister && <span>{topCashRegister.name} · {fmt(Math.round(topCashRegister.balance))} ₽</span>}
+                    </span>
+                  </button>
+                )}
+                {sales && (
+                  <button type="button" className="fui-band__cell" onClick={() => navigate('/admin/sales')}>
+                    <span className="fui-band__k">Выручка сегодня</span>
+                    <span className="fui-band__v">{fmt(totTotal)}<small>₽</small></span>
+                    <span className="fui-band__m">
+                      {topSalesCategory
+                        ? <span>{SALES_LABELS[topSalesCategory.key]} · {fmt(Math.round(topSalesCategory.value))} ₽</span>
+                        : <span>Продаж пока нет</span>}
                     </span>
                   </button>
                 )}

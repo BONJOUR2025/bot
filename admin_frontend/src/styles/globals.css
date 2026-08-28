@@ -176,6 +176,9 @@ a:hover { text-decoration: underline; }
      scrolled the nearest actual scroll container behind it (the page)
      instead of the menu itself. */
   overflow-y: auto;
+  /* Та же причина, что у .sidebar__sections: одна заданная ось делает
+     вторую auto, и панель получает лишнюю горизонтальную прокрутку. */
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   /* Панель прижата к левому краю — ровно там, где Safari ловит свой
      системный жест «свайп от края = назад». Без этого горизонтальный
@@ -455,6 +458,17 @@ a:hover { text-decoration: underline; }
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  /* Ось X закрываем явно. Указать только overflow-y мало: когда одна ось
+     задана auto, вторая («visible») вычисляется браузером тоже в auto — и
+     список пунктов становится горизонтально прокручиваемым, хотя ничего за
+     край не выходит. На тач-устройстве этого достаточно, чтобы при прокрутке
+     вниз с чуть диагональным движением пальца всё меню ездило влево-вправо.
+     touch-action на родителе (.app-shell__sidebar, pan-y) сюда не
+     распространяется — ограничение нужно на том элементе, который реально
+     скроллится, иначе жест обрабатывает он и по обеим осям. */
+  overflow-x: hidden;
+  touch-action: pan-y;
+  overscroll-behavior-x: contain;
 }
 .sidebar__footer {
   margin-top: auto;
