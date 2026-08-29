@@ -3,6 +3,10 @@
 // calculation logic differs.
 
 export const fmtMoney = (v) => (v === null || v === undefined ? '—' : `${Math.round(Number(v)).toLocaleString('ru-RU')} ₽`);
+// В денежной полосе валюта набирается отдельным <small> (см. дашборд):
+// иначе «718 837 ₽» одним куском не влезает в ячейку и рубль уезжает на
+// вторую строку.
+export const fmtMoneyNum = (v) => (v === null || v === undefined ? '—' : Math.round(Number(v)).toLocaleString('ru-RU'));
 export const fmtPct = (v) => (v === null || v === undefined ? '—' : `${(Number(v) * 100).toFixed(1)}%`);
 
 export const TONE_VAR = {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Truck, RefreshCw, Wallet, Banknote, Trash2, CheckCircle2, Gauge, Save, RotateCw, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
-import { fmtMoney, Term, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
+import { fmtMoney, fmtMoneyNum, Term, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 
 const COURIER_MATCH = 'курьер';
@@ -231,12 +231,12 @@ export default function CourierSalary() {
             <div className="fui-band">
               <div className="fui-band__cell">
                 <span className="fui-band__k">К выплате</span>
-                <span className="fui-band__v">{fmtMoney(result.to_pay)}</span>
+                <span className="fui-band__v">{fmtMoneyNum(result.to_pay)}<small>₽</small></span>
                 <span className="fui-band__m"><span>{periodLabel}</span></span>
               </div>
               <div className="fui-band__cell">
                 <span className="fui-band__k">Начислено</span>
-                <span className="fui-band__v">{fmtMoney(result.gross)}</span>
+                <span className="fui-band__v">{fmtMoneyNum(result.gross)}<small>₽</small></span>
                 <span className="fui-band__m"><span>оклад и премии</span></span>
               </div>
               <div
@@ -244,7 +244,7 @@ export default function CourierSalary() {
                 style={{ '--flag': 'var(--color-danger)' }}
               >
                 <span className="fui-band__k">Удержано</span>
-                <span className="fui-band__v">{fmtMoney(kept)}</span>
+                <span className="fui-band__v">{fmtMoneyNum(kept)}<small>₽</small></span>
                 <span className="fui-band__m"><span>авансы и штрафы</span></span>
               </div>
             </div>

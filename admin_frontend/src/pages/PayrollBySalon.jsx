@@ -8,9 +8,22 @@ import { useToast } from '../providers/ToastProvider.jsx';
 import { SkeletonTable } from '../components/ui/Skeleton.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import Skeleton from '../components/ui/Skeleton.jsx';
-import { fmtMoney, StatCard, Tabs } from '../components/ui/SalaryUI.jsx';
+import { fmtMoney, fmtMoneyNum, StatCard, Tabs } from '../components/ui/SalaryUI.jsx';
 
 const fmtRub = (v) => (v == null ? '—' : Math.round(v).toLocaleString('ru-RU') + ' ₽');
+
+// Русское склонение по числу — «1 салон», «2 салона», «5 салонов».
+function plural(n, one, few, many) {
+  const a = Math.abs(n) % 100;
+  if (a > 10 && a < 20) return many;
+  const b = a % 10;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+}
+
+// Доля составляющей в общем ФОТ — подпись под числом в решётке.
+const sharePct = (part, total) => (total ? `${Math.round((part / total) * 100)}% ФОТ` : '—');
 
 // Fixed hue order — never reassigned by value/rank, so a component keeps
 // its color regardless of how big it is this month.
@@ -308,8 +321,13 @@ export default function PayrollBySalon() {
       </div>
 
       {!selectedMonth && !loadingMonths && (
-        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
-          Выберите месяц
+        <div className="app-card">
+          <div className="fui-datastate">
+            <span className="fui-datastate__code fui-datastate__code--icon"><Layers size={13} /> Данные готовы</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__title">Выберите месяц</span>
+            <span className="fui-datastate__text">Отчёт покажет расходы на ФОТ по каждому салону и по каждому сотруднику.</span>
+          </div>
         </div>
       )}
 
@@ -317,32 +335,64 @@ export default function PayrollBySalon() {
 
       {data && !loading && (
         <>
-          {/* Hero: grand total */}
-          <section className="app-card overflow-hidden">
-            <div className="p-5 sm:p-6 flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
-                  Расходы на ФОТ · {data.salons.length} {data.salons.length === 1 ? 'салон' : 'салонов'}
-                </div>
-                <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
-                  {fmtMoney(data.grand_total.total)}
-                </div>
+          {/* Итог месяца и его разбор стояли в одной карточке: сумма слева,
+              пять плиток справа — каждая со своей рамкой поверх общей. Итог
+              вынесен в полосу без рамок, составляющие сведены в одну решётку
+              с волосяными просветами. Метка цвета осталась: она связывает
+              строку с сектором кольца ниже. */}
+          <section className="space-y-3">
+            <div className="fui-section">
+              <span className="fui-section__label">Расходы на ФОТ</span>
+              <span className="fui-section__line" />
+              <span className="fui-section__meta">
+                {data.salons.length} {plural(data.salons.length, 'салон', 'салона', 'салонов')} · {employeeView.length} {plural(employeeView.length, 'сотрудник', 'сотрудника', 'сотрудников')}
+              </span>
+            </div>
+            <div className="fui-band">
+              <div className="fui-band__cell">
+                <span className="fui-band__k">Всего за месяц</span>
+                <span className="fui-band__v">{fmtMoneyNum(data.grand_total.total)}<small>₽</small></span>
+                <span className="fui-band__m"><span>{selectedMonth}</span></span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                {BREAKDOWN_FIELDS.map((f, i) => (
-                  <StatCard
-                    key={f.key}
-                    icon={<span className="w-2.5 h-2.5 rounded-full block" style={{ background: CHART_COLORS[i] }} />}
-                    label={f.label}
-                    value={fmtMoney(data.grand_total[f.key])}
-                  />
-                ))}
+              <div className="fui-band__cell">
+                <span className="fui-band__k">Салонов</span>
+                <span className="fui-band__v">{data.salons.length}</span>
+                <span className="fui-band__m"><span>точек в расчёте</span></span>
               </div>
+              <div className="fui-band__cell">
+                <span className="fui-band__k">Сотрудников</span>
+                <span className="fui-band__v">{employeeView.length}</span>
+                <span className="fui-band__m"><span>с начислениями</span></span>
+              </div>
+            </div>
+            <div className="fui-lattice">
+              {BREAKDOWN_FIELDS.map((f, i) => (
+                <div key={f.key} className="fui-cellstat">
+                  <span className="fui-cellstat__k">
+                    <span
+                      className="mr-1.5 inline-block h-2 w-2 rounded-full align-[1px]"
+                      style={{ background: CHART_COLORS[i] }}
+                    />
+                    {f.label}
+                  </span>
+                  <span className="fui-cellstat__v">{fmtMoney(data.grand_total[f.key])}</span>
+                  <span className="fui-cellstat__m">{sharePct(data.grand_total[f.key], data.grand_total.total)}</span>
+                </div>
+              ))}
             </div>
           </section>
 
+          {/* Было на жёстких amber-50/200/800 — в тёмной теме это светлая
+              плашка со светлым текстом. Переведено на токены. */}
           {data.unknown_codes.length > 0 && (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+            <div
+              className="rounded-lg p-3 text-sm"
+              style={{
+                background: 'var(--color-warning-muted)',
+                border: '1px solid color-mix(in srgb, var(--color-warning) 35%, transparent)',
+                color: 'var(--color-warning)',
+              }}
+            >
               Не найдены точки графика для кодов: {data.unknown_codes.join(', ')}
             </div>
           )}
@@ -356,15 +406,17 @@ export default function PayrollBySalon() {
 
           {tab === 'salons' && (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <StatCard icon={<Store size={18} />} label="Салонов" value={data.salons.length} />
-                <StatCard icon={<Users size={18} />} label="Сотрудников" value={employeeView.length} />
-              </div>
               {sortedSalons.map((salon) => (
                 <SalonRow key={salon.salon_id} salon={salon} />
               ))}
               {data.salons.length === 0 && (
-                <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">Нет данных за месяц</div>
+                <div className="app-card">
+                  <div className="fui-datastate fui-datastate--compact">
+                    <span className="fui-datastate__code">Пусто</span>
+                    <span className="fui-datastate__rule" />
+                    <span className="fui-datastate__text">Нет данных за этот месяц.</span>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -375,7 +427,13 @@ export default function PayrollBySalon() {
                 <EmployeeRow key={emp.employee_code} employee={emp} />
               ))}
               {employeeView.length === 0 && (
-                <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">Нет данных за месяц</div>
+                <div className="app-card">
+                  <div className="fui-datastate fui-datastate--compact">
+                    <span className="fui-datastate__code">Пусто</span>
+                    <span className="fui-datastate__rule" />
+                    <span className="fui-datastate__text">Нет данных за этот месяц.</span>
+                  </div>
+                </div>
               )}
             </div>
           )}

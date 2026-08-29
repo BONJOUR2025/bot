@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
-import { fmtMoney, fmtPct, Term, StatCard, MetricBar, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
+import { fmtMoney, fmtMoneyNum, fmtPct, Term, StatCard, MetricBar, Tabs, TONE_TEXT } from '../components/ui/SalaryUI.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 
 function KpiRing({ pct, size = 84 }) {
@@ -367,12 +367,24 @@ export default function ManagerSalary() {
       )}
 
       {!managerId ? (
-        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
-          <Users size={28} className="mx-auto mb-2 opacity-60" />
-          Выберите менеджера и период, чтобы увидеть расчёт.
+        <div className="app-card">
+          <div className="fui-datastate">
+            <span className="fui-datastate__code fui-datastate__code--icon"><Users size={13} /> Готов к расчёту</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__title">Выберите менеджера и период</span>
+            <span className="fui-datastate__text">
+              Расчёт сведёт оклад, комиссию по KPI, авансы и премии, а рядом покажет качество работы с заявками.
+            </span>
+          </div>
         </div>
       ) : loading && !result ? (
-        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">Загрузка…</div>
+        <div className="app-card">
+          <div className="fui-datastate fui-datastate--loading">
+            <span className="fui-datastate__code">Запрос</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__title">Собираю расчёт…</span>
+          </div>
+        </div>
       ) : result ? (
         <>
           {/* Warnings */}
@@ -394,33 +406,45 @@ export default function ManagerSalary() {
           )}
 
           {/* Hero: payout summary + action */}
-          <section className="app-card overflow-hidden">
-            <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
-              <div className="flex items-center gap-4 min-w-0">
-                <KpiRing pct={result.kpi_max > 0 ? (result.kpi / result.kpi_max) * 100 : 0} />
-                <div className="min-w-0">
-                  <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
-                    К выплате · {manager?.full_name || manager?.name} · {periodLabel}
-                  </div>
-                  <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">
-                    {fmtMoney(result.to_pay)}
-                  </div>
-                  <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
-                    Начислено {fmtMoney(result.gross)}{kept ? <> · удержано <span className="text-[color:var(--color-danger)]">{fmtMoney(kept)}</span></> : null}
-                  </div>
-                </div>
-              </div>
-              <div className="shrink-0 sm:text-right">
-                <button className="btn btn--primary flex items-center gap-2 w-full sm:w-auto justify-center" onClick={accrue} disabled={accruing}>
-                  <Wallet size={16} /> {accruing ? 'Начисляю…' : 'Начислить ЗП'}
-                </button>
-                <div className="mt-1.5 text-[11px] text-[color:var(--color-muted-foreground)] max-w-[220px] sm:ml-auto">
-                  Зафиксирует расчёт в журнале. Выплату создадите там же.
-                </div>
-              </div>
+          {/* Главное число стояло в рамке вместе с кольцом KPI и кнопкой.
+              Деньги вынесены в полосу крупным набором, кольцо осталось
+              отдельным прибором слева от неё — оно измеряет другое. */}
+          <section className="space-y-3">
+            <div className="fui-section">
+              <span className="fui-section__label">Расчёт за месяц</span>
+              <span className="fui-section__line" />
+              <span className="fui-section__meta">{manager?.full_name || manager?.name} · {periodLabel}</span>
             </div>
-            {/* Payout formula */}
-            <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
+            <div className="fui-band">
+                <div className="fui-band__cell">
+                  <span className="fui-band__k">К выплате</span>
+                  <span className="fui-band__v">{fmtMoneyNum(result.to_pay)}<small>₽</small></span>
+                  <span className="fui-band__m"><span>{periodLabel}</span></span>
+                </div>
+                <div className="fui-band__cell">
+                  <span className="fui-band__k">Начислено</span>
+                  <span className="fui-band__v">{fmtMoneyNum(result.gross)}<small>₽</small></span>
+                  <span className="fui-band__m"><span>оклад и комиссия</span></span>
+                </div>
+                <div
+                  className={`fui-band__cell ${kept ? 'fui-band__cell--flag' : ''}`}
+                  style={{ '--flag': 'var(--color-danger)' }}
+                >
+                  <span className="fui-band__k">Удержано</span>
+                  <span className="fui-band__v">{fmtMoneyNum(kept)}<small>₽</small></span>
+                  <span className="fui-band__m"><span>авансы и штрафы</span></span>
+                </div>
+            </div>
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-[11px] text-[color:var(--color-muted-foreground)]">
+                Начисление зафиксирует расчёт в журнале. Выплату создадите там же.
+              </span>
+              <button className="btn btn--primary flex items-center gap-2 justify-center shrink-0" onClick={accrue} disabled={accruing}>
+                <Wallet size={16} /> {accruing ? 'Начисляю…' : 'Начислить ЗП'}
+              </button>
+            </div>
+            {/* Разбор формулы остался под полосой отдельной плитой */}
+            <div className="app-card px-5 sm:px-6 py-4 flex flex-wrap items-center gap-x-4 gap-y-3">
               <Term label="Оклад" value={result.oklad} />
               <Term op="+" label="Комиссия KPI" value={result.kpi} tone={TONE_TEXT.success} />
               <Term op="+" label="Премии" value={result.bonuses} tone={result.bonuses ? TONE_TEXT.success : ''} />
@@ -440,8 +464,11 @@ export default function ManagerSalary() {
               <div className="lg:col-span-2 app-card p-5">
                 <div className="flex items-baseline justify-between gap-2 mb-3">
                   <h3 className="font-semibold flex items-center gap-2"><Coins size={16} /> Комиссия (KPI)</h3>
-                  <div className="text-sm text-[color:var(--color-muted-foreground)]">
-                    <span className="font-semibold text-[color:var(--color-text)]">{fmtMoney(result.kpi)}</span> из цели {fmtMoney(result.kpi_max)}
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-[color:var(--color-muted-foreground)]">
+                      <span className="font-semibold text-[color:var(--color-text)]">{fmtMoney(result.kpi)}</span> из цели {fmtMoney(result.kpi_max)}
+                    </div>
+                    <KpiRing pct={result.kpi_max > 0 ? (result.kpi / result.kpi_max) * 100 : 0} />
                   </div>
                 </div>
                 <MetricBar
