@@ -5765,7 +5765,10 @@ body.viewer3d-fs-active .app-card {
 .fui-band {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  /* 17rem, а не 19: при трёх показаниях и типовой ширине контента ноутбука
+     (1280px экрана = ~908px под полосой) 19rem не давали третьей ячейке
+     встать в ряд, и она переносилась вниз, оставляя половину ряда пустой. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
   border-top: 1px solid var(--fui-edge-strong);
   border-bottom: 1px solid var(--fui-edge);
   isolation: isolate;

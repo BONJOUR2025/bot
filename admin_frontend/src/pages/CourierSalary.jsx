@@ -167,8 +167,10 @@ export default function CourierSalary() {
           <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Зарплата курьера</h2>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">Оклад, авансы и премии/штрафы · пробег авто из StarLine</p>
         </div>
-        <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full ${starline?.configured ? 'bg-[color:var(--color-success-muted)] text-[color:var(--color-success)]' : 'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)]'}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${starline?.configured ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-muted-foreground)]'}`} /> StarLine {starline?.configured ? 'подключён' : 'не настроен'}
+        {/* Свой индикатор из пилюли и точки заменён общим прибором: связь
+            с источником данных выглядит одинаково во всей панели. */}
+        <span className={`fui-status fui-status--always ${starline?.configured ? 'fui-status--live' : 'fui-status--paused'}`}>
+          <span className="fui-status__t">StarLine · {starline?.configured ? 'подключён' : 'не настроен'}</span>
         </span>
       </div>
 
@@ -193,29 +195,68 @@ export default function CourierSalary() {
       </div>
 
       {couriers.length === 0 && (
-        <div className="app-card p-4 text-sm text-[color:var(--color-muted-foreground)]">Нет сотрудников с должностью, содержащей «курьер».</div>
+        <div className="app-card">
+          <div className="fui-datastate fui-datastate--compact">
+            <span className="fui-datastate__code">Список пуст</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__text">Нет сотрудников с должностью, содержащей «курьер».</span>
+          </div>
+        </div>
       )}
 
       {!courierId ? (
-        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]"><Truck size={28} className="mx-auto mb-2 opacity-60" /> Выберите курьера и период.</div>
+        <div className="app-card">
+          <div className="fui-datastate">
+            <span className="fui-datastate__code fui-datastate__code--icon"><Truck size={13} /> Готов к расчёту</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__title">Выберите курьера и период</span>
+            <span className="fui-datastate__text">
+              Расчёт соберёт оклад, авансы и премии за месяц и подтянет пробег из StarLine.
+            </span>
+          </div>
+        </div>
       ) : result ? (
         <>
           {/* Hero: payout */}
-          <section className="app-card overflow-hidden">
-            <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
-              <div className="min-w-0">
-                <div className="text-xs uppercase tracking-wide text-[color:var(--color-muted-foreground)]">К выплате · {courier?.full_name || courier?.name} · {periodLabel}</div>
-                <div className="mt-1 text-4xl font-bold tabular-nums text-[color:var(--color-primary)] whitespace-nowrap">{fmtMoney(result.to_pay)}</div>
-                <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">Начислено {fmtMoney(result.gross)}{kept ? <> · удержано <span className="text-[color:var(--color-danger)]">{fmtMoney(kept)}</span></> : null}</div>
+          <section className="space-y-3">
+            <div className="fui-section">
+              <span className="fui-section__label">Расчёт за месяц</span>
+              <span className="fui-section__line" />
+              <span className="fui-section__meta">{courier?.full_name || courier?.name} · {periodLabel}</span>
+            </div>
+            {/* Главное число страницы стояло в рамке наравне с блоками
+                настроек рядом. Рамка вокруг суммы ничего не добавляла к
+                смыслу — деньги вынесены в полосу крупным набором, как на
+                дашборде и в «Деньгах». */}
+            <div className="fui-band">
+              <div className="fui-band__cell">
+                <span className="fui-band__k">К выплате</span>
+                <span className="fui-band__v">{fmtMoney(result.to_pay)}</span>
+                <span className="fui-band__m"><span>{periodLabel}</span></span>
               </div>
-              <div className="shrink-0 sm:text-right">
-                <button className="btn btn--primary flex items-center gap-2 w-full sm:w-auto justify-center" onClick={accrue} disabled={accruing}>
-                  <Wallet size={16} /> {accruing ? 'Начисляю…' : 'Начислить ЗП'}
-                </button>
-                <div className="mt-1.5 text-[11px] text-[color:var(--color-muted-foreground)]">Фиксирует расчёт в журнале ниже. Выплату создадите там же.</div>
+              <div className="fui-band__cell">
+                <span className="fui-band__k">Начислено</span>
+                <span className="fui-band__v">{fmtMoney(result.gross)}</span>
+                <span className="fui-band__m"><span>оклад и премии</span></span>
+              </div>
+              <div
+                className={`fui-band__cell ${kept ? 'fui-band__cell--flag' : ''}`}
+                style={{ '--flag': 'var(--color-danger)' }}
+              >
+                <span className="fui-band__k">Удержано</span>
+                <span className="fui-band__v">{fmtMoney(kept)}</span>
+                <span className="fui-band__m"><span>авансы и штрафы</span></span>
               </div>
             </div>
-            <div className="px-5 sm:px-6 py-4 border-t border-[color:var(--color-border)] flex flex-wrap items-center gap-x-4 gap-y-3">
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-[11px] text-[color:var(--color-muted-foreground)]">
+                Начисление фиксирует расчёт в журнале ниже. Выплату создадите там же.
+              </span>
+              <button className="btn btn--primary flex items-center gap-2 justify-center shrink-0" onClick={accrue} disabled={accruing}>
+                <Wallet size={16} /> {accruing ? 'Начисляю…' : 'Начислить ЗП'}
+              </button>
+            </div>
+            <div className="app-card px-5 sm:px-6 py-4 flex flex-wrap items-center gap-x-4 gap-y-3">
               <Term label="Оклад" value={result.oklad} />
               <Term op="+" label="Премии" value={result.bonuses} tone={result.bonuses ? TONE_TEXT.success : ''} />
               <Term op="−" label="Авансы" value={result.advances} tone={result.advances ? TONE_TEXT.danger : ''} />
@@ -320,7 +361,13 @@ export default function CourierSalary() {
           </div>
         </>
       ) : loading ? (
-        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">Загрузка…</div>
+        <div className="app-card">
+          <div className="fui-datastate fui-datastate--loading">
+            <span className="fui-datastate__code">Запрос</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__title">Собираю расчёт…</span>
+          </div>
+        </div>
       ) : null}
     </div>
   );
