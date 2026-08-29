@@ -8,7 +8,7 @@ import {
   BarChart2, Store, Megaphone, History, Settings as SettingsIcon,
   Hammer, TrendingUp, ListTodo, KeyRound, Send, LibraryBig, Truck,
   Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon, Monitor,
-  Landmark, UserSearch, UserCog, SlidersHorizontal, Scan, Headphones,
+  Landmark, UserSearch, UserCog, SlidersHorizontal, Scan, Headphones, Search,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -91,6 +91,7 @@ const navStructure = [
       { to: '/admin/knowledge-base', label: 'База знаний', permission: 'employees', icon: LibraryBig },
       { to: '/admin/agbis-users',    label: 'Пользователи АГБИС', permission: 'payroll', icon: UserCog },
       { to: '/admin/agbis-settings', label: 'Настройки АГБИС',   permission: 'payroll', icon: SlidersHorizontal },
+      { to: '/admin/username-search', label: 'Поиск по нику', permission: 'settings', icon: Search },
       { to: '/admin/passwords',      label: 'Пароли',      permission: 'passwords', icon: KeyRound },
       { to: '/admin/settings',       label: 'Настройки',   permission: 'settings',  icon: SettingsIcon },
     ],
