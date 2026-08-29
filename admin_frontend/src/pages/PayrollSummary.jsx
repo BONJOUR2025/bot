@@ -370,33 +370,25 @@ function PayrollProgress({ status }) {
         }} />
       </div>
 
-      {/* Per-category step cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Шаги расчёта. Были четыре карточки, каждая со своей рамкой и
+          заливкой всего поля: готовая категория весила столько же, сколько
+          упавшая, хотя действия не требует. Теперь одна решётка, а состояние
+          несёт общий прибор — тот же, что на остальных страницах. */}
+      <div className="fui-lattice">
         {CATS.map((cat) => {
           const st = status[cat.key] || 'idle';
           const Icon = cat.icon;
-          const isLoading = st === 'loading';
-          const isDone = st === 'done';
-          const isError = st === 'error';
+          const tone = { loading: 'processing', done: 'success', error: 'error' }[st] || 'paused';
+          const text = { loading: 'Загружаю', done: 'Готово', error: 'Ошибка' }[st] || 'Ожидание';
           return (
-            <div key={cat.key}
-              className="rounded-xl p-3.5 flex items-center gap-2.5 transition-all duration-300"
-              style={{
-                background: isLoading ? 'var(--color-primary-muted)' : isDone ? 'var(--color-success-muted)' : 'var(--color-surface)',
-                border: `1px solid ${isLoading ? 'var(--color-primary)' : isDone ? 'var(--color-success)' : isError ? 'var(--color-danger)' : 'var(--color-border)'}`,
-              }}>
-              {isLoading
-                ? <RefreshCw size={15} className="animate-spin shrink-0" style={{ color: 'var(--color-primary)' }} />
-                : <Icon size={15} style={{ color: isDone ? 'var(--color-success)' : isError ? 'var(--color-danger)' : cat.color, flexShrink: 0 }} />
-              }
-              <div className="min-w-0">
-                <div className="text-xs font-semibold truncate text-[color:var(--color-text)]">{cat.title}</div>
-                <div className="text-[10px] mt-0.5" style={{
-                  color: isDone ? 'var(--color-success)' : isError ? 'var(--color-danger)' : isLoading ? 'var(--color-primary-hover)' : 'var(--color-text-faint)',
-                }}>
-                  {isDone ? '✓ Готово' : isError ? '✗ Ошибка' : isLoading ? 'Загружаю…' : 'Ожидание'}
-                </div>
-              </div>
+            <div key={cat.key} className="fui-cellstat">
+              <span className="fui-cellstat__k">
+                <Icon size={12} className="mr-1.5 inline-block align-[-1px]" style={{ color: cat.color }} />
+                {cat.title}
+              </span>
+              <span className={`fui-status fui-status--always fui-status--${tone}`}>
+                <span className="fui-status__t">{text}</span>
+              </span>
             </div>
           );
         })}

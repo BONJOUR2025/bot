@@ -165,7 +165,11 @@ function CompositionAndLeaders({ rows, query, onSelectEmployee }) {
           Структура начислений
         </div>
         {compData.length === 0 ? (
-          <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8">Нет данных</div>
+          <div className="fui-datastate fui-datastate--compact">
+            <span className="fui-datastate__code">Пусто</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__text">Начислений за месяц нет.</span>
+          </div>
         ) : (
           <div className="flex flex-col sm:flex-row gap-4 items-center">
             <div style={{ width: 150, height: 150, flexShrink: 0 }}>
@@ -223,7 +227,13 @@ function CompositionAndLeaders({ rows, query, onSelectEmployee }) {
               </button>
             );
           })}
-          {leaders.length === 0 && <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-4">Нет данных</div>}
+          {leaders.length === 0 && (
+            <div className="fui-datastate fui-datastate--compact">
+              <span className="fui-datastate__code">Пусто</span>
+              <span className="fui-datastate__rule" />
+              <span className="fui-datastate__text">Начислений за месяц нет.</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -990,16 +1000,28 @@ export default function Payroll() {
 
       {/* Table */}
       {!selectedMonth && !loadingMonths ? (
-        <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
-          Выберите месяц для просмотра данных
+        <div className="app-card">
+          <div className="fui-datastate">
+            <span className="fui-datastate__code fui-datastate__code--icon"><FileSpreadsheet size={13} /> Данные готовы</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__title">Выберите месяц</span>
+            <span className="fui-datastate__text">
+              Расчёт покажет оклад, комиссию и премии по каждому администратору за выбранный месяц.
+            </span>
+          </div>
         </div>
       ) : loading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="app-card p-10 text-center text-[color:var(--color-muted-foreground)]">
-          {query ? 'Сотрудник не найден' : 'Нет данных за этот месяц'}
+        <div className="app-card">
+          <div className="fui-datastate fui-datastate--compact">
+            <span className="fui-datastate__code">{query ? 'Поиск' : 'Пусто'}</span>
+            <span className="fui-datastate__rule" />
+            <span className="fui-datastate__title">{query ? 'Сотрудник не найден' : 'Нет данных за этот месяц'}</span>
+            {query && <span className="fui-datastate__text">Проверьте написание фамилии или очистите поиск.</span>}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
