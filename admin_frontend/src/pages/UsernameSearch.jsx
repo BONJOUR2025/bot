@@ -3,18 +3,19 @@ import { Search, Square, Shield, ExternalLink, Loader2 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../providers/ToastProvider.jsx';
 
-// Быстрый набор — площадки, на которых у нас реально что-то ищут. Полный
-// прогон идёт по 400+ сайтам и занимает около минуты; когда нужен ответ
-// «есть ли этот ник вообще», хватает десятка.
-const QUICK_SITES = [
-  'VK', 'Telegram', 'Instagram', 'GitHub', 'Reddit', 'Pinterest',
-  'YouTube', 'TikTok', 'X', 'Facebook',
+// Maigret берёт площадки по рангу популярности. Замерено на этой машине:
+// топ-50 ≈ 14 с, топ-500 ≈ 19 с, вся база (3363) ≈ 1 мин 20 с. Дефолт —
+// топ-50: обычно этого хватает, чтобы понять, занят ли ник вообще.
+const SCOPES = [
+  { key: 'top50',  label: 'Топ 50',   top: 50,  hint: '≈15 секунд' },
+  { key: 'top500', label: 'Топ 500',  top: 500, hint: '≈20 секунд' },
+  { key: 'all',    label: 'Все',      top: 0,   hint: 'около минуты' },
 ];
 
 export default function UsernameSearch() {
   const { toast } = useToast();
   const [username, setUsername] = useState('');
-  const [scope, setScope] = useState('quick'); // quick | all
+  const [scope, setScope] = useState('top50');
   const [useProxy, setUseProxy] = useState(false);
   const [running, setRunning] = useState(false);
   const [hits, setHits] = useState([]);
@@ -22,6 +23,7 @@ export default function UsernameSearch() {
   const [total, setTotal] = useState(null);
   const [lastSite, setLastSite] = useState('');
   const [finished, setFinished] = useState(false);
+  const [details, setDetails] = useState({});
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export default function UsernameSearch() {
   async function run() {
     const name = username.trim();
     if (!name) return;
-    setHits([]); setChecked(0); setLastSite(''); setFinished(false); setRunning(true);
+    setHits([]); setChecked(0); setLastSite(''); setFinished(false); setDetails({}); setRunning(true);
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -58,9 +60,9 @@ export default function UsernameSearch() {
         },
         body: JSON.stringify({
           username: name,
-          sites: scope === 'quick' ? QUICK_SITES : [],
+          top_sites: SCOPES.find((s) => s.key === scope)?.top ?? 50,
           use_proxy: useProxy,
-          timeout: 15,
+          timeout: 12,
         }),
       });
       if (!res.ok) {
@@ -90,6 +92,10 @@ export default function UsernameSearch() {
           } else if (ev.type === 'miss') {
             setChecked(ev.n); setLastSite(ev.site);
           } else if (ev.type === 'done') {
+            // Досье приезжает одним куском в конце: теги площадок и
+            // извлечённые идентификаторы есть только в отчёте Maigret,
+            // в консольный поток они не попадают.
+            if (ev.details) setDetails(ev.details);
             setFinished(true);
           } else if (ev.type === 'error') {
             toast(ev.message, 'error');
@@ -104,14 +110,15 @@ export default function UsernameSearch() {
     }
   }
 
-  const plannedTotal = scope === 'quick' ? QUICK_SITES.length : total;
+  const scopeCfg = SCOPES.find((s) => s.key === scope);
+  const plannedTotal = scopeCfg?.top || total;
   const pct = plannedTotal ? Math.min(100, Math.round((checked / plannedTotal) * 100)) : 0;
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto pb-12">
       <div>
         <span className="ui-eyebrow mb-3">
-          {total ? `База · ${total} площадок` : 'База площадок'}
+          {total ? `Maigret · база ${total} площадок` : 'Maigret'}
         </span>
         <h2 className="text-2xl font-semibold tracking-tight">Поиск по нику</h2>
         <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
@@ -144,22 +151,17 @@ export default function UsernameSearch() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            className={`ui-chip ${scope === 'quick' ? 'is-active' : ''}`}
-            aria-pressed={scope === 'quick'}
-            onClick={() => setScope('quick')}
-            disabled={running}
-          >
-            Основные · {QUICK_SITES.length}
-          </button>
-          <button
-            className={`ui-chip ${scope === 'all' ? 'is-active' : ''}`}
-            aria-pressed={scope === 'all'}
-            onClick={() => setScope('all')}
-            disabled={running}
-          >
-            Все площадки{total ? ` · ${total}` : ''}
-          </button>
+          {SCOPES.map((sc) => (
+            <button
+              key={sc.key}
+              className={`ui-chip ${scope === sc.key ? 'is-active' : ''}`}
+              aria-pressed={scope === sc.key}
+              onClick={() => setScope(sc.key)}
+              disabled={running}
+            >
+              {sc.label}{sc.top ? '' : total ? ` · ${total}` : ''}
+            </button>
+          ))}
           <button
             className={`ui-chip ${useProxy ? 'is-active' : ''}`}
             aria-pressed={useProxy}
@@ -169,11 +171,9 @@ export default function UsernameSearch() {
           >
             <Shield size={12} className="mr-1 inline-block align-[-1px]" /> Через VPN
           </button>
-          {scope === 'all' && (
-            <span className="text-[11px] text-[color:var(--color-muted-foreground)]">
-              полный прогон занимает около минуты
-            </span>
-          )}
+          <span className="text-[11px] text-[color:var(--color-muted-foreground)]">
+            {scopeCfg?.hint}
+          </span>
         </div>
       </div>
 
@@ -215,7 +215,14 @@ export default function UsernameSearch() {
           <ul className="divide-y divide-[color:var(--color-border)]">
             {hits.map((h) => (
               <li key={h.site} className="px-5 py-3 flex items-center justify-between gap-3">
-                <span className="text-sm font-medium truncate">{h.site}</span>
+                <span className="text-sm font-medium truncate">
+                  {h.site}
+                  {details[h.site]?.tags?.length > 0 && (
+                    <span className="ml-2 text-[11px] font-normal text-[color:var(--color-muted-foreground)]">
+                      {details[h.site].tags.join(' · ')}
+                    </span>
+                  )}
+                </span>
                 <a
                   href={h.url}
                   target="_blank"

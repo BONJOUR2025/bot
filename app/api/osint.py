@@ -1,20 +1,34 @@
-"""Поиск аккаунтов по нику (Sherlock) — страница «Поиск по нику» в админке.
+"""Поиск аккаунтов по нику (Maigret) — страница «Поиск по нику» в админке.
 
-Sherlock запускается **отдельным процессом**, а не импортом: он живёт в своём
-venv (settings.sherlock_exe) и тянет requests/urllib3/numpy/pandas, а bot-app
-работает на системном Python вместе с bot-main и bot-vk. Импортировать его
-сюда — значит однажды подменить им версию requests под боевыми процессами.
+Maigret запускается **отдельным процессом**, а не импортом: он живёт в своём
+venv (settings.maigret_exe) и тянет aiohttp/lxml/pillow/reportlab/flask, а
+bot-app работает на системном Python вместе с bot-main и bot-vk. Импортировать
+его сюда — значит однажды подменить им версию aiohttp под боевыми процессами.
 
-Полный прогон идёт по 400+ площадкам и занимает минуты, поэтому ответ
-**потоковый** (NDJSON, по строке на площадку): результат появляется по мере
-ответа сайтов, а не через несколько минут тишины и таймаут прокси.
+Прогон идёт по сотням площадок и занимает минуты, поэтому ответ **потоковый**
+(NDJSON, по строке на событие): попадания появляются по мере ответа сайтов, а
+не через несколько минут тишины и таймаут прокси.
+
+Три особенности запуска Maigret 0.6.5 на этой машине, каждая из которых по
+отдельности ломает работу целиком:
+
+* `PYTHONIOENCODING=utf-8` — иначе он падает с UnicodeEncodeError ещё на своём
+  баннере: печатает «♥», а stdout процесса на Windows по умолчанию cp1251.
+* `--dns-resolver threaded` — его асинхронный резолвер (aiodns) на этом боксе
+  не достучался ни до одного домена: «Connecting failure (DNS)» на 100% сайтов.
+  Системный резолвер работает.
+* `--no-autoupdate` — на старте он лезет обновлять базу площадок (3363 сайта).
+  Для сервера это лишняя сетевая зависимость на каждом запросе.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import shlex
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -24,79 +38,110 @@ from pydantic import BaseModel, Field
 
 from .dependencies import require_permission
 
-# Ник в URL и в аргументах командной строки. Пропускаем только то, что вообще
-# может быть ником: пробелы, кавычки и служебные символы сюда попасть не
-# должны, даже несмотря на то, что процесс запускается без оболочки.
+# Ник уходит в аргументы командной строки и в URL. Пропускаем только то, что
+# вообще может быть ником, даже несмотря на запуск без оболочки.
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
-# Строки вида "[+] GitHub: https://github.com/xxx" / "[-] Reddit: Not Found!"
-FOUND_RE = re.compile(r"^\[\+\]\s+([^:]+):\s+(\S+)")
-NOT_FOUND_RE = re.compile(r"^\[-\]\s+([^:]+):")
-DONE_RE = re.compile(r"^\[\*\]\s+Search completed with (\d+) results")
+# "[+] VK: https://vk.com/xxx" — найдено; "[-] Reddit: Not found" — нет.
+FOUND_RE = re.compile(r"^\[\+\]\s+(.+?):\s+(https?://\S+)")
+NOT_FOUND_RE = re.compile(r"^\[-\]\s+(.+?):\s+Not found!?$")
+# Итоговая строка короткого отчёта Maigret.
+TOTAL_RE = re.compile(r"returned (\d+) accounts")
 
-# Прогон по всем площадкам — минуты; своя граница нужна, чтобы зависший
-# процесс не остался висеть навсегда, если Sherlock не вернётся сам.
-HARD_LIMIT_S = 600
+# Своя граница, чтобы зависший процесс не остался висеть навсегда.
+HARD_LIMIT_S = 900
 
 
 class SearchInput(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
-    # Пустой список = все площадки из базы Sherlock.
-    sites: list[str] = Field(default_factory=list)
+    # Сколько площадок из базы брать (по рангу). 0 = все.
+    top_sites: int = Field(50, ge=0, le=5000)
     # Через наш же vpn-proxy: часть площадок из РФ напрямую не открывается.
     use_proxy: bool = False
-    # Секунды на один сайт. 60 (дефолт Sherlock) на 400+ площадках даёт
-    # слишком длинный хвост из мёртвых доменов.
-    timeout: int = Field(15, ge=3, le=60)
+    timeout: int = Field(12, ge=3, le=60)
 
 
-def _sherlock_path() -> Path:
+def _maigret_path() -> Path:
     from app.settings import settings
 
-    return Path(settings.sherlock_exe)
+    return Path(settings.maigret_exe)
 
 
 def _proxy_url() -> str:
     """HTTP-инбаунд локального xray — тот же, через который ходит бот пошива."""
     from app.settings import settings
 
-    socks = settings.vpn_socks_proxy  # socks5://127.0.0.1:10808
-    port = socks.rsplit(":", 1)[-1]
+    port = settings.vpn_socks_proxy.rsplit(":", 1)[-1]
     try:
         return f"http://127.0.0.1:{int(port) + 1}"
     except ValueError:
         return "http://127.0.0.1:10809"
 
 
-def _build_args(payload: SearchInput) -> list[str]:
+def _build_args(payload: SearchInput, report_dir: str) -> list[str]:
     args = [
-        str(_sherlock_path()),
+        str(_maigret_path()),
         payload.username,
         "--no-color",
-        "--print-all",
-        # Иначе Sherlock кладёт <username>.txt в рабочий каталог процесса —
-        # то есть в продовую папку рядом с hr.db.
-        "--no-txt",
+        "--no-progressbar",
+        "--no-autoupdate",
+        "--dns-resolver",
+        "threaded",
+        "--print-not-found",
         "--timeout",
         str(payload.timeout),
+        # Отчёт кладём во временную папку, а не в рабочий каталог процесса
+        # (это продовая папка рядом с hr.db). Из него берём то, чего нет в
+        # консоли: извлечённые идентификаторы и теги площадок.
+        "-J",
+        "simple",
+        "--folderoutput",
+        report_dir,
     ]
-    for site in payload.sites:
-        args += ["--site", site]
+    if payload.top_sites:
+        args += ["--top-sites", str(payload.top_sites)]
+    else:
+        args += ["-a"]
     if payload.use_proxy:
         args += ["--proxy", _proxy_url()]
     return args
 
 
+def _read_report(report_dir: str) -> dict[str, Any]:
+    """Досье из JSON-отчёта: по каждой найденной площадке — извлечённые
+    идентификаторы и теги. Именно этим Maigret отличается от простого
+    «занят/свободен»."""
+    details: dict[str, Any] = {}
+    try:
+        for path in Path(report_dir).glob("*.json"):
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            for site, entry in doc.items():
+                status = (entry or {}).get("status") or {}
+                if status.get("status") != "Claimed":
+                    continue
+                details[site] = {
+                    "url": entry.get("url_user"),
+                    "ids": status.get("ids") or {},
+                    "tags": status.get("tags") or [],
+                    "rank": entry.get("rank"),
+                }
+    except Exception:
+        # Отчёт — приятное дополнение; из-за него поиск падать не должен.
+        return details
+    return details
+
+
 async def _stream(payload: SearchInput) -> AsyncIterator[bytes]:
-    exe = _sherlock_path()
+    exe = _maigret_path()
     if not exe.exists():
         yield json.dumps(
-            {"type": "error", "message": f"Sherlock не найден: {exe}"},
+            {"type": "error", "message": f"Maigret не найден: {exe}"},
             ensure_ascii=False,
         ).encode() + b"\n"
         return
 
-    args = _build_args(payload)
+    report_dir = tempfile.mkdtemp(prefix="maigret-")
+    args = _build_args(payload, report_dir)
     yield json.dumps(
         {"type": "started", "cmd": shlex.join(args[1:])}, ensure_ascii=False
     ).encode() + b"\n"
@@ -105,18 +150,16 @@ async def _stream(payload: SearchInput) -> AsyncIterator[bytes]:
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
-        # Рабочий каталог — папка самого Sherlock, чтобы любые побочные файлы
-        # (если появятся) не сыпались в продовый каталог приложения.
-        cwd=str(exe.parent),
+        cwd=report_dir,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
     )
 
     checked = 0
+    total: int | None = None
     try:
         while True:
             try:
-                raw = await asyncio.wait_for(
-                    proc.stdout.readline(), timeout=HARD_LIMIT_S
-                )
+                raw = await asyncio.wait_for(proc.stdout.readline(), timeout=HARD_LIMIT_S)
             except asyncio.TimeoutError:
                 yield json.dumps(
                     {"type": "error", "message": "Превышен общий лимит времени"},
@@ -125,7 +168,10 @@ async def _stream(payload: SearchInput) -> AsyncIterator[bytes]:
                 break
             if not raw:
                 break
-            line = raw.decode("utf-8", "replace").rstrip()
+            # strip(), а не rstrip(): Maigret перерисовывает прогресс и шлёт
+            # строки с ведущим возвратом каретки — с ним якорь "^[" в
+            # регулярках не срабатывает, и разбор молча даёт ноль результатов.
+            line = raw.decode("utf-8", "replace").strip()
 
             m = FOUND_RE.match(line)
             if m:
@@ -145,17 +191,26 @@ async def _stream(payload: SearchInput) -> AsyncIterator[bytes]:
                 ).encode() + b"\n"
                 continue
 
-            m = DONE_RE.match(line)
+            m = TOTAL_RE.search(line)
             if m:
-                yield json.dumps(
-                    {"type": "done", "found": int(m.group(1)), "checked": checked},
-                    ensure_ascii=False,
-                ).encode() + b"\n"
+                total = int(m.group(1))
+
+        await proc.wait()
+        yield json.dumps(
+            {
+                "type": "done",
+                "found": total,
+                "checked": checked,
+                "details": _read_report(report_dir),
+            },
+            ensure_ascii=False,
+        ).encode() + b"\n"
     finally:
         # Клиент мог закрыть вкладку — процесс не должен пережить запрос.
         if proc.returncode is None:
             proc.kill()
             await proc.wait()
+        shutil.rmtree(report_dir, ignore_errors=True)
 
 
 def create_osint_router() -> APIRouter:
@@ -167,21 +222,33 @@ def create_osint_router() -> APIRouter:
 
     @router.get("/sites")
     async def sites() -> dict[str, Any]:
-        """Список площадок из базы Sherlock — для выбора подмножества."""
-        exe = _sherlock_path()
-        data = exe.parent.parent / "Lib" / "site-packages" / "sherlock_project" / "resources" / "data.json"
-        try:
-            doc = json.loads(data.read_text(encoding="utf-8"))
-        except Exception as e:
-            raise HTTPException(500, f"Не удалось прочитать базу площадок: {e}")
-        names = sorted(k for k in doc if not k.startswith("$"))
-        return {"sites": names, "total": len(names), "available": exe.exists()}
+        """Размер базы площадок — для подписей в интерфейсе."""
+        exe = _maigret_path()
+        # Maigret держит базу в профиле пользователя и обновляет её сам;
+        # в пакете лежит только та, что приехала с релизом.
+        candidates = [
+            Path.home() / ".maigret" / "data.json",
+            exe.parent.parent / "Lib" / "site-packages" / "maigret" / "resources" / "data.json",
+        ]
+        for path in candidates:
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            sites_doc = doc.get("sites", doc)
+            return {
+                "total": len(sites_doc),
+                "available": exe.exists(),
+                "database": str(path),
+            }
+        raise HTTPException(500, "База площадок Maigret не найдена")
 
     @router.post("/username")
     async def username(payload: SearchInput):
         if not USERNAME_RE.match(payload.username):
             raise HTTPException(
-                400, "Ник может содержать только латиницу, цифры, точку, дефис и подчёркивание"
+                400,
+                "Ник может содержать только латиницу, цифры, точку, дефис и подчёркивание",
             )
         return StreamingResponse(
             _stream(payload),

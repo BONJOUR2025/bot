@@ -197,13 +197,13 @@ class Settings(BaseSettings):
     # читает его логи/настройки и пишет poshiv_settings.json (оверлей, который
     # его config.py накатывает поверх своих дефолтов). Абсолютный путь, потому
     # что относительный резолвился бы от CWD процесса bot-app, а не от бота.
-    # Sherlock (поиск ника по 400+ площадкам) стоит в отдельном venv, а не в
-    # системном Python: он тянет requests/urllib3/numpy/pandas, а на том же
-    # интерпретаторе работают боевые bot-main/bot-app/bot-vk — подмена версий
-    # у них под ногами ищется потом полдня. Отсюда дёргаем именно бинарник.
-    sherlock_exe: str = Field(
-        r"C:\deploy\tools\sherlock-venv\Scripts\sherlock.exe",
-        validation_alias="SHERLOCK_EXE",
+    # Maigret (поиск ника по 3000+ площадкам) стоит в отдельном venv, а не в
+    # системном Python: он тянет aiohttp/lxml/pillow/reportlab/flask, а на том
+    # же интерпретаторе работают боевые bot-main/bot-app/bot-vk — подмена
+    # версий у них под ногами ищется потом полдня. Отсюда дёргаем бинарник.
+    maigret_exe: str = Field(
+        r"C:\deploy\tools\maigret-venv\Scripts\maigret.exe",
+        validation_alias="MAIGRET_EXE",
     )
     poshiv_bot_dir: str = Field(
         r"C:\Users\User\Desktop\ПОШИВ БОТ", validation_alias="POSHIV_BOT_DIR"

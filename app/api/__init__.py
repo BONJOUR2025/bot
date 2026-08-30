@@ -608,7 +608,7 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
-    # Поиск аккаунтов по нику (Sherlock, отдельный venv — см. app/api/osint.py)
+    # Поиск аккаунтов по нику (Maigret, отдельный venv — см. app/api/osint.py)
     from .osint import create_osint_router
 
     app.include_router(
