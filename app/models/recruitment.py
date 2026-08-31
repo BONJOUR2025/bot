@@ -312,6 +312,25 @@ class Candidate(Base):
     last_message_text = Column(Text, nullable=True, default="")
     last_message_at = Column(DateTime, nullable=True)
     last_message_from = Column(String, nullable=True, default="")  # applicant | employer
+    # ─── Режим «Прозвон» ────────────────────────────────────────────────
+    # Самый ранний момент, начиная с которого кандидат МОЖЕТ попасть в
+    # очередь исходящего звонка. Не «время звонка» и не обещание, что
+    # звонок состоится именно тогда: фактическую доступность решает
+    # предикат call_queue.is_callable, где правило «одна попытка в
+    # календарный день» перекрывает это поле (см. call_queue.called_today).
+    # NULL = нижней границы нет.
+    next_attempt_at = Column(DateTime, nullable=True)
+    # Момент, когда мы отреагировали на последнее входящее сообщение.
+    # Нужен потому, что звонок идёт мимо переписки: позвонив, мы не пишем
+    # в чат, last_message_from остаётся "applicant", и без этой отметки
+    # кандидат навсегда завис бы в «ждёт ответа». См. call_queue.unhandled_inbound.
+    last_inbound_handled_at = Column(DateTime, nullable=True)
+    # Журнал контактов, append-only: [{"at", "outcome", "message_sent"?}, ...].
+    # Отдельно от follow_up_count, у них разные обязанности: счётчик — это
+    # попытки в ТЕКУЩЕМ цикле связи (обнуляется при установленном контакте
+    # и управляет логикой), журнал — история всех фактов, которая не
+    # чистится никогда.
+    call_log_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -355,9 +374,27 @@ class Candidate(Base):
             "last_message_text": self.last_message_text or "",
             "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
             "last_message_from": self.last_message_from or "",
+            "next_attempt_at": self.next_attempt_at.isoformat() if self.next_attempt_at else None,
+            "last_inbound_handled_at": (
+                self.last_inbound_handled_at.isoformat() if self.last_inbound_handled_at else None
+            ),
+            "call_log": self.call_log(),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+    def call_log(self) -> list:
+        """Журнал контактов списком. Битый JSON не должен ронять карточку —
+        для витрины пустая история лучше пятисотки."""
+        import json
+
+        if not self.call_log_json:
+            return []
+        try:
+            data = json.loads(self.call_log_json)
+        except Exception:
+            return []
+        return data if isinstance(data, list) else []
 
 
 class RecruitmentSource(Base):

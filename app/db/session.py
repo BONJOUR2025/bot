@@ -60,6 +60,12 @@ def _migrate_columns() -> None:
         _add_column_if_missing(conn, "candidates", "last_message_text", "TEXT DEFAULT ''")
         _add_column_if_missing(conn, "candidates", "last_message_at", "DATETIME")
         _add_column_if_missing(conn, "candidates", "last_message_from", "TEXT DEFAULT ''")
+        # Режим «Прозвон» — см. app/services/call_queue.py. Все три nullable,
+        # поэтому существующие кандидаты корректны сразу: NULL означает
+        # «ограничений нет» и «истории пока не записано».
+        _add_column_if_missing(conn, "candidates", "next_attempt_at", "DATETIME")
+        _add_column_if_missing(conn, "candidates", "last_inbound_handled_at", "DATETIME")
+        _add_column_if_missing(conn, "candidates", "call_log_json", "TEXT")
         _add_column_if_missing(conn, "employee_llm_usage", "cached_tokens", "INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "employee_llm_usage", "question", "TEXT DEFAULT ''")
         _add_column_if_missing(conn, "employee_llm_usage", "answer", "TEXT DEFAULT ''")
