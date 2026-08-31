@@ -451,9 +451,21 @@ async def _schedule_call_if_named(cand_id: int, name: str, text: str) -> str | N
                 category="Подбор персонала",
                 priority="high",
                 reminder_minutes=15,
+                # Связь с кандидатом: по ней перенос задачи двигает и время
+                # звонка в очереди, а очередь показывает связанную задачу.
+                candidate_id=cand_id,
             ),
             created_by="Быстрый режим",
         )
+
+        # Названное кандидатом время — это ещё и время в очереди «Прозвона».
+        # Через normalize, а не напрямую: если сегодня мы уже звонили, «сегодня
+        # в 18:00» уезжает на следующий допустимый день. Вето сильнее
+        # договорённости — второй автоматический звонок в тот же календарный
+        # день невозможен.
+        from app.services import candidate_outreach
+
+        candidate_outreach.schedule_from_task(cand_id, d, t)
         return f"{d.strftime('%d.%m')} в {t.strftime('%H:%M')}"
     except Exception as exc:
         logger.warning("не удалось завести задачу на звонок для кандидата %s: %s", cand_id, exc)

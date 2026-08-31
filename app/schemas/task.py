@@ -21,6 +21,11 @@ class Task(BaseModel):
     updated_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_by: Optional[str] = None  # user who created
+    # Кандидат, к которому привязана задача (режим «Прозвон»). Обычная задача
+    # его не имеет — связь появляется только у звонков, назначенных на
+    # конкретного человека, и позволяет перенос задачи двигать расписание
+    # звонка. Хранилище задач — schemaless JSON, миграция не нужна.
+    candidate_id: Optional[int] = None
 
 
 class TaskCreate(BaseModel):
@@ -34,6 +39,7 @@ class TaskCreate(BaseModel):
     category: Optional[str] = None
     tags: List[str] = []
     reminder_minutes: Optional[int] = None
+    candidate_id: Optional[int] = None
 
 
 class TaskUpdate(BaseModel):
@@ -48,6 +54,7 @@ class TaskUpdate(BaseModel):
     tags: Optional[List[str]] = None
     reminder_minutes: Optional[int] = None
     reminder_sent: Optional[bool] = None
+    candidate_id: Optional[int] = None
 
 
 class TaskStats(BaseModel):

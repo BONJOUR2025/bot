@@ -65,6 +65,13 @@ FLAG_NEEDS_REPLY = "needs_reply"
 FLAG_SILENT = "silent"
 FLAG_UNDELIVERED = "undelivered"
 FLAG_NO_ANSWER = "no_answer"
+# Три попытки исчерпаны. Это НЕ этап воронки: решения по человеку мы не
+# приняли, просто не смогли до него дозвониться. Отдельный этап добавил бы
+# восьмую колонку в канбан, а флаг рисуется на карточке — механизм уже есть.
+FLAG_NO_CONTACT = "no_contact"
+# Кандидат написал последним и ждёт нашего ответа в переписке. Отдельно от
+# звонков: такому кандидату нужно ответить текстом, а не набирать номер.
+FLAG_AWAITING_REPLY = "awaiting_reply"
 
 SILENT_AFTER = timedelta(hours=24)
 
@@ -134,7 +141,8 @@ def _no_answer_label(count: int, last_at: datetime | None, now: datetime) -> str
 
 
 def flags(state: dict | None, *, now: datetime | None = None,
-          call_attempts: int = 0, last_call_at: datetime | None = None) -> list[dict]:
+          call_attempts: int = 0, last_call_at: datetime | None = None,
+          awaiting_reply: bool = False) -> list[dict]:
     """Флаги состояния: что именно сейчас требует внимания.
 
     Каждый флаг — {"code", "label"}, чтобы список рендерился без словаря
@@ -150,13 +158,20 @@ def flags(state: dict | None, *, now: datetime | None = None,
     status = state.get("status")
     result: list[dict] = []
 
+    if awaiting_reply:
+        result.append({"code": FLAG_AWAITING_REPLY, "label": "ждёт ответа"})
+
     if call_attempts and call_attempts > 0:
+        exhausted = call_attempts >= NO_ANSWER_ESCALATE_AT
         result.append({
-            "code": FLAG_NO_ANSWER,
-            "label": _no_answer_label(call_attempts, last_call_at, now),
+            # Исчерпанные попытки — это уже не «не дозвонился в очередной
+            # раз», а состояние «не вышел на связь»: звонить больше не будем.
+            "code": FLAG_NO_CONTACT if exhausted else FLAG_NO_ANSWER,
+            "label": ("не вышел на связь" if exhausted
+                      else _no_answer_label(call_attempts, last_call_at, now)),
             "attempts": call_attempts,
             # Подсказка интерфейсу: пора не звонить снова, а решать.
-            "escalate": call_attempts >= NO_ANSWER_ESCALATE_AT,
+            "escalate": exhausted,
         })
 
     if status == "waiting_admin":

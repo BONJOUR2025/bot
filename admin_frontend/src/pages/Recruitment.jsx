@@ -5,7 +5,7 @@ import {
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare,
   Pause, Play, Check, BookOpen, Sparkles, ListChecks, Copy, FileStack,
-  PhoneMissed, PhoneCall, Archive, Search,
+  PhoneMissed, PhoneCall, PhoneOff, Archive, Search,
 } from 'lucide-react';
 import api from '../api';
 import { formatPhone, telHref, tgHref } from '../utils/phone';
@@ -18,6 +18,7 @@ import VacancyTemplatesModal from '../components/recruitment/VacancyTemplatesMod
 import VacancyModal from '../components/recruitment/VacancyModal.jsx';
 import ScopeBadge from '../components/recruitment/ScopeBadge.jsx';
 import AiCheckPanel from '../components/recruitment/AiCheckPanel.jsx';
+import CallQueueView from './CallQueue.jsx';
 import useAiCheckGate from '../components/recruitment/useAiCheckGate.js';
 
 // Этапы синхронизированы с app/services/recruitment_stages.py (воронка
@@ -1154,7 +1155,12 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
               key={f.code}
               tone={f.escalate ? `${f.code}_escalate` : f.code}
               label={f.label}
-              icon={f.code === 'no_answer' ? <PhoneMissed size={9} /> : undefined}
+              icon={
+                f.code === 'no_answer' ? <PhoneMissed size={9} />
+                  : f.code === 'no_contact' ? <PhoneOff size={9} />
+                    : f.code === 'awaiting_reply' ? <MessageSquare size={9} />
+                      : undefined
+              }
             />
           ))}
           {c.is_paused && <CardFlag tone="paused" label="на паузе" icon={<Pause size={9} />} />}
@@ -1248,6 +1254,14 @@ const FLAG_TONES = {
   // Третий недозвон подряд — карточка перестаёт быть «просто перезвонить»
   // и требует решения, поэтому меняет тон на тревожный.
   no_answer_escalate: 'bg-orange-100 text-orange-800 border-orange-300',
+  // Три попытки исчерпаны: звонить больше не будем, карточка ждёт решения
+  // человека — отказ, пауза или ручной звонок. Тон тревожнее недозвона,
+  // потому что сама она из этого состояния уже не выйдет.
+  no_contact:  'bg-rose-100 text-rose-800 border-rose-300',
+  no_contact_escalate: 'bg-rose-100 text-rose-800 border-rose-300',
+  // Кандидат написал и ждёт текста, а не звонка — отдельная работа,
+  // отдельный тон.
+  awaiting_reply: 'bg-violet-100 text-violet-800 border-violet-200',
   new:         'bg-emerald-100 text-emerald-700 border-emerald-200',
   paused:      'bg-amber-100 text-amber-700 border-amber-200',
 };
@@ -1984,7 +1998,7 @@ export default function Recruitment() {
     api.get('/config/message-templates').then(r => setMsgTemplates(r.data || [])).catch(() => {});
   }, []);
 
-  const [mainView, setMainView] = useState('funnel'); // 'funnel' | 'interviews'
+  const [mainView, setMainView] = useState('funnel'); // 'funnel' | 'calls' | 'interviews' | 'reserve'
 
   function toggleSelection(id) {
     setSelectedIds(prev => {
@@ -2220,7 +2234,9 @@ export default function Recruitment() {
           <h1 className="text-xl font-bold">Подбор персонала</h1>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">CRM кандидатов по вакансиям</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* min-w-0: без него flex-элемент не сжимается уже своего содержимого,
+            и ряд режимов вылезал за правый край экрана на мобильном. */}
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           {isMobile && (
             <button onClick={() => setShowVacList(v => !v)} className="btn btn-secondary text-sm">
               {showVacList ? 'Скрыть вакансии' : 'Вакансии'}
@@ -2254,23 +2270,33 @@ export default function Recruitment() {
           >
             <FileStack size={15} /> Шаблоны вакансий
           </button>
-          <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-hidden">
+          {/* Четыре режима в узкий экран не влезают: с overflow-hidden
+              «Резерв» просто пропадал за краем. Скроллим горизонтально —
+              обрезанная кнопка хотя бы видна и достижима. */}
+          <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-x-auto max-w-full min-w-0">
             <button
               onClick={() => setMainView('funnel')}
-              className={`px-3 py-1.5 text-sm transition-colors ${mainView === 'funnel' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+              className={`px-3 py-1.5 text-sm transition-colors flex-shrink-0 whitespace-nowrap ${mainView === 'funnel' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
             >
               Воронка
             </button>
             <button
+              onClick={() => setMainView('calls')}
+              title="Прозвон: система сама выбирает, кому звонить следующим"
+              className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap ${mainView === 'calls' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+            >
+              <PhoneCall size={13} /> Прозвон
+            </button>
+            <button
               onClick={() => setMainView('interviews')}
-              className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 ${mainView === 'interviews' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+              className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap ${mainView === 'interviews' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
             >
               <Calendar size={13} /> Собеседования
             </button>
             <button
               onClick={() => setMainView('reserve')}
               title="Условно мёртвые: организации, случайные чаты, старые отклики. Не удалены — лежат отдельно, чтобы не подтянулись заново при переподключении интеграции."
-              className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 ${mainView === 'reserve' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+              className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap ${mainView === 'reserve' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
             >
               <Archive size={13} /> Резерв
               {reserveCount > 0 && (
@@ -2306,6 +2332,8 @@ export default function Recruitment() {
           <button onClick={() => setHhToast('')}><X size={14} /></button>
         </div>
       )}
+
+      {mainView === 'calls' && <CallQueueView />}
 
       {/* Interview schedule view */}
       {mainView === 'interviews' && (

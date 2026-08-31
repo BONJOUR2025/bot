@@ -61,6 +61,7 @@ class TaskRepository:
         due_from: Optional[str] = None,
         due_to: Optional[str] = None,
         include_done: bool = True,
+        candidate_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """List tasks with optional filters."""
         self._data = self._load()  # always fresh from disk (two-process setup)
@@ -78,6 +79,8 @@ class TaskRepository:
             if priority and item.get("priority") != priority:
                 continue
             if category and item.get("category") != category:
+                continue
+            if candidate_id is not None and item.get("candidate_id") != candidate_id:
                 continue
 
             task_due = item.get("due_date")

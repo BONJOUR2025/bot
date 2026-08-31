@@ -3,6 +3,29 @@ from typing import List, Optional
 
 from app.schemas.task import Task, TaskCreate, TaskUpdate, TaskStats
 from app.data.task_repository import TaskRepository
+from app.utils.logger import log
+
+
+def _as_date(raw):
+    """ISO-строка из хранилища → date. Задачи лежат в JSON, поэтому обратно
+    приходят строками, а расписание звонка считается по датам."""
+    if not raw or isinstance(raw, date):
+        return raw or None
+    try:
+        return date.fromisoformat(str(raw))
+    except (ValueError, TypeError):
+        return None
+
+
+def _as_time(raw):
+    from datetime import time as _time
+
+    if not raw or isinstance(raw, _time):
+        return raw or None
+    try:
+        return _time.fromisoformat(str(raw))
+    except (ValueError, TypeError):
+        return None
 
 _task_service_singleton: "TaskService | None" = None
 
@@ -27,6 +50,7 @@ class TaskService:
         due_from: Optional[str] = None,
         due_to: Optional[str] = None,
         include_done: bool = True,
+        candidate_id: Optional[int] = None,
     ) -> List[Task]:
         """List tasks with optional filters."""
         items = self._repo.list(
@@ -37,6 +61,7 @@ class TaskService:
             due_from=due_from,
             due_to=due_to,
             include_done=include_done,
+            candidate_id=candidate_id,
         )
         return [Task(**item) for item in items]
 
@@ -74,9 +99,26 @@ class TaskService:
             updates["due_time"] = updates["due_time"].isoformat()
 
         updated = self._repo.update(task_id, updates)
-        if updated:
-            return Task(**updated)
-        return None
+        if not updated:
+            return None
+
+        # Перенос задачи-звонка двигает и расписание звонка: иначе напоминание
+        # стоит на четверг, а очередь предлагает звонить во вторник. Ошибка
+        # синхронизации не должна ронять сам перенос — задача уже сохранена.
+        if updated.get("candidate_id") and (
+                "due_date" in updates or "due_time" in updates):
+            from app.services import candidate_outreach
+
+            try:
+                candidate_outreach.schedule_from_task(
+                    updated["candidate_id"],
+                    _as_date(updated.get("due_date")),
+                    _as_time(updated.get("due_time")),
+                )
+            except Exception as exc:  # pragma: no cover — защитный контур
+                log(f"⚠️ не удалось синхронизировать звонок с задачей {task_id}: {exc}")
+
+        return Task(**updated)
 
     async def delete_task(self, task_id: int) -> bool:
         """Delete a task."""

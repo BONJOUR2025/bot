@@ -82,6 +82,22 @@ class NoAnswerRequest(BaseModel):
     send_message: bool = True
     text: Optional[str] = None
 
+class CallOutcomeRequest(BaseModel):
+    """Результат звонка из режима «Прозвон»."""
+    outcome: str
+    # Только для outcome="later": локальное время следующего звонка.
+    next_at: Optional[datetime] = None
+    send_message: bool = True
+    text: Optional[str] = None
+
+
+class CallHoursRequest(BaseModel):
+    enabled: bool = False
+    days: List[int] = []
+    start: str = "10:00"
+    end: str = "20:00"
+
+
 class HHIntervalRequest(BaseModel):
     sync_interval_minutes: int = 15
 
@@ -224,9 +240,7 @@ def list_candidates(
         # не может разойтись с реальным ходом переписки. Ручные этапы
         # (собеседование/нанят/отказ) при этом сохраняются как есть.
         d["stage"] = rs.derive_stage(c.stage, state)
-        d["flags"] = rs.flags(state, now=now,
-                              call_attempts=c.follow_up_count or 0,
-                              last_call_at=c.follow_up_last_sent_at)
+        d["flags"] = _candidate_flags(c, state, now)
         d["progress"] = rs.progress(state, questions)
         d["answers"] = state.get("answers") or []
         d["is_new"] = bool(c.created_at and c.created_at >= since_24h)
@@ -359,27 +373,36 @@ async def register_no_answer(candidate_id: int, data: NoAnswerRequest,
     if not c:
         raise HTTPException(404, "Candidate not found")
 
-    attempts = outreach.register_call_attempt(db, c)
-    result = {"id": c.id, "call_attempts": attempts, "message_sent": False, "warning": None}
+    warning = None
+    message_sent = False
 
-    if not data.send_message:
-        return result
-    if not outreach.has_chat(c):
-        result["warning"] = "Попытка записана. Переписки с этим кандидатом нет — только телефон."
-        return result
+    # Здесь, в отличие от режима «Прозвон», send_message выполняется как
+    # сказано: это ручное действие оператора с карточки, он видит текст и
+    # решает сам. Правило «пишем только после первого недозвона» —
+    # про автоматическое поведение очереди, а не про явное нажатие кнопки.
+    if data.send_message:
+        if not outreach.has_chat(c):
+            warning = "Попытка записана. Переписки с этим кандидатом нет — только телефон."
+        else:
+            try:
+                _, src, token = await _get_platform_chat(candidate_id, db)
+                await outreach.send_to_candidate(
+                    db, c, src, token,
+                    (data.text or "").strip() or outreach.DEFAULT_NO_ANSWER_MESSAGE,
+                )
+                message_sent = True
+            except HTTPException as exc:
+                warning = f"Попытка записана, но сообщение не отправлено: {exc.detail}"
+            except Exception as exc:
+                log.warning("no-answer message failed for candidate %s: %s", candidate_id, exc)
+                warning = f"Попытка записана, но сообщение не отправлено: {exc}"
 
-    try:
-        _, src, token = await _get_platform_chat(candidate_id, db)
-        await outreach.send_to_candidate(
-            db, c, src, token,
-            (data.text or "").strip() or outreach.DEFAULT_NO_ANSWER_MESSAGE,
-        )
-        result["message_sent"] = True
-    except HTTPException as exc:
-        result["warning"] = f"Попытка записана, но сообщение не отправлено: {exc.detail}"
-    except Exception as exc:
-        log.warning("no-answer message failed for candidate %s: %s", candidate_id, exc)
-        result["warning"] = f"Попытка записана, но сообщение не отправлено: {exc}"
+    # Счётчик, расписание следующей попытки и журнал — через общую точку,
+    # чтобы канбан и «Прозвон» не разошлись в правилах.
+    result = outreach.record_outcome(
+        db, c, outreach.OUTCOME_NO_ANSWER, message_sent=message_sent)
+    result["message_sent"] = message_sent
+    result["warning"] = warning
     return result
 
 
@@ -391,8 +414,232 @@ def register_reached(candidate_id: int, db: Session = Depends(get_db)):
     c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not c:
         raise HTTPException(404, "Candidate not found")
-    outreach.reset_call_attempts(db, c)
-    return {"id": c.id, "call_attempts": 0}
+    return outreach.record_outcome(db, c, outreach.OUTCOME_REACHED)
+
+
+# ─── Режим «Прозвон» ────────────────────────────────────────────────────────
+#
+# Очередь нигде не хранится: она вычисляется предикатом call_queue.is_callable
+# на каждый запрос — ровно как этап кандидата вычисляется из состояния опроса.
+# Поэтому у режима нет ни одной фоновой задачи: наступление next_attempt_at —
+# это сравнение с now внутри вот этого обработчика.
+
+
+def _candidate_flags(c: Candidate, state: dict, now: datetime | None = None) -> list:
+    """Флаги карточки. Вынесено, чтобы список и очередь считали их одинаково."""
+    from app.services import call_queue
+    from app.services import recruitment_stages as rs
+
+    return rs.flags(
+        state,
+        now=now or datetime.utcnow(),
+        call_attempts=c.follow_up_count or 0,
+        last_call_at=c.follow_up_last_sent_at,
+        awaiting_reply=call_queue.unhandled_inbound(c),
+    )
+
+
+def _queue_rows(db: Session, now=None):
+    """(кандидат, этап, причина, ключ сортировки) для всех, кому нужен звонок."""
+    from app.services import call_hours, call_queue, quick_screening
+    from app.services import recruitment_stages as rs
+    from app.services.hours_window import local_now
+
+    now = now or local_now()
+    rows = []
+    # Закрытая вакансия убирает кандидата из очереди, но оставляет в канбане:
+    # звонить по набору, который уже закрыт, незачем.
+    candidates = (
+        db.query(Candidate)
+        .join(Vacancy, Candidate.vacancy_id == Vacancy.id)
+        .filter(Vacancy.is_open.is_(True))
+        .all()
+    )
+    for c in candidates:
+        state = quick_screening.load_state(c)
+        stage = rs.derive_stage(c.stage, state)
+        quick_mode = bool(c.vacancy and c.vacancy.quick_mode_enabled)
+        if not call_queue.is_callable(c, stage, now, call_hours, quick_mode):
+            continue
+        _, reason = call_queue.priority(c, now)
+        rows.append((c, stage, reason, call_queue.sort_key(c, now)))
+    rows.sort(key=lambda r: r[3])
+    return rows
+
+
+async def _queue_card(db: Session, c: Candidate, stage: str, reason: str) -> dict:
+    """Полный контекст кандидата для экрана: рекрутёр не должен собирать его
+    сам, переключаясь между очередью и канбаном."""
+    from app.services import candidate_outreach as outreach
+    from app.services import quick_screening
+    from app.services import recruitment_stages as rs
+    from app.services.task_service import get_task_service
+
+    state = quick_screening.load_state(c)
+    d = c.to_dict()
+    d["stage"] = stage
+    d["reason"] = reason
+    d["answers"] = state.get("answers") or []
+    d["progress"] = rs.progress(state, quick_screening.get_questions(c.vacancy))
+    d["vacancy_title"] = c.vacancy.title if c.vacancy else ""
+    d["has_chat"] = outreach.has_chat(c)
+    d["flags"] = _candidate_flags(c, state)
+
+    # Связанная задача — чтобы рекрутёр не переключался в «Задачи» проверять,
+    # не назначено ли на этого кандидата напоминание.
+    tasks = await get_task_service().list_tasks(candidate_id=c.id, include_done=False)
+    d["linked_task"] = tasks[0].model_dump(mode="json") if tasks else None
+    return d
+
+
+@router.get("/call-queue")
+async def call_queue_view(db: Session = Depends(get_db)):
+    """Очередь звонков: следующий кандидат и счётчики для шапки."""
+    from app.services import call_hours, call_queue
+    from app.services.hours_window import local_now
+
+    now = local_now()
+    rows = _queue_rows(db, now)
+
+    # «Звонков сегодня» — именно исходящие попытки, а не «обработано»:
+    # обработать карточку можно и сообщением, и переводом этапа.
+    calls_today = 0
+    awaiting_reply = 0
+    for c in db.query(Candidate).all():
+        if call_queue.called_today(c, now):
+            calls_today += 1
+        if call_queue.unhandled_inbound(c):
+            awaiting_reply += 1
+
+    next_card = None
+    if rows:
+        c, stage, reason, _ = rows[0]
+        next_card = await _queue_card(db, c, stage, reason)
+
+    within = call_hours.is_within(now)
+    upcoming = None if within else call_hours.next_window_start(now)
+    return {
+        "next": next_card,
+        "queue_count": len(rows),
+        "calls_today": calls_today,
+        "awaiting_reply_count": awaiting_reply,
+        "within_call_hours": within,
+        "next_window_start": upcoming.isoformat() if upcoming else None,
+    }
+
+
+@router.post("/candidates/{candidate_id}/call-outcome")
+async def call_outcome(candidate_id: int, data: CallOutcomeRequest,
+                       db: Session = Depends(get_db)):
+    """Применить результат звонка.
+
+    Сообщение уходит только после ПЕРВОГО недозвона: второе и третье такое же
+    подряд выглядит как автоответчик, а кандидат на него уже не отреагировал.
+    Попытка при этом засчитывается всегда — даже если писать некуда (отклик
+    «только телефон») или отправка не удалась.
+    """
+    from app.services import candidate_outreach as outreach
+
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    if data.outcome not in outreach.OUTCOMES:
+        raise HTTPException(400, f"Неизвестный результат звонка: {data.outcome}")
+    if data.outcome == outreach.OUTCOME_LATER and not data.next_at:
+        raise HTTPException(400, "Для «перезвонить позже» нужно указать время")
+
+    warning = None
+    message_sent = False
+    first_attempt = (c.follow_up_count or 0) == 0
+
+    if data.outcome == outreach.OUTCOME_NO_ANSWER and data.send_message and first_attempt:
+        if not outreach.has_chat(c):
+            warning = "Попытка записана. Переписки с этим кандидатом нет — только телефон."
+        else:
+            try:
+                _, src, token = await _get_platform_chat(candidate_id, db)
+                await outreach.send_to_candidate(
+                    db, c, src, token,
+                    (data.text or "").strip() or outreach.DEFAULT_NO_ANSWER_MESSAGE,
+                )
+                message_sent = True
+            except HTTPException as exc:
+                warning = f"Попытка записана, но сообщение не отправлено: {exc.detail}"
+            except Exception as exc:
+                log.warning("call-outcome message failed for candidate %s: %s",
+                            candidate_id, exc)
+                warning = f"Попытка записана, но сообщение не отправлено: {exc}"
+
+    result = outreach.record_outcome(
+        db, c, data.outcome, next_at=data.next_at, message_sent=message_sent)
+    result["message_sent"] = message_sent
+    result["warning"] = warning
+    return result
+
+
+@router.post("/candidates/{candidate_id}/call-outcome/undo")
+def call_outcome_undo(candidate_id: int, db: Session = Depends(get_db)):
+    """Откатить последний результат.
+
+    Отправленное кандидату сообщение не отзывается — площадки этого не умеют.
+    Флаг message_not_recalled в ответе для того и нужен, чтобы интерфейс сказал
+    это прямо, а не сделал вид, что откат полный.
+    """
+    from app.services import candidate_outreach as outreach
+
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    try:
+        return outreach.undo_last_outcome(db, c)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+def _call_hours_state() -> dict:
+    """Расписание + «а что сейчас». Состояние отдаём вместе с настройкой,
+    потому что настраивают её ровно тогда, когда хотят понять, почему
+    очередь молчит."""
+    from app.services import call_hours
+    from app.services.hours_window import local_now
+
+    now = local_now()
+    upcoming = call_hours.next_window_start(now)
+    return {
+        **call_hours.load_schedule(),
+        "within_now": call_hours.is_within(now),
+        "next_window_start": upcoming.isoformat() if upcoming else None,
+    }
+
+
+@router.get("/call-hours")
+def get_call_hours():
+    """Окно звонков. Отдельное от часов общения бота: писать в чат можно с
+    девяти утра, а звонить в девять уже неловко."""
+    return _call_hours_state()
+
+
+@router.put("/call-hours")
+def put_call_hours(data: CallHoursRequest):
+    from app.services import call_hours
+    from app.services.config_service import ConfigService
+
+    days = []
+    for raw in data.days:
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= n <= 7:
+            days.append(n)
+
+    ConfigService().patch({
+        call_hours.CFG_ENABLED: bool(data.enabled),
+        call_hours.CFG_DAYS: sorted(set(days)),
+        call_hours.CFG_START: data.start,
+        call_hours.CFG_END: data.end,
+    })
+    return _call_hours_state()
 
 
 @router.post("/candidates/{candidate_id}/toggle-pause")

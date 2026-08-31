@@ -55,6 +55,7 @@ def create_task_router(task_service: TaskService) -> APIRouter:
         due_from: Optional[str] = Query(None),
         due_to: Optional[str] = Query(None),
         include_done: bool = Query(True),
+        candidate_id: Optional[int] = Query(None),
     ):
         return await task_service.list_tasks(
             status=status,
@@ -64,6 +65,7 @@ def create_task_router(task_service: TaskService) -> APIRouter:
             due_from=due_from,
             due_to=due_to,
             include_done=include_done,
+            candidate_id=candidate_id,
         )
 
     @router.get("/stats", response_model=TaskStats)
