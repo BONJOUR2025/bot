@@ -77,9 +77,10 @@ def unhandled_inbound(c) -> bool:
 def called_today(c, now: datetime | None = None) -> bool:
     """Была ли сегодня исходящая попытка.
 
-    Единственный источник — follow_up_last_sent_at, который пишется только в
-    candidate_outreach.register_call_attempt, то есть строго по факту
-    исходящего звонка. Входящие контакты его не трогают.
+    Единственный источник — follow_up_last_sent_at, который пишется только
+    в candidate_outreach.record_outcome и только для исхода no_answer
+    (см. OUTBOUND_ATTEMPT_OUTCOMES), то есть строго по факту нашего звонка.
+    Входящие контакты его не трогают.
 
     Граница календарного дня — ЛОКАЛЬНАЯ. Поле хранится в UTC
     (datetime.utcnow), а окно звонков задано в локальных часах: сравнивая

@@ -69,7 +69,13 @@ async def send_to_candidate(db, candidate, src, token: str, text: str) -> None:
 
 
 def register_call_attempt(db, candidate, *, now: datetime | None = None) -> int:
-    """Записать неудачную попытку дозвона. Возвращает их общее число.
+    """УСТАРЕЛО. Используйте record_outcome(..., OUTCOME_NO_ANSWER).
+
+    Осталась ради существующих тестов: пишет счётчик мимо журнала контактов
+    и не назначает next_attempt_at, поэтому кандидат после неё не вернётся
+    в очередь сам. Боевых вызовов больше нет.
+
+    Записать неудачную попытку дозвона. Возвращает их общее число.
 
     Хранится в follow_up_count/follow_up_last_sent_at — колонках, оставшихся
     от вырезанной телеграм-воронки. Они пустые у всех кандидатов (проверено
@@ -83,7 +89,12 @@ def register_call_attempt(db, candidate, *, now: datetime | None = None) -> int:
 
 
 def reset_call_attempts(db, candidate) -> None:
-    """Дозвонились — счётчик и флаг обнуляются."""
+    """УСТАРЕЛО. Используйте record_outcome(..., OUTCOME_REACHED).
+
+    Стирает follow_up_last_sent_at, а это отметка «сегодня уже звонили»:
+    после неё кандидат возвращается в очередь как «ни разу не звонили».
+    Осталась ради существующих тестов, боевых вызовов нет.
+    """
     candidate.follow_up_count = 0
     candidate.follow_up_last_sent_at = None
     db.commit()
