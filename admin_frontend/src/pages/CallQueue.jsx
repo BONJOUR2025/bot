@@ -684,7 +684,13 @@ function AwaitingReplyPanel({ onClose, onOpenCandidate }) {
           )}
           {(rows || []).map(c => {
             const at = parseUtc(c.last_message_at);
-            const meta = [c.vacancy_title, c.stage, at ? ago(at) : '']
+            // Этап подписываем явно: «Мастер по ремонту · ответил · 1 ч назад»
+            // читается как «ответил час назад», хотя «ответил» здесь — колонка
+            // воронки.
+            const stage = c.stage
+              ? `этап: ${c.stage.charAt(0).toUpperCase()}${c.stage.slice(1)}`
+              : '';
+            const meta = [c.vacancy_title, stage, at ? `написал ${ago(at)}` : '']
               .filter(Boolean).join(' · ');
             return (
               <div key={c.id} className="py-3 flex items-start justify-between gap-3">
