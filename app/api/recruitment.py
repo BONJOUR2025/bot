@@ -240,7 +240,7 @@ def list_candidates(
         # не может разойтись с реальным ходом переписки. Ручные этапы
         # (собеседование/нанят/отказ) при этом сохраняются как есть.
         d["stage"] = rs.derive_stage(c.stage, state)
-        d["flags"] = _candidate_flags(c, state, now)
+        d["flags"] = _candidate_flags(c, state, now, d["stage"])
         d["progress"] = rs.progress(state, questions)
         d["answers"] = state.get("answers") or []
         d["is_new"] = bool(c.created_at and c.created_at >= since_24h)
@@ -425,17 +425,26 @@ def register_reached(candidate_id: int, db: Session = Depends(get_db)):
 # это сравнение с now внутри вот этого обработчика.
 
 
-def _candidate_flags(c: Candidate, state: dict, now: datetime | None = None) -> list:
-    """Флаги карточки. Вынесено, чтобы список и очередь считали их одинаково."""
+def _candidate_flags(c: Candidate, state: dict, now: datetime | None = None,
+                     stage: str | None = None) -> list:
+    """Флаги карточки. Вынесено, чтобы список и очередь считали их одинаково.
+
+    На терминальных этапах «ждёт ответа» не показываем: нанятому и
+    отправленному в резерв мы ничего не должны, а без этого счётчик в шапке
+    «Прозвона» (он терминальные отсеивает) и фильтр в канбане расходились бы
+    на восемь карточек и выглядели как ошибка одного из них.
+    """
     from app.services import call_queue
     from app.services import recruitment_stages as rs
 
+    stage = stage or rs.derive_stage(c.stage, state)
     return rs.flags(
         state,
         now=now or datetime.utcnow(),
         call_attempts=c.follow_up_count or 0,
         last_call_at=c.follow_up_last_sent_at,
-        awaiting_reply=call_queue.unhandled_inbound(c),
+        awaiting_reply=(call_queue.unhandled_inbound(c)
+                        and stage not in rs.TERMINAL_STAGES),
     )
 
 
@@ -483,7 +492,7 @@ async def _queue_card(db: Session, c: Candidate, stage: str, reason: str) -> dic
     d["progress"] = rs.progress(state, quick_screening.get_questions(c.vacancy))
     d["vacancy_title"] = c.vacancy.title if c.vacancy else ""
     d["has_chat"] = outreach.has_chat(c)
-    d["flags"] = _candidate_flags(c, state)
+    d["flags"] = _candidate_flags(c, state, stage=stage)
 
     # Связанная задача — чтобы рекрутёр не переключался в «Задачи» проверять,
     # не назначено ли на этого кандидата напоминание.
@@ -614,7 +623,7 @@ def awaiting_reply_list(db: Session = Depends(get_db)):
         d = c.to_dict()
         d["stage"] = stage
         d["vacancy_title"] = c.vacancy.title if c.vacancy else ""
-        d["flags"] = _candidate_flags(c, state)
+        d["flags"] = _candidate_flags(c, state, stage=stage)
         d["progress"] = rs_progress(state, quick_screening.get_questions(c.vacancy))
         result.append(d)
     return result

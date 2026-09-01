@@ -83,7 +83,11 @@ const STALE_AFTER_DAYS = 3;
 const STALE_CRITICAL_DAYS = 7;
 function daysSince(iso) {
   if (!iso) return null;
-  const t = new Date(iso);
+  // created_at приходит из БД в UTC и без суффикса, а new Date() разбирает
+  // такую строку как локальную — сутки считались со сдвигом на три часа, и
+  // «старше 7 дней» промахивалось на границе.
+  const hasZone = /[Zz]$/.test(iso) || /[+-]\d{2}:\d{2}$/.test(iso);
+  const t = new Date(hasZone ? iso : `${iso}Z`);
   if (Number.isNaN(t.getTime())) return null;
   return Math.floor((Date.now() - t.getTime()) / 86400000);
 }
@@ -1456,15 +1460,58 @@ function applyCandidateFilters(list, f) {
       const d = silentDays(c);
       if (d === null || d < f.silent) return false;
     }
+    if (f.older) {
+      const d = daysSince(c.created_at);
+      if (d === null || d < f.older) return false;
+    }
+    // Флаги берём из ответа API, а не пересчитываем на фронте: подпись и
+    // условие должны совпадать с тем, что нарисовано на карточке.
+    const has = (code) => (c.flags || []).some((x) => x.code === code);
+    if (f.awaiting && !has('awaiting_reply')) return false;
+    if (f.noContact && !has('no_contact')) return false;
+    if (f.noPhone && String(c.phone || '').trim()) return false;
+    if (f.resume && !String(c.resume_url || '').trim()) return false;
     return true;
   });
 }
 
-const EMPTY_FILTERS = { query: '', silent: 0, source: '', unanswered: false };
+const EMPTY_FILTERS = {
+  query: '', silent: 0, source: '', unanswered: false,
+  // «Молчит» и «старше» — разные вопросы: первый про то, сколько кандидат не
+  // отвечает НАМ после вопроса опроса, второй про возраст самого отклика.
+  // Половина живой воронки старше двух недель, и разбирают её именно по
+  // возрасту.
+  older: 0,
+  awaiting: false,   // написал последним и ждёт ответа текстом
+  noContact: false,  // три попытки дозвона исчерпаны
+  noPhone: false,    // звонить некуда — в «Прозвон» не попадёт никогда
+  resume: false,     // есть что почитать перед разговором
+};
+
+// Подписи намеренно не такие, как в «Без ответа»: там уже есть «7+ дней»,
+// и два одинаковых чипа в одной строке невозможно различить, даже когда над
+// ними стоят разные заголовки групп.
+const OLDER_OPTIONS = [
+  { value: 7, label: 'неделя' },
+  { value: 14, label: '2 недели' },
+  { value: 30, label: 'месяц' },
+];
+
+const FLAG_FILTERS = [
+  { key: 'awaiting', label: 'Ждут ответа',
+    title: 'Кандидат написал последним — нужен ответ текстом, а не звонок' },
+  { key: 'noContact', label: 'Не вышел на связь',
+    title: 'Три попытки дозвона исчерпаны — нужно решение: отказ, пауза или ручной звонок' },
+  { key: 'noPhone', label: 'Без телефона',
+    title: 'Позвонить нельзя, в «Прозвон» такие кандидаты не попадают' },
+  { key: 'resume', label: 'Есть резюме' },
+];
 
 function CandidateFilters({ filters, onChange, total, shown }) {
   const set = (patch) => onChange({ ...filters, ...patch });
-  const active = filters.query || filters.silent || filters.source || filters.unanswered;
+  const active = filters.query || filters.silent || filters.source
+    || filters.unanswered || filters.older
+    || FLAG_FILTERS.some((o) => filters[o.key]);
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -1497,6 +1544,24 @@ function CandidateFilters({ filters, onChange, total, shown }) {
         ))}
       </div>
 
+      {/* Возраст самого отклика — отдельный вопрос от «молчит после нашего
+          вопроса»: половина живой воронки старше двух недель, и разбирают её
+          именно по этому. */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-[color:var(--color-text-faint)]">Старше</span>
+        {OLDER_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={filters.older === o.value}
+            onClick={() => set({ older: filters.older === o.value ? 0 : o.value })}
+            className={`ui-chip ${filters.older === o.value ? 'is-active' : ''}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+
       {SOURCE_OPTIONS.map((o) => (
         <button
           key={o.value}
@@ -1518,6 +1583,19 @@ function CandidateFilters({ filters, onChange, total, shown }) {
       >
         Вопрос без ответа
       </button>
+
+      {FLAG_FILTERS.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          aria-pressed={!!filters[o.key]}
+          onClick={() => set({ [o.key]: !filters[o.key] })}
+          className={`ui-chip ${filters[o.key] ? 'is-active' : ''}`}
+          title={o.title}
+        >
+          {o.label}
+        </button>
+      ))}
 
       {active && (
         <>
