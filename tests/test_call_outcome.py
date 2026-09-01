@@ -320,3 +320,98 @@ def test_awaiting_reply_flag_is_separate_from_no_answer():
 
     codes = [f["code"] for f in rs.flags({}, call_attempts=1, awaiting_reply=True)]
     assert codes == [rs.FLAG_AWAITING_REPLY, rs.FLAG_NO_ANSWER]
+
+
+# ── кандидат не возвращается в очередь в тот же день ──────────────────────
+
+def _callable(c, now, hours=None):
+    """Предикат очереди с завершённым опросом: derive_stage от пустого
+    состояния вернул бы «новый» и отверг кандидата не по той причине."""
+    from app.services import call_queue
+    from app.services import recruitment_stages as rs
+
+    state = {"status": "done", "answers": [{"q": "?", "a": "!"}]}
+    return call_queue.is_callable(c, rs.derive_stage(c.stage, state), now,
+                                  hours or Hours(), True)
+
+
+def test_reached_removes_candidate_from_queue_for_the_day(db, candidate):
+    """Главный сценарий внедрения: нажали «Дозвонился» — получили следующего.
+
+    Без этого рекрутер попадал в цикл: «Дозвонился» обнуляет счётчик и
+    next_attempt_at, а это ровно признак «ни разу не звонили».
+    """
+    assert _callable(candidate, MONDAY_NOON) is True
+
+    outcome(db, candidate, outreach.OUTCOME_REACHED)
+
+    assert _callable(candidate, MONDAY_NOON.replace(hour=18)) is False
+
+
+def test_inbound_removes_candidate_from_queue_for_the_day(db, candidate):
+    outcome(db, candidate, outreach.OUTCOME_INBOUND)
+
+    assert _callable(candidate, MONDAY_NOON.replace(hour=18)) is False
+
+
+def test_reached_after_yesterdays_no_answer_still_leaves_the_queue(db, candidate):
+    """Вето called_today тут пустое — вчерашняя попытка сегодняшней не
+    считается, — и кандидата держит только журнал."""
+    outcome(db, candidate, outreach.OUTCOME_NO_ANSWER,
+            now=MONDAY_NOON - timedelta(days=1))
+    outcome(db, candidate, outreach.OUTCOME_REACHED)
+
+    assert _callable(candidate, MONDAY_NOON.replace(hour=18)) is False
+
+
+def test_candidate_returns_the_next_day_after_reached(db, candidate):
+    """Закрытие — на день, а не навсегда: разговор мог ничем не кончиться."""
+    outcome(db, candidate, outreach.OUTCOME_REACHED)
+
+    assert _callable(candidate, MONDAY_NOON + timedelta(days=1)) is True
+
+
+def test_later_today_still_fires_today(db, candidate):
+    """«Перезвонить позже» закрывающим результатом не считается: назначенное
+    на сегодняшний вечер время обязано сработать сегодня."""
+    outcome(db, candidate, outreach.OUTCOME_LATER,
+            next_at=MONDAY_NOON.replace(hour=18))
+
+    assert _callable(candidate, MONDAY_NOON.replace(hour=15)) is False
+    assert _callable(candidate, MONDAY_NOON.replace(hour=18)) is True
+
+
+def test_calls_today_counts_successful_calls(db, candidate):
+    """Состоявшийся разговор не трогает счётчик недозвонов, но это звонок."""
+    from app.services import call_queue
+
+    assert call_queue.calls_made_today(candidate, MONDAY_NOON) == 0
+    outcome(db, candidate, outreach.OUTCOME_REACHED)
+    assert call_queue.calls_made_today(candidate, MONDAY_NOON) == 1
+
+
+def test_calls_today_ignores_inbound_and_later(db, candidate):
+    from app.services import call_queue
+
+    outcome(db, candidate, outreach.OUTCOME_INBOUND)
+    outcome(db, candidate, outreach.OUTCOME_LATER,
+            next_at=MONDAY_NOON.replace(hour=18))
+
+    assert call_queue.calls_made_today(candidate, MONDAY_NOON) == 0
+
+
+def test_handled_today_survives_broken_log(db, candidate):
+    from app.services import call_queue
+
+    candidate.call_log_json = "{не json"
+    db.commit()
+
+    assert call_queue.handled_today(candidate, MONDAY_NOON) is False
+
+
+def test_untouched_candidate_is_not_handled_today(db, candidate):
+    """Боевые кандидаты с пустым журналом ведут себя ровно как раньше."""
+    from app.services import call_queue
+
+    assert candidate.call_log_json is None
+    assert call_queue.handled_today(candidate, MONDAY_NOON) is False

@@ -94,6 +94,80 @@ def called_today(c, now: datetime | None = None) -> bool:
     return to_local(last).date() == now.date()
 
 
+# Исходы, после которых кандидат на сегодня закрыт: разговор состоялся либо
+# человек вышел на связь сам. «Перезвонить позже» сюда НЕ входит — назначенное
+# на сегодняшний вечер время должно сработать сегодня же; «недозвон» тоже нет —
+# его держит вето called_today по факту исходящей попытки.
+CLOSING_OUTCOMES = ("reached", "inbound")
+
+
+def handled_today(c, now: datetime | None = None) -> bool:
+    """Сегодня по кандидату уже приняли закрывающий результат.
+
+    Нужно потому, что «Дозвонился» обнуляет follow_up_count и next_attempt_at —
+    а это ровно сигнатура корзины «ни разу не звонили». Без этой проверки
+    рекрутер нажимал «Дозвонился» и получал того же человека снова: очередь
+    честно считала, что звонить ему ещё не начинали.
+
+    Источник — журнал контактов, уже существующий и append-only. Ни одно поле
+    счётчиков при этом не меняет смысла: called_today по-прежнему отвечает
+    только за исходящие попытки, а эта функция — за «с человеком на сегодня
+    закончили».
+    """
+    now = now or local_now()
+    today = now.date()
+    for entry in _log(c):
+        if entry.get("outcome") not in CLOSING_OUTCOMES:
+            continue
+        at = _entry_time(entry)
+        if at and to_local(at).date() == today:
+            return True
+    return False
+
+
+def calls_made_today(c, now: datetime | None = None) -> int:
+    """Сколько исходящих звонков сделано этому кандидату сегодня.
+
+    Считается по журналу, а не по follow_up_last_sent_at: успешный звонок
+    поле недозвонов не трогает (и не должен), но в счётчике «звонков сегодня»
+    он обязан быть — иначе день, проведённый на удачных звонках, показывает
+    ноль.
+    """
+    now = now or local_now()
+    today = now.date()
+    made = 0
+    for entry in _log(c):
+        # Исходящий звонок — это недозвон и состоявшийся разговор. Входящий
+        # контакт и договорённость о переносе звонком не являются.
+        if entry.get("outcome") not in ("no_answer", "reached"):
+            continue
+        at = _entry_time(entry)
+        if at and to_local(at).date() == today:
+            made += 1
+    return made
+
+
+def _log(c) -> list:
+    raw = getattr(c, "call_log_json", None)
+    if not raw:
+        return []
+    try:
+        import json
+
+        data = json.loads(raw)
+    except Exception:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _entry_time(entry: dict) -> datetime | None:
+    """Момент записи журнала. Хранится в UTC (см. record_outcome)."""
+    try:
+        return datetime.fromisoformat(entry.get("at"))
+    except (TypeError, ValueError):
+        return None
+
+
 def next_allowed_call_time(after: datetime, call_hours) -> datetime | None:
     """Ближайший допустимый момент СЛЕДУЮЩЕГО дня.
 
@@ -173,6 +247,10 @@ def is_callable(c, stage: str, now: datetime | None, call_hours,
         # АБСОЛЮТНОЕ ВЕТО. Стоит раньше due() не случайно: это не одно из
         # условий доступности, а запрет, перекрывающий назначенное время.
         not called_today(c, now),
+        # Второе вето, про другое: разговор сегодня уже состоялся. Без него
+        # «Дозвонился» возвращал кандидата в очередь сразу же — счётчик
+        # обнулён, назначенного времени нет, значит «ни разу не звонили».
+        not handled_today(c, now),
         due(c, now),
         call_hours.is_within(now),
         # Кандидат написал и ждёт ответа, а времени звонка не назвал —

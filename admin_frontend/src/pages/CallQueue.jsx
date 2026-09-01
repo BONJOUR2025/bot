@@ -12,7 +12,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Phone, PhoneMissed, PhoneOff, Clock, MessageSquare, X, Check,
-  Loader2, Undo2, CalendarClock, RefreshCw, Briefcase,
+  Loader2, Undo2, CalendarClock, RefreshCw, Briefcase, ArrowRight,
+  CalendarOff, Info, ExternalLink,
 } from 'lucide-react';
 import api from '../api';
 import { formatPhone, telHref } from '../utils/phone';
@@ -22,53 +23,109 @@ const DEFAULT_NO_ANSWER_MSG =
   'Здравствуйте! Пробовали до вас дозвониться, но не получилось. ' +
   'Подскажите, когда вам удобно поговорить?';
 
-// Подписи причин попадания в очередь. Приходят кодами (call_queue.REASON_*),
-// чтобы формулировка жила в одном месте, а не собиралась из полей карточки.
-const REASON_LABEL = {
-  scheduled: 'Назначенное время наступило',
-  never_called: 'Ещё ни разу не звонили',
-  retry: 'Повторная попытка — прошлый день закрыт',
-};
+const ONBOARDING_KEY = 'callqueue_intro_seen';
 
 const OUTCOMES = [
-  { key: 'reached',   label: 'Дозвонился',        icon: Check,          tone: 'primary' },
-  { key: 'no_answer', label: 'Не дозвонился',     icon: PhoneMissed,    tone: 'default' },
-  { key: 'later',     label: 'Перезвонить позже', icon: CalendarClock,  tone: 'default' },
-  { key: 'inbound',   label: 'Написал сам',       icon: MessageSquare,  tone: 'default' },
-  { key: 'rejected',  label: 'Отказ',             icon: X,              tone: 'danger' },
+  { key: 'reached',   label: 'Дозвонился',            icon: Check,         tone: 'primary' },
+  { key: 'no_answer', label: 'Не дозвонился',         icon: PhoneMissed,   tone: 'default' },
+  { key: 'later',     label: 'Перезвонить позже',     icon: CalendarClock, tone: 'default' },
+  { key: 'inbound',   label: 'Кандидат сам связался', icon: MessageSquare, tone: 'default' },
+  { key: 'rejected',  label: 'Не подходит',           icon: X,             tone: 'danger' },
 ];
+const OUTCOME_LABEL = Object.fromEntries(OUTCOMES.map(o => [o.key, o.label]));
 
-/** Локальное «сейчас» + N часов в формате datetime-local.
- *
- * Именно локальное, без toISOString(): бэкенд трактует next_at как местное
- * время (см. комментарий к next_attempt_at в модели), и UTC-строка сдвинула
- * бы каждый назначенный звонок на три часа.
+const WEEKDAY_FULL = ['воскресенье', 'понедельник', 'вторник', 'среду',
+  'четверг', 'пятницу', 'субботу'];
+
+/* ─── время ───────────────────────────────────────────────────────────────
+ * Бэкенд отдаёт два разных вида времени, и путать их нельзя:
+ *   next_attempt_at, next_window_start — уже локальные (см. модель);
+ *   last_call_at, last_message_at      — UTC, как всё остальное в базе.
+ * new Date('...') без суффикса разбирает строку как локальную, поэтому UTC
+ * приходится помечать явно — иначе прошлая попытка показывалась на три часа
+ * раньше, чем была.
  */
+function parseLocal(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function parseUtc(iso) {
+  if (!iso) return null;
+  const hasZone = /[Zz]$/.test(iso) || /[+-]\d{2}:\d{2}$/.test(iso);
+  const d = new Date(hasZone ? iso : `${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function timeOf(d) {
+  return d ? d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
+}
+
+function dayAndTime(d) {
+  if (!d) return '';
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return `сегодня в ${timeOf(d)}`;
+  if (d.toDateString() === tomorrow.toDateString()) return `завтра в ${timeOf(d)}`;
+  if (d.toDateString() === yesterday.toDateString()) return `вчера в ${timeOf(d)}`;
+  return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} в ${timeOf(d)}`;
+}
+
+function ago(d) {
+  if (!d) return '';
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 60) return 'только что';
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} ч назад`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? 'вчера' : `${days} дн. назад`;
+}
+
+/** Локальное время в формате datetime-local. Без toISOString(): бэкенд
+ *  трактует next_at как местное время, и UTC-строка сдвинула бы каждый
+ *  назначенный звонок на три часа. */
 function localInputValue(date) {
   const pad = n => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function formatWhen(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('ru-RU', {
-    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-  });
+/** Ошибка API человеческим языком. Технические подробности рекрутеру не
+ *  помогают — ему нужно знать, что делать дальше. */
+function humanError(e) {
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  const status = e?.response?.status;
+  if (!e?.response) return 'Нет связи с сервером. Проверьте интернет и обновите очередь.';
+  if (status === 401) return 'Сессия истекла. Войдите заново.';
+  if (status === 403) return 'Недостаточно прав для этого действия.';
+  if (status === 404) return 'Кандидат не найден — возможно, карточку удалили.';
+  if (status >= 500) return 'Сервер не ответил. Попробуйте ещё раз через минуту.';
+  return 'Не получилось выполнить действие. Попробуйте ещё раз.';
 }
 
-export default function CallQueue() {
+export default function CallQueue({ onOpenCandidate }) {
   const { toast } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   // Отдельная форма показывается только для тех исходов, где без неё
-  // результат недоопределён: время для «позже», текст для «не дозвонился».
+  // результат недоопределён: время для «позже», текст для первого недозвона.
   const [pending, setPending] = useState(null);
   const [lastAction, setLastAction] = useState(null);
+  const [showAwaiting, setShowAwaiting] = useState(false);
+  const [introHidden, setIntroHidden] = useState(() => {
+    try {
+      return localStorage.getItem(ONBOARDING_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,7 +135,7 @@ export default function CallQueue() {
       setData(res.data);
       setPending(null);
     } catch (e) {
-      setError(e.response?.data?.detail || e.message);
+      setError(humanError(e));
     } finally {
       setLoading(false);
     }
@@ -88,6 +145,14 @@ export default function CallQueue() {
 
   const candidate = data?.next || null;
   const attempts = candidate?.call_attempts || 0;
+  const canCallNow = data ? data.within_call_hours !== false : true;
+
+  function dismissIntro() {
+    setIntroHidden(true);
+    try {
+      localStorage.setItem(ONBOARDING_KEY, '1');
+    } catch { /* приватный режим — подсказка просто вернётся в следующий раз */ }
+  }
 
   async function submit(outcome, extra = {}) {
     if (!candidate) return;
@@ -98,11 +163,15 @@ export default function CallQueue() {
         { outcome, ...extra },
       );
       if (res.data?.warning) toast(res.data.warning, 'warning');
+      if (res.data?.task) toast('Напоминание добавлено в задачи');
       setLastAction({ id: candidate.id, name: candidate.name, outcome });
-      await load();
     } catch (e) {
-      toast(e.response?.data?.detail || e.message, 'error');
+      toast(humanError(e), 'error');
     } finally {
+      // Очередь перезапрашивается в любом случае: и после успеха — чтобы
+      // сразу показать следующего, и после ошибки — чтобы не залипнуть на
+      // карточке, которая по правилам уже обработана.
+      await load();
       setBusy(false);
     }
   }
@@ -113,15 +182,13 @@ export default function CallQueue() {
     try {
       const res = await api.post(
         `/recruitment/candidates/${lastAction.id}/call-outcome/undo`);
-      if (res.data?.message_not_recalled) {
-        toast('Результат откачен, но отправленное сообщение уже не вернуть', 'warning');
-      } else {
-        toast('Результат откачен');
-      }
+      toast(res.data?.message_not_recalled
+        ? 'Результат отменён. Отправленное сообщение вернуть уже нельзя.'
+        : 'Результат отменён');
       setLastAction(null);
       await load();
     } catch (e) {
-      toast(e.response?.data?.detail || e.message, 'error');
+      toast(humanError(e), 'error');
     } finally {
       setBusy(false);
     }
@@ -146,22 +213,32 @@ export default function CallQueue() {
 
   return (
     <div className="p-5 space-y-5">
-      <QueueHeader data={data} onRefresh={load} loading={loading} />
+      {!introHidden && <Intro onClose={dismissIntro} />}
+
+      <QueueHeader
+        data={data}
+        onRefresh={load}
+        loading={loading}
+        onShowAwaiting={() => setShowAwaiting(true)}
+      />
 
       <div className="max-w-3xl space-y-4">
-        {error && (
-          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
-            {error}
+        {!!error && (
+          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+            <span>{error}</span>
+            <button onClick={load} className="btn btn--ghost btn--sm flex-shrink-0">
+              Обновить
+            </button>
           </div>
         )}
 
-        {lastAction && (
+        {!!lastAction && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-muted)]/25 px-4 py-2.5 text-sm">
             <span className="text-[color:var(--color-text-muted)]">
-              {lastAction.name}: {OUTCOMES.find(o => o.key === lastAction.outcome)?.label.toLowerCase()}
+              {lastAction.name} — {(OUTCOME_LABEL[lastAction.outcome] || '').toLowerCase()}
             </span>
             <button onClick={undo} disabled={busy}
-                    className="btn btn--ghost btn--sm flex items-center gap-1.5">
+                    className="btn btn--ghost btn--sm flex items-center gap-1.5 flex-shrink-0">
               <Undo2 size={14} /> Отменить
             </button>
           </div>
@@ -173,14 +250,17 @@ export default function CallQueue() {
           </div>
         )}
 
-        {!loading && !candidate && <EmptyQueue data={data} />}
+        {!!data && !canCallNow && <ClosedWindow data={data} />}
 
-        {candidate && (
+        {!!data && canCallNow && !candidate && !loading && <EmptyQueue data={data} />}
+
+        {!!data && canCallNow && !!candidate && (
           <CallCard
             c={candidate}
             busy={busy}
             pending={pending}
             onPick={pick}
+            onOpenCandidate={onOpenCandidate}
             onCancelPending={() => setPending(null)}
             onChangePending={patch => setPending(p => ({ ...p, ...patch }))}
             onConfirmPending={() => {
@@ -190,18 +270,41 @@ export default function CallQueue() {
           />
         )}
       </div>
+
+      {showAwaiting && (
+        <AwaitingReplyPanel
+          onClose={() => setShowAwaiting(false)}
+          onOpenCandidate={onOpenCandidate}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── подсказка при первом открытии ───────────────────────────────────────
+
+function Intro({ onClose }) {
+  return (
+    <div className="max-w-3xl rounded-xl border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/[0.06] px-4 py-3 flex items-start gap-3">
+      <Info size={16} className="text-[color:var(--color-primary)] flex-shrink-0 mt-0.5" />
+      <div className="text-sm min-w-0 flex-1">
+        <div className="font-semibold mb-0.5">Прозвон</div>
+        <p className="text-[color:var(--color-text-muted)]">
+          Здесь система показывает кандидатов, которым сейчас нужно позвонить.
+          После звонка выберите результат — система сама определит, кому звонить дальше.
+        </p>
+      </div>
+      <button onClick={onClose} className="btn btn--ghost btn--sm flex-shrink-0">
+        Понятно
+      </button>
     </div>
   );
 }
 
 // ── шапка со счётчиками ─────────────────────────────────────────────────
 
-function QueueHeader({ data, onRefresh, loading }) {
-  const counters = [
-    { label: 'в очереди', value: data?.queue_count ?? '—' },
-    { label: 'звонков сегодня', value: data?.calls_today ?? '—' },
-    { label: 'ждут ответа', value: data?.awaiting_reply_count ?? '—' },
-  ];
+function QueueHeader({ data, onRefresh, loading, onShowAwaiting }) {
+  const awaiting = data?.awaiting_reply_count ?? 0;
   return (
     <div className="flex items-end justify-between gap-4 flex-wrap">
       <div>
@@ -212,16 +315,26 @@ function QueueHeader({ data, onRefresh, loading }) {
         </p>
       </div>
       <div className="flex items-center gap-5 flex-wrap">
-        {counters.map(c => (
-          <div key={c.label}>
-            <div className="text-xl font-bold tabular-nums leading-none">{c.value}</div>
-            <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)] mt-1">
-              {c.label}
-            </div>
+        <Counter value={data?.queue_count} label="в очереди" />
+        <Counter value={data?.calls_today} label="звонков сегодня" />
+        <button
+          type="button"
+          onClick={onShowAwaiting}
+          disabled={!awaiting}
+          className="text-left rounded-lg px-2 py-1 -mx-2 transition-colors enabled:hover:bg-[color:var(--color-muted)]/40 disabled:cursor-default"
+          title={awaiting ? 'Открыть список — этим кандидатам нужен ответ в переписке' : undefined}
+        >
+          <div className="text-xl font-bold tabular-nums leading-none flex items-center gap-1">
+            {data ? awaiting : '—'}
+            {!!awaiting && <ArrowRight size={14} className="text-[color:var(--color-primary)]" />}
           </div>
-        ))}
+          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)] mt-1">
+            ждут ответа в чате
+          </div>
+        </button>
         <button onClick={onRefresh} disabled={loading}
-                className="btn btn--ghost btn--sm flex items-center gap-1.5" title="Обновить очередь">
+                className="btn btn--ghost btn--sm flex items-center gap-1.5"
+                title="Обновить очередь">
           <RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> Обновить
         </button>
       </div>
@@ -229,107 +342,195 @@ function QueueHeader({ data, onRefresh, loading }) {
   );
 }
 
+function Counter({ value, label }) {
+  return (
+    <div>
+      <div className="text-xl font-bold tabular-nums leading-none">
+        {value ?? '—'}
+      </div>
+      <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)] mt-1">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+// ── «сейчас звонить нельзя» ─────────────────────────────────────────────
+
+function ClosedWindow({ data }) {
+  const opens = parseLocal(data.next_window_start);
+  const dayOff = !!data.is_day_off;
+  let when = '';
+  if (opens) {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (opens.toDateString() === today.toDateString()) when = `сегодня в ${timeOf(opens)}`;
+    else if (opens.toDateString() === tomorrow.toDateString()) when = `завтра в ${timeOf(opens)}`;
+    else when = `в ${WEEKDAY_FULL[opens.getDay()]}, ${timeOf(opens)}`;
+  }
+  return (
+    <StateCard
+      icon={dayOff ? <CalendarOff size={22} /> : <Clock size={22} />}
+      title={dayOff ? 'Сегодня звонки не выполняются' : 'Сейчас нерабочее время'}
+      text={when
+        ? `Следующее окно звонков — ${when}.`
+        : 'Окно звонков закрыто. Расписание настраивается в «Интеграциях».'}
+      data={data}
+    />
+  );
+}
+
 // ── пустая очередь ──────────────────────────────────────────────────────
 
 function EmptyQueue({ data }) {
-  // Пустая очередь бывает по двум причинам, и они требуют разного: закрытое
-  // окно — «вернитесь позже», а разобранная очередь — «на сегодня всё».
-  const closed = data && data.within_call_hours === false;
+  const next = parseLocal(data.next_candidate_at);
   return (
-    <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-6 py-10 text-center">
+    <StateCard
+      icon={<Check size={22} />}
+      title="Все кандидаты обзвонены"
+      text={next
+        ? `Следующий кандидат появится ${dayAndTime(next)}.`
+        : 'Новые появятся, когда кандидаты пройдут опрос или наступит назначенное время.'}
+      data={data}
+    />
+  );
+}
+
+/** Общая рамка для «нечего делать»: карточку кандидата не показываем, кнопки
+ *  «Позвонить» нет, но счётчики остаются — они и есть полезная часть такого
+ *  экрана. */
+function StateCard({ icon, title, text, data }) {
+  return (
+    <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-6 py-9 text-center">
       <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[color:var(--color-muted)]/40 mb-4">
-        {closed ? <Clock size={22} /> : <Check size={22} />}
+        {icon}
       </div>
-      <div className="text-base font-semibold">
-        {closed ? 'Сейчас не время для звонков' : 'Очередь пуста'}
-      </div>
-      <p className="text-sm text-[color:var(--color-text-muted)] mt-1.5 max-w-sm mx-auto">
-        {closed
-          ? (data?.next_window_start
-            ? `Звонить можно с ${formatWhen(data.next_window_start)}. Часы звонков настраиваются в разделе «Интеграции».`
-            : 'Окно звонков закрыто — проверьте настройки часов звонков.')
-          : 'Всех, кому нужен звонок, уже обзвонили. Новые появятся, когда кандидаты пройдут опрос или наступит назначенное время.'}
+      <div className="text-base font-semibold">{title}</div>
+      <p className="text-sm text-[color:var(--color-text-muted)] mt-1.5 max-w-md mx-auto">
+        {text}
       </p>
-      {!closed && (data?.awaiting_reply_count ?? 0) > 0 && (
-        <p className="text-sm text-[color:var(--color-text-muted)] mt-3">
-          {data.awaiting_reply_count} кандидат(ов) ждут ответа в переписке — им нужен текст, а не звонок.
-        </p>
-      )}
+      <div className="flex items-center justify-center gap-7 mt-6 pt-5 border-t border-[color:var(--color-border)]">
+        <Counter value={data?.queue_count} label="в очереди" />
+        <Counter value={data?.calls_today} label="звонков сегодня" />
+        <Counter value={data?.awaiting_reply_count} label="ждут ответа" />
+      </div>
     </div>
   );
 }
 
 // ── карточка звонка ─────────────────────────────────────────────────────
 
-function CallCard({ c, busy, pending, onPick, onCancelPending, onChangePending, onConfirmPending }) {
+/** «Почему сейчас» человеческим языком: рекрутер должен понимать, обещали мы
+ *  этот звонок или просто дошла очередь. */
+function reasonText(c) {
+  if (c.reason === 'scheduled') {
+    const at = parseLocal(c.next_attempt_at);
+    return at ? `Обещали позвонить ${dayAndTime(at)}` : 'Наступило назначенное время';
+  }
+  if (c.reason === 'never_called') return 'Новый отклик — ещё не звонили';
+  if (c.reason === 'retry') return 'Повторная попытка — прошлый день закрыт';
+  return 'В очереди на звонок';
+}
+
+function CallCard({ c, busy, pending, onPick, onOpenCandidate,
+                    onCancelPending, onChangePending, onConfirmPending }) {
   const attempts = c.call_attempts || 0;
+  const lastCall = parseUtc(c.last_call_at);
+  const scheduled = parseLocal(c.next_attempt_at);
+  const task = c.linked_task;
+  const taskDue = task?.due_date
+    ? parseLocal(`${task.due_date}T${String(task.due_time || '09:00:00').slice(0, 5)}`)
+    : null;
+
   return (
     <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] overflow-hidden">
-      <div className="px-6 pt-5 pb-4 border-b border-[color:var(--color-border)]">
+      <div className="px-6 pt-5 pb-5 border-b border-[color:var(--color-border)]">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <h2 className="text-lg font-bold leading-tight">{c.name}</h2>
-            {c.vacancy_title && (
+            {!!c.vacancy_title && (
               <div className="flex items-center gap-1.5 text-sm text-[color:var(--color-text-muted)] mt-1">
                 <Briefcase size={13} /> {c.vacancy_title}
               </div>
             )}
           </div>
-          <span className="text-xs px-2 py-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-[color:var(--color-text-muted)]">
-            {REASON_LABEL[c.reason] || 'В очереди'}
+          <span className="text-xs px-2.5 py-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-[color:var(--color-text-muted)]">
+            {reasonText(c)}
           </span>
         </div>
 
-        {/* Номер — главное действие экрана, поэтому набран крупно и сам
-            является ссылкой: на телефоне это один тап до звонка. */}
+        {/* Главное действие экрана. На телефоне это один тап до звонка, на
+            десктопе — команда софтфону; номер виден целиком в любом случае. */}
         <a href={telHref(c.phone)}
-           className="mt-4 inline-flex items-center gap-2.5 text-2xl font-bold tracking-tight hover:text-[color:var(--color-primary)] transition-colors">
-          <Phone size={20} /> {formatPhone(c.phone) || c.phone}
+           className="btn btn--primary mt-4 inline-flex items-center gap-2.5 text-base"
+           style={{ paddingTop: '0.6rem', paddingBottom: '0.6rem' }}>
+          <Phone size={17} /> Позвонить · {formatPhone(c.phone) || c.phone}
         </a>
 
-        <div className="flex flex-wrap items-center gap-2 mt-3">
-          {(c.flags || []).map(f => (
-            <span key={f.code}
-                  className="text-[11px] px-2 py-0.5 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-muted)]/25">
-              {f.label}
-            </span>
-          ))}
-          {!c.has_chat && (
-            <span className="text-[11px] px-2 py-0.5 rounded-md border border-amber-200 bg-amber-50 text-amber-800">
-              переписки нет — только телефон
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3.5 text-sm text-[color:var(--color-text-muted)]">
+          <span className="inline-flex items-center gap-1.5">
+            <PhoneOff size={13} />
+            {attempts > 0 ? `Попытка ${attempts + 1} из 3` : 'Первый звонок'}
+          </span>
+          {!!lastCall && <span>Прошлая — {dayAndTime(lastCall)}</span>}
+          {!!scheduled && c.reason !== 'scheduled' && (
+            <span className="inline-flex items-center gap-1.5">
+              <CalendarClock size={13} /> Назначено на {dayAndTime(scheduled)}
             </span>
           )}
         </div>
 
-        {c.linked_task && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-[color:var(--color-text-muted)]">
-            <CalendarClock size={14} />
-            Задача: {c.linked_task.title}
-            {c.linked_task.due_date && ` — ${c.linked_task.due_date}`}
-            {c.linked_task.due_time && ` ${String(c.linked_task.due_time).slice(0, 5)}`}
+        {(!!(c.flags || []).length || !c.has_chat) && (
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            {(c.flags || []).map(f => (
+              <span key={f.code}
+                    className="text-[11px] px-2 py-0.5 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-muted)]/25">
+                {f.label}
+              </span>
+            ))}
+            {!c.has_chat && (
+              <span className="text-[11px] px-2 py-0.5 rounded-md border border-amber-200 bg-amber-50 text-amber-800">
+                переписки нет — только телефон
+              </span>
+            )}
           </div>
         )}
+
+        {!!task && (
+          <div className="mt-3 flex items-center gap-2 text-sm text-[color:var(--color-text-muted)]">
+            <CalendarClock size={14} />
+            Задача: {task.title}{taskDue ? ` — ${dayAndTime(taskDue)}` : ''}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button onClick={() => onOpenCandidate?.(c, 'info')}
+                  className="btn btn-secondary btn--sm flex items-center gap-1.5">
+            <ExternalLink size={14} /> Карточка
+          </button>
+          {!!c.has_chat && (
+            <button onClick={() => onOpenCandidate?.(c, 'chat')}
+                    className="btn btn-secondary btn--sm flex items-center gap-1.5">
+              <MessageSquare size={14} /> Переписка
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Ответы опроса — то, ради чего звонок и делается осмысленным:
-          звонить, не зная, что человек уже написал, значит спрашивать
-          заново то, на что он ответил. */}
+      {/* Ответы опроса — то, ради чего звонок и становится осмысленным:
+          звонить, не зная, что человек уже написал, значит спрашивать заново
+          то, на что он ответил. */}
       {!!(c.answers || []).length && (
         <div className="px-6 py-4 border-b border-[color:var(--color-border)] space-y-2.5">
           {c.answers.map((a, i) => (
             <div key={i}>
               <div className="text-xs text-[color:var(--color-text-muted)]">
-                {a.question || a.q || `Вопрос ${i + 1}`}
+                {a.q || a.question || `Вопрос ${i + 1}`}
               </div>
-              <div className="text-sm">{a.answer || a.a || ''}</div>
+              <div className="text-sm">{a.a || a.answer || '—'}</div>
             </div>
           ))}
-        </div>
-      )}
-
-      {attempts > 0 && (
-        <div className="px-6 py-2.5 border-b border-[color:var(--color-border)] text-sm text-[color:var(--color-text-muted)] flex items-center gap-1.5">
-          <PhoneOff size={14} /> Попыток дозвона: {attempts} из 3
         </div>
       )}
 
@@ -338,25 +539,35 @@ function CallCard({ c, busy, pending, onPick, onCancelPending, onChangePending, 
           ? <PendingForm pending={pending} busy={busy} onChange={onChangePending}
                          onCancel={onCancelPending} onConfirm={onConfirmPending} />
           : (
-            <div className="flex flex-wrap gap-2">
-              {OUTCOMES.map(o => {
-                const Icon = o.icon;
-                return (
-                  <button
-                    key={o.key}
-                    onClick={() => onPick(o.key)}
-                    disabled={busy}
-                    className={`btn btn--sm flex items-center gap-1.5 ${
-                      o.tone === 'primary' ? 'btn--primary'
-                        : o.tone === 'danger' ? 'btn--ghost text-red-600'
-                          : 'btn-secondary'
-                    }`}
-                  >
-                    <Icon size={14} /> {o.label}
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              <div className="text-xs uppercase tracking-wide text-[color:var(--color-text-muted)] mb-2.5">
+                Как прошёл звонок
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {OUTCOMES.map(o => {
+                  const Icon = o.icon;
+                  return (
+                    <button
+                      key={o.key}
+                      onClick={() => onPick(o.key)}
+                      disabled={busy}
+                      className={`btn btn--sm flex items-center gap-1.5 ${
+                        o.tone === 'primary' ? 'btn--primary'
+                          : o.tone === 'danger' ? 'btn--ghost text-red-600'
+                            : 'btn-secondary'
+                      }`}
+                    >
+                      <Icon size={14} /> {o.label}
+                    </button>
+                  );
+                })}
+                {busy && (
+                  <span className="inline-flex items-center gap-1.5 text-sm text-[color:var(--color-text-muted)] px-1">
+                    <Loader2 size={14} className="animate-spin" /> Записываем…
+                  </span>
+                )}
+              </div>
+            </>
           )}
       </div>
     </div>
@@ -378,12 +589,15 @@ function PendingForm({ pending, busy, onChange, onCancel, onConfirm }) {
         {/* Правило дня объясняем заранее: иначе выбранное «сегодня в 18:00»
             молча уезжает на завтра, и это выглядит как ошибка. */}
         <p className="text-xs text-[color:var(--color-text-muted)]">
-          Если сегодня этому кандидату уже звонили, время перенесётся на
-          ближайший следующий день: больше одного звонка в день не делаем.
+          Появится напоминание в задачах. Если сегодня этому кандидату уже
+          звонили, время перенесётся на ближайший следующий рабочий день:
+          больше одного звонка в день не делаем.
         </p>
         <div className="flex gap-2">
           <button onClick={onConfirm} disabled={busy || !pending.next_at}
-                  className="btn btn--primary btn--sm">Сохранить</button>
+                  className="btn btn--primary btn--sm">
+            {busy ? 'Сохраняем…' : 'Сохранить и дальше'}
+          </button>
           <button onClick={onCancel} disabled={busy}
                   className="btn btn--ghost btn--sm">Отмена</button>
         </div>
@@ -401,7 +615,7 @@ function PendingForm({ pending, busy, onChange, onCancel, onConfirm }) {
         />
         Написать кандидату в переписку
       </label>
-      {pending.send_message && (
+      {!!pending.send_message && (
         <textarea
           value={pending.text}
           onChange={e => onChange({ text: e.target.value })}
@@ -414,9 +628,89 @@ function PendingForm({ pending, busy, onChange, onCancel, onConfirm }) {
       </p>
       <div className="flex gap-2">
         <button onClick={onConfirm} disabled={busy}
-                className="btn btn--primary btn--sm">Записать попытку</button>
+                className="btn btn--primary btn--sm">
+          {busy ? 'Записываем…' : 'Записать и дальше'}
+        </button>
         <button onClick={onCancel} disabled={busy}
                 className="btn btn--ghost btn--sm">Отмена</button>
+      </div>
+    </div>
+  );
+}
+
+// ── ждут ответа в переписке ─────────────────────────────────────────────
+
+/** Отдельный список, а не вторая очередь: этим людям нужен текст, а не
+ *  звонок. Поэтому здесь нет ни «следующего», ни результатов звонка — только
+ *  переход в переписку. */
+function AwaitingReplyPanel({ onClose, onOpenCandidate }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    api.get('/recruitment/awaiting-reply')
+      .then(r => { if (alive) setRows(r.data); })
+      .catch(e => { if (alive) setError(humanError(e)); });
+    return () => { alive = false; };
+  }, []);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-base">Ждут ответа в переписке</h3>
+            <p className="text-sm text-[color:var(--color-muted-foreground)] mt-0.5">
+              Эти кандидаты написали последними. Им нужен ответ текстом, а не звонок.
+            </p>
+          </div>
+          <button onClick={onClose} className="btn btn--ghost btn--sm flex-shrink-0">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="mt-4 max-h-[60vh] overflow-y-auto divide-y divide-[color:var(--color-border)]">
+          {rows === null && !error && (
+            <div className="py-6 flex items-center gap-2 text-sm text-[color:var(--color-text-muted)]">
+              <Loader2 size={15} className="animate-spin" /> Загружаем…
+            </div>
+          )}
+          {!!error && <div className="py-6 text-sm text-red-600">{error}</div>}
+          {rows?.length === 0 && (
+            <div className="py-6 text-sm text-[color:var(--color-text-muted)]">
+              Все ответы даны — никто не ждёт.
+            </div>
+          )}
+          {(rows || []).map(c => {
+            const at = parseUtc(c.last_message_at);
+            const meta = [c.vacancy_title, c.stage, at ? ago(at) : '']
+              .filter(Boolean).join(' · ');
+            return (
+              <div key={c.id} className="py-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{c.name}</div>
+                  {!!meta && (
+                    <div className="text-xs text-[color:var(--color-text-muted)] mt-0.5">
+                      {meta}
+                    </div>
+                  )}
+                  {!!c.last_message_text && (
+                    <div className="text-sm mt-1 line-clamp-2 text-[color:var(--color-text-muted)]">
+                      «{c.last_message_text}»
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => { onClose(); onOpenCandidate?.(c, 'chat'); }}
+                  className="btn btn-secondary btn--sm flex items-center gap-1.5 flex-shrink-0"
+                >
+                  <MessageSquare size={14} /> Ответить
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

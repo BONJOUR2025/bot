@@ -492,6 +492,69 @@ async def _queue_card(db: Session, c: Candidate, stage: str, reason: str) -> dic
     return d
 
 
+def _awaiting_reply_rows(db: Session):
+    """Кандидаты, которые написали и ждут текстового ответа.
+
+    Терминальные этапы отсеиваются: нанятому и отправленному в резерв мы
+    ничего не должны, а без фильтра они раздували счётчик — на боевой базе
+    из 42 таких оказалось 8.
+    """
+    from app.services import call_queue, quick_screening
+    from app.services import recruitment_stages as rs
+
+    rows = []
+    for c in db.query(Candidate).all():
+        if not call_queue.unhandled_inbound(c):
+            continue
+        state = quick_screening.load_state(c)
+        stage = rs.derive_stage(c.stage, state)
+        if stage in rs.TERMINAL_STAGES:
+            continue
+        rows.append((c, stage, state))
+    # Свежие сверху: на сообщение, написанное час назад, ответ ещё ждут.
+    rows.sort(key=lambda r: r[0].last_message_at or datetime.min, reverse=True)
+    return rows
+
+
+def _upcoming_attempt(db: Session, now) -> datetime | None:
+    """Когда в очереди появится следующий кандидат.
+
+    Нужно для пустого экрана: «все обзвонены» без ответа на «а дальше что»
+    оставляет рекрутера гадать, заходить ли через час.
+    """
+    from app.services import call_queue, quick_screening
+    from app.services import recruitment_stages as rs
+
+    best = None
+    candidates = (
+        db.query(Candidate)
+        .join(Vacancy, Candidate.vacancy_id == Vacancy.id)
+        .filter(Vacancy.is_open.is_(True))
+        .filter(Candidate.next_attempt_at.isnot(None))
+        .all()
+    )
+    for c in candidates:
+        when = c.next_attempt_at
+        if when is None or when <= now:
+            continue
+        state = quick_screening.load_state(c)
+        stage = rs.derive_stage(c.stage, state)
+        quick_mode = bool(c.vacancy and c.vacancy.quick_mode_enabled)
+        # Тот же предикат, но в момент назначенного времени: кандидат с
+        # исчерпанными попытками или на паузе там не появится.
+        if not call_queue.is_callable(c, stage, when, call_hours_module(), quick_mode):
+            continue
+        if best is None or when < best:
+            best = when
+    return best
+
+
+def call_hours_module():
+    from app.services import call_hours
+
+    return call_hours
+
+
 @router.get("/call-queue")
 async def call_queue_view(db: Session = Depends(get_db)):
     """Очередь звонков: следующий кандидат и счётчики для шапки."""
@@ -502,14 +565,12 @@ async def call_queue_view(db: Session = Depends(get_db)):
     rows = _queue_rows(db, now)
 
     # «Звонков сегодня» — именно исходящие попытки, а не «обработано»:
-    # обработать карточку можно и сообщением, и переводом этапа.
-    calls_today = 0
-    awaiting_reply = 0
-    for c in db.query(Candidate).all():
-        if call_queue.called_today(c, now):
-            calls_today += 1
-        if call_queue.unhandled_inbound(c):
-            awaiting_reply += 1
+    # обработать карточку можно и сообщением, и переводом этапа. Считаем по
+    # журналу, потому что состоявшийся разговор не трогает счётчик недозвонов
+    # и иначе не попал бы в цифру вовсе.
+    calls_today = sum(call_queue.calls_made_today(c, now)
+                      for c in db.query(Candidate).all())
+    awaiting = _awaiting_reply_rows(db)
 
     next_card = None
     if rows:
@@ -517,15 +578,52 @@ async def call_queue_view(db: Session = Depends(get_db)):
         next_card = await _queue_card(db, c, stage, reason)
 
     within = call_hours.is_within(now)
-    upcoming = None if within else call_hours.next_window_start(now)
+    schedule = call_hours.load_schedule()
+    upcoming_window = None if within else call_hours.next_window_start(now)
+    # Выходной отличается от «рано/поздно»: формулировка на экране разная,
+    # и определить его можно только по списку рабочих дней.
+    is_day_off = bool(schedule["enabled"]) and now.isoweekday() not in schedule["days"]
+
     return {
         "next": next_card,
         "queue_count": len(rows),
         "calls_today": calls_today,
-        "awaiting_reply_count": awaiting_reply,
+        "awaiting_reply_count": len(awaiting),
         "within_call_hours": within,
-        "next_window_start": upcoming.isoformat() if upcoming else None,
+        "is_day_off": is_day_off,
+        "next_window_start": upcoming_window.isoformat() if upcoming_window else None,
+        "next_candidate_at": (
+            _upcoming_attempt(db, now).isoformat()
+            if within and not rows and _upcoming_attempt(db, now) else None
+        ),
     }
+
+
+@router.get("/awaiting-reply")
+def awaiting_reply_list(db: Session = Depends(get_db)):
+    """Кандидаты, ждущие ответа в переписке.
+
+    Отдельный список, а не очередь: этим людям нужен текст, а не звонок, и
+    смешивать их с «Прозвоном» было бы ровно той ошибкой, ради исправления
+    которой их и разделили.
+    """
+    from app.services import quick_screening
+
+    result = []
+    for c, stage, state in _awaiting_reply_rows(db):
+        d = c.to_dict()
+        d["stage"] = stage
+        d["vacancy_title"] = c.vacancy.title if c.vacancy else ""
+        d["flags"] = _candidate_flags(c, state)
+        d["progress"] = rs_progress(state, quick_screening.get_questions(c.vacancy))
+        result.append(d)
+    return result
+
+
+def rs_progress(state, questions):
+    from app.services import recruitment_stages as rs
+
+    return rs.progress(state, questions)
 
 
 @router.post("/candidates/{candidate_id}/call-outcome")
@@ -547,6 +645,33 @@ async def call_outcome(candidate_id: int, data: CallOutcomeRequest,
         raise HTTPException(400, f"Неизвестный результат звонка: {data.outcome}")
     if data.outcome == outreach.OUTCOME_LATER and not data.next_at:
         raise HTTPException(400, "Для «перезвонить позже» нужно указать время")
+
+    # Правила очереди защищены здесь, а не только предикатом на чтении: без
+    # этого двойной клик, зависший запрос или повторная отправка формы
+    # засчитывали вторую попытку за день и уводили счётчик за три. Ровно эти
+    # три отказа — та же логика, по которой кандидат не показывается в
+    # очереди, просто применённая к записи.
+    #
+    # Ручной путь с карточки канбана (/no-answer) сюда не попадает намеренно:
+    # там человек осознанно решает позвонить второй раз, и запрещать ему
+    # нельзя — так и было согласовано.
+    from app.services import call_queue
+    from app.services import recruitment_stages as rs
+    from app.services.hours_window import local_now
+
+    if data.outcome == outreach.OUTCOME_NO_ANSWER:
+        if call_queue.called_today(c, local_now()):
+            raise HTTPException(
+                409, "Сегодня этому кандидату уже звонили — следующая попытка "
+                     "будет доступна завтра.")
+        if not call_queue.attempts_left(c):
+            raise HTTPException(
+                409, "Все три попытки дозвона использованы. Кандидат помечен "
+                     "как «не вышел на связь» — нужно решение, а не звонок.")
+    if rs.derive_stage(c.stage, None) in rs.TERMINAL_STAGES:
+        raise HTTPException(
+            409, f"Кандидат уже на этапе «{c.stage}» — результат звонка "
+                 f"для него не записывается.")
 
     warning = None
     message_sent = False
@@ -574,7 +699,44 @@ async def call_outcome(candidate_id: int, data: CallOutcomeRequest,
         db, c, data.outcome, next_at=data.next_at, message_sent=message_sent)
     result["message_sent"] = message_sent
     result["warning"] = warning
+
+    # «Перезвонить позже» — договорённость с человеком, поэтому она попадает
+    # ещё и в список дел рекрутера. Тем же путём, что и время, названное самим
+    # кандидатом: одна категория, один reminder_minutes, связь по candidate_id.
+    # Недозвон задачу НЕ создаёт — системный перенос живёт только в
+    # next_attempt_at и засорять список дел не должен.
+    if data.outcome == outreach.OUTCOME_LATER and data.next_at:
+        result["task"] = await _create_call_task(c, data.next_at)
+
     return result
+
+
+async def _create_call_task(c: Candidate, when: datetime) -> Optional[dict]:
+    """Задача-напоминание о звонке. Ошибка здесь не должна ронять результат:
+    исход звонка уже записан, и терять его из-за списка дел нельзя."""
+    from app.schemas.task import TaskCreate
+    from app.services.task_service import get_task_service
+
+    try:
+        task = await get_task_service().create_task(
+            TaskCreate(
+                title=f"Позвонить: {c.name}",
+                description=(f"Договорились созвониться "
+                             f"{when.strftime('%d.%m в %H:%M')}."),
+                due_date=when.date(), due_time=when.time().replace(second=0,
+                                                                   microsecond=0),
+                category="Подбор персонала",
+                priority="high",
+                reminder_minutes=15,
+                candidate_id=c.id,
+            ),
+            created_by="Прозвон",
+        )
+        return task.model_dump(mode="json")
+    except Exception as exc:
+        log.warning("не удалось создать задачу на звонок для кандидата %s: %s",
+                    c.id, exc)
+        return None
 
 
 @router.post("/candidates/{candidate_id}/call-outcome/undo")

@@ -502,7 +502,8 @@ function CallOutcome({ candidate, hasPlatformChat, platformLabel, templates, onC
 }
 
 function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory,
-                           onPauseToggle, templates = [], onCandidateChanged }) {
+                           onPauseToggle, templates = [], onCandidateChanged,
+                           initialTab = 'info' }) {
   const { toast } = useToast();
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
@@ -518,7 +519,10 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const hasPlatformChat = isHh || isAvitoChat;
   const platformLabel = candidate.source === 'avito' ? 'Авито' : 'hh.ru';
 
-  const [tab, setTab] = useState('info');
+  // Из «Прозвона» карточку открывают ради переписки — открывать её на
+  // «Информации» и заставлять человека кликать вкладку значит терять
+  // единственную секунду, ради которой кнопка и нужна.
+  const [tab, setTab] = useState(initialTab);
   const [resetting, setResetting] = useState(false);
   const [paused, setPaused] = useState(!!candidate.is_paused);
   const [toggling, setToggling] = useState(false);
@@ -1978,6 +1982,7 @@ export default function Recruitment() {
   const [vacancyModal,    setVacancyModal]    = useState(null);
   const [candModal,       setCandModal]       = useState(null);
   const [detailModal,     setDetailModal]     = useState(null);
+  const [detailTab,       setDetailTab]       = useState('info');
   const [interviewModal,  setInterviewModal]  = useState(null);
   const [showVacList,     setShowVacList]     = useState(!isMobile);
   const [showIntegrations,setShowIntegrations]= useState(false);
@@ -2333,7 +2338,18 @@ export default function Recruitment() {
         </div>
       )}
 
-      {mainView === 'calls' && <CallQueueView />}
+      {mainView === 'calls' && (
+        <CallQueueView
+          onOpenCandidate={(c, tab = 'info') => {
+            // Карточку берём из уже загруженного списка: в очереди приходит
+            // срез полей, а модалке нужен полный кандидат (переписка, отклик,
+            // кнопки этапов).
+            const full = candidates.find(x => x.id === c.id) || c;
+            setDetailTab(tab);
+            setDetailModal(full);
+          }}
+        />
+      )}
 
       {/* Interview schedule view */}
       {mainView === 'interviews' && (
@@ -2635,7 +2651,8 @@ export default function Recruitment() {
       {detailModal && (
         <CandidateDetail
           candidate={detailModal}
-          onClose={() => setDetailModal(null)}
+          initialTab={detailTab}
+          onClose={() => { setDetailModal(null); setDetailTab('info'); }}
           onEdit={c => setCandModal({ candidate: c })}
           onDelete={deleteCandidate}
           onStageChange={requestStageChange}
