@@ -1983,6 +1983,9 @@ export default function Recruitment() {
   const [candModal,       setCandModal]       = useState(null);
   const [detailModal,     setDetailModal]     = useState(null);
   const [detailTab,       setDetailTab]       = useState('info');
+  // Счётчик очереди звонков для бейджа на переключателе: «Прозвон 24»
+  // читается как рабочая стопка на сегодня, а не как ещё одна вкладка.
+  const [callCounts,      setCallCounts]      = useState(null);
   const [interviewModal,  setInterviewModal]  = useState(null);
   const [showVacList,     setShowVacList]     = useState(!isMobile);
   const [showIntegrations,setShowIntegrations]= useState(false);
@@ -2004,6 +2007,22 @@ export default function Recruitment() {
   }, []);
 
   const [mainView, setMainView] = useState('funnel'); // 'funnel' | 'calls' | 'interviews' | 'reserve'
+
+  // Отдельным лёгким запросом, а не из списка кандидатов: очередь считается
+  // предикатом на бэкенде и по одной вакансии её не восстановить.
+  const loadCallCounts = useCallback(async () => {
+    try {
+      const res = await api.get('/recruitment/call-queue');
+      setCallCounts({
+        queue: res.data.queue_count,
+        awaiting: res.data.awaiting_reply_count,
+        within: res.data.within_call_hours,
+      });
+    } catch {
+      setCallCounts(null);
+    }
+  }, []);
+  useEffect(() => { loadCallCounts(); }, [loadCallCounts, mainView]);
 
   function toggleSelection(id) {
     setSelectedIds(prev => {
@@ -2275,23 +2294,32 @@ export default function Recruitment() {
           >
             <FileStack size={15} /> Шаблоны вакансий
           </button>
-          {/* Четыре режима в узкий экран не влезают: с overflow-hidden
-              «Резерв» просто пропадал за краем. Скроллим горизонтально —
-              обрезанная кнопка хотя бы видна и достижима. */}
-          <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-x-auto max-w-full min-w-0">
+          {/* Два ряда смысла, а не четыре равных вкладки: слева то, чем
+              рекрутер пользуется каждый день, справа — вспомогательные виды.
+              min-w-0 и горизонтальный скролл: вчетвером они не помещаются на
+              узком экране, и «Резерв» уходил за край. */}
+          <div className="flex items-center rounded-lg border border-[color:var(--color-primary)]/35 overflow-x-auto max-w-full min-w-0 shadow-sm">
             <button
               onClick={() => setMainView('funnel')}
-              className={`px-3 py-1.5 text-sm transition-colors flex-shrink-0 whitespace-nowrap ${mainView === 'funnel' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+              title="Вся воронка кандидатов по этапам"
+              className={`px-3.5 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap ${mainView === 'funnel' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-muted)]'}`}
             >
-              Воронка
+              <User size={14} /> Кандидаты
             </button>
             <button
               onClick={() => setMainView('calls')}
               title="Прозвон: система сама выбирает, кому звонить следующим"
-              className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap ${mainView === 'calls' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
+              className={`px-3.5 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap ${mainView === 'calls' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text)] hover:bg-[color:var(--color-muted)]'}`}
             >
-              <PhoneCall size={13} /> Прозвон
+              <PhoneCall size={14} /> Прозвон
+              {callCounts?.queue > 0 && (
+                <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${mainView === 'calls' ? 'bg-white/25' : 'bg-[color:var(--color-primary)] text-white'}`}>
+                  {callCounts.queue}
+                </span>
+              )}
             </button>
+          </div>
+          <div className="flex items-center rounded-lg border border-[color:var(--color-border)] overflow-x-auto max-w-full min-w-0">
             <button
               onClick={() => setMainView('interviews')}
               className={`px-3 py-1.5 text-sm transition-colors flex items-center gap-1 flex-shrink-0 whitespace-nowrap ${mainView === 'interviews' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-control-bg)] text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-muted)]'}`}
@@ -2340,6 +2368,7 @@ export default function Recruitment() {
 
       {mainView === 'calls' && (
         <CallQueueView
+          onCountsChange={counts => setCallCounts(counts)}
           onOpenCandidate={(c, tab = 'info') => {
             // Карточку берём из уже загруженного списка: в очереди приходит
             // срез полей, а модалке нужен полный кандидат (переписка, отклик,

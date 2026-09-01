@@ -9,7 +9,7 @@
  * нигде не хранится, поэтому после каждого результата экран просто
  * перезапрашивает следующего — своего состояния очереди у него нет.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Phone, PhoneMissed, PhoneOff, Clock, MessageSquare, X, Check,
   Loader2, Undo2, CalendarClock, RefreshCw, Briefcase, ArrowRight,
@@ -108,7 +108,7 @@ function humanError(e) {
   return 'Не получилось выполнить действие. Попробуйте ещё раз.';
 }
 
-export default function CallQueue({ onOpenCandidate }) {
+export default function CallQueue({ onOpenCandidate, onCountsChange }) {
   const { toast } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -127,6 +127,13 @@ export default function CallQueue({ onOpenCandidate }) {
     }
   });
 
+  // Колбэк держим в ref, а не в зависимостях load: родитель передаёт стрелку,
+  // которая пересоздаётся на каждый его рендер, и load вместе с ней. Эффект
+  // тогда перезапрашивал очередь бесконечно и на каждом круге сбрасывал
+  // pending — форма «перезвонить позже» не успевала открыться.
+  const countsRef = useRef(onCountsChange);
+  countsRef.current = onCountsChange;
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -134,6 +141,11 @@ export default function CallQueue({ onOpenCandidate }) {
       const res = await api.get('/recruitment/call-queue');
       setData(res.data);
       setPending(null);
+      countsRef.current?.({
+        queue: res.data.queue_count,
+        awaiting: res.data.awaiting_reply_count,
+        within: res.data.within_call_hours,
+      });
     } catch (e) {
       setError(humanError(e));
     } finally {
@@ -144,7 +156,6 @@ export default function CallQueue({ onOpenCandidate }) {
   useEffect(() => { load(); }, [load]);
 
   const candidate = data?.next || null;
-  const attempts = candidate?.call_attempts || 0;
   const canCallNow = data ? data.within_call_hours !== false : true;
 
   function dismissIntro() {
@@ -163,7 +174,8 @@ export default function CallQueue({ onOpenCandidate }) {
         { outcome, ...extra },
       );
       if (res.data?.warning) toast(res.data.warning, 'warning');
-      if (res.data?.task) toast('Напоминание добавлено в задачи');
+      else if (res.data?.message_sent) toast('Кандидату отправлено сообщение в переписку');
+      if (res.data?.task) toast('Время сохранено в задаче');
       setLastAction({ id: candidate.id, name: candidate.name, outcome });
     } catch (e) {
       toast(humanError(e), 'error');
@@ -195,20 +207,18 @@ export default function CallQueue({ onOpenCandidate }) {
   }
 
   function pick(outcome) {
+    // Время — единственное решение, которое рекрутер принимает сам, поэтому
+    // форма ровно одна. Недозвон подтверждения не требует: сообщение после
+    // первой попытки шлётся само (бэкенд сам решает, первая она или нет),
+    // а лишний экран между «не взял трубку» и следующим кандидатом только
+    // замедляет обзвон.
     if (outcome === 'later') {
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      d.setHours(11, 0, 0, 0);
-      setPending({ outcome, next_at: localInputValue(d) });
+      setPending({ outcome });
       return;
     }
-    if (outcome === 'no_answer' && attempts === 0) {
-      // Сообщение пишем только после ПЕРВОГО недозвона: второе и третье
-      // такое же подряд выглядит как автоответчик.
-      setPending({ outcome, send_message: true, text: DEFAULT_NO_ANSWER_MSG });
-      return;
-    }
-    submit(outcome);
+    submit(outcome, outcome === 'no_answer'
+      ? { send_message: true, text: DEFAULT_NO_ANSWER_MSG }
+      : {});
   }
 
   return (
@@ -263,10 +273,9 @@ export default function CallQueue({ onOpenCandidate }) {
             onOpenCandidate={onOpenCandidate}
             onCancelPending={() => setPending(null)}
             onChangePending={patch => setPending(p => ({ ...p, ...patch }))}
-            onConfirmPending={() => {
-              const { outcome, ...extra } = pending;
-              submit(outcome, extra);
-            }}
+            onConfirmPending={when => submit('later', {
+              next_at: localInputValue(when),
+            })}
           />
         )}
       </div>
@@ -290,8 +299,9 @@ function Intro({ onClose }) {
       <div className="text-sm min-w-0 flex-1">
         <div className="font-semibold mb-0.5">Прозвон</div>
         <p className="text-[color:var(--color-text-muted)]">
-          Здесь система показывает кандидатов, которым сейчас нужно позвонить.
-          После звонка выберите результат — система сама определит, кому звонить дальше.
+          Здесь система сама показывает следующего кандидата, которому нужно позвонить.
+          Позвоните кандидату и выберите результат разговора — система сама определит,
+          что делать дальше.
         </p>
       </div>
       <button onClick={onClose} className="btn btn--ghost btn--sm flex-shrink-0">
@@ -575,61 +585,116 @@ function CallCard({ c, busy, pending, onPick, onOpenCandidate,
 }
 
 function PendingForm({ pending, busy, onChange, onCancel, onConfirm }) {
-  if (pending.outcome === 'later') {
-    return (
-      <div className="space-y-3">
-        <label className="block text-sm font-medium">Когда перезвонить</label>
-        <input
-          type="datetime-local"
-          value={pending.next_at}
-          onChange={e => onChange({ next_at: e.target.value })}
-          className="input"
-          style={{ maxWidth: '16rem' }}
-        />
-        {/* Правило дня объясняем заранее: иначе выбранное «сегодня в 18:00»
-            молча уезжает на завтра, и это выглядит как ошибка. */}
-        <p className="text-xs text-[color:var(--color-text-muted)]">
-          Появится напоминание в задачах. Если сегодня этому кандидату уже
-          звонили, время перенесётся на ближайший следующий рабочий день:
-          больше одного звонка в день не делаем.
-        </p>
-        <div className="flex gap-2">
-          <button onClick={onConfirm} disabled={busy || !pending.next_at}
-                  className="btn btn--primary btn--sm">
-            {busy ? 'Сохраняем…' : 'Сохранить и дальше'}
-          </button>
-          <button onClick={onCancel} disabled={busy}
-                  className="btn btn--ghost btn--sm">Отмена</button>
-        </div>
-      </div>
-    );
+  // Единственное место ручного ввода во всём режиме — и то сведено к двум
+  // нажатиям: день и час. Дату строкой набирать не нужно.
+  const now = new Date();
+  const day = pending.day || 'tomorrow';
+  const time = pending.time || '10:00';
+  const customDate = pending.date || (() => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + 2);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+
+  const days = [
+    { key: 'today', label: 'Сегодня' },
+    { key: 'tomorrow', label: 'Завтра' },
+    { key: 'other', label: 'Другой день' },
+  ];
+  // Часы окна звонков: предлагать 03:00 бессмысленно — бэкенд всё равно
+  // сдвинет такое время в ближайшее окно.
+  const hours = ['10:00', '11:00', '12:00', '13:00', '14:00',
+                 '15:00', '16:00', '17:00', '18:00', '19:00'];
+
+  function resolved() {
+    let d = new Date(now);
+    if (day === 'tomorrow') d.setDate(d.getDate() + 1);
+    if (day === 'other') {
+      const [y, m, dd] = customDate.split('-').map(Number);
+      d = new Date(y, m - 1, dd);
+    }
+    const [hh, mm] = time.split(':').map(Number);
+    d.setHours(hh, mm, 0, 0);
+    return d;
   }
+
+  const when = resolved();
+  const inPast = when.getTime() <= now.getTime();
 
   return (
     <div className="space-y-3">
-      <label className="flex items-center gap-2 text-sm">
+      <div className="text-sm font-medium">Когда перезвонить</div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {days.map(d => (
+          <button
+            key={d.key}
+            type="button"
+            onClick={() => onChange({ day: d.key })}
+            className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+              day === d.key
+                ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                : 'bg-[color:var(--color-control-bg)] border-[color:var(--color-border)] hover:bg-[color:var(--color-muted)]'
+            }`}
+          >
+            {d.label}
+          </button>
+        ))}
+        {day === 'other' && (
+          <input
+            type="date"
+            value={customDate}
+            onChange={e => onChange({ date: e.target.value })}
+            className="input"
+            style={{ maxWidth: '11rem' }}
+          />
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {hours.map(h => (
+          <button
+            key={h}
+            type="button"
+            onClick={() => onChange({ time: h })}
+            className={`px-2.5 py-1 rounded-lg text-sm tabular-nums border transition-colors ${
+              time === h
+                ? 'bg-[color:var(--color-primary)] text-white border-[color:var(--color-primary)]'
+                : 'bg-[color:var(--color-control-bg)] border-[color:var(--color-border)] hover:bg-[color:var(--color-muted)]'
+            }`}
+          >
+            {h}
+          </button>
+        ))}
         <input
-          type="checkbox"
-          checked={!!pending.send_message}
-          onChange={e => onChange({ send_message: e.target.checked })}
-        />
-        Написать кандидату в переписку
-      </label>
-      {!!pending.send_message && (
-        <textarea
-          value={pending.text}
-          onChange={e => onChange({ text: e.target.value })}
-          rows={3}
+          type="time"
+          value={time}
+          onChange={e => onChange({ time: e.target.value })}
           className="input"
+          style={{ maxWidth: '7.5rem' }}
+          title="Другое время"
         />
+      </div>
+
+      <p className="text-sm">
+        Перезвонить <b>{dayAndTime(when)}</b>
+      </p>
+      {inPast && (
+        <p className="text-xs text-amber-700">
+          Это время уже прошло — выберите более позднее.
+        </p>
       )}
+      {/* Правило дня объясняем заранее и без обещаний: напоминание сейчас
+          никуда не отправляется, задача просто появляется в списке дел. */}
       <p className="text-xs text-[color:var(--color-text-muted)]">
-        Сообщение отправляется только после первого недозвона — дальше звоним молча.
+        Время сохранится в задаче «Позвонить: …» в разделе «Задачи». Если сегодня
+        этому кандидату уже звонили, звонок перенесётся на ближайший следующий
+        рабочий день: больше одного звонка в день не делаем.
       </p>
       <div className="flex gap-2">
-        <button onClick={onConfirm} disabled={busy}
+        <button onClick={() => onConfirm(when)} disabled={busy || inPast}
                 className="btn btn--primary btn--sm">
-          {busy ? 'Записываем…' : 'Записать и дальше'}
+          {busy ? 'Сохраняем…' : 'Сохранить и дальше'}
         </button>
         <button onClick={onCancel} disabled={busy}
                 className="btn btn--ghost btn--sm">Отмена</button>
@@ -707,8 +772,12 @@ function AwaitingReplyPanel({ onClose, onOpenCandidate }) {
                     </div>
                   )}
                 </div>
+                {/* Панель НЕ закрываем: карточка кандидата открывается
+                    поверх, и, ответив, рекрутер возвращается ровно в тот же
+                    список — обращения разбираются подряд, а не по одному
+                    с возвратом через счётчик. */}
                 <button
-                  onClick={() => { onClose(); onOpenCandidate?.(c, 'chat'); }}
+                  onClick={() => onOpenCandidate?.(c, 'chat')}
                   className="btn btn-secondary btn--sm flex items-center gap-1.5 flex-shrink-0"
                 >
                   <MessageSquare size={14} /> Ответить
