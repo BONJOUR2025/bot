@@ -199,6 +199,18 @@ def _humanize_order_action(
     return basis or "Действие без описания"
 
 
+def get_salon_repository_names():
+    """Справочник салонов одним обращением к диску.
+
+    SalonRepository.list_salons() перечитывает salons.json на каждый вызов
+    (осознанно — процессов два), поэтому дёргать его в цикле по строкам
+    нельзя; здесь он вызывается ровно один раз на выдачу.
+    """
+    from app.data.salon_repository import get_salon_repository
+
+    return get_salon_repository().list_salons()
+
+
 class _SalonResolver:
     """Resolves (doc_num, doc_date) -> salon_id for a batch of rows.
 
@@ -1541,6 +1553,12 @@ class FirebirdService:
         DOCS.DEP_ID — mixing the two conventions is how the same order ends
         up counted under different salons in different reports.
 
+        `salon_ids` are Salon.id values, same as every neighbouring report;
+        they are translated to order_code suffixes for the SQL LIKE. They
+        used to be substituted into the LIKE as-is, which compared a UUID
+        against a one- or two-digit suffix and matched nothing — the tab
+        came back empty for every salon, not just the one it was noticed on.
+
         `employee_codes`/`categories` used to be accepted by the frontend's
         shared filter bar and silently dropped here — this function didn't
         take either param, so the «Сотрудники»/«Категории» filters had no
@@ -1562,12 +1580,38 @@ class FirebirdService:
         where = ["d.doc_date >= ?", "d.doc_date < ?"]
         params: list = [date_from, date_to + timedelta(days=1)]
 
+        # Приходят Salon.id (те же значения, что у всех соседних отчётов),
+        # а в номере заказа лежит order_code салона: «34247-7» → код «7».
+        # Раньше id подставлялся в LIKE напрямую — и условие принимало вид
+        # doc_num LIKE '%-2b40ace9-75d5-...', то есть не совпадало никогда:
+        # вкладка «Заказы» была пуста при выборе ЛЮБОГО салона, а не только
+        # Охта Молла, на котором это заметили.
         salon_list = [str(s).strip() for s in (salon_ids or []) if str(s).strip()]
+        wanted_salon_ids: set[str] = set()
+        codes_shared: bool = False
         if salon_list:
-            # Салон — суффикс номера заказа (34247-7), поэтому LIKE, а не
-            # сравнение с DEP_ID: см. комментарий к _order_salon_code.
-            where.append("(" + " OR ".join(["d.doc_num LIKE ?"] * len(salon_list)) + ")")
-            params.extend(f"%-{s}" for s in salon_list)
+            from app.data.salon_repository import get_salon_repository
+
+            repo = get_salon_repository()
+            wanted_salon_ids = set(salon_list)
+            salons = repo.list_salons()
+            codes = {(s.order_code or "").strip()
+                     for s in salons if s.id in wanted_salon_ids}
+            codes.discard("")
+            if not codes:
+                # У выбранных салонов нет кода в номере заказа (так заведён
+                # «Тестовый»). Отдать всё подряд было бы хуже пустого ответа:
+                # фильтр выглядел бы проигнорированным.
+                return []
+            # Один код может принадлежать двум салонам («Пассаж» и «Гранд
+            # Палас» оба «7») — их различает только дата открытия, поэтому
+            # такие выборки дочищаются после запроса резолвером.
+            codes_shared = any(
+                sum(1 for s in salons if (s.order_code or "").strip() == code) > 1
+                for code in codes
+            )
+            where.append("(" + " OR ".join(["d.doc_num LIKE ?"] * len(codes)) + ")")
+            params.extend(f"%-{c}" for c in sorted(codes))
 
         needle = (search or "").strip().lower()
         if needle:
@@ -1628,32 +1672,41 @@ class FirebirdService:
             return []
 
         out: list[dict] = []
-        for (doc_num, doc_date, contr_id, client, phone, emp_desc,
-             date_out, date_out_fact, serv_sum, goods_sum,
-             serv_cnt, goods_cnt, photo_cnt) in rows:
-            doc_num = (doc_num or "").strip()
-            salon = _order_salon_code(doc_num)
-            client = (client or "").strip()
-            amount = float(serv_sum or 0) + float(goods_sum or 0)
-            out.append({
-                "doc_num": doc_num,
-                "date": doc_date.isoformat() if doc_date else None,
-                "contragent_id": contr_id,
-                "client": client or "—",
-                "phone": (phone or "").strip(),
-                "employee": (emp_desc or "").strip(),
-                "employee_code": _code_from_description(emp_desc),
-                "salon": salon,
-                "date_out": date_out.isoformat() if date_out else None,
-                "date_out_fact": date_out_fact.isoformat() if date_out_fact else None,
-                "amount": amount,
-                "items_count": int(serv_cnt or 0) + int(goods_cnt or 0),
-                "photo_count": int(photo_cnt or 0),
-                # Выдан ли заказ — по факту выдачи, а не по статусу: статус
-                # живёт в истории отдельной таблицей, а здесь нужен один
-                # дешёвый признак для бейджа в списке.
-                "issued": date_out_fact is not None,
-            })
+        # Имя салона нужно и списку («салон 5» ни о чём не говорит, когда
+        # фильтровал по «Охта Молл»), и дочистке общих кодов ниже.
+        with _SalonResolver() as resolve_salon:
+            names = {s.id: s.name for s in get_salon_repository_names()}
+            for (doc_num, doc_date, contr_id, client, phone, emp_desc,
+                 date_out, date_out_fact, serv_sum, goods_sum,
+                 serv_cnt, goods_cnt, photo_cnt) in rows:
+                doc_num = (doc_num or "").strip()
+                salon = _order_salon_code(doc_num)
+                salon_id = resolve_salon(doc_num, doc_date)
+                if codes_shared and wanted_salon_ids and salon_id not in wanted_salon_ids:
+                    continue
+                client = (client or "").strip()
+                amount = float(serv_sum or 0) + float(goods_sum or 0)
+                out.append({
+                    "doc_num": doc_num,
+                    "date": doc_date.isoformat() if doc_date else None,
+                    "contragent_id": contr_id,
+                    "client": client or "—",
+                    "phone": (phone or "").strip(),
+                    "employee": (emp_desc or "").strip(),
+                    "employee_code": _code_from_description(emp_desc),
+                    "salon": salon,
+                    "salon_id": salon_id,
+                    "salon_name": names.get(salon_id) or "",
+                    "date_out": date_out.isoformat() if date_out else None,
+                    "date_out_fact": date_out_fact.isoformat() if date_out_fact else None,
+                    "amount": amount,
+                    "items_count": int(serv_cnt or 0) + int(goods_cnt or 0),
+                    "photo_count": int(photo_cnt or 0),
+                    # Выдан ли заказ — по факту выдачи, а не по статусу: статус
+                    # живёт в истории отдельной таблицей, а здесь нужен один
+                    # дешёвый признак для бейджа в списке.
+                    "issued": date_out_fact is not None,
+                })
 
         return out
 

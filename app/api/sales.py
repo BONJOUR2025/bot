@@ -149,7 +149,7 @@ def create_sales_router() -> APIRouter:
     async def get_orders_for_period(
         date_from: Optional[date] = Query(default=None),
         date_to: Optional[date] = Query(default=None),
-        salon_ids: Optional[str] = Query(default=None, description="Comma-separated salon order-number suffixes"),
+        salon_ids: Optional[str] = Query(default=None, description="Comma-separated Salon.id list"),
         search: Optional[str] = Query(default=None, description="Поиск по номеру заказа или клиенту"),
         limit: int = Query(default=500, ge=1, le=2000),
         employee_codes: Optional[str] = Query(default=None, description="Comma-separated employee codes"),

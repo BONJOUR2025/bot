@@ -609,7 +609,7 @@ function SalesOrderRow({ order }) {
             <span className="font-medium text-sm">{order.doc_num}</span>
             {order.salon && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
-                салон {order.salon}
+                {order.salon_name || `салон ${order.salon}`}
               </span>
             )}
             {order.photo_count > 0 && (
@@ -719,7 +719,7 @@ function OrdersTab({ params }) {
     if (!shown.length) return;
     const hdr = '№ заказа;Дата;Клиент;Телефон;Принял;Салон;Позиций;Фото;Сумма;Обещан;Выдан';
     const body = shown.map((o) => [
-      o.doc_num, o.date, o.client, o.phone, o.employee, o.salon || '',
+      o.doc_num, o.date, o.client, o.phone, o.employee, o.salon_name || o.salon || '',
       o.items_count, o.photo_count, o.amount, o.date_out || '', o.date_out_fact || '',
     ].join(';')).join('\n');
     const blob = new Blob(['﻿' + hdr + '\n' + body], { type: 'text/csv;charset=utf-8' });
