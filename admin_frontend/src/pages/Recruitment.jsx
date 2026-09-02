@@ -65,8 +65,12 @@ const srcLabel  = (key) => SOURCES.find(s => s.key === key)?.label || key;
 // как две недавние даты.
 // «31 окт. 2023 г.» → «31 окт 2023»: подпись на карточке рендерится 10-м
 // кеглем, служебные «г.» и точки съедают там заметную долю ширины.
+// Зона дописывается по той же причине, что и в daysSince ниже: БД отдаёт UTC
+// без суффикса, а new Date() читает такую строку как локальную. Для дат с
+// временем 00:00–03:00 UTC это давало вчерашнее число.
 const fmtDate   = (iso) => iso
-  ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
+  ? new Date(/[Zz]$|[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}Z`)
+      .toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
       .replace(/\s*г\.$/, '').replace('.', '')
   : '';
 const tgLink    = tgHref;  // нормализация номера (8→7, 10-значные → +7) — в utils/phone
@@ -1083,7 +1087,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
 }
 
 // ── Candidate card ─────────────────────────────────────────────────
-function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, selected, onToggle }) {
+function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, selected, onToggle, showAge }) {
   function handleClick(e) {
     if (selectionMode) { onToggle(c.id); return; }
     onClick(c);
@@ -1106,6 +1110,12 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
   const staleDays = c.stage === 'новый' ? daysSince(c.created_at) : null;
   const isStale = staleDays != null && staleDays >= STALE_AFTER_DAYS;
   const isStaleCritical = staleDays != null && staleDays >= STALE_CRITICAL_DAYS;
+  // Дата внизу карточки — это last_message_at, а фильтр «Старше» отбирает по
+  // created_at. Из-за расхождения карточка с откликом от 23 июня показывала
+  // «22 авг» и выглядела свежей — было непонятно, за что её отобрали.
+  // Поэтому под фильтром возраст отклика показываем на любом этапе, а не
+  // только в «Новых», где его рисует staleDays.
+  const ageDays = showAge ? daysSince(c.created_at) : null;
   return (
     <div
       draggable={!selectionMode}
@@ -1233,7 +1243,17 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
             />
           )}
           {fmtDate(c.last_message_at || c.created_at)}
-          {isStale && (
+          {ageDays != null ? (
+            <span
+              className="recruit-fui-age"
+              title={`Отклик получен ${fmtDate(c.created_at)}`}
+              style={isStale
+                ? { color: isStaleCritical ? 'var(--color-danger)' : 'var(--color-warning)' }
+                : undefined}
+            >
+              · {ageDays} дн. с отклика
+            </span>
+          ) : isStale && (
             <span
               className="recruit-fui-age"
               style={{ color: isStaleCritical ? 'var(--color-danger)' : 'var(--color-warning)' }}
@@ -1613,7 +1633,7 @@ function CandidateFilters({ filters, onChange, total, shown }) {
   );
 }
 
-function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMode, selectedIds, onToggle }) {
+function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMode, selectedIds, onToggle, showAge }) {
   const [dragOver, setDragOver] = useState(null);
   const [dragging, setDragging] = useState(null);
   const scrollRef = useRef(null);
@@ -1740,6 +1760,7 @@ function KanbanBoard({ candidates, onCardClick, onAddClick, onDrop, selectionMod
                     selectionMode={selectionMode}
                     selected={selectedIds.has(c.id)}
                     onToggle={onToggle}
+                    showAge={showAge}
                   />
                 ))}
                 {cards.length === 0 && (
@@ -1784,7 +1805,7 @@ function ScrollArrow({ side, onClick }) {
 }
 
 // ── Mobile board (tabs + list) ─────────────────────────────────────
-function MobileBoard({ candidates, onCardClick, onAddClick, selectionMode, selectedIds, onToggle }) {
+function MobileBoard({ candidates, onCardClick, onAddClick, selectionMode, selectedIds, onToggle, showAge }) {
   const [activeStage, setActiveStage] = useState('новый');
   const stage = stageOf(activeStage);
   const filtered = candidates.filter(c => c.stage === activeStage);
@@ -1847,6 +1868,7 @@ function MobileBoard({ candidates, onCardClick, onAddClick, selectionMode, selec
           <CandidateCard
             key={c.id} c={c} onClick={onCardClick}
             selectionMode={selectionMode} selected={selectedIds.has(c.id)} onToggle={onToggle}
+            showAge={showAge}
           />
         ))}
         {filtered.length === 0 && (
@@ -2720,6 +2742,7 @@ export default function Recruitment() {
                 selectionMode={selectionMode}
                 selectedIds={selectedIds}
                 onToggle={toggleSelection}
+                showAge={filters.older > 0}
               />
             ) : (
               <KanbanBoard
@@ -2730,6 +2753,7 @@ export default function Recruitment() {
                 selectionMode={selectionMode}
                 selectedIds={selectedIds}
                 onToggle={toggleSelection}
+                showAge={filters.older > 0}
               />
             )}
           </div>
