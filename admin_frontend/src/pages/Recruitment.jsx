@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { formatPhone, telHref, tgHref } from '../utils/phone';
+import { resumeHeadline } from '../utils/resume';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import IntegrationsModal from '../components/recruitment/IntegrationsModal.jsx';
@@ -110,6 +111,74 @@ const srcBadgeLabel = (s) => s === 'manual' ? 'руч.' : s;
 // Полное имя площадки — там, где место есть: переключатель переписок,
 // подпись объединения. На карточке в колонке остаётся короткий бейдж.
 const SRC_TITLE = { hh: 'hh.ru', avito: 'Авито', manual: 'вручную' };
+
+/** Анкета резюме с площадки. hh отдаёт её целиком, и раньше всё это
+ *  выбрасывалось: рекрутер шёл смотреть должность и опыт на сайт. */
+function ResumeProfile({ profile }) {
+  if (!profile) return null;
+  const headline = resumeHeadline(profile);
+  const jobs = profile.experience || [];
+  const skills = profile.skills || [];
+  const schools = profile.education || [];
+  if (!headline && !jobs.length && !skills.length && !schools.length) return null;
+
+  return (
+    <div className="rounded-xl border border-[color:var(--color-border)] p-4 space-y-3">
+      <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] uppercase tracking-wide">
+        Анкета с сайта
+      </p>
+      {headline && <p className="text-sm font-medium leading-snug">{headline}</p>}
+
+      {(profile.area || profile.citizenship?.length || profile.schedule) && (
+        <p className="text-xs text-[color:var(--color-muted-foreground)]">
+          {[profile.area, (profile.citizenship || []).join(', '), profile.schedule]
+            .filter(Boolean).join(' · ')}
+        </p>
+      )}
+
+      {jobs.length > 0 && (
+        <div className="space-y-2">
+          {jobs.slice(0, 4).map((e, i) => (
+            <div key={i} className="text-sm">
+              <p className="font-medium leading-snug">{e.position || '—'}</p>
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                {[e.company, [e.start, e.end || 'по настоящее время'].filter(Boolean).join(' — ')]
+                  .filter(Boolean).join(' · ')}
+              </p>
+              {e.description && (
+                <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5 line-clamp-3">
+                  {e.description}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {schools.length > 0 && (
+        <p className="text-xs text-[color:var(--color-muted-foreground)]">
+          {profile.education_level ? `${profile.education_level}: ` : ''}
+          {schools.map(e => [e.name, e.result].filter(Boolean).join(' — ')).join('; ')}
+        </p>
+      )}
+
+      {skills.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {skills.slice(0, 12).map((sk, i) => (
+            <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-md bg-[color:var(--color-bg-secondary)] text-[color:var(--color-muted-foreground)]">
+              {sk}
+            </span>
+          ))}
+          {skills.length > 12 && (
+            <span className="text-[10px] px-1.5 py-0.5 text-[color:var(--color-muted-foreground)]">
+              +{skills.length - 12}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Куда уйдёт текст отказа: 'hh' | 'avito' | null.
  *
@@ -816,6 +885,10 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
             </a>
           )}
 
+          {/* Анкета с площадки — то, ради чего раньше открывали резюме
+              на hh.ru в соседней вкладке. */}
+          <ResumeProfile profile={candidate.resume_profile} />
+
           {/* Meta */}
           <div className="flex items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
             <Clock size={12} />
@@ -1036,8 +1109,12 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
         {tab === 'profile' && (
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {!candidate.profile ? (
-              <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8">
-                <p>Профиля нет — эта функция была частью старого ИИ-интервью и больше не используется.</p>
+              <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8 space-y-1.5">
+                <p>Сводки пока нет.</p>
+                <p className="text-xs">
+                  Она собирается автоматически, когда кандидат ответит на все вопросы
+                  быстрого опроса — из его ответов и анкеты с площадки.
+                </p>
               </div>
             ) : (() => {
               const p = candidate.profile;

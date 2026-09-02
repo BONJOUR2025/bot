@@ -1,5 +1,6 @@
 """Background sync: pulls new candidates from hh.ru and Avito into the CRM."""
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -815,6 +816,11 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
             if src.source == "hh" and not (exists.resume_id or "").strip():
                 exists.resume_id = (item.get("resume_id")
                                     or cm.resume_id_from_url(item.get("resume_url")))
+            # Анкету перезаписываем на каждом синке: кандидат правит резюме,
+            # и снимок месячной давности хуже свежего.
+            if item.get("resume_profile"):
+                exists.resume_profile_json = json.dumps(item["resume_profile"],
+                                                        ensure_ascii=False)
         if not exists:
             applied_at = None
             raw_applied = item.get("applied_at")
@@ -846,6 +852,8 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 platform_chat_id=item.get("platform_chat_id", ""),
                 resume_id=(item.get("resume_id")
                            or cm.resume_id_from_url(item.get("resume_url"))),
+                resume_profile_json=(json.dumps(item["resume_profile"], ensure_ascii=False)
+                                     if item.get("resume_profile") else None),
                 created_at=applied_at or datetime.utcnow(),
             )
             db.add(c)

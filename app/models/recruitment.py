@@ -355,6 +355,12 @@ class Candidate(Base):
     # объединённая карточка честно говорила, из чего она собрана, — и чтобы
     # слияние можно было разобрать руками, если оно окажется ошибочным.
     merged_json = Column(Text, nullable=True)
+    # Анкета с площадки: должность, ожидания по зарплате, стаж, места работы,
+    # образование, навыки (см. hh_api.build_resume_profile). hh отдаёт 59
+    # полей, из них раньше сохранялись телефон, почта и возраст — за
+    # должностью и опытом рекрутер шёл на сайт. Обновляется на каждом синке:
+    # кандидат правит резюме, и хранить снимок годовой давности незачем.
+    resume_profile_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -404,12 +410,26 @@ class Candidate(Base):
             ),
             "call_log": self.call_log(),
             "resume_id": self.resume_id or "",
+            "resume_profile": self.resume_profile(),
             # Обе витрины объединения: чем писать и из чего собрано.
             "channels": self.channels(),
             "merged_from": self.merged_from(),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+    def resume_profile(self) -> dict | None:
+        """Анкета с площадки. None, когда её нет (Авито, ручной ввод,
+        удалённое резюме) — витрина отличает «нет данных» от «пусто»."""
+        import json
+
+        if not self.resume_profile_json:
+            return None
+        try:
+            data = json.loads(self.resume_profile_json)
+        except Exception:
+            return None
+        return data if isinstance(data, dict) else None
 
     def channels(self) -> list:
         """Дополнительные переписки. Битый JSON не должен ронять карточку."""

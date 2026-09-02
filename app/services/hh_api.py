@@ -112,6 +112,79 @@ async def refresh_access_token(client_id: str, client_secret: str, refresh_token
         return r.json()
 
 
+def _name(obj) -> str:
+    """`{"id": .., "name": ..}` → строка. hh почти все справочники отдаёт так."""
+    if isinstance(obj, dict):
+        return str(obj.get("name") or "")
+    return str(obj or "")
+
+
+def _names(items) -> list:
+    return [n for n in (_name(x) for x in (items or [])) if n]
+
+
+def build_resume_profile(resume: dict, full: dict | None = None) -> dict:
+    """Анкета кандидата в том виде, в каком её читает человек.
+
+    hh отдаёт 59 полей, из них раньше брались три (телефон, почта, дата
+    рождения) — остальное выбрасывалось, и рекрутер шёл смотреть должность и
+    опыт на сайт. Здесь собирается то, что реально нужно перед звонком.
+
+    Два источника, потому что они разной полноты: в списке откликов
+    (`resume`) уже есть должность, зарплата, стаж, места работы и
+    образование; отдельный запрос за резюме (`full`) добавляет к этому
+    навыки и языки. Второй может отсутствовать — резюме бывает удалено
+    (404) или скрыто, и тогда профиль просто беднее, а не пуст.
+    """
+    src = {**(resume or {}), **{k: v for k, v in (full or {}).items() if v is not None}}
+
+    experience = []
+    for e in (src.get("experience") or [])[:10]:
+        experience.append({
+            "position": str(e.get("position") or ""),
+            "company": str(e.get("company") or ""),
+            "start": str(e.get("start") or ""),
+            "end": str(e.get("end") or ""),
+            # Описание есть только в полном резюме и бывает на несколько
+            # тысяч знаков — режем: в карточке это подпись, а не документ.
+            "description": (str(e.get("description") or "")[:1500] or None),
+        })
+
+    education = (src.get("education") or {})
+    schools = []
+    for group in ("primary", "additional", "attestation", "elementary"):
+        for item in (education.get(group) or [])[:5]:
+            schools.append({
+                "name": str(item.get("name") or ""),
+                "organization": str(item.get("organization") or ""),
+                "result": str(item.get("result") or ""),
+                "year": item.get("year"),
+            })
+
+    salary = src.get("salary") or {}
+    return {
+        "title": str(src.get("title") or ""),
+        "salary": ({"amount": salary.get("amount"), "currency": salary.get("currency") or "RUR"}
+                   if salary.get("amount") is not None else None),
+        "total_months": ((src.get("total_experience") or {}) or {}).get("months"),
+        "area": _name(src.get("area")),
+        "citizenship": _names(src.get("citizenship")),
+        "gender": _name(src.get("gender")),
+        "experience": experience,
+        "education_level": _name(education.get("level")),
+        "education": schools,
+        "skills": [str(x) for x in (src.get("skill_set") or [])][:40],
+        "languages": [f"{_name(l)} — {_name(l.get('level'))}".strip(" —")
+                      for l in (src.get("language") or []) if isinstance(l, dict)],
+        "employment": _name(src.get("employment")),
+        "schedule": _name(src.get("schedule")),
+        "work_format": _names(src.get("work_format")),
+        "relocation": _name((src.get("relocation") or {}).get("type")),
+        "professional_roles": _names(src.get("professional_roles")),
+        "updated_at": str(src.get("updated_at") or ""),
+    }
+
+
 async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) -> dict:
     """
     Fetch active negotiations (responses) for a vacancy.
@@ -181,6 +254,12 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
             photo_url = photo_obj.get("medium") or photo_obj.get("small") or ""
 
             raw_items.append({
+                # Сырое резюме из списка: из него собирается профиль. Список
+                # уже несёт должность, зарплату, стаж, места работы и
+                # образование — отдельный запрос нужен только за навыками
+                # и контактами.
+                "_resume": resume,
+                "_full": None,
                 "neg_id": str(neg["id"]),
                 # Вебхук CHAT_MESSAGE_CREATED приходит с chat_id, а не с id
                 # отклика — без этой связки уведомление невозможно сопоставить
@@ -217,6 +296,7 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                         log.debug("hh resume %s → %s", item["resume_id"], r2.status_code)
                         return
                     full = r2.json()
+                    item["_full"] = full
                     # hh.ru returns contact as a list:
                     # [{"type": {"id": "cell"}, "value": {"formatted": "+7..."}, ...}, ...]
                     contacts_list = full.get("contact") or []
@@ -236,9 +316,12 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                                 item["phone"] = val
                         elif ctype == "email" and not item["email"]:
                             item["email"] = val if isinstance(val, str) else ""
-                    # birthday may be present in full resume
+                    # Возраст в полном резюме лежит в birth_date. Раньше здесь
+                    # читался несуществующий ключ birthday, и ветка не
+                    # срабатывала никогда — незаметно только потому, что
+                    # возраст обычно приходит числом уже в списке откликов.
                     if item["age"] is None:
-                        bd = full.get("birthday")
+                        bd = full.get("birth_date") or full.get("birthday")
                         if isinstance(bd, dict):
                             try:
                                 from datetime import date as _date
@@ -281,6 +364,7 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                 "photo_url": it["photo_url"],
                 "age": it["age"],
                 "applied_at": it["applied_at"],
+                "resume_profile": build_resume_profile(it["_resume"], it["_full"]),
                 "notes": f"Отклик hh.ru: {it['resume_url']}" if it["resume_url"] else "Отклик hh.ru",
             }
             for it in raw_items

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { formatPhone, telHref } from '../utils/phone';
+import { resumeHeadline, verdictBadge } from '../utils/resume';
 import { useToast } from '../providers/ToastProvider.jsx';
 
 const DEFAULT_NO_ANSWER_MSG =
@@ -443,6 +444,47 @@ function reasonText(c) {
   return 'В очереди на звонок';
 }
 
+/** Сводка ИИ по итогам опроса: вердикт, оценка, два-три довода.
+ *  Полный разбор — в карточке кандидата, здесь ровно столько, сколько
+ *  успеваешь прочитать, пока идёт вызов. */
+function AiSummary({ profile }) {
+  if (!profile?.summary && !profile?.recommendation) return null;
+  const verdict = verdictBadge(profile);
+  const points = [
+    ...(profile.strengths || []).slice(0, 2).map(t => ({ mark: '+', text: t, good: true })),
+    ...(profile.red_flags || []).slice(0, 2).map(t => ({ mark: '\u26a0', text: t, good: false })),
+  ];
+  return (
+    <div className="mt-3.5 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-muted)]/20 px-4 py-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
+          Сводка ИИ
+        </span>
+        {profile.score != null && (
+          <span className="text-sm font-semibold">{profile.score}<span className="text-[color:var(--color-text-muted)] font-normal">/100</span></span>
+        )}
+        {!!verdict && (
+          <span className={`text-[11px] px-2 py-0.5 rounded-md border ${verdict.tone}`}>
+            {verdict.label}
+          </span>
+        )}
+      </div>
+      {!!profile.summary && (
+        <p className="text-sm leading-snug mt-1.5">{profile.summary}</p>
+      )}
+      {points.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5">
+          {points.map((p, i) => (
+            <li key={i} className={`text-xs ${p.good ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {p.mark} {p.text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function CallCard({ c, busy, pending, onPick, onOpenCandidate,
                     onCancelPending, onChangePending, onConfirmPending }) {
   const attempts = c.call_attempts || 0;
@@ -463,6 +505,13 @@ function CallCard({ c, busy, pending, onPick, onOpenCandidate,
               <div className="flex items-center gap-1.5 text-sm text-[color:var(--color-text-muted)] mt-1">
                 <Briefcase size={13} /> {c.vacancy_title}
               </div>
+            )}
+            {/* Должность, стаж и ожидания по зарплате — то, что раньше
+                смотрели на hh.ru в соседней вкладке уже во время гудков. */}
+            {!!resumeHeadline(c.resume_profile) && (
+              <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
+                {resumeHeadline(c.resume_profile)}
+              </p>
             )}
           </div>
           <span className="text-xs px-2.5 py-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-muted)]/30 text-[color:var(--color-text-muted)]">
@@ -490,6 +539,8 @@ function CallCard({ c, busy, pending, onPick, onOpenCandidate,
             </span>
           )}
         </div>
+
+        <AiSummary profile={c.profile} />
 
         {(!!(c.flags || []).length || !c.has_chat) && (
           <div className="flex flex-wrap items-center gap-2 mt-3">

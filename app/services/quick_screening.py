@@ -495,6 +495,7 @@ async def _process_message(db, candidate, vacancy, src, token: str,
                             state: dict, text: str, cfg: dict) -> None:
     """Собственно обработка ответа кандидата — без дедупа и без проверки
     рабочих часов: то же самое проигрывается и «сейчас», и отложенно."""
+    from app.services import candidate_profile
     from app.services.notify import send_notification
 
     if state.get("phase", "questions") == "interest":
@@ -580,9 +581,23 @@ async def _process_message(db, candidate, vacancy, src, token: str,
     err = await _send(db, candidate, src, token, CLOSING_MESSAGE)
     if err:
         log.warning("quick_screening: failed to send closing message to candidate %s: %s", candidate.id, err)
+
+    # Сводка по ответам и анкете с площадки. Строго после того, как опрос
+    # закрыт и кандидату отправлено прощание: это подпись к карточке, и её
+    # отсутствие не должно ни задерживать, ни ломать сам опрос.
+    profile = None
+    try:
+        profile = candidate_profile.generate(db, candidate, vacancy, answers, cfg)
+    except Exception:
+        log.warning("quick_screening: не удалось собрать сводку по кандидату %s",
+                    candidate.id, exc_info=True)
+
+    summary = candidate_profile.format_for_notification(profile)
     await send_notification(
         f"🔴 <b>НУЖЕН ОТВЕТ · Анкета готова</b>\n{_candidate_label(candidate, vacancy)}\n\n"
-        f"{_format_answers(answers)}\n\nДальше — вы."
+        f"{_format_answers(answers)}\n\n"
+        + (f"{summary}\n\n" if summary else "")
+        + "Дальше — вы."
     )
     log.info("quick_screening: completed for candidate_id=%s", candidate.id)
 
