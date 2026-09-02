@@ -234,3 +234,12 @@ def test_notification_block_is_empty_without_a_profile():
 def test_broken_profile_json_does_not_break_the_card():
     assert cand(resume_profile_json="{не json").resume_profile() is None
     assert cand(resume_profile_json="[1,2]").resume_profile() is None
+
+
+def test_prompt_forbids_discriminatory_red_flags():
+    """Модель поставила «возраст» красным флагом 65-летнему мастеру с 26
+    годами стажа по профилю. Отбирать по возрасту нельзя — и подсказывать
+    рекрутеру такое основание тоже."""
+    for word in ("возраст", "пол", "гражданство", "национальность"):
+        assert word in cp.SYSTEM
+    assert "не пиши в минусы" in cp.SYSTEM
