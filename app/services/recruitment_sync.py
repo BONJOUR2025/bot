@@ -703,8 +703,9 @@ def _attach_channel(candidate, source: str, external_id: str, item: dict, reason
     channels = candidate.channels()
     known = {(c.get("source"), c.get("external_id")) for c in channels}
     known.add((candidate.source, candidate.external_id or ""))
-    if (new_channel["source"], new_channel["external_id"]) not in known and (
-            new_channel["external_id"] or new_channel["platform_chat_id"]):
+    is_new = (new_channel["source"], new_channel["external_id"]) not in known and bool(
+        new_channel["external_id"] or new_channel["platform_chat_id"])
+    if is_new:
         channels.append(new_channel)
         candidate.channels_json = json.dumps(channels, ensure_ascii=False)
 
@@ -715,6 +716,13 @@ def _attach_channel(candidate, source: str, external_id: str, item: dict, reason
             setattr(candidate, field, item[field])
     if candidate.age is None and item.get("age") is not None:
         candidate.age = item["age"]
+
+    if not is_new:
+        # Импорт приходит каждые 15 минут и приносит те же отклики снова.
+        # Раньше запись в аудит добавлялась безусловно, и подпись
+        # «объединено откликов: N» росла на каждом синке: у Моисеева она
+        # показывала 3 при двух реально объединённых откликах.
+        return
 
     audit = candidate.merged_from()
     audit.append({

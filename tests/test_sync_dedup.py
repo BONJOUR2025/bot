@@ -231,3 +231,29 @@ def test_candidates_of_another_vacancy_are_not_touched(db, monkeypatch):
     sync_items(db, monkeypatch, [hh_item("5506528508", "13be4637")])
     db.commit()
     assert db.query(Candidate).count() == 2
+
+
+def test_repeated_sync_does_not_grow_the_merge_audit(db, monkeypatch):
+    """Импорт идёт каждые 15 минут. Запись в аудит добавлялась безусловно, и
+    подпись «объединено откликов: N» росла на каждом проходе: у Моисеева она
+    показывала 3 при двух реально объединённых откликах."""
+    items = [hh_item("5496983491", "13be4637"), hh_item("5506528508", "13be4637")]
+    for _ in range(3):
+        sync_items(db, monkeypatch, items)
+        db.commit()
+    assert len(db.query(Candidate).one().merged_from()) == 1
+
+
+def test_cross_platform_rescan_does_not_grow_the_audit(db, monkeypatch):
+    db.add(Candidate(vacancy_id=1, name="Моисеев Станислав", source="avito",
+                     external_id="u2i-77", platform_chat_id="u2i-77",
+                     stage="новый", phone="79119452719"))
+    db.commit()
+    for _ in range(3):
+        sync_items(db, monkeypatch, [hh_item("5490000001", "aaa111",
+                                             name="Моисеев Станислав",
+                                             phone="+7 911 945-27-19")])
+        db.commit()
+    c = db.query(Candidate).one()
+    assert len(c.merged_from()) == 1
+    assert len(c.channels()) == 1
