@@ -1243,17 +1243,7 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
             />
           )}
           {fmtDate(c.last_message_at || c.created_at)}
-          {ageDays != null ? (
-            <span
-              className="recruit-fui-age"
-              title={`Отклик получен ${fmtDate(c.created_at)}`}
-              style={isStale
-                ? { color: isStaleCritical ? 'var(--color-danger)' : 'var(--color-warning)' }
-                : undefined}
-            >
-              · {ageDays} дн. с отклика
-            </span>
-          ) : isStale && (
+          {ageDays == null && isStale && (
             <span
               className="recruit-fui-age"
               style={{ color: isStaleCritical ? 'var(--color-danger)' : 'var(--color-warning)' }}
@@ -1263,11 +1253,29 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
           )}
         </span>
         {c.phone && (
-          <span className="flex items-center gap-1 text-[10px] text-[color:var(--color-muted-foreground)] opacity-70">
+          <span className="flex items-center gap-1 text-[10px] text-[color:var(--color-muted-foreground)] opacity-70 flex-shrink-0">
             <Phone size={9} /> {c.phone}
           </span>
         )}
       </div>
+
+      {/* Отдельной строкой, а не рядом с датой: в строку с телефоном
+          «60 дн. с отклика» не влезает и рвёт саму дату пополам. */}
+      {ageDays != null && (
+        <div
+          className="mt-1 text-[10px] text-[color:var(--color-muted-foreground)] opacity-60"
+          title={`Отклик получен ${fmtDate(c.created_at)}`}
+        >
+          <span
+            className="recruit-fui-age"
+            style={isStale
+              ? { color: isStaleCritical ? 'var(--color-danger)' : 'var(--color-warning)' }
+              : undefined}
+          >
+            {ageDays} дн. с отклика
+          </span>
+        </div>
+      )}
     </div>
   );
 }
