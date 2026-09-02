@@ -312,10 +312,27 @@ def test_human_stage_of_winner_is_not_replaced_by_automatic():
     assert w.stage == STAGE_RESERVE
 
 
-def test_later_human_decision_wins():
-    w = cand(id=1, stage=STAGE_RESERVE, updated_at=datetime(2026, 8, 1))
-    l = cand(id=2, stage=STAGE_HIRED, updated_at=datetime(2026, 8, 20))
+def test_hired_beats_reserve_regardless_of_recency():
+    """Ровно та ошибка, из-за которой Федотов после слияния оказался в
+    резерве: второго клона отложили позже, чем первого наняли."""
+    w = cand(id=1, stage=STAGE_HIRED, updated_at=datetime(2026, 8, 1))
+    l = cand(id=2, stage=STAGE_RESERVE, updated_at=datetime(2026, 8, 20))
     cm.merge(w, l, cm.REASON_RESUME, NOW)
+    assert w.stage == STAGE_HIRED
+
+
+def test_interview_beats_reserve():
+    """«Резерв» — полка, а не решение по кандидату."""
+    w = cand(id=1, stage=STAGE_RESERVE)
+    l = cand(id=2, stage="собеседование")
+    cm.merge(w, l, cm.REASON_PHONE, NOW)
+    assert w.stage == "собеседование"
+
+
+def test_hired_beats_rejected():
+    w = cand(id=1, stage="отказ")
+    l = cand(id=2, stage=STAGE_HIRED)
+    cm.merge(w, l, cm.REASON_PHONE, NOW)
     assert w.stage == STAGE_HIRED
 
 

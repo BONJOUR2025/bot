@@ -161,9 +161,21 @@ def _pick_state(winner, loser):
     return winner.quick_state_json
 
 
-def _updated(candidate) -> datetime:
-    return getattr(candidate, "updated_at", None) or getattr(candidate, "created_at", None) \
-        or datetime.min
+# Насколько весомо решение человека. Не «насколько поздно поставлено»:
+# сначала здесь стояла свежесть updated_at, и «нанят» проиграл «резерву»
+# просто потому, что второго клона отложили позже, — Федотов после слияния
+# оказался не нанят, а в резерве.
+#
+# Порядок: итог найма важнее отказа (человек всё-таки вышел), отказ важнее
+# назначенного собеседования, а «резерв» — самый слабый сигнал: это полка,
+# а не решение по кандидату, и активное собеседование его перебивает.
+HUMAN_RANK = {
+    rs.STAGE_HIRED: 5,
+    rs.STAGE_REJECTED: 4,
+    rs.STAGE_INTERVIEW: 3,
+    rs.STAGE_THINKING: 2,
+    rs.STAGE_RESERVE: 1,
+}
 
 
 def pick_stage(winner, loser) -> str:
@@ -172,12 +184,12 @@ def pick_stage(winner, loser) -> str:
     Выбор победителя решает, В КАКОЙ ЧАТ писать, и там hh важнее Авито. Этап —
     вопрос другой: это решение человека, и площадка к нему отношения не имеет.
     Без отдельного правила «отказ», поставленный руками на карточке Авито,
-    терялся бы при слиянии с карточкой hh, где этап всё ещё «новый»,— и
+    терялся бы при слиянии с карточкой hh, где этап всё ещё «новый», — и
     отказанный кандидат возвращался бы в воронку.
 
-    Поэтому: человеческий этап побеждает автоматический; если человеческих
-    два — тот, который поставили позже; если ни одного — более продвинутый
-    автоматический.
+    Поэтому: любой человеческий этап побеждает автоматический, между двумя
+    человеческими решает HUMAN_RANK, между двумя автоматическими — тот, что
+    дальше по воронке.
     """
     w_human = winner.stage in rs.HUMAN_STAGES
     l_human = loser.stage in rs.HUMAN_STAGES
@@ -186,7 +198,7 @@ def pick_stage(winner, loser) -> str:
     if l_human and not w_human:
         return loser.stage
     if w_human and l_human:
-        return winner.stage if _updated(winner) >= _updated(loser) else loser.stage
+        return max((winner.stage, loser.stage), key=lambda st: HUMAN_RANK.get(st, 0))
     return max((winner.stage, loser.stage), key=lambda st: STAGE_RANK.get(st, 0))
 
 
