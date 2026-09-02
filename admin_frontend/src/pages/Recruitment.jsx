@@ -5,7 +5,7 @@ import {
   CheckSquare, Square, ChevronDown, User, Calendar, MessageCircle,
   ArrowRight, Clock, SendHorizonal, Loader2, MessageSquare,
   Pause, Play, Check, BookOpen, Sparkles, ListChecks, Copy, FileStack,
-  PhoneMissed, PhoneCall, PhoneOff, Archive, Search,
+  PhoneMissed, PhoneCall, PhoneOff, Archive, Search, GitMerge,
 } from 'lucide-react';
 import api from '../api';
 import { formatPhone, telHref, tgHref } from '../utils/phone';
@@ -107,6 +107,9 @@ const SRC_BADGE = {
   other:  'src-tag',
 };
 const srcBadgeLabel = (s) => s === 'manual' ? 'руч.' : s;
+// Полное имя площадки — там, где место есть: переключатель переписок,
+// подпись объединения. На карточке в колонке остаётся короткий бейдж.
+const SRC_TITLE = { hh: 'hh.ru', avito: 'Авито', manual: 'вручную' };
 
 /** Куда уйдёт текст отказа: 'hh' | 'avito' | null.
  *
@@ -527,6 +530,27 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   const hasPlatformChat = isHh || isAvitoChat;
   const platformLabel = candidate.source === 'avito' ? 'Авито' : 'hh.ru';
 
+  // Переписок у объединённой карточки несколько: второй отклик на hh или чат
+  // на другой площадке. Первая в списке — основная, та, в которой бот ведёт
+  // опрос; в остальные можно только написать руками.
+  const chatList = useMemo(() => {
+    const primary = {
+      key: `${candidate.source}:${candidate.external_id || ''}`,
+      source: candidate.source,
+      primary: true,
+    };
+    const extra = (candidate.channels || [])
+      .filter(ch => ch.external_id || ch.platform_chat_id)
+      .map(ch => ({
+        key: `${ch.source}:${ch.external_id || ''}`,
+        source: ch.source,
+        primary: false,
+      }));
+    return [primary, ...extra];
+  }, [candidate.source, candidate.external_id, candidate.channels]);
+  const [chatKey, setChatKey] = useState(chatList[0].key);
+  const mergedFrom = candidate.merged_from || [];
+
   // Из «Прозвона» карточку открывают ради переписки — открывать её на
   // «Информации» и заставлять человека кликать вкладку значит терять
   // единственную секунду, ради которой кнопка и нужна.
@@ -549,6 +573,12 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
     if (tab === 'chat' && hasPlatformChat && messages.length === 0) { loadMessages(); loadQuick(); }
   }, [tab]);
 
+  // Смена переписки перезагружает ленту: сообщения у них разные, показывать
+  // старые под другим заголовком нельзя.
+  useEffect(() => {
+    if (tab === 'chat' && hasPlatformChat) { setMessages([]); loadMessages(); }
+  }, [chatKey]);
+
   useEffect(() => {
     if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, tab]);
@@ -556,7 +586,8 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   async function loadMessages() {
     setMsgLoading(true); setMsgError('');
     try {
-      const res = await api.get(`/recruitment/candidates/${candidate.id}/messages`);
+      const res = await api.get(`/recruitment/candidates/${candidate.id}/messages`,
+        { params: { channel: chatKey } });
       setMessages(res.data);
     } catch (e) {
       setMsgError(e.response?.data?.detail || e.message);
@@ -585,7 +616,8 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
     if (!text.trim() || sending) return;
     setSending(true);
     try {
-      await api.post(`/recruitment/candidates/${candidate.id}/messages`, { text: text.trim() });
+      await api.post(`/recruitment/candidates/${candidate.id}/messages`, { text: text.trim() },
+        { params: { channel: chatKey } });
       setText('');
       await loadMessages();
     } catch (e) {
@@ -661,6 +693,21 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
               <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${SRC_BADGE[candidate.source] || SRC_BADGE.other}`}>
                 {srcBadgeLabel(candidate.source)}
               </span>
+              {/* Карточка собрана из нескольких откликов — это надо сказать
+                  прямо: иначе непонятно, почему в переписке два чата, а в
+                  заметках текст «из объединённого отклика». */}
+              {mergedFrom.length > 0 && (
+                <span
+                  title={mergedFrom.map(m => (
+                    `${SRC_TITLE[m.source] || m.source}`
+                    + (m.stage ? ` · был этап «${m.stage}»` : '')
+                    + (m.reason === 'phone' ? ' · совпал телефон' : ' · то же резюме')
+                  )).join('\n')}
+                  className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)] cursor-help"
+                >
+                  <GitMerge size={11} /> объединено откликов: {mergedFrom.length + 1}
+                </span>
+              )}
             </div>
           </div>
 
@@ -897,6 +944,32 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Переписок больше одной — только у объединённых карточек, и
+                тогда надо видеть, в какой из них сейчас читаешь и пишешь. */}
+            {chatList.length > 1 && (
+              <div className="border-b border-[color:var(--color-border)] px-4 py-2 flex items-center gap-1.5 flex-wrap">
+                {chatList.map(ch => (
+                  <button
+                    key={ch.key}
+                    onClick={() => setChatKey(ch.key)}
+                    title={ch.primary
+                      ? 'Основная переписка — здесь бот ведёт опрос'
+                      : 'Второй отклик того же человека — бот сюда не пишет'}
+                    className={`ui-chip text-xs ${chatKey === ch.key ? 'is-active' : ''}`}
+                  >
+                    {SRC_TITLE[ch.source] || ch.source}
+                    {ch.primary && ' · основная'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {chatList.length > 1 && chatList.find(c => c.key === chatKey)?.primary === false && (
+              <div className="px-4 py-2 text-xs text-[color:var(--color-muted-foreground)] bg-[color:var(--color-muted)]/30 border-b border-[color:var(--color-border)]">
+                Второй отклик того же человека. Бот здесь не пишет — опрос идёт
+                в основной переписке.
               </div>
             )}
 
@@ -1182,6 +1255,9 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
             />
           ))}
           {c.is_paused && <CardFlag tone="paused" label="на паузе" icon={<Pause size={9} />} />}
+          {(c.merged_from || []).length > 0 && (
+            <CardFlag tone="merged" label="объединено" icon={<GitMerge size={9} />} />
+          )}
         </div>
       )}
 
@@ -1299,6 +1375,10 @@ const FLAG_TONES = {
   // отдельный тон.
   awaiting_reply: 'bg-violet-100 text-violet-800 border-violet-200',
   new:         'bg-emerald-100 text-emerald-700 border-emerald-200',
+  // Карточка собрана из нескольких откликов одного человека. Тон
+  // нейтральный: это не проблема и не требует действия, это справка
+  // о происхождении карточки.
+  merged:      'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]',
   paused:      'bg-amber-100 text-amber-700 border-amber-200',
 };
 

@@ -88,7 +88,7 @@ async def _process(event: dict) -> None:
     """Fetch the actual message for this chat and feed it to the screen."""
     from app.db.session import SessionLocal
     from app.models.recruitment import Candidate, RecruitmentSource
-    from app.services import hh_api, quick_screening
+    from app.services import candidate_merge, hh_api, quick_screening
     from app.services.recruitment_sync import _route_to_quick_screening
 
     db = SessionLocal()
@@ -96,17 +96,25 @@ async def _process(event: dict) -> None:
         src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
         if not src or not src.access_token:
             return
-        candidate = db.query(Candidate).filter(
-            Candidate.source == "hh",
-            Candidate.platform_chat_id == event["chat_id"],
-        ).first()
+        # И по дополнительным чатам: откликнувшись на два наших объявления,
+        # человек получает два чата, а карточка у него одна.
+        candidate, is_primary = candidate_merge.find_by_chat(db, "hh", event["chat_id"])
         if not candidate:
             # Normal right after go-live: candidates imported before we began
             # storing chat_id have none yet, and the sync backfills it on its
             # next pass. Polling answers them meanwhile.
             log.info("hh webhook: no candidate for chat %s, ignoring", event["chat_id"])
             return
-        cand_id, neg_id = candidate.id, candidate.external_id
+        cand_id = candidate.id
+        # Читать сообщения надо из ТОГО отклика, в который написали, а не из
+        # основного: второй отклик того же человека — отдельная переписка со
+        # своим neg_id.
+        neg_id = candidate.external_id
+        if not is_primary:
+            for ch in candidate.channels():
+                if ch.get("source") == "hh" and ch.get("platform_chat_id") == event["chat_id"]:
+                    neg_id = ch.get("external_id") or neg_id
+                    break
         token = src.access_token
         src_snapshot = type("Src", (), {"source": "hh", "employer_id": src.employer_id})()
     except Exception:

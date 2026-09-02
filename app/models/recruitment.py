@@ -338,6 +338,23 @@ class Candidate(Base):
     # и управляет логикой), журнал — история всех фактов, которая не
     # чистится никогда.
     call_log_json = Column(Text, nullable=True)
+    # ─── Один человек — одна карточка ───────────────────────────────────
+    # id резюме на hh (путь /resume/<id> без query-параметров). external_id
+    # там — это id ОТКЛИКА, а не человека: откликнувшись на два наших
+    # объявления, кандидат получал два отклика, два чата и две карточки.
+    # Резюме же у него одно, поэтому дедупликация идёт по нему.
+    resume_id = Column(String, nullable=True, index=True)
+    # Дополнительные переписки того же человека: второй отклик hh или чат
+    # на другой площадке. [{"source", "external_id", "platform_chat_id",
+    # "added_at", "from_candidate_id"}]. Основной канал остаётся в
+    # source/external_id/platform_chat_id — именно им пишет бот; здесь то,
+    # что нужно уметь прочитать и куда можно ответить руками.
+    channels_json = Column(Text, nullable=True)
+    # Аудит слияний, append-only: [{"at", "candidate_id", "source",
+    # "external_id", "name", "stage", "created_at", "reason"}]. Нужен, чтобы
+    # объединённая карточка честно говорила, из чего она собрана, — и чтобы
+    # слияние можно было разобрать руками, если оно окажется ошибочным.
+    merged_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -386,9 +403,33 @@ class Candidate(Base):
                 self.last_inbound_handled_at.isoformat() if self.last_inbound_handled_at else None
             ),
             "call_log": self.call_log(),
+            "resume_id": self.resume_id or "",
+            # Обе витрины объединения: чем писать и из чего собрано.
+            "channels": self.channels(),
+            "merged_from": self.merged_from(),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+    def channels(self) -> list:
+        """Дополнительные переписки. Битый JSON не должен ронять карточку."""
+        return self._json_list(self.channels_json)
+
+    def merged_from(self) -> list:
+        """Из каких карточек собрана эта."""
+        return self._json_list(self.merged_json)
+
+    @staticmethod
+    def _json_list(raw) -> list:
+        import json
+
+        if not raw:
+            return []
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return []
+        return data if isinstance(data, list) else []
 
     def call_log(self) -> list:
         """Журнал контактов списком. Битый JSON не должен ронять карточку —

@@ -620,9 +620,125 @@ async def _check_avito_messages(db, src, token: str) -> None:
             logger.warning("[Sync] avito message check failed for candidate %s: %s", cand_id, e)
 
 
+def _find_twin(db, vacancy_id: int, source: str, item: dict):
+    """Карточка того же человека, заведённая по другому отклику.
+
+    Два ключа, оба узкие намеренно:
+
+    * `resume_id` — внутри hh. У человека одно резюме на все отклики, так
+      что совпадение здесь означает того же человека наверняка.
+    * нормализованный телефон — между площадками. Работает только когда
+      номер известен обеим сторонам, а он есть примерно у двух третей
+      карточек. Это принято сознательно: не склеить двоих дешевле, чем
+      склеить разных людей.
+
+    Имена не сравниваются вообще: тёзки на одной вакансии встречаются — в
+    базе есть две «Латышевы Татьяны» с разными резюме и разными телефонами.
+    """
+    from app.models.recruitment import Candidate
+    from app.services import candidate_merge as cm
+
+    if source == "hh":
+        resume_id = item.get("resume_id") or cm.resume_id_from_url(item.get("resume_url"))
+        if resume_id:
+            twin = db.query(Candidate).filter(
+                Candidate.vacancy_id == vacancy_id,
+                Candidate.source == "hh",
+                Candidate.resume_id == resume_id,
+            ).first()
+            if twin is not None:
+                return twin
+
+    phone = cm.normalize_phone(item.get("phone"))
+    if not phone:
+        return None
+    # Сравнение по нормализованному номеру не переложить в SQL: в базе
+    # номера лежат как пришли, «+7 953 158-85-64» и «79531588564» — одно и
+    # то же. Кандидатов на вакансию сотни, не миллионы.
+    for c in db.query(Candidate).filter(Candidate.vacancy_id == vacancy_id).all():
+        if cm.normalize_phone(c.phone) == phone:
+            return c
+    return None
+
+
+def _attach_channel(candidate, source: str, external_id: str, item: dict, reason: str) -> None:
+    """Записать второй отклик как дополнительную переписку карточки.
+
+    Основной канал обычно не меняется: бот продолжает писать туда, где уже
+    идёт разговор. Исключение — приход hh к карточке Авито: тогда hh
+    становится основным, потому что Messenger API Авито доступен только на
+    «Максимальном» тарифе и уже отваливался, а переписка в отклике hh не
+    зависит ни от тарифа, ни от лимитов.
+    """
+    import json
+    from datetime import datetime as _dt
+
+    from app.services import candidate_merge as cm
+
+    chat_id = item.get("platform_chat_id") or ""
+    now = _dt.utcnow()
+    promote = source == "hh" and candidate.source == "avito"
+
+    if promote:
+        new_channel = {
+            "source": candidate.source,
+            "external_id": candidate.external_id or "",
+            "platform_chat_id": candidate.platform_chat_id or "",
+            "added_at": now.isoformat(),
+        }
+        candidate.source = "hh"
+        candidate.external_id = external_id
+        candidate.platform_chat_id = chat_id
+        if not (candidate.resume_id or "").strip():
+            candidate.resume_id = (item.get("resume_id")
+                                   or cm.resume_id_from_url(item.get("resume_url")))
+    else:
+        new_channel = {
+            "source": source,
+            "external_id": external_id,
+            "platform_chat_id": chat_id,
+            "added_at": now.isoformat(),
+        }
+
+    channels = candidate.channels()
+    known = {(c.get("source"), c.get("external_id")) for c in channels}
+    known.add((candidate.source, candidate.external_id or ""))
+    if (new_channel["source"], new_channel["external_id"]) not in known and (
+            new_channel["external_id"] or new_channel["platform_chat_id"]):
+        channels.append(new_channel)
+        candidate.channels_json = json.dumps(channels, ensure_ascii=False)
+
+    # Пустые поля дозаполняем: второй отклик часто несёт телефон или
+    # возраст, которых в первом не было.
+    for field in ("phone", "email", "resume_url", "photo_url"):
+        if not (getattr(candidate, field, "") or "").strip() and item.get(field):
+            setattr(candidate, field, item[field])
+    if candidate.age is None and item.get("age") is not None:
+        candidate.age = item["age"]
+
+    audit = candidate.merged_from()
+    audit.append({
+        "at": now.isoformat(),
+        # Карточки не было: отклик пришёл вторым и сразу подшит, сливать
+        # было нечего. Отличается от записи разового скрипта, где id есть.
+        "candidate_id": None,
+        "source": source,
+        "external_id": external_id,
+        "platform_chat_id": chat_id,
+        "name": item.get("name") or "",
+        "stage": "",
+        "created_at": item.get("applied_at") or None,
+        "reason": reason,
+    })
+    candidate.merged_json = json.dumps(audit, ensure_ascii=False)
+    logger.info("[Sync] %s: второй отклик подшит к карточке %s (%s), причина %s",
+                source, candidate.id, candidate.name, reason)
+
+
 async def _sync_link(db, src, link, token: str) -> list[dict]:
     from app.models.recruitment import Candidate
     from app.services import hh_api, avito_api, recruitment_stages as rs
+    from app.services import candidate_merge as cm
 
     if src.source == "hh":
         new_items = await _collect_hh(token, link.external_vacancy_id)
@@ -666,6 +782,18 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 exists.resume_url = exists.resume_url or item.get("resume_url", "")
                 exists.notes = item.get("notes") or exists.notes
                 logger.info("[Sync] avito: карточка из чата дополнена откликом — %s", exists.name)
+        # Тот же человек, но с другого нашего объявления. external_id —
+        # это id ОТКЛИКА: откликнувшись на две наши вакансии, кандидат
+        # получал два отклика, два чата и две карточки, и бот вёл с ним два
+        # опроса сразу, задавая одни и те же вопросы в разных чатах.
+        # Ключи, по которым это ловится, — в candidate_merge.
+        if not exists:
+            twin = _find_twin(db, link.vacancy_id, src.source, item)
+            if twin is not None:
+                _attach_channel(
+                    twin, src.source, ext_id, item,
+                    cm.REASON_RESUME if src.source == twin.source else cm.REASON_PHONE)
+                exists = twin
         if exists:
             # Дозаполняем chat_id у уже импортированных: без него вебхук hh
             # (он приходит с chat_id, а не с id отклика) не сопоставить с
@@ -673,6 +801,12 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
             # начали его сохранять.
             if not (exists.platform_chat_id or "").strip() and item.get("platform_chat_id"):
                 exists.platform_chat_id = item["platform_chat_id"]
+            # Ключ дедупликации проставляем и задним числом: карточки,
+            # импортированные до появления колонки, иначе продолжали бы
+            # плодить близнецов.
+            if src.source == "hh" and not (exists.resume_id or "").strip():
+                exists.resume_id = (item.get("resume_id")
+                                    or cm.resume_id_from_url(item.get("resume_url")))
         if not exists:
             applied_at = None
             raw_applied = item.get("applied_at")
@@ -702,6 +836,8 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 # (обе площадки). У hh ответ уходит в negotiation по
                 # external_id, но chat_id всё равно нужен для вебхука.
                 platform_chat_id=item.get("platform_chat_id", ""),
+                resume_id=(item.get("resume_id")
+                           or cm.resume_id_from_url(item.get("resume_url"))),
                 created_at=applied_at or datetime.utcnow(),
             )
             db.add(c)

@@ -269,6 +269,11 @@ async def get_negotiations(access_token: str, vacancy_id: str, page: int = 0) ->
                 # надо в negotiation (external_id), но вебхук о новом сообщении
                 # приходит с chat_id — по нему и ищем кандидата.
                 "platform_chat_id": it["chat_id"],
+                # Единственное, что у откликов одного человека совпадает:
+                # neg_id и chat_id свои у каждого отклика, а резюме одно. По
+                # нему импорт и узнаёт, что это тот же человек с другого
+                # нашего объявления (см. candidate_merge).
+                "resume_id": it["resume_id"],
                 "name": it["name"],
                 "phone": it["phone"],
                 "email": it["email"],

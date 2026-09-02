@@ -303,7 +303,7 @@ async def update_candidate(candidate_id: int, data: CandidateUpdate, db: Session
             warnings.append("Отказ сохранён, но написать кандидату некуда — у отклика нет чата на Авито.")
         else:
             try:
-                _, src_row, token = await _get_platform_chat(candidate_id, db)
+                _, src_row, token, _chan = await _get_platform_chat(candidate_id, db)
                 await outreach.send_to_candidate(db, c, src_row, token, data.rejection_message)
             except HTTPException as exc:
                 warnings.append(f"Отказ сохранён, но сообщение не отправлено: {exc.detail}")
@@ -385,7 +385,7 @@ async def register_no_answer(candidate_id: int, data: NoAnswerRequest,
             warning = "Попытка записана. Переписки с этим кандидатом нет — только телефон."
         else:
             try:
-                _, src, token = await _get_platform_chat(candidate_id, db)
+                _, src, token, _chan = await _get_platform_chat(candidate_id, db)
                 await outreach.send_to_candidate(
                     db, c, src, token,
                     (data.text or "").strip() or outreach.DEFAULT_NO_ANSWER_MESSAGE,
@@ -691,7 +691,7 @@ async def call_outcome(candidate_id: int, data: CallOutcomeRequest,
             warning = "Попытка записана. Переписки с этим кандидатом нет — только телефон."
         else:
             try:
-                _, src, token = await _get_platform_chat(candidate_id, db)
+                _, src, token, _chan = await _get_platform_chat(candidate_id, db)
                 await outreach.send_to_candidate(
                     db, c, src, token,
                     (data.text or "").strip() or outreach.DEFAULT_NO_ANSWER_MESSAGE,
@@ -851,7 +851,7 @@ async def list_interviews(db: Session = Depends(get_db)):
     return result
 
 
-async def _get_platform_chat(candidate_id: int, db):
+async def _get_platform_chat(candidate_id: int, db: Session, channel_key: str = ""):
     """Resolve a candidate to (candidate, source_row, token) for reading or
     writing their chat on whichever job board they came from.
 
@@ -859,24 +859,34 @@ async def _get_platform_chat(candidate_id: int, db):
     stored one, so it is fetched here instead of relying on whatever the last
     sync happened to leave in the row.
     """
+    from app.services import candidate_merge
+
     c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not c:
         raise HTTPException(404, "Candidate not found")
-    if c.source not in ("hh", "avito"):
+
+    # У объединённой карточки переписок несколько: второй отклик hh или чат
+    # на другой площадке. Без ключа берётся основная — та, в которой бот
+    # ведёт опрос.
+    channel = candidate_merge.channel_by_key(c, channel_key or "")
+    if channel is None:
+        raise HTTPException(404, "У кандидата нет такой переписки")
+    source = channel["source"]
+    if source not in ("hh", "avito"):
         raise HTTPException(400, "Переписка доступна только для откликов с hh.ru или Авито")
 
-    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == c.source).first()
+    src = db.query(RecruitmentSource).filter(RecruitmentSource.source == source).first()
     if not src:
-        raise HTTPException(400, f"{c.source} не подключён")
+        raise HTTPException(400, f"{source} не подключён")
 
-    if c.source == "hh":
-        if not c.external_id:
+    if source == "hh":
+        if not channel["external_id"]:
             raise HTTPException(400, "У отклика нет идентификатора переписки hh.ru")
         if not src.access_token:
             raise HTTPException(400, "hh.ru не подключён")
-        return c, src, src.access_token
+        return c, src, src.access_token, channel
 
-    if not (c.platform_chat_id or "").strip():
+    if not (channel["platform_chat_id"] or "").strip():
         raise HTTPException(400, "У этого отклика нет чата на Авито (кандидат оставил только телефон)")
     if not (src.client_id and src.client_secret):
         raise HTTPException(400, "Авито не подключён — не заданы ключи API")
@@ -885,12 +895,13 @@ async def _get_platform_chat(candidate_id: int, db):
         token = (await avito_api.get_token(src.client_id, src.client_secret))["access_token"]
     except Exception as exc:
         raise HTTPException(502, f"Авито: не удалось получить токен ({exc})")
-    return c, src, token
+    return c, src, token, channel
 
 
 @router.get("/candidates/{candidate_id}/messages")
-async def get_candidate_messages(candidate_id: int, db: Session = Depends(get_db)):
-    c, src, token = await _get_platform_chat(candidate_id, db)
+async def get_candidate_messages(candidate_id: int, channel: str = Query(""),
+                                 db: Session = Depends(get_db)):
+    c, src, token, chan = await _get_platform_chat(candidate_id, db, channel)
     # Clear unread flag when admin opens the chat
     if getattr(c, 'has_unread_hh_msg', False):
         try:
@@ -900,30 +911,33 @@ async def get_candidate_messages(candidate_id: int, db: Session = Depends(get_db
             pass
     from app.services import hh_api, avito_api
     try:
-        if c.source == "avito":
+        if chan["source"] == "avito":
             # Normalised to the same shape as hh so the UI renders one list.
-            return await avito_api.get_messages(token, src.employer_id, c.platform_chat_id)
-        return await hh_api.get_messages(token, c.external_id)
+            return await avito_api.get_messages(token, src.employer_id, chan["platform_chat_id"])
+        return await hh_api.get_messages(token, chan["external_id"])
     except ValueError as exc:
         raise HTTPException(502, str(exc))
     except Exception as exc:
-        raise HTTPException(502, f"Ошибка {'Авито' if c.source == 'avito' else 'hh.ru'}: {exc}")
+        raise HTTPException(502, f"Ошибка {'Авито' if chan['source'] == 'avito' else 'hh.ru'}: {exc}")
 
 
 @router.post("/candidates/{candidate_id}/messages")
-async def send_candidate_message(candidate_id: int, data: SendMessageRequest, db: Session = Depends(get_db)):
+async def send_candidate_message(candidate_id: int, data: SendMessageRequest,
+                                 channel: str = Query(""),
+                                 db: Session = Depends(get_db)):
     if not data.text.strip():
         raise HTTPException(400, "Текст сообщения не может быть пустым")
-    c, src, token = await _get_platform_chat(candidate_id, db)
+    c, src, token, chan = await _get_platform_chat(candidate_id, db, channel)
     from app.services import hh_api, avito_api
     try:
-        if c.source == "avito":
-            return await avito_api.send_message(token, src.employer_id, c.platform_chat_id, data.text.strip())
-        return await hh_api.send_message(token, c.external_id, data.text.strip())
+        if chan["source"] == "avito":
+            return await avito_api.send_message(token, src.employer_id,
+                                                chan["platform_chat_id"], data.text.strip())
+        return await hh_api.send_message(token, chan["external_id"], data.text.strip())
     except ValueError as exc:
         raise HTTPException(502, str(exc))
     except Exception as exc:
-        raise HTTPException(502, f"Ошибка {'Авито' if c.source == 'avito' else 'hh.ru'}: {exc}")
+        raise HTTPException(502, f"Ошибка {'Авито' if chan['source'] == 'avito' else 'hh.ru'}: {exc}")
 
 
 # ── Quick screening (быстрый режим) for a single candidate ─────────
@@ -957,7 +971,7 @@ async def start_quick_screening(candidate_id: int, db: Session = Depends(get_db)
     responses start one automatically. Requires the vacancy to have questions."""
     from app.services import quick_screening
 
-    c, src, token = await _get_platform_chat(candidate_id, db)
+    c, src, token, _chan = await _get_platform_chat(candidate_id, db)
     vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
     if not quick_screening.get_questions(vacancy):
         raise HTTPException(400, "У вакансии не заданы вопросы быстрого режима — заполните их в карточке вакансии.")

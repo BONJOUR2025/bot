@@ -157,7 +157,7 @@ async def _process(msg: dict) -> None:
     """Route one incoming candidate message into the quick screen."""
     from app.db.session import SessionLocal
     from app.models.recruitment import Candidate, RecruitmentSource
-    from app.services import avito_api, quick_screening
+    from app.services import avito_api, candidate_merge, quick_screening
     from app.services.recruitment_sync import _route_to_quick_screening
 
     # Разговор без опроса: заполняется ниже, а уведомление уходит уже после
@@ -180,10 +180,10 @@ async def _process(msg: dict) -> None:
         if msg["author_id"] and str(src.employer_id) == msg["author_id"]:
             return
 
-        candidate = db.query(Candidate).filter(
-            Candidate.source == "avito",
-            Candidate.platform_chat_id == msg["chat_id"],
-        ).first()
+        # Чат ищем и среди дополнительных: у объединённой карточки основной
+        # канал — hh, а чат Авито остался вторым, и сообщение из него всё
+        # равно наше.
+        candidate, is_primary = candidate_merge.find_by_chat(db, "avito", msg["chat_id"])
 
         if not candidate:
             # Чат без карточки. Обычно это покупатель по ремонту обуви —
@@ -204,7 +204,14 @@ async def _process(msg: dict) -> None:
                 quick_screening.record_last_message(db, candidate, msg["text"], "applicant")
 
             state_status = quick_screening.load_state(candidate).get("status")
-            if state_status != "asking":
+            if not is_primary:
+                # Объединённая карточка: опрос идёт в основном канале (hh),
+                # и подавать в него ответ из чата Авито нельзя — вопрос там
+                # задавали другой. Человеку ответит админ.
+                log.info("avito webhook: сообщение из дополнительного чата карточки %s, "
+                         "опрос ведётся в основном канале", candidate.id)
+                notify_args = (candidate.id, candidate.name, msg["text"], msg["message_id"])
+            elif state_status != "asking":
                 # Опрос не идёт — но разговор идёт. Раньше здесь был просто
                 # выход, и сообщение оседало в карточке, о которой никто не
                 # знал: человек отвечал на наше же «когда вам удобно
