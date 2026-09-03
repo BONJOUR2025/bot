@@ -186,6 +186,10 @@ async def get_applications_for_vacancy(
             "phone": str(phone) if phone else "",
             "email": "",
             "resume_url": "",
+            # Резюме лежит отдельным документом; здесь только ссылка на него.
+            # Забирает его get_resume ниже — синхронизация делает это одним
+            # запросом на кандидата, а не на каждый показ карточки.
+            "resume_id": str(applicant.get("resume_id") or ""),
             "age": age,
             "notes": "Авито отклик",
             "platform_chat_id": chat_id,
@@ -415,6 +419,115 @@ async def get_messages(access_token: str, user_id: str, chat_id: str, limit: int
     # created_at rather than relying on position, so this only affects display.
     result.reverse()
     return result
+
+
+_MONTHS_IN_YEAR = 12
+
+
+def _avito_experience(params: dict) -> list[dict]:
+    """Места работы в том же виде, что у hh: должность, компания, даты."""
+    out = []
+    for e in (params.get("experience_list") or [])[:10]:
+        if not isinstance(e, dict):
+            continue
+        out.append({
+            "position": str(e.get("position") or ""),
+            "company": str(e.get("company") or ""),
+            "start": str(e.get("work_start") or "")[:10],
+            "end": str(e.get("work_finish") or "")[:10],
+            # У Авито обязанности бывают на несколько тысяч знаков — режем
+            # по той же границе, что и в hh_api.build_resume_profile.
+            "description": (str(e.get("responsibilities") or "")[:1500] or None),
+        })
+    return out
+
+
+def build_resume_profile(resume: dict) -> dict:
+    """Резюме Авито в тот же формат, что отдаёт hh_api.build_resume_profile.
+
+    Формат общий намеренно: карточка кандидата, «Прозвон» и сводка ИИ уже
+    умеют его читать, и площадка перестаёт быть их заботой. Поля, которых у
+    Авито нет (навыки, языки), остаются пустыми — потребители и так
+    рассчитаны на неполную анкету, потому что резюме на hh бывает скрыто.
+
+    Стаж Авито отдаёт целыми годами (`experience`), hh — месяцами; здесь
+    приводим к месяцам, иначе «8» прочиталось бы как восемь месяцев.
+    """
+    params = (resume or {}).get("params") or {}
+    addr = (resume or {}).get("address_details") or {}
+
+    years = params.get("experience")
+    try:
+        total_months = int(years) * _MONTHS_IN_YEAR if years is not None else None
+    except (TypeError, ValueError):
+        total_months = None
+
+    salary = (resume or {}).get("salary")
+    try:
+        amount = int(salary) if salary else None
+    except (TypeError, ValueError):
+        amount = None
+
+    schools = []
+    for item in (params.get("education_list") or [])[:5]:
+        if not isinstance(item, dict):
+            continue
+        schools.append({
+            "name": str(item.get("institution") or ""),
+            "organization": "",
+            "result": str(item.get("specialty") or ""),
+            "year": item.get("education_stop"),
+        })
+
+    return {
+        "title": str((resume or {}).get("title") or ""),
+        "salary": {"amount": amount, "currency": "RUR"} if amount else None,
+        "total_months": total_months,
+        "area": str(addr.get("location") or params.get("address") or ""),
+        "metro": str(addr.get("metro") or ""),
+        "citizenship": [str(params["nationality"])] if params.get("nationality") else [],
+        "gender": str(params.get("pol") or ""),
+        "experience": _avito_experience(params),
+        "education_level": str(params.get("education") or ""),
+        "education": schools,
+        "skills": [],
+        "languages": [],
+        "employment": "",
+        "schedule": str(params.get("schedule") or ""),
+        "work_format": [],
+        "relocation": str(params.get("moving") or ""),
+        "professional_roles": [str(params["business_area"])] if params.get("business_area") else [],
+        "about": str((resume or {}).get("description") or "")[:2000],
+        "updated_at": str((resume or {}).get("update_time") or ""),
+    }
+
+
+async def get_resume(access_token: str, resume_id: str) -> dict | None:
+    """Резюме кандидата по id из отклика, уже в общем формате.
+
+    Резюме может быть удалено, скрыто или недоступно на текущем тарифе —
+    во всех случаях возвращается None, а не исключение: анкета украшает
+    карточку, но синхронизация откликов из-за неё падать не должна.
+    """
+    if not resume_id:
+        return None
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        try:
+            r = await client.get(
+                f"{AVITO_BASE}/job/v2/resumes/{resume_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        except httpx.HTTPError as exc:
+            log.warning("Avito resume %s: сеть недоступна (%s)", resume_id, exc)
+            return None
+    if r.status_code != 200:
+        log.info("Avito resume %s недоступно: %s", resume_id, r.status_code)
+        return None
+    try:
+        return build_resume_profile(r.json())
+    except (ValueError, TypeError, AttributeError) as exc:
+        log.warning("Avito resume %s: неожиданный формат (%s)", resume_id, exc)
+        return None
 
 
 # Avito API does not provide an endpoint to list the employer's own vacancies.

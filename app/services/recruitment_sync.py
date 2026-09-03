@@ -850,8 +850,15 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
                 # (обе площадки). У hh ответ уходит в negotiation по
                 # external_id, но chat_id всё равно нужен для вебхука.
                 platform_chat_id=item.get("platform_chat_id", ""),
-                resume_id=(item.get("resume_id")
-                           or cm.resume_id_from_url(item.get("resume_url"))),
+                # Только для hh: колонка — ключ дедупликации откликов внутри
+                # hh (_find_twin), а у Авито своё пространство id резюме.
+                # Свой id Авито здесь и не нужен — анкета уже разложена в
+                # resume_profile_json, а после повышения карточки до hh
+                # (_attach_channel) поле должно оставаться свободным под
+                # настоящий hh-шный resume_id.
+                resume_id=((item.get("resume_id")
+                            or cm.resume_id_from_url(item.get("resume_url")))
+                           if src.source == "hh" else None),
                 resume_profile_json=(json.dumps(item["resume_profile"], ensure_ascii=False)
                                      if item.get("resume_profile") else None),
                 created_at=applied_at or datetime.utcnow(),
@@ -964,9 +971,38 @@ async def _collect_avito(token: str, employer_id: str, vacancy_id: str) -> list[
         merged.append(ch)
         added += 1
 
+    await _attach_avito_resumes(token, merged)
+
     logger.info("[Sync] avito vacancy=%s: откликов %d, чатов без отклика %d, всего %d",
                 vacancy_id, len(applications), added, len(merged))
     return merged
+
+
+async def _attach_avito_resumes(token: str, items: list[dict]) -> None:
+    """Разложить анкету по откликам, у которых Авито дал resume_id.
+
+    До этого с Авито приходили только имя, телефон и возраст, и сводка ИИ
+    писалась вслепую: мастер по коже с восемью годами стажа получал «нет
+    опыта» и уходил в отказ. Резюме лежит отдельным документом, поэтому
+    один дополнительный запрос на кандидата — за него и платим.
+
+    Резюме запрашиваются последовательно, а не пачкой: синк фоновый, а у
+    Авито на общий пул запросов свои лимиты, и упереться в 429 ради
+    подписи к карточке незачем.
+    """
+    from app.services import avito_api
+
+    got = 0
+    for it in items:
+        rid = (it.get("resume_id") or "").strip()
+        if not rid or it.get("resume_profile"):
+            continue
+        profile = await avito_api.get_resume(token, rid)
+        if profile:
+            it["resume_profile"] = profile
+            got += 1
+    if got:
+        logger.info("[Sync] avito: анкет получено %d из %d", got, len(items))
 
 
 async def _collect_hh(token: str, vacancy_id: str) -> list[dict]:

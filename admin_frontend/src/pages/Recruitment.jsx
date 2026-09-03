@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { formatPhone, telHref, tgHref } from '../utils/phone';
-import { resumeHeadline } from '../utils/resume';
+import { basisNote, resumeHeadline } from '../utils/resume';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 import IntegrationsModal from '../components/recruitment/IntegrationsModal.jsx';
@@ -1139,6 +1139,9 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                   {p.score_reason && (
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{p.score_reason}</p>
                   )}
+                  {!!basisNote(p) && (
+                    <p className="text-xs text-[color:var(--color-warning)]">{basisNote(p)}</p>
+                  )}
 
                   {p.summary && (
                     <div className="rounded-xl border border-[color:var(--color-border)] p-3.5">
@@ -1161,6 +1164,19 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                       <p className="text-xs font-medium text-red-700 mb-1.5 uppercase tracking-wide">Красные флаги</p>
                       <ul className="space-y-1">
                         {p.red_flags.map((f, i) => <li key={i} className="text-sm text-red-900">⚠ {f}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Не «минусы», а «неизвестно». Раньше отсутствие данных
+                      попадало в красные флаги — «опыт не подтверждён» у
+                      человека, чьё резюме мы просто не забрали, — и
+                      выглядело как претензия к кандидату. */}
+                  {!!(p.to_ask || []).length && (
+                    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-muted)]/20 p-3.5">
+                      <p className="text-xs font-medium text-[color:var(--color-muted-foreground)] mb-1.5 uppercase tracking-wide">Уточнить на звонке</p>
+                      <ul className="space-y-1">
+                        {p.to_ask.map((q, i) => <li key={i} className="text-sm">— {q}</li>)}
                       </ul>
                     </div>
                   )}

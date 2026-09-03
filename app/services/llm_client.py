@@ -72,6 +72,7 @@ def chat(
     model: Optional[str] = None,
     max_tokens: int = 256,
     cache_system: bool = True,
+    temperature: Optional[float] = None,
     employee_id: Optional[str] = None,
     employee_name: Optional[str] = None,
     feature: Optional[str] = None,
@@ -100,6 +101,12 @@ def chat(
                     aren't tied to one employee (candidate interviews,
                     briefings, admin tools); this account-wide usage is
                     already visible live via Polza's own history endpoint.
+        temperature: sampling temperature. Omit (None) to leave the provider
+                    default, which is what every conversational caller wants.
+                    Pass 0 where the same input must give the same answer —
+                    the candidate scoring did not, and one and the same
+                    résumé scored 30, 53, 50, 60 and 39 across five runs,
+                    which made the number useless for ranking.
         employee_name: display name for the same log row; purely cosmetic.
         feature:    short tag identifying which feature made the call, e.g.
                     "knowledge_base" — lets usage be filtered per feature.
@@ -110,9 +117,10 @@ def chat(
     )
     if _provider(cfg) == "polza":
         return _chat_polza(cfg, messages, system=system, model=model, max_tokens=max_tokens,
-                            attribution=attribution)
+                            temperature=temperature, attribution=attribution)
     return _chat_anthropic(cfg, messages, system=system, model=model, max_tokens=max_tokens,
-                            cache_system=cache_system, attribution=attribution)
+                            cache_system=cache_system, temperature=temperature,
+                            attribution=attribution)
 
 
 def _last_user_message(messages: list) -> str:
@@ -150,7 +158,8 @@ def _record_usage_safely(attribution: Optional[dict], *, provider: str, model: s
 
 def _chat_anthropic(
     cfg: dict, messages: list, *, system: Optional[str], model: Optional[str],
-    max_tokens: int, cache_system: bool, attribution: Optional[dict] = None,
+    max_tokens: int, cache_system: bool, temperature: float | None = None,
+    attribution: Optional[dict] = None,
 ) -> Optional[str]:
     client = get_client(cfg)
     if not client:
@@ -173,6 +182,8 @@ def _chat_anthropic(
             if cache_system else system
         )
 
+    if temperature is not None:
+        kwargs["temperature"] = temperature
     response = client.messages.create(**kwargs)
     usage = getattr(response, "usage", None)
     reply_text = response.content[0].text.strip()
@@ -196,7 +207,7 @@ def _chat_anthropic(
 
 def _chat_polza(
     cfg: dict, messages: list, *, system: Optional[str], model: Optional[str], max_tokens: int,
-    attribution: Optional[dict] = None,
+    temperature: Optional[float] = None, attribution: Optional[dict] = None,
 ) -> Optional[str]:
     api_key = (cfg.get("polza_api_key") or "").strip()
     if not api_key:
@@ -216,6 +227,11 @@ def _chat_polza(
         "messages": payload_messages,
         "max_tokens": max_tokens,
     }
+    # Не передаём ключ вовсе, когда температура не задана: у провайдера своя
+    # умолчательная, и подставлять её самим значило бы зафиксировать чужое
+    # решение.
+    if temperature is not None:
+        body["temperature"] = temperature
     # Через post_json, а не httpx напрямую: рукопожатие OpenSSL к polza на
     # боевой машине срывается через раз, и раньше это молча превращало
     # классификатор в поиск по ключевым словам. Подробности — в

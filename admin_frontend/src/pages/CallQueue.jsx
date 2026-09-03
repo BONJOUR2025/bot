@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { formatPhone, telHref } from '../utils/phone';
-import { resumeHeadline, verdictBadge } from '../utils/resume';
+import { basisNote, resumeHeadline, verdictBadge } from '../utils/resume';
 import { useToast } from '../providers/ToastProvider.jsx';
 
 const DEFAULT_NO_ANSWER_MSG =
@@ -460,6 +460,9 @@ function AiSummary({ profile }) {
         <span className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
           Сводка ИИ
         </span>
+        {!!basisNote(profile) && (
+          <span className="text-[11px] text-[color:var(--color-warning)]">{basisNote(profile)}</span>
+        )}
         {profile.score != null && (
           <span className="text-sm font-semibold">{profile.score}<span className="text-[color:var(--color-text-muted)] font-normal">/100</span></span>
         )}
@@ -480,6 +483,12 @@ function AiSummary({ profile }) {
             </li>
           ))}
         </ul>
+      )}
+      {/* Ровно то, ради чего звонят: чего в данных не хватает. */}
+      {!!(profile.to_ask || []).length && (
+        <p className="mt-1.5 text-xs text-[color:var(--color-text-muted)]">
+          Спросить: {profile.to_ask.slice(0, 3).join(' · ')}
+        </p>
       )}
     </div>
   );
