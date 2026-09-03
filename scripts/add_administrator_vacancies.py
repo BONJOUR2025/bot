@@ -94,11 +94,13 @@ def questions(v: dict) -> list[str]:
 DEAL_BREAKERS = [{"label": "Город проживания",
                   "value": "Санкт-Петербург и Ленинградская область"}]
 
-# «О компании» — то же, что у мастерской. «Регламент работы
-# администратора-продавца» и «Рабочий день администратора» не подключаем:
-# это внутренние инструкции (Таск Менеджер, сверка кассы, рабочие чаты), и
-# бот не должен пересказывать их кандидату.
-KNOWLEDGE_DOCS = [4]
+# Документы базы знаний не подключаются вовсе. В быстром режиме бот на
+# встречные вопросы не отвечает — он останавливает опрос и зовёт админа
+# (см. первый абзац quick_screening.py). Да и само поле
+# knowledge_document_ids_json не читает ни один сервис: поиск по app/ даёт
+# только миграцию, которая эту колонку создаёт. Заполнять его — заводить
+# настройку, которая ни на что не влияет.
+KNOWLEDGE_DOCS = None
 
 STRATEGY_ID = 2  # Быстрый найм — та же, что у мастерской
 
@@ -147,7 +149,8 @@ def run(apply: bool) -> int:
                 extra_instructions=CRITERIA,
                 deal_breakers_json=json.dumps(DEAL_BREAKERS, ensure_ascii=False),
                 custom_questions_json=json.dumps(qs, ensure_ascii=False),
-                knowledge_document_ids_json=json.dumps(KNOWLEDGE_DOCS),
+                knowledge_document_ids_json=(json.dumps(KNOWLEDGE_DOCS)
+                                            if KNOWLEDGE_DOCS else None),
                 quick_mode_enabled=True,
                 quick_questions_json=json.dumps(qs, ensure_ascii=False),
             )
