@@ -317,15 +317,43 @@ def test_rubric_has_anchored_bands():
         assert anchor in cp.SYSTEM
 
 
-def test_rubric_names_adjacent_trades_as_profile_experience():
-    """Первая же прогонка дала «Мастеру по коже» с восемью годами стажа 40
-    баллов с формулировкой «нет опыта ремонта обуви»: без перечисления
-    профессий модель читает профиль по названию вакансии буквально."""
-    for trade in ("швея", "закройщик", "сапожник", "мастер по коже", "реставратор"):
-        assert trade in cp.SYSTEM
-    # Промпт свёрстан по ширине, поэтому фразы рвутся переносами.
-    flat = re.sub(r"\s+", " ", cp.SYSTEM).lower()
-    assert "не требуй, чтобы где-то буквально стояло" in flat
+def test_criteria_come_from_the_vacancy_not_the_shared_prompt():
+    """Рубрика была зашита под мастерскую («профильное — работа руками с
+    кожей»), и администратор-продавец получал бы по ней полосу «нет
+    подходящего опыта», кем бы он ни был."""
+    # «Сапожник» в промпте остаётся — но как пример к правилу про желаемую
+    # должность, а не как определение профиля.
+    for trade in ("швея", "закройщик", "скорняк", "обувщик", "кожгалантере"):
+        assert trade not in cp.SYSTEM
+
+    class Vac(_Vacancy):
+        extra_instructions = ("Профильное: работа с клиентами в рознице, "
+                              "приём заказов, касса.")
+
+    prompt = cp.build_prompt(cand(), Vac(), ANSWERS)
+    assert "КРИТЕРИИ ОЦЕНКИ" in prompt
+    assert "работа с клиентами в рознице" in prompt
+
+
+def test_vacancy_without_criteria_adds_no_section():
+    """Пустое поле не должно давать пустой заголовок: модель начнёт
+    гадать, что от неё скрыли."""
+    assert "КРИТЕРИИ ОЦЕНКИ" not in cp.build_prompt(cand(), _Vacancy(), ANSWERS)
+
+
+def test_criteria_are_capped():
+    class Vac(_Vacancy):
+        extra_instructions = "я" * 5000
+
+    prompt = cp.build_prompt(cand(), Vac(), ANSWERS)
+    assert "я" * 2000 in prompt
+    assert "я" * 2001 not in prompt
+
+
+def test_prompt_still_tells_the_model_where_criteria_live():
+    flat = re.sub(r"\s+", " ", cp.SYSTEM)
+    assert "в блоке КРИТЕРИИ ОЦЕНКИ" in flat
+    assert "Если блока нет, выведи профиль из текста вакансии" in flat
 
 
 def test_missing_screening_does_not_lower_the_score():
