@@ -6816,6 +6816,16 @@ button:hover > .vac-desc { color: var(--color-text); }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* База сравнения рядом с дельтой. Само число без периода ничего не
+   значит, поэтому подпись стоит в строке, а не только в подсказке. */
+.delta-base {
+  font-family: var(--font-mono-ui);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
 /* Лидер категории — служебная подпись рядом с названием, а не бейдж. */
 .cat-lead {
   font-family: var(--font-mono-ui);

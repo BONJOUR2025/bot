@@ -25,6 +25,27 @@ function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 const TODAY = toLocalDateStr(new Date());
+
+/** Та же календарная дата годом раньше; 29 февраля становится 28-м.
+ *
+ *  Считается на строке, а не через Date: `new Date('2026-01-01')` — это
+ *  полночь UTC, и getDate()/setDate() после неё работают уже в местном
+ *  поясе, из-за чего к востоку от Гринвича дата уезжает на сутки.
+ */
+function shiftYearBack(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  const daysInMonth = new Date(Date.UTC(y - 1, m, 0)).getUTCDate();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${y - 1}-${pad(m)}-${pad(Math.min(d, daysInMonth))}`;
+}
+
+/** «01.01.2025 — 31.08.2025» для подписи к дельте. */
+function fmtRangeRu(range) {
+  if (!range) return '';
+  const ru = (iso) => iso.split('-').reverse().join('.');
+  return `${ru(range[0])} — ${ru(range[1])}`;
+}
 const MONTHS_RU      = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 const MONTHS_KEY_RU  = ['ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ','ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ'];
 const DAY_NAMES      = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
@@ -247,12 +268,13 @@ const ChartTooltip = ({ active, payload, label, nameMap }) => {
 // Изменение к прошлому периоду. Здесь цвет — настоящая оценка (выросло
 // или упало), поэтому он уместен; в отличие от категорий, где цвет
 // означал бы всего лишь «это другая строка».
-function Delta({ value }) {
+function Delta({ value, title }) {
   if (value == null || Math.abs(value) < 0.1) return null;
   const up = value > 0;
   return (
     <span
       className="delta-chip"
+      title={title}
       style={{ color: up ? 'var(--color-success)' : 'var(--color-danger)' }}
     >
       {up ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
@@ -917,6 +939,11 @@ export default function SalesAnalytics() {
 
   const [rows,      setRows]      = useState([]);
   const [prevRows,  setPrevRows]  = useState([]);
+  // Период, с которым сравнивается дельта. Держим его в состоянии, чтобы
+  // подписать цифру: раньше база нигде не показывалась, и −0,6% по
+  // «Меркурию» невозможно было отличить от правильного +12,0% — знак
+  // переворачивался, а проверить было не по чему.
+  const [prevRange, setPrevRange] = useState(null);
   const [plans,     setPlans]     = useState({});
   const [retention, setRetention] = useState(null);
   const [margin,    setMargin]    = useState(null);
@@ -998,10 +1025,10 @@ export default function SalesAnalytics() {
     setLoading(true); setError(null);
     try {
       const params = buildParams();
-      const d0 = new Date(dateFrom || TODAY), d1 = new Date(dateTo || TODAY);
-      const prevTo = new Date(d0); prevTo.setDate(prevTo.getDate() - 1);
-      const prevFrom = new Date(+prevTo - (d1 - d0));
-      const prevParams = { ...params, date_from: prevFrom.toISOString().slice(0,10), date_to: prevTo.toISOString().slice(0,10) };
+      const prevFrom = shiftYearBack(dateFrom || TODAY);
+      const prevTo   = shiftYearBack(dateTo   || TODAY);
+      const prevParams = { ...params, date_from: prevFrom, date_to: prevTo };
+      setPrevRange([prevFrom, prevTo]);
       const monthKeys = months.map(toMonthKey).join(',');
       const [mainRes, prevRes, plansRes, retentionRes] = await Promise.all([
         api.get('/sales/daily', { params }),
@@ -1126,6 +1153,10 @@ export default function SalesAnalytics() {
       avgPerActive:  allPeriodsCount > 0 ? cur.total / allPeriodsCount : 0,
     };
   }, [filteredRows, prevFiltered, allPeriodsCount, activeCats]);
+
+  const deltaBaseLabel = prevRange
+    ? `в сравнении с тем же периодом годом раньше: ${fmtRangeRu(prevRange)}`
+    : undefined;
 
   const categoryLeaders = useMemo(() => {
     const leaders = {};
@@ -1376,7 +1407,10 @@ export default function SalesAnalytics() {
               </span>
               <span className="fui-band__m">
                 <span>∅ {fmtRub(kpi.avgPerActive)} / {periodLabel}</span>
-                {kpi.dTotal != null && <Delta value={kpi.dTotal} />}
+                {kpi.dTotal != null && <Delta value={kpi.dTotal} title={deltaBaseLabel} />}
+                {!!prevRange && (
+                  <span className="delta-base">к {fmtRangeRu(prevRange)}</span>
+                )}
               </span>
             </div>
             {retention && retention.total_clients > 0 && (
@@ -1417,7 +1451,7 @@ export default function SalesAnalytics() {
                     </span>
                     <span className="fui-breakdown__v">{fmtRub(v)}</span>
                     <span className="fui-breakdown__p">
-                      {kpi[deltaKey] != null && v > 0 ? <Delta value={kpi[deltaKey]} /> : (kpi.total ? `${Math.round((v / kpi.total) * 100)}%` : '—')}
+                      {kpi[deltaKey] != null && v > 0 ? <Delta value={kpi[deltaKey]} title={deltaBaseLabel} /> : (kpi.total ? `${Math.round((v / kpi.total) * 100)}%` : '—')}
                     </span>
                   </div>
                 );
@@ -1438,7 +1472,7 @@ export default function SalesAnalytics() {
             {kpi.dTotal != null && (
               <>
                 <span className="sep">·</span>
-                <span>Δ: <b style={{ color: kpi.dTotal >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{kpi.dTotal >= 0 ? '+' : ''}{kpi.dTotal.toFixed(1)}%</b></span>
+                <span title={deltaBaseLabel}>Δ Г/Г: <b style={{ color: kpi.dTotal >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{kpi.dTotal >= 0 ? '+' : ''}{kpi.dTotal.toFixed(1)}%</b></span>
               </>
             )}
             <span className="sep">·</span>
