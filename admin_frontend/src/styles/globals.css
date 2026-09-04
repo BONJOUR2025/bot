@@ -1166,8 +1166,23 @@ tbody tr:last-child td { border-bottom: none; }
    импортируется из App.jsx, а там уже подключён index.css), поэтому
    перекрывает text-sm и text-xs на тех же полях без !important. */
 @media (pointer: coarse), (max-width: 768px) {
-  .input, .input-field, .modal-control,
-  .form-field input, .form-field select, .form-field textarea {
+  /* По элементам, а не по списку классов. Раньше здесь перечислялись
+     .input, .input-field и .modal-control — и любое поле со своей вёрсткой
+     мимо них проходило. Обход всех 39 маршрутов нашёл три таких: поиск на
+     «Клиентах» (.cli-search__i), строка в платёжном календаре и редактор
+     базы знаний — все с теми же 14px и тем же зумом. Список классов будет
+     отставать от вёрстки всегда; перечень тегов — никогда.
+
+     :is(#root, .modal-backdrop) нужен за двумя вещами сразу. Первое —
+     специфичность: голый input проигрывает утилитам Tailwind (text-sm, text-xs),
+     а селектор с id выигрывает у любого из них без !important. Второе —
+     модальные окна: Modal уходит порталом в body, то есть его содержимое
+     лежит снаружи #root, и одного #root было бы мало.
+     Специфичность :is() равна самому вескому аргументу, то есть #root,
+     так что обе ветки весят одинаково. */
+  :is(#root, .modal-backdrop) input:not([type='checkbox']):not([type='radio']),
+  :is(#root, .modal-backdrop) select,
+  :is(#root, .modal-backdrop) textarea {
     font-size: 16px;
   }
 }
