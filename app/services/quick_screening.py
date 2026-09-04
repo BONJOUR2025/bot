@@ -13,7 +13,10 @@ Flow:
   no longer looking         → polite goodbye, candidate moved to «отказ»
   candidate answers         → next question
   all questions answered    → thank candidate + alert admin with every answer
-  counter-question           → stop asking, alert, stay silent (do NOT answer it)
+  counter-question           → record the answer it came with, stop asking,
+                               alert, stay silent (do NOT answer it); on the
+                               LAST question the screen still completes — the
+                               profile is built and the alert carries it
   silent for 24h             → alert
 
 State lives in Candidate.quick_state_json:
@@ -36,6 +39,24 @@ from datetime import datetime, timedelta
 log = logging.getLogger(__name__)
 
 SILENCE_AFTER = timedelta(hours=24)
+
+# Классификаторы ниже отвечают одним булевым значением по одной короткой
+# реплике — здесь нужна не «живость», а повторяемость: один и тот же текст
+# обязан давать один и тот же ответ.
+#
+# Ни того, ни другого не было. Вызовы шли на дефолтную модель конфига
+# (openai/gpt-4.1-nano) и без temperature, и на коротких ответах результат
+# плавал: «Да, есть !», «Да ..присматриваюсь пока...» и «Да, удобно, я живу
+# на Новочеркасской» при семи прогонах подряд каждый раз давали и True, и
+# False. 04.09.2026 на этом Свиридова (#272), ответившая «Да» на последний
+# вопрос, была разобрана как задавшая встречный вопрос: опрос оборвался в
+# шаге от конца. Ошибка работает и в обратную сторону — «Вы закрыли
+# объявление, вы нашли уже сотрудников ?» распознавалось как вопрос лишь в
+# трёх прогонах из семи.
+#
+# Та же связка (модель побольше + temperature=0) уже вылечила разброс
+# оценок в candidate_profile.py — см. комментарий к MODEL там.
+MODEL = "openai/gpt-4.1"
 
 INTEREST_QUESTION = "Подскажите, вы ещё в поиске работы?"
 CLOSING_MESSAGE = "Спасибо за ответы! Мы свяжемся с вами в ближайшее время, чтобы договориться о собеседовании."
@@ -129,6 +150,8 @@ def _announces_not_looking(text: str, cfg: dict) -> bool:
                 '{"not_looking": true/false}'
             ),
             max_tokens=20,
+            model=MODEL,
+            temperature=0,
             employee_id="quick_screening",
             employee_name="Быстрый режим (кандидаты)",
             feature="quick_screening",
@@ -322,6 +345,8 @@ def _looks_like_question(text: str, cfg: dict) -> bool:
                 'ответа или вместе с ним. Ответь ТОЛЬКО JSON: {"question": true/false}'
             ),
             max_tokens=20,
+            model=MODEL,
+            temperature=0,
             # Not tied to a staff member — a fixed pseudo-employee bucket so
             # this shows up as its own line in Расход AI по сотрудникам
             # instead of being invisible next to the knowledge-base spend.
@@ -363,6 +388,8 @@ def _looks_still_interested(text: str, cfg: dict) -> bool:
                 '{"still_looking": true/false}'
             ),
             max_tokens=20,
+            model=MODEL,
+            temperature=0,
             employee_id="quick_screening",
             employee_name="Быстрый режим (кандидаты)",
             feature="quick_screening",
@@ -527,39 +554,45 @@ async def _process_message(db, candidate, vacancy, src, token: str,
                  candidate.id)
         return
 
-    # Counter-question → stop and hand over, without answering it.
-    if _looks_like_question(text, cfg):
-        state["status"] = "waiting_admin"
-        state["reason"] = "question"
-        # Кандидат мог в одном сообщении и ответить, и спросить («актуально,
-        # а какая оплата?»). Раньше такой ответ терялся целиком — теперь он
-        # записывается, и админ видит, на чём опрос остановился.
-        answers = state.get("answers") or []
-        idx = int(state.get("idx") or 0)
-        if idx < len(questions):
-            answers.append({"q": questions[idx], "a": text, "with_question": True})
-            state["answers"] = answers
-            state["idx"] = idx + 1
-        save_state(db, candidate, state)
-        collected = _format_answers(state.get("answers") or [])
-        await send_notification(
-            f"🔴 <b>НУЖЕН ОТВЕТ · Вопрос от кандидата</b>\n"
-            f"{_candidate_label(candidate, vacancy)}\n\n"
-            f"«{text[:400]}»\n\n"
-            + (f"Успел ответить:\n{collected}\n\n" if collected else "")
-            + "Бот больше не пишет — отвечайте на площадке."
-        )
-        log.info("quick_screening: candidate %s asked a question, handed to admin", candidate.id)
-        return
+    # Встречный вопрос считаем здесь, а решение откладываем до того момента,
+    # когда ответ записан и видно, остались ли вопросы.
+    #
+    # Раньше проверка стояла первой и обрывала опрос немедленно — в том числе
+    # на последнем ответе, когда спрашивать больше нечего. Анкета была собрана
+    # целиком, но кандидат оставался без завершающего сообщения, а карточка — без
+    # сводки: к 04.09.2026 таких накопилось десять, у пятерых сводки не было
+    # вовсе. Пройденный опрос — это пройденный опрос, что бы ни было в последней
+    # реплике.
+    asked_back = _looks_like_question(text, cfg)
 
-    # Record the answer to the question currently pending.
+    # Ответ записываем всегда: кандидат мог в одном сообщении и ответить, и
+    # спросить («актуально, а какая оплата?»).
     answers = state.get("answers") or []
-    answers.append({"q": questions[idx], "a": text})
+    entry = {"q": questions[idx], "a": text}
+    if asked_back:
+        entry["with_question"] = True
+    answers.append(entry)
     state["answers"] = answers
     idx += 1
     state["idx"] = idx
 
     if idx < len(questions):
+        # Вопросы ещё остались. Встречный вопрос здесь означает то же, что и
+        # раньше: перестаём спрашивать и зовём человека, не пытаясь ответить сами.
+        if asked_back:
+            state["status"] = "waiting_admin"
+            state["reason"] = "question"
+            save_state(db, candidate, state)
+            await send_notification(
+                f"🔴 <b>НУЖЕН ОТВЕТ · Вопрос от кандидата</b>\n"
+                f"{_candidate_label(candidate, vacancy)}\n\n"
+                f"«{text[:400]}»\n\n"
+                f"Успел ответить:\n{_format_answers(answers)}\n\n"
+                "Бот больше не пишет — отвечайте на площадке."
+            )
+            log.info("quick_screening: candidate %s asked a question, handed to admin", candidate.id)
+            return
+
         err = await _send(db, candidate, src, token, questions[idx])
         if err:
             state["status"] = "waiting_admin"
@@ -575,12 +608,19 @@ async def _process_message(db, candidate, vacancy, src, token: str,
         save_state(db, candidate, state)
         return
 
-    # All questions answered.
-    state["status"] = "done"
+    # Вопросы кончились — анкета собрана. Встречный вопрос в последней
+    # реплике меняет только одно: разговор переходит к человеку, а не закрывается.
+    state["status"] = "waiting_admin" if asked_back else "done"
+    if asked_back:
+        state["reason"] = "question"
     save_state(db, candidate, state)
-    err = await _send(db, candidate, src, token, CLOSING_MESSAGE)
-    if err:
-        log.warning("quick_screening: failed to send closing message to candidate %s: %s", candidate.id, err)
+
+    # Завершающее «мы свяжемся с вами» уместно только когда кандидат ни о чём
+    # не спросил: в ответ на прямой вопрос оно читается как отписка.
+    if not asked_back:
+        err = await _send(db, candidate, src, token, CLOSING_MESSAGE)
+        if err:
+            log.warning("quick_screening: failed to send closing message to candidate %s: %s", candidate.id, err)
 
     # Сводка по ответам и анкете с площадки. Строго после того, как опрос
     # закрыт и кандидату отправлено прощание: это подпись к карточке, и её
@@ -594,12 +634,17 @@ async def _process_message(db, candidate, vacancy, src, token: str,
 
     summary = candidate_profile.format_for_notification(profile)
     await send_notification(
-        f"🔴 <b>НУЖЕН ОТВЕТ · Анкета готова</b>\n{_candidate_label(candidate, vacancy)}\n\n"
-        f"{_format_answers(answers)}\n\n"
+        (f"🔴 <b>НУЖЕН ОТВЕТ · Анкета готова, есть вопрос от кандидата</b>"
+         if asked_back else "🔴 <b>НУЖЕН ОТВЕТ · Анкета готова</b>")
+        + f"\n{_candidate_label(candidate, vacancy)}\n\n"
+        + (f"«{text[:400]}»\n\n" if asked_back else "")
+        + f"{_format_answers(answers)}\n\n"
         + (f"{summary}\n\n" if summary else "")
-        + "Дальше — вы."
+        + ("Бот больше не пишет — отвечайте на площадке." if asked_back
+           else "Дальше — вы.")
     )
-    log.info("quick_screening: completed for candidate_id=%s", candidate.id)
+    log.info("quick_screening: completed for candidate_id=%s (встречный вопрос: %s)",
+             candidate.id, asked_back)
 
 
 async def flush_deferred(db, resolve_source) -> int:

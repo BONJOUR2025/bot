@@ -33,12 +33,23 @@ from app.services.config_service import ConfigService
 VERDICT = {"invite": "звонить", "reserve": "в резерв", "reject": "не подходит"}
 
 
-def _answers(candidate) -> list:
-    """Ответы опроса, если он действительно завершён."""
+def _answers(candidate, vacancy=None) -> list:
+    """Ответы опроса, если он действительно завершён.
+
+    Завершённость — это пройденные вопросы, а не статус. Статус "done"
+    ставится, только когда бот сам закрыл разговор; если на последнем ответе
+    он решил, что кандидат задал встречный вопрос, статус остаётся
+    "waiting_admin" — при том что отвечено всё. Пока здесь проверялся только
+    статус, такие анкеты не собирались вовсе: к 04.09.2026 накопилось пять
+    кандидатов, ответивших на все вопросы и оставшихся без сводки.
+    """
     state = quick_screening.load_state(candidate)
-    if state.get("status") != "done":
-        return []
-    return state.get("answers") or []
+    if state.get("status") == "done":
+        return state.get("answers") or []
+    total = len(quick_screening.get_questions(vacancy)) if vacancy else 0
+    if total and int(state.get("idx") or 0) >= total:
+        return state.get("answers") or []
+    return []
 
 
 def run(apply: bool, force: bool, limit: int | None) -> int:
@@ -51,7 +62,9 @@ def run(apply: bool, force: bool, limit: int | None) -> int:
         for c in db.query(Candidate).all():
             if c.profile_json and not force:
                 continue
-            answers = _answers(c)
+            vacancy = (db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first()
+                       if c.vacancy_id else None)
+            answers = _answers(c, vacancy)
             # Оценивать нечего, только если нет ни анкеты, ни ответов.
             if not answers and not c.resume_profile():
                 continue

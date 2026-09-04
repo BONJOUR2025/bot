@@ -391,6 +391,108 @@ class TestCounterQuestion:
         assert qs._looks_like_question("Да, есть опыт", {}) is False
 
 
+class TestCounterQuestionOnLastQuestion:
+    """Встречный вопрос в последнем ответе не должен стоить анкеты.
+
+    Проверка «это вопрос?» стояла перед записью ответа и обрывала опрос
+    сразу. На последнем вопросе спрашивать уже нечего, но бот всё равно
+    замолкал: карточка оставалась без сводки, а рекрутёр получал голый
+    алерт вместо готовой анкеты. 04.09.2026 таких кандидатов было десять.
+    """
+
+    def _on_last_question(self):
+        return _FakeCandidate(state={
+            "status": "asking", "idx": len(QUESTIONS) - 1,
+            "answers": [{"q": QUESTIONS[0], "a": "Да, два года"},
+                        {"q": QUESTIONS[1], "a": "Да, РФ"}],
+            "asked_at": datetime.utcnow().isoformat(), "last_msg_id": "", "silence_alerted": False,
+        })
+
+    def test_screen_still_completes_and_the_alert_carries_the_answers(self, alerts, sent_messages, no_llm):
+        c = self._on_last_question()
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Метро Лесная. А какая зарплата?", "m3", {}))
+
+        state = qs.load_state(c)
+        assert state["idx"] == len(QUESTIONS)          # опрос пройдён целиком
+        assert state["status"] == "waiting_admin"      # но разговор — человеку
+        assert state["reason"] == "question"
+        assert len(alerts) == 1
+        assert "Анкета готова" in alerts[0]
+        assert "есть вопрос от кандидата" in alerts[0]
+        for answer in ["Да, два года", "Да, РФ", "Метро Лесная"]:
+            assert answer in alerts[0]
+
+    def test_the_last_answer_is_recorded_not_dropped(self, alerts, sent_messages, no_llm):
+        c = self._on_last_question()
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Метро Лесная. А какая зарплата?", "m3", {}))
+
+        answers = qs.load_state(c)["answers"]
+        assert len(answers) == len(QUESTIONS)
+        assert answers[-1]["q"] == QUESTIONS[-1]
+        assert answers[-1]["a"] == "Метро Лесная. А какая зарплата?"
+        assert answers[-1]["with_question"] is True
+
+    def test_closing_message_is_withheld_when_the_candidate_asked_something(self, sent_messages, no_llm):
+        """«Мы свяжемся с вами» в ответ на прямой вопрос читается как отписка."""
+        c = self._on_last_question()
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Метро Лесная. А какая зарплата?", "m3", {}))
+
+        assert sent_messages == []
+
+    def test_a_plain_last_answer_still_closes_the_screen_as_before(self, alerts, sent_messages, no_llm):
+        c = self._on_last_question()
+        run_async(qs.handle_incoming(_FakeDb(), c, _FakeVacancy(), _FakeSource(), "tok",
+                                      "Метро Лесная", "m3", {}))
+
+        assert qs.load_state(c)["status"] == "done"
+        assert sent_messages == [("hh", "neg-1", qs.CLOSING_MESSAGE)]
+        assert "вопрос от кандидата" not in alerts[0]
+
+
+class TestClassifiersAreDeterministic:
+    """Три классификатора отвечают одним булевым по одной короткой реплике.
+
+    Без temperature и на nano-модели один и тот же текст давал разные
+    ответы: «Да, есть !» и «Да, удобно, я живу на Новочеркасской» при семи
+    прогонах выдавали и True, и False.
+    """
+
+    def _capture(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("app.services.llm_client.get_client", lambda cfg: object())
+
+        def fake_chat(*a, **kw):
+            calls.append(kw)
+            return '{"question": false, "still_looking": true, "not_looking": false}'
+
+        monkeypatch.setattr("app.services.llm_client.chat", fake_chat)
+        return calls
+
+    def test_question_detection_pins_model_and_temperature(self, monkeypatch):
+        calls = self._capture(monkeypatch)
+        qs._looks_like_question("Да, есть !", {})
+
+        assert calls[0]["model"] == qs.MODEL
+        assert calls[0]["temperature"] == 0
+
+    def test_interest_check_pins_model_and_temperature(self, monkeypatch):
+        calls = self._capture(monkeypatch)
+        qs._looks_still_interested("Да, пока в поиске", {})
+
+        assert calls[0]["model"] == qs.MODEL
+        assert calls[0]["temperature"] == 0
+
+    def test_already_employed_check_pins_model_and_temperature(self, monkeypatch):
+        calls = self._capture(monkeypatch)
+        qs._announces_not_looking("Спасибо, я уже нашел работу", {})
+
+        assert calls[0]["model"] == qs.MODEL
+        assert calls[0]["temperature"] == 0
+
+
 class TestSilence:
     class _Query:
         def __init__(self, rows):
