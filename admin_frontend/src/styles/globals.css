@@ -1147,10 +1147,25 @@ tbody tr:last-child td { border-bottom: none; }
     padding-left: calc(1rem + env(safe-area-inset-left, 0px));
     padding-right: calc(1rem + env(safe-area-inset-right, 0px));
   }
+}
 
-  /* iOS Safari auto-zooms the page on focusing any input/select/textarea
-     with a computed font-size under 16px — at the 0.875rem (14px) desktop
-     size that reads as the whole page "jumping" broken on tap. */
+/* iOS Safari зумит страницу при фокусе на любом input/select/textarea с
+   вычисленным font-size меньше 16px — и обратно сам не возвращает.
+   На наших 0.875rem (14px) это читается как «ткнул в поле — вёрстка
+   разъехалась».
+
+   Условие по типу указателя, а не по ширине экрана. Раньше правило
+   стояло внутри @media (max-width: 768px) и в портрете работало, а стоило
+   повернуть телефон — 844px ширины, правило отключалось, и все поля
+   возвращались к 14px. Замерено в браузере: 390×844 — ни одного поля
+   мельче 16px, 844×390 — десятки на восьми страницах. То же касалось
+   iPad и iOS-оболочки Capacitor. pointer: coarse описывает ровно то, что
+   важно — ввод пальцем, независимо от ориентации и диагонали.
+
+   Правило стоит после утилит Tailwind в собранном CSS (globals.css
+   импортируется из App.jsx, а там уже подключён index.css), поэтому
+   перекрывает text-sm и text-xs на тех же полях без !important. */
+@media (pointer: coarse), (max-width: 768px) {
   .input, .input-field, .modal-control,
   .form-field input, .form-field select, .form-field textarea {
     font-size: 16px;

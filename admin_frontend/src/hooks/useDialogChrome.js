@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 
+import { lockScroll } from '../utils/scrollLock.js';
+
 /**
  * Общее поведение модальных окон — для тех, что собраны вручную.
  *
@@ -26,10 +28,8 @@ import { useEffect } from 'react';
  */
 export default function useDialogChrome() {
   useEffect(() => {
-    const { body } = document;
-    let locked = false;
-    let prevOverflow = '';
-    let prevPadding = '';
+    // Отпускалка общего счётчика; null — сейчас не держим.
+    let releaseScroll = null;
 
     const backdrops = () => [...document.querySelectorAll('.modal-backdrop')];
 
@@ -53,19 +53,11 @@ export default function useDialogChrome() {
       });
 
       const shouldLock = list.length > 0;
-      if (shouldLock && !locked) {
-        prevOverflow = body.style.overflow;
-        prevPadding = body.style.paddingRight;
-        // Компенсируем ширину полосы прокрутки, иначе страница под окном
-        // дёргается вправо в момент открытия.
-        const gap = window.innerWidth - document.documentElement.clientWidth;
-        body.style.overflow = 'hidden';
-        if (gap > 0) body.style.paddingRight = `${gap}px`;
-        locked = true;
-      } else if (!shouldLock && locked) {
-        body.style.overflow = prevOverflow;
-        body.style.paddingRight = prevPadding;
-        locked = false;
+      if (shouldLock && !releaseScroll) {
+        releaseScroll = lockScroll();
+      } else if (!shouldLock && releaseScroll) {
+        releaseScroll();
+        releaseScroll = null;
       }
     };
 
@@ -86,10 +78,7 @@ export default function useDialogChrome() {
     return () => {
       mo.disconnect();
       document.removeEventListener('keydown', onKeyDown);
-      if (locked) {
-        body.style.overflow = prevOverflow;
-        body.style.paddingRight = prevPadding;
-      }
+      releaseScroll?.();
     };
   }, []);
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { lockScroll } from '../utils/scrollLock.js';
 
 /**
  * Модальное окно: подложка + портал в body. Саму карточку рисует
@@ -51,14 +52,9 @@ export default function Modal({ children, isOpen, onClose, label }) {
     };
     document.addEventListener('keydown', onKeyDown);
 
-    // Ширину полосы прокрутки компенсируем padding-ом, иначе в момент
-    // открытия страница под окном дёргается вправо на её ширину.
-    const { body } = document;
-    const prevOverflow = body.style.overflow;
-    const prevPadding = body.style.paddingRight;
-    const gap = window.innerWidth - document.documentElement.clientWidth;
-    body.style.overflow = 'hidden';
-    if (gap > 0) body.style.paddingRight = `${gap}px`;
+    // Счётчик, а не собственное «запомнить и вернуть»: ту же подложку
+    // видит и useDialogChrome, и две блокировки перезаписывали друг друга.
+    const releaseScroll = lockScroll();
 
     // Ждём кадр: содержимое окна на этот момент уже смонтировано.
     const raf = requestAnimationFrame(() => {
@@ -73,8 +69,7 @@ export default function Modal({ children, isOpen, onClose, label }) {
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       cancelAnimationFrame(raf);
-      body.style.overflow = prevOverflow;
-      body.style.paddingRight = prevPadding;
+      releaseScroll();
       restoreRef.current?.focus?.();
     };
   }, [isOpen]);

@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
 import { Download, Maximize2, Minimize2, RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import { lockScroll } from '../utils/scrollLock.js';
 
 // Geometry arrives as base64-encoded GLB (see app/services/mesh_visualization_service.py —
 // same "data URI" convention this codebase already uses for PNG overlays elsewhere),
@@ -366,15 +367,14 @@ export default function Viewer3D({ geometry, title }) {
 
   useEffect(() => {
     if (!isFullscreen) return undefined;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseScroll = lockScroll();
     document.body.classList.add('viewer3d-fs-active');
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') exitFullscreen();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.body.style.overflow = prevOverflow;
+      releaseScroll();
       document.body.classList.remove('viewer3d-fs-active');
       window.removeEventListener('keydown', handleKeyDown);
     };
