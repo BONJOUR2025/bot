@@ -51,8 +51,9 @@ STAGES = [STAGE_NEW, STAGE_SCREENING, STAGE_ANSWERED, STAGE_THINKING,
 # каждое из них.
 TERMINAL_STAGES = [STAGE_HIRED, STAGE_REJECTED, STAGE_RESERVE]
 
-# Этапы, которые ведёт бот по ходу опроса.
+# Этапы, которые ведёт бот по ходу опроса, и их порядок в воронке.
 BOT_STAGES = {STAGE_NEW, STAGE_SCREENING, STAGE_ANSWERED}
+_BOT_STAGE_ORDER = {STAGE_NEW: 0, STAGE_SCREENING: 1, STAGE_ANSWERED: 2}
 # Этапы, которые ставит человек. Бот их не трогает никогда: если кандидата
 # позвали на собеседование, дописанный им ответ не должен утащить карточку
 # обратно в «опрос». «Думает» здесь по той же причине и с большим весом:
@@ -83,7 +84,8 @@ NO_ANSWER_ESCALATE_AT = 3
 def derive_stage(current_stage: str | None, state: dict | None) -> str:
     """Этап кандидата по состоянию опроса.
 
-    Человеческий этап всегда побеждает — см. HUMAN_STAGES.
+    Человеческий этап всегда побеждает — см. HUMAN_STAGES. Среди ботовских
+    этапов результат никогда не откатывает карточку назад по воронке.
     """
     if current_stage in HUMAN_STAGES:
         return current_stage
@@ -93,16 +95,33 @@ def derive_stage(current_stage: str | None, state: dict | None) -> str:
     answers = state.get("answers") or []
 
     if not status:
-        return STAGE_NEW
-    if status == "done":
-        return STAGE_ANSWERED
-    if status == "waiting_admin":
+        derived = STAGE_NEW
+    elif status == "done":
+        derived = STAGE_ANSWERED
+    elif status == "waiting_admin":
         # Не смогли отправить самый первый вопрос — опрос фактически не
         # начинался, кандидат так и остаётся новым (с флагом «не доставлено»).
         if state.get("reason") == "send_failed" and not answers:
-            return STAGE_NEW
-        return STAGE_SCREENING
-    return STAGE_SCREENING
+            derived = STAGE_NEW
+        # Опрос пройден до конца — это «ответил», даже если разговор
+        # передан человеку. То, что ему надо ответить, несёт флаг «нужен
+        # ваш ответ» — ради таких случаев флаги и заведены отдельно от этапов.
+        elif state.get("completed"):
+            derived = STAGE_ANSWERED
+        else:
+            derived = STAGE_SCREENING
+    else:
+        derived = STAGE_SCREENING
+
+    # Воронка движется только вперёд — это сказано в шапке модуля, но
+    # вычисление этого не соблюдало и тихо отменяло решение человека:
+    # карточка, перетащенная в «Ответил», возвращалась в «Опрос» на
+    # ближайшем обновлении страницы, без всяких объяснений. Перетащить
+    # карточку назад можно и сейчас — это запись в БД, а здесь только запрет
+    # вычислению откатывать её самостоятельно.
+    if current_stage in _BOT_STAGE_ORDER:
+        return max(derived, current_stage, key=lambda st: _BOT_STAGE_ORDER.get(st, 0))
+    return derived
 
 
 def progress(state: dict | None, questions: list[str] | None) -> dict:

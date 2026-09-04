@@ -44,6 +44,60 @@ class TestDeriveStage:
             assert rs.derive_stage(stage, {"status": "done"}) == stage
 
 
+class TestStageNeverGoesBackwards:
+    """Воронка движется только вперёд — в том числе когда этап поставлен руками.
+
+    «Ответил» — этап ботовский, поэтому HUMAN_STAGES его не защищал, и
+    карточка, перетащенная туда руками, возвращалась в «Опрос» на ближайшем
+    обновлении страницы.
+    """
+
+    def test_manual_move_to_answered_survives_a_refresh(self):
+        state = {"status": "waiting_admin", "reason": "question",
+                 "answers": [{"q": "a", "a": "b"}]}
+        assert rs.derive_stage(rs.STAGE_ANSWERED, state) == rs.STAGE_ANSWERED
+
+    def test_manual_move_to_answered_survives_an_ongoing_screen(self):
+        assert rs.derive_stage(rs.STAGE_ANSWERED, {"status": "asking"}) == rs.STAGE_ANSWERED
+
+    def test_screening_is_not_pushed_back_to_new_by_a_delivery_failure(self):
+        """Состояние сбросили, но карточка уже была в опросе."""
+        state = {"status": "waiting_admin", "reason": "send_failed", "answers": []}
+        assert rs.derive_stage(rs.STAGE_SCREENING, state) == rs.STAGE_SCREENING
+
+    def test_the_bot_still_moves_a_card_forward(self):
+        assert rs.derive_stage(rs.STAGE_NEW, {"status": "asking"}) == rs.STAGE_SCREENING
+        assert rs.derive_stage(rs.STAGE_SCREENING, {"status": "done"}) == rs.STAGE_ANSWERED
+
+    def test_unknown_legacy_stage_does_not_freeze_the_card(self):
+        assert rs.derive_stage("общение", {"status": "asking"}) == rs.STAGE_SCREENING
+
+
+class TestCompletedScreenIsAnswered:
+    """Пройденный опрос — это «ответил», даже когда разговор у человека.
+
+    Кандидат, ответивший на все вопросы и задавший свой в последней
+    реплике, висел в «Опросе» вместе с теми, кто ещё не начинал отвечать.
+    То, что ему надо ответить, несёт флаг, а не этап.
+    """
+
+    def test_completed_screen_handed_to_admin_is_answered(self):
+        state = {"status": "waiting_admin", "reason": "question", "completed": True,
+                 "answers": [{"q": "a", "a": "b"}, {"q": "c", "a": "d"}]}
+        assert rs.derive_stage(rs.STAGE_SCREENING, state) == rs.STAGE_ANSWERED
+
+    def test_it_still_asks_for_a_reply(self):
+        state = {"status": "waiting_admin", "reason": "question", "completed": True,
+                 "answers": [{"q": "a", "a": "b"}]}
+        codes = [f["code"] for f in rs.flags(state)]
+        assert rs.FLAG_NEEDS_REPLY in codes
+
+    def test_an_unfinished_screen_stays_in_screening(self):
+        state = {"status": "waiting_admin", "reason": "question",
+                 "answers": [{"q": "a", "a": "b"}]}
+        assert rs.derive_stage(rs.STAGE_SCREENING, state) == rs.STAGE_SCREENING
+
+
 class TestProgress:
     def test_counts_answers_against_questions(self):
         state = {"answers": [{"q": "1", "a": "x"}, {"q": "2", "a": "y"}]}

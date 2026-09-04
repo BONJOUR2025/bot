@@ -25,6 +25,7 @@ State lives in Candidate.quick_state_json:
                                       # absent (legacy rows) means "questions"
    "idx": int,                       # index of the question awaiting an answer
    "answers": [{"q": str, "a": str}],
+   "completed": bool,                # вопросы дошли до конца (независимо от status)
    "asked_at": iso str,              # when the pending question was sent
    "last_msg_id": str,               # last platform message already processed
    "silence_alerted": bool}
@@ -610,7 +611,14 @@ async def _process_message(db, candidate, vacancy, src, token: str,
 
     # Вопросы кончились — анкета собрана. Встречный вопрос в последней
     # реплике меняет только одно: разговор переходит к человеку, а не закрывается.
+    #
+    # completed — факт о том, что произошло, а не статус разговора. Он нужен
+    # воронке: без него карточка с waiting_admin читалась как «опрос идёт» даже
+    # тогда, когда отвечено всё, и возвращалась в «Опрос» после каждого
+    # обновления страницы. Статус говорит, кто ведёт разговор сейчас, а
+    # этап — как далеко человек прошёл; смешивать их нельзя.
     state["status"] = "waiting_admin" if asked_back else "done"
+    state["completed"] = True
     if asked_back:
         state["reason"] = "question"
     save_state(db, candidate, state)
