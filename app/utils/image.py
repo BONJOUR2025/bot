@@ -255,13 +255,32 @@ def create_combined_table_image(tables, filename="salary_report.png"):
     return filename
 
 
-def create_payroll_report_image(sections: list, filename: str = "salary_report.png"):
-    """Modern dark-themed payroll report image (for SQL/Firebird source).
+def _shifts_word(n: str) -> str:
+    """«15 смен», «4 смены», «1 смена» — падеж по числу."""
+    try:
+        v = abs(int(str(n).strip()))
+    except (TypeError, ValueError):
+        return "смен"
+    if 11 <= v % 100 <= 14:
+        return "смен"
+    return {1: "смена", 2: "смены", 3: "смены", 4: "смены"}.get(v % 10, "смен")
 
-    Expects sections in the format returned by generate_employee_report_from_payroll().
+
+def create_payroll_report_image(sections: list, filename: str = "salary_report.png"):
+    """Расчётный лист сотрудника картинкой (источник — SQL/Firebird).
+
+    Ожидает структуру, которую возвращает generate_employee_report_from_payroll().
+
+    Порядок блоков отвечает вопросу, ради которого лист и открывают: сколько
+    я получу. Поэтому сумма к выплате стоит первой и крупно, а KPI — в конце:
+    он не ответ, а объяснение, откуда взялся ответ. Раньше было наоборот, и
+    до главного числа приходилось долистывать картинку до низа.
     """
+    # ── палитра ───────────────────────────────────────────────────────
     BG = "#F0F2F8"; CARD = "#FFFFFF"; ACCENT = "#4A6CF7"
-    GREEN = "#2E7D32"; ORANGE = "#E65100"; RED = "#C62828"
+    # Согласовано с расписанием (SALON_COLORS): один уровень насыщенности,
+    # чтобы две картинки от одного бота читались как одна система.
+    GREEN = "#1F8A5B"; WARN = "#C2701A"; RED = "#C0453A"
     TEXT = "#1A1A2E"; SUBTEXT = "#6B6B8A"; BORDER = "#DDE0EE"; PBAR_BG = "#E4E6F0"
 
     W = 560; PAD = 18; IX = PAD + 14
@@ -289,14 +308,17 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
                 pass
         return ImageFont.load_default()
 
+    f11 = tf(regular_candidates, 11)
     f12 = tf(regular_candidates, 12)
     f13 = tf(regular_candidates, 13)
     f14 = tf(regular_candidates, 14)
+    b11 = tf(bold_candidates, 11)
+    b13 = tf(bold_candidates, 13)
     b14 = tf(bold_candidates, 14)
     b16 = tf(bold_candidates, 16)
-    b20 = tf(bold_candidates, 20)
+    b34 = tf(bold_candidates, 34)
 
-    # ── extract data ──────────────────────────────────────
+    # ── разбор входной структуры ──────────────────────────────────────
     def section_dict(idx):
         if idx >= len(sections):
             return {}
@@ -312,18 +334,34 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     er = hdr.get("Дополнительная ставка", ""); es = hdr.get("Дополнительные смены", "")
     rate_parts = []
     if mr and mr != "—":
-        rate_parts.append(f"Осн: {mr} \u00d7 {ms} см")
+        # Было «× 15 см» — сокращение читалось как сантиметры.
+        rate_parts.append(f"Осн. {mr} \u00d7 {ms} {_shifts_word(ms)}")
     if er and er != "—":
-        rate_parts.append(f"Доп: {er} \u00d7 {es} см")
-    rate_line = "   ".join(rate_parts)
+        rate_parts.append(f"доп. {er} \u00d7 {es} {_shifts_word(es)}")
+    rate_line = "   \u00b7   ".join(rate_parts)
 
     def parse_kpi(s):
         if not s or s.strip() == "—":
             return None
         lines = s.split("\n")
+        # Принудительный режим: план не считался вовсе, и строки идут иначе.
+        # Прежний разбор брал «7» из «✅ 7%, комиссия: 35 791 ₽» за план, а
+        # саму комиссию — за факт, получая выполнение 5113 % и оранжевую
+        # полосу во всю ширину. Такой KPI показываем без полосы: сравнивать
+        # не с чем.
+        if "Принудительно" in lines[0]:
+            m = re.search(r'(\d+)%', lines[1] if len(lines) > 1 else "")
+            return dict(
+                forced="макс." if "макс" in lines[0] else "мин.",
+                met="\u2705" in (lines[1] if len(lines) > 1 else ""),
+                rate=m.group(0) if m else "",
+                plan=0.0, fact=0.0, fulfillment=0.0,
+                detail=lines[2] if len(lines) > 2 else "",
+                extra=lines[1] if len(lines) > 1 else "",
+            )
         met = "\u2705" in lines[0]
         m = re.search(r'(\d+)%', lines[0])
-        pct = m.group(0) if m else ""
+        rate = m.group(0) if m else ""
         plan = fact = 0.0
         if len(lines) > 1:
             nums = re.findall(r'[\d\u202f]+', lines[1])
@@ -331,7 +369,7 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
                 plan = float(re.sub(r'[^\d]', '', nums[0]) or 0)
                 fact = float(re.sub(r'[^\d]', '', nums[1]) or 0)
         return dict(
-            met=met, pct=pct, plan=plan, fact=fact,
+            forced="", met=met, rate=rate, plan=plan, fact=fact,
             fulfillment=fact / plan if plan > 0 else 0.0,
             extra=lines[2] if len(lines) > 2 else "",
             detail=lines[1] if len(lines) > 1 else "",
@@ -339,72 +377,73 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
 
     kpi_parsed = [(k, parse_kpi(v)) for k, v in kpi_rows]
 
-    charges = []; deductions = []; net_pay = ""
+    charges = []; deductions = []; net_pay = ""; total = ""
     for key, val in charge_rows:
         if key == "К выплате":
             net_pay = val
+        elif key == "ИТОГО":
+            total = val
+            charges.append((key, val))
         elif key in {"Удержание", "Аванс"}:
-            deductions.append((key, val))
+            # Нулевое удержание — это отсутствие удержания, а не строка отчёта.
+            # «− 0 ₽» дважды подряд занимало целую карточку и ничего не
+            # сообщало; у кого удержаний не было, тот и не должен их видеть.
+            if re.sub(r"[^\d]", "", val or "").strip("0"):
+                deductions.append((key, val))
         else:
             charges.append((key, val))
 
-    # ── layout ────────────────────────────────────────────
-    GAP = 10; CVP = 14; TITLE_H = 30; HEADER_H = 80
-    KNH = 22; KBH = 10; KDH = 16; KEH = 16; KGAP = 10
-    KIH = KNH + 4 + KBH + 4 + KDH + 4 + KEH
-    KNOH = 26; CRH = 28; DIV = 6; DRH = 26; NET_H = 44
+    # ── раскладка ─────────────────────────────────────────────────────
+    GAP = 12; CVP = 14; TITLE_H = 30
+    HERO_H = 128 if rate_line else 112
+    CRH = 28; DIV = 6; DRH = 26
+    KNH = 22; KBH = 8; KDH = 16; KEH = 16; KGAP = 12
+    KIH = KNH + 4 + KBH + 6 + KDH + 2 + KEH        # обычный KPI, с полосой
+    KFH = KNH + 4 + KDH + 2 + KEH                   # принудительный, без полосы
+    KNOH = 26                                       # KPI не считался
 
-    def kpi_card_h():
+    def charges_h():
+        if not charges:
+            return 0
+        h = CVP + TITLE_H
+        for key, _ in charges:
+            h += CRH + (DIV if key == "ИТОГО" else 0)
+        return h + CVP - 6
+
+    def ded_h():
+        return (CVP + TITLE_H + len(deductions) * DRH + CVP - 6) if deductions else 0
+
+    def kpi_h():
         if not kpi_parsed:
             return 0
         h = CVP + TITLE_H
         for i, (_, p) in enumerate(kpi_parsed):
-            h += KIH if p else KNOH
+            h += KNOH if p is None else (KFH if p["forced"] else KIH)
             if i < len(kpi_parsed) - 1:
                 h += KGAP
-        return h + CVP
+        return h + CVP - 6
 
-    def charge_card_h():
-        h = CVP + TITLE_H
-        for key, _ in charges:
-            h += CRH
-            if key == "ИТОГО":
-                h += DIV
-        return h + CVP
+    ch, dh, kh = charges_h(), ded_h(), kpi_h()
+    H = PAD + HERO_H
+    for block in (ch, dh, kh):
+        if block:
+            H += GAP + block
+    H += PAD
 
-    def ded_card_h():
-        return CVP + len(deductions) * DRH + CVP if deductions else 0
-
-    kh = kpi_card_h(); ch = charge_card_h(); dh = ded_card_h()
-    blocks = [
-        (HEADER_H, True),
-        (kh, bool(kpi_parsed)),
-        (ch, bool(charges)),
-        (dh, bool(deductions)),
-        (NET_H, bool(net_pay)),
-    ]
-    H = PAD
-    for bh, vis in blocks:
-        if vis:
-            H += bh + GAP
-    H += PAD - GAP  # replace last gap with bottom padding
-
-    # ── drawing helpers ───────────────────────────────────
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
 
-    def rr(x1, y1, x2, y2, r=12, fill=CARD, outline=None):
+    def rr(x1, y1, x2, y2, r=12, fill=CARD, outline=None, width=1):
         try:
-            d.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill, outline=outline)
+            d.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill,
+                                outline=outline, width=width)
         except AttributeError:
             d.rectangle([x1, y1, x2, y2], fill=fill, outline=outline)
 
     def txt(s, x, y, font, color=TEXT, right=False):
         if right:
-            w = d.textlength(s, font=font)
-            d.text((x - w, y), s, font=font, fill=color)
-        else:
-            d.text((x, y), s, font=font, fill=color)
+            x -= d.textlength(s, font=font)
+        d.text((x, y), s, font=font, fill=color)
 
     def pbar(x, y, w, h, pct, color):
         rr(x, y, x + w, y + h, r=h // 2, fill=PBAR_BG)
@@ -415,72 +454,97 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     RX = W - IX
     y = PAD
 
-    # header card
-    rr(PAD, y, W - PAD, y + HEADER_H, outline=BORDER)
-    txt(name, IX, y + 14, b20)
-    txt(period, RX, y + 16, f14, SUBTEXT, right=True)
-    if rate_line:
-        txt(rate_line, IX, y + 48, f13, SUBTEXT)
-    y += HEADER_H + GAP
+    # ── главное: сумма к выплате ──────────────────────────────────────
+    rr(PAD, y, W - PAD, y + HERO_H, outline=BORDER)
+    eyebrow = " \u00b7 ".join(x for x in (name, period.capitalize()) if x)
+    txt(eyebrow, IX, y + 16, f13, SUBTEXT)
+    txt("К выплате", IX, y + 40, f13, SUBTEXT)
+    txt(net_pay or "\u2014", IX, y + 56, b34, ACCENT)
+    if total:
+        d.line([(IX, y + 100), (RX, y + 100)], fill=BORDER, width=1)
+        # Одной строкой вся арифметика листа: начислено минус удержано.
+        # Разбивку по видам удержаний показывает карточка ниже — здесь
+        # важно не «из чего», а «почему на руки меньше, чем начислено».
+        held = 0
+        for _, v in deductions:
+            digits = re.sub(r"[^\d]", "", v or "")
+            held += int(digits) if digits else 0
+        line = f"Начислено {total}"
+        if held:
+            line += f"   \u2212   удержано {held:,} \u20bd".replace(",", "\u202f")
+        txt(line, IX, y + 108, f12, SUBTEXT)
+    y += HERO_H
 
-    # KPI card
-    if kpi_parsed:
-        rr(PAD, y, W - PAD, y + kh, outline=BORDER)
-        txt("KPI", IX, y + CVP, b16, ACCENT)
-        ky = y + CVP + TITLE_H
-        for i, (kn, p) in enumerate(kpi_parsed):
-            if p is None:
-                txt(kn, IX, ky, b14)
-                txt("—", RX, ky, f14, SUBTEXT, right=True)
-                ky += KNOH
-            else:
-                color = GREEN if p["met"] else ORANGE
-                txt(kn, IX, ky, b14)
-                txt(p["pct"], RX, ky, b14, color, right=True)
-                ky += KNH + 4
-                pbar(IX, ky, W - IX * 2, KBH, p["fulfillment"], color)
-                ky += KBH + 4
-                txt(p["detail"], IX, ky, f12, SUBTEXT)
-                ky += KDH + 4
-                ec = RED if "До 80%" in p["extra"] else GREEN
-                if p["extra"]:
-                    txt(p["extra"], IX, ky, f12, ec)
-                ky += KEH
-            if i < len(kpi_parsed) - 1:
-                ky += KGAP
-        y += kh + GAP
-
-    # charges card
+    # ── начисления ────────────────────────────────────────────────────
     if charges:
+        y += GAP
         rr(PAD, y, W - PAD, y + ch, outline=BORDER)
         txt("Начисления", IX, y + CVP, b16, ACCENT)
+        if rate_line:
+            txt(rate_line, RX, y + CVP + 3, f11, SUBTEXT, right=True)
         cy = y + CVP + TITLE_H
         for key, val in charges:
             is_total = key == "ИТОГО"
             if is_total:
-                d.line([(IX, cy), (W - IX, cy)], fill=BORDER, width=1)
+                d.line([(IX, cy), (RX, cy)], fill=BORDER, width=1)
                 cy += DIV
             txt(key, IX, cy, b14 if is_total else f14, TEXT if is_total else SUBTEXT)
             txt(val, RX, cy, b16 if is_total else f14, TEXT, right=True)
             cy += CRH
-        y += ch + GAP
+        y += ch
 
-    # deductions card
+    # ── удержания ─────────────────────────────────────────────────────
     if deductions:
+        y += GAP
         rr(PAD, y, W - PAD, y + dh, outline=BORDER)
-        dy = y + CVP
+        txt("Удержано", IX, y + CVP, b16, RED)
+        dy = y + CVP + TITLE_H
         for key, val in deductions:
             txt(key, IX, dy, f14, SUBTEXT)
             txt("\u2212\u202f" + val, RX, dy, b14, RED, right=True)
             dy += DRH
-        y += dh + GAP
+        y += dh
 
-    # net pay banner
-    if net_pay:
-        rr(PAD, y, W - PAD, y + NET_H, r=10, fill=ACCENT)
-        ny = y + (NET_H - 14) // 2
-        txt("К выплате", IX, ny, b16, "#FFFFFF")
-        txt(net_pay, RX, ny, b16, "#FFFFFF", right=True)
+    # ── KPI: объяснение, откуда взялись комиссии ──────────────────────
+    if kpi_parsed:
+        y += GAP
+        rr(PAD, y, W - PAD, y + kh, outline=BORDER)
+        txt("Выполнение плана", IX, y + CVP, b16, ACCENT)
+        ky = y + CVP + TITLE_H
+        for i, (kn, p) in enumerate(kpi_parsed):
+            if p is None:
+                txt(kn, IX, ky, b14)
+                txt("план не ставился", RX, ky, f13, SUBTEXT, right=True)
+                ky += KNOH
+            elif p["forced"]:
+                color = GREEN if p["met"] else WARN
+                txt(kn, IX, ky, b14)
+                txt(f"ставка {p['rate']} \u00b7 принудительно: {p['forced']}",
+                    RX, ky + 1, f13, color, right=True)
+                ky += KNH + 4
+                if p["detail"]:
+                    txt(p["detail"], IX, ky, f12, SUBTEXT)
+                ky += KDH + 2 + KEH
+            else:
+                color = GREEN if p["met"] else WARN
+                pct = int(round(p["fulfillment"] * 100)) if p["plan"] else 0
+                txt(kn, IX, ky, b14)
+                # Слева от процента — ставка комиссии: раньше на этом месте
+                # стоял только он, и «7%» рядом с полосой прогресса читалось
+                # как выполнение плана, хотя это доля от продаж.
+                rate_w = d.textlength(f"{pct}%", font=b14)
+                txt(f"ставка {p['rate']}", RX - rate_w - 10, ky + 1, f12, SUBTEXT, right=True)
+                txt(f"{pct}%", RX, ky, b14, color, right=True)
+                ky += KNH + 4
+                pbar(IX, ky, RX - IX, KBH, p["fulfillment"], color)
+                ky += KBH + 6
+                txt(p["detail"], IX, ky, f12, SUBTEXT)
+                ky += KDH + 2
+                if p["extra"]:
+                    txt(p["extra"], IX, ky, f12, RED if "До 80%" in p["extra"] else GREEN)
+                ky += KEH
+            if i < len(kpi_parsed) - 1:
+                ky += KGAP
 
     img.save(filename)
     log(f"✅ [create_payroll_report_image] Saved: {filename}")
