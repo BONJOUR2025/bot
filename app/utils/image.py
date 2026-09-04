@@ -738,8 +738,29 @@ PAYROLL_THEME = {
     "card_pad":          28,
     "gap":               16,
 
-    "row_h":             40,        # строка начислений
-    "kpi_gap":           26,
+    "row_h":             62,        # строка начислений
+    "kpi_gap":           38,
+
+    # Кегли собраны здесь же, а не разбросаны по рендеру: масштаб всего
+    # листа меняется одним словарём. Значения рассчитаны на холст 1080 —
+    # при просмотре во весь экран телефона это примерно 13-14 pt для строк
+    # и 40 pt для суммы к выплате.
+    "type": {
+        "name":        68,   # имя сотрудника
+        "eyebrow":     24,  # «СЕНТЯБРЬ · РАСЧЁТ ЗАРПЛАТЫ»
+        "pay_label":   31,  # «К выплате»
+        "pay":         104,  # сама сумма
+        "summary":     27,  # начислено / удержано
+        "heading":     38,  # заголовок карточки
+        "context":     23,  # ставки и смены
+        "row":         31,  # строка начислений и удержаний
+        "total_key":   33,
+        "total_val":   40,
+        "kpi_name":    32,
+        "kpi_pct":     36,
+        "kpi_rate":    23,
+        "kpi_detail":  26,
+    },
 }
 
 
@@ -846,18 +867,18 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     negative_net = _is_negative(net_pay)
 
     # ── высоты блоков ─────────────────────────────────────────────────
-    HERO_TOP = 136                     # имя + период
-    HERO_PILL = 116                    # «К выплате» и сумма
-    HERO_SUM = 58 if (total or held) else 0
+    HERO_TOP = 206                     # имя + период
+    HERO_PILL = 186                    # «К выплате» и сумма
+    HERO_SUM = 86 if (total or held) else 0
     hero_h = HERO_TOP + HERO_PILL + HERO_SUM + CPAD - 8
 
-    HEAD_H = 58                        # заголовок карточки и отступ под ним
-    charges_h = (CPAD + HEAD_H + len(charges) * T["row_h"] + 22 + 46 + CPAD - 10) if charges else 0
-    ded_h = (CPAD + HEAD_H + len(deductions) * T["row_h"] + CPAD - 12) if deductions else 92
+    HEAD_H = 88                        # заголовок карточки и отступ под ним
+    charges_h = (CPAD + HEAD_H + len(charges) * T["row_h"] + 30 + 72 + CPAD - 10) if charges else 0
+    ded_h = (CPAD + HEAD_H + len(deductions) * T["row_h"] + CPAD - 14) if deductions else 128
 
-    KPI_FULL = 128                     # с полосой выполнения
-    KPI_FORCED = 84
-    KPI_NONE = 52
+    KPI_FULL = 200                     # с полосой выполнения
+    KPI_FORCED = 132
+    KPI_NONE = 80
     kpi_h = 0
     if kpi_parsed:
         kpi_h = CPAD + HEAD_H
@@ -883,8 +904,10 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
         c.rrect(PAD, y, W - PAD, y + h, T["radius_card"],
                 fill=T["surface"], outline=T["border"], width=1)
 
+    TY = T["type"]
+
     def heading(s, y, color=None):
-        c.text(s, IX, y, c.font("semibold", 24), color or T["text"])
+        c.text(s, IX, y, c.font("semibold", TY["heading"]), color or T["text"])
 
     y = PAD
 
@@ -896,48 +919,48 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
         base_name, tab_no = parts[0], parts[1]
     else:
         base_name, tab_no = name.strip(), ""
-    f_name = c.fit_font(name.strip() or "—", "bold", 42, RX - IX, 24)
-    c.text(base_name, IX, y + 34, f_name, T["text"])
+    f_name = c.fit_font(name.strip() or "—", "bold", TY["name"], RX - IX, 30)
+    c.text(base_name, IX, y + 44, f_name, T["text"])
     if tab_no:
-        c.text(" " + tab_no, IX + c.text_w(base_name, f_name), y + 34,
+        c.text(" " + tab_no, IX + c.text_w(base_name, f_name), y + 44,
                f_name, T["primary"])
-    c.tracked(f"{period.upper()} · РАСЧЁТ ЗАРПЛАТЫ", IX, y + 92,
-              c.font("semibold", 16), T["text_secondary"], 1.4)
+    c.tracked(f"{period.upper()} · РАСЧЁТ ЗАРПЛАТЫ", IX, y + 132,
+              c.font("semibold", TY["eyebrow"]), T["text_secondary"], 1.6)
 
     # Сумма к выплате — самый заметный элемент листа. Отрицательная получает
     # мягкую подложку: она означает, что аванс уже перекрыл начисленное, и
     # человек должен это заметить, но кричать об этом красным блоком незачем.
     pay_y = y + HERO_TOP
     accent = T["negative"] if negative_net else T["primary"]
-    f_label = c.font("regular", 19)
-    f_pay = c.fit_font(net_pay or "—", "bold", 62, RX - IX - 40, 34)
+    f_label = c.font("regular", TY["pay_label"])
+    f_pay = c.fit_font(net_pay or "—", "bold", TY["pay"], RX - IX - 40, 44)
     if negative_net:
         # Плашка обнимает содержимое, а не тянется во всю карточку: красным
         # здесь помечают факт, а не подают тревогу.
         pill_w = max(c.text_w("К выплате", f_label),
-                     c.text_w(net_pay or "—", f_pay)) + 44
+                     c.text_w(net_pay or "—", f_pay)) + 52
         c.rrect(IX - 20, pay_y, IX - 20 + min(pill_w, RX - IX + 40),
                 pay_y + HERO_PILL, T["radius_inner"], fill=T["negative_soft"])
-    c.text("К выплате", IX, pay_y + 16, f_label, T["text_secondary"])
-    c.text(net_pay or "—", IX, pay_y + 44, f_pay, accent)
+    c.text("К выплате", IX, pay_y + 22, f_label, T["text_secondary"])
+    c.text(net_pay or "—", IX, pay_y + 64, f_pay, accent)
 
     if HERO_SUM:
         sy = pay_y + HERO_PILL + 18
         c.line(IX, sy, RX, T["border"])
-        f_sum = c.font("regular", 17)
-        f_sum_b = c.font("semibold", 17)
+        f_sum = c.font("regular", TY["summary"])
+        f_sum_b = c.font("semibold", TY["summary"])
         x = IX
         if total:
-            c.text(total, x, sy + 14, f_sum_b, T["text"])
+            c.text(total, x, sy + 18, f_sum_b, T["text"])
             x += c.text_w(total, f_sum_b) + 8
-            c.text("начислено", x, sy + 14, f_sum, T["text_secondary"])
+            c.text("начислено", x, sy + 18, f_sum, T["text_secondary"])
             x += c.text_w("начислено", f_sum) + 18
         if held:
-            c.text("·", x, sy + 14, f_sum, T["text_muted"])
-            x += 16
-            c.text(held_str, x, sy + 14, f_sum_b, T["negative"])
+            c.text("·", x, sy + 18, f_sum, T["text_muted"])
+            x += 20
+            c.text(held_str, x, sy + 18, f_sum_b, T["negative"])
             x += c.text_w(held_str, f_sum_b) + 8
-            c.text("удержано", x, sy + 14, f_sum, T["text_secondary"])
+            c.text("удержано", x, sy + 18, f_sum, T["text_secondary"])
     y += hero_h + GAP
 
     # ── 2. Начисления ─────────────────────────────────────────────────
@@ -946,12 +969,12 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
         heading("Начисления", y + CPAD)
         # Ставки и смены — контекст к окладу, а не отдельный показатель:
         # мельче заголовка и прижаты вправо, чтобы с ним не спорить.
-        f_ctx = c.font("regular", 15)
+        f_ctx = c.font("regular", TY["context"])
         for i, ln in enumerate(rate_lines):
-            c.text(ln, RX, y + CPAD + 2 + i * 21, f_ctx, T["text_secondary"], anchor="ra")
+            c.text(ln, RX, y + CPAD + 4 + i * 32, f_ctx, T["text_secondary"], anchor="ra")
 
-        f_key = c.font("regular", 19)
-        f_val = c.font("semibold", 19)
+        f_key = c.font("regular", TY["row"])
+        f_val = c.font("semibold", TY["row"])
         ry = y + CPAD + HEAD_H
         for key, val in charges:
             c.text(key, IX, ry, f_key, T["text_secondary"])
@@ -960,18 +983,18 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
                    T["text"] if _amount_value(val) else T["text_muted"], anchor="ra")
             ry += T["row_h"]
         if total:
-            ry += 6
+            ry += 10
             c.line(IX, ry, RX, T["border"])
-            c.text("Итого", IX, ry + 16, c.font("semibold", 21), T["text"])
-            c.text(total, RX, ry + 13, c.font("bold", 25), T["text"], anchor="ra")
+            c.text("Итого", IX, ry + 26, c.font("semibold", TY["total_key"]), T["text"])
+            c.text(total, RX, ry + 21, c.font("bold", TY["total_val"]), T["text"], anchor="ra")
         y += charges_h + GAP
 
     # ── 3. Удержано ───────────────────────────────────────────────────
     card(y, ded_h)
     heading("Удержано", y + CPAD, T["negative"])
     if deductions:
-        f_key = c.font("regular", 19)
-        f_val = c.font("semibold", 19)
+        f_key = c.font("regular", TY["row"])
+        f_val = c.font("semibold", TY["row"])
         ry = y + CPAD + HEAD_H
         for key, val in deductions:
             c.text(key, IX, ry, f_key, T["text_secondary"])
@@ -980,7 +1003,7 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     else:
         # Пустая карточка в полный рост ради одного нуля — шум. Ноль встаёт
         # в строку с заголовком.
-        c.text("0 ₽", RX, y + CPAD - 2, c.font("semibold", 22),
+        c.text("0 ₽", RX, y + CPAD - 2, c.font("semibold", TY["heading"]),
                T["text_muted"], anchor="ra")
     y += ded_h + GAP
 
@@ -989,25 +1012,25 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
         card(y, kpi_h)
         heading("Выполнение плана", y + CPAD)
         ky = y + CPAD + HEAD_H
-        f_name_k = c.font("semibold", 20)
-        f_rate = c.font("regular", 15)
-        f_detail = c.font("regular", 16)
+        f_name_k = c.font("semibold", TY["kpi_name"])
+        f_rate = c.font("regular", TY["kpi_rate"])
+        f_detail = c.font("regular", TY["kpi_detail"])
         for i, (kn, p) in enumerate(kpi_parsed):
             if p is None:
                 c.text(kn, IX, ky, f_name_k, T["text"])
-                c.text("план не ставился", RX, ky + 2, f_detail,
+                c.text("план не ставился", RX, ky + 4, f_detail,
                        T["text_muted"], anchor="ra")
                 ky += KPI_NONE
             elif p["forced"]:
                 col = T["positive"] if p["met"] else T["orange"]
                 c.text(kn, IX, ky, f_name_k, T["text"])
                 tag = f"принудительно: {p['forced']}"
-                c.text(tag, RX, ky + 2, f_detail, col, anchor="ra")
+                c.text(tag, RX, ky + 4, f_detail, col, anchor="ra")
                 if p["rate"]:
-                    c.text(f"ставка {p['rate']}", RX - c.text_w(tag, f_detail) - 14,
-                           ky + 4, f_rate, T["text_secondary"], anchor="ra")
+                    c.text(f"ставка {p['rate']}", RX - c.text_w(tag, f_detail) - 18,
+                           ky + 5, f_rate, T["text_secondary"], anchor="ra")
                 if p["detail"]:
-                    c.text(p["detail"], IX, ky + 34, f_detail, T["text_secondary"])
+                    c.text(p["detail"], IX, ky + 54, f_detail, T["text_secondary"])
                 ky += KPI_FORCED
             else:
                 col = T["positive"] if p["met"] else T["orange"]
@@ -1016,18 +1039,18 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
                 # Справа два числа: выполнение крупно и цветом, ставка
                 # комиссии рядом и мельче. Раньше на этом месте стояла одна
                 # ставка, и «7%» рядом с полосой читалось как выполнение.
-                f_pct = c.font("bold", 21)
+                f_pct = c.font("bold", TY["kpi_pct"])
                 pct_s = f"{pct}%"
-                c.text(pct_s, RX, ky - 1, f_pct, col, anchor="ra")
+                c.text(pct_s, RX, ky - 2, f_pct, col, anchor="ra")
                 if p["rate"]:
-                    c.text(f"ставка {p['rate']}", RX - c.text_w(pct_s, f_pct) - 14,
-                           ky + 4, f_rate, T["text_secondary"], anchor="ra")
-                c.bar(IX, ky + 36, RX - IX, 10, p["fulfillment"],
+                    c.text(f"ставка {p['rate']}", RX - c.text_w(pct_s, f_pct) - 18,
+                           ky + 6, f_rate, T["text_secondary"], anchor="ra")
+                c.bar(IX, ky + 58, RX - IX, 15, p["fulfillment"],
                       T["progress_track"], col)
                 if p["detail"]:
-                    c.text(p["detail"], IX, ky + 58, f_detail, T["text_secondary"])
+                    c.text(p["detail"], IX, ky + 90, f_detail, T["text_secondary"])
                 if p["extra"]:
-                    c.text(p["extra"], IX, ky + 86, f_detail,
+                    c.text(p["extra"], IX, ky + 136, f_detail,
                            T["negative"] if "До 80%" in p["extra"] else T["positive"])
                 ky += KPI_FULL
             if i < len(kpi_parsed) - 1:
