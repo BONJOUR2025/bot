@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import pandas as pd
 import os
 import re
@@ -551,60 +551,158 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     return filename
 
 
-SALON_COLORS = {
-    # Согласованный набор вместо прежних чистых #FFFF00 / #0000FF / #FF0000:
-    # те брались как «просто разные», из-за чего картинка выглядела
-    # спецэффектом, а не документом. Здесь один уровень насыщенности и
-    # светлоты, поэтому ни один салон не перетягивает внимание.
-    "Ц":  "#5B5BD6",   # Бестужевская (Цех) — индиго
-    "А":  "#B4761A",   # Академ Парк — янтарный
-    "М":  "#1F8A5B",   # Меркурий — зелёный
-    "Оз": "#CE5230",   # Озерки — терракота
-    "Ох": "#2F6FB0",   # Охта Молл — синий
-    "Гп": "#8B4FC9",   # Гранд Палас — фиолетовый
-    "П":  "#BC3A62",   # Пассаж — розовый
-    "Р":  "#8A6540",   # исторический код, оставлен ради старых листов
-    "Т":  "#6B6B8A",   # тестовая точка — намеренно серая
+# ── Тема оформления расписания ────────────────────────────────────────────
+#
+# Все цвета и размеры собраны здесь, а не размазаны по рендеру: тёмная тема
+# в будущем — это второй такой словарь, без правки логики отрисовки.
+#
+# Размеры заданы в «единицах макета» при ширине 1080. Рисуется всё в два раза
+# крупнее и потом уменьшается (SCALE): у PIL нет сглаживания фигур, и
+# скругления без этого выходят ступенчатыми.
+SCHEDULE_THEME = {
+    "width": 1080,
+    "scale": 2,
+
+    "background":        "#F4F5F8",
+    "surface":           "#FFFFFF",
+    "surface_secondary": "#F6F7FA",
+    "border":            "#E9EAF0",
+    "text":              "#16171D",
+    "text_secondary":    "#8A8D9B",
+    "text_muted":        "#B9BCC8",
+    "weekend":           "#C9788C",
+
+    "accent":            "#7C4DFF",
+    "accent_soft":       "#F1EBFF",
+    "accent_border":     "#DCCBFF",
+    "accent_text":       "#6D3FE8",
+
+    "radius_card":       24,
+    "radius_widget":     16,
+    "radius_cell":       16,
+
+    "shadow_color":      (24, 26, 42),
+    "shadow_alpha":      26,
+    "shadow_blur":       11,
+    "shadow_dy":         5,
+
+    "page_pad":          32,
+    "card_pad":          26,
+    "gap":               18,
+
+    "header_h":          140,
+    "weekday_h":         46,
+    "cell_h":            134,
+    "legend_row_h":      34,
 }
-SALON_COLOR_DEFAULT = "#4A6CF7"
+
+# Палитра филиалов. Четыре роли на каждый: заливка карточки, её граница,
+# крупный код и подпись. Значения для «Гранд Паласа» (фиолетовый) и
+# «Меркурия» (зелёный) заданы по макету, остальные собраны по тому же
+# рецепту — мягкая заливка, чуть плотнее граница, насыщенный текст.
+SALON_PALETTE = {
+    "Гп": {"primary": "#7C4DFF", "bg": "#F1EBFF", "border": "#DCCBFF", "text": "#6D3FE8"},
+    "М":  {"primary": "#269B6B", "bg": "#E8F6F0", "border": "#BFE6D3", "text": "#21885E"},
+    "Ц":  {"primary": "#3E63D6", "bg": "#E9EEFC", "border": "#C2D0F5", "text": "#3453BC"},
+    "А":  {"primary": "#C98A1E", "bg": "#FBF2E1", "border": "#F0DCB2", "text": "#A9731A"},
+    "Ох": {"primary": "#2E8CC4", "bg": "#E7F3FA", "border": "#BEDDEF", "text": "#28789F"},
+    "Оз": {"primary": "#D96B45", "bg": "#FBEEE9", "border": "#F3D0C2", "text": "#B85A39"},
+    "П":  {"primary": "#C4497B", "bg": "#FBEAF2", "border": "#F0C4D8", "text": "#A63C68"},
+    "Р":  {"primary": "#8A6B4A", "bg": "#F4EFE9", "border": "#DFD1BF", "text": "#75593D"},
+    "Т":  {"primary": "#7E8398", "bg": "#F1F2F6", "border": "#D8DAE3", "text": "#6A6F82"},
+}
+SALON_FALLBACK = {"primary": "#7C4DFF", "bg": "#F1EBFF",
+                  "border": "#DCCBFF", "text": "#6D3FE8"}
+
+# Совместимость: прежний плоский словарь код → цвет всё ещё удобен снаружи.
+SALON_COLORS = {code: p["primary"] for code, p in SALON_PALETTE.items()}
 
 WEEKDAY_ORDER = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
 
+# Segoe UI — системный UI-шрифт Windows, на котором и работает бот: близок к
+# SF Pro по рисунку, полная кириллица, есть все нужные начертания. Inter в
+# системе нет — пакет @fontsource во фронтенде отдаёт только woff2, а их PIL
+# не читает. Дальше по списку — то, что найдётся на Linux.
+_UI_FONTS = {
+    "regular":  ["segoeui.ttf", "C:/Windows/Fonts/segoeui.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"],
+    "semibold": ["seguisb.ttf", "C:/Windows/Fonts/seguisb.ttf",
+                 "segoeuib.ttf", "C:/Windows/Fonts/segoeuib.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"],
+    "bold":     ["segoeuib.ttf", "C:/Windows/Fonts/segoeuib.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"],
+}
 
-def _salon_names() -> dict:
-    """Код салона → название, для легенды. Пустой словарь, если справочника нет.
+
+def _ui_font(weight: str, size: int):
+    for path in _UI_FONTS.get(weight, _UI_FONTS["regular"]):
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def _salon_info() -> dict:
+    """Код филиала → {name, weekday, weekend}. Пустой словарь, если справочника нет.
 
     Читается лениво и через try: картинка не должна падать из-за
-    отсутствующего salons.json — легенда просто останется без расшифровок.
+    отсутствующего salons.json — подписи и часы просто не появятся.
     """
     try:
         from ..data.salon_repository import SalonRepository
-        return {s.code: s.name for s in SalonRepository().list_salons() if s.code}
+        out = {}
+        for s in SalonRepository().list_salons():
+            if not s.code:
+                continue
+            out[s.code] = {
+                "name": s.name or "",
+                "weekday": (getattr(s, "work_hours_weekday", "") or "").strip(),
+                "weekend": (getattr(s, "work_hours_weekend", "") or "").strip(),
+            }
+        return out
     except Exception:
         return {}
 
 
-def _mix(hex_color: str, other: str, t: float) -> tuple:
-    """Смешать два цвета: t=0 — первый, t=1 — второй."""
-    a = tuple(int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
-    b = tuple(int(other[i:i + 2], 16) for i in (1, 3, 5))
-    return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
+def _ru_quotes(s: str) -> str:
+    """Прямые кавычки → «ёлочки». Правится подача, а не сам справочник."""
+    out, opening = [], True
+    for ch in s or "":
+        if ch == '"':
+            out.append("«" if opening else "»")
+            opening = not opening
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _hours_label(info: dict, weekend: bool) -> str:
+    """«10:00-22:00» из справочника → «10:00 – 22:00». Пусто, если часов нет."""
+    raw = (info.get("weekend") if weekend else info.get("weekday")) or ""
+    raw = raw.strip() or (info.get("weekday") or "").strip()
+    if not raw or "-" not in raw:
+        return raw
+    left, _, right = raw.partition("-")
+    return f"{left.strip()} \u2013 {right.strip()}"
 
 
 def create_schedule_image(data, employee_name, sheet_name, weekdays):
-    """Расписание сотрудника на месяц — календарной сеткой.
+    """Расписание сотрудника на месяц — экраном мобильного приложения.
 
-    Раньше это была одна строка на 31 столбец: 1700×150 пикселей. В Телеграме
-    на телефоне такая картинка сжимается в нечитаемую полоску, а выходные
-    заливались чистым красным поверх кода салона — «Гп» на красном фоне
-    красным же текстом попросту исчезал.
+    Данные и их разбор те же, что и раньше: строка сотрудника из листа Excel,
+    колонки-дни, коды филиалов в ячейках. Переработан только визуальный слой.
 
-    Сетка 7×5 читается с телефона без масштабирования и отвечает на вопрос,
-    ради которого расписание и открывают: «когда я работаю и где». День
-    смены — плашка цветом салона с его кодом, выходной — пустая клетка.
-    Оформление то же, что у отчёта по зарплате (create_payroll_report_image):
-    одна ширина 560, один фон, одни скругления — два изображения от одного
-    бота не должны выглядеть из разных программ.
+    Сетка 7 колонок строится по дням недели из листа, а не по календарю:
+    Excel остаётся единственным источником правды о том, какой день каким был.
+    Рабочий день — карточка цветом филиала с кодом и часами работы (часы
+    берутся из справочника салонов), выходной — спокойная пустая клетка.
+
+    Композиция: шапка с именем и счётчиком смен, календарь, легенда. Всё
+    оформление — в SCHEDULE_THEME и SALON_PALETTE.
     """
     compare_name = employee_name.lower()
     employee_rows = data[data["ИМЯ"].astype(str).str.lower() == compare_name]
@@ -630,9 +728,8 @@ def create_schedule_image(data, employee_name, sheet_name, weekdays):
     day_numbers = [str(int(col)) for col in valid_day_cols]
     num_days = len(day_numbers)
     # Дни недели приходят срезом weekdays_row[2:33] и в принципе могут
-    # оказаться короче месяца — тогда прежний код падал по IndexError на
-    # первом же дне без пары. Добиваем пустыми: день просто нарисуется как
-    # будний, а не уронит отправку расписания целиком.
+    # оказаться короче месяца — добиваем пустыми, чтобы обращение по индексу
+    # не роняло отправку расписания целиком.
     day_weekdays = [str(wd).strip().lower() for wd in weekdays[:num_days]]
     day_weekdays += [""] * (num_days - len(day_weekdays))
     schedule_values = [
@@ -641,152 +738,215 @@ def create_schedule_image(data, employee_name, sheet_name, weekdays):
     ]
     log(f"DEBUG [create_schedule_image] Расписание: {schedule_values}, Дни недели: {day_weekdays}")
 
-    # ── палитра, общая с отчётом по зарплате ──────────────────────────
-    BG = "#F0F2F8"; CARD = "#FFFFFF"; ACCENT = "#4A6CF7"
-    TEXT = "#1A1A2E"; SUBTEXT = "#6B6B8A"; BORDER = "#DDE0EE"
-    WEEKEND = "#B4506E"   # приглушённый: выходной надо отличать, а не кричать
+    T = SCHEDULE_THEME
+    S = T["scale"]
+    W = T["width"]
 
-    regular_candidates = [
-        "arial.ttf", "calibri.ttf",
-        "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/calibri.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    ]
-    bold_candidates = [
-        "arialbd.ttf", "calibrib.ttf",
-        "C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/calibrib.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ]
-
-    def tf(paths, size):
-        for p in paths:
-            try:
-                return ImageFont.truetype(p, size)
-            except Exception:
-                pass
-        return ImageFont.load_default()
-
-    f11 = tf(regular_candidates, 11)
-    f12 = tf(regular_candidates, 12)
-    f13 = tf(regular_candidates, 13)
-    b11 = tf(bold_candidates, 11)
-    b13 = tf(bold_candidates, 13)
-    b15 = tf(bold_candidates, 15)
-    b20 = tf(bold_candidates, 20)
-    b26 = tf(bold_candidates, 26)
-
-    # ── раскладка ─────────────────────────────────────────────────────
-    W = 560; PAD = 18; INNER = 14
-    GRID_X = PAD + INNER
-    CW = (W - 2 * PAD - 2 * INNER) // 7          # ширина клетки
-    CH = 58                                       # высота клетки
-    GRID_W = CW * 7
-
-    # Смещение первого числа месяца от понедельника — сетка строится по
-    # присланным дням недели, а не по календарю: лист Excel остаётся
-    # единственным источником правды о том, какой день каким был.
     first_wd = day_weekdays[0] if day_weekdays else "пн"
     offset = WEEKDAY_ORDER.index(first_wd) if first_wd in WEEKDAY_ORDER else 0
-    weeks = -(-(offset + num_days) // 7)          # округление вверх
+    weeks = -(-(offset + num_days) // 7)
 
     shifts = sum(1 for v in schedule_values if v)
     used_codes = []
     for v in schedule_values:
         if v and v not in used_codes:
             used_codes.append(v)
-    names = _salon_names()
+    info = _salon_info()
 
-    HEAD_H = 74
-    WDROW_H = 26
-    CAL_H = INNER + WDROW_H + weeks * CH + INNER
-    LEG_ROWS = -(-len(used_codes) // 2) if used_codes else 0
-    LEG_H = (INNER + LEG_ROWS * 22 + INNER - 4) if used_codes else 0
-    GAP = 12
-    H = PAD + HEAD_H + GAP + CAL_H + (GAP + LEG_H if LEG_H else 0) + PAD
+    # ── высоты блоков ─────────────────────────────────────────────────
+    PAD, CPAD, GAP = T["page_pad"], T["card_pad"], T["gap"]
+    head_h = T["header_h"]
+    cal_h = CPAD + T["weekday_h"] + weeks * T["cell_h"] + CPAD - 6
+    legend_h = (CPAD + len(used_codes) * T["legend_row_h"] + CPAD - 8) if used_codes else 0
+    H = PAD + head_h + GAP + cal_h + ((GAP + legend_h) if legend_h else 0) + PAD
 
-    img = Image.new("RGB", (W, H), BG)
+    # ── холст ─────────────────────────────────────────────────────────
+    img = Image.new("RGBA", (W * S, H * S), T["background"])
     d = ImageDraw.Draw(img)
 
-    def rr(x1, y1, x2, y2, r=12, fill=CARD, outline=None, width=1):
-        try:
-            d.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill,
-                                outline=outline, width=width)
-        except AttributeError:
-            d.rectangle([x1, y1, x2, y2], fill=fill, outline=outline)
+    def px(v):
+        return int(round(v * S))
 
-    def ctr(s, cx, y, font, color):
-        d.text((cx - d.textlength(s, font=font) / 2, y), s, font=font, fill=color)
+    def font(weight, size):
+        return _ui_font(weight, px(size))
+
+    def rrect(x1, y1, x2, y2, radius, fill=None, outline=None, width=1.0):
+        d.rounded_rectangle([px(x1), px(y1), px(x2), px(y2)], radius=px(radius),
+                            fill=fill, outline=outline,
+                            width=max(1, px(width)) if outline else 0)
+
+    def shadow(boxes):
+        """Мягкая тень под карточками: отдельный слой с размытием.
+
+        Рисуется до самих карточек, поэтому все тени лежат под всеми
+        поверхностями и не проступают на соседних.
+        """
+        layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        ld = ImageDraw.Draw(layer)
+        col = tuple(T["shadow_color"]) + (T["shadow_alpha"],)
+        for (x1, y1, x2, y2, r) in boxes:
+            ld.rounded_rectangle(
+                [px(x1 + 3), px(y1 + T["shadow_dy"]), px(x2 - 3), px(y2 + T["shadow_dy"])],
+                radius=px(r), fill=col)
+        layer = layer.filter(ImageFilter.GaussianBlur(px(T["shadow_blur"])))
+        img.alpha_composite(layer)
+
+    def text(s, x, y, fnt, fill, anchor="la"):
+        d.text((px(x), px(y)), s, font=fnt, fill=fill, anchor=anchor)
+
+    def text_w(s, fnt):
+        return d.textlength(s, font=fnt) / S
+
+    def tracked(s, x, y, fnt, fill, tracking, center_in=None):
+        """Текст с разрядкой — у PIL её нет, рисуем посимвольно.
+
+        Нужна только для мелких капсовых подписей: без неё они выглядят
+        сжатыми, а именно они задают спокойный «интерфейсный» тон.
+        """
+        widths = [d.textlength(ch, font=fnt) / S for ch in s]
+        total = sum(widths) + tracking * max(0, len(s) - 1)
+        if center_in is not None:
+            x = center_in - total / 2
+        for ch, w in zip(s, widths):
+            d.text((px(x), px(y)), ch, font=fnt, fill=fill)
+            x += w + tracking
+        return total
+
+    def fit_font(s, weight, size, max_w, min_size):
+        """Подобрать кегль так, чтобы строка влезла в ширину."""
+        while size > min_size:
+            f = font(weight, size)
+            if text_w(s, f) <= max_w:
+                return f
+            size -= 1
+        return font(weight, min_size)
+
+    def ellipsize(s, fnt, max_w):
+        if text_w(s, fnt) <= max_w:
+            return s
+        while s and text_w(s + "\u2026", fnt) > max_w:
+            s = s[:-1]
+        return (s.rstrip() + "\u2026") if s else ""
+
+    # ── тени всех карточек одним слоем ────────────────────────────────
+    y_head = PAD
+    y_cal = y_head + head_h + GAP
+    y_leg = y_cal + cal_h + GAP
+    boxes = [(PAD, y_head, W - PAD, y_head + head_h, T["radius_card"]),
+             (PAD, y_cal, W - PAD, y_cal + cal_h, T["radius_card"])]
+    if legend_h:
+        boxes.append((PAD, y_leg, W - PAD, y_leg + legend_h, T["radius_card"]))
+    shadow(boxes)
 
     # ── шапка ─────────────────────────────────────────────────────────
-    y = PAD
-    rr(PAD, y, W - PAD, y + HEAD_H)
-    # Имя в листе идёт с табельным номером («Юлия 3007») — в шапке он лишний,
-    # сотрудник и так знает, чьё это расписание.
-    display_name = employee_name.strip()
-    d.text((GRID_X, y + 16), display_name, font=b20, fill=TEXT)
-    d.text((GRID_X, y + 45), f"{sheet_name.upper()} · график работы", font=f12, fill=SUBTEXT)
+    rrect(PAD, y_head, W - PAD, y_head + head_h, T["radius_card"], fill=T["surface"])
 
-    box_w = 96
-    bx = W - PAD - INNER - box_w
-    rr(bx, y + 14, bx + box_w, y + HEAD_H - 14, r=10,
-       fill=_mix(ACCENT, "#FFFFFF", 0.90))
-    ctr(str(shifts), bx + box_w / 2, y + 18, b26, ACCENT)
-    ctr("смен в месяце", bx + box_w / 2, y + 50, f11, _mix(ACCENT, "#FFFFFF", 0.35))
+    WIDGET_W, WIDGET_H = 194, 104
+    wx2 = W - PAD - CPAD
+    wx1 = wx2 - WIDGET_W
+    wy1 = y_head + (head_h - WIDGET_H) / 2
+
+    # Имя и табельный номер: номер тем же кеглем, но акцентным цветом —
+    # человек ищет глазами имя, номер нужен для сверки и не должен спорить.
+    name_x = PAD + CPAD
+    name_limit = wx1 - name_x - 28
+    parts = employee_name.strip().rsplit(" ", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        base_name, tab_no = parts[0], parts[1]
+    else:
+        base_name, tab_no = employee_name.strip(), ""
+    f_name = fit_font(f"{base_name} {tab_no}".strip(), "bold", 42, name_limit, 26)
+    text(base_name, name_x, y_head + 36, f_name, T["text"])
+    if tab_no:
+        text(" " + tab_no, name_x + text_w(base_name, f_name), y_head + 36,
+             f_name, T["accent"])
+
+    f_sub = font("semibold", 16)
+    tracked(f"{sheet_name.upper()} \u00b7 ГРАФИК РАБОТЫ", name_x, y_head + 92,
+            f_sub, T["text_secondary"], 1.4)
+
+    rrect(wx1, wy1, wx2, wy1 + WIDGET_H, T["radius_widget"], fill=T["accent_soft"])
+    cx = (wx1 + wx2) / 2
+    text(str(shifts), cx, wy1 + 16, font("bold", 46), T["accent"], anchor="ma")
+    tracked("СМЕН В МЕСЯЦЕ", 0, wy1 + 73, font("semibold", 12),
+            T["accent_text"], 1.0, center_in=cx)
 
     # ── календарь ─────────────────────────────────────────────────────
-    y += HEAD_H + GAP
-    rr(PAD, y, W - PAD, y + CAL_H)
+    rrect(PAD, y_cal, W - PAD, y_cal + cal_h, T["radius_card"], fill=T["surface"])
 
-    wy = y + INNER
+    grid_x = PAD + CPAD
+    grid_w = W - 2 * PAD - 2 * CPAD
+    CW = grid_w / 7
+    CH = T["cell_h"]
+
+    f_wd = font("semibold", 16)
     for i, wd in enumerate(WEEKDAY_ORDER):
-        ctr(wd.upper(), GRID_X + i * CW + CW / 2, wy + 6, b11,
-            WEEKEND if i >= 5 else SUBTEXT)
+        tracked(wd.upper(), 0, y_cal + CPAD + 12, f_wd,
+                T["weekend"] if i >= 5 else T["text_secondary"], 1.6,
+                center_in=grid_x + i * CW + CW / 2)
 
-    gy = wy + WDROW_H
+    gy = y_cal + CPAD + T["weekday_h"]
+    f_day = font("semibold", 19)
+    f_day_off = font("regular", 19)
+
     for idx in range(num_days):
         pos = offset + idx
-        col, row = pos % 7, pos // 7
-        x0 = GRID_X + col * CW
-        y0 = gy + row * CH
+        col_i, row_i = pos % 7, pos // 7
+        x0 = grid_x + col_i * CW
+        y0 = gy + row_i * CH
+        # Между карточками — воздух, а не линии сетки: таблица получается
+        # именно из линий, а нужен список карточек.
+        cx1, cy1 = x0 + 4, y0 + 4
+        cx2, cy2 = x0 + CW - 4, y0 + CH - 10
         code = schedule_values[idx]
         weekend = day_weekdays[idx] in ("сб", "вс")
 
         if code:
-            color = SALON_COLORS.get(code, SALON_COLOR_DEFAULT)
-            rr(x0 + 2, y0 + 2, x0 + CW - 3, y0 + CH - 6, r=9,
-               fill=_mix(color, "#FFFFFF", 0.86),
-               outline=_mix(color, "#FFFFFF", 0.55))
-            d.text((x0 + 9, y0 + 8), day_numbers[idx], font=b11,
-                   fill=_mix(color, "#FFFFFF", 0.12))
-            ctr(code, x0 + CW / 2, y0 + 25, b15, color)
+            pal = SALON_PALETTE.get(code, SALON_FALLBACK)
+            rrect(cx1, cy1, cx2, cy2, T["radius_cell"],
+                  fill=pal["bg"], outline=pal["border"], width=1.5)
+            text(day_numbers[idx], cx1 + 13, cy1 + 11, f_day, pal["text"])
+            mid = (cx1 + cx2) / 2
+            f_code = fit_font(code, "bold", 32, (cx2 - cx1) - 22, 17)
+            hours = _hours_label(info.get(code, {}), weekend)
+            # Без часов (в справочнике их может не быть) код встаёт по центру
+            # карточки: иначе под ним остаётся дыра, и такой день выглядит
+            # обрезанным рядом с соседними.
+            text(code, mid, cy1 + (40 if hours else 52), f_code,
+                 pal["primary"], anchor="ma")
+            if hours:
+                f_h = fit_font(hours, "regular", 17, (cx2 - cx1) - 14, 12)
+                text(hours, mid, cy2 - 30, f_h, pal["text"], anchor="ma")
         else:
-            # Выходной — только число на белом. Заливка здесь соревновалась бы
-            # за внимание с рабочими днями, а картинку открывают ради них:
-            # вопрос «когда я работаю» должен читаться с одного взгляда, без
-            # разглядывания, какой из двух оттенков серого что означает.
-            d.text((x0 + 9, y0 + 8), day_numbers[idx], font=b11,
-                   fill=_mix(WEEKEND if weekend else SUBTEXT, "#FFFFFF", 0.45))
+            # Выходной остаётся фоном: заливка едва отличается от карточки,
+            # граница почти неразличима — рабочие дни должны выступать сами,
+            # без того чтобы соревноваться с пустыми клетками.
+            rrect(cx1, cy1, cx2, cy2, T["radius_cell"],
+                  fill=T["surface_secondary"])
+            text(day_numbers[idx], cx1 + 13, cy1 + 11, f_day_off,
+                 T["weekend"] if weekend else T["text_muted"])
 
     # ── легенда ───────────────────────────────────────────────────────
     if used_codes:
-        y += CAL_H + GAP
-        rr(PAD, y, W - PAD, y + LEG_H)
-        col_w = (W - 2 * PAD - 2 * INNER) // 2
-        for i, code in enumerate(used_codes):
-            cx = GRID_X + (i % 2) * col_w
-            cy = y + INNER + (i // 2) * 22
-            color = SALON_COLORS.get(code, SALON_COLOR_DEFAULT)
-            d.ellipse([cx, cy + 4, cx + 9, cy + 13], fill=color)
-            d.text((cx + 16, cy + 1), code, font=b13, fill=TEXT)
-            title = names.get(code, "")
+        rrect(PAD, y_leg, W - PAD, y_leg + legend_h, T["radius_card"], fill=T["surface"])
+        f_code = font("bold", 17)
+        f_name_l = font("regular", 17)
+        ly = y_leg + CPAD
+        for code in used_codes:
+            pal = SALON_PALETTE.get(code, SALON_FALLBACK)
+            dot_r = 5
+            dcx, dcy = grid_x + dot_r, ly + 13
+            d.ellipse([px(dcx - dot_r), px(dcy - dot_r), px(dcx + dot_r), px(dcy + dot_r)],
+                      fill=pal["primary"])
+            text(code, grid_x + 24, ly + 3, f_code, T["text"])
+            title = _ru_quotes((info.get(code, {}) or {}).get("name", ""))
             if title:
-                cw = d.textlength(code, font=b13)
-                d.text((cx + 22 + cw, cy + 2), title, font=f12, fill=SUBTEXT)
+                tx = grid_x + 24 + max(text_w(code, f_code), 34) + 16
+                text(ellipsize(title, f_name_l, W - PAD - CPAD - tx),
+                     tx, ly + 3, f_name_l, T["text_secondary"])
+            ly += T["legend_row_h"]
 
     filename = f"schedule_{employee_name}.png"
-    img.save(filename)
+    img.convert("RGB").resize((W, H), Image.LANCZOS).save(filename)
     log(f"✅ [create_schedule_image] Файл создан: {filename}")
     return filename
