@@ -487,19 +487,67 @@ def create_payroll_report_image(sections: list, filename: str = "salary_report.p
     return filename
 
 
+SALON_COLORS = {
+    # Согласованный набор вместо прежних чистых #FFFF00 / #0000FF / #FF0000:
+    # те брались как «просто разные», из-за чего картинка выглядела
+    # спецэффектом, а не документом. Здесь один уровень насыщенности и
+    # светлоты, поэтому ни один салон не перетягивает внимание.
+    "Ц":  "#5B5BD6",   # Бестужевская (Цех) — индиго
+    "А":  "#B4761A",   # Академ Парк — янтарный
+    "М":  "#1F8A5B",   # Меркурий — зелёный
+    "Оз": "#CE5230",   # Озерки — терракота
+    "Ох": "#2F6FB0",   # Охта Молл — синий
+    "Гп": "#8B4FC9",   # Гранд Палас — фиолетовый
+    "П":  "#BC3A62",   # Пассаж — розовый
+    "Р":  "#8A6540",   # исторический код, оставлен ради старых листов
+    "Т":  "#6B6B8A",   # тестовая точка — намеренно серая
+}
+SALON_COLOR_DEFAULT = "#4A6CF7"
+
+WEEKDAY_ORDER = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+
+
+def _salon_names() -> dict:
+    """Код салона → название, для легенды. Пустой словарь, если справочника нет.
+
+    Читается лениво и через try: картинка не должна падать из-за
+    отсутствующего salons.json — легенда просто останется без расшифровок.
+    """
+    try:
+        from ..data.salon_repository import SalonRepository
+        return {s.code: s.name for s in SalonRepository().list_salons() if s.code}
+    except Exception:
+        return {}
+
+
+def _mix(hex_color: str, other: str, t: float) -> tuple:
+    """Смешать два цвета: t=0 — первый, t=1 — второй."""
+    a = tuple(int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    b = tuple(int(other[i:i + 2], 16) for i in (1, 3, 5))
+    return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
 def create_schedule_image(data, employee_name, sheet_name, weekdays):
-    """Создаёт изображение расписания для выбранного сотрудника и месяца."""
+    """Расписание сотрудника на месяц — календарной сеткой.
+
+    Раньше это была одна строка на 31 столбец: 1700×150 пикселей. В Телеграме
+    на телефоне такая картинка сжимается в нечитаемую полоску, а выходные
+    заливались чистым красным поверх кода салона — «Гп» на красном фоне
+    красным же текстом попросту исчезал.
+
+    Сетка 7×5 читается с телефона без масштабирования и отвечает на вопрос,
+    ради которого расписание и открывают: «когда я работаю и где». День
+    смены — плашка цветом салона с его кодом, выходной — пустая клетка.
+    Оформление то же, что у отчёта по зарплате (create_payroll_report_image):
+    одна ширина 560, один фон, одни скругления — два изображения от одного
+    бота не должны выглядеть из разных программ.
+    """
     compare_name = employee_name.lower()
     employee_rows = data[data["ИМЯ"].astype(str).str.lower() == compare_name]
     if employee_rows.empty:
-        log(
-            f"❌ [create_schedule_image] Нет данных для сотрудника {employee_name} (поиск: {compare_name})"
-        )
+        log(f"❌ [create_schedule_image] Нет данных для сотрудника {employee_name} (поиск: {compare_name})")
         return None
     employee_row = employee_rows.iloc[0]
-    log(
-        f"DEBUG [create_schedule_image] Данные сотрудника: {employee_row.to_dict()}"
-    )
 
     valid_day_cols = []
     for col in data.columns[2:]:
@@ -512,166 +560,167 @@ def create_schedule_image(data, employee_name, sheet_name, weekdays):
         except (ValueError, TypeError):
             break
     if not valid_day_cols:
-        log(
-            f"❌ [create_schedule_image] Нет подходящих данных о днях месяца в столбцах: {data.columns[2:].tolist()}"
-        )
+        log(f"❌ [create_schedule_image] Нет подходящих данных о днях месяца в столбцах: {data.columns[2:].tolist()}")
         return None
-    log(
-        f"DEBUG [create_schedule_image] Найдены столбцы дней: {valid_day_cols}"
-    )
 
     day_numbers = [str(int(col)) for col in valid_day_cols]
-    day_weekdays = [
-        str(wd).strip() for wd in weekdays[: len(valid_day_cols)]
-    ]  # Используем переданные дни недели
     num_days = len(day_numbers)
+    # Дни недели приходят срезом weekdays_row[2:33] и в принципе могут
+    # оказаться короче месяца — тогда прежний код падал по IndexError на
+    # первом же дне без пары. Добиваем пустыми: день просто нарисуется как
+    # будний, а не уронит отправку расписания целиком.
+    day_weekdays = [str(wd).strip().lower() for wd in weekdays[:num_days]]
+    day_weekdays += [""] * (num_days - len(day_weekdays))
     schedule_values = [
-        "" if pd.isna(employee_row[col]) else str(employee_row[col])
+        "" if pd.isna(employee_row[col]) else str(employee_row[col]).strip()
         for col in valid_day_cols
     ]
-    log(
-        f"DEBUG [create_schedule_image] Расписание: {schedule_values}, Дни недели: {day_weekdays}"
-    )
+    log(f"DEBUG [create_schedule_image] Расписание: {schedule_values}, Дни недели: {day_weekdays}")
 
-    cell_width = 50
-    cell_height = 40
-    left_width = 150
-    month_header_height = 30
-    daynum_header_height = 40
-    weekday_header_height = 40
-    data_row_height = 40
+    # ── палитра, общая с отчётом по зарплате ──────────────────────────
+    BG = "#F0F2F8"; CARD = "#FFFFFF"; ACCENT = "#4A6CF7"
+    TEXT = "#1A1A2E"; SUBTEXT = "#6B6B8A"; BORDER = "#DDE0EE"
+    WEEKEND = "#B4506E"   # приглушённый: выходной надо отличать, а не кричать
 
-    img_width = left_width + cell_width * num_days
-    img_height = (
-        month_header_height
-        + daynum_header_height
-        + weekday_header_height
-        + data_row_height
-    )
+    regular_candidates = [
+        "arial.ttf", "calibri.ttf",
+        "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/calibri.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    bold_candidates = [
+        "arialbd.ttf", "calibrib.ttf",
+        "C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/calibrib.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
 
-    img = Image.new("RGB", (img_width, img_height), "white")
-    draw = ImageDraw.Draw(img)
+    def tf(paths, size):
+        for p in paths:
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                pass
+        return ImageFont.load_default()
 
-    try:
-        font = ImageFont.truetype("arial.ttf", 16)
-    except IOError:
-        font = ImageFont.load_default()
+    f11 = tf(regular_candidates, 11)
+    f12 = tf(regular_candidates, 12)
+    f13 = tf(regular_candidates, 13)
+    b11 = tf(bold_candidates, 11)
+    b13 = tf(bold_candidates, 13)
+    b15 = tf(bold_candidates, 15)
+    b20 = tf(bold_candidates, 20)
+    b26 = tf(bold_candidates, 26)
 
-    draw.rectangle(
-        [0, 0, img_width, month_header_height], fill="#E0E0E0", outline="black"
-    )
-    month_text = sheet_name.upper()
-    bbox = draw.textbbox((0, 0), month_text, font=font)
-    w_text, h_text = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text(
-        ((img_width - w_text) / 2, (month_header_height - h_text) / 2),
-        month_text,
-        font=font,
-        fill="black",
-    )
+    # ── раскладка ─────────────────────────────────────────────────────
+    W = 560; PAD = 18; INNER = 14
+    GRID_X = PAD + INNER
+    CW = (W - 2 * PAD - 2 * INNER) // 7          # ширина клетки
+    CH = 58                                       # высота клетки
+    GRID_W = CW * 7
 
-    y_daynum_top = month_header_height
-    y_daynum_bottom = y_daynum_top + daynum_header_height
-    draw.rectangle(
-        [0, y_daynum_top, left_width, y_daynum_bottom],
-        fill="#D3D3D3",
-        outline="black",
-    )
-    for i, day in enumerate(day_numbers):
-        x0 = left_width + i * cell_width
-        x1 = x0 + cell_width
-        fill_color = (
-            "#FF0000" if day_weekdays[i].lower() in ["сб", "вс"] else "#D3D3D3"
-        )
-        text_color = (
-            "white" if day_weekdays[i].lower() in ["сб", "вс"] else "black"
-        )
-        draw.rectangle(
-            [x0, y_daynum_top, x1, y_daynum_bottom],
-            fill=fill_color,
-            outline="black",
-        )
-        bbox = draw.textbbox((0, 0), day, font=font)
-        w_day, h_day = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        draw.text(
-            (
-                x0 + (cell_width - w_day) / 2,
-                y_daynum_top + (daynum_header_height - h_day) / 2,
-            ),
-            day,
-            font=font,
-            fill=text_color,
-        )
+    # Смещение первого числа месяца от понедельника — сетка строится по
+    # присланным дням недели, а не по календарю: лист Excel остаётся
+    # единственным источником правды о том, какой день каким был.
+    first_wd = day_weekdays[0] if day_weekdays else "пн"
+    offset = WEEKDAY_ORDER.index(first_wd) if first_wd in WEEKDAY_ORDER else 0
+    weeks = -(-(offset + num_days) // 7)          # округление вверх
 
-    y_weekday_top = y_daynum_bottom
-    y_weekday_bottom = y_weekday_top + weekday_header_height
-    draw.rectangle(
-        [0, y_weekday_top, left_width, y_weekday_bottom],
-        fill="#A9A9A9",
-        outline="black",
-    )
-    for i, wd in enumerate(day_weekdays):
-        x0 = left_width + i * cell_width
-        x1 = x0 + cell_width
-        fill_color = "#FF0000" if wd.lower() in ["сб", "вс"] else "#A9A9A9"
-        text_color = "white" if wd.lower() in ["сб", "вс"] else "black"
-        draw.rectangle(
-            [x0, y_weekday_top, x1, y_weekday_bottom],
-            fill=fill_color,
-            outline="black",
-        )
-        bbox = draw.textbbox((0, 0), wd, font=font)
-        w_wd, h_wd = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        draw.text(
-            (
-                x0 + (cell_width - w_wd) / 2,
-                y_weekday_top + (weekday_header_height - h_wd) / 2,
-            ),
-            wd,
-            font=font,
-            fill=text_color,
-        )
+    shifts = sum(1 for v in schedule_values if v)
+    used_codes = []
+    for v in schedule_values:
+        if v and v not in used_codes:
+            used_codes.append(v)
+    names = _salon_names()
 
-    y_data_top = y_weekday_bottom
-    y_data_bottom = y_data_top + data_row_height
-    draw.rectangle(
-        [0, y_data_top, left_width, y_data_bottom],
-        fill="#D3D3D3",
-        outline="black",
-    )
-    bbox = draw.textbbox((0, 0), employee_name, font=font)
-    w_emp, h_emp = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text(
-        ((left_width - w_emp) / 2, y_data_top + (data_row_height - h_emp) / 2),
-        employee_name,
-        font=font,
-        fill="black",
-    )
-    for i, val_str in enumerate(schedule_values):
-        x0 = left_width + i * cell_width
-        y0 = y_data_top
-        cell_bg = (
-            "#FF0000" if day_weekdays[i].lower() in ["сб", "вс"] else "#FFFFFF"
-        )
-        text_color = (
-            "white" if day_weekdays[i].lower() in ["сб", "вс"] else "black"
-        )
-        draw.rectangle(
-            [x0, y0, x0 + cell_width, y0 + data_row_height],
-            fill=cell_bg,
-            outline="black",
-        )
-        bbox = draw.textbbox((0, 0), val_str, font=font)
-        w_val, h_val = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        draw.text(
-            (
-                x0 + (cell_width - w_val) / 2,
-                y0 + (data_row_height - h_val) / 2,
-            ),
-            val_str,
-            font=font,
-            fill=text_color,
-        )
+    HEAD_H = 74
+    WDROW_H = 26
+    CAL_H = INNER + WDROW_H + weeks * CH + INNER
+    LEG_ROWS = -(-len(used_codes) // 2) if used_codes else 0
+    LEG_H = (INNER + LEG_ROWS * 22 + INNER - 4) if used_codes else 0
+    GAP = 12
+    H = PAD + HEAD_H + GAP + CAL_H + (GAP + LEG_H if LEG_H else 0) + PAD
+
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+
+    def rr(x1, y1, x2, y2, r=12, fill=CARD, outline=None, width=1):
+        try:
+            d.rounded_rectangle([x1, y1, x2, y2], radius=r, fill=fill,
+                                outline=outline, width=width)
+        except AttributeError:
+            d.rectangle([x1, y1, x2, y2], fill=fill, outline=outline)
+
+    def ctr(s, cx, y, font, color):
+        d.text((cx - d.textlength(s, font=font) / 2, y), s, font=font, fill=color)
+
+    # ── шапка ─────────────────────────────────────────────────────────
+    y = PAD
+    rr(PAD, y, W - PAD, y + HEAD_H)
+    # Имя в листе идёт с табельным номером («Юлия 3007») — в шапке он лишний,
+    # сотрудник и так знает, чьё это расписание.
+    display_name = employee_name.strip()
+    d.text((GRID_X, y + 16), display_name, font=b20, fill=TEXT)
+    d.text((GRID_X, y + 45), f"{sheet_name.upper()} · график работы", font=f12, fill=SUBTEXT)
+
+    box_w = 96
+    bx = W - PAD - INNER - box_w
+    rr(bx, y + 14, bx + box_w, y + HEAD_H - 14, r=10,
+       fill=_mix(ACCENT, "#FFFFFF", 0.90))
+    ctr(str(shifts), bx + box_w / 2, y + 18, b26, ACCENT)
+    ctr("смен в месяце", bx + box_w / 2, y + 50, f11, _mix(ACCENT, "#FFFFFF", 0.35))
+
+    # ── календарь ─────────────────────────────────────────────────────
+    y += HEAD_H + GAP
+    rr(PAD, y, W - PAD, y + CAL_H)
+
+    wy = y + INNER
+    for i, wd in enumerate(WEEKDAY_ORDER):
+        ctr(wd.upper(), GRID_X + i * CW + CW / 2, wy + 6, b11,
+            WEEKEND if i >= 5 else SUBTEXT)
+
+    gy = wy + WDROW_H
+    for idx in range(num_days):
+        pos = offset + idx
+        col, row = pos % 7, pos // 7
+        x0 = GRID_X + col * CW
+        y0 = gy + row * CH
+        code = schedule_values[idx]
+        weekend = day_weekdays[idx] in ("сб", "вс")
+
+        if code:
+            color = SALON_COLORS.get(code, SALON_COLOR_DEFAULT)
+            rr(x0 + 2, y0 + 2, x0 + CW - 3, y0 + CH - 6, r=9,
+               fill=_mix(color, "#FFFFFF", 0.86),
+               outline=_mix(color, "#FFFFFF", 0.55))
+            d.text((x0 + 9, y0 + 8), day_numbers[idx], font=b11,
+                   fill=_mix(color, "#FFFFFF", 0.12))
+            ctr(code, x0 + CW / 2, y0 + 25, b15, color)
+        else:
+            # Выходной — только число на белом. Заливка здесь соревновалась бы
+            # за внимание с рабочими днями, а картинку открывают ради них:
+            # вопрос «когда я работаю» должен читаться с одного взгляда, без
+            # разглядывания, какой из двух оттенков серого что означает.
+            d.text((x0 + 9, y0 + 8), day_numbers[idx], font=b11,
+                   fill=_mix(WEEKEND if weekend else SUBTEXT, "#FFFFFF", 0.45))
+
+    # ── легенда ───────────────────────────────────────────────────────
+    if used_codes:
+        y += CAL_H + GAP
+        rr(PAD, y, W - PAD, y + LEG_H)
+        col_w = (W - 2 * PAD - 2 * INNER) // 2
+        for i, code in enumerate(used_codes):
+            cx = GRID_X + (i % 2) * col_w
+            cy = y + INNER + (i // 2) * 22
+            color = SALON_COLORS.get(code, SALON_COLOR_DEFAULT)
+            d.ellipse([cx, cy + 4, cx + 9, cy + 13], fill=color)
+            d.text((cx + 16, cy + 1), code, font=b13, fill=TEXT)
+            title = names.get(code, "")
+            if title:
+                cw = d.textlength(code, font=b13)
+                d.text((cx + 22 + cw, cy + 2), title, font=f12, fill=SUBTEXT)
 
     filename = f"schedule_{employee_name}.png"
     img.save(filename)
