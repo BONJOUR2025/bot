@@ -26,13 +26,28 @@ export default function Modal({ children, isOpen, onClose, label }) {
   const surfaceRef = useRef(null);
   const restoreRef = useRef(null);
 
+  // onClose приходит инлайновой стрелкой (`onClose={() => setOpen(false)}`)
+  // со всех семнадцати страниц, то есть на каждом рендере это новая функция.
+  // Пока она стояла в зависимостях эффекта, весь эффект переигрывался на
+  // каждый рендер родителя: очистка возвращала фокус на элемент, с которого
+  // окно открыли, а следующий заход тут же переводил его на первое поле
+  // окна. На «Имуществе», где раз в секунду тикают часы телеметрии, это
+  // означало кражу фокуса раз в секунду — открытый выпадающий список
+  // (нативный select или datalist) закрывался сам собой, а курсор из
+  // любого поля прыгал в первое. Замерено в браузере: 0.28 с после клика.
+  //
+  // Ссылка вместо зависимости: эффект видит всегда свежий onClose, но
+  // запускается ровно один раз на открытие.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
     if (!isOpen) return undefined;
 
     restoreRef.current = document.activeElement;
 
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape') closeRef.current?.();
     };
     document.addEventListener('keydown', onKeyDown);
 
@@ -62,7 +77,7 @@ export default function Modal({ children, isOpen, onClose, label }) {
       body.style.paddingRight = prevPadding;
       restoreRef.current?.focus?.();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -79,7 +94,7 @@ export default function Modal({ children, isOpen, onClose, label }) {
       aria-modal="true"
       aria-label={label}
       tabIndex={-1}
-      onClick={(e) => e.target === e.currentTarget && onClose?.()}
+      onClick={(e) => e.target === e.currentTarget && closeRef.current?.()}
     >
       {children}
     </div>,

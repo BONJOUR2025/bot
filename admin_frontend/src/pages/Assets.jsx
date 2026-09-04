@@ -663,9 +663,18 @@ export default function Assets() {
               <input className="input mt-1 w-full" list="asset-positions"
                 placeholder="Должность" value={formEmp.position}
                 onChange={e => setFormEmp(f => ({ ...f, position: e.target.value }))} />
-              <datalist id="asset-positions">{posOptions.map(o => <option key={o} value={o} />)}</datalist>
             </div>
           </div>
+
+          {/* Списки подсказок — один набор на всё окно. Два из них стояли
+              внутри цикла по строкам таблицы, то есть при трёх предметах
+              в документе оказывалось три элемента с id="asset-items" и три с
+              id="asset-sizes". Браузер берёт первый совпавший, так что работало
+              оно по совпадению, а каждый лишний набор пересобирался на каждый
+              рендер. */}
+          <datalist id="asset-positions">{posOptions.map(o => <option key={o} value={o} />)}</datalist>
+          <datalist id="asset-items">{itemOptions.map(o => <option key={o} value={o} />)}</datalist>
+          <datalist id="asset-sizes">{sizeOptions.map(o => <option key={o} value={o} />)}</datalist>
 
           {/* Items table */}
           <div className="border border-[color:var(--color-border)] rounded-lg overflow-x-auto">
@@ -688,13 +697,11 @@ export default function Assets() {
                       <input className="input w-full text-sm" list="asset-items"
                         placeholder="Рабочая форма" value={row.item_name}
                         onChange={e => setItemField(idx, 'item_name', e.target.value)} />
-                      <datalist id="asset-items">{itemOptions.map(o => <option key={o} value={o} />)}</datalist>
                     </td>
                     <td className="px-2 py-2">
                       <input className="input w-full text-sm" list="asset-sizes"
                         placeholder="M / 42" value={row.size}
                         onChange={e => setItemField(idx, 'size', e.target.value)} />
-                      <datalist id="asset-sizes">{sizeOptions.map(o => <option key={o} value={o} />)}</datalist>
                     </td>
                     <td className="px-2 py-2">
                       <input type="number" min={1} className="input w-full text-sm text-center"
