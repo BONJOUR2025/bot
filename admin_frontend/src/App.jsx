@@ -73,6 +73,7 @@ const Receivables = lazy(() => import("./pages/Receivables"));
 const Clients = lazy(() => import("./pages/Clients"));
 const Recruitment = lazy(() => import("./pages/Recruitment"));
 const VisitorCounters = lazy(() => import("./pages/VisitorCounters"));
+const MdmDevices = lazy(() => import("./pages/MdmDevices"));
 const Scanner3D = lazy(() => import("./pages/Scanner3D"));
 const SalonAudio = lazy(() => import("./pages/SalonAudio"));
 
@@ -146,6 +147,7 @@ export default function App() {
                 <Route path="salons" element={<Salons />} />
                 <Route path="shift-checkins" element={<ShiftCheckins />} />
                 <Route path="visitor-counters" element={<VisitorCounters />} />
+                <Route path="mdm-devices" element={<MdmDevices />} />
                 <Route path="scanner-3d" element={<Scanner3D />} />
                 <Route path="salon-audio" element={<SalonAudio />} />
                 <Route path="location-plans" element={<LocationPlans />} />
