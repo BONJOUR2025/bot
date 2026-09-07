@@ -29,6 +29,23 @@
             </intent-filter>
         </activity>
 
+        <!-- Обязательны для настройки по QR начиная с Android 11: система
+             спрашивает у агента режим управления и показывает ему экран
+             завершения. Без них настройка обрывается с «Can't set up device». -->
+        <activity
+            android:name=".ProvisioningActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.app.action.GET_PROVISIONING_MODE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.app.action.ADMIN_POLICY_COMPLIANCE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".AdminReceiver"
             android:exported="true"
