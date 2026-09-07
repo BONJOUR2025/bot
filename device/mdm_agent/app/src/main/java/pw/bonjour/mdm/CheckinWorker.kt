@@ -67,18 +67,22 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
         Prefs.setPolicy(ctx, policy, version)
 
         var problem: String? = null
+        var appliedNow: Int? = null
         if (version != Prefs.appliedVersion(ctx)) {
             problem = PolicyApplier.apply(ctx, policy)
-            if (problem == null) Prefs.setAppliedVersion(ctx, version)
+            if (problem == null) {
+                Prefs.setAppliedVersion(ctx, version)
+                appliedNow = version
+            }
         }
         Prefs.setLastError(ctx, problem)
 
         runCommands(ctx, body.optJSONArray("commands") ?: JSONArray())
+        report(ctx, appliedNow)
         return Result.success()
     }
 
     private fun runCommands(ctx: Context, commands: JSONArray) {
-        if (commands.length() == 0) return
         for (i in 0 until commands.length()) {
             val command = commands.optJSONObject(i) ?: continue
             val outcome = CommandRunner.run(ctx, command)
@@ -88,16 +92,23 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
                 Prefs.addAck(ctx, command.optString("id"), outcome.first, outcome.second)
             }
         }
-        deliverAcks(ctx)
     }
 
-    /** Отдельная ручка вместо повторного чек-ина: чек-ин забрал бы новые
-     *  команды и пометил их отправленными, а исполнить их этот проход уже
-     *  не успевает — они молча повисли бы до следующего цикла. */
-    private fun deliverAcks(ctx: Context) {
+    /** Догоняющий отчёт: что исполнено и какая версия политики применена.
+     *
+     *  Отдельная ручка, а не повторный чек-ин: чек-ин забрал бы новые команды и
+     *  пометил их отправленными, а исполнить их этот проход уже не успевает —
+     *  они молча повисли бы до следующего цикла.
+     *
+     *  Применённую версию можно сообщить только здесь: политику агент получает
+     *  ответом на чек-ин и применяет, когда тот запрос уже ушёл, поэтому в самом
+     *  чек-ине он всегда назвал бы предыдущую.
+     */
+    private fun report(ctx: Context, appliedVersion: Int?) {
         val acks = Prefs.pendingAcks(ctx)
-        if (acks.length() == 0) return
+        if (acks.length() == 0 && appliedVersion == null) return
         val payload = JSONObject().put("acks", acks)
+        if (appliedVersion != null) payload.put("applied_policy_version", appliedVersion)
         val response = try {
             Api.post(
                 Prefs.serverUrl(ctx) + "/api/mdm/device/ack",

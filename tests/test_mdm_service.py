@@ -118,6 +118,20 @@ def test_ack_records_result(service):
     assert stored.acked_at
 
 
+def test_applied_version_is_reported_after_policy_is_applied(service):
+    device, _ = enroll(service)
+    updated = service.set_policy(device.id, MdmPolicy(restrictions=MdmRestrictions(no_add_user=True)))
+
+    # Чек-ин может назвать только предыдущую версию: политику агент получает
+    # ответом на этот же запрос и применяет, когда тот уже ушёл.
+    after_checkin = service.checkin({"id": device.id}, MdmCheckinRequest(applied_policy_version=1))
+    assert after_checkin.applied_policy_version != updated.policy_version
+
+    service.set_applied_version({"id": device.id}, updated.policy_version)
+
+    assert service.get_device(device.id).applied_policy_version == updated.policy_version
+
+
 def test_checkin_updates_state_and_keeps_previous_location(service):
     device, _ = enroll(service)
     service.checkin(

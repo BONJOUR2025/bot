@@ -92,7 +92,10 @@ def create_mdm_device_router(service: MdmService) -> APIRouter:
         data: MdmAckRequest,
         device: dict[str, Any] = Depends(_authenticated_device),
     ) -> dict[str, int]:
-        return {"recorded": service.ack_commands(device, data.acks)}
+        recorded = service.ack_commands(device, data.acks)
+        if data.applied_policy_version is not None:
+            service.set_applied_version(device, data.applied_policy_version)
+        return {"recorded": recorded}
 
     return router
 

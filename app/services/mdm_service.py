@@ -125,6 +125,14 @@ class MdmService:
                 recorded += 1
         return recorded
 
+    def set_applied_version(self, device: dict[str, Any], version: int) -> None:
+        """Догоняющий отчёт агента о применённой политике.
+
+        Без него карточка на один цикл (15 минут) показывала бы «ждёт
+        применения» для политики, которая на телефоне уже действует.
+        """
+        self._repo.upsert(str(device.get("id")), {"applied_policy_version": version})
+
     def take_pending_commands(self, device_id: str) -> list[dict[str, Any]]:
         return self._repo.take_pending(device_id)
 

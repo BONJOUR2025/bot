@@ -130,6 +130,10 @@ class MdmAckRequest(BaseModel):
     """
 
     acks: list[MdmCommandAck] = Field(default_factory=list)
+    # Версия политики, применённая уже ПОСЛЕ отправки чек-ина: в самом
+    # чек-ине агент может сообщить только предыдущую — политику он получает
+    # тем же ответом и применяет, когда запрос уже ушёл.
+    applied_policy_version: Optional[int] = None
 
 
 class MdmCheckinResponse(BaseModel):
