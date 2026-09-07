@@ -595,3 +595,19 @@ def test_upload_token_is_read_live_from_config(tmp_path, monkeypatch):
         json.dumps({"MDM_UPLOAD_TOKEN": "t" * 48}), encoding="utf-8"
     )
     assert mdm_service.current_upload_token() == "t" * 48
+
+
+def test_agent_downgrade_is_refused(service, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    service.save_agent_apk(make_apk(version_name="0.2.8", version_code=11))
+
+    # Android не поставит версию старее поверх новой: раскатка такого APK
+    # означала бы, что весь парк отчитается ошибкой установки.
+    with pytest.raises(MdmValidationError, match="agent_downgrade_11_to_7"):
+        service.save_agent_apk(make_apk(version_name="0.2.4", version_code=7))
+
+    assert service.agent_info().version_name == "0.2.8"
+
+    # Более новая — принимается.
+    service.save_agent_apk(make_apk(version_name="0.2.9", version_code=12))
+    assert service.agent_info().version_code == 12

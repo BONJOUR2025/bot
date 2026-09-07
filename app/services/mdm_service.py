@@ -520,6 +520,17 @@ class MdmService:
         if "pw.bonjour.mdm".encode("utf-16-le") not in manifest:
             raise MdmValidationError("foreign_apk")
 
+        # Откат на версию старее не имеет смысла и опасен: Android откажется
+        # ставить её поверх новой, и весь парк отчитается ошибкой установки.
+        # Проверено на себе — загрузил в панель залежавшийся файл и откатил
+        # сервер на четыре версии назад.
+        new_code = self._read_apk_version(content)[1]
+        current_code = self.agent_info().version_code
+        if new_code is not None and current_code is not None and new_code < current_code:
+            raise MdmValidationError(
+                f"agent_downgrade_{current_code}_to_{new_code}"
+            )
+
         agent_apk_path().write_bytes(content)
         return self.agent_info()
 
