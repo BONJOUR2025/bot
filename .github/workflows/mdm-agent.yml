@@ -59,7 +59,10 @@ jobs:
         working-directory: device/mdm_agent
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -n1)
-          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+          # Провижининг по QR проверяет подпись старым способом и читает только
+          # v1 — если её нет, телефон отказывается настраиваться.
+          "$APKSIGNER" verify --verbose app/build/outputs/apk/release/app-release.apk             | grep -q "v1 scheme (JAR signing): true"
 
       - uses: actions/upload-artifact@v4
         with:

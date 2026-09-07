@@ -3,8 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val agentVersionName = "0.2.5"
-val agentVersionCode = 8
+val agentVersionName = "0.2.6"
+val agentVersionCode = 9
 
 // Версия кладётся внутрь самого APK: сервер читает её из assets, чтобы знать,
 // какая версия лежит у него и какие телефоны отстали. Альтернативы хуже —
@@ -48,6 +48,15 @@ android {
                 storePassword = System.getenv("MDM_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("MDM_KEY_ALIAS") ?: "mdm"
                 keyPassword = System.getenv("MDM_KEYSTORE_PASSWORD")
+                // v1 (подпись внутри архива, META-INF) Gradle пропускает при
+                // minSdk 24 и выше как устаревшую — и для обычной установки её
+                // действительно не нужно. Но мастер первичной настройки Android
+                // проверяет скачанный по QR файл старым способом, который читает
+                // только v1: без неё провижининг падает с «Can't set up device»,
+                // не поясняя, что именно не сошлось. Проверено на realme RMX3938.
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
