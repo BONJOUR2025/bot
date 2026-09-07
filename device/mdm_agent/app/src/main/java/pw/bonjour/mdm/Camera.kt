@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
 object Camera {
 
     private const val OPEN_TIMEOUT_MS = 8_000L
-    private const val CAPTURE_TIMEOUT_MS = 8_000L
+    private const val CAPTURE_TIMEOUT_MS = 12_000L
     private const val UPLOAD_TIMEOUT_MS = 30_000
 
     /** @return текст ошибки, если снять или отправить не вышло; null при успехе. */
@@ -52,7 +52,8 @@ object Camera {
         val cameraId = pickCamera(manager, lens)
             ?: return "Не найдена " + (if (lens == "front") "фронтальная" else "основная") + " камера"
 
-        val jpeg = capture(ctx, manager, cameraId) ?: return "Кадр получить не удалось"
+        val (jpeg, reason) = capture(ctx, manager, cameraId)
+        if (jpeg == null) return reason ?: "Кадр получить не удалось"
         return upload(ctx, lens, jpeg)
     }
 
@@ -73,7 +74,11 @@ object Camera {
         return fallback
     }
 
-    private fun capture(ctx: Context, manager: CameraManager, cameraId: String): ByteArray? {
+    /** @return кадр и null, либо null и причина, на какой стадии сорвалось:
+     *  без кабеля это единственный способ понять, что не так. */
+    private fun capture(
+        ctx: Context, manager: CameraManager, cameraId: String
+    ): Pair<ByteArray?, String?> {
         val thread = HandlerThread("mdm-camera").apply { start() }
         val handler = Handler(thread.looper)
         val size = jpegSize(manager, cameraId)
@@ -94,20 +99,36 @@ object Camera {
 
         var camera: CameraDevice? = null
         try {
-            camera = openCamera(ctx, manager, cameraId, handler) ?: return null
-            val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+            val opened = openCamera(ctx, manager, cameraId, handler)
+            camera = opened.first
+            if (camera == null) {
+                return null to ("Камера не открылась: " + (opened.second ?: "неизвестно"))
+            }
+
+            // Держим поток предпросмотра, пока делаем снимок: без него на многих
+            // прошивках автоэкспозиция не сходится и одиночный кадр просто не
+            // приходит. Это и была причина отказа на realme.
+            val preview = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                 addTarget(reader.surface)
-                // Полный автомат: снимаем вслепую, наводить и выставлять некому.
                 set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
                 set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON)
-                set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            }.build()
+            val still = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+                addTarget(reader.surface)
+                set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
+                set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON)
+                set(CaptureRequest.JPEG_QUALITY, 85.toByte())
             }.build()
 
-            if (!startCaptureSession(camera, reader, request, handler)) return null
-            if (!done.await(CAPTURE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) return null
-            return jpeg
+            if (!startCaptureSession(camera, reader, preview, still, handler)) {
+                return null to "Не удалось настроить съёмку"
+            }
+            if (!done.await(CAPTURE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                return null to "Камера не отдала кадр за отведённое время"
+            }
+            return if (jpeg != null) jpeg to null else (null to "Кадр пришёл пустым")
         } catch (e: Exception) {
-            return null
+            return null to ("Ошибка съёмки: " + e.message)
         } finally {
             camera?.close()
             reader.close()
@@ -117,35 +138,43 @@ object Camera {
 
     private fun openCamera(
         ctx: Context, manager: CameraManager, cameraId: String, handler: Handler
-    ): CameraDevice? {
+    ): Pair<CameraDevice?, String?> {
         var opened: CameraDevice? = null
+        var error: String? = "нет ответа"
         val latch = CountDownLatch(1)
         try {
             manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(device: CameraDevice) {
                     opened = device
+                    error = null
                     latch.countDown()
                 }
 
                 override fun onDisconnected(device: CameraDevice) {
                     device.close()
+                    error = "камеру занял кто-то другой"
                     latch.countDown()
                 }
 
-                override fun onError(device: CameraDevice, error: Int) {
+                override fun onError(device: CameraDevice, err: Int) {
                     device.close()
+                    error = "код " + err
                     latch.countDown()
                 }
             }, handler)
         } catch (e: SecurityException) {
-            return null
+            return null to "нет разрешения"
         }
         latch.await(OPEN_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        return opened
+        return opened to error
     }
 
     private fun startCaptureSession(
-        camera: CameraDevice, reader: ImageReader, request: CaptureRequest, handler: Handler
+        camera: CameraDevice,
+        reader: ImageReader,
+        preview: CaptureRequest,
+        still: CaptureRequest,
+        handler: Handler
     ): Boolean {
         val ready = CountDownLatch(1)
         var ok = false
@@ -155,7 +184,12 @@ object Camera {
             object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(session: CameraCaptureSession) {
                     try {
-                        session.capture(request, null, handler)
+                        // Держим предпросмотр, чтобы автоэкспозиция сошлась, и
+                        // даём ей полторы секунды до кадра.
+                        session.setRepeatingRequest(preview, null, handler)
+                        handler.postDelayed({
+                            runCatching { session.capture(still, null, handler) }
+                        }, 1500)
                         ok = true
                     } catch (e: Exception) {
                         ok = false
