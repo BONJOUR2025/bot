@@ -154,6 +154,13 @@ class Settings(BaseSettings):
     # Статический API-ключ для устройств-счётчиков посетителей (ESP8266 и т.п.)
     visitor_counter_api_key: str = Field("", validation_alias="VISITOR_COUNTER_API_KEY")
 
+    # Файл со списком корпоративных телефонов под MDM-управлением
+    mdm_devices_file: str = Field("mdm_devices.json", validation_alias="MDM_DEVICES_FILE")
+
+    # Статический ключ, которым агент на телефоне авторизует первичную
+    # регистрацию (дальше у каждого телефона свой персональный токен)
+    mdm_enroll_key: str = Field("", validation_alias="MDM_ENROLL_KEY")
+
     # Файл для хранения пользователей бота (для привязки к сотрудникам)
     bot_users_file: str = Field("bot_users.json", validation_alias="BOT_USERS_FILE")
 

@@ -13,6 +13,7 @@ manager_plans.json
 lasts.json
 apprentice_attendance_marks.json
 vpn_settings.json
+mdm_devices.json
 vpn/
 static/uploads/lasts/
 

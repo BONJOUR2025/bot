@@ -1,0 +1,68 @@
+name: MDM agent APK
+
+# Сборка агента для корпоративных телефонов (device/mdm_agent).
+# Локально собирать нечем: на рабочей машине нет ни JDK, ни Android SDK,
+# поэтому APK собирается здесь и скачивается из артефактов сборки.
+
+on:
+  push:
+    branches: [claude/init-wmebv3]
+    paths:
+      - 'device/mdm_agent/**'
+      - '.github/workflows/mdm-agent.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Доставить Android SDK 34
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+
+      # Подпись обязана быть стабильной от сборки к сборке: агент встаёт
+      # владельцем устройства и не удаляется, поэтому APK с другим ключом на
+      # телефон уже не встанет — обновить его можно будет только сбросом.
+      - name: Восстановить ключ подписи
+        env:
+          KEYSTORE_B64: ${{ secrets.MDM_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Секрет MDM_KEYSTORE_B64 не задан — собирать нечем"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mdm-agent.p12"
+
+      - name: Собрать APK
+        working-directory: device/mdm_agent
+        env:
+          MDM_KEYSTORE_PATH: ${{ runner.temp }}/mdm-agent.p12
+          MDM_KEYSTORE_PASSWORD: ${{ secrets.MDM_KEYSTORE_PASSWORD }}
+          MDM_KEY_ALIAS: mdm
+        run: gradle --no-daemon assembleRelease
+
+      - name: Проверить, что APK подписан
+        working-directory: device/mdm_agent
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -n1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bonjour-mdm-agent
+          path: device/mdm_agent/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

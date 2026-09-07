@@ -460,6 +460,19 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # MDM корпоративных Android-телефонов: агент на телефоне ходит по своему
+    # токену (сессии у него быть не может), админские ручки — по праву "mdm".
+    from .mdm import create_mdm_device_router, create_mdm_router
+    from ..services.mdm_service import get_mdm_service
+
+    mdm_service = get_mdm_service()
+    app.include_router(create_mdm_device_router(mdm_service), prefix="/api")
+    app.include_router(
+        create_mdm_router(mdm_service),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # 3D foot scanner (.scm file parsing -> metadata + measurements + views)
     from .scanner import create_scanner_router
 
