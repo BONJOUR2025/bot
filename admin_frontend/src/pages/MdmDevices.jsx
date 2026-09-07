@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Smartphone, RefreshCw, Copy, KeyRound, ShieldCheck, ShieldAlert,
   Lock, MapPin, RotateCw, Download, Trash2, Unlink, BatteryMedium,
-  Upload, QrCode, PackageCheck,
+  Upload, QrCode, PackageCheck, Boxes, ListRestart,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -63,6 +63,8 @@ export default function MdmDevices() {
   const [qrOpen, setQrOpen] = useState(false);
   const qrCanvas = useRef(null);
   const apkInput = useRef(null);
+  const [library, setLibrary] = useState([]);
+  const libraryInput = useRef(null);
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -81,16 +83,18 @@ export default function MdmDevices() {
   async function load() {
     setLoading(true);
     try {
-      const [devicesRes, enrollmentRes, agentRes, provisioningRes] = await Promise.all([
+      const [devicesRes, enrollmentRes, agentRes, provisioningRes, libraryRes] = await Promise.all([
         api.get('mdm/devices'),
         api.get('mdm/enrollment'),
         api.get('mdm/agent'),
         api.get('mdm/provisioning'),
+        api.get('mdm/apps'),
       ]);
       setDevices(devicesRes.data);
       setEnrollment(enrollmentRes.data);
       setAgent(agentRes.data);
       setProvisioning(provisioningRes.data);
+      setLibrary(libraryRes.data);
     } catch (err) {
       toast(err.response?.data?.detail || err.message, 'error');
     } finally {
@@ -124,6 +128,50 @@ export default function MdmDevices() {
     } finally {
       setBusy(false);
       if (apkInput.current) apkInput.current.value = '';
+    }
+  }
+
+  async function uploadLibraryApp(file) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await api.post('mdm/apps', form);
+      toast(`Загружено: ${res.data.package || res.data.filename}`, 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+      if (libraryInput.current) libraryInput.current.value = '';
+    }
+  }
+
+  async function deleteLibraryApp(app) {
+    if (!window.confirm(`Убрать «${app.package || app.filename}» из каталога? На телефонах приложение останется.`)) return;
+    try {
+      await api.delete(`mdm/apps/${app.id}`);
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    }
+  }
+
+  async function installLibraryApp(appId) {
+    if (!selected) {
+      toast('Сначала выберите телефон в списке ниже', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post(`mdm/devices/${selected.id}/install/${appId}`);
+      toast('Установка поставлена в очередь', 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -438,6 +486,76 @@ export default function MdmDevices() {
         )}
       </section>
 
+      <section className="bg-[color:var(--color-bg-secondary)] rounded-xl p-4 flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 font-medium">
+            <Boxes size={16} /> Приложения для раздачи
+          </div>
+          <input
+            ref={libraryInput}
+            type="file"
+            accept=".apk,application/vnd.android.package-archive"
+            className="hidden"
+            onChange={(e) => uploadLibraryApp(e.target.files?.[0])}
+          />
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm flex items-center gap-1.5"
+            disabled={busy}
+            onClick={() => libraryInput.current?.click()}
+          >
+            <Upload size={14} /> Загрузить APK
+          </button>
+        </div>
+
+        {library.length === 0 ? (
+          <p className="text-sm text-[color:var(--color-text-muted)]">
+            Каталог пуст. Загрузите APK — и его можно будет ставить на телефоны одной кнопкой,
+            не вводя ссылок руками.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {library.map((app) => (
+              <div key={app.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium">{app.package || app.filename}</span>
+                {app.version_name && (
+                  <span className="text-[color:var(--color-text-muted)]">{app.version_name}</span>
+                )}
+                <span className="text-[color:var(--color-text-muted)]">
+                  {Math.round(app.size / 1024 / 1024 * 10) / 10} МБ
+                </span>
+                {app.installed_on > 0 && (
+                  <span className="text-[color:var(--color-text-muted)]">
+                    {`стоит на ${app.installed_on}`}
+                  </span>
+                )}
+                <span className="grow" />
+                <button
+                  type="button"
+                  className="btn btn--primary btn--sm"
+                  disabled={busy || !selected}
+                  title={selected ? '' : 'Выберите телефон в списке ниже'}
+                  onClick={() => installLibraryApp(app.id)}
+                >
+                  Поставить
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => deleteLibraryApp(app)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <p className="text-xs text-[color:var(--color-text-muted)]">
+              «Поставить» отправляет приложение на выбранный телефон
+              {selected ? ` — сейчас это «${selected.name || selected.model}»` : ''}.
+            </p>
+          </div>
+        )}
+      </section>
+
       <ResponsiveTable
         columns={columns}
         data={devices}
@@ -582,6 +700,71 @@ export default function MdmDevices() {
             <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
               {`Команда исполнится в течение ${pollText} — телефон опрашивает очередь будильником.`}
             </p>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <h2 className="font-medium">
+                {`Установлено на телефоне${selected.apps?.length ? `: ${selected.apps.length}` : ''}`}
+              </h2>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm flex items-center gap-1.5"
+                disabled={busy}
+                onClick={() => sendCommand('refresh_apps')}
+              >
+                <ListRestart size={14} /> Обновить список
+              </button>
+            </div>
+            {selected.apps?.length ? (
+              <>
+                <div className="flex flex-col gap-1 max-h-80 overflow-y-auto pr-1">
+                  {[...selected.apps]
+                    .sort((a, b) => Number(a.system) - Number(b.system)
+                      || (a.label || a.package).localeCompare(b.label || b.package, 'ru'))
+                    .map((app) => (
+                      <div key={app.package} className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className={app.enabled ? '' : 'text-[color:var(--color-text-muted)]'}>
+                          {app.label || app.package}
+                        </span>
+                        <span className="text-xs text-[color:var(--color-text-muted)]">
+                          {app.package}
+                        </span>
+                        {app.version_name && (
+                          <span className="text-xs text-[color:var(--color-text-muted)]">
+                            {app.version_name}
+                          </span>
+                        )}
+                        {app.system && (
+                          <span className="text-xs text-[color:var(--color-text-muted)]">системное</span>
+                        )}
+                        <span className="grow" />
+                        {!app.system && (
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            disabled={busy}
+                            onClick={() => {
+                              if (!window.confirm(`Удалить «${app.label || app.package}» с телефона?`)) return;
+                              sendCommand('uninstall', { package: app.package });
+                            }}
+                          >
+                            Удалить
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+                <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
+                  {`Список от ${fmtDateTime(selected.apps_updated_at)}. Системные приложения `
+                   + 'показаны только те, что видны сотруднику в меню, и удалить их нельзя.'}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-[color:var(--color-text-muted)]">
+                Телефон ещё не присылал список. Он приедет с ближайшим чек-ином.
+              </p>
+            )}
           </div>
 
           {selected.commands?.length > 0 && (

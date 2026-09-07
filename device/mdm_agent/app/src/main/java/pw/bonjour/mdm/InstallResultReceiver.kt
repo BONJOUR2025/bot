@@ -34,6 +34,9 @@ class InstallResultReceiver : BroadcastReceiver() {
             else ->
                 Prefs.addAck(context, commandId, "failed", message ?: ("status_" + status))
         }
+        // Состав приложений заведомо изменился — пусть ближайший чек-ин
+        // отправит список заново, не дожидаясь, пока кто-то его запросит.
+        Prefs.setReportedAppsHash(context, "")
         CheckinWorker.runNow(context)
     }
 }

@@ -17,11 +17,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from app.config import MDM_AGENT_APK_FILE
+from app.config import MDM_AGENT_APK_FILE, MDM_APPS_DIR
 from app.data.mdm_repository import MdmRepository, get_mdm_repository
 from app.schemas.mdm import (
     MdmAgentInfo,
     MdmAgentRolloutResult,
+    MdmLibraryApp,
     MdmProvisioning,
     MdmCheckinRequest,
     MdmCommandAck,
@@ -32,6 +33,7 @@ from app.schemas.mdm import (
     MdmEnrollmentInfo,
     MdmPolicy,
 )
+from app.services.apk_info import read_apk_info
 from app.settings import settings
 
 
@@ -81,6 +83,39 @@ def current_agent_signature_checksum() -> str:
     except Exception:
         pass
     return settings.mdm_agent_signature_checksum
+
+
+def apps_dir() -> Path:
+    path = Path(MDM_APPS_DIR)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def library_app_url(app_id: str) -> str:
+    """Ссылка, по которой телефон качает приложение из каталога.
+
+    Как и агент, отдаётся без авторизации: телефон не может предъявить
+    пользовательскую сессию, а имя файла — случайные 16 символов от хэша
+    содержимого, так что перебором его не нащупать.
+    """
+    return settings.public_base_url.rstrip("/") + "/api/mdm/apps/" + app_id + ".apk"
+
+
+def _library_index_path() -> Path:
+    return apps_dir() / "index.json"
+
+
+def _read_library_index() -> dict[str, Any]:
+    try:
+        return json.loads(_library_index_path().read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _write_library_index(index: dict[str, Any]) -> None:
+    _library_index_path().write_text(
+        json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def agent_apk_path() -> Path:
@@ -156,6 +191,13 @@ class MdmService:
             "last_error": data.last_error,
             "last_seen_at": _now(),
         }
+        # Список приложений приезжает не каждый раз, а только когда изменился.
+        # Отсутствие его в запросе — «не менялся», а не «приложений больше нет».
+        if data.apps is not None:
+            patch["apps"] = [app.model_dump() for app in data.apps]
+            patch["apps_hash"] = data.apps_hash
+            patch["apps_updated_at"] = _now()
+
         # Координаты приходят только в ответ на команду locate, поэтому пустое
         # значение означает «не спрашивали», а не «телефон переехал в null».
         if data.latitude is not None and data.longitude is not None:
@@ -266,6 +308,89 @@ class MdmService:
         """
         if not self._repo.delete(device_id):
             raise MdmValidationError("device_not_found")
+
+    # --- каталог приложений ---------------------------------------------
+
+    def list_library(self) -> list[MdmLibraryApp]:
+        index = _read_library_index()
+        installed = self._installed_counts()
+        result: list[MdmLibraryApp] = []
+        for app_id, meta in index.items():
+            path = apps_dir() / (app_id + ".apk")
+            if not path.exists():
+                continue
+            package = meta.get("package")
+            result.append(
+                MdmLibraryApp(
+                    id=app_id,
+                    filename=meta.get("filename") or (app_id + ".apk"),
+                    package=package,
+                    version_name=meta.get("version_name"),
+                    version_code=meta.get("version_code"),
+                    size=path.stat().st_size,
+                    uploaded_at=meta.get("uploaded_at"),
+                    url=library_app_url(app_id),
+                    installed_on=installed.get(package, 0) if package else 0,
+                )
+            )
+        result.sort(key=lambda a: str(a.uploaded_at or ""), reverse=True)
+        return result
+
+    def save_library_app(self, filename: str, content: bytes) -> MdmLibraryApp:
+        try:
+            zipfile.ZipFile(io.BytesIO(content)).read("AndroidManifest.xml")
+        except Exception as exc:
+            raise MdmValidationError("not_an_apk") from exc
+
+        app_id = hashlib.sha256(content).hexdigest()[:16]
+        (apps_dir() / (app_id + ".apk")).write_bytes(content)
+
+        # Разбор манифеста — «лучшее усилие»: имя пакета нужно только чтобы
+        # показать, где приложение уже стоит, и предложить удаление. Не
+        # прочиталось — файл всё равно поставится, установщик разберётся сам.
+        info = read_apk_info(content)
+        index = _read_library_index()
+        index[app_id] = {
+            "filename": filename,
+            "package": info["package"],
+            "version_name": info["version_name"],
+            "version_code": info["version_code"],
+            "uploaded_at": _now(),
+        }
+        _write_library_index(index)
+
+        return next(app for app in self.list_library() if app.id == app_id)
+
+    def delete_library_app(self, app_id: str) -> None:
+        index = _read_library_index()
+        if app_id not in index:
+            raise MdmValidationError("app_not_found")
+        (apps_dir() / (app_id + ".apk")).unlink(missing_ok=True)
+        index.pop(app_id, None)
+        _write_library_index(index)
+
+    def library_app_path(self, app_id: str) -> Path:
+        path = apps_dir() / (app_id + ".apk")
+        if not path.exists():
+            raise MdmValidationError("app_not_found")
+        return path
+
+    def install_library_app(self, device_id: str, app_id: str) -> dict[str, Any]:
+        if app_id not in _read_library_index():
+            raise MdmValidationError("app_not_found")
+        return self.queue_command(
+            device_id,
+            MdmCommandCreate(type="install_apk", params={"url": library_app_url(app_id)}),
+        )
+
+    def _installed_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for device in self._repo.list():
+            for app in device.get("apps") or []:
+                package = app.get("package")
+                if package:
+                    counts[package] = counts.get(package, 0) + 1
+        return counts
 
     # --- провижининг по QR ----------------------------------------------
 

@@ -53,6 +53,13 @@ object Prefs {
     fun setPollSeconds(ctx: Context, value: Int) =
         sp(ctx).edit().putInt("poll_seconds", value.coerceIn(30, 3600)).apply()
 
+    /** Отпечаток списка приложений, который сервер уже принял. Пока совпадает
+     *  с текущим, полный список гонять незачем. */
+    fun reportedAppsHash(ctx: Context): String = sp(ctx).getString("apps_hash", "") ?: ""
+
+    fun setReportedAppsHash(ctx: Context, value: String) =
+        sp(ctx).edit().putString("apps_hash", value).apply()
+
     fun lastCheckin(ctx: Context): String = sp(ctx).getString("last_checkin", "") ?: ""
 
     fun setLastCheckin(ctx: Context, value: String) =

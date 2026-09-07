@@ -33,6 +33,11 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
      *  выполненной команды потеряется при обрыве связи. */
     private var sentAcks = JSONArray()
 
+    /** Отпечаток списка приложений, ушедший в текущем запросе. Как и с
+     *  подтверждениями, запоминаем его только после ответа сервера — иначе при
+     *  обрыве связи список считался бы доставленным и не уехал бы никогда. */
+    private var sentAppsHash: String? = null
+
     override fun doWork(): Result {
         val ctx = applicationContext
         var token = Prefs.token(ctx)
@@ -65,6 +70,8 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
         Prefs.setLastCheckin(ctx, now())
         Prefs.clearAcks(ctx, sentAcks)
         sentAcks = JSONArray()
+        sentAppsHash?.let { Prefs.setReportedAppsHash(ctx, it) }
+        sentAppsHash = null
 
         val body = response.json()
         val version = body.optInt("policy_version", 0)
@@ -147,6 +154,14 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
             .put("device_owner", Dpm.isOwner(ctx))
             .put("applied_policy_version", Prefs.appliedVersion(ctx))
             .put("acks", acks)
+
+        val apps = AppInventory.collect(ctx)
+        val hash = AppInventory.fingerprint(apps)
+        json.put("apps_hash", hash)
+        if (hash != Prefs.reportedAppsHash(ctx)) {
+            json.put("apps", apps)
+            sentAppsHash = hash
+        }
 
         battery(ctx)?.let { json.put("battery", it) }
         Prefs.lastError(ctx).takeIf { it.isNotBlank() }?.let { json.put("last_error", it) }

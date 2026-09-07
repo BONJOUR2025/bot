@@ -19,6 +19,7 @@ from app.schemas.mdm import (
     MdmAckRequest,
     MdmAgentInfo,
     MdmAgentRolloutResult,
+    MdmLibraryApp,
     MdmProvisioning,
     MdmCheckinRequest,
     MdmCheckinResponse,
@@ -33,9 +34,9 @@ from app.schemas.mdm import (
 )
 from app.services.mdm_service import (
     MdmService,
+    MdmValidationError,
     agent_apk_path,
     current_command_poll_seconds,
-    MdmValidationError,
     current_enroll_key,
     get_mdm_service,
 )
@@ -70,6 +71,18 @@ def create_mdm_public_router() -> APIRouter:
             path,
             media_type="application/vnd.android.package-archive",
             filename="bonjour-mdm-agent.apk",
+        )
+
+    @router.get("/apps/{app_id}.apk")
+    async def download_library_app(app_id: str) -> FileResponse:
+        try:
+            path = get_mdm_service().library_app_path(app_id)
+        except MdmValidationError:
+            raise HTTPException(status_code=404, detail="app_not_found")
+        return FileResponse(
+            path,
+            media_type="application/vnd.android.package-archive",
+            filename=app_id + ".apk",
         )
 
     return router
@@ -151,6 +164,44 @@ def create_mdm_router(service: MdmService) -> APIRouter:
         current=Depends(require_permission("mdm")),
     ) -> MdmEnrollmentInfo:
         return service.enrollment_info()
+
+    @router.get("/apps", response_model=list[MdmLibraryApp])
+    async def list_library(
+        current=Depends(require_permission("mdm")),
+    ) -> list[MdmLibraryApp]:
+        return service.list_library()
+
+    @router.post("/apps", response_model=MdmLibraryApp)
+    async def upload_library_app(
+        file: UploadFile = File(...),
+        current=Depends(require_permission("mdm")),
+    ) -> MdmLibraryApp:
+        try:
+            return service.save_library_app(file.filename or "app.apk", await file.read())
+        except MdmValidationError as exc:
+            raise _handle(exc)
+
+    @router.delete("/apps/{app_id}")
+    async def delete_library_app(
+        app_id: str,
+        current=Depends(require_permission("mdm")),
+    ) -> dict[str, str]:
+        try:
+            service.delete_library_app(app_id)
+        except MdmValidationError as exc:
+            raise _handle(exc)
+        return {"status": "ok"}
+
+    @router.post("/devices/{device_id}/install/{app_id}", response_model=MdmCommand, status_code=201)
+    async def install_library_app(
+        device_id: str,
+        app_id: str,
+        current=Depends(require_permission("mdm")),
+    ) -> MdmCommand:
+        try:
+            return MdmCommand.model_validate(service.install_library_app(device_id, app_id))
+        except MdmValidationError as exc:
+            raise _handle(exc)
 
     @router.get("/provisioning", response_model=MdmProvisioning)
     async def get_provisioning(

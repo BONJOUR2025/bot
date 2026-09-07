@@ -24,6 +24,13 @@ object CommandRunner {
 
         return try {
             when (type) {
+                "refresh_apps" -> {
+                    // Сбрасываем отпечаток: ближайший чек-ин увидит расхождение
+                    // и отправит полный список заново.
+                    Prefs.setReportedAppsHash(ctx, "")
+                    "done" to null
+                }
+
                 "apply_policy" -> {
                     val problem = PolicyApplier.apply(ctx, Prefs.policy(ctx))
                     if (problem == null) "done" to null else "failed" to problem

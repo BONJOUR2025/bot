@@ -23,7 +23,19 @@ CommandType = Literal[
     "uninstall",  # удалить приложение по имени пакета
     "wipe",  # полный сброс до заводских настроек
     "release_owner",  # аварийный люк: агент перестаёт быть владельцем устройства
+    "refresh_apps",  # прислать список установленных приложений заново
 ]
+
+
+class MdmApp(BaseModel):
+    """Приложение, установленное на телефоне."""
+
+    package: str
+    label: Optional[str] = None
+    version_name: Optional[str] = None
+    version_code: Optional[int] = None
+    system: bool = False
+    enabled: bool = True
 
 
 class MdmRestrictions(BaseModel):
@@ -109,6 +121,11 @@ class MdmCheckinRequest(BaseModel):
     location_at: Optional[str] = None
     last_error: Optional[str] = None
     acks: list[MdmCommandAck] = Field(default_factory=list)
+    # Отпечаток состава приложений приходит всегда, сам список — только
+    # когда изменился: полный список это килобайты, а чек-ины идут раз в
+    # две минуты.
+    apps_hash: Optional[str] = None
+    apps: Optional[list[MdmApp]] = None
 
 
 class MdmCommand(BaseModel):
@@ -168,6 +185,8 @@ class MdmDevice(BaseModel):
     longitude: Optional[float] = None
     location_at: Optional[str] = None
     last_error: Optional[str] = None
+    apps: list[MdmApp] = Field(default_factory=list)
+    apps_updated_at: Optional[str] = None
     commands: list[MdmCommand] = Field(default_factory=list)
 
 
@@ -193,6 +212,21 @@ class MdmAgentInfo(BaseModel):
     url: Optional[str] = None
     # Сколько телефонов сообщают версию, отличную от лежащей на сервере.
     outdated_devices: int = 0
+
+
+class MdmLibraryApp(BaseModel):
+    """APK, загруженный в панель для раздачи на телефоны."""
+
+    id: str
+    filename: str
+    package: Optional[str] = None
+    version_name: Optional[str] = None
+    version_code: Optional[int] = None
+    size: int
+    uploaded_at: Optional[str] = None
+    url: str
+    # На скольких телефонах этот пакет уже стоит — по данным инвентаризации.
+    installed_on: int = 0
 
 
 class MdmProvisioning(BaseModel):

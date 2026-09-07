@@ -170,6 +170,11 @@ class Settings(BaseSettings):
     # через robocopy /MIR и снёс бы файл при первом же обновлении.
     mdm_agent_apk_file: str = Field("mdm_agent.apk", validation_alias="MDM_AGENT_APK_FILE")
 
+    # Каталог с APK, которые раздаются на телефоны. Там же, в корне рабочей
+    # директории, и по той же причине: деплой зеркалит только app/ и
+    # admin_frontend/, всё остальное переживает обновление.
+    mdm_apps_dir: str = Field("mdm_apps", validation_alias="MDM_APPS_DIR")
+
     # SHA-256 сертификата, которым подписан агент, в base64url без padding.
     # Уезжает в QR: по нему телефон при первичной настройке проверяет, что
     # скачал именно нашего агента, а не подменённый по дороге файл.
