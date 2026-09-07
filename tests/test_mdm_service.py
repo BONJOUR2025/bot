@@ -469,3 +469,42 @@ def test_apk_info_never_raises_on_junk():
             "version_name": None,
             "version_code": None,
         }
+
+
+def test_apk_is_never_served_gzipped(tmp_path):
+    """APK не должен проезжать через сжатие.
+
+    В приложении включён GZipMiddleware, и он жал APK всем, кто прислал
+    Accept-Encoding: gzip, — включая мастер первичной настройки Android. Тот
+    пишет полученное в файл и сверяет подпись, у сжатого она не сходится, и
+    провижининг по QR падал с «Can't set up device».
+    """
+    from fastapi import FastAPI
+    from fastapi.responses import FileResponse
+    from fastapi.testclient import TestClient
+    from starlette.middleware.gzip import GZipMiddleware
+
+    from app.api.mdm import _apk_response
+
+    apk = tmp_path / "agent.apk"
+    apk.write_bytes(b"PK" + bytes(200_000))
+
+    app = FastAPI()
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+    @app.get("/naive")
+    def naive():
+        return FileResponse(apk, media_type="application/vnd.android.package-archive")
+
+    @app.get("/agent.apk")
+    def agent():
+        return _apk_response(apk, "agent.apk")
+
+    client = TestClient(app)
+    # Контрольный: без защиты middleware сжимает — значит проверка не холостая.
+    assert client.get("/naive", headers={"Accept-Encoding": "gzip"}).headers.get(
+        "content-encoding"
+    ) == "gzip"
+    assert client.get("/agent.apk", headers={"Accept-Encoding": "gzip"}).headers.get(
+        "content-encoding"
+    ) != "gzip"

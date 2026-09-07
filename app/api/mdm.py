@@ -53,6 +53,26 @@ CHECKIN_INTERVAL_MINUTES = 15
 # телефон» это слишком долго, поэтому очередь агент забирает будильником.
 
 
+def _apk_response(path, filename: str) -> FileResponse:
+    """Отдаёт APK так, чтобы его не испортило сжатие.
+
+    В приложении включён GZipMiddleware, и он честно жал APK всем, кто прислал
+    Accept-Encoding: gzip, — включая мастер первичной настройки Android. Тот
+    сохраняет полученное в файл и сверяет подпись, а у сжатого файла она,
+    естественно, не сходится: провижининг по QR падал с «Can't set up device».
+    Заголовок Content-Encoding заставляет middleware пропустить ответ мимо себя.
+
+    Сжимать APK и незачем: это zip, выигрыш около девяти процентов, а цена —
+    потеря Content-Length и вот такие поломки у неразборчивых клиентов.
+    """
+    return FileResponse(
+        path,
+        media_type="application/vnd.android.package-archive",
+        filename=filename,
+        headers={"Content-Encoding": "identity"},
+    )
+
+
 def create_mdm_public_router() -> APIRouter:
     """Раздача APK агента. Без авторизации — иначе не сработает провижининг.
 
@@ -68,11 +88,7 @@ def create_mdm_public_router() -> APIRouter:
         path = agent_apk_path()
         if not path.exists():
             raise HTTPException(status_code=404, detail="agent_apk_not_uploaded")
-        return FileResponse(
-            path,
-            media_type="application/vnd.android.package-archive",
-            filename="bonjour-mdm-agent.apk",
-        )
+        return _apk_response(path, "bonjour-mdm-agent.apk")
 
     @router.get("/apps/{app_id}.apk")
     async def download_library_app(app_id: str) -> FileResponse:
@@ -80,11 +96,7 @@ def create_mdm_public_router() -> APIRouter:
             path = get_mdm_service().library_app_path(app_id)
         except MdmValidationError:
             raise HTTPException(status_code=404, detail="app_not_found")
-        return FileResponse(
-            path,
-            media_type="application/vnd.android.package-archive",
-            filename=app_id + ".apk",
-        )
+        return _apk_response(path, app_id + ".apk")
 
     return router
 
