@@ -60,6 +60,8 @@ class MainActivity : AppCompatActivity() {
             "Регистрация: " + if (Prefs.token(this).isBlank()) "не пройдена" else "пройдена",
             "Политика: применена " + applied + " из " + known,
             "Последняя связь: " + Prefs.lastCheckin(this).ifBlank { "нет" },
+            "Опрос команд: раз в " + Prefs.pollSeconds(this) + " с" +
+                (if (AlarmScheduler.canBeExact(this)) "" else " (будильник неточный)"),
             "Ошибка: " + Prefs.lastError(this).ifBlank { "нет" }
         )
         status.text = lines.joinToString("\n")
@@ -101,6 +103,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     Prefs.setLastError(this, problem)
                     CheckinWorker.schedule(this)
+                    AlarmScheduler.schedule(this)
                     "Телефон зарегистрирован"
                 } else {
                     "Сервер ответил " + response.code + ": " + response.body.take(200)

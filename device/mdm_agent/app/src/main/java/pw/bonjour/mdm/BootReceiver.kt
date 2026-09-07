@@ -12,6 +12,7 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         PolicyApplier.apply(context, Prefs.policy(context))
         CheckinWorker.schedule(context)
+        AlarmScheduler.schedule(context)
         CheckinWorker.runNow(context)
     }
 }

@@ -39,6 +39,11 @@ from app.services.mdm_service import (
 # равно урежет.
 CHECKIN_INTERVAL_MINUTES = 15
 
+# Как часто агент отдельно опрашивает очередь команд. Полный чек-ин раз в 15
+# минут — потолок WorkManager, для «заблокируй телефон» это слишком долго,
+# поэтому команды агент забирает будильником с этим интервалом.
+COMMAND_POLL_SECONDS = 120
+
 
 def create_mdm_device_router(service: MdmService) -> APIRouter:
     """Роутер для агентов на телефонах. Без пользовательской сессии."""
@@ -85,6 +90,7 @@ def create_mdm_device_router(service: MdmService) -> APIRouter:
             policy=updated.policy,
             commands=[MdmCommand.model_validate(c) for c in pending],
             checkin_interval_minutes=CHECKIN_INTERVAL_MINUTES,
+            command_poll_seconds=COMMAND_POLL_SECONDS,
         )
 
     @router.post("/ack")

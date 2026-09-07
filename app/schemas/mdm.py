@@ -141,6 +141,9 @@ class MdmCheckinResponse(BaseModel):
     policy: MdmPolicy
     commands: list[MdmCommand] = Field(default_factory=list)
     checkin_interval_minutes: int = 15
+    # Как часто телефон отдельно спрашивает команды будильником. Приходит с
+    # сервера, чтобы частоту можно было менять не пересобирая APK.
+    command_poll_seconds: int = 120
 
 
 # --- Админка -> сервер ----------------------------------------------------

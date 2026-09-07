@@ -45,6 +45,14 @@ object Prefs {
     fun setAppliedVersion(ctx: Context, value: Int) =
         sp(ctx).edit().putInt("applied_version", value).apply()
 
+    /** Интервал опроса команд, заданный сервером: менять частоту можно без
+     *  пересборки APK и переустановки на каждом телефоне. */
+    fun pollSeconds(ctx: Context): Int =
+        sp(ctx).getInt("poll_seconds", AlarmScheduler.DEFAULT_POLL_SECONDS)
+
+    fun setPollSeconds(ctx: Context, value: Int) =
+        sp(ctx).edit().putInt("poll_seconds", value.coerceIn(30, 3600)).apply()
+
     fun lastCheckin(ctx: Context): String = sp(ctx).getString("last_checkin", "") ?: ""
 
     fun setLastCheckin(ctx: Context, value: String) =

@@ -66,6 +66,14 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
         val policy = body.optJSONObject("policy") ?: JSONObject()
         Prefs.setPolicy(ctx, policy, version)
 
+        // Интервал опроса задаёт сервер. Перезаводим будильник с новым значением
+        // сразу: PendingIntent один и тот же, так что прежний просто заменяется.
+        val poll = body.optInt("command_poll_seconds", 0)
+        if (poll > 0 && poll != Prefs.pollSeconds(ctx)) {
+            Prefs.setPollSeconds(ctx, poll)
+            AlarmScheduler.schedule(ctx)
+        }
+
         var problem: String? = null
         var appliedNow: Int? = null
         if (version != Prefs.appliedVersion(ctx)) {

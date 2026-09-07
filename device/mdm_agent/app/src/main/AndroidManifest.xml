@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:allowBackup="false"
@@ -41,6 +42,12 @@
              пишется отсюда и уезжает на сервер со следующим чек-ином. -->
         <receiver
             android:name=".InstallResultReceiver"
+            android:exported="false" />
+
+        <!-- Частый опрос команд: WorkManager не умеет период короче 15 минут,
+             а «заблокируй телефон» столько ждать не может. -->
+        <receiver
+            android:name=".AlarmReceiver"
             android:exported="false" />
 
         <receiver

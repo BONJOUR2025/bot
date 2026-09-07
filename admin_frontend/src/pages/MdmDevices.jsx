@@ -40,7 +40,8 @@ function sinceText(value) {
   return `${Math.round(hours / 24)} дн назад`;
 }
 
-/** Телефон выходит на связь раз в 15 минут; час молчания — уже повод смотреть. */
+/** Телефон опрашивает команды раз в пару минут и делает полный чек-ин раз в
+ *  15 минут; час молчания — уже повод смотреть. */
 function isStale(device) {
   if (!device.last_seen_at) return true;
   return Date.now() - new Date(device.last_seen_at).getTime() > 60 * 60 * 1000;
@@ -423,7 +424,7 @@ export default function MdmDevices() {
               </button>
             </div>
             <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
-              Команда исполнится на ближайшей связи — телефон выходит на неё раз в 15 минут.
+              Команда исполнится в течение двух минут — телефон опрашивает очередь будильником.
             </p>
           </div>
 
