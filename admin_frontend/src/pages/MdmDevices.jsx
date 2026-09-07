@@ -3,6 +3,7 @@ import {
   Smartphone, RefreshCw, Copy, KeyRound, ShieldCheck, ShieldAlert,
   Lock, MapPin, RotateCw, Download, Trash2, Unlink, BatteryMedium,
   Upload, QrCode, PackageCheck, Boxes, ListRestart, Camera as CameraIcon,
+  Gauge, ShieldBan, AppWindow, History as HistoryIcon,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -69,6 +70,7 @@ export default function MdmDevices() {
   const [appFilter, setAppFilter] = useState('');
   const [showSystemApps, setShowSystemApps] = useState(false);
   const [selectedApps, setSelectedApps] = useState(() => new Set());
+  const [deviceTab, setDeviceTab] = useState('overview');
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -90,6 +92,7 @@ export default function MdmDevices() {
     setSelectedApps(new Set());
     setAppFilter('');
     setShowSystemApps(false);
+    setDeviceTab('overview');
   }, [selectedId]);
 
   async function load() {
@@ -708,7 +711,8 @@ export default function MdmDevices() {
       />
 
       {selected && policyDraft && (
-        <section className="bg-[color:var(--color-bg-secondary)] rounded-xl p-4 flex flex-col gap-5">
+        <section className="bg-[color:var(--color-bg-secondary)] rounded-xl p-4 flex flex-col gap-4">
+          {/* Шапка: название, салон, ключевое состояние — видно на любой вкладке */}
           <div className="flex flex-col sm:flex-row sm:items-end gap-3">
             <div className="flex-1">
               <label className="block text-xs text-[color:var(--color-text-muted)] mb-1">Название</label>
@@ -732,326 +736,377 @@ export default function MdmDevices() {
             </div>
           </div>
 
-          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-            <div>
-              <dt className="text-xs text-[color:var(--color-text-muted)]">Последняя связь</dt>
-              <dd>{fmtDateTime(selected.last_seen_at)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-[color:var(--color-text-muted)]">Зарегистрирован</dt>
-              <dd>{fmtDateTime(selected.enrolled_at)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-[color:var(--color-text-muted)]">Версия агента</dt>
-              <dd>{selected.agent_version || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-[color:var(--color-text-muted)] flex items-center gap-1">
-                <BatteryMedium size={12} /> Батарея
-              </dt>
-              <dd>{selected.battery == null ? '—' : `${selected.battery}%`}</dd>
-            </div>
-          </dl>
-
-          {selected.play_protect && (
-            <div className="text-sm text-amber-600 flex flex-col gap-1">
-              <span>
-                На телефоне включена Play Защита — она отклоняет установку наших приложений,
-                и команда «поставить» будет падать с ошибкой проверки.
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <span className="inline-flex items-center gap-1">
+              {selected.device_owner
+                ? <><ShieldCheck size={14} /> под управлением</>
+                : <span className="inline-flex items-center gap-1 text-red-600"><ShieldAlert size={14} /> нет прав</span>}
+            </span>
+            <span className={isStale(selected) ? 'text-red-600' : 'text-[color:var(--color-text-muted)]'}>
+              связь {sinceText(selected.last_seen_at)}
+            </span>
+            {selected.battery != null && (
+              <span className="inline-flex items-center gap-1 text-[color:var(--color-text-muted)]">
+                <BatteryMedium size={13} /> {selected.battery}%
               </span>
-              <span className="text-xs text-[color:var(--color-text-muted)]">
-                Выключить можно только на самом телефоне: Play Маркет → значок профиля →
-                Play Защита → шестерёнка → «Сканировать приложения». Программно эту настройку
-                не изменить: владельцу устройства система её менять не даёт.
-              </span>
-            </div>
-          )}
-
-          {selected.last_error && (
-            <p className="text-sm text-red-600">
-              Телефон сообщает об ошибке: {selected.last_error}
-            </p>
-          )}
-
-          {selected.location_at && (
-            <p className="text-sm flex items-center gap-1.5">
-              <MapPin size={14} />
-              <a
-                className="underline"
-                href={`https://yandex.ru/maps/?pt=${selected.longitude},${selected.latitude}&z=17&l=map`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {selected.latitude?.toFixed(5)}, {selected.longitude?.toFixed(5)}
-              </a>
-              <span className="text-[color:var(--color-text-muted)]">({fmtDateTime(selected.location_at)})</span>
-            </p>
-          )}
-
-          <div>
-            <h2 className="font-medium mb-2">Запреты</h2>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {RESTRICTIONS.map(({ id, label, danger }) => (
-                <label key={id} className="flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={!!policyDraft.restrictions[id]}
-                    onChange={() => toggleRestriction(id)}
-                  />
-                  <span className={danger ? 'text-red-600' : ''}>{label}</span>
-                </label>
-              ))}
-            </div>
-            {policyDraft.restrictions.no_factory_reset && (
-              <p className="text-xs text-red-600 mt-2">
-                С этим запретом сброс руками перестаёт работать: снять управление можно будет
-                только через агента или командой «Снять управление». Включайте последним.
-              </p>
             )}
-            <button
-              type="button"
-              className="btn btn--primary mt-3"
-              onClick={savePolicy}
-              disabled={busy}
-            >
-              Сохранить политику
-            </button>
-          </div>
-
-          <div>
-            <h2 className="font-medium mb-2">Команды</h2>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
-                onClick={() => sendCommand('lock')}>
-                <Lock size={14} /> Заблокировать экран
-              </button>
-              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
-                onClick={() => sendCommand('locate')}>
-                <MapPin size={14} /> Где телефон
-              </button>
-              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
-                onClick={() => sendCommand('camera', { lens: 'back' })}>
-                <CameraIcon size={14} /> Снимок (задняя)
-              </button>
-              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
-                onClick={() => sendCommand('camera', { lens: 'front' })}>
-                <CameraIcon size={14} /> Снимок (передняя)
-              </button>
-              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
-                onClick={() => sendCommand('reboot')}>
-                <RotateCw size={14} /> Перезагрузить
-              </button>
-              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
-                onClick={installApk}>
-                <Download size={14} /> Поставить приложение
-              </button>
-              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
-                onClick={uninstallApp}>
-                <Trash2 size={14} /> Удалить приложение
-              </button>
-              <button type="button" className="btn btn--secondary flex items-center gap-1.5" disabled={busy}
-                onClick={releaseOwner}>
-                <Unlink size={14} /> Снять управление
-              </button>
-              <button type="button" className="btn btn--danger flex items-center gap-1.5" disabled={busy}
-                onClick={wipeDevice}>
-                <Trash2 size={14} /> Стереть телефон
-              </button>
-            </div>
-            <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
-              {`Команда исполнится в течение ${pollText} — телефон опрашивает очередь будильником.`}
-            </p>
-          </div>
-
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-              <h2 className="font-medium">Приложения на телефоне</h2>
-              <div className="flex items-center gap-2">
-                <input
-                  className="input w-56"
-                  placeholder="Найти приложение"
-                  value={appFilter}
-                  onChange={(e) => setAppFilter(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm flex items-center gap-1.5"
-                  disabled={busy}
-                  onClick={() => sendCommand('refresh_apps')}
-                >
-                  <ListRestart size={14} /> Обновить
-                </button>
-              </div>
-            </div>
-
-            {selected.apps?.length ? (
-              <>
-                <div className="flex flex-wrap items-center gap-3 mb-2">
-                  <span className="text-sm font-medium">
-                    {`Можно удалить · ${removableApps.length}`}
-                  </span>
-                  {removableApps.length > 0 && (
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={toggleAllApps}
-                    >
-                      {selectedApps.size === removableApps.length ? 'Снять выделение' : 'Выделить все'}
-                    </button>
-                  )}
-                  {selectedApps.size > 0 && (
-                    <button
-                      type="button"
-                      className="btn btn--danger btn--sm"
-                      disabled={busy}
-                      onClick={uninstallSelected}
-                    >
-                      {`Удалить выбранные (${selectedApps.size})`}
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex flex-col divide-y divide-[color:var(--color-border)] max-h-96 overflow-y-auto">
-                  {removableApps.map((app) => (
-                    <label
-                      key={app.package}
-                      className="flex items-center gap-3 py-2 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedApps.has(app.package)}
-                        onChange={() => toggleApp(app.package)}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">
-                          {app.label || app.package}
-                          {!app.enabled && (
-                            <span className="text-xs text-[color:var(--color-text-muted)]"> · отключено</span>
-                          )}
-                        </span>
-                        <span className="block text-xs text-[color:var(--color-text-muted)] truncate">
-                          {[app.package, app.version_name].filter(Boolean).join(' · ')}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm shrink-0"
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (!window.confirm(`Удалить «${app.label || app.package}» с телефона?`)) return;
-                          sendCommand('uninstall', { package: app.package });
-                        }}
-                      >
-                        Удалить
-                      </button>
-                    </label>
-                  ))}
-                  {removableApps.length === 0 && (
-                    <span className="text-sm text-[color:var(--color-text-muted)] py-2">
-                      {appFilter ? 'Ничего не найдено' : 'Нечего удалять'}
-                    </span>
-                  )}
-                </div>
-
-                {/* Системные скрыты по умолчанию: их вчетверо больше, удалить их
-                    нельзя, и в списке они мешают увидеть то, что можно. */}
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm mt-3"
-                  onClick={() => setShowSystemApps((v) => !v)}
-                >
-                  {`${showSystemApps ? 'Скрыть' : 'Показать'} системные · ${systemApps.length}`}
-                </button>
-
-                {showSystemApps && (
-                  <div className="flex flex-col divide-y divide-[color:var(--color-border)] max-h-72 overflow-y-auto mt-2">
-                    {systemApps.map((app) => (
-                      <span key={app.package} className="py-2 min-w-0">
-                        <span className="block truncate text-sm">{app.label || app.package}</span>
-                        <span className="block text-xs text-[color:var(--color-text-muted)] truncate">
-                          {[app.package, app.version_name].filter(Boolean).join(' · ')}
-                        </span>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <p className="text-xs text-[color:var(--color-text-muted)] mt-3">
-                  {`Список от ${fmtDateTime(selected.apps_updated_at)}. Системные приложения удалить `
-                   + 'нельзя — показаны только те, что сотрудник видит в меню.'}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-[color:var(--color-text-muted)]">
-                Телефон ещё не присылал список. Он приедет с ближайшим чек-ином.
-              </p>
-            )}
-          </div>
-
-          {selected.snapshots?.length > 0 && (
-            <div>
-              <h2 className="font-medium mb-2">Снимки с камеры</h2>
-              <div className="flex flex-wrap gap-3">
-                {[...selected.snapshots].reverse().map((snap) => (
-                  <a
-                    key={snap.id}
-                    href={snap.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block w-40"
-                    title={`${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`}
-                  >
-                    <img
-                      src={snap.url}
-                      alt="снимок"
-                      loading="lazy"
-                      className="w-40 h-40 object-cover rounded-lg border border-[color:var(--color-border)]"
-                    />
-                    <span className="block text-xs text-[color:var(--color-text-muted)] mt-1 truncate">
-                      {`${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`}
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="border-t border-[color:var(--color-border)] pt-3 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm flex items-center gap-1.5"
-              disabled={busy}
-              onClick={forgetDevice}
-            >
-              <Trash2 size={14} /> Убрать из списка
-            </button>
-            <span className="text-xs text-[color:var(--color-text-muted)]">
-              Для сброшенного или потерянного аппарата, карточка которого больше не нужна.
-              Управление с телефона это не снимает.
+            <span className="text-[color:var(--color-text-muted)]">агент {selected.agent_version || '—'}</span>
+            <span className={selected.applied_policy_version === selected.policy_version
+              ? 'text-[color:var(--color-text-muted)]' : 'text-amber-600'}>
+              {selected.applied_policy_version === selected.policy_version
+                ? 'политика применена' : 'политика ждёт применения'}
             </span>
           </div>
 
-          {selected.commands?.length > 0 && (
+          {selected.last_error && (
+            <p className="text-sm text-red-600">Телефон сообщает об ошибке: {selected.last_error}</p>
+          )}
+
+          {/* Вкладки */}
+          <nav className="flex flex-wrap gap-1.5 bg-[color:var(--color-bg-subtle)] rounded-xl p-1.5">
+            {[
+              { id: 'overview', label: 'Обзор', Icon: Gauge },
+              { id: 'policy', label: 'Запреты', Icon: ShieldBan },
+              { id: 'apps', label: 'Приложения', Icon: AppWindow },
+              { id: 'history', label: 'История', Icon: HistoryIcon },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setDeviceTab(tab.id)}
+                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-1.5 ${
+                  deviceTab === tab.id
+                    ? 'bg-[color:var(--color-primary)] text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-surface)]'
+                }`}
+              >
+                <tab.Icon size={14} /> {tab.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* ── Обзор ── */}
+          {deviceTab === 'overview' && (
+            <div className="flex flex-col gap-5">
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)]">Последняя связь</dt>
+                  <dd>{fmtDateTime(selected.last_seen_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)]">Зарегистрирован</dt>
+                  <dd>{fmtDateTime(selected.enrolled_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)]">Модель</dt>
+                  <dd>{[selected.manufacturer, selected.model].filter(Boolean).join(' ') || '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)]">Android</dt>
+                  <dd>{selected.android_version || '—'}</dd>
+                </div>
+              </dl>
+
+              {selected.play_protect && (
+                <div className="text-sm text-amber-600 flex flex-col gap-1 bg-[color:var(--color-bg-subtle)] rounded-lg p-3">
+                  <span>
+                    Включена Play Защита — она отклоняет установку наших приложений,
+                    и команда «поставить» будет падать с ошибкой проверки.
+                  </span>
+                  <span className="text-xs text-[color:var(--color-text-muted)]">
+                    Выключить можно только на телефоне: Play Маркет → значок профиля →
+                    Play Защита → шестерёнка → «Сканировать приложения».
+                  </span>
+                </div>
+              )}
+
+              {/* Геолокация */}
+              <div>
+                <h2 className="font-medium mb-2 flex items-center gap-1.5"><MapPin size={15} /> Где телефон</h2>
+                {selected.location_at ? (
+                  <p className="text-sm flex flex-wrap items-center gap-1.5">
+                    <a
+                      className="underline"
+                      href={`https://yandex.ru/maps/?pt=${selected.longitude},${selected.latitude}&z=17&l=map`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {selected.latitude?.toFixed(5)}, {selected.longitude?.toFixed(5)}
+                    </a>
+                    <span className="text-[color:var(--color-text-muted)]">
+                      снято {fmtDateTime(selected.location_at)}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-sm text-[color:var(--color-text-muted)]">Координаты ещё не запрашивались.</p>
+                )}
+                <button type="button" className="btn btn--secondary btn--sm mt-2 flex items-center gap-1.5"
+                  disabled={busy} onClick={() => sendCommand('locate')}>
+                  <MapPin size={14} /> Запросить координаты
+                </button>
+              </div>
+
+              {/* Камера */}
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <h2 className="font-medium flex items-center gap-1.5"><CameraIcon size={15} /> Камера</h2>
+                  <span className="grow" />
+                  <button type="button" className="btn btn--secondary btn--sm" disabled={busy}
+                    onClick={() => sendCommand('camera', { lens: 'back' })}>
+                    Снять заднюю
+                  </button>
+                  <button type="button" className="btn btn--secondary btn--sm" disabled={busy}
+                    onClick={() => sendCommand('camera', { lens: 'front' })}>
+                    Снять переднюю
+                  </button>
+                </div>
+                {selected.snapshots?.length > 0 ? (
+                  <div className="flex flex-wrap gap-3">
+                    {[...selected.snapshots].reverse().map((snap) => (
+                      <a
+                        key={snap.id}
+                        href={snap.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block w-40"
+                        title={`${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`}
+                      >
+                        <img
+                          src={snap.url}
+                          alt="снимок"
+                          loading="lazy"
+                          className="w-40 h-40 object-cover rounded-lg border border-[color:var(--color-border)] bg-black"
+                        />
+                        <span className="block text-xs text-[color:var(--color-text-muted)] mt-1 truncate">
+                          {`${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[color:var(--color-text-muted)]">Снимков пока нет.</p>
+                )}
+              </div>
+
+              {/* Быстрые команды */}
+              <div>
+                <h2 className="font-medium mb-2">Действия</h2>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={() => sendCommand('lock')}>
+                    <Lock size={14} /> Заблокировать экран
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={() => sendCommand('reboot')}>
+                    <RotateCw size={14} /> Перезагрузить
+                  </button>
+                </div>
+                <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
+                  {`Команда исполнится в течение ${pollText} — телефон опрашивает очередь будильником.`}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Запреты ── */}
+          {deviceTab === 'policy' && (
             <div>
-              <h2 className="font-medium mb-2">История команд</h2>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {RESTRICTIONS.map(({ id, label, danger }) => (
+                  <label key={id} className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={!!policyDraft.restrictions[id]}
+                      onChange={() => toggleRestriction(id)}
+                    />
+                    <span className={danger ? 'text-red-600' : ''}>{label}</span>
+                  </label>
+                ))}
+              </div>
+              {policyDraft.restrictions.no_factory_reset && (
+                <p className="text-xs text-red-600 mt-2">
+                  С этим запретом сброс руками перестаёт работать: снять управление можно будет
+                  только через агента или командой «Снять управление». Включайте последним.
+                </p>
+              )}
+              <button
+                type="button"
+                className="btn btn--primary mt-3"
+                onClick={savePolicy}
+                disabled={busy}
+              >
+                Сохранить политику
+              </button>
+            </div>
+          )}
+
+          {/* ── Приложения ── */}
+          {deviceTab === 'apps' && (
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" className="btn btn--secondary btn--sm flex items-center gap-1.5"
+                    disabled={busy} onClick={installApk}>
+                    <Download size={14} /> Поставить по ссылке
+                  </button>
+                  <button type="button" className="btn btn--ghost btn--sm flex items-center gap-1.5"
+                    disabled={busy} onClick={uninstallApp}>
+                    <Trash2 size={14} /> Удалить по имени пакета
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="input w-48"
+                    placeholder="Найти приложение"
+                    value={appFilter}
+                    onChange={(e) => setAppFilter(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm flex items-center gap-1.5"
+                    disabled={busy}
+                    onClick={() => sendCommand('refresh_apps')}
+                  >
+                    <ListRestart size={14} /> Обновить
+                  </button>
+                </div>
+              </div>
+
+              {selected.apps?.length ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                    <span className="text-sm font-medium">
+                      {`Можно удалить · ${removableApps.length}`}
+                    </span>
+                    {removableApps.length > 0 && (
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={toggleAllApps}>
+                        {selectedApps.size === removableApps.length ? 'Снять выделение' : 'Выделить все'}
+                      </button>
+                    )}
+                    {selectedApps.size > 0 && (
+                      <button type="button" className="btn btn--danger btn--sm" disabled={busy}
+                        onClick={uninstallSelected}>
+                        {`Удалить выбранные (${selectedApps.size})`}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col divide-y divide-[color:var(--color-border)] max-h-96 overflow-y-auto">
+                    {removableApps.map((app) => (
+                      <label key={app.package} className="flex items-center gap-3 py-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedApps.has(app.package)}
+                          onChange={() => toggleApp(app.package)}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">
+                            {app.label || app.package}
+                            {!app.enabled && (
+                              <span className="text-xs text-[color:var(--color-text-muted)]"> · отключено</span>
+                            )}
+                          </span>
+                          <span className="block text-xs text-[color:var(--color-text-muted)] truncate">
+                            {[app.package, app.version_name].filter(Boolean).join(' · ')}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm shrink-0"
+                          disabled={busy}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (!window.confirm(`Удалить «${app.label || app.package}» с телефона?`)) return;
+                            sendCommand('uninstall', { package: app.package });
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </label>
+                    ))}
+                    {removableApps.length === 0 && (
+                      <span className="text-sm text-[color:var(--color-text-muted)] py-2">
+                        {appFilter ? 'Ничего не найдено' : 'Нечего удалять'}
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm mt-3"
+                    onClick={() => setShowSystemApps((v) => !v)}
+                  >
+                    {`${showSystemApps ? 'Скрыть' : 'Показать'} системные · ${systemApps.length}`}
+                  </button>
+
+                  {showSystemApps && (
+                    <div className="flex flex-col divide-y divide-[color:var(--color-border)] max-h-72 overflow-y-auto mt-2">
+                      {systemApps.map((app) => (
+                        <span key={app.package} className="py-2 min-w-0">
+                          <span className="block truncate text-sm">{app.label || app.package}</span>
+                          <span className="block text-xs text-[color:var(--color-text-muted)] truncate">
+                            {[app.package, app.version_name].filter(Boolean).join(' · ')}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-[color:var(--color-text-muted)] mt-3">
+                    {`Список от ${fmtDateTime(selected.apps_updated_at)}. Системные приложения удалить `
+                     + 'нельзя — показаны только те, что сотрудник видит в меню.'}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-[color:var(--color-text-muted)]">
+                  Телефон ещё не присылал список. Он приедет с ближайшим чек-ином.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── История ── */}
+          {deviceTab === 'history' && (
+            selected.commands?.length > 0 ? (
               <div className="flex flex-col gap-1 text-sm">
-                {[...selected.commands].reverse().slice(0, 10).map((c) => (
-                  <div key={c.id} className="flex flex-wrap gap-2 items-baseline">
-                    <span className="text-[color:var(--color-text-muted)] text-xs">
+                {[...selected.commands].reverse().map((c) => (
+                  <div key={c.id} className="flex flex-wrap gap-2 items-baseline py-1 border-b border-[color:var(--color-border)] last:border-0">
+                    <span className="text-[color:var(--color-text-muted)] text-xs w-32 shrink-0">
                       {fmtDateTime(c.created_at)}
                     </span>
                     <span className="font-medium">{c.type}</span>
-                    <span className={c.status === 'failed' ? 'text-red-600' : ''}>{c.status}</span>
+                    <span className={c.status === 'failed' ? 'text-red-600'
+                      : c.status === 'done' ? 'text-[color:var(--color-text-muted)]' : 'text-amber-600'}>
+                      {c.status}
+                    </span>
                     {c.result && (
-                      <span className="text-[color:var(--color-text-muted)] text-xs">{c.result}</span>
+                      <span className="text-[color:var(--color-text-muted)] text-xs break-all">{c.result}</span>
                     )}
                   </div>
                 ))}
               </div>
-            </div>
+            ) : (
+              <p className="text-sm text-[color:var(--color-text-muted)]">Команд ещё не было.</p>
+            )
           )}
+
+          {/* Опасная зона — всегда под вкладками, отделена */}
+          <div className="border-t border-[color:var(--color-danger)] pt-3 flex flex-wrap items-center gap-2 mt-1">
+            <span className="text-xs text-[color:var(--color-text-muted)] w-full">Необратимые действия</span>
+            <button type="button" className="btn btn--secondary btn--sm flex items-center gap-1.5"
+              disabled={busy} onClick={releaseOwner}>
+              <Unlink size={14} /> Снять управление
+            </button>
+            <button type="button" className="btn btn--danger btn--sm flex items-center gap-1.5"
+              disabled={busy} onClick={wipeDevice}>
+              <Trash2 size={14} /> Стереть телефон
+            </button>
+            <button type="button" className="btn btn--ghost btn--sm flex items-center gap-1.5"
+              disabled={busy} onClick={forgetDevice}>
+              <Trash2 size={14} /> Убрать из списка
+            </button>
+          </div>
         </section>
       )}
     </div>
