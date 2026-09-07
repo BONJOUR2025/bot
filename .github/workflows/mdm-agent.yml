@@ -103,3 +103,21 @@ jobs:
           name: bonjour-mdm-agent
           path: device/mdm_agent/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
+
+      # Кладём APK сразу на сервер: иначе каждая новая версия требует человека,
+      # который скачает артефакт и загрузит его через панель. Артефакт выше
+      # остаётся на случай, если сервер недоступен.
+      - name: Отправить APK на сервер
+        working-directory: device/mdm_agent
+        env:
+          UPLOAD_TOKEN: ${{ secrets.MDM_UPLOAD_TOKEN }}
+        run: |
+          if [ -z "$UPLOAD_TOKEN" ]; then
+            echo "::warning::Секрет MDM_UPLOAD_TOKEN не задан — APK придётся загружать вручную"
+            exit 0
+          fi
+          curl -sS --fail-with-body --retry 3 --retry-delay 5 \
+            -X POST \
+            -H "X-Upload-Token: $UPLOAD_TOKEN" \
+            -F "file=@app/build/outputs/apk/release/app-release.apk" \
+            https://app.bonjour.pw/api/mdm/agent/upload

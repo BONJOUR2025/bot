@@ -581,3 +581,17 @@ def test_library_still_rejects_files_that_are_not_packages(service, tmp_path, mo
     # Архив без единого APK внутри — не приложение, каким бы zip он ни был.
     with pytest.raises(MdmValidationError, match="not_an_apk"):
         service.save_library_app("random.zip", buffer.getvalue())
+
+
+def test_upload_token_is_read_live_from_config(tmp_path, monkeypatch):
+    from app.services import mdm_service
+
+    monkeypatch.chdir(tmp_path)
+    assert mdm_service.current_upload_token() == ""
+
+    # Читается живьём, как и остальные ключи MDM: сменить токен сборки должно
+    # быть можно без деплоя и перезапуска.
+    (tmp_path / "config.json").write_text(
+        json.dumps({"MDM_UPLOAD_TOKEN": "t" * 48}), encoding="utf-8"
+    )
+    assert mdm_service.current_upload_token() == "t" * 48

@@ -92,6 +92,17 @@ def current_agent_signature_checksum() -> str:
     return settings.mdm_agent_signature_checksum
 
 
+def current_upload_token() -> str:
+    """Токен сборки, свежим чтением из config.json."""
+    try:
+        data = json.loads(Path("config.json").read_text(encoding="utf-8"))
+        if value := data.get("MDM_UPLOAD_TOKEN"):
+            return str(value)
+    except Exception:
+        pass
+    return settings.mdm_upload_token
+
+
 def apps_dir() -> Path:
     path = Path(MDM_APPS_DIR)
     path.mkdir(parents=True, exist_ok=True)

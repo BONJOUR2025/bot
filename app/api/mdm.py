@@ -37,6 +37,7 @@ from app.services.mdm_service import (
     MdmService,
     MdmValidationError,
     agent_apk_path,
+    current_upload_token,
     current_command_poll_seconds,
     current_enroll_key,
     get_mdm_service,
@@ -89,6 +90,27 @@ def create_mdm_public_router() -> APIRouter:
         if not path.exists():
             raise HTTPException(status_code=404, detail="agent_apk_not_uploaded")
         return _apk_response(path, "bonjour-mdm-agent.apk")
+
+    @router.post("/agent/upload", response_model=MdmAgentInfo)
+    async def upload_agent_from_ci(
+        file: UploadFile = File(...),
+        x_upload_token: Optional[str] = Header(default=None, alias="X-Upload-Token"),
+    ) -> MdmAgentInfo:
+        """Сборка кладёт свежий APK агента сама.
+
+        Отдельная авторизация по токену, а не по сессии: у сборки её быть не
+        может. Это последнее звено, из-за которого обновление парка требовало
+        человека с браузером — теперь собралось и сразу лежит на сервере.
+        """
+        expected = current_upload_token()
+        if not expected:
+            raise HTTPException(status_code=503, detail="upload_not_configured")
+        if not x_upload_token or not secrets.compare_digest(expected, x_upload_token):
+            raise HTTPException(status_code=401, detail="invalid_upload_token")
+        try:
+            return get_mdm_service().save_agent_apk(await file.read())
+        except MdmValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     @router.get("/apps/{app_id}.apk")
     async def download_library_app(app_id: str) -> FileResponse:
