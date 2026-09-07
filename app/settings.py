@@ -161,6 +161,10 @@ class Settings(BaseSettings):
     # регистрацию (дальше у каждого телефона свой персональный токен)
     mdm_enroll_key: str = Field("", validation_alias="MDM_ENROLL_KEY")
 
+    # Как часто телефон забирает очередь команд, секунды. Читается живьём из
+    # config.json — менять частоту нужно без пересборки APK И без деплоя.
+    mdm_command_poll_seconds: int = Field(120, validation_alias="MDM_COMMAND_POLL_SECONDS")
+
     # Файл для хранения пользователей бота (для привязки к сотрудникам)
     bot_users_file: str = Field("bot_users.json", validation_alias="BOT_USERS_FILE")
 

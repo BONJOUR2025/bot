@@ -187,3 +187,6 @@ class MdmEnrollmentInfo(BaseModel):
     server_url: str
     enroll_key: str
     configured: bool
+    # Показывается в панели, чтобы обещанная там задержка команд не
+    # расходилась с тем, что телефоны делают на самом деле.
+    command_poll_seconds: int = 120

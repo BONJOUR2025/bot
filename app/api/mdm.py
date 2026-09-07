@@ -29,6 +29,7 @@ from app.schemas.mdm import (
 )
 from app.services.mdm_service import (
     MdmService,
+    current_command_poll_seconds,
     MdmValidationError,
     current_enroll_key,
     get_mdm_service,
@@ -39,10 +40,10 @@ from app.services.mdm_service import (
 # равно урежет.
 CHECKIN_INTERVAL_MINUTES = 15
 
-# Как часто агент отдельно опрашивает очередь команд. Полный чек-ин раз в 15
-# минут — потолок WorkManager, для «заблокируй телефон» это слишком долго,
-# поэтому команды агент забирает будильником с этим интервалом.
-COMMAND_POLL_SECONDS = 120
+# Как часто агент отдельно опрашивает очередь команд, задаётся ключом
+# MDM_COMMAND_POLL_SECONDS в config.json (см. current_command_poll_seconds).
+# Полный чек-ин раз в 15 минут — потолок WorkManager, для «заблокируй
+# телефон» это слишком долго, поэтому очередь агент забирает будильником.
 
 
 def create_mdm_device_router(service: MdmService) -> APIRouter:
@@ -90,7 +91,7 @@ def create_mdm_device_router(service: MdmService) -> APIRouter:
             policy=updated.policy,
             commands=[MdmCommand.model_validate(c) for c in pending],
             checkin_interval_minutes=CHECKIN_INTERVAL_MINUTES,
-            command_poll_seconds=COMMAND_POLL_SECONDS,
+            command_poll_seconds=current_command_poll_seconds(),
         )
 
     @router.post("/ack")

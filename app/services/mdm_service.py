@@ -48,6 +48,23 @@ def current_enroll_key() -> str:
     return settings.mdm_enroll_key
 
 
+def current_command_poll_seconds() -> int:
+    """Интервал опроса команд, свежим чтением из config.json.
+
+    Границы жёсткие: чаще 30 секунд телефон начнёт заметно есть батарею, реже
+    часа — теряется весь смысл будильника. Мусор в конфиге не должен молча
+    превращаться в неуправляемый парк.
+    """
+    value = settings.mdm_command_poll_seconds
+    try:
+        data = json.loads(Path("config.json").read_text(encoding="utf-8"))
+        if (raw := data.get("MDM_COMMAND_POLL_SECONDS")) is not None:
+            value = int(raw)
+    except Exception:
+        pass
+    return max(30, min(3600, value))
+
+
 class MdmValidationError(ValueError):
     """Команда или политика не проходит проверку — наверх идёт как HTTP 400."""
 
@@ -223,6 +240,7 @@ class MdmService:
             server_url=settings.public_base_url,
             enroll_key=key,
             configured=bool(key),
+            command_poll_seconds=current_command_poll_seconds(),
         )
 
     # --- вспомогательное ------------------------------------------------

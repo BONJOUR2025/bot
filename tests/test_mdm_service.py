@@ -161,6 +161,27 @@ def test_update_and_delete_device(service):
         service.get_device(device.id)
 
 
+def test_command_poll_seconds_is_clamped(tmp_path, monkeypatch):
+    from app.services import mdm_service
+
+    monkeypatch.chdir(tmp_path)
+
+    # Мусор в конфиге не должен молча превращаться в неуправляемый парк:
+    # слишком частый опрос сажает батарею, слишком редкий убивает весь смысл.
+    (tmp_path / "config.json").write_text('{"MDM_COMMAND_POLL_SECONDS": 1}', encoding="utf-8")
+    assert mdm_service.current_command_poll_seconds() == 30
+
+    (tmp_path / "config.json").write_text('{"MDM_COMMAND_POLL_SECONDS": 999999}', encoding="utf-8")
+    assert mdm_service.current_command_poll_seconds() == 3600
+
+    (tmp_path / "config.json").write_text('{"MDM_COMMAND_POLL_SECONDS": 300}', encoding="utf-8")
+    assert mdm_service.current_command_poll_seconds() == 300
+
+    # Нечитаемый конфиг — не повод падать: остаётся значение по умолчанию.
+    (tmp_path / "config.json").write_text('{сломано', encoding="utf-8")
+    assert mdm_service.current_command_poll_seconds() == 120
+
+
 def test_token_is_never_exposed_in_device_schema(service):
     device, _ = enroll(service)
 

@@ -174,6 +174,14 @@ export default function MdmDevices() {
     sendCommand('wipe');
   }
 
+  /** Интервал опроса задаётся ключом MDM_COMMAND_POLL_SECONDS в config.json;
+   *  показываем фактическое значение, чтобы обещание в интерфейсе не разошлось
+   *  с тем, что телефоны делают на самом деле. */
+  const pollSeconds = enrollment?.command_poll_seconds ?? 120;
+  const pollText = pollSeconds % 60 === 0
+    ? `${pollSeconds / 60} мин`
+    : `${pollSeconds} с`;
+
   function toggleRestriction(id) {
     setPolicyDraft((prev) => ({
       ...prev,
@@ -273,6 +281,11 @@ export default function MdmDevices() {
                 <Copy size={14} /> Скопировать ключ регистрации
               </button>
             </div>
+            <p className="text-xs text-[color:var(--color-text-muted)]">
+              {`Телефоны забирают команды раз в ${pollText}. Менять — ключом `}
+              <code>MDM_COMMAND_POLL_SECONDS</code>
+              {' в config.json, перезапуск не нужен.'}
+            </p>
           </>
         ) : (
           <p className="text-sm text-red-600">
@@ -424,7 +437,7 @@ export default function MdmDevices() {
               </button>
             </div>
             <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
-              Команда исполнится в течение двух минут — телефон опрашивает очередь будильником.
+              {`Команда исполнится в течение ${pollText} — телефон опрашивает очередь будильником.`}
             </p>
           </div>
 
