@@ -50,6 +50,52 @@ function isStale(device) {
   return Date.now() - new Date(device.last_seen_at).getTime() > 60 * 60 * 1000;
 }
 
+function SnapshotThumb({ deviceId, snap }) {
+  const [src, setSrc] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let url = null;
+    let alive = true;
+    // Абсолютный snap.url бьётся о cookie-авторизацию, которой в iOS-обёртке
+    // нет: там сессия живёт Bearer-токеном. Поэтому качаем тем же axios, что и
+    // остальные запросы, и показываем как объектную ссылку.
+    api.get(`mdm/devices/${deviceId}/snapshots/${snap.id}.jpg`, { responseType: 'blob' })
+      .then((res) => {
+        if (!alive) return;
+        url = URL.createObjectURL(res.data);
+        setSrc(url);
+      })
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [deviceId, snap.id]);
+
+  const label = `${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`;
+  return (
+    <a
+      href={src || undefined}
+      target="_blank"
+      rel="noreferrer"
+      className="block w-full max-w-[10rem]"
+      title={label}
+    >
+      <div className="w-full aspect-square rounded-lg border border-[color:var(--color-border)] bg-black overflow-hidden flex items-center justify-center">
+        {src ? (
+          <img src={src} alt="снимок" className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-xs text-[color:var(--color-text-muted)]">
+            {failed ? 'не загрузилось' : '…'}
+          </span>
+        )}
+      </div>
+      <span className="block text-xs text-[color:var(--color-text-muted)] mt-1 truncate">{label}</span>
+    </a>
+  );
+}
+
 export default function MdmDevices() {
   const { toast } = useToast();
   const [devices, setDevices] = useState([]);
@@ -505,7 +551,7 @@ export default function MdmDevices() {
                   min={30}
                   max={3600}
                   step={30}
-                  className="input w-40"
+                  className="input w-full sm:w-40"
                   value={pollDraft}
                   onChange={(e) => setPollDraft(e.target.value)}
                 />
@@ -763,7 +809,7 @@ export default function MdmDevices() {
           )}
 
           {/* Вкладки */}
-          <nav className="flex flex-wrap gap-1.5 bg-[color:var(--color-bg-subtle)] rounded-xl p-1.5">
+          <nav className="flex gap-1.5 bg-[color:var(--color-bg-subtle)] rounded-xl p-1.5 overflow-x-auto">
             {[
               { id: 'overview', label: 'Обзор', Icon: Gauge },
               { id: 'policy', label: 'Запреты', Icon: ShieldBan },
@@ -774,7 +820,7 @@ export default function MdmDevices() {
                 key={tab.id}
                 type="button"
                 onClick={() => setDeviceTab(tab.id)}
-                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-1.5 ${
+                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                   deviceTab === tab.id
                     ? 'bg-[color:var(--color-primary)] text-white'
                     : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-surface)]'
@@ -861,26 +907,9 @@ export default function MdmDevices() {
                   </button>
                 </div>
                 {selected.snapshots?.length > 0 ? (
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3">
                     {[...selected.snapshots].reverse().map((snap) => (
-                      <a
-                        key={snap.id}
-                        href={snap.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block w-40"
-                        title={`${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`}
-                      >
-                        <img
-                          src={snap.url}
-                          alt="снимок"
-                          loading="lazy"
-                          className="w-40 h-40 object-cover rounded-lg border border-[color:var(--color-border)] bg-black"
-                        />
-                        <span className="block text-xs text-[color:var(--color-text-muted)] mt-1 truncate">
-                          {`${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`}
-                        </span>
-                      </a>
+                      <SnapshotThumb key={snap.id} deviceId={selected.id} snap={snap} />
                     ))}
                   </div>
                 ) : (
@@ -955,9 +984,9 @@ export default function MdmDevices() {
                     <Trash2 size={14} /> Удалить по имени пакета
                   </button>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                   <input
-                    className="input w-48"
+                    className="input flex-1 sm:w-48"
                     placeholder="Найти приложение"
                     value={appFilter}
                     onChange={(e) => setAppFilter(e.target.value)}
