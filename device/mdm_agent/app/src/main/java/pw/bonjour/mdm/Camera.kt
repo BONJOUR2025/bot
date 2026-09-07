@@ -51,10 +51,15 @@ object Camera {
         if (policyWantsDisabled) {
             return "Камера отключена политикой — снимите запрет «Отключить камеру»"
         }
-        // Снимаем безусловно, а не по getCameraDisabled: на realme тот вернул
-        // false, а openCamera всё равно падал с «disabled by policy» — значит
-        // блокировка сидит на уровне ниже, чем видит этот флаг.
-        runCatching { dpm.setCameraDisabled(Dpm.admin(ctx), false) }
+        // Снимаем блокировку сразу с двух уровней, безусловно. getCameraDisabled
+        // на realme вернул false, а камера всё равно была «disabled by policy» —
+        // значит запрет сидит не в setCameraDisabled, а в пользовательском
+        // ограничении DISALLOW_CAMERA, которого тот флаг не видит.
+        val admin = Dpm.admin(ctx)
+        runCatching { dpm.setCameraDisabled(admin, false) }
+        runCatching { dpm.clearUserRestriction(admin, android.os.UserManager.DISALLOW_CAMERA) }
+        // Даём системе применить снятие запрета до открытия камеры.
+        Thread.sleep(400)
 
         val manager = ctx.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
             ?: return "На телефоне нет доступа к камере"
