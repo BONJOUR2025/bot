@@ -307,6 +307,32 @@ export default function MdmDevices() {
     ? `${pollSeconds / 60} мин`
     : `${pollSeconds} с`;
 
+  async function forgetDevice() {
+    if (!selected) return;
+    const title = selected.name || `${selected.manufacturer || ''} ${selected.model || ''}`.trim() || selected.id;
+    // Формулировка намеренно длинная: удаление карточки — не то же самое, что
+    // снятие управления, и перепутать их дорого.
+    if (!window.confirm(
+      `Убрать «${title}» из списка?
+
+`
+      + 'Сам телефон при этом останется управляемым: запреты продолжат действовать, '
+      + 'а агент начнёт получать отказ на каждой попытке связаться. Если телефон живой '
+      + 'и нужно вернуть его в обычное состояние — сначала «Снять управление», и только потом убирать.',
+    )) return;
+    setBusy(true);
+    try {
+      await api.delete(`mdm/devices/${selected.id}`);
+      setSelectedId(null);
+      toast('Телефон убран из списка', 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function toggleRestriction(id) {
     setPolicyDraft((prev) => ({
       ...prev,
@@ -823,6 +849,21 @@ export default function MdmDevices() {
                 Телефон ещё не присылал список. Он приедет с ближайшим чек-ином.
               </p>
             )}
+          </div>
+
+          <div className="border-t border-[color:var(--color-border)] pt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm flex items-center gap-1.5"
+              disabled={busy}
+              onClick={forgetDevice}
+            >
+              <Trash2 size={14} /> Убрать из списка
+            </button>
+            <span className="text-xs text-[color:var(--color-text-muted)]">
+              Для сброшенного или потерянного аппарата, карточка которого больше не нужна.
+              Управление с телефона это не снимает.
+            </span>
           </div>
 
           {selected.commands?.length > 0 && (
