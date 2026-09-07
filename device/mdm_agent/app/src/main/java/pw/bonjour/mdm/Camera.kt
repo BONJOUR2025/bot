@@ -57,7 +57,9 @@ object Camera {
         // ограничении DISALLOW_CAMERA, которого тот флаг не видит.
         val admin = Dpm.admin(ctx)
         runCatching { dpm.setCameraDisabled(admin, false) }
-        runCatching { dpm.clearUserRestriction(admin, android.os.UserManager.DISALLOW_CAMERA) }
+        // "no_camera" — значение UserManager.DISALLOW_CAMERA, которое в публичном
+        // API скрыто (константы нет), а строковый ключ работает как обычно.
+        runCatching { dpm.clearUserRestriction(admin, "no_camera") }
         // Даём системе применить снятие запрета до открытия камеры.
         Thread.sleep(400)
 
