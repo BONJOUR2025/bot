@@ -126,6 +126,10 @@ class MdmCheckinRequest(BaseModel):
     # две минуты.
     apps_hash: Optional[str] = None
     apps: Optional[list[MdmApp]] = None
+    # Play Защита отклоняет тихую установку наших APK, а выключить её
+    # программно нельзя — только руками на телефоне. Поэтому агент хотя бы
+    # сообщает её состояние, чтобы отказ установки не выглядел загадкой.
+    play_protect: Optional[bool] = None
 
 
 class MdmCommand(BaseModel):
@@ -187,6 +191,7 @@ class MdmDevice(BaseModel):
     last_error: Optional[str] = None
     apps: list[MdmApp] = Field(default_factory=list)
     apps_updated_at: Optional[str] = None
+    play_protect: Optional[bool] = None
     commands: list[MdmCommand] = Field(default_factory=list)
 
 

@@ -189,6 +189,7 @@ class MdmService:
             "battery": data.battery,
             "applied_policy_version": data.applied_policy_version,
             "last_error": data.last_error,
+            "play_protect": data.play_protect,
             "last_seen_at": _now(),
         }
         # Список приложений приезжает не каждый раз, а только когда изменился.

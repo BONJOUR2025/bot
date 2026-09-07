@@ -163,12 +163,30 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
             sentAppsHash = hash
         }
 
+        json.put("play_protect", playProtectEnabled(ctx))
+
         battery(ctx)?.let { json.put("battery", it) }
         Prefs.lastError(ctx).takeIf { it.isNotBlank() }?.let { json.put("last_error", it) }
         Prefs.takePendingLocation(ctx)?.let { (lat, lon, at) ->
             json.put("latitude", lat).put("longitude", lon).put("location_at", at)
         }
         return json
+    }
+
+    /** Включена ли Play Защита.
+     *
+     *  Она отклоняет тихую установку приложений, подписанных неизвестным ей
+     *  ключом, — то есть любых наших. Отключить её программно нельзя: владелец
+     *  устройства не вправе менять эту системную настройку. Зато прочитать
+     *  можно, и тогда отказ установки перестаёт быть загадкой: панель прямо
+     *  скажет, что и где выключить на телефоне.
+     */
+    private fun playProtectEnabled(ctx: Context): Boolean = try {
+        android.provider.Settings.Global.getInt(
+            ctx.contentResolver, "package_verifier_user_consent", 1
+        ) > 0
+    } catch (e: Exception) {
+        true
     }
 
     private fun battery(ctx: Context): Int? {

@@ -613,6 +613,20 @@ export default function MdmDevices() {
             </div>
           </dl>
 
+          {selected.play_protect && (
+            <div className="text-sm text-amber-600 flex flex-col gap-1">
+              <span>
+                На телефоне включена Play Защита — она отклоняет установку наших приложений,
+                и команда «поставить» будет падать с ошибкой проверки.
+              </span>
+              <span className="text-xs text-[color:var(--color-text-muted)]">
+                Выключить можно только на самом телефоне: Play Маркет → значок профиля →
+                Play Защита → шестерёнка → «Сканировать приложения». Программно эту настройку
+                не изменить: владельцу устройства система её менять не даёт.
+              </span>
+            </div>
+          )}
+
           {selected.last_error && (
             <p className="text-sm text-red-600">
               Телефон сообщает об ошибке: {selected.last_error}
