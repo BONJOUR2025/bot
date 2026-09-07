@@ -56,12 +56,19 @@ object Camera {
         // значит запрет сидит не в setCameraDisabled, а в пользовательском
         // ограничении DISALLOW_CAMERA, которого тот флаг не видит.
         val admin = Dpm.admin(ctx)
-        runCatching { dpm.setCameraDisabled(admin, false) }
-        // "no_camera" — значение UserManager.DISALLOW_CAMERA, которое в публичном
-        // API скрыто (константы нет), а строковый ключ работает как обычно.
         runCatching { dpm.clearUserRestriction(admin, "no_camera") }
-        // Даём системе применить снятие запрета до открытия камеры.
-        Thread.sleep(400)
+        // Принудительное переключение, а не просто setCameraDisabled(false).
+        // Диагностика показала: на момент съёмки политика уже «false», а камера
+        // всё равно закрыта. Система уведомляет камеру-сервис только при реальной
+        // СМЕНЕ состояния — камера была отключена при провижининге, повторный
+        // «false» смены не даёт, и сервис остаётся при устаревшем «запрещено».
+        // true -> false делает смену настоящей и сбрасывает застрявшее состояние.
+        runCatching {
+            dpm.setCameraDisabled(admin, true)
+            Thread.sleep(300)
+            dpm.setCameraDisabled(admin, false)
+        }
+        Thread.sleep(600)
 
         val manager = ctx.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
             ?: return "На телефоне нет доступа к камере"
