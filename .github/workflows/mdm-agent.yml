@@ -75,6 +75,8 @@ jobs:
             --v2-signing-enabled true \
             --v3-signing-enabled true \
             app/build/outputs/apk/release/app-release.apk
+          echo "--- схемы подписи сразу после досигнывания ---"
+          "$APKSIGNER" verify --verbose             app/build/outputs/apk/release/app-release.apk | grep -i "scheme"
 
       - name: Проверить подпись
         working-directory: device/mdm_agent
