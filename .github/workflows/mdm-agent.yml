@@ -74,20 +74,29 @@ jobs:
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled true \
+            --min-sdk-version 23 \
             app/build/outputs/apk/release/app-release.apk
+          echo "--- файлы подписи внутри архива ---"
+          unzip -l app/build/outputs/apk/release/app-release.apk \
+            | grep -iE "META-INF/.*(MANIFEST|[.]SF|[.]RSA)" || echo "их нет"
           echo "--- схемы подписи сразу после досигнывания ---"
           "$APKSIGNER" verify --verbose             app/build/outputs/apk/release/app-release.apk | grep -i "scheme"
 
+      # Проверяем наличие подписи v1 по содержимому архива, а не по выводу
+      # apksigner verify: тот печатает, какими схемами он проверял, а при
+      # minSdk 24 v1 он не проверяет вовсе и пишет false даже когда подпись на
+      # месте. На этом можно потерять полдня, приняв исправную сборку за
+      # сломанную.
       - name: Проверить подпись
         working-directory: device/mdm_agent
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -n1)
           APK=app/build/outputs/apk/release/app-release.apk
-          "$APKSIGNER" verify --verbose --print-certs $APK
-          # Без v1 провижининг по QR молча не работает — ловим это здесь, а не
-          # на живом телефоне, стоя в салоне.
-          "$APKSIGNER" verify --verbose $APK \
-            | grep -q "v1 scheme (JAR signing): true"
+          "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 23 $APK
+          if ! unzip -l $APK | grep -qiE "META-INF/.*[.]RSA"; then
+            echo "::error::В APK нет подписи v1 — провижининг по QR работать не будет"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
