@@ -1,13 +1,8 @@
 package pw.bonjour.mdm
 
 import android.content.Context
-import android.location.LocationManager
 import android.os.Build
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 /** Исполнитель команд, пришедших с сервера.
  *
@@ -48,7 +43,7 @@ object CommandRunner {
                     "done" to null
                 }
 
-                "locate" -> locate(ctx)
+                "locate" -> Locator.locate(ctx)
 
                 "install_apk" -> {
                     val url = params.optString("url")
@@ -100,30 +95,5 @@ object CommandRunner {
         } catch (e: Exception) {
             "failed" to (e.javaClass.simpleName + ": " + e.message)
         }
-    }
-
-    private fun locate(ctx: Context): Pair<String, String?> {
-        val manager = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        // Берём последнюю известную точку, а не запрашиваем свежую: телефон в
-        // салоне лежит в помещении, ожидание фикса GPS упрётся в таймаут, а
-        // сетевая точка с точностью до квартала отвечает на вопрос «где аппарат».
-        val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-        var best: android.location.Location? = null
-        for (provider in providers) {
-            val location = try {
-                manager.getLastKnownLocation(provider)
-            } catch (e: SecurityException) {
-                null
-            } ?: continue
-            if (best == null || location.time > best.time) best = location
-        }
-        val found = best ?: return "failed" to "no_location"
-
-        val stamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }.format(Date(found.time))
-
-        Prefs.setPendingLocation(ctx, found.latitude, found.longitude, stamp)
-        return "done" to (found.latitude.toString() + "," + found.longitude.toString())
     }
 }

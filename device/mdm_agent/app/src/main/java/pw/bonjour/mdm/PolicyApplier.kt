@@ -29,6 +29,14 @@ object PolicyApplier {
         "no_sms" to UserManager.DISALLOW_SMS
     )
 
+    /** Разрешения, которые агент выдаёт себе сам. Фоновое — обязательно:
+     *  чек-ин работает в фоне, а с Android 10 без него координат не получить. */
+    private val GRANTED_PERMISSIONS = listOf(
+        android.Manifest.permission.ACCESS_FINE_LOCATION,
+        android.Manifest.permission.ACCESS_COARSE_LOCATION,
+        android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+    )
+
     /** @return строка с описанием проблем или null, если всё применилось. */
     fun apply(ctx: Context, policy: JSONObject): String? {
         if (!Dpm.isOwner(ctx)) return "not_device_owner"
@@ -42,6 +50,20 @@ object PolicyApplier {
         runCatching {
             dpm.setPermissionPolicy(admin, DevicePolicyManager.PERMISSION_POLICY_AUTO_GRANT)
         }.onFailure { problems.add("permission_policy: " + it.message) }
+
+        // Автовыдача срабатывает только когда приложение само запрашивает
+        // разрешение, а агент ничего не запрашивает — у него нет экранов, где
+        // показать диалог. Поэтому владелец устройства выдаёт их себе напрямую.
+        GRANTED_PERMISSIONS.forEach { permission ->
+            runCatching {
+                dpm.setPermissionGrantState(
+                    admin,
+                    ctx.packageName,
+                    permission,
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                )
+            }.onFailure { problems.add(permission.substringAfterLast('.') + ": " + it.message) }
+        }
 
         val restrictions = policy.optJSONObject("restrictions") ?: JSONObject()
         RESTRICTIONS.forEach { entry ->
