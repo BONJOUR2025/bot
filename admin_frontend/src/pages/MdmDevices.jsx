@@ -66,6 +66,9 @@ export default function MdmDevices() {
   const [library, setLibrary] = useState([]);
   const libraryInput = useRef(null);
   const [pollDraft, setPollDraft] = useState('');
+  const [appFilter, setAppFilter] = useState('');
+  const [showSystemApps, setShowSystemApps] = useState(false);
+  const [selectedApps, setSelectedApps] = useState(() => new Set());
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -80,6 +83,14 @@ export default function MdmDevices() {
   useEffect(() => {
     setPolicyDraft(selected ? structuredClone(selected.policy) : null);
   }, [selectedId, selected?.policy_version]);
+
+  // Выделение и поиск относятся к конкретному телефону: при переключении их
+  // нужно сбросить, иначе на новом аппарате окажутся отмечены чужие пакеты.
+  useEffect(() => {
+    setSelectedApps(new Set());
+    setAppFilter('');
+    setShowSystemApps(false);
+  }, [selectedId]);
 
   async function load() {
     setLoading(true);
@@ -338,6 +349,55 @@ export default function MdmDevices() {
       ...prev,
       restrictions: { ...prev.restrictions, [id]: !prev.restrictions[id] },
     }));
+  }
+
+  const matchesFilter = (app) => {
+    const needle = appFilter.trim().toLowerCase();
+    if (!needle) return true;
+    return `${app.label || ''} ${app.package}`.toLowerCase().includes(needle);
+  };
+
+  const byName = (a, b) => (a.label || a.package).localeCompare(b.label || b.package, 'ru');
+
+  const removableApps = (selected?.apps || []).filter((a) => !a.system && matchesFilter(a)).sort(byName);
+  const systemApps = (selected?.apps || []).filter((a) => a.system && matchesFilter(a)).sort(byName);
+
+  function toggleApp(pkg) {
+    setSelectedApps((prev) => {
+      const next = new Set(prev);
+      if (next.has(pkg)) next.delete(pkg); else next.add(pkg);
+      return next;
+    });
+  }
+
+  function toggleAllApps() {
+    setSelectedApps((prev) => (
+      prev.size === removableApps.length ? new Set() : new Set(removableApps.map((a) => a.package))
+    ));
+  }
+
+  async function uninstallSelected() {
+    const packages = [...selectedApps];
+    if (!packages.length) return;
+    if (!window.confirm(`Удалить с телефона ${packages.length} приложени(й)?`)) return;
+    setBusy(true);
+    try {
+      // По одной команде на приложение: телефон исполнит их подряд на
+      // ближайшей связи, а в истории будет видно, что именно удалялось.
+      for (const pkg of packages) {
+        await api.post(`mdm/devices/${selected.id}/commands`, {
+          type: 'uninstall',
+          params: { package: pkg },
+        });
+      }
+      toast(`Удаление ${packages.length} приложени(й) поставлено в очередь`, 'success');
+      setSelectedApps(new Set());
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
   }
 
   const columns = [
@@ -797,61 +857,122 @@ export default function MdmDevices() {
           </div>
 
           <div>
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <h2 className="font-medium">
-                {`Установлено на телефоне${selected.apps?.length ? `: ${selected.apps.length}` : ''}`}
-              </h2>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm flex items-center gap-1.5"
-                disabled={busy}
-                onClick={() => sendCommand('refresh_apps')}
-              >
-                <ListRestart size={14} /> Обновить список
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <h2 className="font-medium">Приложения на телефоне</h2>
+              <div className="flex items-center gap-2">
+                <input
+                  className="input w-56"
+                  placeholder="Найти приложение"
+                  value={appFilter}
+                  onChange={(e) => setAppFilter(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm flex items-center gap-1.5"
+                  disabled={busy}
+                  onClick={() => sendCommand('refresh_apps')}
+                >
+                  <ListRestart size={14} /> Обновить
+                </button>
+              </div>
             </div>
+
             {selected.apps?.length ? (
               <>
-                <div className="flex flex-col gap-1 max-h-80 overflow-y-auto pr-1">
-                  {[...selected.apps]
-                    .sort((a, b) => Number(a.system) - Number(b.system)
-                      || (a.label || a.package).localeCompare(b.label || b.package, 'ru'))
-                    .map((app) => (
-                      <div key={app.package} className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className={app.enabled ? '' : 'text-[color:var(--color-text-muted)]'}>
-                          {app.label || app.package}
-                        </span>
-                        <span className="text-xs text-[color:var(--color-text-muted)]">
-                          {app.package}
-                        </span>
-                        {app.version_name && (
-                          <span className="text-xs text-[color:var(--color-text-muted)]">
-                            {app.version_name}
-                          </span>
-                        )}
-                        {app.system && (
-                          <span className="text-xs text-[color:var(--color-text-muted)]">системное</span>
-                        )}
-                        <span className="grow" />
-                        {!app.system && (
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
-                            disabled={busy}
-                            onClick={() => {
-                              if (!window.confirm(`Удалить «${app.label || app.package}» с телефона?`)) return;
-                              sendCommand('uninstall', { package: app.package });
-                            }}
-                          >
-                            Удалить
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                <div className="flex flex-wrap items-center gap-3 mb-2">
+                  <span className="text-sm font-medium">
+                    {`Можно удалить · ${removableApps.length}`}
+                  </span>
+                  {removableApps.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={toggleAllApps}
+                    >
+                      {selectedApps.size === removableApps.length ? 'Снять выделение' : 'Выделить все'}
+                    </button>
+                  )}
+                  {selectedApps.size > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn--danger btn--sm"
+                      disabled={busy}
+                      onClick={uninstallSelected}
+                    >
+                      {`Удалить выбранные (${selectedApps.size})`}
+                    </button>
+                  )}
                 </div>
-                <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
-                  {`Список от ${fmtDateTime(selected.apps_updated_at)}. Системные приложения `
-                   + 'показаны только те, что видны сотруднику в меню, и удалить их нельзя.'}
+
+                <div className="flex flex-col divide-y divide-[color:var(--color-border)] max-h-96 overflow-y-auto">
+                  {removableApps.map((app) => (
+                    <label
+                      key={app.package}
+                      className="flex items-center gap-3 py-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedApps.has(app.package)}
+                        onChange={() => toggleApp(app.package)}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">
+                          {app.label || app.package}
+                          {!app.enabled && (
+                            <span className="text-xs text-[color:var(--color-text-muted)]"> · отключено</span>
+                          )}
+                        </span>
+                        <span className="block text-xs text-[color:var(--color-text-muted)] truncate">
+                          {[app.package, app.version_name].filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm shrink-0"
+                        disabled={busy}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (!window.confirm(`Удалить «${app.label || app.package}» с телефона?`)) return;
+                          sendCommand('uninstall', { package: app.package });
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    </label>
+                  ))}
+                  {removableApps.length === 0 && (
+                    <span className="text-sm text-[color:var(--color-text-muted)] py-2">
+                      {appFilter ? 'Ничего не найдено' : 'Нечего удалять'}
+                    </span>
+                  )}
+                </div>
+
+                {/* Системные скрыты по умолчанию: их вчетверо больше, удалить их
+                    нельзя, и в списке они мешают увидеть то, что можно. */}
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm mt-3"
+                  onClick={() => setShowSystemApps((v) => !v)}
+                >
+                  {`${showSystemApps ? 'Скрыть' : 'Показать'} системные · ${systemApps.length}`}
+                </button>
+
+                {showSystemApps && (
+                  <div className="flex flex-col divide-y divide-[color:var(--color-border)] max-h-72 overflow-y-auto mt-2">
+                    {systemApps.map((app) => (
+                      <span key={app.package} className="py-2 min-w-0">
+                        <span className="block truncate text-sm">{app.label || app.package}</span>
+                        <span className="block text-xs text-[color:var(--color-text-muted)] truncate">
+                          {[app.package, app.version_name].filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs text-[color:var(--color-text-muted)] mt-3">
+                  {`Список от ${fmtDateTime(selected.apps_updated_at)}. Системные приложения удалить `
+                   + 'нельзя — показаны только те, что сотрудник видит в меню.'}
                 </p>
               </>
             ) : (
