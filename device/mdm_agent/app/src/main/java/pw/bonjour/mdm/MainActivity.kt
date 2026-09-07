@@ -46,6 +46,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Открытый экран — последний рубеж восстановления расписания:
+        // сюда приходят руками именно тогда, когда что-то пошло не так.
+        if (Prefs.token(this).isNotBlank()) {
+            CheckinWorker.schedule(this)
+            AlarmScheduler.schedule(this)
+        }
         render()
     }
 

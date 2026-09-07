@@ -69,10 +69,11 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
         // Интервал опроса задаёт сервер. Перезаводим будильник с новым значением
         // сразу: PendingIntent один и тот же, так что прежний просто заменяется.
         val poll = body.optInt("command_poll_seconds", 0)
-        if (poll > 0 && poll != Prefs.pollSeconds(ctx)) {
-            Prefs.setPollSeconds(ctx, poll)
-            AlarmScheduler.schedule(ctx)
-        }
+        if (poll > 0) Prefs.setPollSeconds(ctx, poll)
+        // Заводим будильник на каждом удачном чек-ине, а не только при смене
+        // интервала: так расписание восстанавливается само, что бы его ни
+        // погасило — обновление пакета, очистка данных, причуды прошивки.
+        AlarmScheduler.schedule(ctx)
 
         var problem: String? = null
         var appliedNow: Int? = null
