@@ -246,20 +246,35 @@ object Camera {
         }
     }
 
-    /** Фактическое состояние камерных ограничений — чтобы понять, что держит
-     *  камеру, когда снять её нашими средствами не вышло. */
+    /** Полный срез камерного состояния: когда стандартные рычаги не открыли
+     *  камеру, нужно увидеть всё разом — DPM по агрегату и по нашему admin,
+     *  полный список ограничений, число админов и аппаратный тумблер приватности. */
     private fun diagnostics(ctx: Context, manager: CameraManager): String {
         val dpm = Dpm.manager(ctx)
-        val camDisabled = runCatching { dpm.getCameraDisabled(null) }.getOrNull()
-        val restrictions = runCatching {
+        val camNull = runCatching { dpm.getCameraDisabled(null) }.getOrNull()
+        val camAdmin = runCatching { dpm.getCameraDisabled(Dpm.admin(ctx)) }.getOrNull()
+        val allRestrictions = runCatching {
             val um = ctx.getSystemService(Context.USER_SERVICE) as android.os.UserManager
             um.userRestrictions.keySet().filter { um.userRestrictions.getBoolean(it) }
-                .filter { it.contains("camera") || it == "no_camera" }
         }.getOrElse { emptyList() }
+        val admins = runCatching { dpm.activeAdmins?.map { it.className.substringAfterLast('.') } }
+            .getOrNull()
         val ids = runCatching { manager.cameraIdList.toList() }.getOrElse { emptyList() }
-        val owner = Dpm.isOwner(ctx)
-        return "owner=" + owner + " camDisabled=" + camDisabled +
-            " restrictions=" + restrictions + " cameraIds=" + ids
+        // Аппаратный тумблер приватности камеры (Android 12+): его владелец
+        // устройства снять не может, и он даёт ровно такую блокировку.
+        val sensorPrivacy = runCatching {
+            val spm = ctx.getSystemService("sensor_privacy")
+            if (spm != null) {
+                val m = spm.javaClass.getMethod("isSensorPrivacyEnabled", Int::class.javaPrimitiveType)
+                // 2 = CAMERA в SensorPrivacyManager.Sensors
+                m.invoke(spm, 2)
+            } else "нет сервиса"
+        }.getOrElse { "недоступно: " + (it.message ?: it.javaClass.simpleName) }
+        return "owner=" + Dpm.isOwner(ctx) +
+            " camNull=" + camNull + " camAdmin=" + camAdmin +
+            " restrictions=" + allRestrictions +
+            " admins=" + admins + " cameraIds=" + ids +
+            " sensorPrivacyCamera=" + sensorPrivacy
     }
 
     private fun upload(ctx: Context, lens: String, jpeg: ByteArray): String? {
