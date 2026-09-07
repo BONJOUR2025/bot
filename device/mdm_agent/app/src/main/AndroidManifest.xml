@@ -12,6 +12,8 @@
     <!-- Снимок с камеры для потерянного/украденного телефона. Индикатор
          доступа на Android 12+ система показывает принудительно. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -53,6 +55,13 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- Съёмка идёт из foreground-сервиса: на Android 14 из фона к камере
+             доступа нет. Тип camera обязателен, иначе система не даёт сенсор. -->
+        <service
+            android:name=".CameraService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
 
         <receiver
             android:name=".AdminReceiver"
