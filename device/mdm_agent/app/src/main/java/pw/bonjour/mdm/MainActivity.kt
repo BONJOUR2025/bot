@@ -12,7 +12,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import org.json.JSONObject
 
 /** Служебный экран агента: показать состояние и провести первичную регистрацию.
  *
@@ -83,46 +82,12 @@ class MainActivity : AppCompatActivity() {
         Prefs.setServerUrl(this, url)
         Prefs.setEnrollKey(this, key)
 
-        Thread {
-            val payload = JSONObject()
-                .put("device_id", Prefs.deviceId(this))
-                .put("model", Build.MODEL)
-                .put("manufacturer", Build.MANUFACTURER)
-                .put("android_version", Build.VERSION.RELEASE)
-                .put("agent_version", BuildConfig.VERSION_NAME)
-                .put("device_owner", Dpm.isOwner(this))
-
-            val result = try {
-                val response = Api.post(
-                    url + "/api/mdm/device/enroll",
-                    mapOf("X-Enroll-Key" to key),
-                    payload
-                )
-                if (response.ok) {
-                    val body = response.json()
-                    Prefs.setToken(this, body.optString("token"))
-                    val policy = body.optJSONObject("policy") ?: JSONObject()
-                    Prefs.setPolicy(this, policy, body.optInt("policy_version", 0))
-                    val problem = PolicyApplier.apply(this, policy)
-                    if (problem == null) {
-                        Prefs.setAppliedVersion(this, body.optInt("policy_version", 0))
-                    }
-                    Prefs.setLastError(this, problem)
-                    CheckinWorker.schedule(this)
-                    AlarmScheduler.schedule(this)
-                    "Телефон зарегистрирован"
-                } else {
-                    "Сервер ответил " + response.code + ": " + response.body.take(200)
-                }
-            } catch (e: Exception) {
-                "Не удалось связаться с сервером: " + e.message
-            }
-
+        Enroller.enrollAsync(this) { result ->
             runOnUiThread {
                 toast(result)
                 render()
             }
-        }.start()
+        }
     }
 
     /** Без этого Xiaomi, Honor и прочие агрессивные прошивки усыпляют агента,

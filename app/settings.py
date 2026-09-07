@@ -165,6 +165,18 @@ class Settings(BaseSettings):
     # config.json — менять частоту нужно без пересборки APK И без деплоя.
     mdm_command_poll_seconds: int = Field(120, validation_alias="MDM_COMMAND_POLL_SECONDS")
 
+    # APK агента, который сервер раздаёт телефонам. Лежит в корне рабочей
+    # директории, а не внутри app/ — деплой зеркалит app/ и admin_frontend/
+    # через robocopy /MIR и снёс бы файл при первом же обновлении.
+    mdm_agent_apk_file: str = Field("mdm_agent.apk", validation_alias="MDM_AGENT_APK_FILE")
+
+    # SHA-256 сертификата, которым подписан агент, в base64url без padding.
+    # Уезжает в QR: по нему телефон при первичной настройке проверяет, что
+    # скачал именно нашего агента, а не подменённый по дороге файл.
+    mdm_agent_signature_checksum: str = Field(
+        "", validation_alias="MDM_AGENT_SIGNATURE_CHECKSUM"
+    )
+
     # Файл для хранения пользователей бота (для привязки к сотрудникам)
     bot_users_file: str = Field("bot_users.json", validation_alias="BOT_USERS_FILE")
 

@@ -371,6 +371,19 @@ def register_jobs(app):
 
     app.job_queue.run_repeating(first_order_watch, interval=15 * 60, first=60)
 
+    @log_job("mdm_watch")
+    async def mdm_watch(context: ContextTypes.DEFAULT_TYPE):
+        """Телефоны салонов, переставшие выходить на связь.
+
+        Раз в 10 минут при пороге молчания в час: чаще незачем, реже — теряется
+        смысл. first=300, чтобы после перезапуска бота не разослать тревогу
+        раньше, чем телефоны успеют отметиться.
+        """
+        from ..services.mdm_watch import check_and_notify
+        await check_and_notify()
+
+    app.job_queue.run_repeating(mdm_watch, interval=10 * 60, first=300)
+
     @log_job("morning_briefing")
     async def morning_briefing_job(context: ContextTypes.DEFAULT_TYPE):
         from ..services.briefing_service import send_morning_briefing

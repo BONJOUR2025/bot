@@ -35,11 +35,16 @@ class CheckinWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params
 
     override fun doWork(): Result {
         val ctx = applicationContext
-        val token = Prefs.token(ctx)
+        var token = Prefs.token(ctx)
         if (token.isBlank()) {
-            // Телефон ещё не зарегистрирован — это делается руками через экран
-            // агента, повторять попытку бессмысленно.
-            return Result.success()
+            // При настройке по QR ключ регистрации приезжает внутри самого QR,
+            // но сети в тот момент может ещё не быть. Тогда регистрацию
+            // доделывает первый же чек-ин — иначе телефон, настроенный в
+            // салоне без интернета, навсегда остался бы вне панели.
+            if (Prefs.enrollKey(ctx).isBlank()) return Result.success()
+            Enroller.enroll(ctx)
+            token = Prefs.token(ctx)
+            if (token.isBlank()) return Result.retry()
         }
 
         val base = Prefs.serverUrl(ctx)

@@ -11,11 +11,15 @@ from __future__ import annotations
 import secrets
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.api.dependencies import require_permission
 from app.schemas.mdm import (
     MdmAckRequest,
+    MdmAgentInfo,
+    MdmAgentRolloutResult,
+    MdmProvisioning,
     MdmCheckinRequest,
     MdmCheckinResponse,
     MdmCommand,
@@ -29,6 +33,7 @@ from app.schemas.mdm import (
 )
 from app.services.mdm_service import (
     MdmService,
+    agent_apk_path,
     current_command_poll_seconds,
     MdmValidationError,
     current_enroll_key,
@@ -44,6 +49,30 @@ CHECKIN_INTERVAL_MINUTES = 15
 # MDM_COMMAND_POLL_SECONDS в config.json (см. current_command_poll_seconds).
 # Полный чек-ин раз в 15 минут — потолок WorkManager, для «заблокируй
 # телефон» это слишком долго, поэтому очередь агент забирает будильником.
+
+
+def create_mdm_public_router() -> APIRouter:
+    """Раздача APK агента. Без авторизации — иначе не сработает провижининг.
+
+    По этой ссылке APK тянет мастер первичной настройки Android, когда на
+    телефоне ещё нет ничего. Подмену ловит не доступ, а контрольная сумма
+    подписи, зашитая в QR: файл с чужим ключом телефон просто не поставит.
+    """
+
+    router = APIRouter(prefix="/mdm", tags=["MDM"])
+
+    @router.get("/agent.apk")
+    async def download_agent_apk() -> FileResponse:
+        path = agent_apk_path()
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="agent_apk_not_uploaded")
+        return FileResponse(
+            path,
+            media_type="application/vnd.android.package-archive",
+            filename="bonjour-mdm-agent.apk",
+        )
+
+    return router
 
 
 def create_mdm_device_router(service: MdmService) -> APIRouter:
@@ -122,6 +151,37 @@ def create_mdm_router(service: MdmService) -> APIRouter:
         current=Depends(require_permission("mdm")),
     ) -> MdmEnrollmentInfo:
         return service.enrollment_info()
+
+    @router.get("/provisioning", response_model=MdmProvisioning)
+    async def get_provisioning(
+        current=Depends(require_permission("mdm")),
+    ) -> MdmProvisioning:
+        return service.provisioning()
+
+    @router.get("/agent", response_model=MdmAgentInfo)
+    async def get_agent_info(
+        current=Depends(require_permission("mdm")),
+    ) -> MdmAgentInfo:
+        return service.agent_info()
+
+    @router.post("/agent", response_model=MdmAgentInfo)
+    async def upload_agent_apk(
+        file: UploadFile = File(...),
+        current=Depends(require_permission("mdm")),
+    ) -> MdmAgentInfo:
+        try:
+            return service.save_agent_apk(await file.read())
+        except MdmValidationError as exc:
+            raise _handle(exc)
+
+    @router.post("/agent/rollout", response_model=MdmAgentRolloutResult)
+    async def rollout_agent(
+        current=Depends(require_permission("mdm")),
+    ) -> MdmAgentRolloutResult:
+        try:
+            return service.rollout_agent_update()
+        except MdmValidationError as exc:
+            raise _handle(exc)
 
     @router.get("/devices", response_model=list[MdmDevice])
     async def list_devices(current=Depends(require_permission("mdm"))) -> list[MdmDevice]:

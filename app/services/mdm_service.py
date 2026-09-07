@@ -8,14 +8,21 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from app.config import MDM_AGENT_APK_FILE
 from app.data.mdm_repository import MdmRepository, get_mdm_repository
 from app.schemas.mdm import (
+    MdmAgentInfo,
+    MdmAgentRolloutResult,
+    MdmProvisioning,
     MdmCheckinRequest,
     MdmCommandAck,
     MdmCommandCreate,
@@ -63,6 +70,32 @@ def current_command_poll_seconds() -> int:
     except Exception:
         pass
     return max(30, min(3600, value))
+
+
+def current_agent_signature_checksum() -> str:
+    """Отпечаток ключа подписи, свежим чтением из config.json."""
+    try:
+        data = json.loads(Path("config.json").read_text(encoding="utf-8"))
+        if value := data.get("MDM_AGENT_SIGNATURE_CHECKSUM"):
+            return str(value)
+    except Exception:
+        pass
+    return settings.mdm_agent_signature_checksum
+
+
+def agent_apk_path() -> Path:
+    return Path(MDM_AGENT_APK_FILE)
+
+
+def agent_apk_url() -> str:
+    """Адрес, по которому телефон качает агента.
+
+    Публичный и без авторизации сознательно: по этой же ссылке APK тянет
+    мастер первичной настройки Android при провижининге по QR — там ещё нет
+    ни токена, ни возможности его ввести. Подмену ловит не доступ, а
+    контрольная сумма подписи в самом QR.
+    """
+    return settings.public_base_url.rstrip("/") + "/api/mdm/agent.apk"
 
 
 class MdmValidationError(ValueError):
@@ -233,6 +266,138 @@ class MdmService:
         """
         if not self._repo.delete(device_id):
             raise MdmValidationError("device_not_found")
+
+    # --- провижининг по QR ----------------------------------------------
+
+    def provisioning(self) -> MdmProvisioning:
+        """Строка для QR, который читает мастер первичной настройки Android.
+
+        Ключи с длинными именами — не наша выдумка, это протокол Android; их
+        состав и написание менять нельзя. Смысловая часть три:
+        откуда качать агента, чем проверить его подлинность и что передать ему
+        внутрь, чтобы телефон зарегистрировался сам, без ввода руками.
+        """
+        problems: list[str] = []
+        checksum = current_agent_signature_checksum()
+        key = current_enroll_key()
+        info = self.agent_info()
+
+        if not info.available:
+            problems.append("APK агента не загружен на сервер")
+        if not checksum:
+            problems.append("Не задан MDM_AGENT_SIGNATURE_CHECKSUM в config.json")
+        if not key:
+            problems.append("Не задан MDM_ENROLL_KEY в config.json")
+        if problems:
+            return MdmProvisioning(ready=False, problems=problems)
+
+        payload = {
+            "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": (
+                "pw.bonjour.mdm/pw.bonjour.mdm.AdminReceiver"
+            ),
+            "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": checksum,
+            "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": (
+                agent_apk_url()
+            ),
+            # Системные приложения остаются: без этого телефон приедет к
+            # сотруднику без камеры, календаря и половины привычных вещей.
+            "android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED": True,
+            "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": False,
+            "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
+                "server_url": settings.public_base_url.rstrip("/"),
+                "enroll_key": key,
+            },
+        }
+        return MdmProvisioning(ready=True, payload=json.dumps(payload, ensure_ascii=False))
+
+    # --- APK агента -----------------------------------------------------
+
+    def agent_info(self) -> MdmAgentInfo:
+        path = agent_apk_path()
+        if not path.exists():
+            return MdmAgentInfo(available=False)
+
+        raw = path.read_bytes()
+        version_name, version_code = self._read_apk_version(raw)
+        outdated = 0
+        if version_name:
+            outdated = sum(
+                1
+                for d in self._repo.list()
+                if (d.get("agent_version") or "") != version_name
+            )
+        return MdmAgentInfo(
+            available=True,
+            version_name=version_name,
+            version_code=version_code,
+            size=len(raw),
+            sha256=hashlib.sha256(raw).hexdigest(),
+            uploaded_at=datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+            url=agent_apk_url(),
+            outdated_devices=outdated,
+        )
+
+    def save_agent_apk(self, content: bytes) -> MdmAgentInfo:
+        """Кладёт новый APK агента на сервер.
+
+        Проверка здесь — не подпись, а вменяемость: что это вообще APK и что
+        внутри наш пакет. Полноценно проверить подпись в питоне нечем, но и
+        цена ошибки другая: телефон откажется ставить чужой APK поверх агента,
+        потому что ключ не совпадёт. Смысл проверки — поймать «залил не тот
+        файл» до того, как команда уйдёт на весь парк.
+        """
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(content))
+            manifest = archive.read("AndroidManifest.xml")
+        except Exception as exc:
+            raise MdmValidationError("not_an_apk") from exc
+
+        if "pw.bonjour.mdm".encode("utf-16-le") not in manifest:
+            raise MdmValidationError("foreign_apk")
+
+        agent_apk_path().write_bytes(content)
+        return self.agent_info()
+
+    def rollout_agent_update(self) -> MdmAgentRolloutResult:
+        """Ставит команду обновления телефонам, чья версия отличается от лежащей.
+
+        Сравнение по имени версии, а не «новее/старее»: откат на предыдущую
+        версию — такой же законный сценарий, как обновление, и запрещать его
+        сравнением номеров незачем.
+        """
+        info = self.agent_info()
+        if not info.available:
+            raise MdmValidationError("agent_apk_not_uploaded")
+        if not info.version_name:
+            # Версии нет — значит APK собран до того, как её начали класть
+            # внутрь. Рассылать вслепую нельзя: обновим все телефоны в цикле.
+            raise MdmValidationError("agent_apk_version_unknown")
+
+        queued = skipped = 0
+        for device in self._repo.list():
+            if (device.get("agent_version") or "") == info.version_name:
+                skipped += 1
+                continue
+            self.queue_command(
+                str(device.get("id")),
+                MdmCommandCreate(type="install_apk", params={"url": info.url}),
+            )
+            queued += 1
+        return MdmAgentRolloutResult(queued=queued, skipped=skipped)
+
+    @staticmethod
+    def _read_apk_version(content: bytes) -> tuple[Optional[str], Optional[int]]:
+        """Версия лежит в assets/agent_version.json, который кладёт сборка.
+
+        Разбирать бинарный манифест Android ради двух чисел — несоразмерно, а
+        имя файла по дороге может стать каким угодно.
+        """
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(content))
+            data = json.loads(archive.read("assets/agent_version.json").decode("utf-8"))
+            return str(data["version_name"]), int(data["version_code"])
+        except Exception:
+            return None, None
 
     def enrollment_info(self) -> MdmEnrollmentInfo:
         key = current_enroll_key()

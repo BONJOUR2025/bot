@@ -181,6 +181,39 @@ class MdmCommandCreate(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class MdmAgentInfo(BaseModel):
+    """APK агента, лежащий на сервере, и его расхождение с парком."""
+
+    available: bool = False
+    version_name: Optional[str] = None
+    version_code: Optional[int] = None
+    size: Optional[int] = None
+    sha256: Optional[str] = None
+    uploaded_at: Optional[str] = None
+    url: Optional[str] = None
+    # Сколько телефонов сообщают версию, отличную от лежащей на сервере.
+    outdated_devices: int = 0
+
+
+class MdmProvisioning(BaseModel):
+    """Данные для QR первичной настройки телефона.
+
+    `payload` — готовая строка, которую нужно закодировать в QR-код: её
+    читает мастер первичной настройки Android после шести тапов по экрану
+    приветствия на сброшенном телефоне.
+    """
+
+    ready: bool
+    payload: Optional[str] = None
+    # Чего не хватает, человеческим языком, если ready=False.
+    problems: list[str] = Field(default_factory=list)
+
+
+class MdmAgentRolloutResult(BaseModel):
+    queued: int
+    skipped: int
+
+
 class MdmEnrollmentInfo(BaseModel):
     """Что нужно вбить в агента при первой установке."""
 

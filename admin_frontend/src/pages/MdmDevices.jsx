@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Smartphone, RefreshCw, Copy, KeyRound, ShieldCheck, ShieldAlert,
   Lock, MapPin, RotateCw, Download, Trash2, Unlink, BatteryMedium,
+  Upload, QrCode, PackageCheck,
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
@@ -56,6 +58,11 @@ export default function MdmDevices() {
   const [policyDraft, setPolicyDraft] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [agent, setAgent] = useState(null);
+  const [provisioning, setProvisioning] = useState(null);
+  const [qrOpen, setQrOpen] = useState(false);
+  const qrCanvas = useRef(null);
+  const apkInput = useRef(null);
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -74,16 +81,66 @@ export default function MdmDevices() {
   async function load() {
     setLoading(true);
     try {
-      const [devicesRes, enrollmentRes] = await Promise.all([
+      const [devicesRes, enrollmentRes, agentRes, provisioningRes] = await Promise.all([
         api.get('mdm/devices'),
         api.get('mdm/enrollment'),
+        api.get('mdm/agent'),
+        api.get('mdm/provisioning'),
       ]);
       setDevices(devicesRes.data);
       setEnrollment(enrollmentRes.data);
+      setAgent(agentRes.data);
+      setProvisioning(provisioningRes.data);
     } catch (err) {
       toast(err.response?.data?.detail || err.message, 'error');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // QR рисуем только когда он открыт: строка длинная, код получается плотным,
+  // и постоянно держать его на экране незачем.
+  useEffect(() => {
+    if (!qrOpen || !provisioning?.payload || !qrCanvas.current) return;
+    QRCode.toCanvas(qrCanvas.current, provisioning.payload, {
+      width: 320,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+    }).catch((err) => toast(`Не удалось нарисовать QR: ${err.message}`, 'error'));
+  }, [qrOpen, provisioning?.payload]);
+
+  async function uploadApk(file) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await api.post('mdm/agent', form);
+      setAgent(res.data);
+      toast(`Загружен агент ${res.data.version_name || 'без версии'}`, 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+      if (apkInput.current) apkInput.current.value = '';
+    }
+  }
+
+  async function rolloutAgent() {
+    if (!window.confirm(
+      `Обновить агента на ${agent?.outdated_devices} телефон(ах)? `
+      + 'Телефоны скачают и поставят его сами, вмешательства не потребуется.',
+    )) return;
+    setBusy(true);
+    try {
+      const res = await api.post('mdm/agent/rollout');
+      toast(`Поставлено в очередь: ${res.data.queued}, пропущено: ${res.data.skipped}`, 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -292,6 +349,92 @@ export default function MdmDevices() {
             Ключ регистрации не задан: пропишите <code>MDM_ENROLL_KEY</code> в <code>config.json</code>,
             иначе телефоны не смогут зарегистрироваться.
           </p>
+        )}
+      </section>
+
+      <section className="bg-[color:var(--color-bg-secondary)] rounded-xl p-4 flex flex-col gap-3">
+        <div className="flex items-center gap-2 font-medium">
+          <PackageCheck size={16} /> Агент на сервере
+        </div>
+
+        {agent?.available ? (
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span>
+              Версия <b>{agent.version_name || 'неизвестна'}</b>
+              {agent.version_code ? ` (сборка ${agent.version_code})` : ''}
+            </span>
+            <span className="text-[color:var(--color-text-muted)]">
+              {Math.round(agent.size / 1024)} КБ
+            </span>
+            {agent.outdated_devices > 0 ? (
+              <span className="text-amber-600">
+                {`Устарел на ${agent.outdated_devices} телефон(ах)`}
+              </span>
+            ) : (
+              <span>Все телефоны на этой версии</span>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-red-600">
+            APK агента не загружен. Без него не работают ни обновление по воздуху,
+            ни подключение по QR.
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={apkInput}
+            type="file"
+            accept=".apk,application/vnd.android.package-archive"
+            className="hidden"
+            onChange={(e) => uploadApk(e.target.files?.[0])}
+          />
+          <button
+            type="button"
+            className="btn flex items-center gap-1.5"
+            disabled={busy}
+            onClick={() => apkInput.current?.click()}
+          >
+            <Upload size={14} /> Загрузить APK
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary flex items-center gap-1.5"
+            disabled={busy || !agent?.available || !agent?.outdated_devices}
+            onClick={rolloutAgent}
+          >
+            <Download size={14} /> Обновить телефоны
+          </button>
+          <button
+            type="button"
+            className="btn btn--secondary flex items-center gap-1.5"
+            disabled={!provisioning?.ready}
+            onClick={() => setQrOpen((v) => !v)}
+          >
+            <QrCode size={14} /> {qrOpen ? 'Скрыть QR' : 'QR для нового телефона'}
+          </button>
+        </div>
+
+        {provisioning && !provisioning.ready && (
+          <p className="text-sm text-red-600">
+            {`Подключение по QR недоступно: ${provisioning.problems.join('; ')}`}
+          </p>
+        )}
+
+        {qrOpen && provisioning?.ready && (
+          <div className="flex flex-col sm:flex-row gap-4 items-start pt-2">
+            <canvas ref={qrCanvas} className="bg-white p-2 rounded-lg shrink-0" />
+            <ol className="text-sm flex flex-col gap-1.5 list-decimal pl-4">
+              <li>Сбросьте телефон до заводских настроек (или возьмите новый).</li>
+              <li>На самом первом экране приветствия тапните шесть раз подряд.</li>
+              <li>Подключитесь к Wi-Fi, когда телефон попросит.</li>
+              <li>Наведите камеру телефона на этот код.</li>
+              <li>
+                Дальше телефон всё сделает сам: скачает агента, станет управляемым
+                и появится в списке ниже.
+              </li>
+            </ol>
+          </div>
         )}
       </section>
 

@@ -3,6 +3,25 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val agentVersionName = "0.2.2"
+val agentVersionCode = 5
+
+// Версия кладётся внутрь самого APK: сервер читает её из assets, чтобы знать,
+// какая версия лежит у него и какие телефоны отстали. Альтернативы хуже —
+// разбирать бинарный манифест Android или доверять имени файла, которое любой
+// может переименовать по дороге.
+val agentAssetsDir = layout.buildDirectory.get().asFile.resolve("generated/agentAssets")
+val writeAgentVersion = tasks.register("writeAgentVersion") {
+    val target = agentAssetsDir
+    val content = """{"version_name":"$agentVersionName","version_code":$agentVersionCode}"""
+    outputs.dir(target)
+    doLast {
+        target.mkdirs()
+        target.resolve("agent_version.json").writeText(content)
+    }
+}
+tasks.named("preBuild") { dependsOn(writeAgentVersion) }
+
 android {
     namespace = "pw.bonjour.mdm"
     compileSdk = 34
@@ -11,8 +30,8 @@ android {
         applicationId = "pw.bonjour.mdm"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.2.1"
+        versionCode = agentVersionCode
+        versionName = agentVersionName
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://app.bonjour.pw\"")
     }
 
@@ -39,6 +58,8 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+
+    sourceSets["main"].assets.srcDir(agentAssetsDir)
 
     buildFeatures {
         buildConfig = true
