@@ -16,6 +16,7 @@ vpn_settings.json
 mdm_devices.json
 mdm_agent.apk
 mdm_apps/
+mdm_snapshots/
 vpn/
 static/uploads/lasts/
 

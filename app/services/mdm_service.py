@@ -129,6 +129,21 @@ def _has_android_manifest(content: bytes) -> bool:
         return False
 
 
+def snapshots_dir(device_id: str) -> Path:
+    from app.config import MDM_SNAPSHOTS_DIR
+
+    path = Path(MDM_SNAPSHOTS_DIR) / device_id
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def snapshot_url(device_id: str, snapshot_id: str) -> str:
+    return (
+        settings.public_base_url.rstrip("/")
+        + "/api/mdm/devices/" + device_id + "/snapshots/" + snapshot_id + ".jpg"
+    )
+
+
 def _library_index_path() -> Path:
     return apps_dir() / "index.json"
 
@@ -432,6 +447,48 @@ class MdmService:
                     counts[package] = counts.get(package, 0) + 1
         return counts
 
+    # --- снимки с камеры ------------------------------------------------
+
+    def save_snapshot(self, device: dict[str, Any], lens: Optional[str], content: bytes) -> str:
+        from app.settings import settings as _settings
+
+        device_id = str(device.get("id"))
+        snapshot_id = uuid.uuid4().hex
+        (snapshots_dir(device_id) / (snapshot_id + ".jpg")).write_bytes(content)
+
+        # Свежий список из репозитория, а не из переданного device: тот пришёл
+        # из поиска по токену и к моменту нескольких снимков подряд устаревает.
+        stored = self._repo.get(device_id) or device
+        snapshots = list(stored.get("snapshots") or [])
+        snapshots.append(
+            {
+                "id": snapshot_id,
+                "lens": lens,
+                "taken_at": _now(),
+                "size": len(content),
+            }
+        )
+        # Держим только последние: снимок делается по команде для потерянного
+        # аппарата, копить их бесконечно незачем. Файлы вытесненных удаляем,
+        # иначе каталог рос бы, а в карточке их уже не видно.
+        keep = max(1, int(_settings.mdm_snapshots_keep))
+        for stale in snapshots[:-keep]:
+            (snapshots_dir(device_id) / (str(stale.get("id")) + ".jpg")).unlink(missing_ok=True)
+        snapshots = snapshots[-keep:]
+
+        self._repo.upsert(device_id, {"snapshots": snapshots})
+        return snapshot_id
+
+    def snapshot_path(self, device_id: str, snapshot_id: str) -> Path:
+        # snapshot_id — это hex из uuid4, но приходит из URL, поэтому не пускаем
+        # в путь ничего, кроме hex: защита от «../» и прочего обхода каталога.
+        if not all(c in "0123456789abcdef" for c in snapshot_id):
+            raise MdmValidationError("snapshot_not_found")
+        path = snapshots_dir(device_id) / (snapshot_id + ".jpg")
+        if not path.exists():
+            raise MdmValidationError("snapshot_not_found")
+        return path
+
     # --- провижининг по QR ----------------------------------------------
 
     def provisioning(self) -> MdmProvisioning:
@@ -604,6 +661,13 @@ class MdmService:
     def _to_schema(device: dict[str, Any]) -> MdmDevice:
         data = {k: v for k, v in device.items() if k != "token"}
         data.setdefault("policy", MdmPolicy().model_dump())
+        device_id = str(device.get("id"))
+        # url снимка нигде не хранится — считаем на лету от public_base_url,
+        # чтобы смена домена не осиротила ссылки в карточках.
+        data["snapshots"] = [
+            {**s, "url": snapshot_url(device_id, str(s.get("id")))}
+            for s in (device.get("snapshots") or [])
+        ]
         return MdmDevice.model_validate(data)
 
 

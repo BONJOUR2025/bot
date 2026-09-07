@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Smartphone, RefreshCw, Copy, KeyRound, ShieldCheck, ShieldAlert,
   Lock, MapPin, RotateCw, Download, Trash2, Unlink, BatteryMedium,
-  Upload, QrCode, PackageCheck, Boxes, ListRestart,
+  Upload, QrCode, PackageCheck, Boxes, ListRestart, Camera as CameraIcon,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -831,6 +831,14 @@ export default function MdmDevices() {
                 <MapPin size={14} /> Где телефон
               </button>
               <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                onClick={() => sendCommand('camera', { lens: 'back' })}>
+                <CameraIcon size={14} /> Снимок (задняя)
+              </button>
+              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                onClick={() => sendCommand('camera', { lens: 'front' })}>
+                <CameraIcon size={14} /> Снимок (передняя)
+              </button>
+              <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                 onClick={() => sendCommand('reboot')}>
                 <RotateCw size={14} /> Перезагрузить
               </button>
@@ -981,6 +989,34 @@ export default function MdmDevices() {
               </p>
             )}
           </div>
+
+          {selected.snapshots?.length > 0 && (
+            <div>
+              <h2 className="font-medium mb-2">Снимки с камеры</h2>
+              <div className="flex flex-wrap gap-3">
+                {[...selected.snapshots].reverse().map((snap) => (
+                  <a
+                    key={snap.id}
+                    href={snap.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-40"
+                    title={`${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`}
+                  >
+                    <img
+                      src={snap.url}
+                      alt="снимок"
+                      loading="lazy"
+                      className="w-40 h-40 object-cover rounded-lg border border-[color:var(--color-border)]"
+                    />
+                    <span className="block text-xs text-[color:var(--color-text-muted)] mt-1 truncate">
+                      {`${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="border-t border-[color:var(--color-border)] pt-3 flex flex-wrap items-center gap-3">
             <button

@@ -24,6 +24,7 @@ CommandType = Literal[
     "wipe",  # полный сброс до заводских настроек
     "release_owner",  # аварийный люк: агент перестаёт быть владельцем устройства
     "refresh_apps",  # прислать список установленных приложений заново
+    "camera",  # снимок с камеры (для потерянного/украденного телефона)
 ]
 
 
@@ -192,6 +193,7 @@ class MdmDevice(BaseModel):
     apps: list[MdmApp] = Field(default_factory=list)
     apps_updated_at: Optional[str] = None
     play_protect: Optional[bool] = None
+    snapshots: list[MdmSnapshot] = Field(default_factory=list)
     commands: list[MdmCommand] = Field(default_factory=list)
 
 
@@ -217,6 +219,16 @@ class MdmAgentInfo(BaseModel):
     url: Optional[str] = None
     # Сколько телефонов сообщают версию, отличную от лежащей на сервере.
     outdated_devices: int = 0
+
+
+class MdmSnapshot(BaseModel):
+    """Снимок с камеры телефона."""
+
+    id: str
+    lens: Optional[str] = None  # "back" | "front"
+    taken_at: Optional[str] = None
+    size: int
+    url: str
 
 
 class MdmLibraryApp(BaseModel):

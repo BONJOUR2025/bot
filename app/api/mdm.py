@@ -171,6 +171,15 @@ def create_mdm_device_router(service: MdmService) -> APIRouter:
             command_poll_seconds=current_command_poll_seconds(),
         )
 
+    @router.post("/snapshot")
+    async def upload_snapshot(
+        file: UploadFile = File(...),
+        lens: Optional[str] = Header(default=None, alias="X-Lens"),
+        device: dict[str, Any] = Depends(_authenticated_device),
+    ) -> dict[str, str]:
+        snapshot_id = service.save_snapshot(device, lens, await file.read())
+        return {"status": "ok", "snapshot_id": snapshot_id}
+
     @router.post("/ack")
     async def ack_commands(
         data: MdmAckRequest,
@@ -325,6 +334,18 @@ def create_mdm_router(service: MdmService) -> APIRouter:
             return MdmCommand.model_validate(service.queue_command(device_id, data))
         except MdmValidationError as exc:
             raise _handle(exc)
+
+    @router.get("/devices/{device_id}/snapshots/{snapshot_id}.jpg")
+    async def get_snapshot(
+        device_id: str,
+        snapshot_id: str,
+        current=Depends(require_permission("mdm")),
+    ) -> FileResponse:
+        try:
+            path = service.snapshot_path(device_id, snapshot_id)
+        except MdmValidationError as exc:
+            raise _handle(exc)
+        return FileResponse(path, media_type="image/jpeg")
 
     @router.delete("/devices/{device_id}")
     async def delete_device(

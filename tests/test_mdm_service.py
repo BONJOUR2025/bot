@@ -611,3 +611,43 @@ def test_agent_downgrade_is_refused(service, tmp_path, monkeypatch):
     # Более новая — принимается.
     service.save_agent_apk(make_apk(version_name="0.2.9", version_code=12))
     assert service.agent_info().version_code == 12
+
+
+def test_snapshot_is_stored_and_served(service, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    device, _ = enroll(service)
+
+    snapshot_id = service.save_snapshot({"id": device.id}, "back", bytes([255, 216]) + b"jpegbytes")
+
+    card = service.get_device(device.id)
+    assert len(card.snapshots) == 1
+    assert card.snapshots[0].lens == "back"
+    assert card.snapshots[0].url.endswith(snapshot_id + ".jpg")
+    assert service.snapshot_path(device.id, snapshot_id).read_bytes() == bytes([255, 216]) + b"jpegbytes"
+
+
+def test_only_recent_snapshots_are_kept(service, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("app.settings.settings.mdm_snapshots_keep", 3)
+    device, _ = enroll(service)
+
+    ids = [service.save_snapshot({"id": device.id}, "back", bytes([i])) for i in range(5)]
+
+    card = service.get_device(device.id)
+    # Копить снимки бесконечно незачем: остаются только последние, файлы
+    # вытесненных удаляются, иначе каталог рос бы, а в карточке их уже нет.
+    assert len(card.snapshots) == 3
+    kept = {s.id for s in card.snapshots}
+    assert kept == set(ids[-3:])
+    for gone in ids[:2]:
+        with pytest.raises(MdmValidationError, match="snapshot_not_found"):
+            service.snapshot_path(device.id, gone)
+
+
+def test_snapshot_path_rejects_traversal(service, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    device, _ = enroll(service)
+
+    # id приходит из URL — в путь не должно попасть ничего, кроме hex.
+    with pytest.raises(MdmValidationError, match="snapshot_not_found"):
+        service.snapshot_path(device.id, "..%2f..%2fconfig")
