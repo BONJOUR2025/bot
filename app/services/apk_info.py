@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import io
+import json
 import struct
 import zipfile
 from typing import Any, Optional
@@ -161,3 +162,75 @@ def _read_utf8_len(data: bytes, at: int) -> tuple[int, int]:
         value = ((value & 0x7F) << 8) | data[at]
         at += 1
     return at, value
+
+
+# --- контейнеры (XAPK) ------------------------------------------------------
+
+
+def read_package_info(content: bytes) -> dict[str, Any]:
+    """Что нам дали: одиночный APK или контейнер вроде XAPK.
+
+    Google давно раздаёт приложения набором: базовый APK плюс «сплиты» под
+    архитектуру процессора, плотность экрана и язык. Единого файла у таких
+    приложений не существует, и сайты-зеркала упаковывают весь набор в архив.
+    Ставится он одной транзакцией — Android это умеет, — но сначала нужно
+    понять, что перед нами.
+
+    @return package / version_name / version_code / kind ("apk" | "xapk") /
+            parts (сколько APK внутри) / has_obb
+    """
+    single = read_apk_info(content)
+    if single["package"]:
+        return {**single, "kind": "apk", "parts": 1, "has_obb": False}
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            names = archive.namelist()
+            parts = [n for n in names if n.lower().endswith(".apk")]
+            if not parts:
+                return {**single, "kind": None, "parts": 0, "has_obb": False}
+
+            info = _container_manifest(archive) or _container_from_base(archive, parts)
+            return {
+                **info,
+                "kind": "xapk",
+                "parts": len(parts),
+                "has_obb": any(n.lower().endswith(".obb") for n in names),
+            }
+    except Exception:
+        return {**single, "kind": None, "parts": 0, "has_obb": False}
+
+
+def _container_manifest(archive: zipfile.ZipFile) -> Optional[dict[str, Any]]:
+    """Описание, которое кладут в архив сами упаковщики. Верить ему можно
+    настолько, насколько оно совпадает с базовым APK, — но как источник имени
+    и версии оно удобнее и надёжнее разбора чужих манифестов."""
+    try:
+        data = json.loads(archive.read("manifest.json").decode("utf-8"))
+    except Exception:
+        return None
+    package = data.get("package_name")
+    if not package:
+        return None
+    version_code = data.get("version_code")
+    return {
+        "package": str(package),
+        "version_name": str(data["version_name"]) if data.get("version_name") else None,
+        "version_code": int(version_code) if isinstance(version_code, (int, str)) and str(version_code).isdigit() else None,
+    }
+
+
+def _container_from_base(archive: zipfile.ZipFile, parts: list[str]) -> dict[str, Any]:
+    """Описания нет — читаем манифесты вложенных APK и берём базовый.
+
+    Базовый отличается тем, что несёт название версии: у сплитов его нет,
+    только номер сборки.
+    """
+    fallback = {"package": None, "version_name": None, "version_code": None}
+    for name in parts:
+        info = read_apk_info(archive.read(name))
+        if info["package"] and info["version_name"]:
+            return info
+        if info["package"] and fallback["package"] is None:
+            fallback = info
+    return fallback

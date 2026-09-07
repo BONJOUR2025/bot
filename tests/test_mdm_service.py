@@ -406,6 +406,7 @@ def test_library_keeps_file_when_manifest_is_unreadable(service, tmp_path, monke
     app = service.save_library_app("exotic.apk", buffer.getvalue())
 
     assert app.package is None
+    assert app.kind == "apk"
     assert app.filename == "exotic.apk"
     assert app.size > 0
 
@@ -508,3 +509,75 @@ def test_apk_is_never_served_gzipped(tmp_path):
     assert client.get("/agent.apk", headers={"Accept-Encoding": "gzip"}).headers.get(
         "content-encoding"
     ) != "gzip"
+
+
+def make_xapk(package="ru.agbis.AgbisPhoto", version_name="26.1.5", version_code=2615,
+              with_obb=False):
+    """Контейнер вроде XAPK: базовый APK, довески и описание от упаковщика."""
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(package + ".apk", make_axml(package, version_name, version_code))
+        archive.writestr("config.arm64_v8a.apk", make_axml(package, version_name, version_code))
+        archive.writestr("config.xxxhdpi.apk", make_axml(package, version_name, version_code))
+        archive.writestr("manifest.json", json.dumps({
+            "package_name": package,
+            "version_name": version_name,
+            "version_code": version_code,
+            "split_apks": [{"file": package + ".apk", "id": "base"}],
+        }))
+        if with_obb:
+            archive.writestr("Android/obb/" + package + "/main.1.obb", b"data")
+    return buffer.getvalue()
+
+
+def test_container_is_recognised_as_a_set_of_parts():
+    from app.services.apk_info import read_package_info
+
+    single = read_package_info(make_apk())
+    assert single["kind"] == "apk"
+    assert single["parts"] == 1
+
+    bundle = read_package_info(make_xapk())
+    assert bundle["kind"] == "xapk"
+    assert bundle["package"] == "ru.agbis.AgbisPhoto"
+    assert bundle["version_name"] == "26.1.5"
+    assert bundle["version_code"] == 2615
+    # Три вложенных APK: базовый и два довеска.
+    assert bundle["parts"] == 3
+    assert bundle["has_obb"] is False
+
+
+def test_container_with_game_data_is_flagged():
+    from app.services.apk_info import read_package_info
+
+    # Данные для игр мы не раскладываем — приложение встанет, а игра без них
+    # может не запуститься. Оператор должен об этом знать заранее.
+    assert read_package_info(make_xapk(with_obb=True))["has_obb"] is True
+
+
+def test_library_accepts_container_and_keeps_package_name(service, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    app = service.save_library_app("agbis.xapk", make_xapk())
+
+    assert app.kind == "xapk"
+    assert app.parts == 3
+    assert app.package == "ru.agbis.AgbisPhoto"
+    assert app.version_name == "26.1.5"
+
+
+def test_library_still_rejects_files_that_are_not_packages(service, tmp_path, monkeypatch):
+    import io
+    import zipfile
+
+    monkeypatch.chdir(tmp_path)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("readme.txt", b"no packages here")
+
+    # Архив без единого APK внутри — не приложение, каким бы zip он ни был.
+    with pytest.raises(MdmValidationError, match="not_an_apk"):
+        service.save_library_app("random.zip", buffer.getvalue())

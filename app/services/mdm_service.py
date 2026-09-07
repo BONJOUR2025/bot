@@ -33,7 +33,7 @@ from app.schemas.mdm import (
     MdmEnrollmentInfo,
     MdmPolicy,
 )
-from app.services.apk_info import read_apk_info
+from app.services.apk_info import read_apk_info, read_package_info
 from app.settings import settings
 
 
@@ -106,6 +106,16 @@ def library_app_url(app_id: str) -> str:
     содержимого, так что перебором его не нащупать.
     """
     return settings.public_base_url.rstrip("/") + "/api/mdm/apps/" + app_id + ".apk"
+
+
+def _has_android_manifest(content: bytes) -> bool:
+    """Похоже ли на APK хотя бы по составу архива."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            archive.getinfo("AndroidManifest.xml")
+        return True
+    except Exception:
+        return False
 
 
 def _library_index_path() -> Path:
@@ -338,6 +348,9 @@ class MdmService:
                     size=path.stat().st_size,
                     uploaded_at=meta.get("uploaded_at"),
                     url=library_app_url(app_id),
+                    kind=meta.get("kind", "apk"),
+                    parts=int(meta.get("parts") or 1),
+                    has_obb=bool(meta.get("has_obb")),
                     installed_on=installed.get(package, 0) if package else 0,
                 )
             )
@@ -345,24 +358,32 @@ class MdmService:
         return result
 
     def save_library_app(self, filename: str, content: bytes) -> MdmLibraryApp:
-        try:
-            zipfile.ZipFile(io.BytesIO(content)).read("AndroidManifest.xml")
-        except Exception as exc:
-            raise MdmValidationError("not_an_apk") from exc
+        # Принимаем и одиночный APK, и контейнер вроде XAPK: у приложений,
+        # которые Google раздаёт набором, единого файла попросту не бывает.
+        info = read_package_info(content)
+        kind = info["kind"]
+        if kind is None:
+            # Разобрать не вышло — но если внутри лежит манифест Android, это
+            # APK, и он поставится: установщик разберётся сам. Наш разбор —
+            # «лучшее усилие», решать за пользователя, годится ли файл, он не
+            # должен.
+            if _has_android_manifest(content):
+                kind = "apk"
+            else:
+                raise MdmValidationError("not_an_apk")
 
         app_id = hashlib.sha256(content).hexdigest()[:16]
         (apps_dir() / (app_id + ".apk")).write_bytes(content)
 
-        # Разбор манифеста — «лучшее усилие»: имя пакета нужно только чтобы
-        # показать, где приложение уже стоит, и предложить удаление. Не
-        # прочиталось — файл всё равно поставится, установщик разберётся сам.
-        info = read_apk_info(content)
         index = _read_library_index()
         index[app_id] = {
             "filename": filename,
             "package": info["package"],
             "version_name": info["version_name"],
             "version_code": info["version_code"],
+            "kind": kind,
+            "parts": info["parts"],
+            "has_obb": info["has_obb"],
             "uploaded_at": _now(),
         }
         _write_library_index(index)

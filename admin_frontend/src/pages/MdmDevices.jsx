@@ -564,7 +564,7 @@ export default function MdmDevices() {
           <input
             ref={libraryInput}
             type="file"
-            accept=".apk,application/vnd.android.package-archive"
+            accept=".apk,.xapk,application/vnd.android.package-archive"
             className="hidden"
             onChange={(e) => uploadLibraryApp(e.target.files?.[0])}
           />
@@ -580,8 +580,8 @@ export default function MdmDevices() {
 
         {library.length === 0 ? (
           <p className="text-sm text-[color:var(--color-text-muted)]">
-            Каталог пуст. Загрузите APK — и его можно будет ставить на телефоны одной кнопкой,
-            не вводя ссылок руками.
+            Каталог пуст. Загрузите APK или XAPK — и его можно будет ставить на телефоны
+            одной кнопкой, не вводя ссылок руками.
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -594,6 +594,16 @@ export default function MdmDevices() {
                 <span className="text-[color:var(--color-text-muted)]">
                   {Math.round(app.size / 1024 / 1024 * 10) / 10} МБ
                 </span>
+                {app.parts > 1 && (
+                  <span className="text-[color:var(--color-text-muted)]">
+                    {`набор из ${app.parts} частей`}
+                  </span>
+                )}
+                {app.has_obb && (
+                  <span className="text-amber-600" title="Данные для игр мы не раскладываем">
+                    внутри данные для игр
+                  </span>
+                )}
                 {app.installed_on > 0 && (
                   <span className="text-[color:var(--color-text-muted)]">
                     {`стоит на ${app.installed_on}`}
