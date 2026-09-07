@@ -57,6 +57,13 @@ def current_enroll_key() -> str:
     return settings.mdm_enroll_key
 
 
+# Границы интервала опроса команд. Чаще получаса телефон заметно ест
+# батарею, реже часа — теряется смысл будильника, ради которого всё это
+# затевалось. Знают их и схема запроса, и подсказка в панели.
+MIN_POLL_SECONDS = 30
+MAX_POLL_SECONDS = 3600
+
+
 def current_command_poll_seconds() -> int:
     """Интервал опроса команд, свежим чтением из config.json.
 
@@ -71,7 +78,7 @@ def current_command_poll_seconds() -> int:
             value = int(raw)
     except Exception:
         pass
-    return max(30, min(3600, value))
+    return max(MIN_POLL_SECONDS, min(MAX_POLL_SECONDS, value))
 
 
 def current_agent_signature_checksum() -> str:
@@ -524,6 +531,20 @@ class MdmService:
             return str(data["version_name"]), int(data["version_code"])
         except Exception:
             return None, None
+
+    def set_command_poll_seconds(self, value: int) -> MdmEnrollmentInfo:
+        """Меняет частоту опроса команд, записывая её в config.json.
+
+        Пишем через ConfigService, а не своими руками: у этого файла уже была
+        история с затиранием (чтение повреждённого как {} и запись обратно), и
+        там для этого есть атомарная запись с бэкапом и блокировкой.
+        """
+        if not MIN_POLL_SECONDS <= value <= MAX_POLL_SECONDS:
+            raise MdmValidationError("poll_seconds_out_of_range")
+        from app.services.config_service import ConfigService
+
+        ConfigService().patch({"MDM_COMMAND_POLL_SECONDS": int(value)})
+        return self.enrollment_info()
 
     def enrollment_info(self) -> MdmEnrollmentInfo:
         key = current_enroll_key()

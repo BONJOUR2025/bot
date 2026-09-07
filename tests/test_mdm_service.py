@@ -163,6 +163,31 @@ def test_update_and_delete_device(service):
         service.get_device(device.id)
 
 
+def test_setting_poll_seconds_keeps_other_config_keys(service, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.json").write_text(
+        json.dumps({"MDM_ENROLL_KEY": "k" * 16, "llm_provider": "polza"}), encoding="utf-8"
+    )
+
+    info = service.set_command_poll_seconds(300)
+
+    assert info.command_poll_seconds == 300
+    saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    # Запись идёт через ConfigService именно ради этого: у config.json уже была
+    # история, когда правка одного ключа сносила все остальные.
+    assert saved["llm_provider"] == "polza"
+    assert saved["MDM_ENROLL_KEY"] == "k" * 16
+
+
+def test_poll_seconds_outside_bounds_is_rejected(service, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(MdmValidationError, match="poll_seconds_out_of_range"):
+        service.set_command_poll_seconds(5)
+    with pytest.raises(MdmValidationError, match="poll_seconds_out_of_range"):
+        service.set_command_poll_seconds(99999)
+
+
 def test_command_poll_seconds_is_clamped(tmp_path, monkeypatch):
     from app.services import mdm_service
 

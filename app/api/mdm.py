@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from app.api.dependencies import require_permission
 from app.schemas.mdm import (
     MdmAckRequest,
+    MdmSettingsUpdate,
     MdmAgentInfo,
     MdmAgentRolloutResult,
     MdmLibraryApp,
@@ -164,6 +165,16 @@ def create_mdm_router(service: MdmService) -> APIRouter:
         current=Depends(require_permission("mdm")),
     ) -> MdmEnrollmentInfo:
         return service.enrollment_info()
+
+    @router.put("/settings", response_model=MdmEnrollmentInfo)
+    async def update_settings(
+        data: MdmSettingsUpdate,
+        current=Depends(require_permission("mdm")),
+    ) -> MdmEnrollmentInfo:
+        try:
+            return service.set_command_poll_seconds(data.command_poll_seconds)
+        except MdmValidationError as exc:
+            raise _handle(exc)
 
     @router.get("/apps", response_model=list[MdmLibraryApp])
     async def list_library(

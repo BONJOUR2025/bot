@@ -253,6 +253,12 @@ class MdmAgentRolloutResult(BaseModel):
     skipped: int
 
 
+class MdmSettingsUpdate(BaseModel):
+    """Что можно поменять из панели, не трогая файлы на сервере."""
+
+    command_poll_seconds: int = Field(ge=30, le=3600)
+
+
 class MdmEnrollmentInfo(BaseModel):
     """Что нужно вбить в агента при первой установке."""
 

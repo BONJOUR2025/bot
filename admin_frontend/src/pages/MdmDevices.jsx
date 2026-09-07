@@ -65,6 +65,7 @@ export default function MdmDevices() {
   const apkInput = useRef(null);
   const [library, setLibrary] = useState([]);
   const libraryInput = useRef(null);
+  const [pollDraft, setPollDraft] = useState('');
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -95,6 +96,7 @@ export default function MdmDevices() {
       setAgent(agentRes.data);
       setProvisioning(provisioningRes.data);
       setLibrary(libraryRes.data);
+      setPollDraft(String(enrollmentRes.data.command_poll_seconds ?? 120));
     } catch (err) {
       toast(err.response?.data?.detail || err.message, 'error');
     } finally {
@@ -128,6 +130,24 @@ export default function MdmDevices() {
     } finally {
       setBusy(false);
       if (apkInput.current) apkInput.current.value = '';
+    }
+  }
+
+  async function savePollSeconds() {
+    const value = Number(pollDraft);
+    if (!Number.isFinite(value) || value < 30 || value > 3600) {
+      toast('Допустимо от 30 до 3600 секунд', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.put('mdm/settings', { command_poll_seconds: value });
+      setEnrollment(res.data);
+      toast('Телефоны перейдут на новый интервал в течение одного цикла', 'success');
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -386,11 +406,35 @@ export default function MdmDevices() {
                 <Copy size={14} /> Скопировать ключ регистрации
               </button>
             </div>
-            <p className="text-xs text-[color:var(--color-text-muted)]">
-              {`Телефоны забирают команды раз в ${pollText}. Менять — ключом `}
-              <code>MDM_COMMAND_POLL_SECONDS</code>
-              {' в config.json, перезапуск не нужен.'}
-            </p>
+            <div className="flex flex-wrap items-end gap-2 pt-1">
+              <div>
+                <label className="block text-xs text-[color:var(--color-text-muted)] mb-1">
+                  Телефоны забирают команды раз в, секунд
+                </label>
+                <input
+                  type="number"
+                  min={30}
+                  max={3600}
+                  step={30}
+                  className="input w-40"
+                  value={pollDraft}
+                  onChange={(e) => setPollDraft(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={busy || String(enrollment.command_poll_seconds) === pollDraft}
+                onClick={savePollSeconds}
+              >
+                Сохранить
+              </button>
+              <p className="text-xs text-[color:var(--color-text-muted)] basis-full">
+                Сейчас {pollText}. Чаще — быстрее доходят команды, но заметнее расход батареи;
+                реже — наоборот. Допустимо от 30 секунд до часа; телефоны перейдут на новое
+                значение в течение одного цикла, ничего перезапускать не нужно.
+              </p>
+            </div>
           </>
         ) : (
           <p className="text-sm text-red-600">
