@@ -55,14 +55,37 @@ jobs:
           MDM_KEY_ALIAS: mdm
         run: gradle --no-daemon assembleRelease
 
-      - name: Проверить, что APK подписан
+      # Gradle при minSdk 24 не кладёт подпись v1 и не поддаётся уговорам через
+      # DSL (enableV1Signing = true он молча игнорирует). Поэтому подписываем
+      # явно инструментом SDK: провижининг по QR проверяет скачанный файл старым
+      # способом, который читает только v1, и без неё телефон отказывается
+      # настраиваться с обезличенным «Can't set up device».
+      - name: Досигнать APK всеми схемами
+        working-directory: device/mdm_agent
+        env:
+          MDM_KEYSTORE_PATH: ${{ runner.temp }}/mdm-agent.p12
+          MDM_KEYSTORE_PASSWORD: ${{ secrets.MDM_KEYSTORE_PASSWORD }}
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -n1)
+          "$APKSIGNER" sign \
+            --ks "$MDM_KEYSTORE_PATH" --ks-type PKCS12 \
+            --ks-pass "pass:$MDM_KEYSTORE_PASSWORD" \
+            --ks-key-alias mdm --key-pass "pass:$MDM_KEYSTORE_PASSWORD" \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            app/build/outputs/apk/release/app-release.apk
+
+      - name: Проверить подпись
         working-directory: device/mdm_agent
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -n1)
-          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
-          # Провижининг по QR проверяет подпись старым способом и читает только
-          # v1 — если её нет, телефон отказывается настраиваться.
-          "$APKSIGNER" verify --verbose app/build/outputs/apk/release/app-release.apk             | grep -q "v1 scheme (JAR signing): true"
+          APK=app/build/outputs/apk/release/app-release.apk
+          "$APKSIGNER" verify --verbose --print-certs $APK
+          # Без v1 провижининг по QR молча не работает — ловим это здесь, а не
+          # на живом телефоне, стоя в салоне.
+          "$APKSIGNER" verify --verbose $APK \
+            | grep -q "v1 scheme (JAR signing): true"
 
       - uses: actions/upload-artifact@v4
         with:
