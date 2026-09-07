@@ -181,9 +181,6 @@ class Settings(BaseSettings):
     # обновление.
     mdm_snapshots_dir: str = Field("mdm_snapshots", validation_alias="MDM_SNAPSHOTS_DIR")
 
-    # Сколько последних снимков хранить на телефон: снимок делается по
-    # команде для потерянного аппарата, копить их бесконечно незачем.
-    mdm_snapshots_keep: int = Field(20, validation_alias="MDM_SNAPSHOTS_KEEP")
 
     # Токен, которым сборка кладёт свежий APK агента прямо на сервер.
     # Без него каждая новая версия требует ручного переноса файла из

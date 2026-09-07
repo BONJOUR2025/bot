@@ -626,22 +626,25 @@ def test_snapshot_is_stored_and_served(service, tmp_path, monkeypatch):
     assert service.snapshot_path(device.id, snapshot_id).read_bytes() == bytes([255, 216]) + b"jpegbytes"
 
 
-def test_only_recent_snapshots_are_kept(service, tmp_path, monkeypatch):
+def test_only_last_snapshot_per_lens_is_kept(service, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("app.settings.settings.mdm_snapshots_keep", 3)
     device, _ = enroll(service)
 
-    ids = [service.save_snapshot({"id": device.id}, "back", bytes([i])) for i in range(5)]
+    # Держим по одному последнему кадру на камеру: новый снимок задней камеры
+    # затирает прежний задний, но не трогает фронтальный.
+    back1 = service.save_snapshot({"id": device.id}, "back", bytes([1]))
+    front1 = service.save_snapshot({"id": device.id}, "front", bytes([2]))
+    back2 = service.save_snapshot({"id": device.id}, "back", bytes([3]))
 
     card = service.get_device(device.id)
-    # Копить снимки бесконечно незачем: остаются только последние, файлы
-    # вытесненных удаляются, иначе каталог рос бы, а в карточке их уже нет.
-    assert len(card.snapshots) == 3
-    kept = {s.id for s in card.snapshots}
-    assert kept == set(ids[-3:])
-    for gone in ids[:2]:
-        with pytest.raises(MdmValidationError, match="snapshot_not_found"):
-            service.snapshot_path(device.id, gone)
+    kept = {s.lens: s.id for s in card.snapshots}
+    assert kept == {"back": back2, "front": front1}
+
+    # Файл затёртого заднего кадра удалён, фронтальный и новый задний живы.
+    with pytest.raises(MdmValidationError, match="snapshot_not_found"):
+        service.snapshot_path(device.id, back1)
+    assert service.snapshot_path(device.id, back2).read_bytes() == bytes([3])
+    assert service.snapshot_path(device.id, front1).read_bytes() == bytes([2])
 
 
 def test_snapshot_path_rejects_traversal(service, tmp_path, monkeypatch):
