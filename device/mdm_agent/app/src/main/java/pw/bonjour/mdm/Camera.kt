@@ -69,7 +69,7 @@ object Camera {
             ?: return "Не найдена " + (if (lens == "front") "фронтальная" else "основная") + " камера"
 
         val (jpeg, reason) = capture(ctx, manager, cameraId)
-        if (jpeg == null) return reason ?: "Кадр получить не удалось"
+        if (jpeg == null) return (reason ?: "Кадр получить не удалось") + " | " + diagnostics(ctx, manager)
         return upload(ctx, lens, jpeg)
     }
 
@@ -237,6 +237,22 @@ object Camera {
         } catch (e: Exception) {
             Pair(1280, 720)
         }
+    }
+
+    /** Фактическое состояние камерных ограничений — чтобы понять, что держит
+     *  камеру, когда снять её нашими средствами не вышло. */
+    private fun diagnostics(ctx: Context, manager: CameraManager): String {
+        val dpm = Dpm.manager(ctx)
+        val camDisabled = runCatching { dpm.getCameraDisabled(null) }.getOrNull()
+        val restrictions = runCatching {
+            val um = ctx.getSystemService(Context.USER_SERVICE) as android.os.UserManager
+            um.userRestrictions.keySet().filter { um.userRestrictions.getBoolean(it) }
+                .filter { it.contains("camera") || it == "no_camera" }
+        }.getOrElse { emptyList() }
+        val ids = runCatching { manager.cameraIdList.toList() }.getOrElse { emptyList() }
+        val owner = Dpm.isOwner(ctx)
+        return "owner=" + owner + " camDisabled=" + camDisabled +
+            " restrictions=" + restrictions + " cameraIds=" + ids
     }
 
     private fun upload(ctx: Context, lens: String, jpeg: ByteArray): String? {
