@@ -41,11 +41,20 @@ object Camera {
         ) {
             return "Агенту не выдано разрешение на камеру"
         }
-        // Запрет камеры в политике блокирует её даже владельцу устройства —
-        // без этой проверки снимок падал бы с невнятной ошибкой открытия.
-        if (Dpm.manager(ctx).getCameraDisabled(null)) {
+        // Камера может быть заблокирована политикой даже когда в самой политике
+        // запрета нет: состояние setCameraDisabled переживает переустановку
+        // агента и однажды осталось включённым. Поэтому владелец устройства
+        // снимает блокировку прямо здесь, если политика не требует запрета.
+        val dpm = Dpm.manager(ctx)
+        val policyWantsDisabled = Prefs.policy(ctx)
+            .optJSONObject("restrictions")?.optBoolean("camera_disabled", false) ?: false
+        if (policyWantsDisabled) {
             return "Камера отключена политикой — снимите запрет «Отключить камеру»"
         }
+        // Снимаем безусловно, а не по getCameraDisabled: на realme тот вернул
+        // false, а openCamera всё равно падал с «disabled by policy» — значит
+        // блокировка сидит на уровне ниже, чем видит этот флаг.
+        runCatching { dpm.setCameraDisabled(Dpm.admin(ctx), false) }
 
         val manager = ctx.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
             ?: return "На телефоне нет доступа к камере"
