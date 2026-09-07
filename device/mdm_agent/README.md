@@ -177,6 +177,14 @@ adb shell dpm set-device-owner pw.bonjour.mdm/pw.bonjour.mdm.AdminReceiver
 экономии батареи: без неё Xiaomi, Honor и прочие агрессивные прошивки усыпляют
 агента, и телефон перестаёт выходить на связь.
 
+## Сброс телефона: wipeDevice, а не wipeData
+
+На Android 14 `wipeData` не сбрасывает полностью управляемый аппарат, а пытается
+удалить пользователя и падает с `SecurityException: User 0 is a system user and
+cannot be removed` (проверено на realme RMX3938). Заводской сброс на таких
+устройствах делает `wipeDevice`, появившийся в API 34; на более старых версиях
+остаётся `wipeData`.
+
 ## Аварийные люки
 
 Порядок, в котором их пробовать, если что-то пошло не так:

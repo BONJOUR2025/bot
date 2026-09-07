@@ -2,6 +2,7 @@ package pw.bonjour.mdm
 
 import android.content.Context
 import android.location.LocationManager
+import android.os.Build
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -79,7 +80,18 @@ object CommandRunner {
 
                 "wipe" -> {
                     // Возврата отсюда не будет: телефон уходит в сброс.
-                    Dpm.manager(ctx).wipeData(0)
+                    //
+                    // wipeData на Android 14 не сбрасывает аппарат, а пытается
+                    // удалить пользователя, и падает с «User 0 is a system user
+                    // and cannot be removed» — проверено на realme RMX3938.
+                    // Для полностью управляемых устройств там появился отдельный
+                    // wipeDevice, который делает именно заводской сброс.
+                    val dpm = Dpm.manager(ctx)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        dpm.wipeDevice(0)
+                    } else {
+                        dpm.wipeData(0)
+                    }
                     "done" to null
                 }
 
