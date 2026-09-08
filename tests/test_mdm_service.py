@@ -622,7 +622,7 @@ def test_snapshot_is_stored_and_served(service, tmp_path, monkeypatch):
     card = service.get_device(device.id)
     assert len(card.snapshots) == 1
     assert card.snapshots[0].lens == "back"
-    assert card.snapshots[0].url.endswith(snapshot_id + ".jpg")
+    assert (snapshot_id + ".jpg?") in card.snapshots[0].url
     assert service.snapshot_path(device.id, snapshot_id).read_bytes() == bytes([255, 216]) + b"jpegbytes"
 
 
@@ -654,3 +654,24 @@ def test_snapshot_path_rejects_traversal(service, tmp_path, monkeypatch):
     # id приходит из URL — в путь не должно попасть ничего, кроме hex.
     with pytest.raises(MdmValidationError, match="snapshot_not_found"):
         service.snapshot_path(device.id, "..%2f..%2fconfig")
+
+
+def test_snapshot_url_is_signed_and_verifiable():
+    import time
+    from app.services.mdm_service import sign_snapshot, verify_snapshot_sig, snapshot_url
+
+    url = snapshot_url("dev1", "snap1")
+    # Ссылка — обычный https-адрес (открывается в браузере как скан паспорта),
+    # но с подписью и сроком: без действительной подписи снимок не отдаётся.
+    assert "/api/mdm/devices/dev1/snapshots/snap1.jpg?exp=" in url
+    assert "&sig=" in url
+
+    exp = int(time.time()) + 100
+    sig = sign_snapshot("dev1", "snap1", exp)
+    assert verify_snapshot_sig("dev1", "snap1", exp, sig) is True
+    assert verify_snapshot_sig("dev1", "snap1", exp, "deadbeef") is False
+    # Просроченная — отклоняется.
+    past = int(time.time()) - 1
+    assert verify_snapshot_sig("dev1", "snap1", past, sign_snapshot("dev1", "snap1", past)) is False
+    # Подпись привязана к конкретному снимку: чужим id не воспользоваться.
+    assert verify_snapshot_sig("dev1", "other", exp, sig) is False

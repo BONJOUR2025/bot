@@ -112,6 +112,21 @@ def create_mdm_public_router() -> APIRouter:
         except MdmValidationError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
+    @router.get("/devices/{device_id}/snapshots/{snapshot_id}.jpg")
+    async def get_snapshot(device_id: str, snapshot_id: str, exp: int = 0, sig: str = "") -> FileResponse:
+        # Подписанная ссылка вместо сессии: снимок открывается в браузере
+        # обычным <a href>, как скан паспорта, но подпись не даёт достать его
+        # чужому. См. sign_snapshot/verify_snapshot_sig.
+        from app.services.mdm_service import verify_snapshot_sig
+
+        if not verify_snapshot_sig(device_id, snapshot_id, exp, sig):
+            raise HTTPException(status_code=403, detail="invalid_or_expired_signature")
+        try:
+            path = get_mdm_service().snapshot_path(device_id, snapshot_id)
+        except MdmValidationError:
+            raise HTTPException(status_code=404, detail="snapshot_not_found")
+        return FileResponse(path, media_type="image/jpeg")
+
     @router.get("/apps/{app_id}.apk")
     async def download_library_app(app_id: str) -> FileResponse:
         try:
@@ -334,18 +349,6 @@ def create_mdm_router(service: MdmService) -> APIRouter:
             return MdmCommand.model_validate(service.queue_command(device_id, data))
         except MdmValidationError as exc:
             raise _handle(exc)
-
-    @router.get("/devices/{device_id}/snapshots/{snapshot_id}.jpg")
-    async def get_snapshot(
-        device_id: str,
-        snapshot_id: str,
-        current=Depends(require_permission("mdm")),
-    ) -> FileResponse:
-        try:
-            path = service.snapshot_path(device_id, snapshot_id)
-        except MdmValidationError as exc:
-            raise _handle(exc)
-        return FileResponse(path, media_type="image/jpeg")
 
     @router.delete("/devices/{device_id}")
     async def delete_device(

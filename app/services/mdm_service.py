@@ -137,10 +137,41 @@ def snapshots_dir(device_id: str) -> Path:
     return path
 
 
+# Снимки открываются в браузере обычной ссылкой, как сканы паспорта, — но, в
+# отличие от паспортов, они не публичны: это кадры с камеры. Поэтому ссылка
+# подписана и живёт ограниченное время. Без действительной подписи отдача
+# снимка отвечает 403, так что простой <a href> работает, а перебором адрес не
+# достать.
+SNAPSHOT_URL_TTL_SECONDS = 12 * 3600
+
+
+def sign_snapshot(device_id: str, snapshot_id: str, exp: int) -> str:
+    import hashlib
+    import hmac
+
+    message = (device_id + "/" + snapshot_id + "/" + str(exp)).encode("utf-8")
+    return hmac.new(settings.secret_key.encode("utf-8"), message, hashlib.sha256).hexdigest()[:32]
+
+
+def verify_snapshot_sig(device_id: str, snapshot_id: str, exp: int, sig: str) -> bool:
+    import secrets as _secrets
+    import time
+
+    if exp < int(time.time()):
+        return False
+    expected = sign_snapshot(device_id, snapshot_id, exp)
+    return _secrets.compare_digest(expected, sig or "")
+
+
 def snapshot_url(device_id: str, snapshot_id: str) -> str:
+    import time
+
+    exp = int(time.time()) + SNAPSHOT_URL_TTL_SECONDS
+    sig = sign_snapshot(device_id, snapshot_id, exp)
     return (
         settings.public_base_url.rstrip("/")
         + "/api/mdm/devices/" + device_id + "/snapshots/" + snapshot_id + ".jpg"
+        + "?exp=" + str(exp) + "&sig=" + sig
     )
 
 
