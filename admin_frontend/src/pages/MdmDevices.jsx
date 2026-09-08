@@ -3,7 +3,7 @@ import {
   Smartphone, RefreshCw, Copy, KeyRound, ShieldCheck, ShieldAlert,
   Lock, MapPin, RotateCw, Download, Trash2, Unlink, BatteryMedium,
   Upload, QrCode, PackageCheck, Boxes, ListRestart, Camera as CameraIcon,
-  Gauge, ShieldBan, AppWindow, History as HistoryIcon,
+  Gauge, ShieldBan, AppWindow, History as HistoryIcon, X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -50,7 +50,7 @@ function isStale(device) {
   return Date.now() - new Date(device.last_seen_at).getTime() > 60 * 60 * 1000;
 }
 
-function SnapshotThumb({ deviceId, snap }) {
+function SnapshotThumb({ deviceId, snap, onOpen }) {
   const [src, setSrc] = useState(null);
   const [failed, setFailed] = useState(false);
 
@@ -75,11 +75,14 @@ function SnapshotThumb({ deviceId, snap }) {
 
   const label = `${snap.lens === 'front' ? 'передняя' : 'задняя'} · ${fmtDateTime(snap.taken_at)}`;
   return (
-    <a
-      href={src || undefined}
-      target="_blank"
-      rel="noreferrer"
-      className="block w-full max-w-[10rem]"
+    <button
+      type="button"
+      // В iOS-обёртке (WKWebView) ссылка на blob: с target=_blank молча не
+      // открывается — новые окна для blob там запрещены. Поэтому не уводим в
+      // браузер, а показываем снимок во весь экран прямо в панели.
+      onClick={() => src && onOpen(src, label)}
+      disabled={!src}
+      className="block w-full max-w-[10rem] text-left"
       title={label}
     >
       <div className="w-full aspect-square rounded-lg border border-[color:var(--color-border)] bg-black overflow-hidden flex items-center justify-center">
@@ -92,7 +95,7 @@ function SnapshotThumb({ deviceId, snap }) {
         )}
       </div>
       <span className="block text-xs text-[color:var(--color-text-muted)] mt-1 truncate">{label}</span>
-    </a>
+    </button>
   );
 }
 
@@ -117,6 +120,7 @@ export default function MdmDevices() {
   const [showSystemApps, setShowSystemApps] = useState(false);
   const [selectedApps, setSelectedApps] = useState(() => new Set());
   const [deviceTab, setDeviceTab] = useState('overview');
+  const [lightbox, setLightbox] = useState(null);
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -909,7 +913,12 @@ export default function MdmDevices() {
                 {selected.snapshots?.length > 0 ? (
                   <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3">
                     {[...selected.snapshots].reverse().map((snap) => (
-                      <SnapshotThumb key={snap.id} deviceId={selected.id} snap={snap} />
+                      <SnapshotThumb
+                        key={snap.id}
+                        deviceId={selected.id}
+                        snap={snap}
+                        onOpen={(src, label) => setLightbox({ src, label })}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -1137,6 +1146,29 @@ export default function MdmDevices() {
             </button>
           </div>
         </section>
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            onClick={() => setLightbox(null)}
+            aria-label="Закрыть"
+          >
+            <X size={28} />
+          </button>
+          <img
+            src={lightbox.src}
+            alt={lightbox.label}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <span className="text-white/70 text-sm mt-3">{lightbox.label}</span>
+        </div>
       )}
     </div>
   );
