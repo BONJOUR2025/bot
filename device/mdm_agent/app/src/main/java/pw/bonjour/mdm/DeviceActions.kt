@@ -39,8 +39,11 @@ object DeviceActions {
     fun setAppEnabled(ctx: Context, pkg: String, enabled: Boolean): Pair<String, String?> {
         if (pkg == ctx.packageName) return "failed" to "нельзя скрыть сам агент"
         return try {
-            Dpm.manager(ctx).setApplicationHidden(Dpm.admin(ctx), pkg, !enabled)
-            "done" to (if (enabled) "показано" else "скрыто")
+            // Возврат false означает, что состояние не поменялось — почти всегда
+            // потому, что такого пакета на телефоне нет. Не выдаём это за успех.
+            val ok = Dpm.manager(ctx).setApplicationHidden(Dpm.admin(ctx), pkg, !enabled)
+            if (ok) "done" to (if (enabled) "показано" else "скрыто")
+            else "failed" to "приложение не найдено"
         } catch (e: Exception) {
             "failed" to (e.message ?: "не удалось")
         }
