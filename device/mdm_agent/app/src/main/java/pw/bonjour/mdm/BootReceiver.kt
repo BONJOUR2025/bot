@@ -25,6 +25,6 @@ class BootReceiver : BroadcastReceiver() {
         PolicyApplier.apply(context, Prefs.policy(context))
         CheckinWorker.schedule(context)
         AlarmScheduler.schedule(context)
-        CheckinWorker.runNow(context)
+        AgentService.start(context)
     }
 }

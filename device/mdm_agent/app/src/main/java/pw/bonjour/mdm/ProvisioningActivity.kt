@@ -43,6 +43,7 @@ class ProvisioningActivity : Activity() {
                 applyProvisioningExtras()
                 CheckinWorker.schedule(this)
                 AlarmScheduler.schedule(this)
+                AgentService.start(this)
                 Enroller.enrollAsync(this)
                 setResult(RESULT_OK)
             }

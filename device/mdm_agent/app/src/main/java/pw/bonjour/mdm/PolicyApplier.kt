@@ -35,7 +35,10 @@ object PolicyApplier {
         android.Manifest.permission.ACCESS_FINE_LOCATION,
         android.Manifest.permission.ACCESS_COARSE_LOCATION,
         android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
-        android.Manifest.permission.CAMERA
+        android.Manifest.permission.CAMERA,
+        // С Android 13 без него уведомление постоянного сервиса не показывается,
+        // а сервис без видимого уведомления система вправе прибить.
+        android.Manifest.permission.POST_NOTIFICATIONS
     )
 
     /** @return строка с описанием проблем или null, если всё применилось. */

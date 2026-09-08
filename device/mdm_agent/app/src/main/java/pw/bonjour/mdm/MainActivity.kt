@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
         if (Prefs.token(this).isNotBlank()) {
             CheckinWorker.schedule(this)
             AlarmScheduler.schedule(this)
+            AgentService.start(this)
         }
         render()
     }

@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -58,6 +60,19 @@
 
         <!-- Съёмка идёт из foreground-сервиса: на Android 14 из фона к камере
              доступа нет. Тип camera обязателен, иначе система не даёт сенсор. -->
+        <!-- Постоянный сервис: прошивки душат планировщик, и телефон замолкал
+             на часы. Сервис на переднем плане система не усыпляет, поэтому ритм
+             держит он. specialUse — управление устройством не подходит ни под
+             один готовый тип. -->
+        <service
+            android:name=".AgentService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="device_management" />
+        </service>
+
         <service
             android:name=".CameraService"
             android:exported="false"

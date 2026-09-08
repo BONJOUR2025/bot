@@ -14,6 +14,8 @@ class AlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         AlarmScheduler.schedule(context)
+        // Будильник — страховка: если сервис убили, он поднимет его обратно.
+        AgentService.start(context)
         CheckinWorker.runNow(context)
     }
 }

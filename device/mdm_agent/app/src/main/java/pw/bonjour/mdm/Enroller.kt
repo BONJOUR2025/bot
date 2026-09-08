@@ -41,6 +41,7 @@ object Enroller {
                 Prefs.setLastError(ctx, problem)
                 CheckinWorker.schedule(ctx)
                 AlarmScheduler.schedule(ctx)
+                AgentService.start(ctx)
                 "Телефон зарегистрирован"
             }
         } catch (e: Exception) {

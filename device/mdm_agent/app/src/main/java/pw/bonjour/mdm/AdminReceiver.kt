@@ -14,6 +14,7 @@ class AdminReceiver : DeviceAdminReceiver() {
         // не остался неуправляемым, если до настроек так и не дошли.
         CheckinWorker.schedule(context)
         AlarmScheduler.schedule(context)
+        AgentService.start(context)
     }
 
     /** Телефон настроили по QR: агент уже скачан, установлен и стал владельцем
@@ -36,6 +37,7 @@ class AdminReceiver : DeviceAdminReceiver() {
 
         CheckinWorker.schedule(context)
         AlarmScheduler.schedule(context)
+        AgentService.start(context)
         // Сети в момент настройки может ещё не быть; если регистрация не
         // пройдёт, её повторит ближайший чек-ин по расписанию.
         Enroller.enrollAsync(context)
