@@ -66,6 +66,7 @@ class MainActivity : AppCompatActivity() {
             "Регистрация: " + if (Prefs.token(this).isBlank()) "не пройдена" else "пройдена",
             "Политика: применена " + applied + " из " + known,
             "Последняя связь: " + Prefs.lastCheckin(this).ifBlank { "нет" },
+            "Сервис связи: " + if (isAgentServiceRunning()) "работает" else "не запущен",
             "Опрос команд: раз в " + Prefs.pollSeconds(this) + " с" +
                 (if (AlarmScheduler.canBeExact(this)) "" else " (будильник неточный)"),
             "Ошибка: " + Prefs.lastError(this).ifBlank { "нет" }
@@ -133,6 +134,13 @@ class MainActivity : AppCompatActivity() {
                 render()
             }
             .show()
+    }
+
+    private fun isAgentServiceRunning(): Boolean {
+        val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        @Suppress("DEPRECATION")
+        return am.getRunningServices(Int.MAX_VALUE)
+            .any { it.service.className == AgentService::class.java.name }
     }
 
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
