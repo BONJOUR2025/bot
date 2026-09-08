@@ -266,6 +266,15 @@ class MdmService:
             "play_protect": data.play_protect,
             "last_seen_at": _now(),
         }
+        # Телеметрия: пишем только то, что реально пришло, чтобы редкое поле не
+        # затирало прежнее значение пустотой.
+        for field in (
+            "storage_total_mb", "storage_free_mb", "ram_total_mb", "network",
+            "wifi_ssid", "ip_address", "uptime_seconds", "secure_lock",
+        ):
+            value = getattr(data, field)
+            if value is not None:
+                patch[field] = value
         # Список приложений приезжает не каждый раз, а только когда изменился.
         # Отсутствие его в запросе — «не менялся», а не «приложений больше нет».
         if data.apps is not None:
@@ -356,11 +365,27 @@ class MdmService:
                 # владельца устройства.
                 raise MdmValidationError("install_apk_requires_https_url")
             params["url"] = url
-        elif data.type == "uninstall":
+        elif data.type in ("uninstall", "clear_app_data"):
             package = str(params.get("package") or "").strip()
             if not package:
-                raise MdmValidationError("uninstall_requires_package")
+                raise MdmValidationError(data.type + "_requires_package")
             params["package"] = package
+        elif data.type == "set_app_enabled":
+            package = str(params.get("package") or "").strip()
+            if not package:
+                raise MdmValidationError("set_app_enabled_requires_package")
+            params["package"] = package
+            params["enabled"] = bool(params.get("enabled", True))
+        elif data.type == "message":
+            # Пустой текст снимает сообщение с экрана — это законный сценарий,
+            # поэтому длину не требуем, только ограничиваем сверху.
+            params["text"] = str(params.get("text") or "")[:400]
+        elif data.type == "ring":
+            secs = int(params.get("seconds") or 30)
+            params["seconds"] = max(5, min(300, secs))
+        elif data.type == "set_volume":
+            pct = int(params.get("percent") or 100)
+            params["percent"] = max(0, min(100, pct))
 
         command = {
             "id": uuid.uuid4().hex,
@@ -372,6 +397,10 @@ class MdmService:
             "acked_at": None,
         }
         self._repo.add_command(device_id, command)
+        # Сообщение на экране блокировки показываем в карточке сразу, не дожидаясь
+        # чек-ина: оператор должен видеть, что он задал.
+        if data.type == "message":
+            self._repo.upsert(device_id, {"lock_message": params.get("text") or None})
         return command
 
     def delete_device(self, device_id: str) -> None:

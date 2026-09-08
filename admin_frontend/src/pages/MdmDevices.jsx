@@ -4,6 +4,7 @@ import {
   Lock, MapPin, RotateCw, Download, Trash2, Unlink, BatteryMedium,
   Upload, QrCode, PackageCheck, Boxes, ListRestart, Camera as CameraIcon,
   Gauge, ShieldBan, AppWindow, History as HistoryIcon,
+  Volume2, MessageSquareWarning, HardDrive, Wifi, Cpu, Clock, EyeOff, Eraser,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -25,8 +26,28 @@ const RESTRICTIONS = [
   { id: 'no_outgoing_calls', label: 'Запретить исходящие звонки' },
   { id: 'no_sms', label: 'Запретить SMS' },
   { id: 'camera_disabled', label: 'Отключить камеру' },
+  { id: 'no_screen_capture', label: 'Запретить скриншоты и запись экрана' },
+  { id: 'no_bluetooth', label: 'Запретить Bluetooth' },
+  { id: 'no_usb_file_transfer', label: 'Запретить передачу файлов по USB' },
+  { id: 'no_config_wifi', label: 'Запретить менять настройки Wi-Fi' },
   { id: 'no_factory_reset', label: 'Запретить сброс до заводских настроек', danger: true },
 ];
+
+function fmtBytes(mb) {
+  if (mb == null) return '—';
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} ГБ`;
+  return `${mb} МБ`;
+}
+
+function fmtUptime(sec) {
+  if (sec == null) return '—';
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (d > 0) return `${d} дн ${h} ч`;
+  if (h > 0) return `${h} ч ${m} мин`;
+  return `${m} мин`;
+}
 
 function fmtDateTime(value) {
   if (!value) return '—';
@@ -306,6 +327,31 @@ export default function MdmDevices() {
     } catch (err) {
       toast(err.response?.data?.detail || err.message, 'error');
     }
+  }
+
+  function ringPhone() {
+    sendCommand('ring', { seconds: 30 });
+  }
+
+  function setLockMessage() {
+    const current = selected?.lock_message || '';
+    const text = window.prompt(
+      'Текст на экране блокировки (для потерянного телефона). Пусто — убрать сообщение:',
+      current,
+    );
+    if (text === null) return;
+    sendCommand('message', { text: text.trim() });
+  }
+
+  function setVolume() {
+    const raw = window.prompt('Громкость в процентах (0–100):', '100');
+    if (raw === null) return;
+    const percent = Number(raw);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      toast('Нужно число от 0 до 100', 'error');
+      return;
+    }
+    sendCommand('set_volume', { percent });
   }
 
   function installApk() {
@@ -830,6 +876,44 @@ export default function MdmDevices() {
                   <dt className="text-xs text-[color:var(--color-text-muted)]">Android</dt>
                   <dd>{selected.android_version || '—'}</dd>
                 </div>
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)] flex items-center gap-1">
+                    <HardDrive size={12} /> Память
+                  </dt>
+                  <dd>{`${fmtBytes(selected.storage_free_mb)} свободно из ${fmtBytes(selected.storage_total_mb)}`}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)] flex items-center gap-1">
+                    <Cpu size={12} /> ОЗУ
+                  </dt>
+                  <dd>{fmtBytes(selected.ram_total_mb)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)] flex items-center gap-1">
+                    <Wifi size={12} /> Сеть
+                  </dt>
+                  <dd>
+                    {selected.network === 'wifi'
+                      ? (selected.wifi_ssid || 'Wi-Fi')
+                      : selected.network === 'mobile' ? 'Моб. интернет'
+                      : selected.network === 'none' ? 'Нет сети' : (selected.network || '—')}
+                    {selected.ip_address && (
+                      <span className="text-xs text-[color:var(--color-text-muted)]"> · {selected.ip_address}</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)] flex items-center gap-1">
+                    <Clock size={12} /> Аптайм
+                  </dt>
+                  <dd>{fmtUptime(selected.uptime_seconds)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)]">Экран защищён</dt>
+                  <dd className={selected.secure_lock === false ? 'text-amber-600' : ''}>
+                    {selected.secure_lock == null ? '—' : selected.secure_lock ? 'да' : 'нет пароля'}
+                  </dd>
+                </div>
               </dl>
 
               {selected.play_protect && (
@@ -908,7 +992,24 @@ export default function MdmDevices() {
                     onClick={() => sendCommand('reboot')}>
                     <RotateCw size={14} /> Перезагрузить
                   </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={ringPhone}>
+                    <Volume2 size={14} /> Звук поиска
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={setLockMessage}>
+                    <MessageSquareWarning size={14} /> Сообщение на экран
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={setVolume}>
+                    <Volume2 size={14} /> Громкость
+                  </button>
                 </div>
+                {selected.lock_message && (
+                  <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
+                    На экране блокировки: «{selected.lock_message}»
+                  </p>
+                )}
                 <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
                   {`Команда исполнится в течение ${pollText} — телефон опрашивает очередь будильником.`}
                 </p>
@@ -1019,18 +1120,45 @@ export default function MdmDevices() {
                             {[app.package, app.version_name].filter(Boolean).join(' · ')}
                           </span>
                         </span>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm shrink-0"
-                          disabled={busy}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            if (!window.confirm(`Удалить «${app.label || app.package}» с телефона?`)) return;
-                            sendCommand('uninstall', { package: app.package });
-                          }}
-                        >
-                          Удалить
-                        </button>
+                        <span className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            disabled={busy}
+                            title="Очистить данные приложения"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (!window.confirm(`Очистить данные «${app.label || app.package}»? Приложение останется, но сбросится в исходное состояние.`)) return;
+                              sendCommand('clear_app_data', { package: app.package });
+                            }}
+                          >
+                            <Eraser size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            disabled={busy}
+                            title={app.enabled ? 'Скрыть от сотрудника' : 'Показать снова'}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              sendCommand('set_app_enabled', { package: app.package, enabled: !app.enabled });
+                            }}
+                          >
+                            <EyeOff size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            disabled={busy}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (!window.confirm(`Удалить «${app.label || app.package}» с телефона?`)) return;
+                              sendCommand('uninstall', { package: app.package });
+                            }}
+                          >
+                            Удалить
+                          </button>
+                        </span>
                       </label>
                     ))}
                     {removableApps.length === 0 && (

@@ -78,6 +78,42 @@ object CommandRunner {
                     }
                 }
 
+                "ring" -> {
+                    Ringer.start(ctx, params.optInt("seconds", 30))
+                    "done" to (params.optInt("seconds", 30).toString() + "с")
+                }
+
+                "stop_ring" -> {
+                    Ringer.stop(ctx)
+                    "done" to null
+                }
+
+                "message" -> {
+                    // Пустой текст снимает сообщение — законный сценарий.
+                    val text = params.optString("text")
+                    Dpm.manager(ctx).setDeviceOwnerLockScreenInfo(
+                        Dpm.admin(ctx), if (text.isBlank()) null else text
+                    )
+                    "done" to null
+                }
+
+                "clear_app_data" -> {
+                    val pkg = params.optString("package")
+                    if (pkg.isBlank()) "failed" to "no_package"
+                    else DeviceActions.clearAppData(ctx, pkg)
+                }
+
+                "set_app_enabled" -> {
+                    val pkg = params.optString("package")
+                    if (pkg.isBlank()) "failed" to "no_package"
+                    else DeviceActions.setAppEnabled(ctx, pkg, params.optBoolean("enabled", true))
+                }
+
+                "set_volume" -> {
+                    DeviceActions.setVolume(ctx, params.optInt("percent", 100))
+                    "done" to null
+                }
+
                 "release_owner" -> {
                     // Аварийный люк: агент добровольно перестаёт быть владельцем
                     // устройства. Без него APK с другой подписью можно поставить

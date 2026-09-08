@@ -24,6 +24,8 @@
          установленного, и инвентаризация теряет смысл. В Play агент не
          публикуется, поэтому политика Google на это разрешение не давит. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Вибрация для «звук поиска» -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="false"

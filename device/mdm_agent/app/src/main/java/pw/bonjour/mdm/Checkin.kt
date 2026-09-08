@@ -155,6 +155,10 @@ object Checkin {
 
         json.put("play_protect", playProtectEnabled(ctx))
 
+        // Телеметрия: место, память, сеть, аптайм, защита экрана.
+        val tele = Telemetry.collect(ctx)
+        for (key in tele.keys()) json.put(key, tele.get(key))
+
         battery(ctx)?.let { json.put("battery", it) }
         Prefs.lastError(ctx).takeIf { it.isNotBlank() }?.let { json.put("last_error", it) }
         Prefs.takePendingLocation(ctx)?.let { (lat, lon, at) ->

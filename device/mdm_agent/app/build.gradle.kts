@@ -3,8 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val agentVersionName = "0.4.1"
-val agentVersionCode = 23
+val agentVersionName = "0.5.0"
+val agentVersionCode = 24
 
 // Версия кладётся внутрь самого APK: сервер читает её из assets, чтобы знать,
 // какая версия лежит у него и какие телефоны отстали. Альтернативы хуже —

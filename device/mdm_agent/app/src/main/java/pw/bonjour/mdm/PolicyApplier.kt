@@ -26,7 +26,10 @@ object PolicyApplier {
         "no_config_tethering" to UserManager.DISALLOW_CONFIG_TETHERING,
         "no_debugging_features" to UserManager.DISALLOW_DEBUGGING_FEATURES,
         "no_outgoing_calls" to UserManager.DISALLOW_OUTGOING_CALLS,
-        "no_sms" to UserManager.DISALLOW_SMS
+        "no_sms" to UserManager.DISALLOW_SMS,
+        "no_bluetooth" to UserManager.DISALLOW_BLUETOOTH,
+        "no_usb_file_transfer" to UserManager.DISALLOW_USB_FILE_TRANSFER,
+        "no_config_wifi" to UserManager.DISALLOW_CONFIG_WIFI
     )
 
     /** Разрешения, которые агент выдаёт себе сам. Фоновое — обязательно:
@@ -84,6 +87,10 @@ object PolicyApplier {
         runCatching {
             dpm.setCameraDisabled(admin, restrictions.optBoolean("camera_disabled", false))
         }.onFailure { problems.add("camera_disabled: " + it.message) }
+
+        runCatching {
+            dpm.setScreenCaptureDisabled(admin, restrictions.optBoolean("no_screen_capture", false))
+        }.onFailure { problems.add("no_screen_capture: " + it.message) }
 
         // Киоск: разрешаем перечисленным приложениям залипать на экране.
         // Полноценный киоск (автозапуск и подмена рабочего стола) — отдельная

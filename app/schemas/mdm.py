@@ -25,6 +25,12 @@ CommandType = Literal[
     "release_owner",  # аварийный люк: агент перестаёт быть владельцем устройства
     "refresh_apps",  # прислать список установленных приложений заново
     "camera",  # снимок с камеры (для потерянного/украденного телефона)
+    "ring",  # громкий сигнал + вибрация, чтобы найти телефон
+    "stop_ring",  # выключить сигнал
+    "message",  # стойкое сообщение на экране блокировки (потерянный телефон)
+    "clear_app_data",  # очистить данные приложения (params: package)
+    "set_app_enabled",  # скрыть/показать приложение (params: package, enabled)
+    "set_volume",  # выставить громкость 0..100 (params: percent)
 ]
 
 
@@ -62,6 +68,10 @@ class MdmRestrictions(BaseModel):
     no_outgoing_calls: bool = False
     no_sms: bool = False
     camera_disabled: bool = False
+    no_screen_capture: bool = False  # запретить скриншоты и запись экрана
+    no_bluetooth: bool = False
+    no_usb_file_transfer: bool = False
+    no_config_wifi: bool = False  # запретить менять настройки Wi-Fi
 
 
 class MdmKiosk(BaseModel):
@@ -131,6 +141,15 @@ class MdmCheckinRequest(BaseModel):
     # программно нельзя — только руками на телефоне. Поэтому агент хотя бы
     # сообщает её состояние, чтобы отказ установки не выглядел загадкой.
     play_protect: Optional[bool] = None
+    # Телеметрия телефона: место, память, сеть, аптайм, защищён ли экран.
+    storage_total_mb: Optional[int] = None
+    storage_free_mb: Optional[int] = None
+    ram_total_mb: Optional[int] = None
+    network: Optional[str] = None  # wifi | mobile | none
+    wifi_ssid: Optional[str] = None
+    ip_address: Optional[str] = None
+    uptime_seconds: Optional[int] = None
+    secure_lock: Optional[bool] = None  # есть ли пароль/PIN на экране
 
 
 class MdmCommand(BaseModel):
@@ -193,6 +212,15 @@ class MdmDevice(BaseModel):
     apps: list[MdmApp] = Field(default_factory=list)
     apps_updated_at: Optional[str] = None
     play_protect: Optional[bool] = None
+    storage_total_mb: Optional[int] = None
+    storage_free_mb: Optional[int] = None
+    ram_total_mb: Optional[int] = None
+    network: Optional[str] = None
+    wifi_ssid: Optional[str] = None
+    ip_address: Optional[str] = None
+    uptime_seconds: Optional[int] = None
+    secure_lock: Optional[bool] = None
+    lock_message: Optional[str] = None
     snapshots: list[MdmSnapshot] = Field(default_factory=list)
     commands: list[MdmCommand] = Field(default_factory=list)
 

@@ -675,3 +675,59 @@ def test_snapshot_url_is_signed_and_verifiable():
     assert verify_snapshot_sig("dev1", "snap1", past, sign_snapshot("dev1", "snap1", past)) is False
     # Подпись привязана к конкретному снимку: чужим id не воспользоваться.
     assert verify_snapshot_sig("dev1", "other", exp, sig) is False
+
+
+def test_new_commands_validate_params(service):
+    device, _ = enroll(service)
+
+    with pytest.raises(MdmValidationError, match="clear_app_data_requires_package"):
+        service.queue_command(device.id, MdmCommandCreate(type="clear_app_data", params={}))
+    with pytest.raises(MdmValidationError, match="set_app_enabled_requires_package"):
+        service.queue_command(device.id, MdmCommandCreate(type="set_app_enabled", params={}))
+
+    # ring зажимается в разумные границы.
+    cmd = service.queue_command(device.id, MdmCommandCreate(type="ring", params={"seconds": 99999}))
+    assert cmd["params"]["seconds"] == 300
+    # громкость зажимается в 0..100.
+    cmd = service.queue_command(device.id, MdmCommandCreate(type="set_volume", params={"percent": 250}))
+    assert cmd["params"]["percent"] == 100
+    # set_app_enabled нормализует enabled в bool.
+    cmd = service.queue_command(
+        device.id, MdmCommandCreate(type="set_app_enabled", params={"package": "com.x", "enabled": 1})
+    )
+    assert cmd["params"]["enabled"] is True
+
+
+def test_message_command_updates_lock_message_in_card(service):
+    device, _ = enroll(service)
+
+    service.queue_command(device.id, MdmCommandCreate(type="message", params={"text": "Верните телефон"}))
+    assert service.get_device(device.id).lock_message == "Верните телефон"
+
+    # Пустой текст снимает сообщение.
+    service.queue_command(device.id, MdmCommandCreate(type="message", params={"text": ""}))
+    assert service.get_device(device.id).lock_message is None
+
+
+def test_checkin_stores_telemetry(service):
+    device, _ = enroll(service)
+
+    updated = service.checkin(
+        {"id": device.id},
+        MdmCheckinRequest(
+            storage_total_mb=64000, storage_free_mb=32000, ram_total_mb=6000,
+            network="wifi", wifi_ssid="Salon-WiFi", ip_address="192.168.1.5",
+            uptime_seconds=3600, secure_lock=True,
+        ),
+    )
+
+    assert updated.storage_free_mb == 32000
+    assert updated.ram_total_mb == 6000
+    assert updated.network == "wifi"
+    assert updated.wifi_ssid == "Salon-WiFi"
+    assert updated.ip_address == "192.168.1.5"
+    assert updated.secure_lock is True
+
+    # Пустой чек-ин не затирает уже собранную телеметрию.
+    after = service.checkin({"id": device.id}, MdmCheckinRequest(battery=50))
+    assert after.wifi_ssid == "Salon-WiFi"
