@@ -59,7 +59,12 @@ object CommandRunner {
                         "failed" to "no_url"
                     } else {
                         val error = ApkInstaller.install(ctx, commandId, url)
-                        if (error == null) null else "failed" to error
+                        when {
+                            error == null -> null  // ставится, ack придёт асинхронно
+                            // Та же версия уже стоит — это не сбой, а нечего делать.
+                            error.startsWith("already_installed") -> "done" to error
+                            else -> "failed" to error
+                        }
                     }
                 }
 

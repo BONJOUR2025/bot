@@ -61,6 +61,13 @@ object ApkInstaller {
     private fun installFile(ctx: Context, commandId: String, file: File): String? {
         val parts = containerParts(file)
         val hasObb = parts.second
+
+        // Если версия та же или старее уже стоящей — установка была бы холостой:
+        // Android идентичный versionCode не переставляет, а сообщает успех, и в
+        // панели это выглядит как «done, но ничего не изменилось». Отвечаем
+        // внятно, не запуская пустую установку.
+        alreadyInstalled(ctx, file)?.let { return it }
+
         val installer = ctx.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(
             PackageInstaller.SessionParams.MODE_FULL_INSTALL
@@ -99,6 +106,31 @@ object ApkInstaller {
 
     /** @return список вложенных APK (пусто, если это обычный APK) и признак,
      *  что внутри лежат данные для игр, которые мы не раскладываем. */
+    /** @return непустой результат, если ставить нечего (та же версия или старее);
+     *  null — можно ставить. Для набора (XAPK) проверку пропускаем: версия там
+     *  в манифесте базового APK, а его ещё надо распаковать — не тот случай,
+     *  ради которого это делается (самообновление агента — всегда один файл). */
+    private fun alreadyInstalled(ctx: Context, file: File): String? {
+        val info = ctx.packageManager.getPackageArchiveInfo(file.absolutePath, 0) ?: return null
+        val newCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION") info.versionCode.toLong()
+        }
+        val installedCode = try {
+            val cur = ctx.packageManager.getPackageInfo(info.packageName, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) cur.longVersionCode
+            else @Suppress("DEPRECATION") cur.versionCode.toLong()
+        } catch (e: Exception) {
+            return null  // не установлено — ставим как новое
+        }
+        return if (newCode <= installedCode) {
+            "already_installed:" + info.packageName + " v" + newCode
+        } else {
+            null
+        }
+    }
+
     private fun containerParts(file: File): Pair<List<String>, Boolean> = try {
         ZipFile(file).use { zip ->
             val names = zip.entries().toList().map { it.name }
