@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /** Мелкие действия над устройством и приложениями правами владельца устройства. */
@@ -13,17 +14,24 @@ object DeviceActions {
      *  токен и выпадем из-под управления. */
     fun clearAppData(ctx: Context, pkg: String): Pair<String, String?> {
         if (pkg == ctx.packageName) return "failed" to "нельзя чистить сам агент"
-        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE)
-            as? android.app.ActivityManager ?: return "failed" to "нет ActivityManager"
+        val dpm = Dpm.manager(ctx)
+        val executor = Executors.newSingleThreadExecutor()
         val latch = CountDownLatch(1)
         var ok = false
-        val requested = am.clearApplicationUserData(pkg) { succeeded ->
-            ok = succeeded
-            latch.countDown()
+        return try {
+            dpm.clearApplicationUserData(
+                Dpm.admin(ctx), pkg, executor
+            ) { _, succeeded ->
+                ok = succeeded
+                latch.countDown()
+            }
+            latch.await(20, TimeUnit.SECONDS)
+            if (ok) "done" to null else "failed" to "очистка не удалась"
+        } catch (e: Exception) {
+            "failed" to (e.message ?: "не удалось")
+        } finally {
+            executor.shutdown()
         }
-        if (!requested) return "failed" to "система отклонила очистку"
-        latch.await(20, TimeUnit.SECONDS)
-        return if (ok) "done" to null else "failed" to "очистка не удалась"
     }
 
     /** Скрыть/показать приложение. Владелец устройства прячет пакет целиком —
@@ -53,7 +61,7 @@ object DeviceActions {
         }
     }
 
-    /** Установлено ли приложение (для set_app_enabled показать/скрыть без ошибки). */
+    /** Установлено ли приложение. */
     fun isInstalled(ctx: Context, pkg: String): Boolean = try {
         ctx.packageManager.getPackageInfo(pkg, 0)
         true
