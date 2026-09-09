@@ -41,13 +41,44 @@ fi
 
 model=$("$ADB" shell getprop ro.product.model 2>/dev/null | tr -d '\r')
 android=$("$ADB" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')
-echo "  $model, Android $android"
+brand=$("$ADB" shell getprop ro.product.brand 2>/dev/null | tr -d '\r')
+echo "  $brand $model, Android $android"
 
 ready=0
 
+# Xiaomi и родня: там дело не в аккаунтах, и выяснять это по месту дорого.
+# Проверено на Redmi 2409BRN2CY (HyperOS 3, Android 16): shell-у запрещены любые
+# операции с администраторами устройства — `dpm set-active-admin` отвечает
+# SecurityException «Calling identity is not authorized» ещё до всякой проверки
+# аккаунтов. Открывается это переключателем «Отладка по USB (Настройки
+# безопасности)», а он требует входа в Mi-аккаунт.
+case "$(echo "$brand" | tr 'A-Z' 'a-z')" in
+  xiaomi|redmi|poco)
+    cat <<'EOF'
+
+  ВНИМАНИЕ, прошивка Xiaomi. Здесь мало убрать аккаунты — нужны ещё два
+  переключателя в «Для разработчиков»:
+    · «Установка через USB» — иначе adb не поставит APK
+      (обходится: положить APK на телефон и установить с самого телефона);
+    · «Отладка по USB (Настройки безопасности)» — без неё dpm отказывает
+      с «Calling identity is not authorized», и обхода этому не нашлось.
+  Второй переключатель требует входа в Mi-аккаунт. Порядок: войти в
+  Mi-аккаунт → включить оба → выйти из Mi-аккаунта → убрать остальные
+  аккаунты → и только тогда брать телефон под управление.
+EOF
+    ;;
+esac
+
 echo
 echo "=== Аккаунты (главное препятствие) ==="
-accounts=$("$ADB" shell dumpsys account 2>/dev/null | tr -d '\r' | grep -o 'Account {name=[^}]*}' | sed 's/Account {name=//; s/}$//')
+# Берём только строки, где `Account {` стоит в начале — это перечень аккаунтов
+# пользователя. Ниже в том же выводе есть строки `Session: ... Account {...}`:
+# это система опрашивает приложения, и одно и то же приложение попадает туда
+# многократно. Считая их, скрипт показывал вчетверо больше аккаунтов, чем есть,
+# и отправлял чистить уже удалённое.
+accounts=$("$ADB" shell dumpsys account 2>/dev/null | tr -d '\r' \
+  | grep -E '^[[:space:]]*Account \{' \
+  | grep -o 'Account {name=[^}]*}' | sed 's/Account {name=//; s/}$//' | sort -u)
 if [ -z "$accounts" ]; then
   echo "  ок: аккаунтов нет"
 else
