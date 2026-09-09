@@ -290,6 +290,29 @@ allowed`. Виновата **не** системная проверка Android 
 такое окно сотрудник бы не смог. У `message` пустой текст, наоборот, законен —
 это снятие надписи.
 
+### Сканер MIUI при установке
+
+Прошивки Xiaomi гоняют собственный антивирус на каждой установке. По логам
+Redmi 2409BRN2CY (Android 16):
+
+    CheckVirusTaskV2: begin scan, min: 6000
+    AntivirusManager: check white list start onScanProgress <пакет>
+    CheckVirusTaskV2: scan time: 596,  min scan: 6000
+
+Сама проверка занимает полсекунды, но MIUI держит её **минимум шесть секунд** и
+пытается показать в окне рекламу (`AD-nativeAd`). На установке приложения из
+библиотеки это стоило 11 секунд из 37.
+
+Гасится пакет `com.miui.guardprovider` — и только правами владельца устройства:
+`pm disable-user` через adb отвечает «Cannot disable system packages» даже с
+открытыми настройками безопасности. То есть нашей же командой из панели:
+
+    set_app_enabled  package=com.miui.guardprovider  enabled=false
+
+Соседей не трогать: `com.miui.securitycenter` — это всё приложение
+«Безопасность», `com.lbe.security.miui` заведует разрешениями и автозапуском;
+без них телефон станет хуже, чем был.
+
 ### Play Защита: по воздуху не выключается
 
 Проверено на Redmi 2409BRN2CY (Android 16) командой `set_play_protect`: Android
