@@ -80,6 +80,22 @@
             android:exported="false"
             android:foregroundServiceType="camera" />
 
+        <!-- Домашний экран киоска: включается как HOME, только когда киоск
+             активен (через addPersistentPreferredActivity). Своего вида нет —
+             сразу запускает целевое приложение в режиме закрепления. -->
+        <activity
+            android:name=".KioskActivity"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".AdminReceiver"
             android:exported="true"

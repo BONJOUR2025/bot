@@ -64,6 +64,51 @@ object DeviceActions {
         }
     }
 
+    /** Открыть приложение на телефоне. */
+    fun launchApp(ctx: Context, pkg: String): Pair<String, String?> {
+        val intent = ctx.packageManager.getLaunchIntentForPackage(pkg)
+            ?: return "failed" to "приложение не найдено"
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            ctx.startActivity(intent)
+            "done" to null
+        } catch (e: Exception) {
+            "failed" to (e.message ?: "не удалось запустить")
+        }
+    }
+
+    /** Выдать или отозвать разрешение приложению правами владельца устройства. */
+    fun grantPermission(ctx: Context, pkg: String, permission: String, grant: Boolean): Pair<String, String?> {
+        val state = if (grant) {
+            android.app.admin.DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+        } else {
+            android.app.admin.DevicePolicyManager.PERMISSION_GRANT_STATE_DENIED
+        }
+        return try {
+            val ok = Dpm.manager(ctx).setPermissionGrantState(Dpm.admin(ctx), pkg, permission, state)
+            if (ok) "done" to (if (grant) "выдано" else "отозвано")
+            else "failed" to "система отклонила"
+        } catch (e: Exception) {
+            "failed" to (e.message ?: "не удалось")
+        }
+    }
+
+    /** Часовой пояс. */
+    fun setTimeZone(ctx: Context, zone: String): Pair<String, String?> = try {
+        Dpm.manager(ctx).setTimeZone(Dpm.admin(ctx), zone)
+        "done" to zone
+    } catch (e: Exception) {
+        "failed" to (e.message ?: "не удалось")
+    }
+
+    /** Автосинхронизация времени. */
+    fun setAutoTime(ctx: Context, enabled: Boolean): Pair<String, String?> = try {
+        Dpm.manager(ctx).setAutoTimeEnabled(Dpm.admin(ctx), enabled)
+        "done" to (if (enabled) "включена" else "выключена")
+    } catch (e: Exception) {
+        "failed" to (e.message ?: "не удалось")
+    }
+
     /** Установлено ли приложение. */
     fun isInstalled(ctx: Context, pkg: String): Boolean = try {
         ctx.packageManager.getPackageInfo(pkg, 0)

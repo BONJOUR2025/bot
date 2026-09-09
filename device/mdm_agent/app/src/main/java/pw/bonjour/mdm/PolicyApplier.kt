@@ -92,24 +92,10 @@ object PolicyApplier {
             dpm.setScreenCaptureDisabled(admin, restrictions.optBoolean("no_screen_capture", false))
         }.onFailure { problems.add("no_screen_capture: " + it.message) }
 
-        // Киоск: разрешаем перечисленным приложениям залипать на экране.
-        // Полноценный киоск (автозапуск и подмена рабочего стола) — отдельная
-        // задача; здесь только список допущенных пакетов.
+        // Киоск: целевое приложение становится домашним экраном и залипает в
+        // режиме закрепления. Вся логика — в Kiosk.
         val kiosk = policy.optJSONObject("kiosk") ?: JSONObject()
-        val kioskPackages = kiosk.optJSONArray("packages")
-        val packages = if (kiosk.optBoolean("enabled", false) && kioskPackages != null) {
-            val collected = mutableListOf<String>()
-            for (i in 0 until kioskPackages.length()) {
-                val name = kioskPackages.optString(i)
-                if (name.isNotBlank()) collected.add(name)
-            }
-            collected.toTypedArray()
-        } else {
-            emptyArray()
-        }
-        runCatching {
-            dpm.setLockTaskPackages(admin, packages)
-        }.onFailure { problems.add("kiosk: " + it.message) }
+        Kiosk.apply(ctx, kiosk)?.let { problems.add(it) }
 
         return if (problems.isEmpty()) null else problems.joinToString("; ")
     }

@@ -70,7 +70,7 @@ def test_kiosk_without_packages_is_rejected(service):
     device, _ = enroll(service)
     policy = MdmPolicy(kiosk=MdmKiosk(enabled=True, packages=[]))
 
-    with pytest.raises(MdmValidationError, match="kiosk_requires_packages"):
+    with pytest.raises(MdmValidationError, match="kiosk_requires_app"):
         service.set_policy(device.id, policy)
 
 
@@ -731,3 +731,36 @@ def test_checkin_stores_telemetry(service):
     # Пустой чек-ин не затирает уже собранную телеметрию.
     after = service.checkin({"id": device.id}, MdmCheckinRequest(battery=50))
     assert after.wifi_ssid == "Salon-WiFi"
+
+
+def test_kiosk_requires_an_app(service):
+    device, _ = enroll(service)
+    from app.schemas.mdm import MdmKiosk
+    policy = MdmPolicy(kiosk=MdmKiosk(enabled=True))
+    with pytest.raises(MdmValidationError, match="kiosk_requires_app"):
+        service.set_policy(device.id, policy)
+
+    # С домашним приложением — проходит.
+    ok = service.set_policy(device.id, MdmPolicy(kiosk=MdmKiosk(enabled=True, home="ru.agbis.AgbisPhoto")))
+    assert ok.policy.kiosk.home == "ru.agbis.AgbisPhoto"
+
+
+def test_new_utility_commands_validate(service):
+    device, _ = enroll(service)
+
+    with pytest.raises(MdmValidationError, match="launch_app_requires_package"):
+        service.queue_command(device.id, MdmCommandCreate(type="launch_app", params={}))
+    with pytest.raises(MdmValidationError, match="grant_permission_requires"):
+        service.queue_command(device.id, MdmCommandCreate(type="grant_permission", params={"package": "com.x"}))
+    with pytest.raises(MdmValidationError, match="set_time_zone_requires_zone"):
+        service.queue_command(device.id, MdmCommandCreate(type="set_time_zone", params={}))
+
+    cmd = service.queue_command(
+        device.id,
+        MdmCommandCreate(type="grant_permission",
+                         params={"package": "ru.agbis.AgbisPhoto", "permission": "android.permission.CAMERA"}),
+    )
+    assert cmd["params"]["grant"] is True
+
+    # kiosk_exit не требует параметров.
+    assert service.queue_command(device.id, MdmCommandCreate(type="kiosk_exit"))["type"] == "kiosk_exit"

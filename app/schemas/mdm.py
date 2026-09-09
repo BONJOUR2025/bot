@@ -31,6 +31,11 @@ CommandType = Literal[
     "clear_app_data",  # очистить данные приложения (params: package)
     "set_app_enabled",  # скрыть/показать приложение (params: package, enabled)
     "set_volume",  # выставить громкость 0..100 (params: percent)
+    "launch_app",  # открыть приложение (params: package)
+    "grant_permission",  # выдать/отозвать разрешение (params: package, permission, grant)
+    "set_time_zone",  # часовой пояс (params: zone, напр. Europe/Moscow)
+    "set_auto_time",  # автосинхронизация времени вкл/выкл (params: enabled)
+    "kiosk_exit",  # аварийно выйти из киоска (снять залипание)
 ]
 
 
@@ -75,14 +80,24 @@ class MdmRestrictions(BaseModel):
 
 
 class MdmKiosk(BaseModel):
-    """Киоск: телефон залипает в перечисленных приложениях (lock task mode).
+    """Киоск: телефон работает как терминал одного приложения.
 
-    Пустой список пакетов при enabled=True — бессмысленная и опасная политика
-    (телефон залипнет в никуда), поэтому сервис такое не принимает.
+    `home` — приложение, в которое телефон залипает: оно становится домашним
+    экраном и запускается в режиме закрепления (lock task). `packages` —
+    дополнительные приложения, которым тоже разрешено работать в киоске
+    (например, касса рядом с основным). Пустой список пакетов при enabled=True
+    без `home` — бессмысленная политика, сервис такое не принимает.
+
+    Флаги системных элементов: что оставить доступным в киоске.
     """
 
     enabled: bool = False
+    home: Optional[str] = None
     packages: list[str] = Field(default_factory=list)
+    allow_home_button: bool = False
+    allow_recents: bool = False
+    allow_notifications: bool = True
+    allow_system_info: bool = True
 
 
 class MdmPolicy(BaseModel):

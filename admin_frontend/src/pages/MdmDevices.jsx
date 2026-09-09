@@ -5,6 +5,7 @@ import {
   Upload, QrCode, PackageCheck, Boxes, ListRestart, Camera as CameraIcon,
   Gauge, ShieldBan, AppWindow, History as HistoryIcon,
   Volume2, MessageSquareWarning, HardDrive, Wifi, Cpu, Clock, EyeOff, Eraser,
+  MonitorSmartphone, Play, KeyRound as KeyIcon,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -117,6 +118,7 @@ export default function MdmDevices() {
   const [showSystemApps, setShowSystemApps] = useState(false);
   const [selectedApps, setSelectedApps] = useState(() => new Set());
   const [deviceTab, setDeviceTab] = useState('overview');
+  const [kioskDraft, setKioskDraft] = useState(null);
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -130,6 +132,7 @@ export default function MdmDevices() {
 
   useEffect(() => {
     setPolicyDraft(selected ? structuredClone(selected.policy) : null);
+    setKioskDraft(selected ? structuredClone(selected.policy.kiosk || {}) : null);
   }, [selectedId, selected?.policy_version]);
 
   // Выделение и поиск относятся к конкретному телефону: при переключении их
@@ -293,6 +296,39 @@ export default function MdmDevices() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function saveKiosk() {
+    if (!selected || !policyDraft || !kioskDraft) return;
+    if (kioskDraft.enabled && !kioskDraft.home && !(kioskDraft.packages || []).length) {
+      toast('Выберите приложение для киоска', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const next = { ...structuredClone(selected.policy), kiosk: kioskDraft };
+      await api.put(`mdm/devices/${selected.id}/policy`, next);
+      toast('Настройки киоска сохранены. Телефон применит их на ближайшей связи', 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function launchApp() {
+    const pkg = window.prompt('Имя пакета, которое открыть, напр. com.yandex.browser');
+    if (!pkg) return;
+    sendCommand('launch_app', { package: pkg.trim() });
+  }
+
+  function grantPermission() {
+    const pkg = window.prompt('Имя пакета, напр. ru.agbis.AgbisPhoto');
+    if (!pkg) return;
+    const perm = window.prompt('Разрешение, напр. android.permission.CAMERA');
+    if (!perm) return;
+    sendCommand('grant_permission', { package: pkg.trim(), permission: perm.trim(), grant: true });
   }
 
   async function sendCommand(type, params = {}) {
@@ -839,6 +875,7 @@ export default function MdmDevices() {
               { id: 'overview', label: 'Обзор', Icon: Gauge },
               { id: 'policy', label: 'Запреты', Icon: ShieldBan },
               { id: 'apps', label: 'Приложения', Icon: AppWindow },
+              { id: 'kiosk', label: 'Киоск', Icon: MonitorSmartphone },
               { id: 'history', label: 'История', Icon: HistoryIcon },
             ].map((tab) => (
               <button
@@ -1003,6 +1040,14 @@ export default function MdmDevices() {
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={setVolume}>
                     <Volume2 size={14} /> Громкость
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={launchApp}>
+                    <Play size={14} /> Открыть приложение
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={grantPermission}>
+                    <KeyIcon size={14} /> Выдать разрешение
                   </button>
                 </div>
                 {selected.lock_message && (
@@ -1199,6 +1244,87 @@ export default function MdmDevices() {
                   Телефон ещё не присылал список. Он приедет с ближайшим чек-ином.
                 </p>
               )}
+            </div>
+          )}
+
+          {/* ── Киоск ── */}
+          {deviceTab === 'kiosk' && kioskDraft && (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-[color:var(--color-text-muted)]">
+                Киоск превращает телефон в терминал одного приложения: выбранное
+                приложение становится домашним экраном и залипает на нём, выйти в
+                настройки или другие программы нельзя.
+              </p>
+
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={!!kioskDraft.enabled}
+                  onChange={() => setKioskDraft((k) => ({ ...k, enabled: !k.enabled }))}
+                />
+                Включить киоск
+              </label>
+
+              <div>
+                <label className="block text-xs text-[color:var(--color-text-muted)] mb-1">
+                  Приложение киоска
+                </label>
+                <select
+                  className="input w-full"
+                  value={kioskDraft.home || ''}
+                  onChange={(e) => setKioskDraft((k) => ({ ...k, home: e.target.value || null }))}
+                >
+                  <option value="">Не выбрано</option>
+                  {(selected.apps || [])
+                    .filter((a) => !a.system || a.enabled)
+                    .sort((a, b) => (a.label || a.package).localeCompare(b.label || b.package, 'ru'))
+                    .map((a) => (
+                      <option key={a.package} value={a.package}>
+                        {(a.label || a.package)} — {a.package}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+                  Если приложения нет в списке — сначала поставьте его и обновите список на вкладке «Приложения».
+                </p>
+              </div>
+
+              <div>
+                <span className="block text-xs text-[color:var(--color-text-muted)] mb-1">
+                  Что оставить доступным в киоске
+                </span>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {[
+                    { id: 'allow_home_button', label: 'Кнопка «Домой»' },
+                    { id: 'allow_recents', label: 'Недавние приложения' },
+                    { id: 'allow_notifications', label: 'Уведомления' },
+                    { id: 'allow_system_info', label: 'Строка состояния (часы, батарея)' },
+                  ].map(({ id, label }) => (
+                    <label key={id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={!!kioskDraft[id]}
+                        onChange={() => setKioskDraft((k) => ({ ...k, [id]: !k[id] }))}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="btn btn--primary" disabled={busy} onClick={saveKiosk}>
+                  Сохранить киоск
+                </button>
+                <button type="button" className="btn btn--secondary flex items-center gap-1.5"
+                  disabled={busy} onClick={() => sendCommand('kiosk_exit')}>
+                  <MonitorSmartphone size={14} /> Аварийно выйти из киоска
+                </button>
+              </div>
+              <p className="text-xs text-[color:var(--color-text-muted)]">
+                Если что-то пошло не так и телефон завис в приложении — «аварийно выйти»
+                снимет киоск на ближайшей связи.
+              </p>
             </div>
           )}
 

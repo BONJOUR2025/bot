@@ -337,8 +337,8 @@ class MdmService:
         device = self._repo.get(device_id)
         if not device:
             raise MdmValidationError("device_not_found")
-        if policy.kiosk.enabled and not policy.kiosk.packages:
-            raise MdmValidationError("kiosk_requires_packages")
+        if policy.kiosk.enabled and not policy.kiosk.home and not policy.kiosk.packages:
+            raise MdmValidationError("kiosk_requires_app")
 
         self._repo.upsert(
             device_id,
@@ -386,6 +386,26 @@ class MdmService:
         elif data.type == "set_volume":
             pct = int(params.get("percent") or 100)
             params["percent"] = max(0, min(100, pct))
+        elif data.type == "launch_app":
+            package = str(params.get("package") or "").strip()
+            if not package:
+                raise MdmValidationError("launch_app_requires_package")
+            params["package"] = package
+        elif data.type == "grant_permission":
+            package = str(params.get("package") or "").strip()
+            permission = str(params.get("permission") or "").strip()
+            if not package or not permission:
+                raise MdmValidationError("grant_permission_requires_package_and_permission")
+            params["package"] = package
+            params["permission"] = permission
+            params["grant"] = bool(params.get("grant", True))
+        elif data.type == "set_time_zone":
+            zone = str(params.get("zone") or "").strip()
+            if not zone:
+                raise MdmValidationError("set_time_zone_requires_zone")
+            params["zone"] = zone
+        elif data.type == "set_auto_time":
+            params["enabled"] = bool(params.get("enabled", True))
 
         command = {
             "id": uuid.uuid4().hex,

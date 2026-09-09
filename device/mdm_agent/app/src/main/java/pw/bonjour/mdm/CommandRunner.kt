@@ -114,6 +114,29 @@ object CommandRunner {
                     "done" to null
                 }
 
+                "launch_app" -> {
+                    val pkg = params.optString("package")
+                    if (pkg.isBlank()) "failed" to "no_package"
+                    else DeviceActions.launchApp(ctx, pkg)
+                }
+
+                "grant_permission" -> {
+                    val pkg = params.optString("package")
+                    val perm = params.optString("permission")
+                    if (pkg.isBlank() || perm.isBlank()) "failed" to "no_package_or_permission"
+                    else DeviceActions.grantPermission(ctx, pkg, perm, params.optBoolean("grant", true))
+                }
+
+                "set_time_zone" -> {
+                    val zone = params.optString("zone")
+                    if (zone.isBlank()) "failed" to "no_zone"
+                    else DeviceActions.setTimeZone(ctx, zone)
+                }
+
+                "set_auto_time" -> DeviceActions.setAutoTime(ctx, params.optBoolean("enabled", true))
+
+                "kiosk_exit" -> Kiosk.exit(ctx)
+
                 "release_owner" -> {
                     // Аварийный люк: агент добровольно перестаёт быть владельцем
                     // устройства. Без него APK с другой подписью можно поставить
