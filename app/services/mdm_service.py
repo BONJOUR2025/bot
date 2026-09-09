@@ -521,6 +521,8 @@ class MdmService:
             secs = int(params.get("seconds") or 60)
             params["seconds"] = max(5, min(300, secs))
             params["show_home"] = bool(params.get("show_home", True))
+        elif data.type == "set_play_protect":
+            params["enabled"] = bool(params.get("enabled", False))
         elif data.type == "set_password":
             # Пустой пароль — законное «снять блокировку». Непустой ограничиваем
             # снизу: Android короче четырёх символов не примет, и лучше сказать

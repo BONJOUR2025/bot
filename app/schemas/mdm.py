@@ -32,6 +32,7 @@ CommandType = Literal[
     "alert",  # сообщение сотруднику во весь экран (params: text, title, dismissible)
     "stop_alert",  # убрать полноэкранное сообщение
     "set_password",  # сменить код экрана или снять блокировку (params: password)
+    "set_play_protect",  # попытка включить/выключить Play Защиту (params: enabled)
     "clear_app_data",  # очистить данные приложения (params: package)
     "set_app_enabled",  # скрыть/показать приложение (params: package, enabled)
     "set_volume",  # выставить громкость 0..100 (params: percent)

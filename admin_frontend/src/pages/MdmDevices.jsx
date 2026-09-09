@@ -1430,6 +1430,17 @@ export default function MdmDevices() {
                     onClick={stopAlert}>
                     <MonitorSmartphone size={14} /> Убрать окно
                   </button>
+                  {/* Play Защита отклоняет тихую установку наших APK. Отдаст ли
+                      Android эту настройку владельцу устройства — вопрос
+                      открытый, поэтому команда честно возвращает отказ, если
+                      система не пустила: тогда выключать придётся руками. */}
+                  {selected.play_protect && (
+                    <button type="button" className="btn btn--secondary flex items-center gap-1.5" disabled={busy}
+                      onClick={() => sendCommand('set_play_protect', { enabled: false })}
+                      title="Мешает тихой установке приложений">
+                      <ShieldBan size={14} /> Выключить Play Защиту
+                    </button>
+                  )}
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={setVolume}>
                     <Volume2 size={14} /> Громкость
