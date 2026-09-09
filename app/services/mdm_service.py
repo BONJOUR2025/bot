@@ -104,6 +104,24 @@ def current_long_poll_seconds() -> int:
     return max(MIN_LONG_POLL_SECONDS, min(MAX_LONG_POLL_SECONDS, value))
 
 
+# Насколько свежей должна быть отметка «на связи», чтобы не переписывать её
+# заново. См. MdmService.mark_seen.
+MARK_SEEN_MIN_SECONDS = 60
+
+
+def _is_fresh(timestamp: Optional[str], max_age_seconds: int) -> bool:
+    """Не старше ли отметка заданного возраста. Нечитаемая — считается старой."""
+    if not timestamp:
+        return False
+    try:
+        moment = datetime.fromisoformat(str(timestamp))
+    except ValueError:
+        return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - moment).total_seconds() < max_age_seconds
+
+
 # Статусы команды, которые понимает схема. Всё, что не отсюда, — повреждённая
 # запись: файл правят несколько процессов, а однажды его пришлось править и
 # руками.
@@ -385,7 +403,16 @@ class MdmService:
         Длинный опрос приходит куда чаще полного чек-ина, и именно он теперь
         доказывает, что телефон на связи: без этой отметки сторож считал бы
         замолчавшим аппарат, который на самом деле висит на открытом запросе.
+
+        Отметка придушена по времени. Каждый телефон переподключается раз в
+        25 секунд, а запись здесь переписывает файл целиком — на парке салонов
+        это была бы непрерывная перезапись мегабайтного файла и столь же
+        непрерывное пробуждение всех открытых панелей. Сторож меряет молчание
+        десятками минут, так что минутной точности ему хватает с запасом.
         """
+        device = self._repo.get(device_id)
+        if device and _is_fresh(device.get("last_seen_at"), MARK_SEEN_MIN_SECONDS):
+            return
         self._repo.upsert(str(device_id), {"last_seen_at": _now()})
 
     def find_by_token(self, token: str) -> Optional[dict[str, Any]]:

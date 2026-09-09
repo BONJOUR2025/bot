@@ -936,3 +936,39 @@ def test_broken_command_row_does_not_break_whole_device_list(service):
 
     assert len(service.list_devices()) == 1
     assert service.get_device(device.id).commands[-1].status == "failed"
+
+
+def test_mark_seen_is_throttled(service):
+    """Отметка «на связи» не должна переписывать файл на каждом переподключении.
+
+    Телефон возвращается каждые 25 секунд, а запись переписывает файл целиком:
+    на парке салонов это была бы непрерывная перезапись и столь же непрерывное
+    пробуждение всех открытых панелей.
+    """
+    device, _ = enroll(service)
+
+    service.mark_seen(device.id)
+    first = service.get_device(device.id).last_seen_at
+    marker = service.queue_marker()
+
+    # Сразу следом — записи быть не должно.
+    service.mark_seen(device.id)
+    assert service.get_device(device.id).last_seen_at == first
+    assert service.queue_marker() == marker
+
+    # А устаревшую отметку обновляем.
+    from datetime import datetime, timedelta, timezone as tz
+    stale = (datetime.now(tz.utc) - timedelta(minutes=5)).isoformat()
+    service._repo.upsert(device.id, {"last_seen_at": stale})
+    service.mark_seen(device.id)
+    assert service.get_device(device.id).last_seen_at != stale
+
+
+def test_mark_seen_survives_unreadable_timestamp(service):
+    """Мусор в отметке не должен молча выключать признак живости."""
+    device, _ = enroll(service)
+    service._repo.upsert(device.id, {"last_seen_at": "не дата"})
+
+    service.mark_seen(device.id)
+
+    assert service.get_device(device.id).last_seen_at != "не дата"
