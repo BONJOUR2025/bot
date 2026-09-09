@@ -72,7 +72,12 @@ case "$owners" in
   *)  echo "  ок: владельца устройства нет" ;;
 esac
 
-admins=$("$ADB" shell dpm list-admins 2>/dev/null | tr -d '\r' | grep -v '^$' | grep -vi 'admin receivers')
+# Через dumpsys, а не `dpm list-admins`: такой подкоманды нет (на Android 16
+# точно), и dpm в ответ печатает свою справку — которую легко принять за список
+# администраторов и напугать оператора на ровном месте.
+admins=$("$ADB" shell dumpsys device_policy 2>/dev/null | tr -d '\r' \
+  | sed -n '/Enabled Device Admins/,/^[[:space:]]*$/p' \
+  | grep -oE '[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+/[A-Za-z0-9_.$]+' | sort -u)
 if [ -n "$admins" ]; then
   echo "  внимание: есть активные администраторы устройства —"
   echo "$admins" | sed 's/^/    /'
