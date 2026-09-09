@@ -28,6 +28,8 @@ CommandType = Literal[
     "ring",  # громкий сигнал + вибрация, чтобы найти телефон
     "stop_ring",  # выключить сигнал
     "message",  # стойкое сообщение на экране блокировки (потерянный телефон)
+    "alert",  # сообщение сотруднику во весь экран (params: text, title, dismissible)
+    "stop_alert",  # убрать полноэкранное сообщение
     "clear_app_data",  # очистить данные приложения (params: package)
     "set_app_enabled",  # скрыть/показать приложение (params: package, enabled)
     "set_volume",  # выставить громкость 0..100 (params: percent)

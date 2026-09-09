@@ -999,3 +999,49 @@ def test_found_mode_undoes_what_lost_mode_left_on(service):
 def test_found_mode_requires_existing_device(service):
     with pytest.raises(MdmValidationError, match="device_not_found"):
         service.found_mode("нет-такого")
+
+
+def test_alert_requires_text(service):
+    """Пустое полноэкранное сообщение показывать нечего.
+
+    В отличие от надписи под замком, где пустой текст — это законное «снять
+    сообщение», здесь пустое окно ещё и невозможно закрыть, если снята кнопка.
+    Убирают его отдельной командой stop_alert.
+    """
+    device, _ = enroll(service)
+
+    with pytest.raises(MdmValidationError, match="alert_requires_text"):
+        service.queue_command(device.id, MdmCommandCreate(type="alert", params={"text": "   "}))
+
+
+def test_alert_normalises_params(service):
+    device, _ = enroll(service)
+
+    cmd = service.queue_command(device.id, MdmCommandCreate(
+        type="alert", params={"text": "  Зайдите к управляющему  ", "title": " Важно "},
+    ))
+
+    assert cmd["params"]["text"] == "Зайдите к управляющему"
+    assert cmd["params"]["title"] == "Важно"
+    # По умолчанию сотрудник может закрыть окно: неснимаемое — осознанный выбор.
+    assert cmd["params"]["dismissible"] is True
+
+
+def test_alert_is_not_the_lock_screen_message(service):
+    """alert не должен подменять надпись под замком в карточке.
+
+    Это разные вещи: надпись висит под замком до отмены, окно показывается
+    поверх работы. Если бы alert писался в lock_message, панель показывала бы
+    на карточке то, чего на экране блокировки нет.
+    """
+    device, _ = enroll(service)
+
+    service.queue_command(device.id, MdmCommandCreate(type="alert", params={"text": "Привет"}))
+
+    assert service.get_device(device.id).lock_message is None
+
+
+def test_stop_alert_needs_no_params(service):
+    device, _ = enroll(service)
+    cmd = service.queue_command(device.id, MdmCommandCreate(type="stop_alert"))
+    assert cmd["type"] == "stop_alert"

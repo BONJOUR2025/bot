@@ -97,6 +97,21 @@ object CommandRunner {
                     "done" to null
                 }
 
+                "alert" -> {
+                    AlertActivity.show(
+                        ctx,
+                        params.optString("title"),
+                        params.optString("text"),
+                        params.optBoolean("dismissible", true)
+                    )
+                    "done" to (if (params.optBoolean("dismissible", true)) "показано" else "показано, без закрытия")
+                }
+
+                "stop_alert" -> {
+                    val closed = AlertActivity.close()
+                    "done" to (if (closed) "окно закрыто" else "окна не было")
+                }
+
                 "clear_app_data" -> {
                     val pkg = params.optString("package")
                     if (pkg.isBlank()) "failed" to "no_package"

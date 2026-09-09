@@ -102,6 +102,20 @@
             </intent-filter>
         </activity>
 
+        <!-- Сообщение сотруднику во весь экран. Поднимается поверх всего и
+             поверх блокировки: текст под замком видит только тот, кто возьмёт
+             телефон в руки, а сказать иногда нужно работающему человеку сразу.
+             singleTask — второе сообщение перерисовывает то же окно, а не
+             копит стопку экранов. -->
+        <activity
+            android:name=".AlertActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
+
         <receiver
             android:name=".AdminReceiver"
             android:exported="true"

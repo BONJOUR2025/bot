@@ -584,6 +584,30 @@ export default function MdmDevices() {
     sendCommand('message', { text: '' });
   }
 
+  /** Сообщение во весь экран — в отличие от надписи под замком, его видит
+   *  сотрудник, который прямо сейчас работает на телефоне. */
+  function showAlert() {
+    const text = window.prompt('Текст сообщения во весь экран телефона:');
+    if (text === null) return;
+    if (!text.trim()) {
+      toast('Пустое сообщение показывать нечего', 'error');
+      return;
+    }
+    const title = window.prompt('Заголовок (можно пусто):', 'Сообщение от руководства') || '';
+    // Неснимаемым окном останавливают работу на телефоне, поэтому спрашиваем
+    // отдельно: закрыть его сотрудник уже не сможет, только команда stop_alert.
+    const locking = window.confirm(
+      'Разрешить сотруднику закрыть сообщение кнопкой?\n\n'
+      + 'OK — сотрудник закроет сам.\n'
+      + 'Отмена — окно останется на экране, пока вы не уберёте его командой.',
+    );
+    sendCommand('alert', { text: text.trim(), title: title.trim(), dismissible: locking });
+  }
+
+  function stopAlert() {
+    sendCommand('stop_alert');
+  }
+
   function setLockMessage() {
     const current = selected?.lock_message || '';
     const text = window.prompt(
@@ -1334,7 +1358,15 @@ export default function MdmDevices() {
                   </button>
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={setLockMessage}>
-                    <MessageSquareWarning size={14} /> Сообщение на экран
+                    <MessageSquareWarning size={14} /> Надпись под замком
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={showAlert}>
+                    <MonitorSmartphone size={14} /> Сообщение на весь экран
+                  </button>
+                  <button type="button" className="btn btn--secondary flex items-center gap-1.5" disabled={busy}
+                    onClick={stopAlert}>
+                    <MonitorSmartphone size={14} /> Убрать окно
                   </button>
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={setVolume}>
@@ -1501,6 +1533,21 @@ export default function MdmDevices() {
                           </span>
                         </span>
                         <span className="flex items-center gap-1 shrink-0">
+                          {/* Открыть прямо отсюда: имя пакета уже известно —
+                              заставлять оператора перепечатывать его в диалог
+                              было нечестно. Отключённое не откроется. */}
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            disabled={busy || !app.enabled}
+                            title={app.enabled ? 'Открыть на телефоне' : 'Приложение скрыто — сначала покажите его'}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              sendCommand('launch_app', { package: app.package });
+                            }}
+                          >
+                            <Play size={14} />
+                          </button>
                           <button
                             type="button"
                             className="btn btn--ghost btn--sm"
@@ -1559,11 +1606,25 @@ export default function MdmDevices() {
                   {showSystemApps && (
                     <div className="flex flex-col divide-y divide-[color:var(--color-border)] max-h-72 overflow-y-auto mt-2">
                       {systemApps.map((app) => (
-                        <span key={app.package} className="py-2 min-w-0">
-                          <span className="block truncate text-sm">{app.label || app.package}</span>
-                          <span className="block text-xs text-[color:var(--color-text-muted)] truncate">
-                            {[app.package, app.version_name].filter(Boolean).join(' · ')}
+                        <span key={app.package} className="py-2 min-w-0 flex items-center gap-2">
+                          <span className="min-w-0 grow">
+                            <span className="block truncate text-sm">{app.label || app.package}</span>
+                            <span className="block text-xs text-[color:var(--color-text-muted)] truncate">
+                              {[app.package, app.version_name].filter(Boolean).join(' · ')}
+                            </span>
                           </span>
+                          {/* Удалить системное нельзя, а открыть — можно и
+                              бывает нужно: те же «Настройки» на телефоне,
+                              который стоит в другом салоне. */}
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm shrink-0"
+                            disabled={busy}
+                            title="Открыть на телефоне"
+                            onClick={() => sendCommand('launch_app', { package: app.package })}
+                          >
+                            <Play size={14} />
+                          </button>
                         </span>
                       ))}
                     </div>

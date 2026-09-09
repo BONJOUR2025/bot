@@ -483,6 +483,16 @@ class MdmService:
             # Пустой текст снимает сообщение с экрана — это законный сценарий,
             # поэтому длину не требуем, только ограничиваем сверху.
             params["text"] = str(params.get("text") or "")[:400]
+        elif data.type == "alert":
+            # В отличие от message, пустой текст здесь бессмыслен: показывать
+            # сотруднику во весь экран нечего, а закрыть окно нельзя будет,
+            # если ещё и снята кнопка. Убирают его командой stop_alert.
+            text = str(params.get("text") or "").strip()
+            if not text:
+                raise MdmValidationError("alert_requires_text")
+            params["text"] = text[:600]
+            params["title"] = str(params.get("title") or "").strip()[:120]
+            params["dismissible"] = bool(params.get("dismissible", True))
         elif data.type == "ring":
             secs = int(params.get("seconds") or 30)
             params["seconds"] = max(5, min(300, secs))
