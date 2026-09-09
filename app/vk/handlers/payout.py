@@ -16,8 +16,9 @@ from app.data.employee_repository import EmployeeRepository
 from app.utils.logger import log
 from ..keyboards import home_only_menu, payout_type_menu, payout_method_menu, confirm_menu, main_menu
 from ..states import PayoutStates
+from app.core.constants import PAYOUT_TYPES as SHARED_PAYOUT_TYPES
 
-PAYOUT_TYPES = {"Аванс", "Зарплата"}
+PAYOUT_TYPES = set(SHARED_PAYOUT_TYPES)
 PAYOUT_METHODS = {"💳 На карту", "🏦 Из кассы", "🤝 Наличными"}
 
 

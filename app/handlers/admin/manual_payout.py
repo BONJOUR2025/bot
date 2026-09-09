@@ -13,6 +13,7 @@ from ...services.users import load_users_map
 from ...keyboards.reply_admin import get_admin_menu
 from ...services.advance_requests import log_new_request
 from ...constants import ManualPayoutStates
+from ...core.constants import PAYOUT_TYPES
 from ...utils.logger import log
 
 
@@ -54,7 +55,7 @@ async def manual_payout_employee(
     await update.message.reply_text(
         "Выберите тип выплаты:",
         reply_markup=ReplyKeyboardMarkup(
-            [["Аванс", "Зарплата"], ["🏠 Домой"]], resize_keyboard=True
+            [PAYOUT_TYPES, ["🏠 Домой"]], resize_keyboard=True
         ),
     )
     return ManualPayoutStates.SELECT_TYPE

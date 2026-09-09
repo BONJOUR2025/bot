@@ -5,6 +5,7 @@ from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKe
 from telegram.ext import ContextTypes, ConversationHandler
 
 from ...constants import PAYMENT_REQUEST_PATTERN, PayoutStates
+from ...core.constants import PAYOUT_TYPES
 from ...config import MAX_ADVANCE_AMOUNT_PER_MONTH
 from ...services.users import load_users_map
 from ...services.advance_requests import (
@@ -58,7 +59,7 @@ async def request_payout_start(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["payout_in_progress"] = True
 
     keyboard = ReplyKeyboardMarkup(
-        [["Аванс", "Зарплата"], ["🏠 Домой"]], resize_keyboard=True
+        [PAYOUT_TYPES, ["🏠 Домой"]], resize_keyboard=True
     )
     await update.message.reply_text(
         "Выберите тип выплаты:", reply_markup=keyboard
@@ -68,7 +69,7 @@ async def request_payout_start(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> PayoutStates:
     payout_type = update.message.text.strip()
-    if payout_type not in {"Аванс", "Зарплата"}:
+    if payout_type not in PAYOUT_TYPES:
         await update.message.reply_text(
             "❌ Пожалуйста, выберите из предложенных вариантов."
         )

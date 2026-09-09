@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
+import { PAYOUT_TYPES, REQUESTABLE_TYPES } from '../../constants/payouts.js';
 
 const METHODS = ['💳 На карту', '🏦 Из кассы'];
-const PAYOUT_TYPES = ['Аванс', 'Зарплата'];
 
 const STATUS_LABELS = {
   'Ожидает': { label: 'Ожидает', cls: 'badge--warning' },
@@ -172,7 +172,7 @@ export default function EmployeePayouts() {
 
       {loading && <p className="emp-page__loading">Загрузка…</p>}
 
-      {!loading && payouts.filter(p => p.payout_type === 'Аванс').length === 0 && (
+      {!loading && payouts.filter(p => REQUESTABLE_TYPES.includes(p.payout_type)).length === 0 && (
         <p className="emp-page__empty">Нет запросов на выплату</p>
       )}
 
@@ -197,7 +197,7 @@ export default function EmployeePayouts() {
         });
 
         if (visible.length === 0) {
-          return <p className="emp-page__empty">Авансов с последней зарплаты нет</p>;
+          return <p className="emp-page__empty">Выплат с последней зарплаты нет</p>;
         }
 
         return (

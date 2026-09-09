@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { PAYOUT_TYPES } from '../constants/payouts.js';
 import {
   CheckCircle,
   Download,
@@ -1602,8 +1603,9 @@ export default function Payouts() {
           onChange={(e) => setFilters({ ...filters, type: e.target.value })}
         >
           <option value="">Все типы</option>
-          <option value="Аванс">Аванс</option>
-          <option value="Зарплата">Зарплата</option>
+          {PAYOUT_TYPES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
         </select>
         <select
           className="input"
@@ -1880,8 +1882,9 @@ export default function Payouts() {
               value={form.payout_type}
               onChange={(e) => setForm({ ...form, payout_type: e.target.value })}
             >
-              <option value="Аванс">Аванс</option>
-              <option value="Зарплата">Зарплата</option>
+              {PAYOUT_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
             </select>
             <select
               className="modal-control"
