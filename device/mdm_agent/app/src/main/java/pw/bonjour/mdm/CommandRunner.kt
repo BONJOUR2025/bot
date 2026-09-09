@@ -37,6 +37,12 @@ object CommandRunner {
                     "done" to null
                 }
 
+                "wake" -> WakeActivity.wake(
+                    ctx,
+                    params.optInt("seconds", 60),
+                    params.optBoolean("show_home", true)
+                )
+
                 "reboot" -> {
                     // Требует владельца устройства и отсутствия активного звонка.
                     Dpm.manager(ctx).reboot(Dpm.admin(ctx))

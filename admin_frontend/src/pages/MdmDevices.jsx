@@ -1378,6 +1378,17 @@ export default function MdmDevices() {
                     onClick={() => sendCommand('lock')}>
                     <Lock size={14} /> Заблокировать экран
                   </button>
+                  {/* Пара к «Заблокировать»: телефон лежит с погашенным экраном,
+                      кнопка зажигает его и показывает рабочий стол. Если на
+                      телефоне стоит код, покажется запрос кода — обойти его
+                      было бы то же, что сделать код бесполезным. */}
+                  <button type="button" className="btn btn--secondary flex items-center gap-1.5" disabled={busy}
+                    onClick={() => sendCommand('wake', { seconds: 60, show_home: true })}
+                    title={selected.secure_lock
+                      ? 'Экран загорится; код на телефоне придётся ввести вручную'
+                      : 'Экран загорится и покажет рабочий стол'}>
+                    <Sun size={14} /> Разбудить экран
+                  </button>
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={() => sendCommand('reboot')}>
                     <RotateCw size={14} /> Перезагрузить

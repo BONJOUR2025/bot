@@ -1121,3 +1121,29 @@ def test_checkin_stores_remote_unlock_readiness(service):
                     MdmCheckinRequest(can_reset_password=True, secure_lock=True))
 
     assert service.get_device(device.id).can_reset_password is True
+
+
+def test_wake_clamps_screen_time(service):
+    """Держать экран включённым бесконечно по команде незачем.
+
+    Телефон лежит без присмотра, а разбудить его снова — одна кнопка.
+    """
+    device, _ = enroll(service)
+
+    long_cmd = service.queue_command(device.id, MdmCommandCreate(
+        type="wake", params={"seconds": 99999}))
+    short_cmd = service.queue_command(device.id, MdmCommandCreate(
+        type="wake", params={"seconds": 1}))
+
+    assert long_cmd["params"]["seconds"] == 300
+    assert short_cmd["params"]["seconds"] == 5
+
+
+def test_wake_shows_home_by_default(service):
+    """По умолчанию показываем рабочий стол, а не то, в чём телефон уснул."""
+    device, _ = enroll(service)
+
+    cmd = service.queue_command(device.id, MdmCommandCreate(type="wake"))
+
+    assert cmd["params"]["show_home"] is True
+    assert cmd["params"]["seconds"] == 60

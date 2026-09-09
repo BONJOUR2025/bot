@@ -26,6 +26,9 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <!-- Вибрация для «звук поиска» -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Побудка экрана по команде: без него блокировка питания бросает
+         SecurityException и экран остаётся погашенным. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- IMEI и данные SIM для инвентаризации -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <!-- Прописать салонный Wi-Fi на телефон -->
@@ -115,6 +118,18 @@
             android:showOnLockScreen="true"
             android:turnScreenOn="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
+
+        <!-- Побудка экрана. Своего вида нет: включение дисплея привязано к окну,
+             которое просит turnScreenOn, поэтому активность нужна как повод.
+             Прозрачная и сразу уходит, оставляя на экране рабочий стол. -->
+        <activity
+            android:name=".WakeActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <receiver
             android:name=".AdminReceiver"

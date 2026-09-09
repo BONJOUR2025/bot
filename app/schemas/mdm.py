@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 CommandType = Literal[
     "apply_policy",  # перечитать политику (обычно не нужно: агент и так её тянет)
     "lock",  # немедленно заблокировать экран
+    "wake",  # разбудить экран и показать рабочий стол (params: seconds, show_home)
     "reboot",  # перезагрузить телефон
     "locate",  # прислать координаты в ближайшем чек-ине
     "install_apk",  # тихо поставить APK по ссылке
