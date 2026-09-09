@@ -108,6 +108,10 @@ def current_long_poll_seconds() -> int:
 # заново. См. MdmService.mark_seen.
 MARK_SEEN_MIN_SECONDS = 60
 
+# Сколько ждать подтверждения от телефона, прежде чем считать команду
+# потерянной. См. MdmService.expire_stale_commands.
+STALE_COMMAND_SECONDS = 15 * 60
+
 
 def _is_fresh(timestamp: Optional[str], max_age_seconds: int) -> bool:
     """Не старше ли отметка заданного возраста. Нечитаемая — считается старой."""
@@ -392,6 +396,34 @@ class MdmService:
         if not self._repo.cancel_command(device_id, command_id):
             raise MdmValidationError("command_not_cancelable")
         return self.get_device(device_id)
+
+    def expire_stale_commands(self, device_id: str) -> int:
+        """Пометить сбойными команды, которые телефон забрал и не подтвердил.
+
+        Подтверждение может не прийти совсем: прошивка убила процесс между
+        исполнением и отчётом. Такая команда висела бы в панели со статусом
+        «на телефоне» вечно, и оператор не отличил бы её от медленной установки.
+        Врать бесконечно хуже, чем через десять минут признать, что ответа нет.
+
+        Порог с запасом: установка большого APK и снимок с камеры укладываются
+        в минуты, а не в десятки.
+        """
+        device = self._repo.get(device_id)
+        if not device:
+            return 0
+        commands = list(device.get("commands") or [])
+        changed = 0
+        for command in commands:
+            if command.get("status") != "sent":
+                continue
+            if _is_fresh(command.get("created_at"), STALE_COMMAND_SECONDS):
+                continue
+            command["status"] = "failed"
+            command["result"] = "телефон не подтвердил выполнение"
+            changed += 1
+        if changed:
+            self._repo.upsert(str(device_id), {"commands": commands})
+        return changed
 
     def queue_marker(self) -> tuple[float, int]:
         """Признак «очередь могла измениться» для длинного опроса."""

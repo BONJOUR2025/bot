@@ -147,11 +147,17 @@ class AlertActivity : Activity() {
             ctx.startActivity(intent)
         }
 
-        /** @return true, если было что закрывать. */
+        /** @return true, если было что закрывать.
+         *
+         *  Вызывается из потока команд, а не из главного, поэтому finish()
+         *  переносим на UI-поток. Всё обёрнуто: закрытие окна не должно уметь
+         *  провалить команду — если активности уже нет, цель и так достигнута.
+         */
         fun close(): Boolean {
-            val activity = current?.get() ?: return false
-            activity.runOnUiThread { activity.finish() }
+            val activity = current?.get()
             current = null
+            if (activity == null) return false
+            runCatching { activity.runOnUiThread { runCatching { activity.finish() } } }
             return true
         }
     }

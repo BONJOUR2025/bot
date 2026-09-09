@@ -1045,3 +1045,42 @@ def test_stop_alert_needs_no_params(service):
     device, _ = enroll(service)
     cmd = service.queue_command(device.id, MdmCommandCreate(type="stop_alert"))
     assert cmd["type"] == "stop_alert"
+
+
+def test_stale_sent_command_is_marked_failed(service):
+    """Забранная и неподтверждённая команда не должна висеть вечно.
+
+    Отчёт может не прийти совсем: прошивка убила процесс между исполнением и
+    подтверждением. В панели это выглядело бы как «на телефоне» без конца —
+    неотличимо от медленной установки.
+    """
+    from datetime import datetime, timedelta, timezone as tz
+
+    device, _ = enroll(service)
+    fresh = service.queue_command(device.id, MdmCommandCreate(type="lock"))
+    stale = service.queue_command(device.id, MdmCommandCreate(type="reboot"))
+    service.take_pending_commands(device.id)
+
+    raw = service._repo.get(device.id)
+    for c in raw["commands"]:
+        if c["id"] == stale["id"]:
+            c["created_at"] = (datetime.now(tz.utc) - timedelta(hours=1)).isoformat()
+    service._repo.upsert(device.id, {"commands": raw["commands"]})
+
+    assert service.expire_stale_commands(device.id) == 1
+
+    by_id = {c.id: c for c in service.get_device(device.id).commands}
+    assert by_id[stale["id"]].status == "failed"
+    assert "не подтвердил" in by_id[stale["id"]].result
+    # Свежую не трогаем: она может исполняться прямо сейчас.
+    assert by_id[fresh["id"]].status == "sent"
+
+
+def test_expire_leaves_done_commands_alone(service):
+    device, _ = enroll(service)
+    cmd = service.queue_command(device.id, MdmCommandCreate(type="lock"))
+    service.take_pending_commands(device.id)
+    service.ack_commands({"id": device.id}, [MdmCommandAck(command_id=cmd["id"], status="done")])
+
+    assert service.expire_stale_commands(device.id) == 0
+    assert service.get_device(device.id).commands[-1].status == "done"

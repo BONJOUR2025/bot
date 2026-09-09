@@ -92,7 +92,17 @@ object CommandPoller {
     private fun runCommands(ctx: Context, commands: JSONArray) {
         for (i in 0 until commands.length()) {
             val command = commands.optJSONObject(i) ?: continue
-            val outcome = runCatching { CommandRunner.run(ctx, command) }.getOrNull()
+            val outcome = try {
+                CommandRunner.run(ctx, command)
+            } catch (t: Throwable) {
+                // Сюда долетает то, что CommandRunner не ловит: он берёт
+                // Exception, а Error (нет класса, не сошлась сигнатура на чужой
+                // прошивке) проходит мимо. Раньше это гасилось runCatching и
+                // команда пропадала совсем — навсегда застревая в панели со
+                // статусом «на телефоне», неотличимо от медленной установки.
+                // Пусть лучше сбой назовёт себя.
+                "failed" to (t.javaClass.simpleName + ": " + t.message)
+            }
             // null — установка приложения или снимок с камеры: подтверждение
             // придёт асинхронно, когда система закончит работу.
             if (outcome != null) {

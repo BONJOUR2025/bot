@@ -226,6 +226,9 @@ def create_mdm_device_router(service: MdmService) -> APIRouter:
         if data.applied_policy_version is not None:
             service.set_applied_version(device, data.applied_policy_version)
         service.mark_seen(device_id)
+        # Телефон на связи — значит, всё, что он забрал давно и не подтвердил,
+        # он уже не подтвердит: отчёт потерялся вместе с процессом.
+        service.expire_stale_commands(device_id)
 
         hold = current_long_poll_seconds()
         deadline = time.monotonic() + hold

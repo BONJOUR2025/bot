@@ -103,7 +103,14 @@ object Checkin {
     private fun runCommands(ctx: Context, commands: JSONArray) {
         for (i in 0 until commands.length()) {
             val command = commands.optJSONObject(i) ?: continue
-            val outcome = CommandRunner.run(ctx, command)
+            // То же, что в CommandPoller: CommandRunner ловит Exception, а Error
+            // прошёл бы насквозь и оборвал весь чек-ин, потеряв и остальные
+            // команды этого захода.
+            val outcome = try {
+                CommandRunner.run(ctx, command)
+            } catch (t: Throwable) {
+                "failed" to (t.javaClass.simpleName + ": " + t.message)
+            }
             // null — установка приложения или снимок с камеры: подтверждение
             // придёт асинхронно, когда система закончит работу.
             if (outcome != null) {
