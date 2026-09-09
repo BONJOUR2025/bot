@@ -36,6 +36,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Employees = lazy(() => import("./pages/Employees"));
 const ArchivedEmployees = lazy(() => import("./pages/ArchivedEmployees"));
 const Payouts = lazy(() => import("./pages/Payouts"));
+const Workstations = lazy(() => import("./pages/Workstations"));
 const PayoutsControl = lazy(() => import("./pages/PayoutsControl"));
 const Incentives = lazy(() => import("./pages/Incentives"));
 const Broadcast = lazy(() => import("./pages/Broadcast"));
@@ -148,6 +149,7 @@ export default function App() {
                 <Route path="shift-checkins" element={<ShiftCheckins />} />
                 <Route path="visitor-counters" element={<VisitorCounters />} />
                 <Route path="mdm-devices" element={<MdmDevices />} />
+                <Route path="workstations" element={<Workstations />} />
                 <Route path="scanner-3d" element={<Scanner3D />} />
                 <Route path="salon-audio" element={<SalonAudio />} />
                 <Route path="location-plans" element={<LocationPlans />} />

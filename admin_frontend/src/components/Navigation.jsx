@@ -46,6 +46,7 @@ const navStructure = [
       { to: '/admin/salons',           label: 'Салоны',               permission: 'salons',           icon: Store },
       { to: '/admin/visitor-counters', label: 'Счётчик посетителей',  permission: 'visitor-counters', icon: Users2 },
       { to: '/admin/mdm-devices',      label: 'Телефоны салонов',     permission: 'mdm',              icon: Smartphone },
+      { to: '/admin/workstations',     label: 'Компьютеры салонов',   permission: 'mdm',              icon: Monitor },
       { to: '/admin/sales',            label: 'Продажи',              permission: 'payroll',          icon: TrendingUp },
       { to: '/admin/clients',          label: 'Клиенты',              permission: 'payroll',          icon: UserSearch },
       { to: '/admin/location-plans',   label: 'Планы продаж',         permission: 'payroll',          icon: MapPin },
