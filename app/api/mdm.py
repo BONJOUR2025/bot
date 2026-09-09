@@ -11,7 +11,7 @@ from __future__ import annotations
 import secrets
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.dependencies import require_permission
@@ -34,6 +34,7 @@ from app.schemas.mdm import (
     MdmEnrollRequest,
     MdmEnrollResponse,
     MdmEnrollmentInfo,
+    MdmLostMode,
     MdmPolicy,
 )
 from app.services.mdm_service import (
@@ -393,11 +394,11 @@ def create_mdm_router(service: MdmService) -> APIRouter:
     @router.post("/devices/{device_id}/lost-mode", response_model=list[MdmCommand])
     async def lost_mode(
         device_id: str,
-        payload: dict = None,
+        payload: MdmLostMode = Body(default=MdmLostMode()),
         current=Depends(require_permission("mdm")),
     ) -> list[MdmCommand]:
         """Режим пропажи: заблокировать, показать сообщение, сигнал, локация, кадр."""
-        message = (payload or {}).get("message") if isinstance(payload, dict) else None
+        message = payload.message
         try:
             cmds = service.lost_mode(device_id, message)
         except MdmValidationError as exc:

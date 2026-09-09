@@ -353,6 +353,12 @@ class MdmBroadcastResult(BaseModel):
     total: int
 
 
+class MdmLostMode(BaseModel):
+    """Тело запроса режима пропажи: необязательное сообщение на экран."""
+
+    message: Optional[str] = None
+
+
 class MdmSettingsUpdate(BaseModel):
     """Что можно поменять из панели, не трогая файлы на сервере."""
 
