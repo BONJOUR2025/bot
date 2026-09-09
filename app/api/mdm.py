@@ -32,6 +32,7 @@ from app.schemas.mdm import (
     MdmCommand,
     MdmCommandCreate,
     MdmDevice,
+    MdmDevicesWatch,
     MdmDeviceUpdate,
     MdmEnrollRequest,
     MdmEnrollResponse,
@@ -57,6 +58,11 @@ from app.services.mdm_service import (
 # на случай правки файла, не заметной по времени и размеру.
 POLL_TICK_SECONDS = 0.5
 POLL_SAFETY_TICKS = 10
+
+
+def _marker_text(marker: tuple[float, int]) -> str:
+    """Маркер очереди строкой: он уезжает в браузер и возвращается обратно."""
+    return f"{marker[0]:.6f}-{marker[1]}"
 
 # Как часто агент выходит на связь. 15 минут — минимальный период, который
 # WorkManager на Android гарантирует; просить чаще бессмысленно, система всё
@@ -402,6 +408,36 @@ def create_mdm_router(service: MdmService) -> APIRouter:
     @router.get("/devices", response_model=list[MdmDevice])
     async def list_devices(current=Depends(require_permission("mdm"))) -> list[MdmDevice]:
         return service.list_devices()
+
+    # Зарегистрировано до /devices/{device_id}: иначе "watch" попал бы туда
+    # как идентификатор телефона, и живое обновление молча отвечало бы 404.
+    @router.get("/devices/watch", response_model=MdmDevicesWatch)
+    async def watch_devices(
+        marker: str = "",
+        current=Depends(require_permission("mdm")),
+    ) -> MdmDevicesWatch:
+        """Живое обновление панели: держим запрос, пока в парке не изменится.
+
+        Снимок с камеры, ответ телефона на команду, свежий заряд — всё это
+        приезжает само, без кнопки «обновить». Ждём по тому же маркеру файла,
+        что и опрос телефонов: писать в него может и соседний процесс.
+
+        Пустой marker — первый заход: отвечаем сразу, чтобы панель получила
+        точку отсчёта и не ждала лишний цикл на открытии страницы.
+        """
+        hold = current_long_poll_seconds()
+        deadline = time.monotonic() + hold
+        current_marker = _marker_text(service.queue_marker())
+        while marker and current_marker == marker and time.monotonic() < deadline:
+            await asyncio.sleep(POLL_TICK_SECONDS)
+            current_marker = _marker_text(service.queue_marker())
+
+        changed = current_marker != marker
+        return MdmDevicesWatch(
+            marker=current_marker,
+            changed=changed,
+            devices=service.list_devices() if changed else [],
+        )
 
     @router.get("/devices/{device_id}", response_model=MdmDevice)
     async def get_device(

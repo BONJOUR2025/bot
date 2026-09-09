@@ -131,6 +131,9 @@ export default function MdmDevices() {
   const [deviceTab, setDeviceTab] = useState('overview');
   const [kioskDraft, setKioskDraft] = useState(null);
   const [schedules, setSchedules] = useState([]);
+  // Работает ли живое обновление. Показываем честно: если оно оборвалось,
+  // оператор должен знать, что смотрит на застывшую картинку.
+  const [live, setLive] = useState(false);
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -180,6 +183,62 @@ export default function MdmDevices() {
       setLoading(false);
     }
   }
+
+  /** Живое обновление парка.
+   *
+   *  Запрос висит на сервере, пока в парке ничего не менялось, и возвращается
+   *  сразу, как что-то произошло: приехал снимок с камеры, телефон ответил на
+   *  команду, обновилась телеметрия. Раньше всё это ждало, пока оператор
+   *  догадается нажать «обновить» — а снимок с камеры заказывают как раз
+   *  тогда, когда смотрят на экран и ждут его сию секунду.
+   *
+   *  Обновляем молча: без индикатора загрузки и без сброса того, что оператор
+   *  сейчас правит. Черновики политики завязаны на policy_version, поэтому
+   *  чужие изменения телеметрии их не трогают.
+   */
+  const watchMarker = useRef('');
+
+  useEffect(() => {
+    let stopped = false;
+    const controller = new AbortController();
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function watch() {
+      let failures = 0;
+      while (!stopped) {
+        // Вкладку свернули — держать открытое соединение незачем.
+        if (document.hidden) {
+          await pause(1000);
+          continue;
+        }
+        try {
+          const res = await api.get('mdm/devices/watch', {
+            params: { marker: watchMarker.current },
+            signal: controller.signal,
+          });
+          if (stopped) return;
+          watchMarker.current = res.data.marker;
+          if (res.data.changed) setDevices(res.data.devices);
+          setLive(true);
+          failures = 0;
+        } catch (err) {
+          if (stopped || err.code === 'ERR_CANCELED') return;
+          setLive(false);
+          // Обрыв висящего запроса — штатное дело: туннель, сон вкладки,
+          // пересборка сервера. Молчим и отступаем, а не сыплем тостами:
+          // оператор ничего не сделал не так и починить это не может.
+          failures += 1;
+          await pause(Math.min(2000 * failures, 30000));
+        }
+      }
+    }
+
+    watch();
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }, []);
 
   // QR рисуем только когда он открыт: строка длинная, код получается плотным,
   // и постоянно держать его на экране незачем.
@@ -704,6 +763,17 @@ export default function MdmDevices() {
           <Smartphone size={20} /> Телефоны салонов
         </h1>
         <div className="flex items-center gap-2">
+          <span
+            className="flex items-center gap-1.5 text-xs text-[color:var(--color-text-muted)]"
+            title={live
+              ? 'Снимки, ответы на команды и телеметрия появляются сами'
+              : 'Живое обновление оборвалось — данные могут устареть'}
+          >
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+              live ? 'bg-emerald-500 animate-pulse' : 'bg-[color:var(--color-text-muted)]'}`}
+            />
+            {live ? 'обновляется само' : 'нет связи'}
+          </span>
           <button type="button" className="btn btn--secondary flex items-center gap-1.5"
             disabled={busy || !devices.length} onClick={broadcast}>
             <Send size={14} /> Команда всем
