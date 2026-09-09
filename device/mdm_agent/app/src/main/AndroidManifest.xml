@@ -26,6 +26,11 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <!-- Вибрация для «звук поиска» -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- IMEI и данные SIM для инвентаризации -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Прописать салонный Wi-Fi на телефон -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
     <application
         android:allowBackup="false"

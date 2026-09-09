@@ -5,7 +5,7 @@ import {
   Upload, QrCode, PackageCheck, Boxes, ListRestart, Camera as CameraIcon,
   Gauge, ShieldBan, AppWindow, History as HistoryIcon,
   Volume2, MessageSquareWarning, HardDrive, Wifi, Cpu, Clock, EyeOff, Eraser,
-  MonitorSmartphone, Play, KeyRound as KeyIcon,
+  MonitorSmartphone, Play, KeyRound as KeyIcon, Sun, Radio, Send,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -317,6 +317,42 @@ export default function MdmDevices() {
     }
   }
 
+  function addWifi() {
+    const ssid = window.prompt('Имя сети Wi-Fi (SSID)');
+    if (!ssid) return;
+    const password = window.prompt('Пароль (пусто — открытая сеть)') || '';
+    sendCommand('add_wifi', { ssid: ssid.trim(), password, hidden: false });
+  }
+
+  function toggleStayAwake(enabled) {
+    sendCommand('set_stay_awake', { enabled });
+  }
+
+  function toggleStatusBar(disabled) {
+    sendCommand('set_status_bar', { disabled });
+  }
+
+  function syncTime() {
+    sendCommand('set_time', { epoch_ms: Date.now() });
+  }
+
+  async function broadcast() {
+    const type = window.prompt('Команда всем телефонам: lock, reboot, refresh_apps, set_time');
+    if (!type) return;
+    if (!window.confirm(`Отправить «${type.trim()}» ВСЕМ телефонам (${devices.length})?`)) return;
+    setBusy(true);
+    try {
+      const params = type.trim() === 'set_time' ? { epoch_ms: Date.now() } : {};
+      const res = await api.post('mdm/broadcast', { type: type.trim(), params });
+      toast(`Отправлено на ${res.data.queued} из ${res.data.total}`, 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function launchApp() {
     const pkg = window.prompt('Имя пакета, которое открыть, напр. com.yandex.browser');
     if (!pkg) return;
@@ -574,9 +610,15 @@ export default function MdmDevices() {
         <h1 className="text-xl font-semibold flex items-center gap-2">
           <Smartphone size={20} /> Телефоны салонов
         </h1>
-        <button type="button" className="btn flex items-center gap-1.5" onClick={load} disabled={loading}>
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Обновить
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" className="btn btn--secondary flex items-center gap-1.5"
+            disabled={busy || !devices.length} onClick={broadcast}>
+            <Send size={14} /> Команда всем
+          </button>
+          <button type="button" className="btn flex items-center gap-1.5" onClick={load} disabled={loading}>
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Обновить
+          </button>
+        </div>
       </div>
 
       <section className="bg-[color:var(--color-bg-secondary)] rounded-xl p-4 flex flex-col gap-2">
@@ -951,6 +993,24 @@ export default function MdmDevices() {
                     {selected.secure_lock == null ? '—' : selected.secure_lock ? 'да' : 'нет пароля'}
                   </dd>
                 </div>
+                {selected.serial_number && (
+                  <div>
+                    <dt className="text-xs text-[color:var(--color-text-muted)]">Серийный номер</dt>
+                    <dd className="break-all">{selected.serial_number}</dd>
+                  </div>
+                )}
+                {selected.imei && (
+                  <div>
+                    <dt className="text-xs text-[color:var(--color-text-muted)]">IMEI</dt>
+                    <dd className="break-all">{selected.imei}</dd>
+                  </div>
+                )}
+                {selected.sim_operator && (
+                  <div>
+                    <dt className="text-xs text-[color:var(--color-text-muted)]">Оператор</dt>
+                    <dd>{selected.sim_operator}</dd>
+                  </div>
+                )}
               </dl>
 
               {selected.play_protect && (
@@ -1048,6 +1108,22 @@ export default function MdmDevices() {
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={grantPermission}>
                     <KeyIcon size={14} /> Выдать разрешение
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={addWifi}>
+                    <Wifi size={14} /> Прописать Wi-Fi
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={syncTime}>
+                    <Clock size={14} /> Синхронизировать время
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={() => toggleStayAwake(true)}>
+                    <Sun size={14} /> Не гасить при зарядке
+                  </button>
+                  <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
+                    onClick={() => toggleStatusBar(true)}>
+                    <Radio size={14} /> Скрыть строку состояния
                   </button>
                 </div>
                 {selected.lock_message && (

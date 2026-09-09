@@ -41,7 +41,8 @@ object PolicyApplier {
         android.Manifest.permission.CAMERA,
         // С Android 13 без него уведомление постоянного сервиса не показывается,
         // а сервис без видимого уведомления система вправе прибить.
-        android.Manifest.permission.POST_NOTIFICATIONS
+        android.Manifest.permission.POST_NOTIFICATIONS,
+        android.Manifest.permission.READ_PHONE_STATE
     )
 
     /** @return строка с описанием проблем или null, если всё применилось. */

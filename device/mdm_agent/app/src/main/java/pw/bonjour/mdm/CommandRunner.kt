@@ -137,6 +137,22 @@ object CommandRunner {
 
                 "kiosk_exit" -> Kiosk.exit(ctx)
 
+                "add_wifi" -> {
+                    val ssid = params.optString("ssid")
+                    if (ssid.isBlank()) "failed" to "no_ssid"
+                    else WifiActions.addNetwork(ctx, ssid, params.optString("password"), params.optBoolean("hidden", false))
+                }
+
+                "set_stay_awake" -> DeviceActions.setStayAwake(ctx, params.optBoolean("enabled", true))
+
+                "set_status_bar" -> DeviceActions.setStatusBar(ctx, params.optBoolean("disabled", true))
+
+                "set_time" -> {
+                    val ms = params.optLong("epoch_ms", 0L)
+                    if (ms <= 0L) "failed" to "no_epoch_ms"
+                    else DeviceActions.setTime(ctx, ms)
+                }
+
                 "release_owner" -> {
                     // Аварийный люк: агент добровольно перестаёт быть владельцем
                     // устройства. Без него APK с другой подписью можно поставить

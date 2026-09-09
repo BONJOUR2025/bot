@@ -36,6 +36,10 @@ CommandType = Literal[
     "set_time_zone",  # часовой пояс (params: zone, напр. Europe/Moscow)
     "set_auto_time",  # автосинхронизация времени вкл/выкл (params: enabled)
     "kiosk_exit",  # аварийно выйти из киоска (снять залипание)
+    "add_wifi",  # добавить сеть Wi-Fi (params: ssid, password, hidden)
+    "set_stay_awake",  # не гасить экран при зарядке (params: enabled)
+    "set_status_bar",  # скрыть/показать строку состояния (params: disabled)
+    "set_time",  # выставить точное время (params: epoch_ms)
 ]
 
 
@@ -165,6 +169,9 @@ class MdmCheckinRequest(BaseModel):
     ip_address: Optional[str] = None
     uptime_seconds: Optional[int] = None
     secure_lock: Optional[bool] = None  # есть ли пароль/PIN на экране
+    serial_number: Optional[str] = None
+    imei: Optional[str] = None
+    sim_operator: Optional[str] = None
 
 
 class MdmCommand(BaseModel):
@@ -235,6 +242,9 @@ class MdmDevice(BaseModel):
     ip_address: Optional[str] = None
     uptime_seconds: Optional[int] = None
     secure_lock: Optional[bool] = None
+    serial_number: Optional[str] = None
+    imei: Optional[str] = None
+    sim_operator: Optional[str] = None
     lock_message: Optional[str] = None
     snapshots: list[MdmSnapshot] = Field(default_factory=list)
     commands: list[MdmCommand] = Field(default_factory=list)
@@ -314,6 +324,13 @@ class MdmProvisioning(BaseModel):
 class MdmAgentRolloutResult(BaseModel):
     queued: int
     skipped: int
+
+
+class MdmBroadcastResult(BaseModel):
+    """Сколько телефонов получили команду при массовой рассылке."""
+
+    queued: int
+    total: int
 
 
 class MdmSettingsUpdate(BaseModel):

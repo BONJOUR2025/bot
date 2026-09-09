@@ -271,6 +271,7 @@ class MdmService:
         for field in (
             "storage_total_mb", "storage_free_mb", "ram_total_mb", "network",
             "wifi_ssid", "ip_address", "uptime_seconds", "secure_lock",
+            "serial_number", "imei", "sim_operator",
         ):
             value = getattr(data, field)
             if value is not None:
@@ -406,6 +407,22 @@ class MdmService:
             params["zone"] = zone
         elif data.type == "set_auto_time":
             params["enabled"] = bool(params.get("enabled", True))
+        elif data.type == "add_wifi":
+            ssid = str(params.get("ssid") or "").strip()
+            if not ssid:
+                raise MdmValidationError("add_wifi_requires_ssid")
+            params["ssid"] = ssid
+            params["password"] = str(params.get("password") or "")
+            params["hidden"] = bool(params.get("hidden", False))
+        elif data.type == "set_stay_awake":
+            params["enabled"] = bool(params.get("enabled", True))
+        elif data.type == "set_status_bar":
+            params["disabled"] = bool(params.get("disabled", True))
+        elif data.type == "set_time":
+            epoch = int(params.get("epoch_ms") or 0)
+            if epoch <= 0:
+                raise MdmValidationError("set_time_requires_epoch_ms")
+            params["epoch_ms"] = epoch
 
         command = {
             "id": uuid.uuid4().hex,
@@ -422,6 +439,30 @@ class MdmService:
         if data.type == "message":
             self._repo.upsert(device_id, {"lock_message": params.get("text") or None})
         return command
+
+    def broadcast_command(self, data: MdmCommandCreate, salon_id: Optional[str] = None) -> "MdmBroadcastResult":
+        """Поставить команду сразу всем телефонам (или всем в одном салоне).
+
+        Валидация — та же, что у одиночной команды: проверяем один раз на
+        болванке, потом ставим каждому. Так кривая команда не уедет половине
+        парка, прежде чем упасть.
+        """
+        from app.schemas.mdm import MdmBroadcastResult
+
+        devices = self._repo.list()
+        if salon_id:
+            devices = [d for d in devices if str(d.get("salon_id") or "") == str(salon_id)]
+
+        queued = 0
+        for device in devices:
+            try:
+                self.queue_command(str(device.get("id")), data)
+                queued += 1
+            except MdmValidationError:
+                # Одна и та же команда всем: если не прошла валидацию, она не
+                # пройдёт нигде — пробрасываем наверх как ошибку запроса.
+                raise
+        return MdmBroadcastResult(queued=queued, total=len(devices))
 
     def delete_device(self, device_id: str) -> None:
         """Убирает телефон из списка. Сам телефон при этом остаётся управляемым.

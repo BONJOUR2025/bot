@@ -45,6 +45,26 @@ object Telemetry {
             json.put("secure_lock", km.isDeviceSecure)
         }
 
+        // Инвентарь железа: серийник, IMEI, оператор SIM. Всё лучшим усилием —
+        // на части прошивок и без нужных разрешений вернётся пусто.
+        runCatching {
+            val serial = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                android.os.Build.getSerial()
+            } else {
+                @Suppress("DEPRECATION") Build.SERIAL
+            }
+            if (serial.isNotBlank() && serial != Build.UNKNOWN) json.put("serial_number", serial)
+        }
+        runCatching {
+            val tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as? android.telephony.TelephonyManager
+            if (tm != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    runCatching { tm.imei?.let { if (it.isNotBlank()) json.put("imei", it) } }
+                }
+                tm.simOperatorName?.takeIf { it.isNotBlank() }?.let { json.put("sim_operator", it) }
+            }
+        }
+
         return json
     }
 

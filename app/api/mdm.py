@@ -20,6 +20,7 @@ from app.schemas.mdm import (
     MdmSettingsUpdate,
     MdmAgentInfo,
     MdmAgentRolloutResult,
+    MdmBroadcastResult,
     MdmLibraryApp,
     MdmProvisioning,
     MdmCheckinRequest,
@@ -300,6 +301,18 @@ def create_mdm_router(service: MdmService) -> APIRouter:
     ) -> MdmAgentRolloutResult:
         try:
             return service.rollout_agent_update()
+        except MdmValidationError as exc:
+            raise _handle(exc)
+
+    @router.post("/broadcast", response_model=MdmBroadcastResult)
+    async def broadcast(
+        data: MdmCommandCreate,
+        salon_id: Optional[str] = None,
+        current=Depends(require_permission("mdm")),
+    ) -> MdmBroadcastResult:
+        """Одна команда сразу всем телефонам (или всем в салоне ?salon_id=...)."""
+        try:
+            return service.broadcast_command(data, salon_id)
         except MdmValidationError as exc:
             raise _handle(exc)
 

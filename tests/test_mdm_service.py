@@ -764,3 +764,50 @@ def test_new_utility_commands_validate(service):
 
     # kiosk_exit не требует параметров.
     assert service.queue_command(device.id, MdmCommandCreate(type="kiosk_exit"))["type"] == "kiosk_exit"
+
+
+def test_wifi_and_terminal_commands_validate(service):
+    device, _ = enroll(service)
+
+    with pytest.raises(MdmValidationError, match="add_wifi_requires_ssid"):
+        service.queue_command(device.id, MdmCommandCreate(type="add_wifi", params={}))
+    with pytest.raises(MdmValidationError, match="set_time_requires_epoch_ms"):
+        service.queue_command(device.id, MdmCommandCreate(type="set_time", params={}))
+
+    cmd = service.queue_command(
+        device.id, MdmCommandCreate(type="add_wifi", params={"ssid": "Salon", "password": "secret"})
+    )
+    assert cmd["params"]["ssid"] == "Salon"
+    assert cmd["params"]["hidden"] is False
+
+    assert service.queue_command(
+        device.id, MdmCommandCreate(type="set_stay_awake", params={"enabled": 1})
+    )["params"]["enabled"] is True
+
+
+def test_broadcast_queues_to_all_or_salon(service):
+    a, _ = service.enroll(MdmEnrollRequest(device_id="phone-a"))
+    b, _ = service.enroll(MdmEnrollRequest(device_id="phone-b"))
+    service.update_device(a.id, MdmDeviceUpdate(salon_id="s1"))
+    service.update_device(b.id, MdmDeviceUpdate(salon_id="s2"))
+
+    res = service.broadcast_command(MdmCommandCreate(type="lock"))
+    assert res.queued == 2 and res.total == 2
+
+    only_s1 = service.broadcast_command(MdmCommandCreate(type="lock"), salon_id="s1")
+    assert only_s1.queued == 1 and only_s1.total == 1
+
+    # Кривая команда не уезжает никому: валидация до постановки.
+    with pytest.raises(MdmValidationError):
+        service.broadcast_command(MdmCommandCreate(type="add_wifi", params={}))
+
+
+def test_checkin_stores_hardware_inventory(service):
+    device, _ = enroll(service)
+    updated = service.checkin(
+        {"id": device.id},
+        MdmCheckinRequest(serial_number="ABC123", imei="356938035643809", sim_operator="MTS"),
+    )
+    assert updated.serial_number == "ABC123"
+    assert updated.imei == "356938035643809"
+    assert updated.sim_operator == "MTS"

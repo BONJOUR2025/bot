@@ -109,6 +109,32 @@ object DeviceActions {
         "failed" to (e.message ?: "не удалось")
     }
 
+    /** Не гасить экран при зарядке — для терминала на подставке. */
+    fun setStayAwake(ctx: Context, enabled: Boolean): Pair<String, String?> = try {
+        // BatteryManager.BATTERY_PLUGGED_* маской: AC|USB|WIRELESS = 1|2|4 = 7.
+        val value = if (enabled) "7" else "0"
+        Dpm.manager(ctx).setGlobalSetting(Dpm.admin(ctx), "stay_on_while_plugged_in", value)
+        "done" to (if (enabled) "экран не гаснет при зарядке" else "как обычно")
+    } catch (e: Exception) {
+        "failed" to (e.message ?: "не удалось")
+    }
+
+    /** Скрыть/показать строку состояния (для киоска). */
+    fun setStatusBar(ctx: Context, disabled: Boolean): Pair<String, String?> = try {
+        Dpm.manager(ctx).setStatusBarDisabled(Dpm.admin(ctx), disabled)
+        "done" to (if (disabled) "скрыта" else "показана")
+    } catch (e: Exception) {
+        "failed" to (e.message ?: "не удалось")
+    }
+
+    /** Выставить точное время. */
+    fun setTime(ctx: Context, epochMs: Long): Pair<String, String?> = try {
+        Dpm.manager(ctx).setTime(Dpm.admin(ctx), epochMs)
+        "done" to null
+    } catch (e: Exception) {
+        "failed" to (e.message ?: "не удалось")
+    }
+
     /** Установлено ли приложение. */
     fun isInstalled(ctx: Context, pkg: String): Boolean = try {
         ctx.packageManager.getPackageInfo(pkg, 0)
