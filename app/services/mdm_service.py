@@ -341,7 +341,7 @@ class MdmService:
         for field in (
             "storage_total_mb", "storage_free_mb", "ram_total_mb", "network",
             "wifi_ssid", "ip_address", "uptime_seconds", "secure_lock",
-            "can_reset_password", "serial_number", "imei", "sim_operator",
+            "can_reset_password", "screen_on", "serial_number", "imei", "sim_operator",
         ):
             value = getattr(data, field)
             if value is not None:

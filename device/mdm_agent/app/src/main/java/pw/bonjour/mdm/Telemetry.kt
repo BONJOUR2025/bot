@@ -49,6 +49,13 @@ object Telemetry {
         // заранее: выяснять в момент, когда сотрудник заперся снаружи, поздно.
         runCatching { json.put("can_reset_password", ScreenLock.tokenActive(ctx)) }
 
+        // Горит ли экран. Единственный способ проверить со стороны, что побудка
+        // сработала: сама команда может лишь запустить активность.
+        runCatching {
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            json.put("screen_on", pm.isInteractive)
+        }
+
         // Инвентарь железа: серийник, IMEI, оператор SIM. Всё лучшим усилием —
         // на части прошивок и без нужных разрешений вернётся пусто.
         runCatching {

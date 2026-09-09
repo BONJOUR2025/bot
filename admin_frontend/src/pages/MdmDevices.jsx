@@ -1268,6 +1268,12 @@ export default function MdmDevices() {
                   <dd>{fmtUptime(selected.uptime_seconds)}</dd>
                 </div>
                 <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)]">Экран</dt>
+                  <dd>
+                    {selected.screen_on == null ? '—' : selected.screen_on ? 'горит' : 'погашен'}
+                  </dd>
+                </div>
+                <div>
                   <dt className="text-xs text-[color:var(--color-text-muted)]">Экран защищён</dt>
                   <dd className={selected.secure_lock === false ? 'text-amber-600' : ''}>
                     {selected.secure_lock == null ? '—' : selected.secure_lock ? 'да' : 'нет пароля'}

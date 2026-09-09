@@ -81,6 +81,9 @@ class WakeActivity : Activity() {
     companion object {
         private const val EXTRA_HOME = "home"
 
+        /** Сколько ждать перед проверкой: активность стартует не мгновенно. */
+        private const val WAKE_CHECK_DELAY_MS = 1500L
+
         /** @param keepSeconds сколько удерживать экран включённым.
          *  @param showHome показать рабочий стол вместо того, что было открыто. */
         fun wake(ctx: Context, keepSeconds: Int, showHome: Boolean): Pair<String, String?> = try {
@@ -102,7 +105,24 @@ class WakeActivity : Activity() {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     .putExtra(EXTRA_HOME, showHome)
             )
-            "done" to (if (showHome) "экран включён, показан рабочий стол" else "экран включён")
+
+            // Проверяем, а не рапортуем. startActivity молчит о том, зажёгся ли
+            // экран на самом деле: он лишь ставит активность в очередь. Отчёт
+            // «экран включён» без проверки был бы догадкой, выданной за факт, —
+            // а оператор по нему решает, ехать ли в салон.
+            Thread.sleep(WAKE_CHECK_DELAY_MS)
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+            @Suppress("DEPRECATION")
+            val awake = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                pm.isInteractive
+            } else {
+                pm.isScreenOn
+            }
+            if (awake) {
+                "done" to (if (showHome) "экран включён, показан рабочий стол" else "экран включён")
+            } else {
+                "failed" to "экран не включился"
+            }
         } catch (e: Exception) {
             "failed" to (e.javaClass.simpleName + ": " + e.message)
         }

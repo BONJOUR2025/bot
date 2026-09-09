@@ -176,6 +176,7 @@ class MdmCheckinRequest(BaseModel):
     # Выдан ли телефону действующий токен сброса: без него удалённо сменить
     # или снять код нельзя, и знать это надо заранее.
     can_reset_password: Optional[bool] = None
+    screen_on: Optional[bool] = None  # горит ли экран прямо сейчас
     serial_number: Optional[str] = None
     imei: Optional[str] = None
     sim_operator: Optional[str] = None
@@ -279,6 +280,7 @@ class MdmDevice(BaseModel):
     uptime_seconds: Optional[int] = None
     secure_lock: Optional[bool] = None
     can_reset_password: Optional[bool] = None
+    screen_on: Optional[bool] = None
     serial_number: Optional[str] = None
     imei: Optional[str] = None
     sim_operator: Optional[str] = None

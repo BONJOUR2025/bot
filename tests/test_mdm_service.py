@@ -1147,3 +1147,19 @@ def test_wake_shows_home_by_default(service):
 
     assert cmd["params"]["show_home"] is True
     assert cmd["params"]["seconds"] == 60
+
+
+def test_checkin_stores_screen_state(service):
+    """Состояние экрана должно доезжать до карточки.
+
+    Команда побудки может только запустить активность и не знает, зажёгся ли
+    экран на самом деле. Проверить это со стороны можно единственным способом —
+    спросить телефон, и ответ должен быть виден в панели.
+    """
+    device, _ = enroll(service)
+
+    service.checkin(service._repo.get(device.id), MdmCheckinRequest(screen_on=True))
+    assert service.get_device(device.id).screen_on is True
+
+    service.checkin(service._repo.get(device.id), MdmCheckinRequest(screen_on=False))
+    assert service.get_device(device.id).screen_on is False
