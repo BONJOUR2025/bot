@@ -76,13 +76,23 @@ object CommandPoller {
         body.optInt("hold_seconds", 0).takeIf { it > 0 }?.let { Prefs.setHoldSeconds(ctx, it) }
         body.optInt("command_poll_seconds", 0).takeIf { it > 0 }?.let { Prefs.setPollSeconds(ctx, it) }
 
-        runCommands(ctx, body.optJSONArray("commands") ?: JSONArray())
+        val commands = body.optJSONArray("commands") ?: JSONArray()
+        runCommands(ctx, commands)
 
         // Политику сменили из панели — не ждём своего чек-ина, идём за ней
         // сразу: иначе запрет вступал бы в силу через интервал чек-ина, тогда
         // как команда доезжает за секунды, и разница выглядела бы поломкой.
         val version = body.optInt("policy_version", 0)
-        if (version > 0 && version != Prefs.appliedVersion(ctx)) {
+        val policyChanged = version > 0 && version != Prefs.appliedVersion(ctx)
+
+        // Отчитываемся сразу и после любой выполненной команды. Команда меняет
+        // состояние телефона — код экрана, громкость, состав приложений, — а
+        // телеметрия едет только с полным чек-ином, раз в десять минут. Без
+        // этого оператор нажимал бы «снять код», получал «выполнено» и ещё
+        // десять минут видел в карточке прежнее «экран защищён»: панель врала
+        // бы ровно про то, что он только что сделал. Команды приходят по воле
+        // оператора и потому редки — лишним трафиком это не станет.
+        if (commands.length() > 0 || policyChanged) {
             runCatching { Checkin.run(ctx) }
         }
 
