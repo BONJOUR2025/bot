@@ -40,6 +40,21 @@ class MdmRepository:
 
     # --- чтение ---------------------------------------------------------
 
+    def marker(self) -> tuple[float, int]:
+        """Дешёвый признак «файл менялся»: время правки и размер.
+
+        Нужен длинному опросу: он ждёт команду в цикле и не может перечитывать
+        весь JSON по нескольку раз в секунду на каждый висящий телефон. Команду
+        мог положить и другой процесс (bot-main исполняет расписания), поэтому
+        признак берётся с диска, а не из памяти. Размер идёт рядом со временем
+        на случай двух правок внутри одного тика файловой системы.
+        """
+        try:
+            stat = os.stat(self._file)
+            return (stat.st_mtime, stat.st_size)
+        except OSError:
+            return (0.0, 0)
+
     def list(self) -> List[Dict[str, Any]]:
         self._data = self._load()
         return sorted(self._data, key=lambda d: str(d.get("last_seen_at") or ""), reverse=True)

@@ -84,6 +84,26 @@ def current_command_poll_seconds() -> int:
     return max(MIN_POLL_SECONDS, min(MAX_POLL_SECONDS, value))
 
 
+# Границы удержания длинного опроса. Меньше пяти секунд — это уже обычный
+# опрос с его переподключениями, больше пятидесяти — соединение успевает
+# порваться в туннеле или у оператора, и удержание оборачивается лишней
+# работой вместо экономии.
+MIN_LONG_POLL_SECONDS = 5
+MAX_LONG_POLL_SECONDS = 50
+
+
+def current_long_poll_seconds() -> int:
+    """Сколько держать запрос длинного опроса, свежим чтением из config.json."""
+    value = settings.mdm_long_poll_seconds
+    try:
+        data = json.loads(Path("config.json").read_text(encoding="utf-8"))
+        if (raw := data.get("MDM_LONG_POLL_SECONDS")) is not None:
+            value = int(raw)
+    except Exception:
+        pass
+    return max(MIN_LONG_POLL_SECONDS, min(MAX_LONG_POLL_SECONDS, value))
+
+
 def current_agent_signature_checksum() -> str:
     """Отпечаток ключа подписи, свежим чтением из config.json."""
     try:
@@ -320,6 +340,19 @@ class MdmService:
 
     def take_pending_commands(self, device_id: str) -> list[dict[str, Any]]:
         return self._repo.take_pending(device_id)
+
+    def queue_marker(self) -> tuple[float, int]:
+        """Признак «очередь могла измениться» для длинного опроса."""
+        return self._repo.marker()
+
+    def mark_seen(self, device_id: str) -> None:
+        """Отметить телефон живым, не собирая с него отчёт.
+
+        Длинный опрос приходит куда чаще полного чек-ина, и именно он теперь
+        доказывает, что телефон на связи: без этой отметки сторож считал бы
+        замолчавшим аппарат, который на самом деле висит на открытом запросе.
+        """
+        self._repo.upsert(str(device_id), {"last_seen_at": _now()})
 
     def find_by_token(self, token: str) -> Optional[dict[str, Any]]:
         return self._repo.get_by_token(token)

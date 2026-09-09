@@ -17,11 +17,19 @@ object Api {
 
     private const val TIMEOUT_MS = 20_000
 
-    fun post(url: String, headers: Map<String, String>, payload: JSONObject): Response {
+    /** @param readTimeoutMs ожидание ответа. Длинный опрос молчит, пока сервер
+     *  держит запрос, поэтому ему нужен запас поверх времени удержания —
+     *  обычные 20 секунд оборвали бы его на середине ожидания. */
+    fun post(
+        url: String,
+        headers: Map<String, String>,
+        payload: JSONObject,
+        readTimeoutMs: Int = TIMEOUT_MS,
+    ): Response {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
+            readTimeout = readTimeoutMs
             doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             headers.forEach { (key, value) -> setRequestProperty(key, value) }

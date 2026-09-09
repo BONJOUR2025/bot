@@ -38,6 +38,11 @@ class AgentService : Service() {
         if (!running) {
             running = true
             Thread({ loop() }, "mdm-agent").start()
+            // Отдельный поток: чек-ин — тяжёлый отчёт раз в несколько минут, а
+            // опрос команд висит на открытом запросе почти всё время. В одном
+            // потоке одно ждало бы другого, и отклик снова упёрся бы в интервал
+            // чек-ина, ради ухода от которого опрос и заводился.
+            Thread({ pollLoop() }, "mdm-poll").start()
         }
         // START_STICKY: если процесс всё же убьют, система поднимет сервис снова.
         return START_STICKY
@@ -59,6 +64,21 @@ class AgentService : Service() {
             // вернуться в строй быстрее, но не молотим впустую.
             val seconds = if (ok) Prefs.pollSeconds(applicationContext) else 30
             sleep(seconds)
+        }
+    }
+
+    /** Цикл длинного опроса. Заход сам ждёт на сервере, поэтому своей паузы
+     *  между удачными заходами здесь нет — только откат после неудач. */
+    private fun pollLoop() {
+        var failures = 0
+        while (running) {
+            val wait = try {
+                CommandPoller.once(applicationContext, failures)
+            } catch (e: Exception) {
+                60
+            }
+            failures = if (wait == 0) 0 else failures + 1
+            sleep(wait)
         }
     }
 

@@ -53,6 +53,14 @@ object Prefs {
     fun setPollSeconds(ctx: Context, value: Int) =
         sp(ctx).edit().putInt("poll_seconds", value.coerceIn(30, 3600)).apply()
 
+    /** Сколько сервер держит длинный опрос. Помним между запусками, чтобы
+     *  после перезагрузки телефон сразу ждал правильное время, а не подбирал
+     *  его заново первым ответом. */
+    fun holdSeconds(ctx: Context): Int = sp(ctx).getInt("hold_seconds", CommandPoller.DEFAULT_HOLD_SECONDS)
+
+    fun setHoldSeconds(ctx: Context, value: Int) =
+        sp(ctx).edit().putInt("hold_seconds", value.coerceIn(5, 50)).apply()
+
     /** Отпечаток списка приложений, который сервер уже принял. Пока совпадает
      *  с текущим, полный список гонять незачем. */
     fun reportedAppsHash(ctx: Context): String = sp(ctx).getString("apps_hash", "") ?: ""

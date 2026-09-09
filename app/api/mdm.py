@@ -8,7 +8,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Header, HTTPException, UploadFile
@@ -36,6 +38,8 @@ from app.schemas.mdm import (
     MdmEnrollmentInfo,
     MdmLostMode,
     MdmPolicy,
+    MdmPollRequest,
+    MdmPollResponse,
 )
 from app.services.mdm_service import (
     MdmService,
@@ -44,8 +48,15 @@ from app.services.mdm_service import (
     current_upload_token,
     current_command_poll_seconds,
     current_enroll_key,
+    current_long_poll_seconds,
     get_mdm_service,
 )
+
+# Такт ожидания в длинном опросе: с ним отклик упирается в полсекунды, а
+# сторожевая проверка очереди целиком делается раз в POLL_SAFETY_TICKS тактов —
+# на случай правки файла, не заметной по времени и размеру.
+POLL_TICK_SECONDS = 0.5
+POLL_SAFETY_TICKS = 10
 
 # Как часто агент выходит на связь. 15 минут — минимальный период, который
 # WorkManager на Android гарантирует; просить чаще бессмысленно, система всё
@@ -187,6 +198,50 @@ def create_mdm_device_router(service: MdmService) -> APIRouter:
             policy=updated.policy,
             commands=[MdmCommand.model_validate(c) for c in pending],
             checkin_interval_minutes=CHECKIN_INTERVAL_MINUTES,
+            command_poll_seconds=current_command_poll_seconds(),
+        )
+
+    @router.post("/poll", response_model=MdmPollResponse)
+    async def poll_commands(
+        data: MdmPollRequest = Body(default=MdmPollRequest()),
+        device: dict[str, Any] = Depends(_authenticated_device),
+    ) -> MdmPollResponse:
+        """Длинный опрос: держим запрос, пока не появится команда.
+
+        Телефон висит на одном открытом запросе вместо того, чтобы будить радио
+        раз в две минуты, а команда уходит в него в тот же момент, когда её
+        поставили, — отсюда отклик в секунды. Ждём в цикле по маркеру файла:
+        команду мог положить и соседний процесс (bot-main исполняет расписания),
+        поэтому внутрипроцессного события мало.
+        """
+        device_id = str(device.get("id"))
+        if data.acks:
+            service.ack_commands(device, data.acks)
+        if data.applied_policy_version is not None:
+            service.set_applied_version(device, data.applied_policy_version)
+        service.mark_seen(device_id)
+
+        hold = current_long_poll_seconds()
+        deadline = time.monotonic() + hold
+        marker = service.queue_marker()
+        commands = service.take_pending_commands(device_id)
+        # Страховка на случай, если правку файла не видно по маркеру: раз в
+        # POLL_SAFETY_TICKS всё равно смотрим очередь целиком.
+        tick = 0
+        while not commands and time.monotonic() < deadline:
+            await asyncio.sleep(POLL_TICK_SECONDS)
+            tick += 1
+            current = service.queue_marker()
+            if current == marker and tick % POLL_SAFETY_TICKS:
+                continue
+            marker = current
+            commands = service.take_pending_commands(device_id)
+
+        fresh = service.get_device(device_id)
+        return MdmPollResponse(
+            commands=[MdmCommand.model_validate(c) for c in commands],
+            policy_version=fresh.policy_version,
+            hold_seconds=hold,
             command_poll_seconds=current_command_poll_seconds(),
         )
 

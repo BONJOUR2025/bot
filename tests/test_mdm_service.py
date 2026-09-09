@@ -206,7 +206,7 @@ def test_command_poll_seconds_is_clamped(tmp_path, monkeypatch):
 
     # Нечитаемый конфиг — не повод падать: остаётся значение по умолчанию.
     (tmp_path / "config.json").write_text('{сломано', encoding="utf-8")
-    assert mdm_service.current_command_poll_seconds() == 120
+    assert mdm_service.current_command_poll_seconds() == 600
 
 
 def test_token_is_never_exposed_in_device_schema(service):
@@ -848,3 +848,54 @@ def test_schedules_add_validate_and_run(service, tmp_path, monkeypatch):
 
     svc.delete_schedule(sched.id)
     assert svc.list_schedules() == []
+
+
+def test_queue_marker_changes_when_command_queued(service):
+    """Маркер очереди должен ловить постановку команды.
+
+    На нём стоит весь длинный опрос: не заметив правку файла, ждущий запрос
+    провисел бы полное удержание с командой, уже лежащей в очереди.
+    """
+    device, _ = enroll(service)
+    before = service.queue_marker()
+
+    service.queue_command(device.id, MdmCommandCreate(type="reboot"))
+
+    assert service.queue_marker() != before
+
+
+def test_mark_seen_updates_last_seen_without_touching_report(service):
+    """Отметка живости не должна подменять собой отчёт.
+
+    Длинный опрос приходит куда чаще чек-ина и доказывает, что телефон на
+    связи, но телеметрию он не несёт — и не должен обнулять уже собранную.
+    """
+    device, _ = enroll(service)
+    service.checkin(
+        service._repo.get(device.id),
+        MdmCheckinRequest(battery=77, agent_version="0.8.0"),
+    )
+    before = service.get_device(device.id)
+
+    service.mark_seen(device.id)
+    after = service.get_device(device.id)
+
+    assert after.last_seen_at >= before.last_seen_at
+    assert after.battery == 77
+    assert after.agent_version == "0.8.0"
+
+
+def test_long_poll_seconds_stays_within_bounds(monkeypatch, tmp_path):
+    """Мусор в конфиге не должен превращаться в вечно висящий запрос."""
+    from app.services import mdm_service as module
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.json").write_text(
+        json.dumps({"MDM_LONG_POLL_SECONDS": 9999}), encoding="utf-8"
+    )
+    assert module.current_long_poll_seconds() == module.MAX_LONG_POLL_SECONDS
+
+    (tmp_path / "config.json").write_text(
+        json.dumps({"MDM_LONG_POLL_SECONDS": 0}), encoding="utf-8"
+    )
+    assert module.current_long_poll_seconds() == module.MIN_LONG_POLL_SECONDS

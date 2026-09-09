@@ -199,6 +199,33 @@ class MdmAckRequest(BaseModel):
     applied_policy_version: Optional[int] = None
 
 
+class MdmPollRequest(BaseModel):
+    """Длинный опрос: телефон отчитывается о сделанном и ждёт новое.
+
+    Результаты команд едут прямо здесь, а не отдельной ручкой: агент исполняет
+    команду и тут же снова встаёт на ожидание, так что иначе на каждую команду
+    уходило бы два запроса вместо одного.
+    """
+
+    acks: list[MdmCommandAck] = Field(default_factory=list)
+    applied_policy_version: Optional[int] = None
+
+
+class MdmPollResponse(BaseModel):
+    """Ответ длинного опроса — пустой, если за время ожидания ничего не пришло.
+
+    Версия политики нужна, чтобы телефон заметил её смену за секунды: увидев
+    чужой номер, агент сам сходит на полный чек-ин, не дожидаясь своего.
+    """
+
+    commands: list[MdmCommand] = Field(default_factory=list)
+    policy_version: int
+    # Сколько сервер держал запрос и сколько просит держать дальше: частоту
+    # можно менять с сервера, не пересобирая APK.
+    hold_seconds: int
+    command_poll_seconds: int = 120
+
+
 class MdmCheckinResponse(BaseModel):
     policy_version: int
     policy: MdmPolicy
