@@ -28,6 +28,11 @@ object Kiosk {
                 return null
             }
 
+            // Включаем компонент домашнего экрана только на время киоска: иначе
+            // он остаётся кандидатом на «домой» и после выхода телефон спрашивает,
+            // какой лаунчер выбрать.
+            setKioskHomeEnabled(ctx, true)
+
             // Разрешаем закрепление целевому приложению, дополнительным и самому
             // агенту (чтобы он мог работать и, если надо, показать свой экран).
             val allowed = linkedSetOf(ctx.packageName)
@@ -68,6 +73,25 @@ object Kiosk {
         runCatching { dpm.clearPackagePersistentPreferredActivities(admin, ctx.packageName) }
         runCatching { dpm.setLockTaskPackages(admin, emptyArray()) }
         runCatching { dpm.setLockTaskFeatures(admin, DevicePolicyManager.LOCK_TASK_FEATURE_NONE) }
+        setKioskHomeEnabled(ctx, false)
+    }
+
+    /** Домашний экран киоска — кандидат на HOME только когда киоск включён.
+     *  Вне киоска компонент выключен, чтобы система не предлагала выбрать
+     *  лаунчер после выхода. */
+    private fun setKioskHomeEnabled(ctx: Context, enabled: Boolean) {
+        val state = if (enabled) {
+            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        } else {
+            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        }
+        runCatching {
+            ctx.packageManager.setComponentEnabledSetting(
+                ComponentName(ctx, KioskActivity::class.java),
+                state,
+                android.content.pm.PackageManager.DONT_KILL_APP
+            )
+        }
     }
 
     /** Аварийный выход по команде: снять киоск и погасить политику локально,

@@ -86,6 +86,7 @@
         <activity
             android:name=".KioskActivity"
             android:exported="true"
+            android:enabled="false"
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.NoDisplay">
