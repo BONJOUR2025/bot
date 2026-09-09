@@ -972,3 +972,30 @@ def test_mark_seen_survives_unreadable_timestamp(service):
     service.mark_seen(device.id)
 
     assert service.get_device(device.id).last_seen_at != "не дата"
+
+
+def test_found_mode_undoes_what_lost_mode_left_on(service):
+    """Отбой должен снимать ровно то, что само не погаснет.
+
+    Сигнал и сообщение на экране остаются висеть до отдельной команды —
+    разбирать их по одной пришлось бы как раз в спешке. Блокировку экрана
+    отбой не трогает: «разблокировать удалённо» сняло бы защиту с найденного
+    телефона, ровно наоборот тому, зачем режим включали.
+    """
+    device, _ = enroll(service)
+    service.lost_mode(device.id, "Верните в салон")
+    assert service.get_device(device.id).lock_message == "Верните в салон"
+
+    cmds = service.found_mode(device.id)
+
+    assert [c["type"] for c in cmds] == ["stop_ring", "message"]
+    assert cmds[1]["params"]["text"] == ""
+    # Карточка не должна дальше показывать снятое сообщение.
+    assert service.get_device(device.id).lock_message is None
+    # Разблокировки среди команд нет и быть не должно.
+    assert "unlock" not in [c["type"] for c in cmds]
+
+
+def test_found_mode_requires_existing_device(service):
+    with pytest.raises(MdmValidationError, match="device_not_found"):
+        service.found_mode("нет-такого")

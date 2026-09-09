@@ -6,7 +6,7 @@ import {
   Gauge, ShieldBan, AppWindow, History as HistoryIcon,
   Volume2, MessageSquareWarning, HardDrive, Wifi, Cpu, Clock, EyeOff, Eraser,
   MonitorSmartphone, Play, KeyRound as KeyIcon, Sun, Radio, Send,
-  Siren, CalendarClock, Plus,
+  Siren, CalendarClock, Plus, VolumeX, Moon, BellOff,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -452,6 +452,23 @@ export default function MdmDevices() {
     }
   }
 
+  /** Отбой: телефон нашёлся. Снимает то, что режим пропажи оставил включённым
+   *  и что само не погаснет, — сигнал и сообщение на экране. Разбирать это по
+   *  одной команде пришлось бы как раз в спешке. */
+  async function foundMode() {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await api.post(`mdm/devices/${selected.id}/found-mode`);
+      toast('Отбой: сигнал выключен, сообщение снято', 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function cancelCommand(commandId) {
     if (!selected) return;
     setBusy(true);
@@ -511,12 +528,14 @@ export default function MdmDevices() {
     sendCommand('launch_app', { package: pkg.trim() });
   }
 
-  function grantPermission() {
-    const pkg = window.prompt('Имя пакета, напр. ru.agbis.AgbisPhoto');
+  /** @param grant true — выдать разрешение, false — отозвать. */
+  function grantPermission(grant) {
+    const what = grant ? 'выдать' : 'отозвать';
+    const pkg = window.prompt(`Имя пакета, которому ${what} разрешение, напр. ru.agbis.AgbisPhoto`);
     if (!pkg) return;
     const perm = window.prompt('Разрешение, напр. android.permission.CAMERA');
     if (!perm) return;
-    sendCommand('grant_permission', { package: pkg.trim(), permission: perm.trim(), grant: true });
+    sendCommand('grant_permission', { package: pkg.trim(), permission: perm.trim(), grant });
   }
 
   async function sendCommand(type, params = {}) {
@@ -555,6 +574,14 @@ export default function MdmDevices() {
 
   function ringPhone() {
     sendCommand('ring', { seconds: 30 });
+  }
+
+  function stopRing() {
+    sendCommand('stop_ring');
+  }
+
+  function clearLockMessage() {
+    sendCommand('message', { text: '' });
   }
 
   function setLockMessage() {
@@ -1301,6 +1328,10 @@ export default function MdmDevices() {
                     onClick={ringPhone}>
                     <Volume2 size={14} /> Звук поиска
                   </button>
+                  <button type="button" className="btn btn--secondary flex items-center gap-1.5" disabled={busy}
+                    onClick={stopRing}>
+                    <VolumeX size={14} /> Выключить сигнал
+                  </button>
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={setLockMessage}>
                     <MessageSquareWarning size={14} /> Сообщение на экран
@@ -1314,8 +1345,12 @@ export default function MdmDevices() {
                     <Play size={14} /> Открыть приложение
                   </button>
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
-                    onClick={grantPermission}>
+                    onClick={() => grantPermission(true)}>
                     <KeyIcon size={14} /> Выдать разрешение
+                  </button>
+                  <button type="button" className="btn btn--secondary flex items-center gap-1.5" disabled={busy}
+                    onClick={() => grantPermission(false)}>
+                    <KeyIcon size={14} /> Отозвать разрешение
                   </button>
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={addWifi}>
@@ -1329,14 +1364,29 @@ export default function MdmDevices() {
                     onClick={() => toggleStayAwake(true)}>
                     <Sun size={14} /> Не гасить при зарядке
                   </button>
+                  <button type="button" className="btn btn--secondary flex items-center gap-1.5" disabled={busy}
+                    onClick={() => toggleStayAwake(false)}>
+                    <Moon size={14} /> Гасить как обычно
+                  </button>
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={() => toggleStatusBar(true)}>
                     <Radio size={14} /> Скрыть строку состояния
                   </button>
+                  <button type="button" className="btn btn--secondary flex items-center gap-1.5" disabled={busy}
+                    onClick={() => toggleStatusBar(false)}>
+                    <Radio size={14} /> Показать строку состояния
+                  </button>
                 </div>
+                {/* Снять сообщение можно ровно там, где видно, что оно висит:
+                    отдельной кнопки в общем ряду для этого мало — она нужна
+                    только когда сообщение вообще есть. */}
                 {selected.lock_message && (
-                  <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
-                    На экране блокировки: «{selected.lock_message}»
+                  <p className="text-xs text-[color:var(--color-text-muted)] mt-2 flex items-center gap-2 flex-wrap">
+                    <span>На экране блокировки: «{selected.lock_message}»</span>
+                    <button type="button" className="btn btn--ghost btn--sm" disabled={busy}
+                      onClick={clearLockMessage}>
+                      Снять сообщение
+                    </button>
                   </p>
                 )}
                 <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
@@ -1648,13 +1698,19 @@ export default function MdmDevices() {
             )
           )}
 
-          <div className="border-t border-[color:var(--color-border)] pt-3">
+          <div className="border-t border-[color:var(--color-border)] pt-3 flex flex-wrap items-center gap-2">
             <button type="button" className="btn btn--danger flex items-center gap-1.5"
               disabled={busy} onClick={lostMode}>
               <Siren size={14} /> Режим пропажи
             </button>
-            <span className="text-xs text-[color:var(--color-text-muted)] ml-2">
-              заблокировать + сообщение + сигнал + локация + снимок, одной кнопкой
+            <button type="button" className="btn btn--secondary flex items-center gap-1.5"
+              disabled={busy} onClick={foundMode}>
+              <BellOff size={14} /> Отбой — нашёлся
+            </button>
+            <span className="text-xs text-[color:var(--color-text-muted)] basis-full">
+              Пропажа: заблокировать + сообщение + сигнал + локация + снимок, одной кнопкой.
+              Отбой выключает сигнал и снимает сообщение; блокировка экрана остаётся —
+              она снимается обычным PIN-ом.
             </span>
           </div>
 

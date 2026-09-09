@@ -609,6 +609,24 @@ class MdmService:
         ]
         return [self.queue_command(device_id, step) for step in steps]
 
+    def found_mode(self, device_id: str) -> list[dict[str, Any]]:
+        """Отбой пропажи: телефон нашёлся.
+
+        Снимает ровно то, что режим пропажи оставил включённым и что само не
+        погаснет: сигнал и сообщение на экране блокировки. Разбирать это руками
+        по одной команде — тот случай, когда обратное действие сложнее прямого,
+        а нужно оно в спешке.
+
+        Блокировку экрана не трогаем: она снимается тем же PIN-ом, что и всегда,
+        и «разблокировать удалённо» означало бы снять защиту с найденного
+        телефона — ровно наоборот тому, зачем режим включали.
+        """
+        steps = [
+            MdmCommandCreate(type="stop_ring"),
+            MdmCommandCreate(type="message", params={"text": ""}),
+        ]
+        return [self.queue_command(device_id, step) for step in steps]
+
     def broadcast_command(self, data: MdmCommandCreate, salon_id: Optional[str] = None) -> "MdmBroadcastResult":
         """Поставить команду сразу всем телефонам (или всем в одном салоне).
 

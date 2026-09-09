@@ -508,6 +508,18 @@ def create_mdm_router(service: MdmService) -> APIRouter:
             raise _handle(exc)
         return [MdmCommand.model_validate(c) for c in cmds]
 
+    @router.post("/devices/{device_id}/found-mode", response_model=list[MdmCommand])
+    async def found_mode(
+        device_id: str,
+        current=Depends(require_permission("mdm")),
+    ) -> list[MdmCommand]:
+        """Отбой пропажи: выключить сигнал и снять сообщение с экрана."""
+        try:
+            cmds = service.found_mode(device_id)
+        except MdmValidationError as exc:
+            raise _handle(exc)
+        return [MdmCommand.model_validate(c) for c in cmds]
+
     @router.delete("/devices/{device_id}")
     async def delete_device(
         device_id: str,
