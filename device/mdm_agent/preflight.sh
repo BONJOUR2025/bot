@@ -12,6 +12,9 @@
 #
 # Запуск (из Git Bash):
 #   bash /c/deploy/bot-repo/device/mdm_agent/preflight.sh
+#
+# Взять телефон под управление — соседний adopt.sh (он же выключает
+# Play Защиту, которая по воздуху не гасится).
 set -u
 
 ADB="${ADB:-/c/deploy/platform-tools/adb.exe}"
