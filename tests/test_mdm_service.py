@@ -811,3 +811,40 @@ def test_checkin_stores_hardware_inventory(service):
     assert updated.serial_number == "ABC123"
     assert updated.imei == "356938035643809"
     assert updated.sim_operator == "MTS"
+
+
+def test_lost_mode_queues_the_sequence(service):
+    device, _ = enroll(service)
+    cmds = service.lost_mode(device.id, "Верните телефон")
+    types = [c["type"] for c in cmds]
+    assert types == ["lock", "message", "ring", "locate", "camera"]
+    assert cmds[1]["params"]["text"] == "Верните телефон"
+
+
+def test_schedules_add_validate_and_run(service, tmp_path, monkeypatch):
+    from app.data.mdm_schedule_repository import MdmScheduleRepository
+    from app.schemas.mdm import MdmScheduleCreate
+
+    svc = MdmService(
+        repo=MdmRepository(file_path=str(tmp_path / "d.json")),
+        schedule_repo=MdmScheduleRepository(file_path=str(tmp_path / "s.json")),
+    )
+    dev, _ = svc.enroll(MdmEnrollRequest(device_id="phone-x"))
+
+    with pytest.raises(MdmValidationError, match="schedule_bad_time"):
+        svc.add_schedule(MdmScheduleCreate(time="99:99", command_type="reboot"))
+
+    sched = svc.add_schedule(MdmScheduleCreate(time="04:30", command_type="reboot", target="all"))
+    assert sched.id and sched.time == "04:30"
+    assert len(svc.list_schedules()) == 1
+
+    # Не время — не срабатывает.
+    assert svc.run_due_schedules("04:29", "2026-09-09") == 0
+    # Время — срабатывает, команда встаёт телефону.
+    assert svc.run_due_schedules("04:30", "2026-09-09") == 1
+    assert svc.get_device(dev.id).commands[-1].type == "reboot"
+    # Тот же день второй раз — не повторяется.
+    assert svc.run_due_schedules("04:30", "2026-09-09") == 0
+
+    svc.delete_schedule(sched.id)
+    assert svc.list_schedules() == []

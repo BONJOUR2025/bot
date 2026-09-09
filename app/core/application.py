@@ -384,6 +384,21 @@ def register_jobs(app):
 
     app.job_queue.run_repeating(mdm_watch, interval=10 * 60, first=300)
 
+    @log_job("mdm_scheduler")
+    async def mdm_scheduler(context: ContextTypes.DEFAULT_TYPE):
+        """Расписания команд MDM: раз в минуту проверяем, не настало ли время.
+
+        Время сверяем по Москве — операторы задают его в этом же поясе.
+        """
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from ..services.mdm_service import get_mdm_service
+
+        now = datetime.now(ZoneInfo("Europe/Moscow"))
+        get_mdm_service().run_due_schedules(now.strftime("%H:%M"), now.strftime("%Y-%m-%d"))
+
+    app.job_queue.run_repeating(mdm_scheduler, interval=60, first=30)
+
     @log_job("morning_briefing")
     async def morning_briefing_job(context: ContextTypes.DEFAULT_TYPE):
         from ..services.briefing_service import send_morning_briefing

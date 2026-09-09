@@ -26,6 +26,14 @@ RENOTIFY_HOURS = 6
 # а pydantic лишние ключи из хранилища молча игнорирует.
 ALERT_FIELD = "silence_alerted_at"
 
+# Поле с отпечатком последней тревоги о здоровье — чтобы не слать одно и то же
+# каждые 10 минут. Хранит набор сработавших правил и когда.
+HEALTH_ALERT_FIELD = "health_alerted"
+
+# Пороги здоровья.
+LOW_STORAGE_PERCENT = 10   # свободно меньше — предупредить
+LOW_BATTERY_PERCENT = 15   # заряд ниже — предупредить (телефон на связи, но вот-вот сядет)
+
 
 def _parse(value: Any) -> Optional[datetime]:
     if not value:
@@ -54,6 +62,43 @@ def _silence_text(device: dict[str, Any], now: datetime) -> str:
     return f"• {_title(device)} — молчит {when} (последний раз в {last.astimezone().strftime('%H:%M %d.%m')})"
 
 
+def _check_health(repo, device: dict[str, Any], now: datetime, out: list[str]) -> None:
+    """Собирает поводы для тревоги по одному телефону и гасит повтор.
+
+    Один отпечаток на телефон: пока набор сработавших правил не изменился,
+    заново не тревожим (иначе каждые 10 минут одно и то же). Изменился —
+    сообщаем свежий набор.
+    """
+    problems: list[str] = []
+
+    free = device.get("storage_free_mb")
+    total = device.get("storage_total_mb")
+    if isinstance(free, int) and isinstance(total, int) and total > 0:
+        if free * 100 / total < LOW_STORAGE_PERCENT:
+            problems.append("мало места (" + str(round(free / 1024, 1)) + " ГБ)")
+
+    battery = device.get("battery")
+    if isinstance(battery, int) and battery < LOW_BATTERY_PERCENT:
+        problems.append("низкий заряд (" + str(battery) + "%)")
+
+    if device.get("secure_lock") is False:
+        problems.append("нет пароля на экране")
+
+    if device.get("device_owner") is False:
+        problems.append("агент не владелец устройства")
+
+    key = ",".join(sorted(problems))
+    prev = device.get(HEALTH_ALERT_FIELD)
+    if not problems:
+        if prev:
+            repo.upsert(str(device.get("id")), {HEALTH_ALERT_FIELD: None})
+        return
+    if prev == key:
+        return  # тот же набор проблем уже показан
+    repo.upsert(str(device.get("id")), {HEALTH_ALERT_FIELD: key})
+    out.append("• " + _title(device) + ": " + "; ".join(problems))
+
+
 async def check_and_notify() -> None:
     from app.data.mdm_repository import get_mdm_repository
     from app.services.notify import send_notification
@@ -63,6 +108,7 @@ async def check_and_notify() -> None:
 
     gone: list[dict[str, Any]] = []
     back: list[dict[str, Any]] = []
+    health_alerts: list[str] = []
 
     for device in repo.list():
         device_id = str(device.get("id"))
@@ -80,6 +126,11 @@ async def check_and_notify() -> None:
             back.append(device)
             repo.upsert(device_id, {ALERT_FIELD: None})
 
+        # Проверки здоровья — только для телефонов на связи (молчащие уже
+        # попали в тревогу выше, и их телеметрия устарела).
+        if not silent:
+            _check_health(repo, device, now, health_alerts)
+
     if gone:
         lines = "\n".join(_silence_text(d, now) for d in gone)
         word = "телефон" if len(gone) == 1 else "телефонов"
@@ -89,10 +140,7 @@ async def check_and_notify() -> None:
         # сломанная связь, либо унесённый аппарат, и то и другое требует
         # действий. Префиксы — общая конвенция ленты, см. tests/test_notification_tiers.py.
         await send_notification(
-            f"🛠 <b>СБОЙ · Не выходят на связь: {len(gone)} {word}</b>
-{lines}
-
-"
+            f"🛠 <b>СБОЙ · Не выходят на связь: {len(gone)} {word}</b>\n{lines}\n\n"
             f"Если молчат все сразу — скорее всего дело не в телефонах, а в туннеле."
         )
 

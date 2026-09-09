@@ -19,11 +19,14 @@ from typing import Any, Optional
 
 from app.config import MDM_AGENT_APK_FILE, MDM_APPS_DIR
 from app.data.mdm_repository import MdmRepository, get_mdm_repository
+from app.data.mdm_schedule_repository import MdmScheduleRepository, get_mdm_schedule_repository
 from app.schemas.mdm import (
     MdmAgentInfo,
     MdmAgentRolloutResult,
     MdmLibraryApp,
     MdmProvisioning,
+    MdmSchedule,
+    MdmScheduleCreate,
     MdmCheckinRequest,
     MdmCommandAck,
     MdmCommandCreate,
@@ -212,8 +215,13 @@ class MdmValidationError(ValueError):
 
 
 class MdmService:
-    def __init__(self, repo: Optional[MdmRepository] = None) -> None:
+    def __init__(
+        self,
+        repo: Optional[MdmRepository] = None,
+        schedule_repo: Optional[MdmScheduleRepository] = None,
+    ) -> None:
         self._repo = repo or get_mdm_repository()
+        self._schedules = schedule_repo or get_mdm_schedule_repository()
 
     # --- агент ----------------------------------------------------------
 
@@ -439,6 +447,73 @@ class MdmService:
         if data.type == "message":
             self._repo.upsert(device_id, {"lock_message": params.get("text") or None})
         return command
+
+    # --- расписания ------------------------------------------------------
+
+    def list_schedules(self) -> list[MdmSchedule]:
+        return [MdmSchedule.model_validate(s) for s in self._schedules.list()]
+
+    def add_schedule(self, data: MdmScheduleCreate) -> MdmSchedule:
+        # Проверяем команду один раз тем же путём, что и обычную постановку:
+        # расписание не должно молча копить кривую команду до срабатывания.
+        hh, _, mm = data.time.partition(":")
+        if not (hh.isdigit() and mm.isdigit() and 0 <= int(hh) < 24 and 0 <= int(mm) < 60):
+            raise MdmValidationError("schedule_bad_time")
+        MdmCommandCreate(type=data.command_type, params=data.command_params)  # валидация типа
+        stored = self._schedules.add(data.model_dump())
+        return MdmSchedule.model_validate(stored)
+
+    def delete_schedule(self, schedule_id: str) -> None:
+        if not self._schedules.delete(schedule_id):
+            raise MdmValidationError("schedule_not_found")
+
+    def run_due_schedules(self, now_hhmm: str, today: str) -> int:
+        """Выполнить расписания, чьё время настало и сегодня ещё не запускались.
+
+        Вызывается таймером раз в минуту. Возвращает число сработавших.
+        """
+        fired = 0
+        for s in self._schedules.list():
+            if not s.get("enabled", True):
+                continue
+            if s.get("time") != now_hhmm:
+                continue
+            if s.get("last_run_date") == today:
+                continue  # уже сработало сегодня
+            command = MdmCommandCreate(
+                type=s.get("command_type"), params=dict(s.get("command_params") or {})
+            )
+            target = str(s.get("target") or "all")
+            if target.startswith("device:"):
+                try:
+                    self.queue_command(target.split(":", 1)[1], command)
+                except MdmValidationError:
+                    pass
+            else:
+                salon = target.split(":", 1)[1] if target.startswith("salon:") else None
+                self.broadcast_command(command, salon)
+            self._schedules.mark_run(str(s.get("id")), today)
+            fired += 1
+        return fired
+
+    def lost_mode(self, device_id: str, message: Optional[str] = None) -> list[dict[str, Any]]:
+        """Режим пропажи: одной кнопкой заблокировать, показать сообщение на
+        экране, поднять сигнал, запросить координаты и снять кадр с камеры.
+
+        Просто последовательность обычных команд — телефон исполнит их подряд на
+        ближайшей связи. Порядок осмысленный: сперва блокировка и сообщение
+        (чтобы нашедший сразу понял, чей телефон и куда звонить), потом сигнал и
+        локация с камерой для поиска.
+        """
+        text = (message or "").strip() or "Телефон потерян. Пожалуйста, верните владельцу."
+        steps = [
+            MdmCommandCreate(type="lock"),
+            MdmCommandCreate(type="message", params={"text": text}),
+            MdmCommandCreate(type="ring", params={"seconds": 60}),
+            MdmCommandCreate(type="locate"),
+            MdmCommandCreate(type="camera", params={"lens": "back"}),
+        ]
+        return [self.queue_command(device_id, step) for step in steps]
 
     def broadcast_command(self, data: MdmCommandCreate, salon_id: Optional[str] = None) -> "MdmBroadcastResult":
         """Поставить команду сразу всем телефонам (или всем в одном салоне).

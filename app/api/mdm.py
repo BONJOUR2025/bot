@@ -21,6 +21,8 @@ from app.schemas.mdm import (
     MdmAgentInfo,
     MdmAgentRolloutResult,
     MdmBroadcastResult,
+    MdmSchedule,
+    MdmScheduleCreate,
     MdmLibraryApp,
     MdmProvisioning,
     MdmCheckinRequest,
@@ -304,6 +306,31 @@ def create_mdm_router(service: MdmService) -> APIRouter:
         except MdmValidationError as exc:
             raise _handle(exc)
 
+    @router.get("/schedules", response_model=list[MdmSchedule])
+    async def list_schedules(current=Depends(require_permission("mdm"))) -> list[MdmSchedule]:
+        return service.list_schedules()
+
+    @router.post("/schedules", response_model=MdmSchedule, status_code=201)
+    async def add_schedule(
+        data: MdmScheduleCreate,
+        current=Depends(require_permission("mdm")),
+    ) -> MdmSchedule:
+        try:
+            return service.add_schedule(data)
+        except MdmValidationError as exc:
+            raise _handle(exc)
+
+    @router.delete("/schedules/{schedule_id}")
+    async def delete_schedule(
+        schedule_id: str,
+        current=Depends(require_permission("mdm")),
+    ) -> dict[str, str]:
+        try:
+            service.delete_schedule(schedule_id)
+        except MdmValidationError as exc:
+            raise _handle(exc)
+        return {"status": "ok"}
+
     @router.post("/broadcast", response_model=MdmBroadcastResult)
     async def broadcast(
         data: MdmCommandCreate,
@@ -362,6 +389,20 @@ def create_mdm_router(service: MdmService) -> APIRouter:
             return MdmCommand.model_validate(service.queue_command(device_id, data))
         except MdmValidationError as exc:
             raise _handle(exc)
+
+    @router.post("/devices/{device_id}/lost-mode", response_model=list[MdmCommand])
+    async def lost_mode(
+        device_id: str,
+        payload: dict = None,
+        current=Depends(require_permission("mdm")),
+    ) -> list[MdmCommand]:
+        """Режим пропажи: заблокировать, показать сообщение, сигнал, локация, кадр."""
+        message = (payload or {}).get("message") if isinstance(payload, dict) else None
+        try:
+            cmds = service.lost_mode(device_id, message)
+        except MdmValidationError as exc:
+            raise _handle(exc)
+        return [MdmCommand.model_validate(c) for c in cmds]
 
     @router.delete("/devices/{device_id}")
     async def delete_device(

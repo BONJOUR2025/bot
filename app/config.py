@@ -72,6 +72,7 @@ MDM_DEVICES_FILE = settings.mdm_devices_file
 MDM_AGENT_APK_FILE = settings.mdm_agent_apk_file
 MDM_APPS_DIR = settings.mdm_apps_dir
 MDM_SNAPSHOTS_DIR = settings.mdm_snapshots_dir
+MDM_SCHEDULES_FILE = settings.mdm_schedules_file
 BOT_USERS_FILE = settings.bot_users_file
 VK_BOT_USERS_FILE = settings.vk_bot_users_file
 ASSETS_FILE = settings.assets_file

@@ -326,6 +326,26 @@ class MdmAgentRolloutResult(BaseModel):
     skipped: int
 
 
+class MdmSchedule(BaseModel):
+    """Расписание: команда каждый день в HH:MM для группы телефонов."""
+
+    id: Optional[str] = None
+    time: str  # "HH:MM" по Москве
+    command_type: CommandType
+    command_params: dict[str, Any] = Field(default_factory=dict)
+    target: str = "all"  # "all" | "salon:<id>" | "device:<id>"
+    enabled: bool = True
+    last_run_date: Optional[str] = None
+
+
+class MdmScheduleCreate(BaseModel):
+    time: str
+    command_type: CommandType
+    command_params: dict[str, Any] = Field(default_factory=dict)
+    target: str = "all"
+    enabled: bool = True
+
+
 class MdmBroadcastResult(BaseModel):
     """Сколько телефонов получили команду при массовой рассылке."""
 

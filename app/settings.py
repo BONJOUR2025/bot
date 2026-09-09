@@ -180,6 +180,7 @@ class Settings(BaseSettings):
     # мимо публичной статики. Деплой корень не зеркалит — снимки переживают
     # обновление.
     mdm_snapshots_dir: str = Field("mdm_snapshots", validation_alias="MDM_SNAPSHOTS_DIR")
+    mdm_schedules_file: str = Field("mdm_schedules.json", validation_alias="MDM_SCHEDULES_FILE")
 
 
     # Токен, которым сборка кладёт свежий APK агента прямо на сервер.

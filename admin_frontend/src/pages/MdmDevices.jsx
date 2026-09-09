@@ -6,6 +6,7 @@ import {
   Gauge, ShieldBan, AppWindow, History as HistoryIcon,
   Volume2, MessageSquareWarning, HardDrive, Wifi, Cpu, Clock, EyeOff, Eraser,
   MonitorSmartphone, Play, KeyRound as KeyIcon, Sun, Radio, Send,
+  Siren, CalendarClock, Plus,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import api from '../api';
@@ -119,6 +120,7 @@ export default function MdmDevices() {
   const [selectedApps, setSelectedApps] = useState(() => new Set());
   const [deviceTab, setDeviceTab] = useState('overview');
   const [kioskDraft, setKioskDraft] = useState(null);
+  const [schedules, setSchedules] = useState([]);
 
   const selected = useMemo(
     () => devices.find((d) => d.id === selectedId) || null,
@@ -147,18 +149,20 @@ export default function MdmDevices() {
   async function load() {
     setLoading(true);
     try {
-      const [devicesRes, enrollmentRes, agentRes, provisioningRes, libraryRes] = await Promise.all([
+      const [devicesRes, enrollmentRes, agentRes, provisioningRes, libraryRes, schedulesRes] = await Promise.all([
         api.get('mdm/devices'),
         api.get('mdm/enrollment'),
         api.get('mdm/agent'),
         api.get('mdm/provisioning'),
         api.get('mdm/apps'),
+        api.get('mdm/schedules'),
       ]);
       setDevices(devicesRes.data);
       setEnrollment(enrollmentRes.data);
       setAgent(agentRes.data);
       setProvisioning(provisioningRes.data);
       setLibrary(libraryRes.data);
+      setSchedules(schedulesRes.data);
       setPollDraft(String(enrollmentRes.data.command_poll_seconds ?? 120));
     } catch (err) {
       toast(err.response?.data?.detail || err.message, 'error');
@@ -350,6 +354,62 @@ export default function MdmDevices() {
       toast(err.response?.data?.detail || err.message, 'error');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function lostMode() {
+    if (!selected) return;
+    if (!window.confirm(
+      `Включить режим пропажи для «${selected.name || selected.model}»?
+
+`
+      + 'Телефон заблокируется, покажет сообщение на экране, поднимет сигнал, '
+      + 'пришлёт координаты и кадр с камеры.',
+    )) return;
+    const message = window.prompt(
+      'Текст на экране блокировки:',
+      'Телефон потерян. Пожалуйста, верните владельцу.',
+    );
+    if (message === null) return;
+    setBusy(true);
+    try {
+      await api.post(`mdm/devices/${selected.id}/lost-mode`, { message });
+      toast('Режим пропажи включён — команды в очереди', 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addSchedule() {
+    const time = window.prompt('Время по Москве (ЧЧ:ММ), например 04:30');
+    if (!time) return;
+    const command_type = window.prompt('Команда: reboot, refresh_apps, locate, set_time, lock');
+    if (!command_type) return;
+    setBusy(true);
+    try {
+      const params = command_type.trim() === 'set_time' ? {} : {};
+      await api.post('mdm/schedules', {
+        time: time.trim(), command_type: command_type.trim(), command_params: params, target: 'all', enabled: true,
+      });
+      toast('Расписание добавлено', 'success');
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSchedule(id) {
+    if (!window.confirm('Удалить расписание?')) return;
+    try {
+      await api.delete(`mdm/schedules/${id}`);
+      await load();
+    } catch (err) {
+      toast(err.response?.data?.detail || err.message, 'error');
     }
   }
 
@@ -846,6 +906,50 @@ export default function MdmDevices() {
             </p>
           </div>
         )}
+      </section>
+
+      <section className="bg-[color:var(--color-bg-secondary)] rounded-xl p-4 flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 font-medium">
+            <CalendarClock size={16} /> Расписание команд
+          </div>
+          <button type="button" className="btn btn--secondary btn--sm flex items-center gap-1.5"
+            disabled={busy} onClick={addSchedule}>
+            <Plus size={14} /> Добавить
+          </button>
+        </div>
+        {schedules.length === 0 ? (
+          <p className="text-sm text-[color:var(--color-text-muted)]">
+            Нет расписаний. Например: перезагрузка всех телефонов каждую ночь в 04:30
+            или обновление списка приложений утром.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {schedules.map((s) => (
+              <div key={s.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium tabular-nums">{s.time}</span>
+                <span>{s.command_type}</span>
+                <span className="text-[color:var(--color-text-muted)]">
+                  {s.target === 'all' ? 'всем' : s.target.startsWith('salon:') ? 'салон' : 'телефону'}
+                </span>
+                {!s.enabled && <span className="text-[color:var(--color-text-muted)]">(выключено)</span>}
+                {s.last_run_date && (
+                  <span className="text-xs text-[color:var(--color-text-muted)]">
+                    последний запуск {s.last_run_date}
+                  </span>
+                )}
+                <span className="grow" />
+                <button type="button" className="btn btn--ghost btn--sm"
+                  onClick={() => deleteSchedule(s.id)}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-[color:var(--color-text-muted)]">
+          Время — по Москве. Проверка раз в минуту; команда уходит телефонам на их ближайшей связи.
+        </p>
       </section>
 
       <ResponsiveTable
@@ -1428,6 +1532,16 @@ export default function MdmDevices() {
               <p className="text-sm text-[color:var(--color-text-muted)]">Команд ещё не было.</p>
             )
           )}
+
+          <div className="border-t border-[color:var(--color-border)] pt-3">
+            <button type="button" className="btn btn--danger flex items-center gap-1.5"
+              disabled={busy} onClick={lostMode}>
+              <Siren size={14} /> Режим пропажи
+            </button>
+            <span className="text-xs text-[color:var(--color-text-muted)] ml-2">
+              заблокировать + сообщение + сигнал + локация + снимок, одной кнопкой
+            </span>
+          </div>
 
           {/* Опасная зона — всегда под вкладками, отделена */}
           <div className="border-t border-[color:var(--color-danger)] pt-3 flex flex-wrap items-center gap-2 mt-1">
