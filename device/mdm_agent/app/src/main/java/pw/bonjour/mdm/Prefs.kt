@@ -61,6 +61,19 @@ object Prefs {
     fun setHoldSeconds(ctx: Context, value: Int) =
         sp(ctx).edit().putInt("hold_seconds", value.coerceIn(5, 50)).apply()
 
+    /** Токен сброса экрана блокировки. Выдаётся телефону один раз и хранится
+     *  здесь, чтобы им можно было воспользоваться позже — см. ScreenLock. */
+    fun resetToken(ctx: Context): ByteArray? {
+        val hex = sp(ctx).getString("reset_token", "") ?: ""
+        if (hex.length < 2 || hex.length % 2 != 0) return null
+        return runCatching {
+            ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+        }.getOrNull()
+    }
+
+    fun setResetToken(ctx: Context, token: ByteArray) =
+        sp(ctx).edit().putString("reset_token", token.joinToString("") { "%02x".format(it) }).apply()
+
     /** Отпечаток списка приложений, который сервер уже принял. Пока совпадает
      *  с текущим, полный список гонять незачем. */
     fun reportedAppsHash(ctx: Context): String = sp(ctx).getString("apps_hash", "") ?: ""

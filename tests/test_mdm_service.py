@@ -1084,3 +1084,40 @@ def test_expire_leaves_done_commands_alone(service):
 
     assert service.expire_stale_commands(device.id) == 0
     assert service.get_device(device.id).commands[-1].status == "done"
+
+
+def test_set_password_rejects_too_short_code(service):
+    """Короткий код Android не примет — лучше сказать это сразу.
+
+    Иначе оператор узнал бы об отказе с телефона через полминуты, и выглядело
+    бы это как сбой связи, а не как его собственная опечатка.
+    """
+    device, _ = enroll(service)
+
+    with pytest.raises(MdmValidationError, match="password_too_short"):
+        service.queue_command(device.id, MdmCommandCreate(
+            type="set_password", params={"password": "123"}))
+
+
+def test_empty_password_means_remove_lock(service):
+    """Пустой пароль — законное «снять блокировку», а не ошибка ввода."""
+    device, _ = enroll(service)
+
+    cmd = service.queue_command(device.id, MdmCommandCreate(
+        type="set_password", params={"password": ""}))
+
+    assert cmd["params"]["password"] == ""
+
+
+def test_checkin_stores_remote_unlock_readiness(service):
+    """Готовность к разблокировке должна доезжать до карточки.
+
+    Токен нельзя выдать задним числом, поэтому панель обязана показывать это
+    заранее, а не выяснять в момент, когда сотрудник заперся снаружи.
+    """
+    device, _ = enroll(service)
+
+    service.checkin(service._repo.get(device.id),
+                    MdmCheckinRequest(can_reset_password=True, secure_lock=True))
+
+    assert service.get_device(device.id).can_reset_password is True

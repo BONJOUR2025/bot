@@ -30,6 +30,7 @@ CommandType = Literal[
     "message",  # стойкое сообщение на экране блокировки (потерянный телефон)
     "alert",  # сообщение сотруднику во весь экран (params: text, title, dismissible)
     "stop_alert",  # убрать полноэкранное сообщение
+    "set_password",  # сменить код экрана или снять блокировку (params: password)
     "clear_app_data",  # очистить данные приложения (params: package)
     "set_app_enabled",  # скрыть/показать приложение (params: package, enabled)
     "set_volume",  # выставить громкость 0..100 (params: percent)
@@ -171,6 +172,9 @@ class MdmCheckinRequest(BaseModel):
     ip_address: Optional[str] = None
     uptime_seconds: Optional[int] = None
     secure_lock: Optional[bool] = None  # есть ли пароль/PIN на экране
+    # Выдан ли телефону действующий токен сброса: без него удалённо сменить
+    # или снять код нельзя, и знать это надо заранее.
+    can_reset_password: Optional[bool] = None
     serial_number: Optional[str] = None
     imei: Optional[str] = None
     sim_operator: Optional[str] = None
@@ -273,6 +277,7 @@ class MdmDevice(BaseModel):
     ip_address: Optional[str] = None
     uptime_seconds: Optional[int] = None
     secure_lock: Optional[bool] = None
+    can_reset_password: Optional[bool] = None
     serial_number: Optional[str] = None
     imei: Optional[str] = None
     sim_operator: Optional[str] = None

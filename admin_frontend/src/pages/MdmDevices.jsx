@@ -608,6 +608,27 @@ export default function MdmDevices() {
     sendCommand('stop_alert');
   }
 
+  /** Сменить код экрана. Пустой — снять блокировку. */
+  function setScreenPassword() {
+    const code = window.prompt(
+      'Новый код разблокировки (минимум 4 знака).\n'
+      + 'Оставьте пустым, чтобы снять блокировку совсем:',
+      '',
+    );
+    if (code === null) return;
+    const value = code.trim();
+    if (value && value.length < 4) {
+      toast('Android не примет код короче четырёх знаков', 'error');
+      return;
+    }
+    if (!value && !window.confirm(
+      'Снять блокировку экрана полностью?\n\n'
+      + 'Телефон останется без кода: его сможет взять и разблокировать кто угодно. '
+      + 'Панель будет предупреждать об этом, пока код не поставят снова.',
+    )) return;
+    sendCommand('set_password', { password: value });
+  }
+
   function setLockMessage() {
     const current = selected?.lock_message || '';
     const text = window.prompt(
@@ -1252,6 +1273,19 @@ export default function MdmDevices() {
                     {selected.secure_lock == null ? '—' : selected.secure_lock ? 'да' : 'нет пароля'}
                   </dd>
                 </div>
+                {/* Готовность к удалённой разблокировке — знание на будущее:
+                    выдать токен задним числом нельзя, а выяснять это в момент,
+                    когда сотрудник забыл код, уже поздно. */}
+                <div>
+                  <dt className="text-xs text-[color:var(--color-text-muted)]">Разблокировка удалённо</dt>
+                  <dd className={selected.can_reset_password === false ? 'text-amber-600' : ''}>
+                    {selected.can_reset_password == null
+                      ? '—'
+                      : selected.can_reset_password
+                        ? 'доступна'
+                        : 'нет — разблокируйте телефон один раз вручную'}
+                  </dd>
+                </div>
                 {selected.serial_number && (
                   <div>
                     <dt className="text-xs text-[color:var(--color-text-muted)]">Серийный номер</dt>
@@ -1347,6 +1381,17 @@ export default function MdmDevices() {
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={() => sendCommand('reboot')}>
                     <RotateCw size={14} /> Перезагрузить
+                  </button>
+                  {/* Обратное к «Заблокировать»: сменить код или снять его.
+                      Доступность зависит от токена сброса, поэтому кнопка
+                      гаснет, а рядом объясняется почему. */}
+                  <button type="button" className="btn btn--secondary flex items-center gap-1.5"
+                    disabled={busy || selected.can_reset_password === false}
+                    title={selected.can_reset_password === false
+                      ? 'Телефон ещё не разблокировали вручную после установки агента'
+                      : 'Поставить новый код или снять блокировку'}
+                    onClick={setScreenPassword}>
+                    <KeyRound size={14} /> Код разблокировки
                   </button>
                   <button type="button" className="btn flex items-center gap-1.5" disabled={busy}
                     onClick={ringPhone}>

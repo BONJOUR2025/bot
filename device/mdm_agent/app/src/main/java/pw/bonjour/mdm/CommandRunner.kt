@@ -107,6 +107,8 @@ object CommandRunner {
                     "done" to (if (params.optBoolean("dismissible", true)) "показано" else "показано, без закрытия")
                 }
 
+                "set_password" -> ScreenLock.setPassword(ctx, params.optString("password"))
+
                 "stop_alert" -> {
                     val closed = AlertActivity.close()
                     "done" to (if (closed) "окно закрыто" else "окна не было")

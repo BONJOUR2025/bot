@@ -341,7 +341,7 @@ class MdmService:
         for field in (
             "storage_total_mb", "storage_free_mb", "ram_total_mb", "network",
             "wifi_ssid", "ip_address", "uptime_seconds", "secure_lock",
-            "serial_number", "imei", "sim_operator",
+            "can_reset_password", "serial_number", "imei", "sim_operator",
         ):
             value = getattr(data, field)
             if value is not None:
@@ -515,6 +515,14 @@ class MdmService:
             # Пустой текст снимает сообщение с экрана — это законный сценарий,
             # поэтому длину не требуем, только ограничиваем сверху.
             params["text"] = str(params.get("text") or "")[:400]
+        elif data.type == "set_password":
+            # Пустой пароль — законное «снять блокировку». Непустой ограничиваем
+            # снизу: Android короче четырёх символов не примет, и лучше сказать
+            # это здесь, чем получить отказ с телефона через полминуты.
+            password = str(params.get("password") or "")
+            if password and len(password) < 4:
+                raise MdmValidationError("password_too_short")
+            params["password"] = password
         elif data.type == "alert":
             # В отличие от message, пустой текст здесь бессмыслен: показывать
             # сотруднику во весь экран нечего, а закрыть окно нельзя будет,

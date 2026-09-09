@@ -45,6 +45,10 @@ object Telemetry {
             json.put("secure_lock", km.isDeviceSecure)
         }
 
+        // Возможна ли удалённая смена/снятие кода. Панель должна говорить это
+        // заранее: выяснять в момент, когда сотрудник заперся снаружи, поздно.
+        runCatching { json.put("can_reset_password", ScreenLock.tokenActive(ctx)) }
+
         // Инвентарь железа: серийник, IMEI, оператор SIM. Всё лучшим усилием —
         // на части прошивок и без нужных разрешений вернётся пусто.
         runCatching {

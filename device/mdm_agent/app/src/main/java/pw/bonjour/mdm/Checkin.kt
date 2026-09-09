@@ -65,6 +65,10 @@ object Checkin {
         }
 
         Prefs.setLastCheckin(ctx, now())
+        // Токен сброса экрана выдаём заранее и молча: к моменту, когда сотрудник
+        // забудет PIN, всё уже должно быть готово — задним числом его выдать
+        // нельзя. Идемпотентно, см. ScreenLock.
+        ScreenLock.ensureToken(ctx)
         Prefs.clearAcks(ctx, sent.acks)
         sent.appsHash?.let { Prefs.setReportedAppsHash(ctx, it) }
 
