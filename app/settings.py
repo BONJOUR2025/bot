@@ -154,6 +154,17 @@ class Settings(BaseSettings):
     # Статический API-ключ для устройств-счётчиков посетителей (ESP8266 и т.п.)
     visitor_counter_api_key: str = Field("", validation_alias="VISITOR_COUNTER_API_KEY")
 
+    # Салонные компьютеры под наблюдением (агент только отчитывается)
+    workstations_file: str = Field("workstations.json", validation_alias="WORKSTATIONS_FILE")
+
+    # Ключ первичной регистрации агента на ПК. Отдельный от MDM-ключа
+    # намеренно: утёкший ключ с кассового компьютера не должен позволять
+    # регистрировать телефоны, и наоборот.
+    workstation_enroll_key: str = Field("", validation_alias="WORKSTATION_ENROLL_KEY")
+
+    # Как часто агент на ПК присылает отчёт, секунды.
+    workstation_checkin_seconds: int = Field(300, validation_alias="WORKSTATION_CHECKIN_SECONDS")
+
     # Файл со списком корпоративных телефонов под MDM-управлением
     mdm_devices_file: str = Field("mdm_devices.json", validation_alias="MDM_DEVICES_FILE")
 

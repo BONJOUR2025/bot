@@ -478,6 +478,22 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Салонные компьютеры: агент только отчитывается о здоровье машины,
+    # команд ему не отдаём (см. app/schemas/workstation.py).
+    from .workstations import (
+        create_workstation_agent_router,
+        create_workstation_router,
+    )
+    from ..services.workstation_service import get_workstation_service
+
+    workstation_service = get_workstation_service()
+    app.include_router(create_workstation_agent_router(workstation_service), prefix="/api")
+    app.include_router(
+        create_workstation_router(workstation_service),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # 3D foot scanner (.scm file parsing -> metadata + measurements + views)
     from .scanner import create_scanner_router
 

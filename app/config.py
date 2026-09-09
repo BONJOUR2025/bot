@@ -69,6 +69,7 @@ SHIFT_CHECKINS_FILE = settings.shift_checkins_file
 VISITOR_EVENTS_FILE = settings.visitor_events_file
 VISITOR_COUNTER_RESETS_FILE = settings.visitor_counter_resets_file
 MDM_DEVICES_FILE = settings.mdm_devices_file
+WORKSTATIONS_FILE = settings.workstations_file
 MDM_AGENT_APK_FILE = settings.mdm_agent_apk_file
 MDM_APPS_DIR = settings.mdm_apps_dir
 MDM_SNAPSHOTS_DIR = settings.mdm_snapshots_dir
