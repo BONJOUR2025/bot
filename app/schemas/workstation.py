@@ -1,21 +1,40 @@
-"""Схемы наблюдения за салонными компьютерами.
+"""Схемы управления салонными компьютерами.
 
-Отдельно от MDM телефонов и намеренно проще. Телефону нужна очередь команд с
-подтверждениями и длинный опрос — здесь этого нет вовсе: агент на ПК только
-рассказывает о себе и ничего не умеет делать. Read-only не как «первый этап,
-потом добавим», а как свойство: в агенте нет кода, исполняющего команды, и
-скомпрометированный сервер не сможет ничего запустить на кассовом компьютере.
+Отдельно от MDM телефонов: команды, показатели и экран в панели у них разные,
+и сведение в один субсистем-конгломерат дало бы условия «если андроид» в каждой
+второй строке. Механику очереди команд повторяем сознательно — она у телефонов
+выстрадана (подтверждения, отмена, подметание зависших), и переносим форму, а
+не переиспользуем код, чтобы правки для ПК не задевали работающий парк
+телефонов.
 
-Цена такого решения — обновлять агент придётся через тот же удалённый доступ,
-которым его ставили. На парке в несколько машин это дешевле, чем держать на
-кассе исполнителя произвольных команд.
+Про безопасность. На этих машинах касса, Firebird с продажами и Agbis, поэтому
+команды «выполнить произвольную строку» здесь нет и не будет. Есть белый список
+действий, а имена программ для запуска и перезапуска задаются в config.json
+сервера (WORKSTATION_ALLOWED_APPS), а не приходят параметром: так опасная
+поверхность лежит в одном видимом месте, а не в теле каждой команды.
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+# Типы команд. Держится в синхроне с device/pc_agent/agent.py.
+WorkstationCommandType = Literal[
+    "reboot",  # перезагрузить (params: delay_seconds)
+    "shutdown",  # выключить (params: delay_seconds)
+    "cancel_shutdown",  # отменить отложенную перезагрузку/выключение
+    "lock",  # заблокировать экран
+    "logoff",  # завершить сеанс пользователя
+    "message",  # окно с сообщением на экране (params: text, title)
+    "restart_process",  # перезапустить программу из белого списка (params: app)
+    "run_app",  # запустить программу из белого списка (params: app)
+    "cleanup_temp",  # очистить временные файлы
+    "collect_now",  # прислать свежий отчёт немедленно
+]
+
+COMMAND_STATUSES = ("pending", "sent", "done", "failed", "canceled")
 
 
 class DiskInfo(BaseModel):
@@ -26,6 +45,27 @@ class DiskInfo(BaseModel):
     total_gb: float
     free_gb: float
     free_percent: float
+
+
+class WorkstationCommand(BaseModel):
+    id: str
+    type: WorkstationCommandType
+    params: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+    status: Literal["pending", "sent", "done", "failed", "canceled"] = "pending"
+    result: Optional[str] = None
+    acked_at: Optional[str] = None
+
+
+class WorkstationCommandCreate(BaseModel):
+    type: WorkstationCommandType
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkstationCommandAck(BaseModel):
+    command_id: str
+    status: Literal["done", "failed"]
+    result: Optional[str] = None
 
 
 class WorkstationEnrollRequest(BaseModel):
@@ -39,9 +79,11 @@ class WorkstationEnrollResponse(BaseModel):
 
 
 class WorkstationCheckin(BaseModel):
-    """Регулярный отчёт агента. Всё, кроме имени, необязательно: сбор любого
-    показателя может не удаться на конкретной машине, и это не повод терять
-    остальной отчёт."""
+    """Отчёт о состоянии машины.
+
+    Всё, кроме имени, необязательно: сбор любого показателя может не удаться на
+    конкретной машине, и это не повод терять остальной отчёт.
+    """
 
     hostname: Optional[str] = None
     os_version: Optional[str] = None
@@ -53,17 +95,40 @@ class WorkstationCheckin(BaseModel):
     disks: list[DiskInfo] = Field(default_factory=list)
     ip_address: Optional[str] = None
     # Какие из ожидаемых процессов найдены. Ключ — имя процесса, значение —
-    # запущен ли. Список ожидаемых задаёт сервер, см. WorkstationCheckinResponse.
+    # запущен ли. Список ожидаемых задаёт сервер.
     processes: dict[str, bool] = Field(default_factory=dict)
     pending_reboot: Optional[bool] = None
+    # Есть ли на машине активный сеанс пользователя. Без него экранные команды
+    # (сообщение, блокировка) выполнить некому, и панель должна это показывать
+    # заранее, а не отдавать команду в пустоту.
+    user_session: Optional[bool] = None
+    logged_user: Optional[str] = None
     last_error: Optional[str] = None
+    acks: list[WorkstationCommandAck] = Field(default_factory=list)
 
 
 class WorkstationCheckinResponse(BaseModel):
     interval_seconds: int
-    # Процессы, о которых агент должен доложить. Приходят с сервера, чтобы
-    # добавить наблюдение за новой программой можно было без обхода машин.
     watch_processes: list[str] = Field(default_factory=list)
+    # Программы, которые разрешено запускать и перезапускать. Приходят с
+    # сервера, чтобы имя программы не было свободным параметром команды.
+    allowed_apps: list[str] = Field(default_factory=list)
+
+
+class WorkstationPollRequest(BaseModel):
+    """Длинный опрос: подтверждения едут здесь же.
+
+    Агент исполнил команду и тут же снова встаёт на ожидание, поэтому отдельный
+    отчёт был бы вторым запросом на ровном месте.
+    """
+
+    acks: list[WorkstationCommandAck] = Field(default_factory=list)
+
+
+class WorkstationPollResponse(BaseModel):
+    commands: list[WorkstationCommand] = Field(default_factory=list)
+    hold_seconds: int
+    allowed_apps: list[str] = Field(default_factory=list)
 
 
 class Workstation(BaseModel):
@@ -83,11 +148,14 @@ class Workstation(BaseModel):
     ip_address: Optional[str] = None
     processes: dict[str, bool] = Field(default_factory=dict)
     pending_reboot: Optional[bool] = None
+    user_session: Optional[bool] = None
+    logged_user: Optional[str] = None
     last_error: Optional[str] = None
+    commands: list[WorkstationCommand] = Field(default_factory=list)
 
 
 class WorkstationUpdate(BaseModel):
-    """Что оператор может поправить руками: понятное имя и привязка к салону."""
+    """Что оператор правит руками: понятное имя и привязка к салону."""
 
     name: Optional[str] = None
     salon_id: Optional[str] = None
