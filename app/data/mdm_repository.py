@@ -136,6 +136,23 @@ class MdmRepository:
             return pending
         return []
 
+    def cancel_command(self, device_id: str, command_id: str) -> bool:
+        """Снять команду с очереди. Только ожидающую: отправленная уже на телефоне."""
+        self._data = self._load()
+        for device in self._data:
+            if str(device.get("id")) != str(device_id):
+                continue
+            for command in device.get("commands") or []:
+                if str(command.get("id")) != str(command_id):
+                    continue
+                if command.get("status") != "pending":
+                    return False
+                command["status"] = "canceled"
+                command["result"] = "отменено оператором"
+                self._save()
+                return True
+        return False
+
     def ack_command(
         self, device_id: str, command_id: str, status: str, result: Optional[str], acked_at: str
     ) -> bool:

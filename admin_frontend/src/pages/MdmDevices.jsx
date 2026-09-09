@@ -13,6 +13,16 @@ import api from '../api';
 import ResponsiveTable from '../components/ui/ResponsiveTable.jsx';
 import { useToast } from '../providers/ToastProvider.jsx';
 
+/** Статусы команды по-русски: история читается оператором, а не разработчиком.
+ *  «Ждёт» и «на телефоне» — разные вещи: отменить можно только первое. */
+const CMD_STATUS = {
+  pending: 'ждёт',
+  sent: 'на телефоне',
+  done: 'выполнено',
+  failed: 'сбой',
+  canceled: 'отменено',
+};
+
 /** Порядок намеренный: сверху безобидные запреты, снизу — тот, что отбирает
  *  последний аварийный люк. См. device/mdm_agent/README.md. */
 const RESTRICTIONS = [
@@ -378,6 +388,29 @@ export default function MdmDevices() {
       await load();
     } catch (err) {
       toast(err.response?.data?.detail || err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelCommand(commandId) {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await api.delete(`mdm/devices/${selected.id}/commands/${commandId}`);
+      toast('Команда снята с очереди', 'success');
+      await load();
+    } catch (err) {
+      // Гонка здесь штатная: телефон мог забрать команду за те секунды, пока
+      // оператор целился в кнопку. Говорим об этом прямо, а не «ошибка».
+      const detail = err.response?.data?.detail;
+      toast(
+        detail === 'command_not_cancelable'
+          ? 'Поздно: телефон уже забрал команду'
+          : detail || err.message,
+        'error',
+      );
+      await load();
     } finally {
       setBusy(false);
     }
@@ -1521,11 +1554,21 @@ export default function MdmDevices() {
                     </span>
                     <span className="font-medium">{c.type}</span>
                     <span className={c.status === 'failed' ? 'text-red-600'
-                      : c.status === 'done' ? 'text-[color:var(--color-text-muted)]' : 'text-amber-600'}>
-                      {c.status}
+                      : c.status === 'done' || c.status === 'canceled' ? 'text-[color:var(--color-text-muted)]'
+                      : 'text-amber-600'}>
+                      {CMD_STATUS[c.status] || c.status}
                     </span>
                     {c.result && (
                       <span className="text-[color:var(--color-text-muted)] text-xs break-all">{c.result}</span>
+                    )}
+                    {/* Отменить можно только то, что телефон ещё не забрал.
+                        С длинным опросом это секунды, но именно в них и стоит
+                        успеть, если нажали wipe не на том аппарате. */}
+                    {c.status === 'pending' && (
+                      <button type="button" className="btn btn--ghost btn--sm ml-auto"
+                        disabled={busy} onClick={() => cancelCommand(c.id)}>
+                        Отменить
+                      </button>
                     )}
                   </div>
                 ))}

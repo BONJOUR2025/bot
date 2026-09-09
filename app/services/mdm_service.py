@@ -104,6 +104,26 @@ def current_long_poll_seconds() -> int:
     return max(MIN_LONG_POLL_SECONDS, min(MAX_LONG_POLL_SECONDS, value))
 
 
+# Статусы команды, которые понимает схема. Всё, что не отсюда, — повреждённая
+# запись: файл правят несколько процессов, а однажды его пришлось править и
+# руками.
+COMMAND_STATUSES = {"pending", "sent", "done", "failed", "canceled"}
+
+
+def _sane_command(command: dict[str, Any]) -> dict[str, Any]:
+    """Обезвредить одну запись команды перед проверкой схемы.
+
+    Карточка телефона показывает историю команд, и раньше одна повреждённая
+    запись роняла всю страницу MDM целиком: схема не принимала неизвестный
+    статус, а падала на этом вся выдача устройств. История — не то, ради чего
+    стоит терять доступ к парку, поэтому непонятный статус показываем как
+    сбойный, а не отказываемся отвечать.
+    """
+    if command.get("status") in COMMAND_STATUSES:
+        return command
+    return {**command, "status": "failed"}
+
+
 def current_agent_signature_checksum() -> str:
     """Отпечаток ключа подписи, свежим чтением из config.json."""
     try:
@@ -340,6 +360,20 @@ class MdmService:
 
     def take_pending_commands(self, device_id: str) -> list[dict[str, Any]]:
         return self._repo.take_pending(device_id)
+
+    def cancel_command(self, device_id: str, command_id: str) -> MdmDevice:
+        """Снять из очереди команду, которая ещё не ушла на телефон.
+
+        Ошибиться кнопкой здесь дорого — рядом стоят `wipe` и `release_owner`, —
+        а с длинным опросом запас времени на исправление измеряется секундами.
+        Отменять уже отправленное поздно и нечестно: телефон её выполнил или
+        выполняет, и отметка «отменено» соврала бы оператору.
+        """
+        if not self._repo.get(device_id):
+            raise MdmValidationError("device_not_found")
+        if not self._repo.cancel_command(device_id, command_id):
+            raise MdmValidationError("command_not_cancelable")
+        return self.get_device(device_id)
 
     def queue_marker(self) -> tuple[float, int]:
         """Признак «очередь могла измениться» для длинного опроса."""
@@ -898,6 +932,7 @@ class MdmService:
             {**s, "url": snapshot_url(device_id, str(s.get("id")))}
             for s in (device.get("snapshots") or [])
         ]
+        data["commands"] = [_sane_command(c) for c in (device.get("commands") or [])]
         return MdmDevice.model_validate(data)
 
 

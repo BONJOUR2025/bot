@@ -899,3 +899,40 @@ def test_long_poll_seconds_stays_within_bounds(monkeypatch, tmp_path):
         json.dumps({"MDM_LONG_POLL_SECONDS": 0}), encoding="utf-8"
     )
     assert module.current_long_poll_seconds() == module.MIN_LONG_POLL_SECONDS
+
+
+def test_cancel_command_only_while_pending(service):
+    """Отменить можно только то, что ещё не ушло на телефон."""
+    device, _ = enroll(service)
+    cmd = service.queue_command(device.id, MdmCommandCreate(type="wipe"))
+
+    updated = service.cancel_command(device.id, cmd["id"])
+    assert updated.commands[-1].status == "canceled"
+
+    # Повторная отмена уже отменённой — не проходит.
+    with pytest.raises(MdmValidationError, match="command_not_cancelable"):
+        service.cancel_command(device.id, cmd["id"])
+
+    # Отправленную отменять поздно: телефон её уже выполняет.
+    sent = service.queue_command(device.id, MdmCommandCreate(type="reboot"))
+    service.take_pending_commands(device.id)
+    with pytest.raises(MdmValidationError, match="command_not_cancelable"):
+        service.cancel_command(device.id, sent["id"])
+
+
+def test_broken_command_row_does_not_break_whole_device_list(service):
+    """Одна повреждённая запись не должна ронять страницу MDM целиком.
+
+    Файл правят несколько процессов, а однажды его пришлось править руками —
+    и неизвестный статус команды уронил выдачу всех устройств разом. История
+    команд не стоит потери доступа к парку.
+    """
+    device, _ = enroll(service)
+    service.queue_command(device.id, MdmCommandCreate(type="reboot"))
+
+    raw = service._repo.get(device.id)
+    raw["commands"][-1]["status"] = "какая-то ерунда"
+    service._repo.upsert(device.id, {"commands": raw["commands"]})
+
+    assert len(service.list_devices()) == 1
+    assert service.get_device(device.id).commands[-1].status == "failed"

@@ -446,6 +446,18 @@ def create_mdm_router(service: MdmService) -> APIRouter:
         except MdmValidationError as exc:
             raise _handle(exc)
 
+    @router.delete("/devices/{device_id}/commands/{command_id}", response_model=MdmDevice)
+    async def cancel_command(
+        device_id: str,
+        command_id: str,
+        current=Depends(require_permission("mdm")),
+    ) -> MdmDevice:
+        """Снять команду с очереди, пока она не ушла на телефон."""
+        try:
+            return service.cancel_command(device_id, command_id)
+        except MdmValidationError as exc:
+            raise _handle(exc)
+
     @router.post("/devices/{device_id}/lost-mode", response_model=list[MdmCommand])
     async def lost_mode(
         device_id: str,

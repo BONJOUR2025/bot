@@ -179,7 +179,9 @@ class MdmCommand(BaseModel):
     type: CommandType
     params: dict[str, Any] = Field(default_factory=dict)
     created_at: str
-    status: Literal["pending", "sent", "done", "failed"] = "pending"
+    # canceled — снята оператором из очереди, телефон её не увидит. Отменить
+    # можно только то, что ещё не ушло: после "sent" команда уже на аппарате.
+    status: Literal["pending", "sent", "done", "failed", "canceled"] = "pending"
     result: Optional[str] = None
     acked_at: Optional[str] = None
 
