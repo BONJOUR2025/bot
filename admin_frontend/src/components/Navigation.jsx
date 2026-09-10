@@ -94,7 +94,6 @@ const navStructure = [
       { to: '/admin/knowledge-base', label: 'База знаний', permission: 'employees', icon: LibraryBig },
       { to: '/admin/agbis-users',    label: 'Пользователи АГБИС', permission: 'payroll', icon: UserCog },
       { to: '/admin/agbis-settings', label: 'Настройки АГБИС',   permission: 'payroll', icon: SlidersHorizontal },
-      { to: '/admin/username-search', label: 'Поиск по нику', permission: 'settings', icon: Search },
       { to: '/admin/passwords',      label: 'Пароли',      permission: 'passwords', icon: KeyRound },
       { to: '/admin/settings',       label: 'Настройки',   permission: 'settings',  icon: SettingsIcon },
     ],

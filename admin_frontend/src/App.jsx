@@ -67,7 +67,6 @@ const LocationPlans = lazy(() => import("./pages/LocationPlans"));
 const SaleTransfers = lazy(() => import("./pages/SaleTransfers"));
 const CashMovements = lazy(() => import("./pages/CashMovements"));
 const CashSummary = lazy(() => import("./pages/CashSummary"));
-const UsernameSearch = lazy(() => import("./pages/UsernameSearch"));
 const PaymentCalendar = lazy(() => import("./pages/PaymentCalendar"));
 const Smses = lazy(() => import("./pages/Smses"));
 const Receivables = lazy(() => import("./pages/Receivables"));
@@ -156,7 +155,6 @@ export default function App() {
                 <Route path="sale-transfers" element={<SaleTransfers />} />
                 <Route path="cash-moves" element={<CashMovements />} />
                 <Route path="cash-summary" element={<CashSummary />} />
-                <Route path="username-search" element={<UsernameSearch />} />
                 <Route path="receivables" element={<Receivables />} />
                 <Route path="clients" element={<Clients />} />
                 <Route path="payment-calendar" element={<PaymentCalendar />} />

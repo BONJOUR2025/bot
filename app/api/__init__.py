@@ -642,14 +642,6 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
-    # Поиск аккаунтов по нику (Maigret, отдельный venv — см. app/api/osint.py)
-    from .osint import create_osint_router
-
-    app.include_router(
-        create_osint_router(),
-        prefix="/api",
-        dependencies=protected,
-    )
 
     # Настройки и диагностика бота пошива (сторонний бот, Агбис -> amoCRM)
     from .poshiv_bot import create_poshiv_bot_router
