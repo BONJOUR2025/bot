@@ -421,6 +421,15 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Восстановление пароля ЛК клиента по телефону (право passwords)
+    from .client_passwords import create_client_password_router
+
+    app.include_router(
+        create_client_password_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Salons management
     from .salons import create_salons_router
     from ..data.salon_repository import get_salon_repository

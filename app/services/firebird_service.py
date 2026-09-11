@@ -21,6 +21,24 @@ from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# sha1("0000".."9999") -> "0000".."9999". Agbis хэширует 4-значный PIN ЛК
+# несолёным SHA-1, так что обратный словарь на 10000 записей полностью
+# перекрывает пространство таких паролей. Строится один раз, лениво: около
+# 10 000 sha1 — миллисекунды, но и они ни к чему, пока функцией не
+# воспользовались.
+_LK_PIN_REV: dict[str, str] | None = None
+
+
+def _lk_pin_by_sha1() -> dict[str, str]:
+    global _LK_PIN_REV
+    if _LK_PIN_REV is None:
+        import hashlib
+        _LK_PIN_REV = {
+            hashlib.sha1(f"{n:04d}".encode()).hexdigest(): f"{n:04d}"
+            for n in range(10000)
+        }
+    return _LK_PIN_REV
+
 # Set by run_with_timeout() before it dispatches a blocking call to a worker
 # thread; _connect() fills in "attachment_id" as soon as it has one, so
 # run_with_timeout can kill that specific attachment if the call overruns
@@ -1459,6 +1477,66 @@ class FirebirdService:
             seen.add(cid)
             results.append({"contragent_id": cid, "name": (name or "").strip(), "phone": (phone or "").strip() or None})
         return results[:limit]
+
+    def get_client_lk_passwords(self, phone: str) -> list[dict]:
+        """Восстановить пароль(и) от личного кабинета клиента по номеру телефона.
+
+        Agbis хранит пароль ЛК в CONTRAG_REGISTRATION.PASS как несолёный
+        SHA-1: 4-значный PIN превращается в те же 40 hex-символов у всех
+        клиентов, поэтому исходные PIN восстанавливаются обратным словарём
+        sha1("0000"..\"9999") без всякого перебора на строку. Словарь
+        строится один раз при первом обращении (см. _lk_pin_by_sha1).
+
+        Телефон сопоставляем по последним 10 цифрам: в базе номер записан
+        как «+79001234567», ввести могли «8 900 …», «+7 900 …» или просто
+        «9001234567» — последние 10 цифр совпадают во всех вариантах.
+        Один телефон может висеть на нескольких карточках, поэтому
+        возвращаем список.
+        """
+        if not FIREBIRD_AVAILABLE:
+            return []
+        digits = re.sub(r"\D", "", phone or "")
+        if len(digits) < 7:
+            return []
+        tail = digits[-10:]
+        rev = _lk_pin_by_sha1()
+
+        sql = """
+            SELECT c.contr_id, c.name, c.name_full, c.teleph_cell, c.telephone,
+                   r.pass, r.registered, r.is_digit_pass
+            FROM contragents c
+            JOIN contrag_registration r ON r.contr_id = c.contr_id
+            WHERE c.teleph_cell LIKE ? OR c.telephone LIKE ? OR r.teleph_cell LIKE ?
+        """
+        con = _connect()
+        try:
+            cur = con.cursor()
+            like = f"%{tail}%"
+            cur.execute(sql, (like, like, like))
+            rows = cur.fetchall()
+        finally:
+            con.close()
+
+        results: list[dict] = []
+        seen: set[int] = set()
+        for cid, name, name_full, tcell, tel, pass_hash, registered, is_digit in rows:
+            if cid in seen:
+                continue
+            seen.add(cid)
+            h = (pass_hash or "").strip().lower()
+            pin = rev.get(h)
+            results.append({
+                "contragent_id": cid,
+                "name": (name_full or name or "").strip() or None,
+                "phone": (tcell or tel or "").strip() or None,
+                "password": pin,
+                "recoverable": pin is not None,
+                "registered": bool(registered),
+                "is_digit_pass": bool(is_digit),
+            })
+        # Сначала те, у кого пароль восстановился, затем по имени
+        results.sort(key=lambda r: (r["password"] is None, r["name"] or ""))
+        return results
 
     def get_client_profile(self, contragent_id: int) -> dict | None:
         """Full order history + LTV/avg-check/last-visit for one client.

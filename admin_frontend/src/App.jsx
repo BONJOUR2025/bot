@@ -56,6 +56,7 @@ const CourierSalary = lazy(() => import("./pages/CourierSalary"));
 const Schedule = lazy(() => import("./pages/Schedule"));
 const Tasks = lazy(() => import("./pages/Tasks"));
 const Passwords = lazy(() => import("./pages/Passwords"));
+const ClientLkPassword = lazy(() => import("./pages/ClientLkPassword"));
 const Masters = lazy(() => import("./pages/Masters"));
 const AgbisUsers = lazy(() => import("./pages/AgbisUsers"));
 const AgbisSettings = lazy(() => import("./pages/AgbisSettings"));
@@ -140,6 +141,7 @@ export default function App() {
                 <Route path="schedule" element={<Schedule />} />
                 <Route path="tasks" element={<Tasks />} />
                 <Route path="passwords" element={<Passwords />} />
+                <Route path="client-lk-password" element={<ClientLkPassword />} />
                 <Route path="masters" element={<Masters />} />
                 <Route path="agbis-users" element={<AgbisUsers />} />
                 <Route path="agbis-settings" element={<AgbisSettings />} />

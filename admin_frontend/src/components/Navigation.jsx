@@ -95,6 +95,7 @@ const navStructure = [
       { to: '/admin/agbis-users',    label: 'Пользователи АГБИС', permission: 'payroll', icon: UserCog },
       { to: '/admin/agbis-settings', label: 'Настройки АГБИС',   permission: 'payroll', icon: SlidersHorizontal },
       { to: '/admin/passwords',      label: 'Пароли',      permission: 'passwords', icon: KeyRound },
+      { to: '/admin/client-lk-password', label: 'Пароль клиента (ЛК)', permission: 'passwords', icon: Search },
       { to: '/admin/settings',       label: 'Настройки',   permission: 'settings',  icon: SettingsIcon },
     ],
   },
