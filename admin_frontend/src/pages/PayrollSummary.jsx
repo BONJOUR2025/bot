@@ -984,82 +984,202 @@ export default function PayrollSummary() {
     if (exportKind) return;
     setExportKind('xlsx');
     try {
-      const XLSX = await import('xlsx');
+      const mod = await import('exceljs');
+      const ExcelJS = mod.default ?? mod;
       const r0 = (v) => Math.round(Number(v) || 0);
-      const wb = XLSX.utils.book_new();
 
-      // Лист 1 — показатели
-      const kpi = [
-        ['Сводный отчёт по ФОТ'],
-        ['Период', periodLabel],
-        ['Категории', cats.map((c) => c.title).join(', ') || '—'],
-        ['Сформировано', generatedAt || ''],
-        [],
-        ['ФОТ за период', r0(grand.gross)],
-        ['ФОТ в месяц', r0(avgPerMonth)],
-        ['Средняя ЗП за период (на чел.)', r0(avgPerPerson)],
-        ['Средняя ЗП в месяц (на чел.)', r0(avgPerPersonMonth)],
-        ['Постоянная часть (оклады), %', fixedShare],
-        ['  оклады', r0(grand.oklad)],
-        ['  переменная (комиссия+премии)', r0(variablePart)],
-        ['Удержания (авансы+штрафы)', r0(withholdings)],
-        ['  авансы', r0(grand.advances)],
-        ['  штрафы', r0(grand.penalties)],
-        ['Сотрудников', headcount],
-        ['Месяцев в периоде', monthsCount],
-      ];
-      const wsKpi = XLSX.utils.aoa_to_sheet(kpi);
-      wsKpi['!cols'] = [{ wch: 36 }, { wch: 18 }];
-      XLSX.utils.book_append_sheet(wb, wsKpi, 'Показатели');
+      // ── Палитра и стили (под индиго-бренд панели) ──────────────────────────
+      const C = {
+        brand: 'FF4F46E5', brandDark: 'FF3730A3', headFill: 'FFEEF2FF',
+        total: 'FFEEF2FF', sub: 'FFF8FAFC', line: 'FFE2E8F0',
+        ink: 'FF1E293B', muted: 'FF64748B', white: 'FFFFFFFF', danger: 'FFDC2626',
+      };
+      const MONEY = '#,##0" ₽"', PCT = '0"%"', INT = '#,##0';
+      const solid = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+      const thin = { style: 'thin', color: { argb: C.line } };
+      const boxAll = { top: thin, left: thin, bottom: thin, right: thin };
 
-      // Лист 2 — по категориям
-      const catHead = ['Категория', 'Человек', 'ФОТ за период', 'ФОТ в месяц', 'Средняя ЗП в месяц', 'Доля %'];
-      const catRows = cats.map((c) => {
-        const n = c.rows.length;
-        return [
-          c.title, n, r0(c.totals.gross), r0(monthsCount ? c.totals.gross / monthsCount : 0),
-          n && monthsCount ? r0(c.totals.gross / n / monthsCount) : 0, pct(c.totals.gross, grand.gross),
-        ];
-      });
-      catRows.push(['ВСЕГО', headcount, r0(grand.gross), r0(avgPerMonth), r0(avgPerPersonMonth), 100]);
-      const wsCat = XLSX.utils.aoa_to_sheet([catHead, ...catRows]);
-      wsCat['!cols'] = [{ wch: 18 }, { wch: 9 }, { wch: 15 }, { wch: 14 }, { wch: 18 }, { wch: 8 }];
-      XLSX.utils.book_append_sheet(wb, wsCat, 'По категориям');
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'BONJOUR';
+      wb.created = new Date();
 
-      // Лист 3 — по сотрудникам
-      const empHead = ['Категория', 'Сотрудник', ...COLS.map((c) => c.label)];
-      const empRows = [empHead];
-      cats.forEach((c) => {
-        c.rows.forEach((row) => {
-          empRows.push([c.title, row.name, ...COLS.map((col) => r0(row[col.key]))]);
-        });
-        empRows.push(['', `Итого · ${c.title.toLowerCase()}`, ...COLS.map((col) => r0(c.totals[col.key]))]);
-      });
-      empRows.push(['', `ВСЕГО · ${headcount} чел.`, ...COLS.map((col) => r0(grand[col.key]))]);
-      const wsEmp = XLSX.utils.aoa_to_sheet(empRows);
-      wsEmp['!cols'] = [{ wch: 16 }, { wch: 26 }, ...COLS.map(() => ({ wch: 13 }))];
-      XLSX.utils.book_append_sheet(wb, wsEmp, 'По сотрудникам');
-
-      // Лист 4 — по салонам (если посчитан)
-      if (salons && salons.length) {
-        const salHead = ['Салон', 'Человек', 'Оклад', 'Комиссия', 'Премии', 'Итого', 'В месяц', 'Доля %'];
-        const salRows = salons.map((s) => [
-          s.salon_name, s.headcount || 0, r0(s.oklad), r0(s.commission), r0(s.bonuses),
-          r0(s.total), r0(s.total / salonMonths), pct(s.total, salonTotal),
-        ]);
-        salRows.push([
-          `ВСЕГО · ${salons.length} салонов`, '',
-          r0(salons.reduce((a, s) => a + s.oklad, 0)),
-          r0(salons.reduce((a, s) => a + s.commission, 0)),
-          r0(salons.reduce((a, s) => a + s.bonuses, 0)),
-          r0(salonTotal), r0(salonTotal / salonMonths), 100,
-        ]);
-        const wsSal = XLSX.utils.aoa_to_sheet([salHead, ...salRows]);
-        wsSal['!cols'] = [{ wch: 22 }, { wch: 9 }, { wch: 13 }, { wch: 13 }, { wch: 13 }, { wch: 14 }, { wch: 13 }, { wch: 8 }];
-        XLSX.utils.book_append_sheet(wb, wsSal, 'По салонам');
+      // Шапка листа: цветная плашка с названием + строка периода.
+      function titleBand(ws, span) {
+        ws.mergeCells(1, 1, 1, span);
+        const t = ws.getCell(1, 1);
+        t.value = 'Сводный отчёт по ФОТ';
+        t.font = { name: 'Arial', bold: true, size: 16, color: { argb: C.white } };
+        t.fill = solid(C.brand);
+        t.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        ws.getRow(1).height = 30;
+        ws.mergeCells(2, 1, 2, span);
+        const s = ws.getCell(2, 1);
+        s.value = `${periodLabel}${generatedAt ? `   ·   сформировано ${generatedAt}` : ''}`;
+        s.font = { name: 'Arial', size: 10, color: { argb: C.muted } };
+        s.fill = solid(C.white);
+        s.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        ws.getRow(2).height = 18;
       }
 
-      XLSX.writeFile(wb, `${fileBase}.xlsx`);
+      // Строка заголовков таблицы.
+      function headRow(ws, rowIdx, labels, rightFrom) {
+        const r = ws.getRow(rowIdx);
+        labels.forEach((label, i) => {
+          const c = r.getCell(i + 1);
+          c.value = label;
+          c.font = { name: 'Arial', bold: true, size: 10, color: { argb: C.brandDark } };
+          c.fill = solid(C.headFill);
+          c.alignment = { vertical: 'middle', horizontal: i + 1 >= rightFrom ? 'right' : 'left', wrapText: true };
+          c.border = { bottom: { style: 'medium', color: { argb: C.brand } }, top: boxAll.top, left: boxAll.left, right: boxAll.right };
+        });
+        r.height = 22;
+        return r;
+      }
+
+      // Оформляет строку данных: рамки, форматы, выравнивание, при желании жирный
+      // и заливку (для итогов).
+      function bodyRow(ws, rowIdx, opts) {
+        const { fmts, rightFrom, bold, fill, color } = opts;
+        const r = ws.getRow(rowIdx);
+        r.eachCell({ includeEmpty: true }, (c, col) => {
+          c.border = boxAll;
+          c.font = { name: 'Arial', size: 10, bold: !!bold, color: { argb: color || C.ink } };
+          if (fill) c.fill = solid(fill);
+          if (fmts && fmts[col]) c.numFmt = fmts[col];
+          c.alignment = { vertical: 'middle', horizontal: col >= rightFrom ? 'right' : 'left' };
+        });
+        return r;
+      }
+
+      // ── Лист 1 — Показатели ────────────────────────────────────────────────
+      const wsK = wb.addWorksheet('Показатели', { views: [{ showGridLines: false }] });
+      wsK.columns = [{ width: 40 }, { width: 20 }];
+      titleBand(wsK, 2);
+      wsK.getRow(3).height = 6;
+      const kpis = [
+        ['ФОТ за период', r0(grand.gross), MONEY, true],
+        ['ФОТ в месяц', r0(avgPerMonth), MONEY, false],
+        ['Средняя ЗП за период (на чел.)', r0(avgPerPerson), MONEY, false],
+        ['Средняя ЗП в месяц (на чел.)', r0(avgPerPersonMonth), MONEY, false],
+        ['Постоянная часть (оклады)', fixedShare, PCT, false],
+        ['    оклады', r0(grand.oklad), MONEY, false],
+        ['    переменная (комиссия + премии)', r0(variablePart), MONEY, false],
+        ['Удержания (авансы + штрафы)', r0(withholdings), MONEY, false],
+        ['    авансы', r0(grand.advances), MONEY, false],
+        ['    штрафы', r0(grand.penalties), MONEY, false],
+        ['Сотрудников', headcount, INT, false],
+        ['Месяцев в периоде', monthsCount, INT, false],
+      ];
+      let rk = 4;
+      kpis.forEach(([label, val, fmt, strong]) => {
+        const r = wsK.getRow(rk);
+        const a = r.getCell(1); const b = r.getCell(2);
+        a.value = label; b.value = val;
+        const indented = label.startsWith('    ');
+        a.font = { name: 'Arial', size: 11, bold: strong, color: { argb: indented ? C.muted : C.ink } };
+        b.font = { name: 'Arial', size: 11, bold: strong, color: { argb: strong ? C.brand : C.ink } };
+        b.numFmt = fmt; b.alignment = { horizontal: 'right' };
+        a.border = { bottom: thin }; b.border = { bottom: thin };
+        r.height = strong ? 22 : 18;
+        rk += 1;
+      });
+
+      // ── Лист 2 — По категориям ─────────────────────────────────────────────
+      const wsC = wb.addWorksheet('По категориям', { views: [{ showGridLines: false, state: 'frozen', ySplit: 3 }] });
+      wsC.columns = [{ width: 20 }, { width: 10 }, { width: 16 }, { width: 15 }, { width: 20 }, { width: 9 }];
+      titleBand(wsC, 6);
+      headRow(wsC, 3, ['Категория', 'Человек', 'ФОТ за период', 'ФОТ в месяц', 'Средняя ЗП в месяц', 'Доля'], 2);
+      const catFmts = { 2: INT, 3: MONEY, 4: MONEY, 5: MONEY, 6: PCT };
+      let rc = 4;
+      cats.forEach((c) => {
+        const n = c.rows.length;
+        const r = wsC.getRow(rc);
+        r.getCell(1).value = c.title;
+        r.getCell(2).value = n;
+        r.getCell(3).value = r0(c.totals.gross);
+        r.getCell(4).value = r0(monthsCount ? c.totals.gross / monthsCount : 0);
+        r.getCell(5).value = n && monthsCount ? r0(c.totals.gross / n / monthsCount) : 0;
+        r.getCell(6).value = pct(c.totals.gross, grand.gross);
+        bodyRow(wsC, rc, { fmts: catFmts, rightFrom: 2 });
+        rc += 1;
+      });
+      const rcTot = wsC.getRow(rc);
+      rcTot.getCell(1).value = 'ВСЕГО';
+      rcTot.getCell(2).value = headcount;
+      rcTot.getCell(3).value = r0(grand.gross);
+      rcTot.getCell(4).value = r0(avgPerMonth);
+      rcTot.getCell(5).value = r0(avgPerPersonMonth);
+      rcTot.getCell(6).value = 100;
+      bodyRow(wsC, rc, { fmts: catFmts, rightFrom: 2, bold: true, fill: C.total });
+
+      // ── Лист 3 — По сотрудникам ────────────────────────────────────────────
+      const wsE = wb.addWorksheet('По сотрудникам', { views: [{ showGridLines: false, state: 'frozen', ySplit: 3 }] });
+      wsE.columns = [{ width: 16 }, { width: 26 }, ...COLS.map(() => ({ width: 14 }))];
+      titleBand(wsE, 2 + COLS.length);
+      const empRightFrom = 3; // числовые столбцы начинаются с 3-го
+      headRow(wsE, 3, ['Категория', 'Сотрудник', ...COLS.map((c) => c.label)], empRightFrom);
+      const empFmts = Object.fromEntries(COLS.map((_, i) => [3 + i, MONEY]));
+      let re = 4;
+      cats.forEach((c) => {
+        c.rows.forEach((row) => {
+          const r = wsE.getRow(re);
+          r.getCell(1).value = c.title;
+          r.getCell(2).value = row.name;
+          COLS.forEach((col, i) => { r.getCell(3 + i).value = r0(row[col.key]); });
+          bodyRow(wsE, re, { fmts: empFmts, rightFrom: empRightFrom });
+          re += 1;
+        });
+        const rs = wsE.getRow(re);
+        rs.getCell(2).value = `Итого · ${c.title.toLowerCase()}`;
+        COLS.forEach((col, i) => { rs.getCell(3 + i).value = r0(c.totals[col.key]); });
+        bodyRow(wsE, re, { fmts: empFmts, rightFrom: empRightFrom, bold: true, fill: C.sub });
+        re += 1;
+      });
+      const reTot = wsE.getRow(re);
+      reTot.getCell(2).value = `ВСЕГО · ${headcount} чел.`;
+      COLS.forEach((col, i) => { reTot.getCell(3 + i).value = r0(grand[col.key]); });
+      bodyRow(wsE, re, { fmts: empFmts, rightFrom: empRightFrom, bold: true, fill: C.total });
+
+      // ── Лист 4 — По салонам (если посчитан) ────────────────────────────────
+      if (salons && salons.length) {
+        const wsS = wb.addWorksheet('По салонам', { views: [{ showGridLines: false, state: 'frozen', ySplit: 3 }] });
+        wsS.columns = [{ width: 24 }, { width: 10 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 15 }, { width: 14 }, { width: 9 }];
+        titleBand(wsS, 8);
+        headRow(wsS, 3, ['Салон', 'Человек', 'Оклад', 'Комиссия', 'Премии', 'Итого', 'В месяц', 'Доля'], 2);
+        const salFmts = { 2: INT, 3: MONEY, 4: MONEY, 5: MONEY, 6: MONEY, 7: MONEY, 8: PCT };
+        let rsn = 4;
+        salons.forEach((s) => {
+          const r = wsS.getRow(rsn);
+          r.getCell(1).value = s.salon_name;
+          r.getCell(2).value = s.headcount || 0;
+          r.getCell(3).value = r0(s.oklad);
+          r.getCell(4).value = r0(s.commission);
+          r.getCell(5).value = r0(s.bonuses);
+          r.getCell(6).value = r0(s.total);
+          r.getCell(7).value = r0(s.total / salonMonths);
+          r.getCell(8).value = pct(s.total, salonTotal);
+          bodyRow(wsS, rsn, { fmts: salFmts, rightFrom: 2 });
+          rsn += 1;
+        });
+        const rsT = wsS.getRow(rsn);
+        rsT.getCell(1).value = `ВСЕГО · ${salons.length} салонов`;
+        rsT.getCell(3).value = r0(salons.reduce((a, s) => a + s.oklad, 0));
+        rsT.getCell(4).value = r0(salons.reduce((a, s) => a + s.commission, 0));
+        rsT.getCell(5).value = r0(salons.reduce((a, s) => a + s.bonuses, 0));
+        rsT.getCell(6).value = r0(salonTotal);
+        rsT.getCell(7).value = r0(salonTotal / salonMonths);
+        rsT.getCell(8).value = 100;
+        bodyRow(wsS, rsn, { fmts: salFmts, rightFrom: 2, bold: true, fill: C.total });
+      }
+
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${fileBase}.xlsx`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast('Excel сохранён', 'success');
     } catch (e) {
       console.error(e);

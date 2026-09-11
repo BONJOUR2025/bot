@@ -29,6 +29,7 @@
     "@react-three/fiber": "^9.6.1",
     "@use-gesture/react": "^10.3.1",
     "axios": "^1.10.0",
+    "exceljs": "^4.4.0",
     "html-to-image": "^1.11.13",
     "jspdf": "^2.5.2",
     "lucide-react": "^0.525.0",
@@ -38,8 +39,7 @@
     "react-hook-form": "^7.50.0",
     "react-router-dom": "^7.6.2",
     "recharts": "^2.15.3",
-    "three": "^0.185.1",
-    "xlsx": "^0.18.5"
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",
