@@ -147,7 +147,6 @@ const COLS = [
   { key: 'penalties', label: 'Штрафы' },
   { key: 'advances', label: 'Авансы' },
   { key: 'gross', label: 'Начислено' },
-  { key: 'to_pay', label: 'К выплате' },
 ];
 
 const sumRows = (rows) => {
@@ -877,9 +876,9 @@ export default function PayrollSummary() {
   const headcount = tagged.length;
   const withholdings = grand.advances + grand.penalties;
   const donut = cats.filter((c) => c.totals.gross > 0).map((c) => ({ name: c.title, value: c.totals.gross, color: c.color }));
-  const topEarners = [...tagged].sort((a, b) => b.to_pay - a.to_pay).slice(0, 6);
+  const topEarners = [...tagged].sort((a, b) => b.gross - a.gross).slice(0, 6);
   const maxCat = Math.max(1, ...cats.map((c) => c.totals.gross));
-  const maxTop = Math.max(1, ...topEarners.map((r) => r.to_pay));
+  const maxTop = Math.max(1, ...topEarners.map((r) => r.gross));
   const comp = [
     { label: 'Оклад', value: grand.oklad, color: 'var(--color-primary)' },
     { label: 'Комиссия / KPI', value: grand.commission, color: 'var(--color-success)' },
@@ -1064,7 +1063,6 @@ export default function PayrollSummary() {
                 <div className="text-right">
                   <div className="text-[11px] font-semibold uppercase tracking-wide opacity-80">Итого начислено</div>
                   <div className="text-[40px] font-extrabold leading-none tabular-nums">{fmtMoney(grand.gross)}</div>
-                  <div className="mt-1 text-sm opacity-90">к выплате {fmtMoney(grand.to_pay)}</div>
                   {loading && (
                     <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide opacity-80">
                       расчёт не закончен · готово {CATS.filter((c) => catStatus[c.key] === 'done' || catStatus[c.key] === 'error').length} из {CATS.filter((c) => catStatus[c.key] !== 'skipped').length} категорий
@@ -1075,9 +1073,8 @@ export default function PayrollSummary() {
 
               <div className="px-10 py-8 space-y-8">
                 {/* KPI cards */}
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <KpiCard icon={<Wallet size={13} />} label="ФОТ за период" value={fmtMoney(grand.gross)} sub={`средняя ${fmtMoney(headcount ? grand.gross / headcount : 0)} / чел.`} color={BRAND} />
-                  <KpiCard icon={<Wallet size={13} />} label="К выплате" value={fmtMoney(grand.to_pay)} sub={`${pct(grand.to_pay, grand.gross)}% от начисленного`} color="var(--color-success)" />
                   <KpiCard icon={<UserRound size={13} />} label="Сотрудников" value={String(headcount)} sub={cats.map((c) => `${c.title.slice(0, 4).toLowerCase()}. ${c.rows.length}`).join(' · ') || '—'} />
                   <KpiCard icon={<TrendingDown size={13} />} label="Удержания" value={fmtMoney(withholdings)} sub={`авансы ${fmtMoney(grand.advances)} · штрафы ${fmtMoney(grand.penalties)}`} color={DANGER} />
                 </div>
@@ -1199,10 +1196,8 @@ export default function PayrollSummary() {
                       </div>
                     ))}
                     <div className="flex items-center gap-2 text-sm ml-auto">
-                      <span style={{ color: T.muted }}>− удержания</span>
+                      <span style={{ color: T.muted }}>удержания</span>
                       <span className="font-semibold tabular-nums" style={{ color: DANGER }}>{fmtMoney(withholdings)}</span>
-                      <span style={{ color: T.muted }}>= к выплате</span>
-                      <span className="font-bold tabular-nums" style={{ color: 'var(--color-success)' }}>{fmtMoney(grand.to_pay)}</span>
                     </div>
                   </div>
                 </Section>
@@ -1308,10 +1303,10 @@ export default function PayrollSummary() {
 
                 {/* Top earners */}
                 {topEarners.length > 0 && (
-                  <Section title="Топ по выплате" hint="самые крупные выплаты за период">
+                  <Section title="Топ по начислению" hint="самые крупные начисления за период">
                     <div className="space-y-2.5 pt-1">
                       {topEarners.map((r, i) => (
-                        <BarRow key={i} label={r.name} value={r.to_pay} max={maxTop} color={r.catColor} right={fmtMoney(r.to_pay)} />
+                        <BarRow key={i} label={r.name} value={r.gross} max={maxTop} color={r.catColor} right={fmtMoney(r.gross)} />
                       ))}
                     </div>
                   </Section>
