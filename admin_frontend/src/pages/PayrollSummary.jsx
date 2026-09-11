@@ -430,8 +430,11 @@ function Section({ title, hint, children }) {
 // ── Detailed loading progress panel ─────────────────────────────────────────
 
 function PayrollProgress({ status, errors = {} }) {
-  const done = CATS.filter((c) => status[c.key] === 'done' || status[c.key] === 'error').length;
-  const total = CATS.length;
+  // Скрытые настройкой категории не считаются вовсе, поэтому и в знаменателе
+  // их быть не должно: иначе «3 из 4» никогда не станет «4 из 4».
+  const counted = CATS.filter((c) => status[c.key] !== 'skipped');
+  const done = counted.filter((c) => status[c.key] === 'done' || status[c.key] === 'error').length;
+  const total = counted.length;
   const barPct = total > 0 ? (done / total) * 100 : 0;
 
   return (
@@ -474,7 +477,7 @@ function PayrollProgress({ status, errors = {} }) {
           // Голое «Ошибка» ничего не даёт: причина уже есть, её надо показать
           // здесь же, а не заставлять ждать таблицу.
           const reason = st === 'error' ? errors[cat.key] : '';
-          const text = { loading: 'Загружаю', done: 'Готово', error: 'Ошибка' }[st] || 'Ожидание';
+          const text = { loading: 'Загружаю', done: 'Готово', error: 'Ошибка', skipped: 'Скрыта' }[st] || 'Ожидание';
           return (
             <div key={cat.key} className="fui-cellstat" title={reason || undefined}>
               <span className="fui-cellstat__k">
@@ -634,7 +637,7 @@ export default function PayrollSummary() {
   const [dateTo, setDateTo] = useState(initialRange.to);
   const [activePreset, setActivePreset] = useState('this-month');
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [started, setStarted] = useState(false);
   const [pnging, setPnging] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [catStatus, setCatStatus] = useState({});
@@ -650,6 +653,9 @@ export default function PayrollSummary() {
 
   const rangeKey = `${dateFrom}_${dateTo}`;
   const periodLabel = `${fmtDateRu(dateFrom)} – ${fmtDateRu(dateTo)}`;
+  // «Идёт расчёт» — это просто «хоть одна категория в работе». Отдельным
+  // флагом это было дважды: догрузка раскрытой категории его бы не выставила.
+  const loading = CATS.some((c) => catStatus[c.key] === 'loading');
 
   // T drives the on-screen theme: dark normally, light during PNG export
   const T = exporting ? LIGHT : DARK;
@@ -665,34 +671,53 @@ export default function PayrollSummary() {
   const loadGen = useRef(0);
   const loadAbort = useRef(null);
 
-  const load = useCallback(async () => {
-    const gen = ++loadGen.current;
+  // Скрытая настройкой категория не должна считаться. Читаем набор через ref,
+  // а не через зависимость useCallback: иначе галка в настройках меняла бы
+  // саму функцию load, а эффект ниже перезапускал бы из-за этого весь расчёт.
+  const hiddenCatsRef = useRef(hiddenCats);
+  hiddenCatsRef.current = hiddenCats;
+
+  // fresh — новый расчёт: отменяет предыдущий и очищает отчёт.
+  // Иначе догружаем только то, что сейчас раскрыли в настройках, не трогая
+  // уже посчитанное.
+  const fetchCats = useCallback(async (keys, { fresh }) => {
+    let gen, signal;
+    if (fresh) {
+      gen = ++loadGen.current;
+      loadAbort.current?.abort();
+      const ac = new AbortController();
+      loadAbort.current = ac;
+      signal = ac.signal;
+      setCatErrors({});
+      setData(keys.length ? null : {});
+      setCatStatus(Object.fromEntries(CATS.map((c) => [c.key, keys.includes(c.key) ? 'loading' : 'skipped'])));
+    } else {
+      if (!keys.length) return;
+      gen = loadGen.current;
+      signal = loadAbort.current?.signal;
+      setCatStatus((prev) => ({ ...prev, ...Object.fromEntries(keys.map((k) => [k, 'loading'])) }));
+    }
     const mine = () => loadGen.current === gen;
-    loadAbort.current?.abort();
-    const ac = new AbortController();
-    loadAbort.current = ac;
-    const signal = ac.signal;
-    setLoading(true);
-    setData(null);
-    setCatStatus(Object.fromEntries(CATS.map((c) => [c.key, 'loading'])));
-    setCatErrors({});
-    try {
-      // Категории показываем по мере готовности, а не все разом в конце.
-      // Мастера считаются секунды, администраторы за год — минуту: ждать
-      // ради них пустой экран незачем, а «идёт расчёт» видно по панели
-      // прогресса и по пометке у ещё не доехавших категорий.
-      await Promise.all(CATS.map(async (c) => {
-        const result = await c.load(dateFrom, dateTo, signal)
-          .then((rows) => ({ rows }))
-          .catch((e) => ({ rows: [], error: e?.response?.data?.detail || e.message || 'ошибка' }));
-        if (!mine()) return;
-        setCatStatus((prev) => ({ ...prev, [c.key]: result.error ? 'error' : 'done' }));
-        if (result.error) setCatErrors((prev) => ({ ...prev, [c.key]: result.error }));
-        setData((prev) => ({ ...(prev || {}), [c.key]: result }));
-        setGeneratedAt(new Date().toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
-      }));
-    } finally { if (mine()) setLoading(false); }
+    // Категории показываем по мере готовности, а не все разом в конце.
+    // Мастера считаются секунды, администраторы за год — минуту: ждать
+    // ради них пустой экран незачем, а «идёт расчёт» видно по панели
+    // прогресса и по пометке у ещё не доехавших категорий.
+    await Promise.all(CATS.filter((c) => keys.includes(c.key)).map(async (c) => {
+      const result = await c.load(dateFrom, dateTo, signal)
+        .then((rows) => ({ rows }))
+        .catch((e) => ({ rows: [], error: e?.response?.data?.detail || e.message || 'ошибка' }));
+      if (!mine()) return;
+      setCatStatus((prev) => ({ ...prev, [c.key]: result.error ? 'error' : 'done' }));
+      if (result.error) setCatErrors((prev) => ({ ...prev, [c.key]: result.error }));
+      setData((prev) => ({ ...(prev || {}), [c.key]: result }));
+      setGeneratedAt(new Date().toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
+    }));
   }, [dateFrom, dateTo]);
+
+  const load = useCallback(
+    () => fetchCats(CATS.filter((c) => !hiddenCatsRef.current.has(c.key)).map((c) => c.key), { fresh: true }),
+    [fetchCats],
+  );
 
   // ФОТ по салонам грузится отдельно и по кнопке — он дороже всего отчёта.
   const [salons, setSalons] = useState(null);
@@ -730,7 +755,19 @@ export default function PayrollSummary() {
     }
   }, [dateFrom, dateTo]);
 
-  useEffect(() => { load(); }, [load]);
+  // Сам по себе отчёт не считается: расчёт идёт в базу салонов и стоит от
+  // нескольких секунд за месяц до нескольких минут за год. Открытие страницы —
+  // не повод его запускать; запускает кнопка, дальше смена периода.
+  useEffect(() => { if (started) load(); }, [load, started]);
+
+  // Категорию раскрыли в настройках уже после расчёта — досчитываем только её.
+  useEffect(() => {
+    if (!started || !data) return;
+    const missing = CATS
+      .filter((c) => !hiddenCats.has(c.key) && !data[c.key] && catStatus[c.key] !== 'loading')
+      .map((c) => c.key);
+    if (missing.length) fetchCats(missing, { fresh: false });
+  }, [started, data, catStatus, hiddenCats, fetchCats]);
   // Уход со страницы тоже отменяет расчёт — иначе он доедет до Firebird уже
   // никому не нужным.
   const abortRefs = useRef([loadAbort, salonsAbort]);
@@ -749,10 +786,15 @@ export default function PayrollSummary() {
     setActivePreset(p.key);
     const { from, to } = p.range();
     setDateFrom(from); setDateTo(to);
+    setStarted(true);
   }
   function applyCustomRange() {
     setActivePreset('custom');
-    load();
+    // Если даты не менялись, эффект не сработает — зовём расчёт напрямую.
+    if (started) load(); else setStarted(true);
+  }
+  function refresh() {
+    if (started) load(); else setStarted(true);
   }
   function addManualRow(category, row) {
     const withId = { ...row, id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, category };
@@ -869,7 +911,7 @@ export default function PayrollSummary() {
             Сводный отчёт по ФОТ
           </h2>
           <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2 max-w-[56ch]">
-            Администраторы, мастера, менеджеры и курьеры за период · настраиваемый PNG-отчёт
+            {CATS.filter((c) => !hiddenCats.has(c.key)).map((c) => c.title.toLowerCase()).join(', ') || 'все категории скрыты'} за период · настраиваемый PNG-отчёт
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -901,8 +943,12 @@ export default function PayrollSummary() {
           <button className="btn btn--secondary flex items-center gap-1.5" onClick={() => setShowSettings((v) => !v)}>
             <SlidersHorizontal size={14} /> Настроить{(hiddenCats.size + hiddenEmployees.size) > 0 ? ` (${hiddenCats.size + hiddenEmployees.size})` : ''}
           </button>
-          <button className="btn btn--secondary flex items-center gap-1.5" onClick={load} disabled={loading}>
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Обновить
+          <button
+            className={`btn ${started ? 'btn--secondary' : 'btn--primary'} flex items-center gap-1.5`}
+            onClick={refresh}
+            disabled={loading}
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {started ? 'Обновить' : 'Сформировать'}
           </button>
           <button className="btn btn--primary flex items-center gap-1.5" onClick={downloadPng} disabled={pnging || loading || !data}>
             <ImageIcon size={15} /> {pnging ? 'Генерирую…' : 'Скачать PNG'}
@@ -925,6 +971,33 @@ export default function PayrollSummary() {
           onSetShowBreakdown={setShowBreakdown}
           onClose={() => setShowSettings(false)}
         />
+      )}
+
+      {/* До первого запуска — ничего не считаем и честно говорим почему */}
+      {!started && (
+        <div className="app-card p-8 flex flex-wrap items-center gap-6">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
+            style={{ background: 'var(--color-primary-muted)' }}>
+            <Calculator size={20} style={{ color: 'var(--color-primary)' }} />
+          </div>
+          <div className="flex-1 min-w-[280px]">
+            <div className="text-base font-semibold text-[color:var(--color-text)]">Отчёт ещё не посчитан</div>
+            <p className="text-sm text-[color:var(--color-text-muted)] mt-1 max-w-[62ch]">
+              Расчёт идёт в базу салонов и стоит от полуминуты за месяц до нескольких минут за год,
+              поэтому он запускается кнопкой, а не сам при открытии страницы. Считаются только
+              категории, включённые в настройках.
+            </p>
+            <div className="text-[11px] text-[color:var(--color-muted-foreground)] mt-2">
+              Период: {periodLabel} · категорий к расчёту: {CATS.length - hiddenCats.size} из {CATS.length}
+              {hiddenCats.size > 0 && ` (скрыты: ${CATS.filter((c) => hiddenCats.has(c.key)).map((c) => c.title.toLowerCase()).join(', ')})`}
+            </div>
+          </div>
+          <div className="shrink-0">
+            <button className="btn btn--primary flex items-center gap-1.5" onClick={() => setStarted(true)}>
+              <Calculator size={15} /> Сформировать отчёт
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Панель прогресса держим всё время расчёта, а не только до первой
@@ -955,7 +1028,7 @@ export default function PayrollSummary() {
                   <div className="mt-1 text-sm opacity-90">к выплате {fmtMoney(grand.to_pay)}</div>
                   {loading && (
                     <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide opacity-80">
-                      расчёт не закончен · готово {CATS.filter((c) => catStatus[c.key] === 'done' || catStatus[c.key] === 'error').length} из {CATS.length} категорий
+                      расчёт не закончен · готово {CATS.filter((c) => catStatus[c.key] === 'done' || catStatus[c.key] === 'error').length} из {CATS.filter((c) => catStatus[c.key] !== 'skipped').length} категорий
                     </div>
                   )}
                 </div>
