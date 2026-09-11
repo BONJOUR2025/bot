@@ -158,10 +158,10 @@ const sumRows = (rows) => {
 
 // ── Per-category, per-month loaders (raw, one calendar month at a time) ──────
 
-async function loadAdminsMonth(period) {
+async function loadAdminsMonth(period, signal) {
   const [y, m] = period.split('-').map(Number);
   const monthName = MONTHS_RU[m - 1].toUpperCase();
-  const res = await api.get('payroll/calculate', { params: { month: monthName, year: y } });
+  const res = await api.get('payroll/calculate', { params: { month: monthName, year: y }, signal });
   return (res.data?.rows || []).map((r) => ({
     code: r.employee_code || '',
     name: r.employee_name || r.employee_code || '—',
@@ -174,15 +174,13 @@ async function loadAdminsMonth(period) {
     to_pay: r.total_net ?? 0,
   })).filter((r) => r.gross || r.oklad || r.commission || r.advances);
 }
-async function loadAdmins(dateFrom, dateTo) {
-  const perMonth = await mapLimit(monthsInRange(dateFrom, dateTo), MONTH_CONCURRENCY, loadAdminsMonth);
+async function loadAdmins(dateFrom, dateTo, signal) {
+  const perMonth = await mapLimit(monthsInRange(dateFrom, dateTo), MONTH_CONCURRENCY, (period) => loadAdminsMonth(period, signal));
   return mergeRowsAcrossMonths(perMonth);
 }
 
-// masters/works already accepts an arbitrary date range server-side —
-// no month-splitting needed here.
-async function loadMasters(dateFrom, dateTo) {
-  const res = await api.get('masters/works', { params: { date_from: dateFrom, date_to: dateTo } });
+async function loadMastersRange(from, to, signal) {
+  const res = await api.get('masters/works', { params: { date_from: from, date_to: to }, signal });
   const data = res.data;
   const services = Array.isArray(data) ? data : (data.services || []);
   const map = {};
@@ -192,25 +190,39 @@ async function loadMasters(dateFrom, dateTo) {
     map[name] = (map[name] || 0) + (Number(r.master_salary) || 0);
   }
   return Object.entries(map)
-    .map(([name, sal]) => ({ name, oklad: 0, commission: sal, bonuses: 0, penalties: 0, advances: 0, gross: sal, to_pay: sal }))
-    .sort((a, b) => b.gross - a.gross);
+    .map(([name, sal]) => ({ name, oklad: 0, commission: sal, bonuses: 0, penalties: 0, advances: 0, gross: sal, to_pay: sal }));
 }
 
-async function loadManagersMonth(period, rangeFrom, rangeTo, emp) {
+// masters/works принимает произвольный диапазон, но за год не успевает: сервер
+// отвечает 504 «Запрос выполняется слишком долго», и в отчёте мастера
+// оказывались нулями. Поэтому режем по календарным месяцам — с обрезкой по
+// краям, чтобы 10–20 сентября остались 10–20 сентября, а не всем сентябрём.
+async function loadMasters(dateFrom, dateTo, signal) {
+  const periods = monthsInRange(dateFrom, dateTo);
+  if (periods.length <= 1) return (await loadMastersRange(dateFrom, dateTo, signal)).sort((a, b) => b.gross - a.gross);
+  const perMonth = await mapLimit(periods, MONTH_CONCURRENCY, (period) => {
+    const monthFrom = `${period}-01`;
+    const monthTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
+    return loadMastersRange(monthFrom > dateFrom ? monthFrom : dateFrom, monthTo < dateTo ? monthTo : dateTo, signal);
+  });
+  return mergeRowsAcrossMonths(perMonth);
+}
+
+async function loadManagersMonth(period, rangeFrom, rangeTo, emp, signal) {
   const monthFrom = `${period}-01`;
   const monthTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
   const incFrom = monthFrom > rangeFrom ? monthFrom : rangeFrom;
   const incTo = monthTo < rangeTo ? monthTo : rangeTo;
   const managers = emp.filter((e) => e.status !== 'inactive' && (e.position || '').trim().toLowerCase() === MANAGER_POSITION);
   const rows = await Promise.all(managers.map(async (mgr) => {
-    const plan = await api.get('manager-salary/plan', { params: { employee_code: mgr.id, period } }).then((r) => r.data).catch(() => ({}));
-    const adv = await api.get('manager-salary/advances', { params: { employee_id: mgr.id } }).then((r) => r.data).catch(() => ({ total: 0 }));
-    const inc = await api.get('incentives/', { params: { employee_id: mgr.id, date_from: incFrom, date_to: incTo } }).then((r) => r.data).catch(() => []);
+    const plan = await api.get('manager-salary/plan', { params: { employee_code: mgr.id, period }, signal }).then((r) => r.data).catch(() => ({}));
+    const adv = await api.get('manager-salary/advances', { params: { employee_id: mgr.id }, signal }).then((r) => r.data).catch(() => ({ total: 0 }));
+    const inc = await api.get('incentives/', { params: { employee_id: mgr.id, date_from: incFrom, date_to: incTo }, signal }).then((r) => r.data).catch(() => []);
     const bonuses = (inc || []).filter((i) => i.type === 'bonus').reduce((s, i) => s + (Number(i.amount) || 0), 0);
     const penalties = (inc || []).filter((i) => i.type === 'penalty').reduce((s, i) => s + (Number(i.amount) || 0), 0);
     let met = null;
     if (mgr.amo_user_id) {
-      met = await api.get('manager-salary/metrics', { params: { date_from: incFrom, date_to: incTo, amo_user_id: mgr.amo_user_id } }).then((r) => r.data).catch(() => null);
+      met = await api.get('manager-salary/metrics', { params: { date_from: incFrom, date_to: incTo, amo_user_id: mgr.amo_user_id }, signal }).then((r) => r.data).catch(() => null);
     }
     const calc = await api.post('manager-salary/calc', {
       oklad: plan.oklad, kpi_max: plan.kpi_max,
@@ -218,7 +230,7 @@ async function loadManagersMonth(period, rangeFrom, rangeTo, emp) {
       repair_plan_conv: plan.repair_plan_conv, repair_target_deals: met?.repair_target_deals || 0, repair_total_deals: met?.repair_total_deals || 0,
       sew_plan_conv: plan.sew_plan_conv, sew_target_deals: met?.sew_target_deals || 0, sew_total_deals: met?.sew_total_deals || 0, sew_new_leads: met?.sew_new_leads || 0,
       advances: adv?.total || 0, bonuses, penalties,
-    }).then((r) => r.data).catch(() => null);
+    }, { signal }).then((r) => r.data).catch(() => null);
     if (!calc) return null;
     return {
       code: mgr.id, name: mgr.full_name || mgr.name, oklad: calc.oklad, commission: calc.kpi,
@@ -228,43 +240,43 @@ async function loadManagersMonth(period, rangeFrom, rangeTo, emp) {
   }));
   return rows.filter(Boolean);
 }
-async function loadManagers(dateFrom, dateTo) {
+async function loadManagers(dateFrom, dateTo, signal) {
   // Справочник сотрудников от месяца не зависит — читаем один раз на
   // категорию. Раньше он запрашивался внутри каждого месяца, и за «год»
   // уходило 12 лишних одинаковых запросов на менеджеров и столько же на
   // курьеров.
-  const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
+  const emp = await api.get('employees/', { params: { archived: false }, signal }).then((r) => r.data || []);
   const perMonth = await mapLimit(monthsInRange(dateFrom, dateTo), MONTH_CONCURRENCY,
-    (period) => loadManagersMonth(period, dateFrom, dateTo, emp));
+    (period) => loadManagersMonth(period, dateFrom, dateTo, emp, signal));
   return mergeRowsAcrossMonths(perMonth);
 }
 
-async function loadCouriersMonth(period, rangeFrom, rangeTo, emp) {
+async function loadCouriersMonth(period, rangeFrom, rangeTo, emp, signal) {
   const monthFrom = `${period}-01`;
   const monthTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
   const incFrom = monthFrom > rangeFrom ? monthFrom : rangeFrom;
   const incTo = monthTo < rangeTo ? monthTo : rangeTo;
   const couriers = emp.filter((e) => e.status !== 'inactive' && (e.position || '').toLowerCase().includes('курьер'));
   const rows = await Promise.all(couriers.map(async (c) => {
-    const plan = await api.get('courier-salary/plan', { params: { employee_code: c.id, period } }).then((r) => r.data).catch(() => ({}));
-    const adv = await api.get('courier-salary/advances', { params: { employee_id: c.id } }).then((r) => r.data).catch(() => ({ total: 0 }));
-    const inc = await api.get('incentives/', { params: { employee_id: c.id, date_from: incFrom, date_to: incTo } }).then((r) => r.data).catch(() => []);
+    const plan = await api.get('courier-salary/plan', { params: { employee_code: c.id, period }, signal }).then((r) => r.data).catch(() => ({}));
+    const adv = await api.get('courier-salary/advances', { params: { employee_id: c.id }, signal }).then((r) => r.data).catch(() => ({ total: 0 }));
+    const inc = await api.get('incentives/', { params: { employee_id: c.id, date_from: incFrom, date_to: incTo }, signal }).then((r) => r.data).catch(() => []);
     const bonuses = (inc || []).filter((i) => i.type === 'bonus').reduce((s, i) => s + (Number(i.amount) || 0), 0);
     const penalties = (inc || []).filter((i) => i.type === 'penalty').reduce((s, i) => s + (Number(i.amount) || 0), 0);
-    const calc = await api.post('courier-salary/calc', { oklad: plan.oklad, advances: adv?.total || 0, bonuses, penalties }).then((r) => r.data).catch(() => null);
+    const calc = await api.post('courier-salary/calc', { oklad: plan.oklad, advances: adv?.total || 0, bonuses, penalties }, { signal }).then((r) => r.data).catch(() => null);
     if (!calc) return null;
     return { code: c.id, name: c.full_name || c.name, oklad: calc.oklad, commission: 0, bonuses: calc.bonuses, penalties: calc.penalties, advances: calc.advances, gross: calc.gross, to_pay: calc.to_pay };
   }));
   return rows.filter(Boolean).filter((r) => r.gross || r.advances);
 }
-async function loadCouriers(dateFrom, dateTo) {
+async function loadCouriers(dateFrom, dateTo, signal) {
   // Справочник сотрудников от месяца не зависит — читаем один раз на
   // категорию. Раньше он запрашивался внутри каждого месяца, и за «год»
   // уходило 12 лишних одинаковых запросов на менеджеров и столько же на
   // курьеров.
-  const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
+  const emp = await api.get('employees/', { params: { archived: false }, signal }).then((r) => r.data || []);
   const perMonth = await mapLimit(monthsInRange(dateFrom, dateTo), MONTH_CONCURRENCY,
-    (period) => loadCouriersMonth(period, dateFrom, dateTo, emp));
+    (period) => loadCouriersMonth(period, dateFrom, dateTo, emp, signal));
   return mergeRowsAcrossMonths(perMonth);
 }
 
@@ -274,10 +286,10 @@ async function loadCouriers(dateFrom, dateTo) {
 // за год — полторы минуты, поэтому грузим не вместе с отчётом, а по кнопке.
 // Население то же, что у «администраторов»: мастера, менеджеры и курьеры к
 // салону не привязаны.
-async function loadSalonsMonth(period) {
+async function loadSalonsMonth(period, signal) {
   const [y, m] = period.split('-').map(Number);
   const monthName = MONTHS_RU[m - 1].toUpperCase();
-  const res = await api.get('payroll/by-salon', { params: { month: monthName, year: y } });
+  const res = await api.get('payroll/by-salon', { params: { month: monthName, year: y }, signal });
   return res.data?.salons || [];
 }
 
@@ -645,30 +657,40 @@ export default function PayrollSummary() {
   // Каждая загрузка получает номер. Переключение периода запускает новую, но
   // старая продолжает висеть на сети ещё десятки секунд — и без этой проверки
   // её ответ приходит последним и затирает свежие цифры чужого периода.
+  //
+  // Номера мало: брошенные запросы всё равно доходят до Firebird и занимают
+  // сервер. Проверено — расчёт по салонам за один месяц после переключения с
+  // «года» шёл 65 секунд вместо девяти, потому что двенадцать никому не нужных
+  // месяцев доедали очередь. Поэтому загрузка ещё и отменяется по-настоящему.
   const loadGen = useRef(0);
+  const loadAbort = useRef(null);
 
   const load = useCallback(async () => {
     const gen = ++loadGen.current;
     const mine = () => loadGen.current === gen;
+    loadAbort.current?.abort();
+    const ac = new AbortController();
+    loadAbort.current = ac;
+    const signal = ac.signal;
     setLoading(true);
+    setData(null);
     setCatStatus(Object.fromEntries(CATS.map((c) => [c.key, 'loading'])));
     setCatErrors({});
     try {
-      const results = await Promise.all(CATS.map(async (c) => {
-        const result = await c.load(dateFrom, dateTo)
+      // Категории показываем по мере готовности, а не все разом в конце.
+      // Мастера считаются секунды, администраторы за год — минуту: ждать
+      // ради них пустой экран незачем, а «идёт расчёт» видно по панели
+      // прогресса и по пометке у ещё не доехавших категорий.
+      await Promise.all(CATS.map(async (c) => {
+        const result = await c.load(dateFrom, dateTo, signal)
           .then((rows) => ({ rows }))
           .catch((e) => ({ rows: [], error: e?.response?.data?.detail || e.message || 'ошибка' }));
-        if (mine()) {
-          setCatStatus((prev) => ({ ...prev, [c.key]: result.error ? 'error' : 'done' }));
-          if (result.error) setCatErrors((prev) => ({ ...prev, [c.key]: result.error }));
-        }
-        return result;
+        if (!mine()) return;
+        setCatStatus((prev) => ({ ...prev, [c.key]: result.error ? 'error' : 'done' }));
+        if (result.error) setCatErrors((prev) => ({ ...prev, [c.key]: result.error }));
+        setData((prev) => ({ ...(prev || {}), [c.key]: result }));
+        setGeneratedAt(new Date().toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
       }));
-      if (!mine()) return;
-      const next = {};
-      CATS.forEach((c, i) => { next[c.key] = results[i]; });
-      setData(next);
-      setGeneratedAt(new Date().toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
     } finally { if (mine()) setLoading(false); }
   }, [dateFrom, dateTo]);
 
@@ -676,21 +698,26 @@ export default function PayrollSummary() {
   const [salons, setSalons] = useState(null);
   const [salonsState, setSalonsState] = useState({ status: 'idle', done: 0, total: 0, error: '' });
   const salonsGen = useRef(0);
+  const salonsAbort = useRef(null);
 
   useEffect(() => {
     salonsGen.current += 1;
+    salonsAbort.current?.abort();
     setSalons(null);
     setSalonsState({ status: 'idle', done: 0, total: 0, error: '' });
   }, [dateFrom, dateTo]);
 
   const loadSalons = useCallback(async () => {
     const gen = ++salonsGen.current;
+    salonsAbort.current?.abort();
+    const ac = new AbortController();
+    salonsAbort.current = ac;
     const periods = monthsInRange(dateFrom, dateTo);
     setSalons(null);
     setSalonsState({ status: 'loading', done: 0, total: periods.length, error: '' });
     try {
       const perMonth = await mapLimit(periods, MONTH_CONCURRENCY, async (p) => {
-        const rows = await loadSalonsMonth(p);
+        const rows = await loadSalonsMonth(p, ac.signal);
         if (salonsGen.current === gen) setSalonsState((s) => ({ ...s, done: s.done + 1 }));
         return rows;
       });
@@ -704,6 +731,13 @@ export default function PayrollSummary() {
   }, [dateFrom, dateTo]);
 
   useEffect(() => { load(); }, [load]);
+  // Уход со страницы тоже отменяет расчёт — иначе он доедет до Firebird уже
+  // никому не нужным.
+  const abortRefs = useRef([loadAbort, salonsAbort]);
+  useEffect(() => {
+    const refs = abortRefs.current;
+    return () => refs.forEach((r) => r.current?.abort());
+  }, []);
   useEffect(() => { saveSet(HIDDEN_CATS_KEY, hiddenCats); }, [hiddenCats]);
   useEffect(() => { saveSet(HIDDEN_EMPLOYEES_KEY, hiddenEmployees); }, [hiddenEmployees]);
   useEffect(() => { saveBool(SHOW_BREAKDOWN_KEY, showBreakdown); }, [showBreakdown]);
@@ -893,8 +927,9 @@ export default function PayrollSummary() {
         />
       )}
 
-      {/* Initial load: detailed progress panel */}
-      {loading && !data && <PayrollProgress status={catStatus} errors={catErrors} />}
+      {/* Панель прогресса держим всё время расчёта, а не только до первой
+          готовой категории: отчёт ниже уже показывает то, что доехало. */}
+      {loading && <PayrollProgress status={catStatus} errors={catErrors} />}
 
       {/* Report (shown once data is available, even while refreshing) */}
       {data && (
@@ -918,6 +953,11 @@ export default function PayrollSummary() {
                   <div className="text-[11px] font-semibold uppercase tracking-wide opacity-80">Итого начислено</div>
                   <div className="text-[40px] font-extrabold leading-none tabular-nums">{fmtMoney(grand.gross)}</div>
                   <div className="mt-1 text-sm opacity-90">к выплате {fmtMoney(grand.to_pay)}</div>
+                  {loading && (
+                    <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide opacity-80">
+                      расчёт не закончен · готово {CATS.filter((c) => catStatus[c.key] === 'done' || catStatus[c.key] === 'error').length} из {CATS.length} категорий
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1214,7 +1254,9 @@ export default function PayrollSummary() {
                               </tr>
                             ))}
                             {!c.error && c.rows.length === 0 && addingToCategory !== c.key && (
-                              <tr><td colSpan={visibleCols.length + 1} className="px-3 py-2 text-[12px]" style={{ color: T.muted }}>Нет данных за период.</td></tr>
+                              <tr><td colSpan={visibleCols.length + 1} className="px-3 py-2 text-[12px]" style={{ color: T.muted }}>
+                                {catStatus[c.key] === 'loading' ? 'Считаю…' : 'Нет данных за период.'}
+                              </td></tr>
                             )}
                             {!exporting && addingToCategory === c.key && (
                               <AddRowForm visibleCols={visibleCols} onCancel={() => setAddingToCategory(null)} onSubmit={(row) => addManualRow(c.key, row)} />
