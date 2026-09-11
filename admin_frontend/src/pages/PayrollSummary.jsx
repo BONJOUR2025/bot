@@ -720,40 +720,76 @@ export default function PayrollSummary() {
   );
 
   // ФОТ по салонам грузится отдельно и по кнопке — он дороже всего отчёта.
+  // Помесячные результаты копим в ref, чтобы «докат» после сбоя не считал
+  // заново уже посчитанные месяцы.
   const [salons, setSalons] = useState(null);
-  const [salonsState, setSalonsState] = useState({ status: 'idle', done: 0, total: 0, error: '' });
+  const [salonsState, setSalonsState] = useState({ status: 'idle', done: 0, total: 0, failed: [], error: '' });
   const salonsGen = useRef(0);
   const salonsAbort = useRef(null);
+  const salonMonthsRef = useRef({}); // period -> rows[]
 
   useEffect(() => {
     salonsGen.current += 1;
     salonsAbort.current?.abort();
+    salonMonthsRef.current = {};
     setSalons(null);
-    setSalonsState({ status: 'idle', done: 0, total: 0, error: '' });
+    setSalonsState({ status: 'idle', done: 0, total: 0, failed: [], error: '' });
   }, [dateFrom, dateTo]);
+
+  // Считает переданные месяцы, по одному не роняя остальные. Один месяц —
+  // это отдельный тяжёлый запрос к Firebird; под нагрузкой он изредка
+  // выходит за серверный таймаут и отвечает 504. Раньше такой единичный сбой
+  // ронял весь расчёт (Promise.all отклонялся) и выбрасывал 11 успешных
+  // месяцев. Теперь ошибка месяца лишь помечает его к докату, а посчитанное
+  // сразу показывается.
+  const fetchSalonMonths = useCallback(async (periods, gen, signal) => {
+    const failed = [];
+    await mapLimit(periods, MONTH_CONCURRENCY, async (p) => {
+      try {
+        const rows = await loadSalonsMonth(p, signal);
+        if (salonsGen.current !== gen) return;
+        salonMonthsRef.current[p] = rows;
+      } catch (e) {
+        if (salonsGen.current !== gen) return;
+        if (e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return; // сменили период — молча
+        failed.push(p);
+      } finally {
+        if (salonsGen.current === gen) {
+          setSalonsState((s) => ({ ...s, done: Object.keys(salonMonthsRef.current).length }));
+        }
+      }
+    });
+    return failed;
+  }, []);
 
   const loadSalons = useCallback(async () => {
     const gen = ++salonsGen.current;
     salonsAbort.current?.abort();
     const ac = new AbortController();
     salonsAbort.current = ac;
-    const periods = monthsInRange(dateFrom, dateTo);
-    setSalons(null);
-    setSalonsState({ status: 'loading', done: 0, total: periods.length, error: '' });
-    try {
-      const perMonth = await mapLimit(periods, MONTH_CONCURRENCY, async (p) => {
-        const rows = await loadSalonsMonth(p, ac.signal);
-        if (salonsGen.current === gen) setSalonsState((s) => ({ ...s, done: s.done + 1 }));
-        return rows;
-      });
+    // Считаем только ещё не посчитанные месяцы (докат после сбоя не трогает
+    // готовые), но упавшие пробуем заново.
+    const all = monthsInRange(dateFrom, dateTo);
+    const todo = all.filter((p) => !salonMonthsRef.current[p]);
+    setSalonsState((s) => ({ ...s, status: 'loading', total: all.length, done: all.length - todo.length, failed: [], error: '' }));
+
+    let failed = await fetchSalonMonths(todo, gen, ac.signal);
+    if (salonsGen.current !== gen) return;
+    // Один автоповтор упавших: контеншн на общем Firebird обычно преходящий.
+    if (failed.length) {
+      failed = await fetchSalonMonths(failed, gen, ac.signal);
       if (salonsGen.current !== gen) return;
-      setSalons(mergeSalonsAcrossMonths(perMonth));
-      setSalonsState((s) => ({ ...s, status: 'done' }));
-    } catch (e) {
-      if (salonsGen.current !== gen) return;
-      setSalonsState((s) => ({ ...s, status: 'error', error: e?.response?.data?.detail || e.message || 'ошибка' }));
     }
-  }, [dateFrom, dateTo]);
+
+    const gotAny = Object.keys(salonMonthsRef.current).length > 0;
+    setSalons(gotAny ? mergeSalonsAcrossMonths(Object.values(salonMonthsRef.current)) : null);
+    setSalonsState((s) => ({
+      ...s,
+      status: failed.length ? (gotAny ? 'partial' : 'error') : 'done',
+      failed,
+      error: gotAny ? '' : 'сервер не ответил вовремя',
+    }));
+  }, [dateFrom, dateTo, fetchSalonMonths]);
 
   // Сам по себе отчёт не считается: расчёт идёт в базу салонов и стоит от
   // нескольких секунд за месяц до нескольких минут за год. Открытие страницы —
@@ -866,6 +902,9 @@ export default function PayrollSummary() {
 
   const salonMax = Math.max(1, ...(salons || []).map((s) => s.total));
   const salonTotal = (salons || []).reduce((s, x) => s + x.total, 0);
+  // «В месяц» по салонам делим на реально посчитанные месяцы, а не на весь
+  // диапазон: при частичном результате часть месяцев отсутствует.
+  const salonMonths = Math.max(1, monthsCount - (salonsState.status === 'partial' ? salonsState.failed.length : 0));
 
   const visibleCols = showBreakdown
     ? COLS
@@ -1191,8 +1230,23 @@ export default function PayrollSummary() {
                     )}
                     {salonsState.status === 'error' && (
                       <div className="flex items-center gap-3">
-                        <span className="text-sm" style={{ color: DANGER }}>Не удалось посчитать: {salonsState.error}</span>
+                        <span className="text-sm" style={{ color: DANGER }}>Не удалось посчитать: {salonsState.error}. Firebird салонов бывает перегружен — попробуйте ещё раз.</span>
                         {!exporting && <button className="btn btn--secondary" onClick={loadSalons}>Повторить</button>}
+                      </div>
+                    )}
+                    {/* Часть месяцев не посчиталась — показываем, что есть, и
+                        предлагаем докатить только их, не пересчитывая готовые. */}
+                    {salonsState.status === 'partial' && (
+                      <div className="flex flex-wrap items-center gap-3 mb-3 rounded-lg px-3 py-2"
+                        style={{ background: 'var(--color-warning-muted, rgba(234,179,8,0.12))' }}>
+                        <span className="text-sm" style={{ color: 'var(--color-warning)' }}>
+                          Не досчитались {salonsState.failed.length} мес. ({salonsState.failed.join(', ')}) — Firebird салонов был перегружен. Ниже — по {salonsState.total - salonsState.failed.length} из {salonsState.total} мес.
+                        </span>
+                        {!exporting && (
+                          <button className="btn btn--secondary btn--sm" onClick={loadSalons}>
+                            Досчитать {salonsState.failed.length} мес.
+                          </button>
+                        )}
                       </div>
                     )}
                     {salons && salons.length > 0 && (
@@ -1225,7 +1279,7 @@ export default function PayrollSummary() {
                                   <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{s.commission ? fmtMoney(s.commission) : '—'}</td>
                                   <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{s.bonuses ? fmtMoney(s.bonuses) : '—'}</td>
                                   <td className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: BRAND }}>{fmtMoney(s.total)}</td>
-                                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{fmtMoney(monthsCount ? s.total / monthsCount : 0)}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{fmtMoney(s.total / salonMonths)}</td>
                                   <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.muted }}>{pct(s.total, salonTotal)}%</td>
                                 </tr>
                               ))}
@@ -1238,7 +1292,7 @@ export default function PayrollSummary() {
                                 <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: T.ink }}>{fmtMoney(salons.reduce((a, s) => a + s.commission, 0))}</td>
                                 <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: T.ink }}>{fmtMoney(salons.reduce((a, s) => a + s.bonuses, 0))}</td>
                                 <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: BRAND }}>{fmtMoney(salonTotal)}</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: T.ink }}>{fmtMoney(monthsCount ? salonTotal / monthsCount : 0)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: T.ink }}>{fmtMoney(salonTotal / salonMonths)}</td>
                                 <td />
                               </tr>
                             </tfoot>
