@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound,
+  RefreshCw, Image as ImageIcon, FileSpreadsheet, FileText, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound,
   SlidersHorizontal, X, Check, Plus, Trash2, Building2, CalendarRange, Percent,
 } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
@@ -637,7 +637,7 @@ export default function PayrollSummary() {
   const [activePreset, setActivePreset] = useState('this-month');
   const [data, setData] = useState(null);
   const [started, setStarted] = useState(false);
-  const [pnging, setPnging] = useState(false);
+  const [exportKind, setExportKind] = useState(null); // 'png' | 'pdf' | 'xlsx' | null
   const [exporting, setExporting] = useState(false);
   const [catStatus, setCatStatus] = useState({});
   const [catErrors, setCatErrors] = useState({});
@@ -909,34 +909,170 @@ export default function PayrollSummary() {
     ? COLS
     : COLS.filter((c) => c.key !== 'advances' && (c.key !== 'penalties' || grand.penalties > 0));
 
-  async function downloadPng() {
-    if (!reportRef.current) return;
-    setPnging(true);
+  const fileBase = `ФОТ_${dateFrom}_${dateTo}`;
+
+  // Снимок отчёта в светлой теме. PNG и PDF рендерят одну и ту же картинку —
+  // ту, что видно на экране, со всеми графиками; расходятся только контейнером.
+  async function captureReport() {
     setExporting(true);
     setAddingToCategory(null);
-    // Two animation frames so React re-renders with the light LIGHT theme (and
-    // without any open inline add-row form) before capture
+    // Два кадра, чтобы React перерисовал светлую тему и убрал открытую форму
+    // добавления строки до захвата.
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     try {
-      const url = await toPng(reportRef.current, { backgroundColor: '#ffffff', pixelRatio: 2, cacheBust: true, skipFonts: true });
+      const node = reportRef.current;
+      const url = await toPng(node, { backgroundColor: '#ffffff', pixelRatio: 2, cacheBust: true, skipFonts: true });
+      return { url, width: node.offsetWidth, height: node.offsetHeight };
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function downloadPng() {
+    if (!reportRef.current || exportKind) return;
+    setExportKind('png');
+    try {
+      const { url } = await captureReport();
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ФОТ_${dateFrom}_${dateTo}.png`;
+      a.download = `${fileBase}.png`;
       a.click();
       toast('PNG сохранён', 'success');
     } catch (e) {
       console.error(e);
       toast('Ошибка генерации PNG', 'error');
     } finally {
-      setExporting(false);
-      setPnging(false);
+      setExportKind(null);
+    }
+  }
+
+  async function downloadPdf() {
+    if (!reportRef.current || exportKind) return;
+    setExportKind('pdf');
+    try {
+      const { url, width, height } = await captureReport();
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgW = pageW;
+      const imgH = (height / width) * pageW; // высота картинки в точках A4
+      // Длинный отчёт нарезаем по страницам A4: одна и та же картинка рисуется
+      // со сдвигом вверх на страницу — то, что не влезло, показывается на
+      // следующей.
+      let heightLeft = imgH;
+      let position = 0;
+      pdf.addImage(url, 'PNG', 0, position, imgW, imgH);
+      heightLeft -= pageH;
+      while (heightLeft > 0) {
+        position -= pageH;
+        pdf.addPage();
+        pdf.addImage(url, 'PNG', 0, position, imgW, imgH);
+        heightLeft -= pageH;
+      }
+      pdf.save(`${fileBase}.pdf`);
+      toast('PDF сохранён', 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Ошибка генерации PDF', 'error');
+    } finally {
+      setExportKind(null);
+    }
+  }
+
+  async function downloadXlsx() {
+    if (exportKind) return;
+    setExportKind('xlsx');
+    try {
+      const XLSX = await import('xlsx');
+      const r0 = (v) => Math.round(Number(v) || 0);
+      const wb = XLSX.utils.book_new();
+
+      // Лист 1 — показатели
+      const kpi = [
+        ['Сводный отчёт по ФОТ'],
+        ['Период', periodLabel],
+        ['Категории', cats.map((c) => c.title).join(', ') || '—'],
+        ['Сформировано', generatedAt || ''],
+        [],
+        ['ФОТ за период', r0(grand.gross)],
+        ['ФОТ в месяц', r0(avgPerMonth)],
+        ['Средняя ЗП за период (на чел.)', r0(avgPerPerson)],
+        ['Средняя ЗП в месяц (на чел.)', r0(avgPerPersonMonth)],
+        ['Постоянная часть (оклады), %', fixedShare],
+        ['  оклады', r0(grand.oklad)],
+        ['  переменная (комиссия+премии)', r0(variablePart)],
+        ['Удержания (авансы+штрафы)', r0(withholdings)],
+        ['  авансы', r0(grand.advances)],
+        ['  штрафы', r0(grand.penalties)],
+        ['Сотрудников', headcount],
+        ['Месяцев в периоде', monthsCount],
+      ];
+      const wsKpi = XLSX.utils.aoa_to_sheet(kpi);
+      wsKpi['!cols'] = [{ wch: 36 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(wb, wsKpi, 'Показатели');
+
+      // Лист 2 — по категориям
+      const catHead = ['Категория', 'Человек', 'ФОТ за период', 'ФОТ в месяц', 'Средняя ЗП в месяц', 'Доля %'];
+      const catRows = cats.map((c) => {
+        const n = c.rows.length;
+        return [
+          c.title, n, r0(c.totals.gross), r0(monthsCount ? c.totals.gross / monthsCount : 0),
+          n && monthsCount ? r0(c.totals.gross / n / monthsCount) : 0, pct(c.totals.gross, grand.gross),
+        ];
+      });
+      catRows.push(['ВСЕГО', headcount, r0(grand.gross), r0(avgPerMonth), r0(avgPerPersonMonth), 100]);
+      const wsCat = XLSX.utils.aoa_to_sheet([catHead, ...catRows]);
+      wsCat['!cols'] = [{ wch: 18 }, { wch: 9 }, { wch: 15 }, { wch: 14 }, { wch: 18 }, { wch: 8 }];
+      XLSX.utils.book_append_sheet(wb, wsCat, 'По категориям');
+
+      // Лист 3 — по сотрудникам
+      const empHead = ['Категория', 'Сотрудник', ...COLS.map((c) => c.label)];
+      const empRows = [empHead];
+      cats.forEach((c) => {
+        c.rows.forEach((row) => {
+          empRows.push([c.title, row.name, ...COLS.map((col) => r0(row[col.key]))]);
+        });
+        empRows.push(['', `Итого · ${c.title.toLowerCase()}`, ...COLS.map((col) => r0(c.totals[col.key]))]);
+      });
+      empRows.push(['', `ВСЕГО · ${headcount} чел.`, ...COLS.map((col) => r0(grand[col.key]))]);
+      const wsEmp = XLSX.utils.aoa_to_sheet(empRows);
+      wsEmp['!cols'] = [{ wch: 16 }, { wch: 26 }, ...COLS.map(() => ({ wch: 13 }))];
+      XLSX.utils.book_append_sheet(wb, wsEmp, 'По сотрудникам');
+
+      // Лист 4 — по салонам (если посчитан)
+      if (salons && salons.length) {
+        const salHead = ['Салон', 'Человек', 'Оклад', 'Комиссия', 'Премии', 'Итого', 'В месяц', 'Доля %'];
+        const salRows = salons.map((s) => [
+          s.salon_name, s.headcount || 0, r0(s.oklad), r0(s.commission), r0(s.bonuses),
+          r0(s.total), r0(s.total / salonMonths), pct(s.total, salonTotal),
+        ]);
+        salRows.push([
+          `ВСЕГО · ${salons.length} салонов`, '',
+          r0(salons.reduce((a, s) => a + s.oklad, 0)),
+          r0(salons.reduce((a, s) => a + s.commission, 0)),
+          r0(salons.reduce((a, s) => a + s.bonuses, 0)),
+          r0(salonTotal), r0(salonTotal / salonMonths), 100,
+        ]);
+        const wsSal = XLSX.utils.aoa_to_sheet([salHead, ...salRows]);
+        wsSal['!cols'] = [{ wch: 22 }, { wch: 9 }, { wch: 13 }, { wch: 13 }, { wch: 13 }, { wch: 14 }, { wch: 13 }, { wch: 8 }];
+        XLSX.utils.book_append_sheet(wb, wsSal, 'По салонам');
+      }
+
+      XLSX.writeFile(wb, `${fileBase}.xlsx`);
+      toast('Excel сохранён', 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Ошибка генерации Excel', 'error');
+    } finally {
+      setExportKind(null);
     }
   }
 
   return (
     <div className="space-y-5 max-w-[1140px] mx-auto pb-12">
       {/* Top progress bar: shown while refreshing or generating PNG */}
-      <TopProgressBar active={pnging || (loading && !!data)} />
+      <TopProgressBar active={!!exportKind || (loading && !!data)} />
 
       {/* Controls */}
       <div className="ui-reveal flex flex-wrap items-end justify-between gap-3">
@@ -988,8 +1124,14 @@ export default function PayrollSummary() {
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {started ? 'Обновить' : 'Сформировать'}
           </button>
-          <button className="btn btn--primary flex items-center gap-1.5" onClick={downloadPng} disabled={pnging || loading || !data}>
-            <ImageIcon size={15} /> {pnging ? 'Генерирую…' : 'Скачать PNG'}
+          <button className="btn btn--secondary flex items-center gap-1.5" onClick={downloadXlsx} disabled={!!exportKind || loading || !data}>
+            <FileSpreadsheet size={15} /> {exportKind === 'xlsx' ? 'Готовлю…' : 'Excel'}
+          </button>
+          <button className="btn btn--secondary flex items-center gap-1.5" onClick={downloadPdf} disabled={!!exportKind || loading || !data}>
+            <FileText size={15} /> {exportKind === 'pdf' ? 'Готовлю…' : 'PDF'}
+          </button>
+          <button className="btn btn--primary flex items-center gap-1.5" onClick={downloadPng} disabled={!!exportKind || loading || !data}>
+            <ImageIcon size={15} /> {exportKind === 'png' ? 'Готовлю…' : 'PNG'}
           </button>
         </div>
       </div>
