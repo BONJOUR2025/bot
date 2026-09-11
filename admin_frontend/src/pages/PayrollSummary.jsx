@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw, Image as ImageIcon, Calculator, Hammer, Users, Truck, Wallet, TrendingDown, UserRound,
-  SlidersHorizontal, X, Check, Plus, Trash2,
+  SlidersHorizontal, X, Check, Plus, Trash2, Building2, CalendarRange, Percent,
 } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { toPng } from 'html-to-image';
@@ -54,7 +54,13 @@ const lastDay = (ym) => { const [y, m] = ym.split('-').map(Number); return new D
 const fmtDateRu = (iso) => { const [y, m, d] = iso.split('-'); return `${d}.${m}.${y}`; };
 
 // ── Date range helpers ────────────────────────────────────────────────────────
-const isoDate = (d) => d.toISOString().slice(0, 10);
+// Дату берём ЛОКАЛЬНУЮ, а не через toISOString(): тот переводит в UTC, и
+// полночь 1 сентября по Москве превращается в «31 августа». Из-за этого обе
+// границы периода съезжали на день назад, «Этот месяц» показывал 31.08–29.09,
+// а в отчёт затягивался лишний календарный месяц — с его окладами. То есть
+// суммы были не просто сдвинуты, а завышены на целый месяц.
+const isoDate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const monthRange = (year, month0) => ({ from: isoDate(new Date(year, month0, 1)), to: isoDate(new Date(year, month0 + 1, 0)) });
 const thisMonthRange = () => { const d = new Date(); return monthRange(d.getFullYear(), d.getMonth()); };
 const quarterRange = (year, q) => ({ from: isoDate(new Date(year, q * 3, 1)), to: isoDate(new Date(year, q * 3 + 3, 0)) });
@@ -80,6 +86,29 @@ const DATE_PRESETS = [
 // the range doesn't align to month boundaries, the oklad/plan for the
 // first and last month is still counted in full (there's no daily pro-rated
 // plan in the underlying data model).
+// Запускает задачи пачками по `limit` штук вместо всех разом.
+//
+// Зачем. payroll/calculate ходит в Firebird и стоит 8–12 секунд на месяц. При
+// выборе «Этот год» страница запускала все 12 сразу; браузер их выстраивал в
+// очередь по 6, а сервер захлёбывался — проверено: после такой загрузки API не
+// отвечал 20 секунд, то есть падала вся панель, а не только этот отчёт.
+// Последовательно-по-двое выходит не медленнее, но никого не роняет.
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+const MONTH_CONCURRENCY = 2;
+
 function monthsInRange(dateFrom, dateTo) {
   const out = [];
   let [y, m] = dateFrom.split('-').map(Number);
@@ -146,7 +175,7 @@ async function loadAdminsMonth(period) {
   })).filter((r) => r.gross || r.oklad || r.commission || r.advances);
 }
 async function loadAdmins(dateFrom, dateTo) {
-  const perMonth = await Promise.all(monthsInRange(dateFrom, dateTo).map(loadAdminsMonth));
+  const perMonth = await mapLimit(monthsInRange(dateFrom, dateTo), MONTH_CONCURRENCY, loadAdminsMonth);
   return mergeRowsAcrossMonths(perMonth);
 }
 
@@ -167,12 +196,11 @@ async function loadMasters(dateFrom, dateTo) {
     .sort((a, b) => b.gross - a.gross);
 }
 
-async function loadManagersMonth(period, rangeFrom, rangeTo) {
+async function loadManagersMonth(period, rangeFrom, rangeTo, emp) {
   const monthFrom = `${period}-01`;
   const monthTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
   const incFrom = monthFrom > rangeFrom ? monthFrom : rangeFrom;
   const incTo = monthTo < rangeTo ? monthTo : rangeTo;
-  const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
   const managers = emp.filter((e) => e.status !== 'inactive' && (e.position || '').trim().toLowerCase() === MANAGER_POSITION);
   const rows = await Promise.all(managers.map(async (mgr) => {
     const plan = await api.get('manager-salary/plan', { params: { employee_code: mgr.id, period } }).then((r) => r.data).catch(() => ({}));
@@ -201,16 +229,21 @@ async function loadManagersMonth(period, rangeFrom, rangeTo) {
   return rows.filter(Boolean);
 }
 async function loadManagers(dateFrom, dateTo) {
-  const perMonth = await Promise.all(monthsInRange(dateFrom, dateTo).map((period) => loadManagersMonth(period, dateFrom, dateTo)));
+  // Справочник сотрудников от месяца не зависит — читаем один раз на
+  // категорию. Раньше он запрашивался внутри каждого месяца, и за «год»
+  // уходило 12 лишних одинаковых запросов на менеджеров и столько же на
+  // курьеров.
+  const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
+  const perMonth = await mapLimit(monthsInRange(dateFrom, dateTo), MONTH_CONCURRENCY,
+    (period) => loadManagersMonth(period, dateFrom, dateTo, emp));
   return mergeRowsAcrossMonths(perMonth);
 }
 
-async function loadCouriersMonth(period, rangeFrom, rangeTo) {
+async function loadCouriersMonth(period, rangeFrom, rangeTo, emp) {
   const monthFrom = `${period}-01`;
   const monthTo = `${period}-${String(lastDay(period)).padStart(2, '0')}`;
   const incFrom = monthFrom > rangeFrom ? monthFrom : rangeFrom;
   const incTo = monthTo < rangeTo ? monthTo : rangeTo;
-  const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
   const couriers = emp.filter((e) => e.status !== 'inactive' && (e.position || '').toLowerCase().includes('курьер'));
   const rows = await Promise.all(couriers.map(async (c) => {
     const plan = await api.get('courier-salary/plan', { params: { employee_code: c.id, period } }).then((r) => r.data).catch(() => ({}));
@@ -225,8 +258,55 @@ async function loadCouriersMonth(period, rangeFrom, rangeTo) {
   return rows.filter(Boolean).filter((r) => r.gross || r.advances);
 }
 async function loadCouriers(dateFrom, dateTo) {
-  const perMonth = await Promise.all(monthsInRange(dateFrom, dateTo).map((period) => loadCouriersMonth(period, dateFrom, dateTo)));
+  // Справочник сотрудников от месяца не зависит — читаем один раз на
+  // категорию. Раньше он запрашивался внутри каждого месяца, и за «год»
+  // уходило 12 лишних одинаковых запросов на менеджеров и столько же на
+  // курьеров.
+  const emp = await api.get('employees/', { params: { archived: false } }).then((r) => r.data || []);
+  const perMonth = await mapLimit(monthsInRange(dateFrom, dateTo), MONTH_CONCURRENCY,
+    (period) => loadCouriersMonth(period, dateFrom, dateTo, emp));
   return mergeRowsAcrossMonths(perMonth);
+}
+
+// ── ФОТ по салонам ───────────────────────────────────────────────────────────
+// Отдельный разрез: сервер раскладывает те же оклады и комиссии по салонам, где
+// прошли продажи. Считается это дороже обычного расчёта (месяц ≈ 9 секунд), а
+// за год — полторы минуты, поэтому грузим не вместе с отчётом, а по кнопке.
+// Население то же, что у «администраторов»: мастера, менеджеры и курьеры к
+// салону не привязаны.
+async function loadSalonsMonth(period) {
+  const [y, m] = period.split('-').map(Number);
+  const monthName = MONTHS_RU[m - 1].toUpperCase();
+  const res = await api.get('payroll/by-salon', { params: { month: monthName, year: y } });
+  return res.data?.salons || [];
+}
+
+const SALON_MONEY_FIELDS = ['oklad', 'bonuses', 'repair_commission', 'cosmetics_commission', 'shoes_commission', 'total'];
+
+function mergeSalonsAcrossMonths(perMonth) {
+  const map = new Map();
+  for (const salons of perMonth || []) {
+    for (const s of salons || []) {
+      let acc = map.get(s.salon_id);
+      if (!acc) {
+        acc = { salon_id: s.salon_id, salon_name: s.salon_name, staff: new Map() };
+        for (const f of SALON_MONEY_FIELDS) acc[f] = 0;
+        map.set(s.salon_id, acc);
+      }
+      for (const f of SALON_MONEY_FIELDS) acc[f] += Number(s[f]) || 0;
+      for (const e of s.employees || []) {
+        const prev = acc.staff.get(e.employee_code) || 0;
+        acc.staff.set(e.employee_code, prev + (Number(e.total) || 0));
+      }
+    }
+  }
+  return [...map.values()]
+    .map((s) => ({
+      ...s,
+      commission: s.repair_commission + s.cosmetics_commission + s.shoes_commission,
+      headcount: s.staff.size,
+    }))
+    .sort((a, b) => b.total - a.total);
 }
 
 const CATS = [
@@ -337,7 +417,7 @@ function Section({ title, hint, children }) {
 
 // ── Detailed loading progress panel ─────────────────────────────────────────
 
-function PayrollProgress({ status }) {
+function PayrollProgress({ status, errors = {} }) {
   const done = CATS.filter((c) => status[c.key] === 'done' || status[c.key] === 'error').length;
   const total = CATS.length;
   const barPct = total > 0 ? (done / total) * 100 : 0;
@@ -379,12 +459,20 @@ function PayrollProgress({ status }) {
           const st = status[cat.key] || 'idle';
           const Icon = cat.icon;
           const tone = { loading: 'processing', done: 'success', error: 'error' }[st] || 'paused';
+          // Голое «Ошибка» ничего не даёт: причина уже есть, её надо показать
+          // здесь же, а не заставлять ждать таблицу.
+          const reason = st === 'error' ? errors[cat.key] : '';
           const text = { loading: 'Загружаю', done: 'Готово', error: 'Ошибка' }[st] || 'Ожидание';
           return (
-            <div key={cat.key} className="fui-cellstat">
+            <div key={cat.key} className="fui-cellstat" title={reason || undefined}>
               <span className="fui-cellstat__k">
                 <Icon size={12} className="mr-1.5 inline-block align-[-1px]" style={{ color: cat.color }} />
                 {cat.title}
+                {reason && (
+                  <span className="block mt-0.5 text-[11px] font-normal leading-snug break-words" style={{ color: 'var(--color-danger, #dc2626)' }}>
+                    {reason}
+                  </span>
+                )}
               </span>
               <span className={`fui-status fui-status--always fui-status--${tone}`}>
                 <span className="fui-status__t">{text}</span>
@@ -538,6 +626,7 @@ export default function PayrollSummary() {
   const [pnging, setPnging] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [catStatus, setCatStatus] = useState({});
+  const [catErrors, setCatErrors] = useState({});
   const [generatedAt, setGeneratedAt] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [hiddenCats, setHiddenCats] = useState(() => loadSet(HIDDEN_CATS_KEY));
@@ -553,23 +642,65 @@ export default function PayrollSummary() {
   // T drives the on-screen theme: dark normally, light during PNG export
   const T = exporting ? LIGHT : DARK;
 
+  // Каждая загрузка получает номер. Переключение периода запускает новую, но
+  // старая продолжает висеть на сети ещё десятки секунд — и без этой проверки
+  // её ответ приходит последним и затирает свежие цифры чужого периода.
+  const loadGen = useRef(0);
+
   const load = useCallback(async () => {
+    const gen = ++loadGen.current;
+    const mine = () => loadGen.current === gen;
     setLoading(true);
-    setCatStatus({});
+    setCatStatus(Object.fromEntries(CATS.map((c) => [c.key, 'loading'])));
+    setCatErrors({});
     try {
       const results = await Promise.all(CATS.map(async (c) => {
-        setCatStatus((prev) => ({ ...prev, [c.key]: 'loading' }));
         const result = await c.load(dateFrom, dateTo)
           .then((rows) => ({ rows }))
           .catch((e) => ({ rows: [], error: e?.response?.data?.detail || e.message || 'ошибка' }));
-        setCatStatus((prev) => ({ ...prev, [c.key]: result.error ? 'error' : 'done' }));
+        if (mine()) {
+          setCatStatus((prev) => ({ ...prev, [c.key]: result.error ? 'error' : 'done' }));
+          if (result.error) setCatErrors((prev) => ({ ...prev, [c.key]: result.error }));
+        }
         return result;
       }));
+      if (!mine()) return;
       const next = {};
       CATS.forEach((c, i) => { next[c.key] = results[i]; });
       setData(next);
       setGeneratedAt(new Date().toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
-    } finally { setLoading(false); }
+    } finally { if (mine()) setLoading(false); }
+  }, [dateFrom, dateTo]);
+
+  // ФОТ по салонам грузится отдельно и по кнопке — он дороже всего отчёта.
+  const [salons, setSalons] = useState(null);
+  const [salonsState, setSalonsState] = useState({ status: 'idle', done: 0, total: 0, error: '' });
+  const salonsGen = useRef(0);
+
+  useEffect(() => {
+    salonsGen.current += 1;
+    setSalons(null);
+    setSalonsState({ status: 'idle', done: 0, total: 0, error: '' });
+  }, [dateFrom, dateTo]);
+
+  const loadSalons = useCallback(async () => {
+    const gen = ++salonsGen.current;
+    const periods = monthsInRange(dateFrom, dateTo);
+    setSalons(null);
+    setSalonsState({ status: 'loading', done: 0, total: periods.length, error: '' });
+    try {
+      const perMonth = await mapLimit(periods, MONTH_CONCURRENCY, async (p) => {
+        const rows = await loadSalonsMonth(p);
+        if (salonsGen.current === gen) setSalonsState((s) => ({ ...s, done: s.done + 1 }));
+        return rows;
+      });
+      if (salonsGen.current !== gen) return;
+      setSalons(mergeSalonsAcrossMonths(perMonth));
+      setSalonsState((s) => ({ ...s, status: 'done' }));
+    } catch (e) {
+      if (salonsGen.current !== gen) return;
+      setSalonsState((s) => ({ ...s, status: 'error', error: e?.response?.data?.detail || e.message || 'ошибка' }));
+    }
   }, [dateFrom, dateTo]);
 
   useEffect(() => { load(); }, [load]);
@@ -645,6 +776,21 @@ export default function PayrollSummary() {
   // "Кратко" = salary breakdown (oklad/KPI/premии/штрафы-if-any) minus авансы,
   // not just two totals — advances is the one column considered sensitive
   // enough to gate behind "Подробно".
+  // ── Метрики для собственника ───────────────────────────────────────────────
+  // Абсолютный ФОТ за произвольный период несравним сам с собой: квартал втрое
+  // больше месяца просто потому, что месяцев три. Поэтому всё, что ниже,
+  // приведено к «в месяц» и «на человека» — эти числа можно сравнивать между
+  // периодами и между категориями.
+  const monthsCount = useMemo(() => monthsInRange(dateFrom, dateTo).length, [dateFrom, dateTo]);
+  const avgPerPerson = headcount ? grand.gross / headcount : 0;
+  const avgPerMonth = monthsCount ? grand.gross / monthsCount : 0;
+  const avgPerPersonMonth = headcount && monthsCount ? grand.gross / headcount / monthsCount : 0;
+  const fixedShare = pct(grand.oklad, grand.gross);
+  const variablePart = grand.commission + grand.bonuses;
+
+  const salonMax = Math.max(1, ...(salons || []).map((s) => s.total));
+  const salonTotal = (salons || []).reduce((s, x) => s + x.total, 0);
+
   const visibleCols = showBreakdown
     ? COLS
     : COLS.filter((c) => c.key !== 'advances' && (c.key !== 'penalties' || grand.penalties > 0));
@@ -748,7 +894,7 @@ export default function PayrollSummary() {
       )}
 
       {/* Initial load: detailed progress panel */}
-      {loading && !data && <PayrollProgress status={catStatus} />}
+      {loading && !data && <PayrollProgress status={catStatus} errors={catErrors} />}
 
       {/* Report (shown once data is available, even while refreshing) */}
       {data && (
@@ -783,6 +929,64 @@ export default function PayrollSummary() {
                   <KpiCard icon={<UserRound size={13} />} label="Сотрудников" value={String(headcount)} sub={cats.map((c) => `${c.title.slice(0, 4).toLowerCase()}. ${c.rows.length}`).join(' · ') || '—'} />
                   <KpiCard icon={<TrendingDown size={13} />} label="Удержания" value={fmtMoney(withholdings)} sub={`авансы ${fmtMoney(grand.advances)} · штрафы ${fmtMoney(grand.penalties)}`} color={DANGER} />
                 </div>
+
+                {/* Метрики, приведённые к месяцу и человеку */}
+                <Section
+                  title="Ключевые метрики"
+                  hint={monthsCount > 1 ? `период — ${monthsCount} мес., всё приведено к месяцу` : 'период — один месяц'}
+                >
+                  <div className="grid grid-cols-4 gap-4">
+                    <KpiCard icon={<CalendarRange size={13} />} label="ФОТ в месяц"
+                      value={fmtMoney(avgPerMonth)}
+                      sub={monthsCount > 1 ? `в среднем за ${monthsCount} мес.` : 'за выбранный месяц'}
+                      color={BRAND} />
+                    <KpiCard icon={<UserRound size={13} />} label="Средняя ЗП за период"
+                      value={fmtMoney(avgPerPerson)}
+                      sub={`начислено на человека · ${headcount} чел.`} />
+                    <KpiCard icon={<UserRound size={13} />} label="Средняя ЗП в месяц"
+                      value={fmtMoney(avgPerPersonMonth)}
+                      sub="на человека, в среднем за месяц" />
+                    <KpiCard icon={<Percent size={13} />} label="Постоянная часть"
+                      value={`${fixedShare}%`}
+                      sub={`оклады ${fmtMoney(grand.oklad)} · переменная ${fmtMoney(variablePart)}`}
+                      color={fixedShare >= 70 ? 'var(--color-warning)' : 'var(--color-success)'} />
+                  </div>
+
+                  {/* Те же средние по категориям: видно, какая из них дорожает */}
+                  {cats.length > 0 && (
+                    <div className="mt-4 rounded-xl border overflow-hidden" style={{ borderColor: T.line }}>
+                      <table className="w-full text-[13px]">
+                        <thead>
+                          <tr style={{ background: T.bg2, color: T.muted }} className="text-[10px] uppercase tracking-wide">
+                            <th className="text-left font-semibold px-3 py-2">Категория</th>
+                            <th className="text-right font-semibold px-3 py-2">Человек</th>
+                            <th className="text-right font-semibold px-3 py-2">ФОТ за период</th>
+                            <th className="text-right font-semibold px-3 py-2">ФОТ в месяц</th>
+                            <th className="text-right font-semibold px-3 py-2">Средняя ЗП в месяц</th>
+                            <th className="text-right font-semibold px-3 py-2">Доля</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cats.map((c) => {
+                            const n = c.rows.length;
+                            return (
+                              <tr key={c.key} style={{ borderTop: `1px solid ${T.line}` }}>
+                                <td className="px-3 py-1.5 font-medium" style={{ color: c.color }}>{c.title}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{n || '—'}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{fmtMoney(c.totals.gross)}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{fmtMoney(monthsCount ? c.totals.gross / monthsCount : 0)}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: T.ink }}>
+                                  {n && monthsCount ? fmtMoney(c.totals.gross / n / monthsCount) : '—'}
+                                </td>
+                                <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.muted }}>{pct(c.totals.gross, grand.gross)}%</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Section>
 
                 {/* Charts row */}
                 <div className="grid grid-cols-2 gap-6">
@@ -850,6 +1054,90 @@ export default function PayrollSummary() {
                     </div>
                   </div>
                 </Section>
+
+                {/* ФОТ по салонам — грузится по кнопке */}
+                {(!exporting || salons) && (
+                  <Section title="ФОТ по салонам" hint="администраторы · оклад и комиссия разнесены по месту продажи">
+                    {salonsState.status === 'idle' && !exporting && (
+                      <div className="flex items-center gap-3">
+                        <button className="btn btn--secondary flex items-center gap-1.5" onClick={loadSalons}>
+                          <Building2 size={14} /> Посчитать по салонам
+                        </button>
+                        <span className="text-xs" style={{ color: T.muted }}>
+                          {monthsCount > 1
+                            ? `${monthsCount} мес. — расчёт займёт около ${Math.round((monthsCount * 9) / MONTH_CONCURRENCY)} с`
+                            : 'расчёт займёт около 9 секунд'}
+                        </span>
+                      </div>
+                    )}
+                    {salonsState.status === 'loading' && (
+                      <div className="flex items-center gap-3 text-sm" style={{ color: T.muted }}>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Считаю по салонам… {salonsState.done} из {salonsState.total} мес.
+                      </div>
+                    )}
+                    {salonsState.status === 'error' && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm" style={{ color: DANGER }}>Не удалось посчитать: {salonsState.error}</span>
+                        {!exporting && <button className="btn btn--secondary" onClick={loadSalons}>Повторить</button>}
+                      </div>
+                    )}
+                    {salons && salons.length > 0 && (
+                      <>
+                        <div className="space-y-2.5 pt-1">
+                          {salons.map((s) => (
+                            <BarRow key={s.salon_id} label={s.salon_name} value={s.total} max={salonMax} color={BRAND} right={fmtMoney(s.total)} />
+                          ))}
+                        </div>
+                        <div className="mt-4 rounded-xl border overflow-hidden" style={{ borderColor: T.line }}>
+                          <table className="w-full text-[13px]">
+                            <thead>
+                              <tr style={{ background: T.bg2, color: T.muted }} className="text-[10px] uppercase tracking-wide">
+                                <th className="text-left font-semibold px-3 py-2">Салон</th>
+                                <th className="text-right font-semibold px-3 py-2">Человек</th>
+                                <th className="text-right font-semibold px-3 py-2">Оклад</th>
+                                <th className="text-right font-semibold px-3 py-2">Комиссия</th>
+                                <th className="text-right font-semibold px-3 py-2">Премии</th>
+                                <th className="text-right font-semibold px-3 py-2">Итого</th>
+                                <th className="text-right font-semibold px-3 py-2">В месяц</th>
+                                <th className="text-right font-semibold px-3 py-2">Доля</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {salons.map((s) => (
+                                <tr key={s.salon_id} style={{ borderTop: `1px solid ${T.line}` }}>
+                                  <td className="px-3 py-1.5 font-medium" style={{ color: T.ink }}>{s.salon_name}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{s.headcount || '—'}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{s.oklad ? fmtMoney(s.oklad) : '—'}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{s.commission ? fmtMoney(s.commission) : '—'}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{s.bonuses ? fmtMoney(s.bonuses) : '—'}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: BRAND }}>{fmtMoney(s.total)}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.ink }}>{fmtMoney(monthsCount ? s.total / monthsCount : 0)}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: T.muted }}>{pct(s.total, salonTotal)}%</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr style={{ borderTop: `2px solid ${T.ink}`, background: T.bg2 }}>
+                                <td className="px-3 py-2 font-extrabold" style={{ color: T.ink }}>ВСЕГО · {salons.length} салонов</td>
+                                <td />
+                                <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: T.ink }}>{fmtMoney(salons.reduce((a, s) => a + s.oklad, 0))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: T.ink }}>{fmtMoney(salons.reduce((a, s) => a + s.commission, 0))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: T.ink }}>{fmtMoney(salons.reduce((a, s) => a + s.bonuses, 0))}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: BRAND }}>{fmtMoney(salonTotal)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: T.ink }}>{fmtMoney(monthsCount ? salonTotal / monthsCount : 0)}</td>
+                                <td />
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                    {salons && salons.length === 0 && (
+                      <div className="text-sm" style={{ color: T.muted }}>За период нет начислений, привязанных к салонам.</div>
+                    )}
+                  </Section>
+                )}
 
                 {/* Top earners */}
                 {topEarners.length > 0 && (
