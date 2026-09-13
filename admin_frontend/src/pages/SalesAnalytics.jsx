@@ -82,7 +82,8 @@ const CATEGORIES = [
 ];
 // Categories with no cost-of-goods concept for get_margin_summary (see its
 // docstring) — excluded from the "Маржа" tab's per-category breakdown.
-const NO_MARGIN_CATEGORY_KEYS = new Set(['shoes', 'insoles', 'slippers', 'leather_goods', 'certificates', 'delivery', 'keys']);
+// «Обувь» (пошив) теперь есть: себестоимость задана на пару по типу пошива.
+const NO_MARGIN_CATEGORY_KEYS = new Set(['insoles', 'slippers', 'leather_goods', 'certificates', 'delivery', 'keys']);
 const LABEL_TO_KEY = Object.fromEntries(CATEGORIES.map((c) => [c.label, c.key]));
 
 // Tabs where "Категории"/"Сотрудники" genuinely don't apply to the
@@ -1040,13 +1041,14 @@ function PaybackTab({ params }) {
         </div>
         <div className="px-4 py-2.5 border-t border-[color:var(--color-border)] text-xs text-[color:var(--color-muted-foreground)] space-y-1">
           <p>
-            «Принёс прибыли» — валовая прибыль по продажам сотрудника: ремонт/химчистка за вычетом себестоимости 30% и косметика за
-            вычетом складской закупки. «Начислено» — его ФОТ за период (оклад + KPI + премии) из расчёта зарплаты.
+            «Принёс прибыли» — валовая прибыль по продажам сотрудника: ремонт/химчистка за вычетом себестоимости 30%, косметика за
+            вычетом складской закупки и пошив обуви за вычетом себестоимости пары (4 000 ₽ за «Пошив обуви», 8 000 ₽ за
+            «Индивидуальный пошив обуви»). «Начислено» — его ФОТ за период (оклад + KPI + премии) из расчёта зарплаты.
           </p>
           <p>
-            Оценка по продажам за смену, а не полная стоимость сотрудника: обувь и прочие категории в прибыль не входят, а вклад
-            администратора не сводится только к продажам. Оклад помесячный — за неполный месяц он всё равно учитывается целиком
-            (как в расчёте ЗП).{state.salonScoped ? ' Фильтр по салону сужает прибыль до этого салона, а ФОТ берётся полный — сравнивайте окупаемость без фильтра салонов.' : ''}
+            Оценка по продажам за смену, а не полная стоимость сотрудника: прочие категории (стельки, тапочки, кожгалантерея,
+            сертификаты, доставка, ключи) в прибыль не входят, а вклад администратора не сводится только к продажам. Оклад
+            помесячный — за неполный месяц он всё равно учитывается целиком (как в расчёте ЗП).{state.salonScoped ? ' Фильтр по салону сужает прибыль до этого салона, а ФОТ берётся полный — сравнивайте окупаемость без фильтра салонов.' : ''}
           </p>
         </div>
       </div>
@@ -1351,25 +1353,27 @@ export default function SalesAnalytics() {
   // the function body for why that one never needs the backend at all.
   const filteredMargin = useMemo(() => {
     if (!margin) return null;
-    const wantRepair    = !selectedCategories.size || selectedCategories.has('repair');
-    const wantCosmetics = !selectedCategories.size || selectedCategories.has('cosmetics');
-    if (!selectedEmployees.size && wantRepair && wantCosmetics) return margin;
+    const MARGIN_CATS = ['repair', 'cosmetics', 'shoes'];
+    const want = Object.fromEntries(MARGIN_CATS.map((c) => [c, !selectedCategories.size || selectedCategories.has(c)]));
+    if (!selectedEmployees.size && MARGIN_CATS.every((c) => want[c])) return margin;
     const byEmp = selectedEmployees.size ? margin.by_employee.filter((e) => selectedEmployees.has(e.code)) : margin.by_employee;
     const sum = (field) => byEmp.reduce((s, e) => s + (e[field] || 0), 0);
     const categories = {};
-    for (const cat of ['repair', 'cosmetics']) {
-      const included = cat === 'repair' ? wantRepair : wantCosmetics;
-      const rev = included ? sum(`${cat}_revenue`) : 0, cost = included ? sum(`${cat}_cost`) : 0;
+    for (const cat of MARGIN_CATS) {
+      const rev = want[cat] ? sum(`${cat}_revenue`) : 0, cost = want[cat] ? sum(`${cat}_cost`) : 0;
       categories[cat] = { revenue: rev, cost, margin: rev - cost, margin_pct: rev ? Math.round((rev - cost) / rev * 1000) / 10 : 0 };
     }
-    const totalRev = categories.repair.revenue + categories.cosmetics.revenue;
-    const totalCost = categories.repair.cost + categories.cosmetics.cost;
+    const totalRev = MARGIN_CATS.reduce((s, c) => s + categories[c].revenue, 0);
+    const totalCost = MARGIN_CATS.reduce((s, c) => s + categories[c].cost, 0);
     return {
       categories,
       total: { revenue: totalRev, cost: totalCost, margin: totalRev - totalCost,
         margin_pct: totalRev ? Math.round((totalRev - totalCost) / totalRev * 1000) / 10 : 0 },
       by_employee: byEmp,
       unpriced_items: margin.unpriced_items,
+      repair_cost_rate: margin.repair_cost_rate,
+      shoe_sewn_cost: margin.shoe_sewn_cost,
+      shoe_custom_cost: margin.shoe_custom_cost,
     };
   }, [margin, selectedEmployees, selectedCategories]);
 
@@ -1967,6 +1971,7 @@ export default function SalesAnalytics() {
                     «Ремонт/химчистка» — это в основном труд и расходники (химия, фурнитура, набойки), склада под них почти нет, поэтому
                     себестоимость взята оценкой {Math.round((filteredMargin.repair_cost_rate ?? 0.3) * 100)}% от стоимости услуги (задано владельцем). Косметика считается по реальной
                     закупке — последней цене прихода на складе на конец периода{filteredMargin.unpriced_items > 0 ? `; для ${filteredMargin.unpriced_items} позиций косметики приход в базе не найден — их себестоимость взята как 0` : ''}.
+                    «Обувь» — это пошив: себестоимость задана на пару — {fmtRub(filteredMargin.shoe_sewn_cost ?? 4000)} за «Пошив обуви» и {fmtRub(filteredMargin.shoe_custom_cost ?? 8000)} за «Индивидуальный пошив обуви».
                   </div>
                 </div>
 

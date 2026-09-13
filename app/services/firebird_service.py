@@ -407,6 +407,12 @@ _CUSTOM_WORK_LEATHER_CODES = {'2', '3'}        # пошив ремня / кож�
 # «Окупаемости». Держим одной константой, чтобы поменять ставку в одном месте.
 REPAIR_COST_RATE = 0.30
 
+# Себестоимость пошива обуви — задана владельцем на ПАРУ, по типу пошива.
+# Тип различает маркер пары в папке CUSTOM_WORK: код '0' — «Пошив обуви»,
+# код '1' — «Индивидуальный пошив обуви». Применяется в «Марже» и «Окупаемости».
+SHOE_SEWN_COST = 4000.0    # «Пошив обуви» (маркер '0')
+SHOE_CUSTOM_COST = 8000.0  # «Индивидуальный пошив обуви» (маркер '1')
+
 REPAIR_FOLDER_IDS = (
     215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
     108401, 108402, 110409, 110410, 110411,
@@ -566,6 +572,31 @@ def _parse_shoe_pairs(items: list[tuple]) -> list[float]:
                 current_kredit += kredit
     if in_pair:
         pairs.append(current_kredit)
+    return pairs
+
+
+def _parse_shoe_pairs_typed(items: list[tuple]) -> list[tuple]:
+    """Как _parse_shoe_pairs, но возвращает (marker_code, kredit) на каждую пару.
+
+    marker_code — код записи-маркера ('0' «Пошив обуви» или '1'
+    «Индивидуальный пошив обуви»), по нему в «Марже» назначается себестоимость
+    пары (SHOE_SEWN_COST / SHOE_CUSTOM_COST). Как и в _parse_shoe_pairs, деньги
+    берутся с идущих следом записей 147.x, а сам маркер несёт kredit=0.
+    """
+    pairs: list[tuple] = []
+    current_kredit = 0.0
+    marker = None
+    for code, kredit in items:
+        if code in _PAIR_STARTERS:
+            if marker is not None:
+                pairs.append((marker, current_kredit))
+            current_kredit = 0.0
+            marker = code
+        else:
+            if marker is not None:
+                current_kredit += kredit
+    if marker is not None:
+        pairs.append((marker, current_kredit))
     return pairs
 
 
@@ -2022,22 +2053,25 @@ class FirebirdService:
     def get_margin_summary(self, date_from: date, date_to: date, salon_ids: list[str] | None = None) -> dict:
         """Gross margin by category and by employee for a date range.
 
-        Cost is the most recent warehouse-receipt price (DOC_SCLAD_LINES,
-        DOC_TYPE=1 "Приход") at or before date_to for each sold TOVAR_ID.
-        Shoes are deliberately excluded: their commission is computed on
-        paired 0/1+147.x records (see SHOES_CODES/_parse_shoe_pairs), which
-        isn't a per-unit cost-of-goods figure the same way repair/cosmetics
-        are. Repair/cleaning is mostly labor + consumables with no purchase
-        record on the warehouse, so its cost is estimated as REPAIR_COST_RATE
-        (30%) of the service revenue rather than taken from receipts;
-        cosmetics keeps the real warehouse cost-of-goods.
+        Three categories:
+        - cosmetics: real warehouse cost-of-goods (DOC_SCLAD_LINES, DOC_TYPE=1
+          "Приход", most recent price at or before date_to per sold TOVAR_ID).
+        - repair/cleaning: mostly labor + consumables with no warehouse
+          purchase, so its cost is estimated as REPAIR_COST_RATE (30%) of the
+          service revenue rather than taken from receipts.
+        - shoes (пошив): revenue is the per-pair 147.x sum (SHOES_CODES /
+          _parse_shoe_pairs_typed), cost is a fixed per-pair figure by tailoring
+          type — SHOE_SEWN_COST for «Пошив обуви» (marker '0'), SHOE_CUSTOM_COST
+          for «Индивидуальный пошив обуви» (marker '1'). The 0/1 markers carry
+          kredit=0 and are excluded from the repair/cosmetics folders, so
+          nothing here double-counts with them.
 
         `salon_ids` restricts to orders resolved to one of those salons —
         see get_daily_sales for the attribution rule and its caveats.
         """
         empty_cat = {"revenue": 0.0, "cost": 0.0, "margin": 0.0, "margin_pct": 0.0}
         empty = {
-            "categories": {"repair": dict(empty_cat), "cosmetics": dict(empty_cat)},
+            "categories": {"repair": dict(empty_cat), "cosmetics": dict(empty_cat), "shoes": dict(empty_cat)},
             "total": dict(empty_cat),
             "by_employee": [],
             "unpriced_items": 0,
@@ -2083,6 +2117,22 @@ class FirebirdService:
             WHERE tovar_id IN ({ph}) AND doc_type = 1 AND dl_date <= ?
             ORDER BY tovar_id, dl_date DESC
         """
+        # Пошив обуви: записи схемы обуви (SHOES_CODES = маркеры 0/1 + 147.x),
+        # по порядку внутри заказа, чтобы _parse_shoe_pairs_typed нарезал пары.
+        shoes_ph = ','.join(['?'] * len(SHOES_CODES))
+        sql_shoes = f"""
+            SELECT users.description, docs.doc_num, docs.doc_date,
+                   TRIM(tovars_tbl.code), doc_order_services.kredit
+            FROM docs_order
+                INNER JOIN doc_order_services ON (docs_order.id = doc_order_services.doc_order_id)
+                INNER JOIN tovars_tbl ON (doc_order_services.tovar_id = tovars_tbl.tovar_id)
+                INNER JOIN docs ON (docs_order.doc_id = docs.doc_id)
+                INNER JOIN users ON (docs_order.creater_id = users.user_id)
+            WHERE
+                docs.doc_date >= ? AND docs.doc_date <= ?
+                AND tovars_tbl.code IN ({shoes_ph})
+            ORDER BY docs.doc_num, doc_order_services.id
+        """
 
         try:
             con = _connect()
@@ -2092,6 +2142,8 @@ class FirebirdService:
                 repair_rows = cur.fetchall()
                 cur.execute(sql_cosmetics, (date_from, date_to))
                 cosmetics_rows = cur.fetchall()
+                cur.execute(sql_shoes, (date_from, date_to, *SHOES_CODES))
+                shoes_rows = cur.fetchall()
 
                 tovar_ids = sorted({r[1] for r in repair_rows} | {r[1] for r in cosmetics_rows})
                 cost_rows = _fetch_batched(cur, sql_cost, tovar_ids, (date_to,))
@@ -2109,6 +2161,14 @@ class FirebirdService:
 
         by_emp: dict[str, dict] = {}
 
+        def _entry(code: str) -> dict:
+            return by_emp.setdefault(code, {
+                "code": code, "repair_revenue": 0.0, "repair_cost": 0.0,
+                "cosmetics_revenue": 0.0, "cosmetics_cost": 0.0,
+                "shoes_revenue": 0.0, "shoes_cost": 0.0,
+                "shoes_pairs_sewn": 0, "shoes_pairs_custom": 0,
+            })
+
         with _SalonResolver() as resolve_salon:
             def _accumulate(rows, category: str) -> None:
                 for desc, tovar_id, doc_date, doc_num, revenue, qty in rows:
@@ -2118,15 +2178,39 @@ class FirebirdService:
                     if not code:
                         continue
                     cost = float(qty or 0) * unit_cost.get(tovar_id, 0.0)
-                    entry = by_emp.setdefault(code, {
-                        "code": code, "repair_revenue": 0.0, "repair_cost": 0.0,
-                        "cosmetics_revenue": 0.0, "cosmetics_cost": 0.0,
-                    })
+                    entry = _entry(code)
                     entry[f"{category}_revenue"] += float(revenue or 0)
                     entry[f"{category}_cost"] += cost
 
             _accumulate(repair_rows, "repair")
             _accumulate(cosmetics_rows, "cosmetics")
+
+            # Пошив обуви: группируем записи заказа, режем на пары маркерами 0/1,
+            # выручка пары — сумма следующих 147.x, себестоимость — фиксированная
+            # по типу пошива (маркер '0' → SHOE_SEWN_COST, '1' → SHOE_CUSTOM_COST).
+            shoes_orders: dict[str, dict] = {}
+            for desc, doc_num, doc_date, code, kredit in shoes_rows:
+                if doc_num is None:
+                    continue
+                key = str(doc_num)
+                o = shoes_orders.setdefault(key, {
+                    "emp": _code_from_description(desc), "doc_date": doc_date, "items": []})
+                o["items"].append(((code or "").strip(), float(kredit or 0)))
+            for doc_num, o in shoes_orders.items():
+                emp = o["emp"]
+                if not emp:
+                    continue
+                if salon_filter is not None and resolve_salon(doc_num, o["doc_date"]) not in salon_filter:
+                    continue
+                entry = _entry(emp)
+                for marker, pair_kredit in _parse_shoe_pairs_typed(o["items"]):
+                    entry["shoes_revenue"] += pair_kredit
+                    if marker == "1":
+                        entry["shoes_cost"] += SHOE_CUSTOM_COST
+                        entry["shoes_pairs_custom"] += 1
+                    else:  # marker '0'
+                        entry["shoes_cost"] += SHOE_SEWN_COST
+                        entry["shoes_pairs_sewn"] += 1
 
         # Себестоимость ремонта/химчистки в приходах ≈ 0 (это труд + расходники),
         # поэтому берём оценку REPAIR_COST_RATE от выручки услуги. Косметику
@@ -2134,8 +2218,8 @@ class FirebirdService:
         for entry in by_emp.values():
             entry["repair_cost"] = REPAIR_COST_RATE * entry["repair_revenue"]
 
-        categories = {"repair": dict(empty_cat), "cosmetics": dict(empty_cat)}
-        for cat in ("repair", "cosmetics"):
+        categories = {"repair": dict(empty_cat), "cosmetics": dict(empty_cat), "shoes": dict(empty_cat)}
+        for cat in ("repair", "cosmetics", "shoes"):
             rev = sum(e[f"{cat}_revenue"] for e in by_emp.values())
             cost = sum(e[f"{cat}_cost"] for e in by_emp.values())
             categories[cat] = {
@@ -2143,8 +2227,8 @@ class FirebirdService:
                 "margin_pct": round((rev - cost) / rev * 100, 1) if rev else 0.0,
             }
 
-        total_rev = categories["repair"]["revenue"] + categories["cosmetics"]["revenue"]
-        total_cost = categories["repair"]["cost"] + categories["cosmetics"]["cost"]
+        total_rev = sum(categories[c]["revenue"] for c in ("repair", "cosmetics", "shoes"))
+        total_cost = sum(categories[c]["cost"] for c in ("repair", "cosmetics", "shoes"))
         total = {
             "revenue": total_rev, "cost": total_cost, "margin": total_rev - total_cost,
             "margin_pct": round((total_rev - total_cost) / total_rev * 100, 1) if total_rev else 0.0,
@@ -2152,8 +2236,8 @@ class FirebirdService:
 
         by_employee = []
         for entry in by_emp.values():
-            rev = entry["repair_revenue"] + entry["cosmetics_revenue"]
-            cost = entry["repair_cost"] + entry["cosmetics_cost"]
+            rev = entry["repair_revenue"] + entry["cosmetics_revenue"] + entry["shoes_revenue"]
+            cost = entry["repair_cost"] + entry["cosmetics_cost"] + entry["shoes_cost"]
             by_employee.append({
                 **entry,
                 "revenue": rev, "cost": cost, "margin": rev - cost,
@@ -2167,6 +2251,8 @@ class FirebirdService:
             "by_employee": by_employee,
             "unpriced_items": unpriced_items,
             "repair_cost_rate": REPAIR_COST_RATE,
+            "shoe_sewn_cost": SHOE_SEWN_COST,
+            "shoe_custom_cost": SHOE_CUSTOM_COST,
         }
 
     def get_turnaround_stats(self, date_from: date, date_to: date, salon_ids: list[str] | None = None,
