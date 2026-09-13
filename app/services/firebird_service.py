@@ -400,6 +400,13 @@ _CUSTOM_WORK_LEATHER_CODES = {'2', '3'}        # пошив ремня / кож�
 # code '4' ("Изготовление индивидуального изделия") is deliberately
 # unhandled — no clear category and zero real-world occurrences so far.
 
+# Себестоимость ремонта/химчистки. Это в основном труд + расходники (химия,
+# фурнитура, набойки), закупочного склада под них почти нет, поэтому реальная
+# себестоимость в приходах ≈ 0 и маржа выходила ~100%. Владелец задал оценку:
+# считать её примерно 30% от стоимости услуги. Применяется и в «Марже», и в
+# «Окупаемости». Держим одной константой, чтобы поменять ставку в одном месте.
+REPAIR_COST_RATE = 0.30
+
 REPAIR_FOLDER_IDS = (
     215, 216, 217, 221, 326, 327, 328, 329, 330, 416, 417, 418, 419,
     108401, 108402, 110409, 110410, 110411,
@@ -2020,10 +2027,10 @@ class FirebirdService:
         Shoes are deliberately excluded: their commission is computed on
         paired 0/1+147.x records (see SHOES_CODES/_parse_shoe_pairs), which
         isn't a per-unit cost-of-goods figure the same way repair/cosmetics
-        are. Repair-category items are mostly labor (cleaning/repair
-        services) with no purchase record at all — those come back with
-        cost=0, which is correct (their real cost is payroll, tracked
-        elsewhere), not a data gap.
+        are. Repair/cleaning is mostly labor + consumables with no purchase
+        record on the warehouse, so its cost is estimated as REPAIR_COST_RATE
+        (30%) of the service revenue rather than taken from receipts;
+        cosmetics keeps the real warehouse cost-of-goods.
 
         `salon_ids` restricts to orders resolved to one of those salons —
         see get_daily_sales for the attribution rule and its caveats.
@@ -2121,6 +2128,12 @@ class FirebirdService:
             _accumulate(repair_rows, "repair")
             _accumulate(cosmetics_rows, "cosmetics")
 
+        # Себестоимость ремонта/химчистки в приходах ≈ 0 (это труд + расходники),
+        # поэтому берём оценку REPAIR_COST_RATE от выручки услуги. Косметику
+        # оставляем как есть — там реальная закупочная себестоимость со склада.
+        for entry in by_emp.values():
+            entry["repair_cost"] = REPAIR_COST_RATE * entry["repair_revenue"]
+
         categories = {"repair": dict(empty_cat), "cosmetics": dict(empty_cat)}
         for cat in ("repair", "cosmetics"):
             rev = sum(e[f"{cat}_revenue"] for e in by_emp.values())
@@ -2153,6 +2166,7 @@ class FirebirdService:
             "total": total,
             "by_employee": by_employee,
             "unpriced_items": unpriced_items,
+            "repair_cost_rate": REPAIR_COST_RATE,
         }
 
     def get_turnaround_stats(self, date_from: date, date_to: date, salon_ids: list[str] | None = None,

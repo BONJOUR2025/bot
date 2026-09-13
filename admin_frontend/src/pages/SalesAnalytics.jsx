@@ -89,8 +89,8 @@ const LABEL_TO_KEY = Object.fromEntries(CATEGORIES.map((c) => [c.label, c.key]))
 // underlying data (not just "not wired up yet") — greyed out there
 // instead of silently doing nothing when picked. See backend docstrings
 // (get_workplace_summary, get_turnaround_stats) for why.
-const CATEGORIES_INAPPLICABLE_TABS = new Set(['workplaces', 'unclaimed']);
-const EMPLOYEES_INAPPLICABLE_TABS = new Set(['turnaround', 'workplaces', 'unclaimed']);
+const CATEGORIES_INAPPLICABLE_TABS = new Set(['workplaces', 'unclaimed', 'payback']);
+const EMPLOYEES_INAPPLICABLE_TABS = new Set(['turnaround', 'workplaces', 'unclaimed', 'payback']);
 const CATEGORIES_DISABLED_HINT = 'На этой вкладке нет разбивки по категориям';
 const EMPLOYEES_DISABLED_HINT = 'На этой вкладке нет привязки к сотруднику';
 
@@ -901,6 +901,159 @@ function UnclaimedTab() {
   );
 }
 
+/* ── Окупаемость сотрудника ──────────────────────────────────
+   Отвечает на вопрос «стоит ли сотрудник тех денег, что мы платим»: сколько
+   валовой прибыли он принёс (маржа по ремонту/химчистке и косметике из
+   /sales/margin) против того, сколько мы ему начислили (ФОТ из
+   /payroll/calculate). Себестоимость ремонта учтена в марже (30%), косметики —
+   по складу. Обе величины за один и тот же период. */
+const MONTHS_FULL_RU = ['ЯНВАРЬ', 'ФЕВРАЛЬ', 'МАРТ', 'АПРЕЛЬ', 'МАЙ', 'ИЮНЬ', 'ИЮЛЬ', 'АВГУСТ', 'СЕНТЯБРЬ', 'ОКТЯБРЬ', 'НОЯБРЬ', 'ДЕКАБРЬ'];
+
+// payroll/calculate ходит в Firebird (8–12 с на месяц). За «год» это 12
+// запросов — гоняем не больше двух разом, чтобы не завалить общий сервер.
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  }));
+  return out;
+}
+
+const fmtRatio = (r) => (r == null ? '—' : '×' + r.toFixed(1).replace('.', ','));
+
+function PaybackTab({ params }) {
+  const [state, setState] = useState({ loading: true, error: null, rows: [], totals: null, months: 0, salonScoped: false });
+  const key = JSON.stringify(params);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setState((s) => ({ ...s, loading: true, error: null }));
+      try {
+        const months = getMonthsInRange(params.date_from, params.date_to);
+        const marginP = api.get('/sales/margin', { params }).then((r) => r.data);
+        const payP = mapLimit(months, 2, async (mk) => {
+          const [y, m] = mk.split('-').map(Number);
+          return api.get('/payroll/calculate', { params: { month: MONTHS_FULL_RU[m - 1], year: y } })
+            .then((r) => r.data?.rows || []).catch(() => []);
+        });
+        const [margin, payMonths] = await Promise.all([marginP, payP]);
+        if (cancelled) return;
+
+        const pay = {};
+        payMonths.flat().forEach((r) => {
+          const code = r.employee_code;
+          if (!code) return;
+          const gross = r.total_gross ?? ((r.base_salary || 0) + (r.total_commission || 0) + (r.bonuses || 0) + (r.excel_bonus || 0));
+          pay[code] = (pay[code] || 0) + gross;
+        });
+        const profitByCode = {};
+        (margin.by_employee || []).forEach((e) => { profitByCode[e.code] = e; });
+
+        const codes = new Set([...Object.keys(pay), ...Object.keys(profitByCode)]);
+        const rows = [...codes].map((code) => {
+          const m = profitByCode[code];
+          const profit = m?.margin || 0;
+          const revenue = m?.revenue || 0;
+          const paid = pay[code] || 0;
+          return { code, name: empName(code), revenue, profit, paid, net: profit - paid, ratio: paid > 0 ? profit / paid : null };
+        }).filter((r) => r.paid > 0 || r.profit > 0)
+          .sort((a, b) => b.net - a.net);
+
+        const totProfit = rows.reduce((s, r) => s + r.profit, 0);
+        const totPaid = rows.reduce((s, r) => s + r.paid, 0);
+        setState({
+          loading: false, error: null, rows,
+          totals: { profit: totProfit, paid: totPaid, net: totProfit - totPaid, ratio: totPaid > 0 ? totProfit / totPaid : null },
+          months: months.length, salonScoped: !!params.salon_ids,
+        });
+      } catch (e) {
+        if (!cancelled) setState((s) => ({ ...s, loading: false, error: e.response?.data?.detail || e.message || 'Ошибка загрузки' }));
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  if (state.loading) return <SkeletonTable rows={6} />;
+  if (state.error) return <div className="app-card p-8 text-center text-[color:var(--color-danger)]">{state.error}</div>;
+  if (!state.rows.length) return <div className="app-card p-8 text-center text-[color:var(--color-muted-foreground)]">Нет данных за выбранный период</div>;
+
+  const t = state.totals;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiStat label="Принесли прибыли" value={fmtRub(t.profit)} accent="var(--color-success)" icon={<TrendingUp size={18} />}
+          sub="валовая прибыль по их продажам" />
+        <KpiStat label="Начислено (ФОТ)" value={fmtRub(t.paid)} accent="var(--color-danger)" icon={<Wallet size={18} />}
+          sub="сколько мы им платим" />
+        <KpiStat label="Разница" value={fmtRub(t.net)} accent={t.net >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} icon={<Percent size={18} />}
+          sub="прибыль − ФОТ" />
+        <KpiStat label="Окупаемость" value={fmtRatio(t.ratio)} accent="var(--color-primary)" icon={<Target size={18} />}
+          sub="во сколько раз прибыль покрывает ФОТ" />
+      </div>
+
+      <div className="app-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-[color:var(--color-border)]">
+          <h3 className="font-semibold">По сотрудникам</h3>
+          <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+            Отсортировано по разнице «прибыль − ФОТ»: сверху те, кто приносит больше всего сверх своей зарплаты.
+          </p>
+        </div>
+        <div className="p-3">
+          <ResponsiveTable
+            data={state.rows}
+            keyFn={(r) => r.code}
+            emptyText="Нет данных" emptyHint="Расширьте период."
+            columns={[
+              { label: 'Сотрудник', primary: true, render: (r) => (
+                <div className="flex items-center gap-2">
+                  <EmpAvatar name={r.name} color={CHART_COLORS[state.rows.indexOf(r) % CHART_COLORS.length]} size={26} />
+                  <span>{r.name}</span>
+                </div>
+              )},
+              { label: 'Выручка', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (r) => fmtRub(r.revenue) },
+              { label: 'Принёс прибыли', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (r) => fmtRub(r.profit) },
+              { label: 'Начислено (ФОТ)', headerClass: 'text-right', cellClass: 'text-right tabular-nums', render: (r) => fmtRub(r.paid) },
+              { label: 'Разница', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold',
+                render: (r) => <span style={{ color: r.net >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{fmtRub(r.net)}</span> },
+              { label: 'Окупаемость', headerClass: 'text-right', cellClass: 'text-right tabular-nums font-semibold', render: (r) => {
+                if (r.ratio == null) return <span className="text-[color:var(--color-muted-foreground)]">—</span>;
+                const ok = r.ratio >= 1;
+                return (
+                  <span className="inline-flex items-center gap-1.5 justify-end">
+                    <span style={{ color: ok ? 'var(--color-success)' : 'var(--color-danger)' }}>{fmtRatio(r.ratio)}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                      style={{ color: ok ? 'var(--color-success)' : 'var(--color-danger)', background: `color-mix(in oklab, ${ok ? 'var(--color-success)' : 'var(--color-danger)'} 14%, transparent)` }}>
+                      {ok ? 'окупается' : 'не окупается'}
+                    </span>
+                  </span>
+                );
+              }},
+            ]}
+          />
+        </div>
+        <div className="px-4 py-2.5 border-t border-[color:var(--color-border)] text-xs text-[color:var(--color-muted-foreground)] space-y-1">
+          <p>
+            «Принёс прибыли» — валовая прибыль по продажам сотрудника: ремонт/химчистка за вычетом себестоимости 30% и косметика за
+            вычетом складской закупки. «Начислено» — его ФОТ за период (оклад + KPI + премии) из расчёта зарплаты.
+          </p>
+          <p>
+            Оценка по продажам за смену, а не полная стоимость сотрудника: обувь и прочие категории в прибыль не входят, а вклад
+            администратора не сводится только к продажам. Оклад помесячный — за неполный месяц он всё равно учитывается целиком
+            (как в расчёте ЗП).{state.salonScoped ? ' Фильтр по салону сужает прибыль до этого салона, а ФОТ берётся полный — сравнивайте окупаемость без фильтра салонов.' : ''}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── main component ──────────────────────────────────────── */
 export default function SalesAnalytics() {
   const [dateFrom, setDateFrom] = useState(TODAY);
@@ -1260,6 +1413,7 @@ export default function SalesAnalytics() {
     { key: 'employees',  label: 'Сотрудники',   icon: <Users size={15} />, badge: employees.length || undefined },
     { key: 'details',    label: 'Сводная',       icon: <Target size={15} /> },
     { key: 'margin',     label: 'Маржа',        icon: <Percent size={15} /> },
+    { key: 'payback',    label: 'Окупаемость',  icon: <Wallet size={15} /> },
     { key: 'turnaround', label: 'Сроки',         icon: <Clock size={15} /> },
     { key: 'returns',    label: 'Возвраты',      icon: <RotateCcw size={15} /> },
     { key: 'workplaces', label: 'Пропускная способность', icon: <Gauge size={15} /> },
@@ -1810,9 +1964,9 @@ export default function SalesAnalytics() {
                     />
                   </div>
                   <div className="px-4 py-2.5 border-t border-[color:var(--color-border)] text-xs text-[color:var(--color-muted-foreground)]">
-                    «Ремонт/химчистка» — это в основном услуги (труд), а не перепродаваемый товар: закупочная себестоимость по складским приходам
-                    для них почти нулевая, поэтому маржа там близка к 100% — это ожидаемо, не ошибка расчёта. Себестоимость считается по последней
-                    цене прихода на складе на конец периода{filteredMargin.unpriced_items > 0 ? `; для ${filteredMargin.unpriced_items} позиций приход в базе не найден — их себестоимость взята как 0` : ''}.
+                    «Ремонт/химчистка» — это в основном труд и расходники (химия, фурнитура, набойки), склада под них почти нет, поэтому
+                    себестоимость взята оценкой {Math.round((filteredMargin.repair_cost_rate ?? 0.3) * 100)}% от стоимости услуги (задано владельцем). Косметика считается по реальной
+                    закупке — последней цене прихода на складе на конец периода{filteredMargin.unpriced_items > 0 ? `; для ${filteredMargin.unpriced_items} позиций косметики приход в базе не найден — их себестоимость взята как 0` : ''}.
                   </div>
                 </div>
 
@@ -2062,6 +2216,7 @@ export default function SalesAnalytics() {
           )}
 
           {/* ══ UNCLAIMED tab ═══════════════════════════════ */}
+          {activeTab === 'payback' && <PaybackTab params={buildParams()} />}
           {activeTab === 'orders' && <OrdersTab params={buildParams()} />}
           {activeTab === 'unclaimed' && <UnclaimedTab />}
 
