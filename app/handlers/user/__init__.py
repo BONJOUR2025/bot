@@ -21,6 +21,7 @@ from .cabinet import (
 )
 from .ack import handle_acknowledgment
 from .shift_checkin import open_salon_start, open_salon_photo, open_salon_cancel
+from .master import master_earnings, master_earnings_period, master_wip
 
 
 __all__ = [
@@ -44,4 +45,7 @@ __all__ = [
     "open_salon_start",
     "open_salon_photo",
     "open_salon_cancel",
+    "master_earnings",
+    "master_earnings_period",
+    "master_wip",
 ]

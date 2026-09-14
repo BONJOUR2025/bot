@@ -35,6 +35,7 @@ select
     user_session_actions.work_place_id,
     user_session_actions.barcode,
     users.description,
+    users.user_id AS master_user_id,
     docs_order.status_id,
     tree.name AS folder_name,
     tree2.name AS top_parent_name
@@ -165,6 +166,17 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     in_description  = in_events.groupby(service_key)["description"].last()
     out_description = out_events.groupby(service_key)["description"].last()
 
+    # The same events keyed by Agbis USERS.USER_ID instead of the display
+    # string. The master bot resolves "whose services are these" by this id
+    # (it equals the employee card's external_code) rather than by name:
+    # the name is not a reliable key here -- masters scan under accounts
+    # whose description doesn't match their bot card ("Корягин К." vs the
+    # card "Константин К.", "Рудем Г." vs "Галиулин Р."), and showing one
+    # master another's earnings is the one failure this must not have.
+    has_uid = "master_user_id" in df.columns
+    in_user_id  = in_events.groupby(service_key)["master_user_id"].last() if has_uid else None
+    out_user_id = out_events.groupby(service_key)["master_user_id"].last() if has_uid else None
+
     # Scan counts for multi-scan detection
     in_count  = in_events.groupby(service_key).size().rename("in_count")
     out_count = out_events.groupby(service_key).size().rename("out_count")
@@ -195,6 +207,8 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
     service["out_time"]        = service["service_id"].map(out_time)
     service["in_description"]  = service["service_id"].map(in_description)
     service["out_description"] = service["service_id"].map(out_description)
+    service["in_user_id"]  = service["service_id"].map(in_user_id) if has_uid else pd.NA
+    service["out_user_id"] = service["service_id"].map(out_user_id) if has_uid else pd.NA
     service["in_count"]        = service["service_id"].map(in_count).fillna(0).astype(int)
     service["out_count"]       = service["service_id"].map(out_count).fillna(0).astype(int)
 

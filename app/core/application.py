@@ -26,6 +26,9 @@ from ..handlers.user import (
     handle_selected_month_user,
     view_salary_user,
     view_schedule_user,
+    master_earnings,
+    master_earnings_period,
+    master_wip,
     personal_cabinet,
     view_user_info,
     edit_user_info,
@@ -150,6 +153,21 @@ def _register_all_handlers(app):
             filters.Regex(r"^📄 Просмотр ЗП$") & ~filters.User(ADMIN_ID),
             view_salary_user,
         )
+    )
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^🔧 Мой заработок$") & ~filters.User(ADMIN_ID),
+            master_earnings,
+        )
+    )
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^🧰 Что на мне висит$") & ~filters.User(ADMIN_ID),
+            master_wip,
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(master_earnings_period, pattern=r"^master_earn:")
     )
     app.add_handler(
         MessageHandler(

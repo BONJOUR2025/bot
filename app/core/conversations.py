@@ -208,7 +208,8 @@ def build_manual_payout_conversation():
 def build_payout_conversation():
     # Pattern for main menu buttons that should exit payout flow
     menu_buttons = filters.Regex(
-        r"^(📄 Просмотр ЗП|📅 Просмотр расписания|👤 Личный кабинет)$"
+        r"^(📄 Просмотр ЗП|📅 Просмотр расписания|👤 Личный кабинет"
+        r"|🔧 Мой заработок|🧰 Что на мне висит)$"
     )
     return ConversationHandler(
         entry_points=[

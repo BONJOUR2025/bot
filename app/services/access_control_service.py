@@ -89,6 +89,18 @@ BOT_BUTTON_CATALOG: list[dict[str, Any]] = [
         "text": "🏪 Открыть салон",
     },
     {
+        "id": "master.earnings",
+        "label": "🔧 Мой заработок",
+        "scope": "master",
+        "text": "🔧 Мой заработок",
+    },
+    {
+        "id": "master.wip",
+        "label": "🧰 Что на мне висит",
+        "scope": "master",
+        "text": "🧰 Что на мне висит",
+    },
+    {
         "id": "common.home",
         "label": "🏠 Домой",
         "scope": "common",
@@ -103,6 +115,15 @@ DEFAULT_USER_BUTTON_IDS: list[str] = [
     "user.view_schedule",
     "user.profile",
     "user.open_salon",
+]
+
+# Кнопки раздела мастера. Они не раздаются ролью и не попадают в "*":
+# признак — должность в карточке сотрудника, а не настройка доступа, так
+# решили сознательно (см. get_bot_button_texts). Владельцу они не нужны —
+# у него нет сканов, и отчёт был бы пустым.
+MASTER_BUTTON_IDS: list[str] = [
+    "master.earnings",
+    "master.wip",
 ]
 
 TOKEN_TTL_SECONDS = 60 * 60 * 12
@@ -696,7 +717,10 @@ class AccessControlService:
         if button_ids is None:
             resolved = DEFAULT_USER_BUTTON_IDS.copy()
         elif button_ids and "*" in button_ids:
-            resolved = [btn["id"] for btn in BOT_BUTTON_CATALOG if btn.get("scope") != "common"]
+            resolved = [
+                btn["id"] for btn in BOT_BUTTON_CATALOG
+                if btn.get("scope") not in ("common", "master")
+            ]
         else:
             valid_ids = {btn["id"] for btn in BOT_BUTTON_CATALOG}
             resolved = [btn_id for btn_id in button_ids if btn_id in valid_ids]
@@ -806,9 +830,28 @@ class AccessControlService:
         if not user_id:
             return self._buttons_to_text(DEFAULT_USER_BUTTON_IDS + ["common.home"])
         user = self.resolve_user(user_id)
-        if not user:
-            return self._buttons_to_text(DEFAULT_USER_BUTTON_IDS + ["common.home"])
-        return self._buttons_to_text(user.bot_buttons)
+        buttons = list(user.bot_buttons) if user else DEFAULT_USER_BUTTON_IDS + ["common.home"]
+        return self._buttons_to_text(self._with_master_buttons(user_id, buttons))
+
+    def _with_master_buttons(self, user_id: str, button_ids: list[str]) -> list[str]:
+        """Раздел мастера появляется по должности, а не по настройке доступа.
+
+        Так решено сознательно: мастеров нанимают и переводят чаще, чем
+        кто-то вспоминает про экран прав, и «мастер вышел на смену, а
+        заработка в боте нет» — отказ, который никто не свяжет с
+        забытой галочкой. Должность в карточке и так обязательна.
+        """
+        from app.services.master_bot_service import is_master_position
+
+        employee = self.employee_repo.get_employee(str(user_id))
+        if employee is None or not is_master_position(getattr(employee, "position", "")):
+            return button_ids
+        head = [b for b in button_ids if b != "common.home"]
+        tail = [b for b in button_ids if b == "common.home"]
+        for btn_id in MASTER_BUTTON_IDS:
+            if btn_id not in head:
+                head.append(btn_id)
+        return head + tail
 
     def _buttons_to_text(self, button_ids: Iterable[str]) -> list[str]:
         catalog_map = {btn["id"]: btn["text"] for btn in BOT_BUTTON_CATALOG}

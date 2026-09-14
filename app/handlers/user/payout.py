@@ -18,6 +18,31 @@ from app.data.employee_repository import EmployeeRepository
 from ...utils.logger import log
 
 
+def _rub(value: float) -> str:
+    return f"{float(value):,.0f} ₽".replace(",", " ")
+
+
+async def _master_advance_cap(user_id: str) -> dict | None:
+    """Сколько мастер уже заработал и сколько может взять авансом.
+
+    None означает «потолок неизвестен» — сотрудник не мастер, либо отчёт
+    сейчас не посчитать. Намеренно fail-open: Firebird бывает занят, и
+    заблокировать в такой момент все заявки на аванс — куда хуже, чем
+    пропустить заявку без проверки, которую всё равно утверждает админ.
+    """
+    try:
+        from ...services.firebird_service import run_with_timeout
+        from ...services.master_bot_service import get_advance_cap, resolve_master
+
+        master = resolve_master(user_id)
+        if master is None:
+            return None
+        return await run_with_timeout(get_advance_cap, master, timeout=55)
+    except Exception as exc:
+        log(f"⚠️ [payout] не удалось посчитать потолок аванса для {user_id}: {exc}")
+        return None
+
+
 async def request_payout_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> PayoutStates:
     """Start payout request conversation."""
     chat_id = update.effective_chat.id
@@ -74,8 +99,29 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Pay
             "❌ Пожалуйста, выберите из предложенных вариантов."
         )
         return PayoutStates.SELECT_TYPE
-    context.user_data.setdefault("payout_data", {})["payout_type"] = payout_type
-    await update.message.reply_text("Введите сумму:")
+    data = context.user_data.setdefault("payout_data", {})
+    data["payout_type"] = payout_type
+
+    prompt = "Введите сумму:"
+    if payout_type == "Аванс":
+        cap = await _master_advance_cap(str(update.effective_user.id))
+        if cap is not None:
+            data["advance_cap"] = cap["available"]
+            earned_label = (
+                "Стипендия с последней зарплаты"
+                if cap["basis"] == "stipend"
+                else "Заработано с последней зарплаты"
+            )
+            prompt = (
+                f"{earned_label}: {_rub(cap['earned'])}\n"
+                f"Уже взято авансом: {_rub(cap['advances'])}\n"
+                f"<b>Доступно к авансу: {_rub(cap['available'])}</b>\n\n"
+                "Введите сумму:"
+            )
+            await update.message.reply_text(prompt, parse_mode="HTML")
+            return PayoutStates.ENTER_AMOUNT
+
+    await update.message.reply_text(prompt)
     return PayoutStates.ENTER_AMOUNT
 
 
@@ -88,6 +134,18 @@ async def enter_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Pa
     amount = int(text)
     data = context.user_data.setdefault("payout_data", {})
     user_id = data.get("user_id")
+
+    # Потолок мастера: больше заработанного авансом не выдаём. Считается
+    # один раз при входе в флоу (см. _master_advance_cap) — если посчитать
+    # не удалось, ключа здесь просто нет и проверка не срабатывает.
+    if data.get("payout_type") == "Аванс" and data.get("advance_cap") is not None:
+        cap = float(data["advance_cap"])
+        if amount > cap:
+            await update.message.reply_text(
+                f"❌ Это больше, чем вы заработали.\n"
+                f"Доступно к авансу: {_rub(cap)}\n\nВведите другую сумму:"
+            )
+            return PayoutStates.ENTER_AMOUNT
 
     # check monthly limit for advances
     if data.get("payout_type") == "Аванс":
