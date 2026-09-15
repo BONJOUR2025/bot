@@ -29,37 +29,80 @@ _PAGE = """<!doctype html>
 }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; padding:32px 16px; }
-main { max-width:28rem; margin:0 auto; }
-.logo { width:56px; height:56px; border-radius:14px; background:var(--btn); color:var(--btn-text); display:grid; place-items:center; font-weight:700; font-size:28px; }
-h1 { font-size:1.6rem; margin:16px 0 4px; }
-.lead { color:var(--muted); margin:0 0 24px; }
+main { max-width:52rem; margin:0 auto; }
+.head { display:flex; gap:16px; align-items:center; margin-bottom:28px; }
+.logo { flex:none; width:56px; height:56px; border-radius:14px; background:var(--btn); color:var(--btn-text); display:grid; place-items:center; font-weight:700; font-size:28px; }
+h1 { font-size:1.6rem; line-height:1.2; margin:0 0 2px; }
+.lead { color:var(--muted); margin:0; }
+.grid { display:grid; gap:24px; grid-template-columns:minmax(0, 1fr); }
+@media (min-width: 720px) { .grid { grid-template-columns:minmax(0, 1fr) 16rem; align-items:start; } }
 .btn { display:block; text-align:center; background:var(--btn); color:var(--btn-text); text-decoration:none; font-weight:600; padding:14px; border-radius:12px; }
 .btn:focus-visible { outline:3px solid var(--muted); outline-offset:2px; }
-.meta { color:var(--muted); font-size:.85rem; text-align:center; margin:8px 0 28px; }
+.meta { color:var(--muted); font-size:.85rem; text-align:center; margin:8px 0 20px; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:12px; }
 ol.card { margin:0; padding:16px 16px 16px 36px; }
 li + li { margin-top:10px; }
 .off { padding:16px; color:var(--muted); }
+.qr { margin:0; padding:16px; text-align:center; }
+/* Код всегда тёмным по белому, и в тёмной теме тоже: камеры хуже читают
+   инвертированный QR, а белое поле заодно даёт ему нужную «тихую зону». */
+.qr__code { background:#ffffff; border-radius:8px; padding:8px; line-height:0; }
+.qr__code svg { width:100%; height:auto; max-width:14rem; }
+.qr figcaption { color:var(--muted); font-size:.85rem; margin-top:12px; }
 </style>
 </head>
 <body>
 <main>
+<header class="head">
 <div class="logo">B</div>
+<div>
 <h1>BONJOUR Мастер</h1>
 <p class="lead">Заработок, работы в процессе и запрос аванса — в телефоне.</p>
+</div>
+</header>
 %BODY%
 </main>
 </body>
 </html>"""
 
-_STEPS = """<a class="btn" href="/api/master-app/%APK%">Скачать приложение</a>
+_AVAILABLE = """<div class="grid">
+<section>
+<a class="btn" href="/api/master-app/%APK%">Скачать приложение</a>
 <p class="meta">%META%</p>
 <ol class="card">
-<li>Нажмите «Скачать приложение» и откройте скачанный файл.</li>
+<li>Нажмите «Скачать приложение» или наведите камеру телефона на QR-код и откройте скачанный файл.</li>
 <li>Если телефон спросит — разрешите установку из этого источника и вернитесь назад.</li>
 <li>Если Play Защита предупредит о неизвестном приложении — нажмите «Подробнее» → «Всё равно установить».</li>
 <li>Откройте «BONJOUR Мастер» и войдите по логину и паролю, которые выдал руководитель.</li>
-</ol>"""
+</ol>
+</section>
+%QR%
+</div>"""
+
+_QR = """<figure class="card qr">
+<div class="qr__code" role="img" aria-label="QR-код ссылки на скачивание приложения">%SVG%</div>
+<figcaption>Наведите камеру телефона — скачивание начнётся сразу</figcaption>
+</figure>"""
+
+
+def _qr_svg(url: str) -> Optional[str]:
+    """QR с прямой ссылкой на APK, готовым SVG для вставки в страницу.
+
+    Нужен, когда страницу открывают на компьютере — например, руководитель
+    показывает её мастерам на смене: навёл камеру, и файл уже качается.
+
+    Без библиотеки страница работает без кода, а не падает: деплой не ставит
+    зависимости из requirements.txt, и на новой машине segno может не
+    оказаться. make_qr, а не make: на короткой строке make выбрал бы Micro QR,
+    а его камеры телефонов не читают.
+    """
+    try:
+        import segno
+    except ImportError:
+        return None
+    return segno.make_qr(url, error="m").svg_inline(
+        scale=8, border=2, dark="#0a0a0a", light="#ffffff", omitsize=True,
+    )
 
 
 def create_master_app_public_router() -> APIRouter:
@@ -76,9 +119,11 @@ def create_master_app_public_router() -> APIRouter:
             if data.get("version_name"):
                 size_mb = data["size"] / (1024 * 1024)
                 meta = f"Версия {data['version_name']} · {size_mb:.1f} МБ · только для Android"
+            svg = _qr_svg(master_app_service.apk_url())
             body = (
-                _STEPS.replace("%APK%", master_app_service.PUBLIC_APK_NAME)
+                _AVAILABLE.replace("%APK%", master_app_service.PUBLIC_APK_NAME)
                 .replace("%META%", html.escape(meta))
+                .replace("%QR%", _QR.replace("%SVG%", svg) if svg else "")
             )
         return HTMLResponse(_PAGE.replace("%BODY%", body))
 

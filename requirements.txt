@@ -24,6 +24,10 @@ reportlab>=4.0.0
 # Images
 Pillow>=10.3.0
 matplotlib>=3.8.0
+# QR на странице установки приложения мастера (app/api/master_app.py). Деплой
+# зависимости не ставит: на новой машине — pip install segno, иначе страница
+# откроется без кода.
+segno>=1.6.0
 
 # 3D mesh processing (shoe-last fit: mesh validation, surface distance, registration)
 trimesh>=4.12.0

@@ -104,3 +104,39 @@ def test_new_upload_replaces_previous(client, tmp_path):
     _upload(client, _apk(version=("1.1.0", 2)))
     assert client.get("/api/master-app/info").json()["version_code"] == 2
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_install_page_has_qr_with_the_apk_link(client):
+    pytest.importorskip("segno")
+    from app.api import master_app
+    from app.services import master_app_service
+
+    _upload(client, _apk())
+    page = client.get("/api/master-app/").text
+    expected = master_app._qr_svg(master_app_service.apk_url())
+    assert expected and "<svg" in expected
+    assert expected in page
+
+
+def test_qr_is_a_regular_qr_not_micro():
+    """Micro QR камеры телефонов не читают."""
+    segno = pytest.importorskip("segno")
+    from app.services import master_app_service
+
+    assert not segno.make_qr(master_app_service.apk_url()).is_micro
+
+
+def test_no_qr_until_apk_is_uploaded(client):
+    assert "<svg" not in client.get("/api/master-app/").text
+
+
+def test_install_page_works_without_segno(client, monkeypatch):
+    """Деплой не ставит зависимости: без библиотеки страница без кода, но работает."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "segno", None)
+    _upload(client, _apk())
+    page = client.get("/api/master-app/")
+    assert page.status_code == 200
+    assert "Скачать приложение" in page.text
+    assert "<svg" not in page.text
