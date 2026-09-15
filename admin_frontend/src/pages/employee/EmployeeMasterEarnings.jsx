@@ -208,7 +208,20 @@ function DaysChart({ rows, metric, dateFrom, dateTo }) {
         ))}
       </svg>
       {act && (
-        <div className="emp-earn-tip" style={{ left: clampX(cx(active)), top: Math.max(yOf(act.value) - 8, 46) }}>
+        <div
+          className="emp-earn-tip"
+          // Над столбцом, если сверху есть место (~56px — две строки подсказки
+          // с отступом). У высокого столбца места нет: подсказка вылезала за
+          // график и налезала на заголовок раздела — тогда ставим её сбоку от
+          // столбца, в ту половину графика, где свободнее.
+          style={
+            yOf(act.value) - 56 >= 0
+              ? { left: clampX(cx(active)), top: yOf(act.value) - 8 }
+              : cx(active) < width / 2
+                ? { left: cx(active) + barW / 2 + 8, top: yOf(act.value), transform: 'none' }
+                : { left: cx(active) - barW / 2 - 8, top: yOf(act.value), transform: 'translateX(-100%)' }
+          }
+        >
           <b>{money(act.value)}</b>
           <span>{dayShort(act.day)} · {act.count} шт</span>
         </div>
