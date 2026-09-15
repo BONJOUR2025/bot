@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bonjour_background">#0A0A0A</color>
+    <color name="bonjour_text">#F8FAFC</color>
+    <color name="bonjour_muted">#94A3B8</color>
+    <color name="bonjour_accent">#F8FAFC</color>
+</resources>

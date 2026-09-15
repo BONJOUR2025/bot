@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «B», как логотип в шапке кабинета. Буква уложена в безопасную зону
+     адаптивного значка (круг 66dp в центре холста 108dp), чтобы маска
+     лаунчера любой формы её не обрезала. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#F8FAFC"
+        android:fillType="evenOdd"
+        android:pathData="M38,32 H58 C66.5,32 71,36.5 71,43 C71,47.5 68.8,50.6 65.2,52 C69.8,53.3 73,57 73,62.5 C73,70.5 67.5,76 58.5,76 H38 Z M46,39.5 V49 H57 C60.5,49 62.6,47.3 62.6,44.2 C62.6,41.2 60.5,39.5 57,39.5 Z M46,55.8 V68.5 H57.8 C62,68.5 64.4,66.3 64.4,62.1 C64.4,58 62,55.8 57.8,55.8 Z" />
+</vector>

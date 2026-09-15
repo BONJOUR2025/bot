@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Те же тона, что у оболочки iOS и заставки кабинета (capacitor.config.json). -->
+    <color name="bonjour_background">#F8FAFC</color>
+    <color name="bonjour_text">#0F172A</color>
+    <color name="bonjour_muted">#64748B</color>
+    <color name="bonjour_accent">#0A0A0A</color>
+    <color name="ic_launcher_background">#0A0A0A</color>
+</resources>

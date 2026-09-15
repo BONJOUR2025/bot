@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BONJOUR Мастер</string>
+    <string name="error_title">Нет связи с сервером</string>
+    <string name="error_body">Проверьте интернет и попробуйте ещё раз.</string>
+    <string name="error_retry">Повторить</string>
+</resources>
