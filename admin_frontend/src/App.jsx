@@ -23,6 +23,9 @@ import NativeShell from "./components/NativeShell.jsx";
 // (Sales, Payroll, Dashboard, ...) shipped in one ~1.7 MB bundle, so even the
 // login page had to download and parse the entire admin app first.
 import Login from "./pages/Login.jsx";
+// Тоже не lazy: сюда попадает аккаунт без сотрудника и прав сразу после
+// входа, и отдельный чанк ради одного сообщения только добавил бы ожидание.
+import NoAccess from "./pages/NoAccess.jsx";
 
 const EmployeeSalary = lazy(() => import("./pages/employee/EmployeeSalary.jsx"));
 const EmployeePayouts = lazy(() => import("./pages/employee/EmployeePayouts.jsx"));
@@ -105,6 +108,11 @@ export default function App() {
               {/* Единая страница логина */}
               <Route path="/login" element={<PlainLayout />}>
                 <Route index element={<Login />} />
+              </Route>
+              {/* Аккаунт без сотрудника и без прав. Вне RequireAuth намеренно:
+                  иначе он снова попал бы в петлю редиректов. */}
+              <Route path="/no-access" element={<PlainLayout />}>
+                <Route index element={<NoAccess />} />
               </Route>
               {/* Редиректы со старых адресов */}
               <Route path="/admin/login" element={<Navigate to="/login" replace />} />

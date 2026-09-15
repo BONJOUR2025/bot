@@ -12,7 +12,9 @@ export function getHomeForUser(user) {
   // permissions (e.g. "payouts") without being an admin/owner.
   if (user.employee_id) return user.is_master ? '/employee/earnings' : '/employee/salary';
   if (user.permissions?.length > 0) return '/admin';
-  return '/admin';
+  // Ни сотрудника, ни прав: раньше здесь тоже был '/admin', и RequireAuth
+  // отправлял такой аккаунт с /admin на /admin — пустой экран без выхода.
+  return '/no-access';
 }
 
 export default function Login() {
