@@ -434,7 +434,7 @@ export default function AccessControl() {
                 {Object.entries(buttonGroups).map(([scope, buttons]) => (
                   <div key={scope}>
                     <p className="text-sm font-semibold text-[color:var(--color-text-muted)] mb-1">
-                      {scope === 'user' ? 'Пользовательское меню' : scope === 'common' ? 'Обязательные' : scope}
+                      {scope === 'user' ? 'Пользовательское меню' : scope === 'master' ? 'Меню мастера' : scope === 'common' ? 'Обязательные' : scope}
                     </p>
                     <div className="grid md:grid-cols-2 gap-2">
                       {buttons.map((btn) => (
@@ -716,7 +716,7 @@ export default function AccessControl() {
                   {Object.entries(buttonGroups).map(([scope, buttons]) => (
                     <div key={scope}>
                       <p className="text-sm font-semibold text-[color:var(--color-text-muted)] mb-1">
-                        {scope === 'user' ? 'Пользовательское меню' : scope === 'common' ? 'Обязательные' : scope}
+                        {scope === 'user' ? 'Пользовательское меню' : scope === 'master' ? 'Меню мастера' : scope === 'common' ? 'Обязательные' : scope}
                       </p>
                       <div className="grid md:grid-cols-2 gap-2">
                         {buttons.map((btn) => (

@@ -25,7 +25,9 @@ def _from_rows(rows: list[list[str]]) -> Keyboard:
 
 
 def main_menu(employee_id: str | None) -> Keyboard:
-    texts = get_access_control_service().get_bot_button_texts(employee_id)
+    # channel="vk" убирает кнопки разделов, которые в VK не портированы
+    # (раздел мастера) — без обработчика нажатие просто молчало бы.
+    texts = get_access_control_service().get_bot_button_texts(employee_id, channel="vk")
     # one button per row keeps VK's keyboard legible regardless of label length
     return _from_rows([[t] for t in texts])
 

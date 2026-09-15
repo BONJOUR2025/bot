@@ -117,13 +117,22 @@ DEFAULT_USER_BUTTON_IDS: list[str] = [
     "user.open_salon",
 ]
 
-# Кнопки раздела мастера. Они не раздаются ролью и не попадают в "*":
-# признак — должность в карточке сотрудника, а не настройка доступа, так
-# решили сознательно (см. get_bot_button_texts). Владельцу они не нужны —
-# у него нет сканов, и отчёт был бы пустым.
-MASTER_BUTTON_IDS: list[str] = [
+# Роль «Мастер» — набор кнопок для мастеров и учеников. Меню у мастера не
+# дополняет меню сотрудника, а заменяет его: «Просмотр ЗП» и «Просмотр
+# расписания» читают «ФОТ админы *.xlsx», где мастеров нет вовсе, так что у
+# мастера эти кнопки всегда отвечали бы «данные не найдены»; «Открыть салон»
+# — обязанность администратора.
+#
+# Роль назначается по должности в карточке (см. resolve_user), а не вручную
+# на экране доступов, но набор кнопок в ней правится в панели как у любой
+# другой роли. Если админ задал сотруднику кнопки персонально — это явный
+# выбор, и он главнее должности.
+MASTER_ROLE_ID = "master"
+MASTER_ROLE_DEFAULT_BUTTON_IDS: list[str] = [
     "master.earnings",
     "master.wip",
+    "user.request_payout",
+    "user.profile",
 ]
 
 TOKEN_TTL_SECONDS = 60 * 60 * 12
@@ -267,6 +276,20 @@ class AccessControlService:
                     "bot_buttons": DEFAULT_USER_BUTTON_IDS.copy(),
                 },
             ]
+            changed = True
+        if not any(r.get("id") == MASTER_ROLE_ID for r in self._data["roles"]):
+            # Роль нужна для привязки меню к должности мастера, поэтому она
+            # восстанавливается при каждой загрузке: удалить её из панели
+            # можно, но на следующем чтении конфига она вернётся с набором
+            # по умолчанию. Кнопки в ней при этом правятся как угодно.
+            self._data["roles"].append(
+                {
+                    "id": MASTER_ROLE_ID,
+                    "name": "Мастер",
+                    "permissions": [],
+                    "bot_buttons": MASTER_ROLE_DEFAULT_BUTTON_IDS.copy(),
+                }
+            )
             changed = True
         if "users" not in self._data:
             self._data["users"] = []
@@ -665,8 +688,13 @@ class AccessControlService:
             return None
         role = self._get_role(record.get("role_id"))
         permissions = self._resolve_permissions(record, role)
-        buttons = self._resolve_buttons(record, role)
         employee = self.employee_repo.get_employee(user_id)
+        buttons = self._resolve_buttons(record, role)
+        # Мастер получает меню роли «Мастер» вместо меню своей роли — но
+        # только кнопки: права в панели остаются от назначенной роли.
+        # Персонально заданные кнопки — явный выбор админа, их не трогаем.
+        if record.get("bot_buttons") is None and self._is_master(employee):
+            buttons = self._master_buttons()
         display_name: str | None = None
         if employee:
             display_name = employee.full_name or employee.name
@@ -825,33 +853,49 @@ class AccessControlService:
     # ------------------------------------------------------------------
     # bot integration helpers
     # ------------------------------------------------------------------
-    def get_bot_button_texts(self, user_id: str | None) -> list[str]:
+    def get_bot_button_texts(self, user_id: str | None, channel: str = "telegram") -> list[str]:
+        """Тексты кнопок главного меню.
+
+        channel="vk" убирает кнопки разделов, которые в VK-боте не
+        портированы (раздел мастера): без обработчика нажатие молчит.
+        """
         self._reload()
         if not user_id:
-            return self._buttons_to_text(DEFAULT_USER_BUTTON_IDS + ["common.home"])
-        user = self.resolve_user(user_id)
-        buttons = list(user.bot_buttons) if user else DEFAULT_USER_BUTTON_IDS + ["common.home"]
-        return self._buttons_to_text(self._with_master_buttons(user_id, buttons))
+            buttons = DEFAULT_USER_BUTTON_IDS + ["common.home"]
+        else:
+            user = self.resolve_user(user_id)
+            if user:
+                buttons = list(user.bot_buttons)
+            elif self._is_master(self.employee_repo.get_employee(str(user_id))):
+                # Карточку с tg id заводят заранее, а запись доступа
+                # появляется позже — мастер не должен до этого видеть
+                # чужое меню сотрудника.
+                buttons = self._master_buttons()
+            else:
+                buttons = DEFAULT_USER_BUTTON_IDS + ["common.home"]
+        if channel == "vk":
+            master_ids = {b["id"] for b in BOT_BUTTON_CATALOG if b.get("scope") == "master"}
+            buttons = [b for b in buttons if b not in master_ids]
+        return self._buttons_to_text(buttons)
 
-    def _with_master_buttons(self, user_id: str, button_ids: list[str]) -> list[str]:
-        """Раздел мастера появляется по должности, а не по настройке доступа.
+    @staticmethod
+    def _is_master(employee) -> bool:
+        """Меню мастера выбирается по должности, а не по настройке доступа.
 
-        Так решено сознательно: мастеров нанимают и переводят чаще, чем
-        кто-то вспоминает про экран прав, и «мастер вышел на смену, а
-        заработка в боте нет» — отказ, который никто не свяжет с
-        забытой галочкой. Должность в карточке и так обязательна.
+        Мастеров нанимают и переводят чаще, чем кто-то вспоминает про экран
+        прав, и «мастер вышел на смену, а заработка в боте нет» — отказ,
+        который никто не свяжет с забытой ролью. Должность в карточке и так
+        заполняют всегда.
         """
+        if employee is None:
+            return False
         from app.services.master_bot_service import is_master_position
 
-        employee = self.employee_repo.get_employee(str(user_id))
-        if employee is None or not is_master_position(getattr(employee, "position", "")):
-            return button_ids
-        head = [b for b in button_ids if b != "common.home"]
-        tail = [b for b in button_ids if b == "common.home"]
-        for btn_id in MASTER_BUTTON_IDS:
-            if btn_id not in head:
-                head.append(btn_id)
-        return head + tail
+        return is_master_position(getattr(employee, "position", ""))
+
+    def _master_buttons(self) -> list[str]:
+        role = self._get_role(MASTER_ROLE_ID) or {"bot_buttons": MASTER_ROLE_DEFAULT_BUTTON_IDS}
+        return self._resolve_buttons({"bot_buttons": None}, role)
 
     def _buttons_to_text(self, button_ids: Iterable[str]) -> list[str]:
         catalog_map = {btn["id"]: btn["text"] for btn in BOT_BUTTON_CATALOG}
