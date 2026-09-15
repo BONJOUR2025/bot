@@ -4,7 +4,11 @@ from app.schemas.vacation import Vacation, VacationCreate, VacationUpdate
 from app.services.vacation_service import VacationService
 from app.services.access_control_service import AccessControlService, ResolvedUser
 
-from .dependencies import get_current_user
+from .dependencies import get_current_user, require_permission
+
+# Чтение отфильтровано областью видимости, правка — только с правом раздела:
+# сотрудник просит отпуск заявкой на отгул, а не заводит его себе сам.
+EDIT_PERMISSION = "vacations"
 
 
 def create_vacation_router(
@@ -41,7 +45,7 @@ def create_vacation_router(
 
     @router.post("/", response_model=Vacation)
     async def create_vacation(
-        data: VacationCreate, current: ResolvedUser = Depends(get_current_user)
+        data: VacationCreate, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         if not access_service.is_employee_visible(current, data.employee_id):
             raise HTTPException(status_code=403, detail="forbidden")
@@ -54,7 +58,7 @@ def create_vacation_router(
     async def update_vacation(
         vacation_id: str,
         data: VacationUpdate,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION)),
     ):
         _ensure_vacation_access(vacation_id, current)
         if data.employee_id and not access_service.is_employee_visible(
@@ -73,7 +77,7 @@ def create_vacation_router(
 
     @router.delete("/{vacation_id}")
     async def delete_vacation(
-        vacation_id: str, current: ResolvedUser = Depends(get_current_user)
+        vacation_id: str, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         _ensure_vacation_access(vacation_id, current)
         await service.delete_vacation(vacation_id)

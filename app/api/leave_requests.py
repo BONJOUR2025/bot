@@ -85,6 +85,9 @@ def create_leave_request_router(
 
     @router.delete("/{request_id}")
     async def delete_request(request_id: str, current: ResolvedUser = Depends(get_current_user)):
+        # Как одобрение: сотрудник не должен стирать свою заявку после решения.
+        if not access_service.user_has_permission(current, APPROVE_PERMISSION):
+            raise HTTPException(status_code=403, detail="forbidden")
         _ensure_access(request_id, current)
         await service.delete_request(request_id)
         return {"status": "deleted"}

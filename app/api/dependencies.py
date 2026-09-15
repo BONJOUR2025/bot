@@ -39,3 +39,18 @@ def require_permission(permission: str):
         return user
 
     return dependency
+
+
+def require_any_permission(*permissions: str):
+    """Пропускает, если есть хотя бы одно из прав.
+
+    Для адресов, которыми пользуются несколько разделов панели: например,
+    статус amoCRM читают и «Настройки», и расчёт ЗП менеджеров.
+    """
+
+    async def dependency(user: ResolvedUser = Depends(get_current_user)) -> ResolvedUser:
+        if "*" in user.permissions or any(p in user.permissions for p in permissions):
+            return user
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+    return dependency

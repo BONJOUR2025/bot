@@ -10,6 +10,9 @@ from app.data.employee_repository import EmployeeRepository
 from app.services.access_control_service import AccessControlService
 from tests.conftest import make_employee_dict
 
+# Владельца заводим явно: известного admin/admin по умолчанию больше нет.
+OWNER_PASSWORD = "0wner-test-pass"
+
 
 def _make_employee_repo(tmp_path):
     p = tmp_path / "users.json"
@@ -30,16 +33,19 @@ def _make_service(tmp_path, ac_data=None, employee_repo=None):
         path=ac_path,
         secret_key="test_secret_key_12345",
         employee_repo=employee_repo or _make_employee_repo(tmp_path),
+        bootstrap_login="admin",
+        bootstrap_password=OWNER_PASSWORD,
     )
 
 
 class TestAccessControlInit:
-    def test_creates_default_admin_and_role(self, tmp_path):
+    def test_creates_owner_role_and_bootstrap_admin(self, tmp_path):
         svc = _make_service(tmp_path)
         roles = svc.list_roles()
         users = svc.list_users()
         assert any(r["id"] == "owner" for r in roles)
         assert any(u["login"] == "admin" for u in users)
+        assert svc.authenticate("admin", "admin") is None
 
     def test_loads_existing_config(self, tmp_path):
         ac_data = {
@@ -121,7 +127,7 @@ class TestUserCRUD:
 class TestAuthentication:
     def test_authenticate_valid(self, tmp_path):
         svc = _make_service(tmp_path)
-        user = svc.authenticate("admin", "admin")
+        user = svc.authenticate("admin", OWNER_PASSWORD)
         assert user is not None
         assert user.login == "admin"
 
@@ -156,7 +162,7 @@ class TestTokens:
 class TestPermissions:
     def test_user_has_all_permissions_from_owner_role(self, tmp_path):
         svc = _make_service(tmp_path)
-        user = svc.authenticate("admin", "admin")
+        user = svc.authenticate("admin", OWNER_PASSWORD)
         # Owner role has ["*"] which resolves to all available permissions
         assert svc.user_has_permission(user, "dashboard") is True
         assert svc.user_has_permission(user, "employees") is True
@@ -176,17 +182,17 @@ class TestPermissions:
 class TestVisibility:
     def test_visible_employee_ids_wildcard(self, tmp_path):
         svc = _make_service(tmp_path)
-        user = svc.authenticate("admin", "admin")
+        user = svc.authenticate("admin", OWNER_PASSWORD)
         visible = svc.visible_employee_ids(user)
         assert visible is None  # None means all visible
 
     def test_is_employee_visible_for_admin(self, tmp_path):
         svc = _make_service(tmp_path)
-        user = svc.authenticate("admin", "admin")
+        user = svc.authenticate("admin", OWNER_PASSWORD)
         assert svc.is_employee_visible(user, "100") is True
 
     def test_user_employee_scope_unrestricted(self, tmp_path):
         svc = _make_service(tmp_path)
-        user = svc.authenticate("admin", "admin")
+        user = svc.authenticate("admin", OWNER_PASSWORD)
         scope = svc.user_employee_scope(user)
         assert scope is None  # None = unrestricted

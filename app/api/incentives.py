@@ -5,7 +5,11 @@ from app.schemas.incentive import Incentive, IncentiveCreate, IncentiveUpdate
 from app.services.incentive_service import IncentiveService
 from app.services.access_control_service import AccessControlService, ResolvedUser
 
-from .dependencies import get_current_user
+from .dependencies import get_current_user, require_permission
+
+# Чтение отфильтровано областью видимости (свои записи), а правка — только
+# с правом раздела: иначе сотрудник мог удалить себе штраф или начислить премию.
+EDIT_PERMISSION = "incentives"
 
 
 def create_incentive_router(
@@ -42,7 +46,7 @@ def create_incentive_router(
 
     @router.post("/", response_model=Incentive)
     async def add_incentive(
-        data: IncentiveCreate, current: ResolvedUser = Depends(get_current_user)
+        data: IncentiveCreate, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         if not access_service.is_employee_visible(current, data.employee_id):
             raise HTTPException(status_code=403, detail="forbidden")
@@ -52,7 +56,7 @@ def create_incentive_router(
     async def update_incentive(
         item_id: str,
         data: IncentiveUpdate,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION)),
     ):
         _ensure_incentive_access(item_id, current)
         if data.employee_id and not access_service.is_employee_visible(
@@ -68,7 +72,7 @@ def create_incentive_router(
 
     @router.delete("/{item_id}")
     async def delete_incentive(
-        item_id: str, current: ResolvedUser = Depends(get_current_user)
+        item_id: str, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         _ensure_incentive_access(item_id, current)
         if not await service.delete_incentive(item_id):

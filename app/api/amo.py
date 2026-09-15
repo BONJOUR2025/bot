@@ -7,14 +7,18 @@ from fastapi.responses import HTMLResponse
 from app.services.access_control_service import ResolvedUser
 from app.services import amo_client
 
-from .dependencies import get_current_user
+from .dependencies import require_any_permission, require_permission
 
 
 def create_amo_router() -> APIRouter:
     router = APIRouter(prefix="/amo", tags=["amoCRM"])
 
+    # Статус читают «Настройки → Интеграции» и расчёт ЗП менеджеров,
+    # пользователей amo — привязка сотрудников. Сотруднику всё это не нужно.
     @router.get("/status")
-    async def status(current: ResolvedUser = Depends(get_current_user)):
+    async def status(
+        current: ResolvedUser = Depends(require_any_permission("settings", "manager-salary")),
+    ):
         return {
             "configured": amo_client.is_configured(),
             "authorized": amo_client.is_authorized(),
@@ -22,7 +26,11 @@ def create_amo_router() -> APIRouter:
         }
 
     @router.get("/users")
-    async def users(current: ResolvedUser = Depends(get_current_user)):
+    async def users(
+        current: ResolvedUser = Depends(
+            require_any_permission("employees", "manager-salary", "settings")
+        ),
+    ):
         try:
             return await amo_client.list_users()
         except Exception as exc:
@@ -35,7 +43,7 @@ def create_amo_router() -> APIRouter:
         date_to: str = Query(..., description="YYYY-MM-DD"),
         type: str = Query("lead_status_changed", description="тип события amoCRM, напр. outgoing_chat_message"),
         limit: int = 50,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission("settings")),
     ):
         """Raw events of the given type for the range (first page) — to check the
         value_after / entity_id / entity_type / created_by shapes against the
@@ -58,7 +66,7 @@ def create_amo_router() -> APIRouter:
             raise HTTPException(status_code=502, detail=str(exc))
 
     @router.get("/raw/lead/{lead_id}")
-    async def raw_lead(lead_id: int, current: ResolvedUser = Depends(get_current_user)):
+    async def raw_lead(lead_id: int, current: ResolvedUser = Depends(require_permission("settings"))):
         """Raw lead payload — to verify responsible_user_id / price / pipeline_id / status_id."""
         try:
             return await amo_client.amo_get(f"/leads/{lead_id}")
@@ -66,7 +74,7 @@ def create_amo_router() -> APIRouter:
             raise HTTPException(status_code=502, detail=str(exc))
 
     @router.get("/auth/url")
-    async def auth_url(current: ResolvedUser = Depends(get_current_user)):
+    async def auth_url(current: ResolvedUser = Depends(require_permission("settings"))):
         if not amo_client.is_configured():
             raise HTTPException(status_code=400, detail="amoCRM не настроен в .env")
         return {"url": amo_client.auth_url()}

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from app.config import SECRET_KEY
+from app.config import ADMIN_LOGIN, ADMIN_PASSWORD, SECRET_KEY
 from app.data.bot_user_repository import BotUserRepository, get_bot_user_repository
 from app.data.employee_repository import EmployeeRepository
 from app.data.json_storage import JsonStorage
@@ -171,7 +171,13 @@ class AccessControlService:
         secret_key: str | None = None,
         employee_repo: EmployeeRepository | None = None,
         bot_user_repo: BotUserRepository | None = None,
+        bootstrap_login: str | None = None,
+        bootstrap_password: str | None = None,
     ) -> None:
+        self._bootstrap_login = bootstrap_login if bootstrap_login is not None else ADMIN_LOGIN
+        self._bootstrap_password = (
+            bootstrap_password if bootstrap_password is not None else ADMIN_PASSWORD
+        )
         self.storage = JsonStorage(path)
         self.secret_key = (secret_key or SECRET_KEY or "change_me").encode("utf-8")
         self.employee_repo = employee_repo or EmployeeRepository()
@@ -304,12 +310,26 @@ class AccessControlService:
         if "users" not in self._data:
             self._data["users"] = []
             changed = True
-        if not any(u.get("login") == "admin" for u in self._data["users"]):
-            salt, password_hash = self._hash_password("admin")
+        # Раньше здесь при каждом чтении конфига создавался admin/admin, если
+        # пользователя с логином «admin» не было. Удалить или переименовать
+        # его было нельзя — он возвращался с тем же известным паролем. Теперь
+        # первый владелец заводится только на пустой установке (ни у кого нет
+        # пароля) и только с паролем из ADMIN_PASSWORD.
+        login = (self._bootstrap_login or "").strip()
+        password = self._bootstrap_password or ""
+        has_password_user = any(u.get("password_hash") for u in self._data["users"])
+        if (
+            not has_password_user
+            and login
+            and password
+            and password != login
+            and not any(u.get("login") == login for u in self._data["users"])
+        ):
+            salt, password_hash = self._hash_password(password)
             self._data["users"].append(
                 {
-                    "id": "admin",
-                    "login": "admin",
+                    "id": login,
+                    "login": login,
                     "role_id": "owner",
                     "permissions": None,
                     "bot_buttons": None,
@@ -772,6 +792,11 @@ class AccessControlService:
             # means "unrestricted" for admin/manager accounts.
             if allowed_employee_ids is None and allowed_departments is None:
                 allowed_employee_ids = [employee_id]
+        elif not permissions and allowed_employee_ids is None and allowed_departments is None:
+            # Аккаунт без прав и без сотрудника не видит никого. Иначе «не
+            # задано» читалось бы как «без ограничений», и вход без единого
+            # права открывал бы через API чужие выплаты, ЗП и карточки.
+            allowed_employee_ids = []
         return ResolvedUser(
             id=user_id,
             login=record.get("login") or "",
@@ -904,7 +929,9 @@ class AccessControlService:
     def visible_employee_ids(self, user: ResolvedUser) -> set[str] | None:
         employee_scope = self.user_employee_scope(user)
         department_scope = self.user_department_scope(user)
-        if not employee_scope and not department_scope:
+        # Пустой список — «никого», а не «всех»: так же считает
+        # is_employee_visible. Раньше пустая область здесь снимала фильтр.
+        if employee_scope is None and department_scope is None:
             return None
         visible: set[str] = set(employee_scope or [])
         if department_scope:

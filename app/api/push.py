@@ -24,6 +24,17 @@ class UnsubscribeRequest(BaseModel):
 def create_push_router(push_service: PushService) -> APIRouter:
     router = APIRouter(prefix="/push", tags=["Push"])
 
+    def _ensure_own(current: ResolvedUser, employee_id: str) -> None:
+        # Сотрудник подписывает только себя. Аккаунт без сотрудника раньше
+        # проходил проверку для любого id и мог получать чужие уведомления
+        # (статусы выплат) — теперь только с правом раздела «Сотрудники».
+        if current.employee_id:
+            if current.employee_id != employee_id:
+                raise HTTPException(status_code=403, detail="forbidden")
+            return
+        if "*" not in current.permissions and "employees" not in current.permissions:
+            raise HTTPException(status_code=403, detail="forbidden")
+
     @router.get("/vapid-public-key")
     async def vapid_public_key(
         _: ResolvedUser = Depends(get_current_user),
@@ -35,9 +46,7 @@ def create_push_router(push_service: PushService) -> APIRouter:
         body: SubscribeRequest,
         current: ResolvedUser = Depends(get_current_user),
     ) -> dict[str, str]:
-        # Only allow subscribing for own employee_id
-        if current.employee_id and current.employee_id != body.employee_id:
-            raise HTTPException(status_code=403, detail="forbidden")
+        _ensure_own(current, body.employee_id)
         push_service.subscribe(body.employee_id, body.subscription)
         return {"status": "subscribed"}
 
@@ -46,8 +55,7 @@ def create_push_router(push_service: PushService) -> APIRouter:
         body: UnsubscribeRequest,
         current: ResolvedUser = Depends(get_current_user),
     ) -> dict[str, str]:
-        if current.employee_id and current.employee_id != body.employee_id:
-            raise HTTPException(status_code=403, detail="forbidden")
+        _ensure_own(current, body.employee_id)
         push_service.unsubscribe(body.employee_id, body.endpoint)
         return {"status": "unsubscribed"}
 
@@ -56,8 +64,7 @@ def create_push_router(push_service: PushService) -> APIRouter:
         employee_id: str,
         current: ResolvedUser = Depends(get_current_user),
     ) -> dict[str, bool]:
-        if current.employee_id and current.employee_id != employee_id:
-            raise HTTPException(status_code=403, detail="forbidden")
+        _ensure_own(current, employee_id)
         return {"subscribed": push_service.has_subscription(employee_id)}
 
     return router

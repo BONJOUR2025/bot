@@ -9,7 +9,12 @@ from app.data.payout_repository import PayoutRepository
 from app.data.vacation_repository import VacationRepository
 from app.services.access_control_service import AccessControlService, ResolvedUser
 
-from .dependencies import get_current_user
+from .dependencies import get_current_user, require_any_permission, require_permission
+
+# Правка карточек — раздел «Сотрудники». Сотрудник с областью «только я»
+# проходил проверку видимости и мог сам себе поменять должность, код Агбиса
+# или удалить карточку; себе он правит только поля из PATCH /self и фото.
+EDIT_PERMISSION = "employees"
 
 
 def create_employee_router(
@@ -38,7 +43,7 @@ def create_employee_router(
     @router.get("/external-users")
     async def list_external_users(
         search: str = "",
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_any_permission("employees", "payroll")),
     ):
         from app.services import fdb_cache
         from app.services.firebird_service import run_with_timeout
@@ -80,7 +85,7 @@ def create_employee_router(
 
     @router.post("/", response_model=EmployeeOut)
     async def create(
-        data: EmployeeCreate, current: ResolvedUser = Depends(get_current_user)
+        data: EmployeeCreate, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         if access_service.user_employee_scope(current) or access_service.user_department_scope(
             current
@@ -92,7 +97,7 @@ def create_employee_router(
     async def update(
         employee_id: str,
         data: EmployeeUpdate,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION)),
     ):
         if not access_service.is_employee_visible(
             current, employee_id, _employee_department(employee_id)
@@ -106,6 +111,10 @@ def create_employee_router(
         file: UploadFile = File(...),
         current: ResolvedUser = Depends(get_current_user),
     ):
+        # Фото себе ставит и сам сотрудник (профиль в кабинете).
+        is_self = bool(current.employee_id) and current.employee_id == employee_id
+        if not is_self and not access_service.user_has_permission(current, EDIT_PERMISSION):
+            raise HTTPException(status_code=403, detail="forbidden")
         if not access_service.is_employee_visible(
             current, employee_id, _employee_department(employee_id)
         ):
@@ -116,7 +125,7 @@ def create_employee_router(
     async def upload_passport(
         employee_id: str,
         file: UploadFile = File(...),
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION)),
     ):
         if not access_service.is_employee_visible(
             current, employee_id, _employee_department(employee_id)
@@ -127,7 +136,7 @@ def create_employee_router(
 
     @router.delete("/{employee_id}")
     async def delete(
-        employee_id: str, current: ResolvedUser = Depends(get_current_user)
+        employee_id: str, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         if not access_service.is_employee_visible(
             current, employee_id, _employee_department(employee_id)
@@ -137,7 +146,7 @@ def create_employee_router(
 
     @router.post("/{employee_id}/archive", response_model=EmployeeOut)
     async def archive_employee(
-        employee_id: str, current: ResolvedUser = Depends(get_current_user)
+        employee_id: str, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         if not access_service.is_employee_visible(
             current, employee_id, _employee_department(employee_id)
@@ -147,7 +156,7 @@ def create_employee_router(
 
     @router.post("/{employee_id}/restore", response_model=EmployeeOut)
     async def restore_employee(
-        employee_id: str, current: ResolvedUser = Depends(get_current_user)
+        employee_id: str, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         if not access_service.is_employee_visible(
             current, employee_id, _employee_department(employee_id)
@@ -176,7 +185,9 @@ def create_employee_router(
 
     @router.get("/export.pdf", response_class=Response)
     async def export_employees_pdf(
-        current: ResolvedUser = Depends(get_current_user),
+        # Проверка области ниже пропускала пустую область (пустое множество —
+        # «ложь»), то есть аккаунт без прав и без сотрудника.
+        current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION)),
     ):
         if access_service.user_employee_scope(current) or access_service.user_department_scope(
             current

@@ -4,7 +4,11 @@ from app.schemas.asset import Asset, AssetCreate, AssetUpdate, BulkIdsRequest, B
 from app.services.asset_service import AssetService
 from app.services.access_control_service import AccessControlService, ResolvedUser
 
-from .dependencies import get_current_user
+from .dependencies import get_current_user, require_permission
+
+# Чтение отфильтровано областью видимости, правка и уведомления — только
+# с правом раздела: иначе сотрудник мог списать с себя выданное имущество.
+EDIT_PERMISSION = "assets"
 
 
 def create_asset_router(
@@ -29,7 +33,7 @@ def create_asset_router(
 
     @router.post("/bulk/create", response_model=list[Asset])
     async def bulk_create_assets(
-        data: BulkCreateRequest, current: ResolvedUser = Depends(get_current_user)
+        data: BulkCreateRequest, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         for item in data.items:
             if not access_service.is_employee_visible(current, item.employee_id):
@@ -38,7 +42,7 @@ def create_asset_router(
 
     @router.post("/bulk/delete")
     async def bulk_delete(
-        data: BulkIdsRequest, current: ResolvedUser = Depends(get_current_user)
+        data: BulkIdsRequest, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         for item_id in data.ids:
             _ensure_asset_access(str(item_id), current)
@@ -47,7 +51,7 @@ def create_asset_router(
 
     @router.post("/bulk/notify")
     async def bulk_notify(
-        data: BulkIdsRequest, current: ResolvedUser = Depends(get_current_user)
+        data: BulkIdsRequest, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         for item_id in data.ids:
             _ensure_asset_access(str(item_id), current)
@@ -69,7 +73,7 @@ def create_asset_router(
 
     @router.post("/", response_model=Asset)
     async def create_asset(
-        data: AssetCreate, current: ResolvedUser = Depends(get_current_user)
+        data: AssetCreate, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         if not access_service.is_employee_visible(current, data.employee_id):
             raise HTTPException(status_code=403, detail="forbidden")
@@ -77,7 +81,7 @@ def create_asset_router(
 
     @router.post("/{item_id}/notify")
     async def notify_asset(
-        item_id: str, current: ResolvedUser = Depends(get_current_user)
+        item_id: str, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         _ensure_asset_access(item_id, current)
         result = await service.notify_asset(item_id)
@@ -92,7 +96,7 @@ def create_asset_router(
     async def update_asset(
         item_id: str,
         data: AssetUpdate,
-        current: ResolvedUser = Depends(get_current_user),
+        current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION)),
     ):
         _ensure_asset_access(item_id, current)
         if data.employee_id and not access_service.is_employee_visible(
@@ -108,7 +112,7 @@ def create_asset_router(
 
     @router.delete("/{item_id}")
     async def delete_asset(
-        item_id: str, current: ResolvedUser = Depends(get_current_user)
+        item_id: str, current: ResolvedUser = Depends(require_permission(EDIT_PERMISSION))
     ):
         _ensure_asset_access(item_id, current)
         await service.delete_asset(item_id)
