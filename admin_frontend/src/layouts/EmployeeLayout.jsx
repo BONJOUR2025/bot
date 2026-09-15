@@ -1,25 +1,25 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
-  LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, CalendarOff, MessageCircle, Wallet, Wrench,
+  LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, Wallet, Wrench,
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 
+// «Отгулов» и «Связи» в меню нет ни у кого — так решил руководитель. Страницы
+// (/employee/leave-requests, /employee/feedback) остались и открываются по
+// прямой ссылке, из меню их убрали.
 const NAV_ITEMS = [
   { to: '/employee/salary', label: 'Зарплата', icon: DollarSign },
   { to: '/employee/payouts', label: 'Авансы', icon: CreditCard },
   { to: '/employee/history', label: 'История', icon: History },
   { to: '/employee/schedule', label: 'График', icon: Calendar },
-  { to: '/employee/leave-requests', label: 'Отгулы', icon: CalendarOff },
-  { to: '/employee/feedback', label: 'Связь', icon: MessageCircle },
   { to: '/employee/profile', label: 'Профиль', icon: User },
 ];
 
 // У мастера нет «Зарплаты» и «Графика»: оба раздела читают «ФОТ админы *.xlsx»,
 // где мастеров нет, и всегда показывали бы «данных нет». Заработок мастера
 // считается по сканам — тот же набор, что меню мастера в Telegram-боте.
-// «Отгулов» и «Связи» у мастера тоже нет — так решил руководитель.
 const MASTER_NAV_ITEMS = [
   { to: '/employee/earnings', label: 'Заработок', icon: Wallet },
   { to: '/employee/wip', label: 'В работе', icon: Wrench },
