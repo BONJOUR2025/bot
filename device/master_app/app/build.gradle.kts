@@ -5,8 +5,9 @@ plugins {
 
 // versionCode обязан расти с каждой выпущенной сборкой: APK с тем же или
 // меньшим кодом Android поверх установленного не поставит.
-val appVersionName = "1.0.0"
-val appVersionCode = 1
+// 1.1.0 — сканер бирок камерой (мост BonjourApp) и скачивание файлов браузером.
+val appVersionName = "1.1.0"
+val appVersionCode = 2
 
 // Версия кладётся внутрь APK — сервер показывает её на странице установки,
 // не разбирая бинарный манифест и не доверяя имени файла (так же у агента MDM).
@@ -78,4 +79,7 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    // Сканер штрихкодов Google Play: своя камера и распознавание, приложению
+    // не нужно ни разрешение на камеру, ни собственный экран сканирования.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 }

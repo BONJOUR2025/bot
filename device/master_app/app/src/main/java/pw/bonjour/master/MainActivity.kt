@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -20,6 +21,10 @@ import android.widget.ProgressBar
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import org.json.JSONObject
 
 /**
  * Оболочка над кабинетом сотрудника на app.bonjour.pw.
@@ -27,6 +32,9 @@ import androidx.appcompat.app.AppCompatActivity
  * Своих экранов у приложения нет намеренно: всё, что видит мастер, — это
  * веб-кабинет, поэтому новый раздел или исправление приезжают на телефоны
  * вместе с деплоем сервера, без пересборки и переустановки APK.
+ *
+ * Из нативного — только то, чего веб в WebView не умеет: выбор фото,
+ * сканер бирок камерой (мост BonjourApp) и скачивание файлов браузером.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -68,6 +76,12 @@ class MainActivity : AppCompatActivity() {
         }
         webView.webViewClient = Client()
         webView.webChromeClient = Chrome()
+        // Кабинет открывается только с app.bonjour.pw (shouldOverrideUrlLoading
+        // выпускает остальное в браузер), поэтому мост видит только наш сайт.
+        webView.addJavascriptInterface(AppBridge(), BRIDGE_NAME)
+        // У WebView нет своего загрузчика: без этого ссылка на файл (например,
+        // на новую версию приложения) молча ничего не делала. Отдаём браузеру.
+        webView.setDownloadListener { url, _, _, _, _ -> openExternally(Uri.parse(url)) }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -127,6 +141,54 @@ class MainActivity : AppCompatActivity() {
             // Открыть нечем (например, tel: на планшете без звонков) —
             // остаёмся на месте, для кабинета это не ошибка.
         }
+    }
+
+    /**
+     * Сканер бирок: системный сканер Google Play со своей камерой и
+     * распознаванием. Результат уходит в кабинет событием `bonjour-scan`
+     * ({value, error, cancelled}) — страница «Скан» его слушает.
+     */
+    private fun startBarcodeScan() {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(
+                Barcode.FORMAT_CODE_128,
+                Barcode.FORMAT_CODE_39,
+                Barcode.FORMAT_CODE_93,
+                Barcode.FORMAT_ITF,
+                Barcode.FORMAT_EAN_13,
+                Barcode.FORMAT_CODABAR,
+                Barcode.FORMAT_QR_CODE,
+            )
+            .enableAutoZoom()
+            .build()
+        GmsBarcodeScanning.getClient(this, options)
+            .startScan()
+            .addOnSuccessListener { barcode -> sendScanResult(barcode.rawValue, null, false) }
+            .addOnCanceledListener { sendScanResult(null, null, true) }
+            .addOnFailureListener { e -> sendScanResult(null, e.message ?: "scan_failed", false) }
+    }
+
+    private fun sendScanResult(value: String?, error: String?, cancelled: Boolean) {
+        val detail = JSONObject()
+            .put("value", value ?: JSONObject.NULL)
+            .put("error", error ?: JSONObject.NULL)
+            .put("cancelled", cancelled)
+        webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('bonjour-scan', { detail: $detail }));",
+            null,
+        )
+    }
+
+    private inner class AppBridge {
+        @JavascriptInterface
+        fun scanBarcode() {
+            // Методы моста вызываются не в главном потоке — сканер и WebView
+            // трогать можно только оттуда.
+            runOnUiThread { startBarcodeScan() }
+        }
+
+        @JavascriptInterface
+        fun version(): String = BuildConfig.VERSION_NAME
     }
 
     private inner class Client : WebViewClient() {
@@ -200,5 +262,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val USER_AGENT_MARK = "BonjourMasterApp"
+        const val BRIDGE_NAME = "BonjourApp"
     }
 }

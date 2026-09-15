@@ -37,6 +37,7 @@ const EmployeeFeedback = lazy(() => import("./pages/employee/EmployeeFeedback.js
 const EmployeeHome = lazy(() => import("./pages/employee/EmployeeHome.jsx"));
 const EmployeeMasterEarnings = lazy(() => import("./pages/employee/EmployeeMasterEarnings.jsx"));
 const EmployeeMasterWip = lazy(() => import("./pages/employee/EmployeeMasterWip.jsx"));
+const EmployeeMasterScan = lazy(() => import("./pages/employee/EmployeeMasterScan.jsx"));
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Employees = lazy(() => import("./pages/Employees"));
@@ -188,6 +189,7 @@ export default function App() {
                 <Route index element={<EmployeeHome />} />
                 <Route path="earnings" element={<EmployeeMasterEarnings />} />
                 <Route path="wip" element={<EmployeeMasterWip />} />
+                <Route path="scan" element={<EmployeeMasterScan />} />
                 <Route path="salary" element={<EmployeeSalary />} />
                 <Route path="payouts" element={<EmployeePayouts />} />
                 <Route path="schedule" element={<EmployeeSchedule />} />

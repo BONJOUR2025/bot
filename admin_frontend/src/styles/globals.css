@@ -5034,6 +5034,110 @@ body.viewer3d-fs-active .app-card {
   background-position: right 0.9rem center;
 }
 
+/* ── Вход и выход по бирке (пробный режим) ─────────────────────────── */
+.emp-scan-banner {
+  margin-bottom: 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--color-warning, #d97706) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-warning, #d97706) 12%, transparent);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.emp-scan-get { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
+.emp-scan-camera {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 52px;
+  font-size: 1rem;
+}
+.emp-scan-hint { margin: 0; color: var(--color-text-muted); font-size: 0.8rem; line-height: 1.45; }
+.emp-scan-manual { display: flex; align-items: flex-end; gap: 0.5rem; }
+.emp-scan-manual .form-field { flex: 1; min-width: 0; margin: 0; }
+.emp-scan-manual input { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.emp-scan-manual .btn { min-height: 44px; }
+
+.emp-scan-service__title { color: var(--color-text); font-size: 1rem; font-weight: 600; line-height: 1.3; }
+.emp-scan-service__meta { margin-top: 0.25rem; color: var(--color-text-muted); font-size: 0.85rem; }
+
+.emp-scan-history { display: flex; flex-direction: column; }
+.emp-scan-history__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.emp-scan-history__row:last-child { border-bottom: 0; }
+.emp-scan-history__row span:nth-child(2) { color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.emp-scan-posts { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.emp-scan-post {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.emp-scan-post small { color: var(--color-text-muted); font-size: 0.7rem; font-weight: 400; }
+.emp-scan-post[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+.emp-scan-post:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.emp-scan-msg { margin: 0.6rem 0 0; padding: 0.55rem 0.7rem; border-radius: 8px; font-size: 0.85rem; line-height: 1.4; }
+.emp-scan-msg--block {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-danger) 16%, transparent);
+  border-left: 3px solid var(--color-danger);
+}
+.emp-scan-msg--warn {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-warning, #d97706) 14%, transparent);
+  border-left: 3px solid var(--color-warning, #d97706);
+}
+.emp-scan-msg--info {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-left: 3px solid var(--color-primary);
+}
+.emp-scan-go { width: 100%; min-height: 48px; margin-top: 0.9rem; }
+.emp-scan-confirm {
+  margin-top: 0.9rem;
+  padding: 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+.emp-scan-confirm p { margin: 0 0 0.7rem; color: var(--color-text); font-size: 0.9rem; }
+.emp-scan-confirm__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+
+.emp-scan-writes { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.8rem 0 0; padding: 0; list-style: none; counter-reset: write; }
+.emp-scan-write { padding: 0.6rem 0.7rem; border: 1px solid var(--color-border); border-radius: 8px; }
+.emp-scan-write__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.25rem 0.75rem; margin-bottom: 0.4rem; }
+.emp-scan-write__head b { color: var(--color-text); font-size: 0.9rem; }
+.emp-scan-write__head span { color: var(--color-text-muted); font-size: 0.72rem; }
+.emp-scan-write__fields { display: grid; grid-template-columns: 1fr; gap: 1px; margin: 0; }
+.emp-scan-write__fields div { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.75rem; }
+.emp-scan-write__fields dt { color: var(--color-text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.emp-scan-write__fields dd { margin: 0; color: var(--color-text); text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.emp-scan-write__note { margin-top: 0.35rem; color: var(--color-text-muted); font-size: 0.72rem; }
+
 /* ── FUI: слой графиков ─────────────────────────────────────────
    До сих пор графиков в дизайн-системе не существовало вовсе: ни
    одного правила recharts в CSS, пятнадцать страниц настраивали оси

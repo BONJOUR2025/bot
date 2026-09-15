@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
-  LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, Wallet, Wrench,
+  LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, Wallet, Wrench, ScanLine,
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -20,9 +20,11 @@ const NAV_ITEMS = [
 // У мастера нет «Зарплаты» и «Графика»: оба раздела читают «ФОТ админы *.xlsx»,
 // где мастеров нет, и всегда показывали бы «данных нет». Заработок мастера
 // считается по сканам — тот же набор, что меню мастера в Telegram-боте.
+// «Скан» — вход и выход по бирке (пока в пробном режиме).
 const MASTER_NAV_ITEMS = [
   { to: '/employee/earnings', label: 'Заработок', icon: Wallet },
   { to: '/employee/wip', label: 'В работе', icon: Wrench },
+  { to: '/employee/scan', label: 'Скан', icon: ScanLine },
   { to: '/employee/payouts', label: 'Авансы', icon: CreditCard },
   { to: '/employee/history', label: 'История', icon: History },
   { to: '/employee/profile', label: 'Профиль', icon: User },

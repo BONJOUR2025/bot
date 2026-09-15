@@ -75,4 +75,59 @@ def create_master_self_router() -> APIRouter:
 
         return await _run(get_advance_cap, _master(current))
 
+    # ── Вход / выход по бирке — ПРОБНЫЙ РЕЖИМ ─────────────────────────
+    # Обе ручки только читают Агбис (см. master_scan_service): мастер
+    # сканирует бирку, подтверждает, и видит, что записалось бы. Сама запись
+    # включается отдельным шагом после пилота.
+    import logging
+
+    from fastapi import Body
+
+    scan_logger = logging.getLogger("master_scan")
+
+    def _scan_error(exc: ValueError) -> HTTPException:
+        from app.services.master_scan_service import BARCODE_ERRORS
+
+        return HTTPException(status_code=400, detail=BARCODE_ERRORS.get(str(exc), "Не удалось прочитать бирку."))
+
+    @router.get("/scan/lookup")
+    async def scan_lookup(
+        barcode: str = Query(...),
+        current: ResolvedUser = Depends(get_current_user),
+    ) -> dict:
+        from app.services import master_scan_service as scan
+
+        master = _master(current)
+        try:
+            result = await _run(scan.describe, master, barcode)
+        except scan.BarcodeError as exc:
+            raise _scan_error(exc)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Бирка не найдена в Агбисе. Проверьте номер под штрихкодом.")
+        return result
+
+    @router.post("/scan/preview")
+    async def scan_preview(
+        barcode: str = Body(...),
+        action: str = Body(...),
+        current: ResolvedUser = Depends(get_current_user),
+    ) -> dict:
+        from app.services import master_scan_service as scan
+
+        if action not in scan.ACTIONS:
+            raise HTTPException(status_code=400, detail="invalid_action")
+        master = _master(current)
+        try:
+            result = await _run(scan.plan, master, barcode, action)
+        except scan.BarcodeError as exc:
+            raise _scan_error(exc)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Бирка не найдена в Агбисе. Проверьте номер под штрихкодом.")
+        scan_logger.info(
+            "Пробный скан: %s (Агбис %s) %s, бирка %s, заказ %s — %s",
+            master.name, master.agbis_user_id, action, scan.normalize_barcode(barcode),
+            result["service"].get("doc_num"), "разрешён" if result["allowed"] else "; ".join(result["blockers"]),
+        )
+        return result
+
     return router
