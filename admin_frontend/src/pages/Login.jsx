@@ -67,9 +67,6 @@ export default function Login() {
           <br />
           <b>систему</b>.
         </h1>
-        <p className="auth-split__lead">
-          Персонал, зарплата, продажи и индивидуальный пошив — в одной панели.
-        </p>
       </div>
 
       <div className={`auth-card ${isMobile ? 'auth-card--mobile' : ''}`}>

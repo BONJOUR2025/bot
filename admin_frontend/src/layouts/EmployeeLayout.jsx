@@ -19,18 +19,12 @@ const NAV_ITEMS = [
 // У мастера нет «Зарплаты» и «Графика»: оба раздела читают «ФОТ админы *.xlsx»,
 // где мастеров нет, и всегда показывали бы «данных нет». Заработок мастера
 // считается по сканам — тот же набор, что меню мастера в Telegram-боте.
-//
-// bottom: false — пункт только в меню ☰, не в нижней панели. Мастер открывает
-// кабинет с телефона, а семь подписей на экране 360dp не помещались: слова
-// налезали друг на друга и уходили за край. В панели — то, что нужно каждый
-// день; отгулы и связь с руководителем — реже.
+// «Отгулов» и «Связи» у мастера тоже нет — так решил руководитель.
 const MASTER_NAV_ITEMS = [
   { to: '/employee/earnings', label: 'Заработок', icon: Wallet },
   { to: '/employee/wip', label: 'В работе', icon: Wrench },
   { to: '/employee/payouts', label: 'Авансы', icon: CreditCard },
   { to: '/employee/history', label: 'История', icon: History },
-  { to: '/employee/leave-requests', label: 'Отгулы', icon: CalendarOff, bottom: false },
-  { to: '/employee/feedback', label: 'Связь', icon: MessageCircle, bottom: false },
   { to: '/employee/profile', label: 'Профиль', icon: User },
 ];
 
@@ -47,7 +41,6 @@ export default function EmployeeLayout() {
 
   const displayName = user?.display_name || user?.login || 'Сотрудник';
   const navItems = user?.is_master ? MASTER_NAV_ITEMS : NAV_ITEMS;
-  const bottomNavItems = navItems.filter((item) => item.bottom !== false);
 
   return (
     <div className="emp-shell">
@@ -129,7 +122,7 @@ export default function EmployeeLayout() {
 
       {isMobile && (
         <nav className="emp-bottomnav">
-          {bottomNavItems.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

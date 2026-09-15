@@ -212,7 +212,6 @@ export default function EmployeeProfile() {
                   : null
               }
             />
-            {employee.note && <Row label="Заметка" value={employee.note} />}
           </div>
 
           {/* Push API во WebView приложения «BONJOUR Мастер» нет — вместо

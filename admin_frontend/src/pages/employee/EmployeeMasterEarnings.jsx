@@ -152,19 +152,8 @@ export default function EmployeeMasterEarnings() {
             </div>
           </section>
 
-          {r.to_pay < 0 && (
-            <div className="emp-salary-card__note">
-              Авансом получено на {money(-r.to_pay)} больше начисленного — разница учтётся при расчёте зарплаты.
-            </div>
-          )}
-          {r.warnings_count > 0 && (
-            <div className="emp-salary-card__note">
-              Услуг с замечаниями: {r.warnings_count} — уточните у руководителя.
-            </div>
-          )}
           <div className="emp-salary-card__note">
-            Цифры предварительные, посчитаны по сканам. Итоговая выплата может отличаться — премии, штрафы и
-            корректировки считаются отдельно.
+            Показатели предварительные, уточните у руководителя.
           </div>
         </div>
       )}
