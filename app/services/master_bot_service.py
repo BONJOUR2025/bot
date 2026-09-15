@@ -198,6 +198,34 @@ def get_earnings(master: Master, period: str = PERIOD_MONTH) -> dict[str, Any]:
         reverse=True,
     )
 
+    # Каждая услуга — для детальной сводки в кабинете (график по дням, фильтр
+    # по видам работ, список), новые сверху. Ставка в отчёте masters.works не
+    # сериализуется (salary_rate выкидывается перед отдачей), поэтому
+    # считается обратно из суммы работ и начисления.
+    service_rows = sorted(
+        (
+            {
+                "doc_num": svc.get("doc_num"),
+                "name": svc.get("name"),
+                "service_group": str(svc.get("service_group") or "Другое"),
+                "kredit": _num(svc.get("kredit")),
+                "salary": _num(svc.get("master_salary")),
+                "rate": (
+                    round(_num(svc.get("master_salary")) / _num(svc.get("kredit")), 4)
+                    if _num(svc.get("kredit"))
+                    else None
+                ),
+                "in_time": svc.get("in_time"),
+                "out_time": svc.get("out_time"),
+                "day": str(svc.get("out_time"))[:10] if svc.get("out_time") else None,
+                "duration_min": svc.get("duration_min"),
+            }
+            for svc in paid
+        ),
+        key=lambda row: row["out_time"] or "",
+        reverse=True,
+    )
+
     df, dt = period_range(period)
     advances = _advances(master.employee_id)
     report: dict[str, Any] = {
@@ -209,6 +237,7 @@ def get_earnings(master: Master, period: str = PERIOD_MONTH) -> dict[str, Any]:
         "kredit": kredit,
         "accrued": accrued,
         "groups": groups,
+        "services": service_rows,
         "advances": advances,
         "warnings_count": sum(1 for s in paid if s.get("warnings")),
         "is_apprentice": master.is_apprentice,

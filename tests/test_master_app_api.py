@@ -140,3 +140,16 @@ def test_install_page_works_without_segno(client, monkeypatch):
     assert page.status_code == 200
     assert "Скачать приложение" in page.text
     assert "<svg" not in page.text
+
+
+def test_logins_for_the_app_login_dropdown(client, monkeypatch):
+    from app.services import access_control_service as acs
+
+    class FakeAccess:
+        def master_login_options(self):
+            return [{"login": "koryagin", "name": "Корягин Константин Сергеевич"}]
+
+    monkeypatch.setattr(acs, "get_access_control_service", lambda: FakeAccess())
+    resp = client.get("/api/master-app/logins")
+    assert resp.status_code == 200
+    assert resp.json() == [{"login": "koryagin", "name": "Корягин Константин Сергеевич"}]

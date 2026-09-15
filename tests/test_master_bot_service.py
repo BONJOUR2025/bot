@@ -211,3 +211,30 @@ def test_apprentice_advance_cap_is_based_on_stipend(monkeypatch):
     assert cap["basis"] == "stipend"
     assert cap["earned"] == 8000.0
     assert cap["available"] == 7000.0
+
+
+# ── Подробная сводка: список услуг ────────────────────────────────
+
+def test_earnings_lists_services_newest_first_with_rate_and_day(monkeypatch):
+    services = [
+        {"out_user_id": 110133, "kredit": 1000.0, "master_salary": 200.0, "service_group": "Набойки",
+         "doc_num": "1-3", "name": "Набойки", "out_time": "2026-09-14T10:00:00",
+         "in_time": "2026-09-14T09:00:00", "duration_min": 60.0},
+        {"out_user_id": 110133, "kredit": 500.0, "master_salary": 115.0, "service_group": "Химчистка",
+         "doc_num": "2-3", "name": "Химчистка", "out_time": "2026-09-15T12:00:00"},
+        {"out_user_id": 110133, "kredit": 300.0, "master_salary": 60.0, "service_group": None,
+         "doc_num": "3-3", "name": "Набойки", "out_time": "2026-09-15T16:00:00"},
+        {"out_user_id": 999, "kredit": 9999.0, "master_salary": 4000.0, "doc_num": "чужой",
+         "out_time": "2026-09-15T17:00:00"},
+    ]
+    monkeypatch.setattr(mbs, "_load_services", lambda period: services)
+    monkeypatch.setattr(mbs, "_advances", lambda eid: 0.0)
+
+    rows = mbs.get_earnings(_master(), mbs.PERIOD_MONTH)["services"]
+
+    assert [r["doc_num"] for r in rows] == ["3-3", "2-3", "1-3"]   # новые сверху, чужой не попал
+    assert rows[0]["rate"] == 0.2
+    assert rows[0]["service_group"] == "Другое"
+    assert rows[1]["rate"] == 0.23
+    assert rows[2]["day"] == "2026-09-14"
+    assert rows[2]["duration_min"] == 60.0

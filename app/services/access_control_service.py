@@ -705,6 +705,29 @@ class AccessControlService:
             return MASTER_TOKEN_TTL_SECONDS
         return TOKEN_TTL_SECONDS
 
+    def master_login_options(self) -> list[dict[str, str]]:
+        """Логины мастеров для выпадающего списка на входе в приложение.
+
+        Только аккаунты с заданным паролем и привязанные к сотруднику-мастеру:
+        выбрать из списка логин, по которому всё равно не войти, хуже, чем не
+        увидеть его вовсе. Показываем имя из карточки, а не логин — мастер
+        ищет себя по фамилии.
+        """
+        self._reload()
+        options: list[dict[str, str]] = []
+        for record in self._data.get("users", []):
+            login = record.get("login")
+            if not login or not record.get("password_hash"):
+                continue
+            resolved = self.resolve_user(str(record.get("id")))
+            if resolved is None or not resolved.is_master:
+                continue
+            employee = self.employee_repo.get_employee(str(resolved.employee_id or resolved.id))
+            name = ((employee.full_name or employee.name) if employee else "") or login
+            options.append({"login": login, "name": name.strip()})
+        options.sort(key=lambda option: option["name"].lower())
+        return options
+
     # ------------------------------------------------------------------
     # resolution helpers
     # ------------------------------------------------------------------

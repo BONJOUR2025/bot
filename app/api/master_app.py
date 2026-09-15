@@ -131,6 +131,18 @@ def create_master_app_public_router() -> APIRouter:
     async def get_info() -> dict:
         return master_app_service.info()
 
+    @router.get("/logins")
+    async def list_master_logins() -> list[dict]:
+        """Логины мастеров для выпадающего списка на входе в приложение.
+
+        Публично, как и всё здесь: список нужен до входа. Цена принята
+        сознательно — кто знает адрес, увидит имена мастеров, но без пароля
+        это ничего не даёт. Отдаются только логин и имя.
+        """
+        from app.services.access_control_service import get_access_control_service
+
+        return get_access_control_service().master_login_options()
+
     @router.get("/" + master_app_service.PUBLIC_APK_NAME)
     async def download_apk() -> FileResponse:
         path = master_app_service.apk_path()

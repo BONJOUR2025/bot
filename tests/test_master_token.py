@@ -85,3 +85,20 @@ def test_master_with_panel_permissions_keeps_12_hours(tmp_path, monkeypatch):
 def test_ttl_for_master_without_permissions(tmp_path):
     svc = _service(tmp_path, users=[_record("700", role_id="master")])
     assert svc.token_ttl_for(svc.resolve_user("700")) == acs.MASTER_TOKEN_TTL_SECONDS
+
+
+def test_login_options_list_only_masters_who_can_actually_log_in(tmp_path):
+    """В выпадающем списке на входе — только те, кто по этому логину войдёт."""
+    with_password = _login_record("a1", "700")
+    with_password["password_hash"] = "hash"
+    no_password = _login_record("a2", "701")
+    administrator = _login_record("a3", "703", role_id="employee_checkin")
+    administrator["password_hash"] = "hash"
+    not_linked = _login_record("a4", None)
+    not_linked["password_hash"] = "hash"
+    svc = _service(tmp_path, users=[with_password, no_password, administrator, not_linked])
+
+    options = svc.master_login_options()
+
+    assert [o["login"] for o in options] == ["login-a1"]
+    assert options[0]["name"]
