@@ -107,10 +107,12 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Pay
         cap = await _master_advance_cap(str(update.effective_user.id))
         if cap is not None:
             data["advance_cap"] = cap["available"]
+            # Начисление — за текущий месяц (get_advance_cap), а авансы — с
+            # последней зарплаты; подпись раньше путала первое со вторым.
             earned_label = (
-                "Стипендия с последней зарплаты"
+                "Стипендия за этот месяц"
                 if cap["basis"] == "stipend"
-                else "Заработано с последней зарплаты"
+                else "Начислено за этот месяц"
             )
             prompt = (
                 f"{earned_label}: {_rub(cap['earned'])}\n"

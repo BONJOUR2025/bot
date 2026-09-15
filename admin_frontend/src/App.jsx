@@ -31,6 +31,9 @@ const EmployeeProfile = lazy(() => import("./pages/employee/EmployeeProfile.jsx"
 const EmployeeHistory = lazy(() => import("./pages/employee/EmployeeHistory.jsx"));
 const EmployeeLeaveRequests = lazy(() => import("./pages/employee/EmployeeLeaveRequests.jsx"));
 const EmployeeFeedback = lazy(() => import("./pages/employee/EmployeeFeedback.jsx"));
+const EmployeeHome = lazy(() => import("./pages/employee/EmployeeHome.jsx"));
+const EmployeeMasterEarnings = lazy(() => import("./pages/employee/EmployeeMasterEarnings.jsx"));
+const EmployeeMasterWip = lazy(() => import("./pages/employee/EmployeeMasterWip.jsx"));
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Employees = lazy(() => import("./pages/Employees"));
@@ -174,7 +177,9 @@ export default function App() {
                   </RequireEmployee>
                 }
               >
-                <Route index element={<Navigate to="/employee/salary" replace />} />
+                <Route index element={<EmployeeHome />} />
+                <Route path="earnings" element={<EmployeeMasterEarnings />} />
+                <Route path="wip" element={<EmployeeMasterWip />} />
                 <Route path="salary" element={<EmployeeSalary />} />
                 <Route path="payouts" element={<EmployeePayouts />} />
                 <Route path="schedule" element={<EmployeeSchedule />} />

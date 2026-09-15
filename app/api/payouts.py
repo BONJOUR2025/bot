@@ -97,6 +97,43 @@ def create_payout_router(
         )
         return _filter_visible(payouts, current)
 
+    async def _check_master_advance_cap(data: PayoutCreate, current: ResolvedUser) -> None:
+        """Мастер не может попросить авансом больше, чем заработал.
+
+        Та же проверка, что в Telegram-боте (handlers/user/payout.py), и по тем
+        же правилам. Только когда сотрудник просит сам за себя: выплату,
+        которую заводит админ, это не ограничивает. И fail-open: если отчёт
+        сейчас не посчитать, заявка проходит — её всё равно утверждает админ,
+        а заблокировать все авансы, пока Firebird занят, хуже.
+        """
+        if data.payout_type != "Аванс":
+            return
+        if not current.employee_id or str(data.user_id) != str(current.employee_id):
+            return
+        if access_service.user_has_permission(current, PAYOUTS_PERMISSION):
+            return
+        try:
+            from app.services.firebird_service import run_with_timeout
+            from app.services.master_bot_service import get_advance_cap, resolve_master
+
+            master = resolve_master(current.employee_id)
+            if master is None:
+                return
+            cap = await run_with_timeout(get_advance_cap, master, timeout=55)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Не удалось посчитать потолок аванса для %s", current.employee_id, exc_info=True
+            )
+            return
+        if float(data.amount) > float(cap["available"]):
+            available = f"{float(cap['available']):,.0f}".replace(",", " ")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Это больше, чем вы заработали. Доступно к авансу: {available} ₽",
+            )
+
     @router.post("/", response_model=Payout)
     async def create_payout(
         data: PayoutCreate, current: ResolvedUser = Depends(get_current_user)
@@ -107,6 +144,7 @@ def create_payout_router(
             current, MANAGE_DATES_PERMISSION
         ):
             raise HTTPException(status_code=403, detail="forbidden")
+        await _check_master_advance_cap(data, current)
         return await service.create_payout(data)
 
     @router.put("/{payout_id}", response_model=Payout)

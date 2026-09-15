@@ -193,6 +193,11 @@ class Settings(BaseSettings):
     # через robocopy /MIR и снёс бы файл при первом же обновлении.
     mdm_agent_apk_file: str = Field("mdm_agent.apk", validation_alias="MDM_AGENT_APK_FILE")
 
+    # APK приложения «BONJOUR Мастер» для личных телефонов мастеров. Тоже в
+    # корне рабочей директории и по той же причине: деплой зеркалит app/
+    # через robocopy /MIR и снёс бы файл. Кладёт его сборка (master-app.yml).
+    master_app_apk_file: str = Field("master_app.apk", validation_alias="MASTER_APP_APK_FILE")
+
     # Каталог с APK, которые раздаются на телефоны. Там же, в корне рабочей
     # директории, и по той же причине: деплой зеркалит только app/ и
     # admin_frontend/, всё остальное переживает обновление.

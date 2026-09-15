@@ -4,6 +4,7 @@ import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
 import { useToast } from '../../providers/ToastProvider.jsx';
 import { subscribePush, unsubscribePush, getPushState } from '../../utils/push.js';
+import { IN_MASTER_APP } from '../../utils/masterApp.js';
 
 function Row({ label, value }) {
   if (!value) return null;
@@ -214,7 +215,12 @@ export default function EmployeeProfile() {
             {employee.note && <Row label="Заметка" value={employee.note} />}
           </div>
 
-          <div className="emp-profile-section emp-profile-section--push">
+          {/* Push API во WebView приложения «BONJOUR Мастер» нет — вместо
+              «браузер не поддерживает» раздел просто не показываем. */}
+          <div
+            className="emp-profile-section emp-profile-section--push"
+            style={IN_MASTER_APP ? { display: 'none' } : undefined}
+          >
             <div className="emp-profile-section__title">Уведомления</div>
             {pushState.iosNonStandalone && (
               <p style={{ fontSize: '0.8rem', color: 'var(--color-text-faint)', marginBottom: '0.5rem' }}>

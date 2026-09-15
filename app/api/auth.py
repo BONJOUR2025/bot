@@ -49,6 +49,7 @@ def _to_auth_user(resolved: ResolvedUser) -> AuthUser:
         allowed_employee_ids=resolved.allowed_employee_ids,
         allowed_departments=resolved.allowed_departments,
         employee_id=resolved.employee_id,
+        is_master=resolved.is_master,
     )
 
 
@@ -73,7 +74,9 @@ def create_auth_router(service: AccessControlService | None = None) -> APIRouter
         response.set_cookie(
             "access_token",
             token,
-            max_age=TOKEN_TTL_SECONDS,
+            # Через класс, а не через экземпляр: срок — чистая функция от
+            # пользователя, и её не нужно подменять вместе с сервисом.
+            max_age=AccessControlService.token_ttl_for(resolved),
             httponly=True,
             secure=False,
             samesite="lax",

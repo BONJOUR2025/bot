@@ -10,7 +10,7 @@ export function getHomeForUser(user) {
   // employee_id is only ever set on employee accounts (see access_control_service.py) —
   // check it before permissions, since an employee can also hold scoped admin
   // permissions (e.g. "payouts") without being an admin/owner.
-  if (user.employee_id) return '/employee/salary';
+  if (user.employee_id) return user.is_master ? '/employee/earnings' : '/employee/salary';
   if (user.permissions?.length > 0) return '/admin';
   return '/admin';
 }

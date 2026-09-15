@@ -25,6 +25,7 @@ function fmtDate(ts) {
 export default function EmployeePayouts() {
   const { user } = useAuth();
   const employeeId = user?.employee_id;
+  const isMaster = Boolean(user?.is_master);
 
   const [payouts, setPayouts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -32,6 +33,9 @@ export default function EmployeePayouts() {
   const [employee, setEmployee] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  // Лимит аванса мастера: заработанное за месяц минус уже взятое. null —
+  // посчитать не вышло; тогда заявка уходит без проверки, сервер решает сам.
+  const [cap, setCap] = useState(null);
 
   const [form, setForm] = useState({
     amount: '',
@@ -49,17 +53,35 @@ export default function EmployeePayouts() {
       .finally(() => setLoading(false));
   };
 
+  const loadCap = () => {
+    if (!isMaster) return;
+    api
+      .get('/masters/me/advance-cap')
+      .then((res) => setCap(res.data))
+      .catch(() => setCap(null));
+  };
+
   useEffect(() => {
     loadPayouts();
+    loadCap();
     if (employeeId) {
       api.get(`/employees/${employeeId}`).then((res) => setEmployee(res.data));
     }
   }, [employeeId]);
 
+  const toggleForm = () => {
+    // Свежий лимит на момент заявки: пока форма была закрыта, мог выйти
+    // новый скан или одобриться аванс.
+    if (!showForm) loadCap();
+    setShowForm(!showForm);
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
+
+  const capApplies = isMaster && cap && form.payout_type === 'Аванс';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -67,6 +89,10 @@ export default function EmployeePayouts() {
     const amount = parseFloat(form.amount);
     if (!amount || amount <= 0) {
       setFormError('Укажите сумму');
+      return;
+    }
+    if (capApplies && amount > cap.available) {
+      setFormError(`Это больше, чем вы заработали. Доступно к авансу: ${fmt(Math.round(cap.available))}`);
       return;
     }
     setSubmitting(true);
@@ -86,6 +112,7 @@ export default function EmployeePayouts() {
       setShowForm(false);
       setForm({ amount: '', method: METHODS[0], payout_type: PAYOUT_TYPES[0], note: '' });
       loadPayouts();
+      loadCap();
     } catch (err) {
       setFormError(err.response?.data?.detail || 'Ошибка при отправке запроса');
     } finally {
@@ -109,7 +136,7 @@ export default function EmployeePayouts() {
         <button
           type="button"
           className="btn btn--primary btn--sm"
-          onClick={() => setShowForm((v) => !v)}
+          onClick={toggleForm}
         >
           <Plus size={16} />
           Запросить
@@ -125,6 +152,22 @@ export default function EmployeePayouts() {
             </button>
           </div>
           <form onSubmit={handleSubmit}>
+            {capApplies && (
+              <div className="emp-salary-grid" style={{ marginBottom: '0.75rem' }}>
+                <div className="emp-salary-row">
+                  <span>{cap.basis === 'stipend' ? 'Стипендия за этот месяц' : 'Начислено за этот месяц'}</span>
+                  <span>{fmt(Math.round(cap.earned))}</span>
+                </div>
+                <div className="emp-salary-row">
+                  <span>Уже взято авансом</span>
+                  <span>{fmt(Math.round(cap.advances))}</span>
+                </div>
+                <div className="emp-salary-row emp-salary-row--total">
+                  <span>Доступно к авансу</span>
+                  <span>{fmt(Math.round(cap.available))}</span>
+                </div>
+              </div>
+            )}
             <div className="emp-form-row">
               <label className="form-field">
                 <span>Сумма</span>

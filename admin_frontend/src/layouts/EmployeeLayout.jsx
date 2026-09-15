@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, CalendarOff, MessageCircle } from 'lucide-react';
+import {
+  LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, CalendarOff, MessageCircle, Wallet, Wrench,
+} from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 
@@ -9,6 +11,19 @@ const NAV_ITEMS = [
   { to: '/employee/payouts', label: 'Авансы', icon: CreditCard },
   { to: '/employee/history', label: 'История', icon: History },
   { to: '/employee/schedule', label: 'График', icon: Calendar },
+  { to: '/employee/leave-requests', label: 'Отгулы', icon: CalendarOff },
+  { to: '/employee/feedback', label: 'Связь', icon: MessageCircle },
+  { to: '/employee/profile', label: 'Профиль', icon: User },
+];
+
+// У мастера нет «Зарплаты» и «Графика»: оба раздела читают «ФОТ админы *.xlsx»,
+// где мастеров нет, и всегда показывали бы «данных нет». Заработок мастера
+// считается по сканам — тот же набор, что меню мастера в Telegram-боте.
+const MASTER_NAV_ITEMS = [
+  { to: '/employee/earnings', label: 'Заработок', icon: Wallet },
+  { to: '/employee/wip', label: 'В работе', icon: Wrench },
+  { to: '/employee/payouts', label: 'Авансы', icon: CreditCard },
+  { to: '/employee/history', label: 'История', icon: History },
   { to: '/employee/leave-requests', label: 'Отгулы', icon: CalendarOff },
   { to: '/employee/feedback', label: 'Связь', icon: MessageCircle },
   { to: '/employee/profile', label: 'Профиль', icon: User },
@@ -26,6 +41,7 @@ export default function EmployeeLayout() {
   };
 
   const displayName = user?.display_name || user?.login || 'Сотрудник';
+  const navItems = user?.is_master ? MASTER_NAV_ITEMS : NAV_ITEMS;
 
   return (
     <div className="emp-shell">
@@ -61,7 +77,7 @@ export default function EmployeeLayout() {
 
       {isMobile && menuOpen && (
         <nav className="emp-nav emp-nav--mobile">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -85,7 +101,7 @@ export default function EmployeeLayout() {
         {!isMobile && (
           <aside className="emp-sidebar">
             <nav className="emp-nav">
-              {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+              {navItems.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
                   to={to}
@@ -107,7 +123,7 @@ export default function EmployeeLayout() {
 
       {isMobile && (
         <nav className="emp-bottomnav">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

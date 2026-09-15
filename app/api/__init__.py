@@ -376,6 +376,22 @@ def create_app() -> FastAPI:
         dependencies=protected,
     )
 
+    # Кабинет мастера (веб и приложение «BONJOUR Мастер»): только свои данные,
+    # поэтому без права payroll — в отличие от сводки по всем мастерам ниже.
+    from .master_self import create_master_self_router
+
+    app.include_router(
+        create_master_self_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
+    # Раздача приложения «BONJOUR Мастер» — без авторизации, как APK агента MDM:
+    # мастер качает его по ссылке, когда у него ещё ничего не установлено.
+    from .master_app import create_master_app_public_router
+
+    app.include_router(create_master_app_public_router(), prefix="/api")
+
     # Masters / Agbis services dashboard
     from .masters import create_masters_router
 

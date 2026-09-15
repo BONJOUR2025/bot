@@ -21,6 +21,9 @@ class AuthUser(BaseModel):
     allowed_employee_ids: Optional[List[str]] = None
     allowed_departments: Optional[List[str]] = None
     employee_id: Optional[str] = None
+    # Мастер по должности в карточке: кабинет показывает ему свой набор
+    # разделов (заработок по сканам вместо «Зарплаты» из Excel админов).
+    is_master: bool = False
 
 
 class LoginResponse(BaseModel):

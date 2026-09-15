@@ -137,6 +137,15 @@ MASTER_ROLE_DEFAULT_BUTTON_IDS: list[str] = [
 
 TOKEN_TTL_SECONDS = 60 * 60 * 12
 
+# Мастер входит с личного телефона через приложение «BONJOUR Мастер», и 12
+# часов значили бы ввод логина и пароля дважды в день — таким приложением
+# просто перестают пользоваться. Длинный срок только у мастеров без прав в
+# панели: их аккаунт видит лишь собственный заработок и может попросить аванс,
+# который всё равно утверждает админ. Как только сотрудник перестаёт быть
+# мастером (перевели, уволили), его токен снова живёт 12 часов — срок
+# считается при каждой проверке, а не зашивается в токен.
+MASTER_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
+
 
 @dataclass
 class ResolvedUser:
@@ -150,6 +159,7 @@ class ResolvedUser:
     allowed_employee_ids: list[str] | None
     allowed_departments: list[str] | None
     employee_id: str | None = None
+    is_master: bool = False
 
 
 class AccessControlService:
@@ -670,12 +680,30 @@ class AccessControlService:
         if not hmac.compare_digest(expected_signature, signature):
             raise ValueError("invalid_token")
         issued_at = int(issued_at_str)
-        if time.time() - issued_at > TOKEN_TTL_SECONDS:
+        # Срок зависит от того, чей это токен (см. token_ttl_for), поэтому
+        # пользователя разрешаем до проверки срока. Токен старше любого
+        # возможного срока отвергаем сразу, не читая конфиг.
+        age = time.time() - issued_at
+        if age > max(TOKEN_TTL_SECONDS, MASTER_TOKEN_TTL_SECONDS):
             raise ValueError("token_expired")
         resolved = self.resolve_user(user_id)
         if not resolved:
             raise ValueError("user_not_found")
+        if age > self.token_ttl_for(resolved):
+            raise ValueError("token_expired")
         return resolved
+
+    @staticmethod
+    def token_ttl_for(user: ResolvedUser) -> int:
+        """Срок жизни токена этого пользователя, секунды.
+
+        Длинный — только у мастера без прав в панели (см.
+        MASTER_TOKEN_TTL_SECONDS). Считается при каждой проверке токена, так
+        что смена должности или выдача прав сразу возвращают 12 часов.
+        """
+        if user.is_master and not user.permissions:
+            return MASTER_TOKEN_TTL_SECONDS
+        return TOKEN_TTL_SECONDS
 
     # ------------------------------------------------------------------
     # resolution helpers
@@ -689,11 +717,22 @@ class AccessControlService:
         role = self._get_role(record.get("role_id"))
         permissions = self._resolve_permissions(record, role)
         employee = self.employee_repo.get_employee(user_id)
+        # Бот-аккаунт живёт под id сотрудника, а аккаунт с логином в панель —
+        # под своим id и привязан к сотруднику полем employee_id (так мастеру
+        # и заводят вход в приложение). Мастер ли это, решает карточка того
+        # сотрудника, к которому аккаунт привязан.
+        linked_id = record.get("employee_id")
+        linked = (
+            self.employee_repo.get_employee(str(linked_id))
+            if linked_id and str(linked_id) != str(user_id)
+            else employee
+        )
+        is_master = self._is_master(linked)
         buttons = self._resolve_buttons(record, role)
         # Мастер получает меню роли «Мастер» вместо меню своей роли — но
         # только кнопки: права в панели остаются от назначенной роли.
         # Персонально заданные кнопки — явный выбор админа, их не трогаем.
-        if record.get("bot_buttons") is None and self._is_master(employee):
+        if record.get("bot_buttons") is None and is_master:
             buttons = self._master_buttons()
         display_name: str | None = None
         if employee:
@@ -721,6 +760,7 @@ class AccessControlService:
             allowed_employee_ids=allowed_employee_ids,
             allowed_departments=allowed_departments,
             employee_id=employee_id,
+            is_master=is_master,
         )
 
     def _resolve_permissions(

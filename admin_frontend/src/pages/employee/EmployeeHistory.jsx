@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
+import { IN_MASTER_APP } from '../../utils/masterApp.js';
 
 const STATUS_LABELS = {
   'Ожидает': { label: 'Ожидает', cls: 'badge--warning' },
@@ -77,15 +78,20 @@ export default function EmployeeHistory() {
     <div className="emp-page">
       <div className="emp-page__head">
         <h2 className="emp-page__title">История выплат</h2>
-        <button
-          type="button"
-          className="btn btn--secondary btn--sm"
-          onClick={handleDownload}
-          disabled={downloading || sorted.length === 0}
-        >
-          <Download size={16} />
-          {downloading ? 'Скачивание…' : 'Скачать PDF'}
-        </button>
+        {/* В приложении «BONJOUR Мастер» скачивание не работает: WebView не
+            сохраняет файлы, созданные в браузере. Кнопку прячем, а не оставляем
+            молчащей. */}
+        {!IN_MASTER_APP && (
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            onClick={handleDownload}
+            disabled={downloading || sorted.length === 0}
+          >
+            <Download size={16} />
+            {downloading ? 'Скачивание…' : 'Скачать PDF'}
+          </button>
+        )}
       </div>
 
       {loading && <p className="emp-page__loading">Загрузка…</p>}
