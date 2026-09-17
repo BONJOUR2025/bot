@@ -465,7 +465,7 @@ export default function EmployeeMasterScan() {
             )}
           </section>
           {streak && canScan && !result.dry_run ? (
-            <p className="emp-scan-hint">Камера откроется для следующей бирки…</p>
+            <p className="emp-scan-next">Камера откроется для следующей бирки…</p>
           ) : (
             <button
               type="button"
