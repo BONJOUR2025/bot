@@ -5,8 +5,9 @@ plugins {
 
 // versionCode обязан расти с каждой выпущенной сборкой: APK с тем же или
 // меньшим кодом Android поверх установленного не поставит.
-val appVersionName = "1.0.0"
-val appVersionCode = 1
+// 1.0.1 — старт на «Зарплате»: приложение это личный кабинет, как бот.
+val appVersionName = "1.0.1"
+val appVersionCode = 2
 
 // Версия кладётся внутрь APK — сервер показывает её на странице установки,
 // не разбирая бинарный манифест и не доверяя имени файла (так же у агента MDM).
@@ -32,7 +33,7 @@ android {
         targetSdk = 34
         versionCode = appVersionCode
         versionName = appVersionName
-        buildConfigField("String", "START_URL", "\"https://app.bonjour.pw/employee/shift\"")
+        buildConfigField("String", "START_URL", "\"https://app.bonjour.pw/employee/salary\"")
         buildConfigField("String", "APP_HOST", "\"app.bonjour.pw\"")
     }
 

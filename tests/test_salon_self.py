@@ -5,9 +5,8 @@
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -21,7 +20,6 @@ POINT = sss.Point(
     address="Невский пр., 48", phone="+7 812 000-00-00",
     work_hours_weekday="10:00-22:00", work_hours_weekend="11:00-22:00",
 )
-NOW = datetime(2026, 9, 17, 15, 0)
 
 
 def _user(**kw):
@@ -110,129 +108,6 @@ def test_weekend_opening_time_comes_from_the_weekend_hours(monkeypatch):
     assert shift["expected_open_time"] == "11:00"
 
 
-# ── Выручка ───────────────────────────────────────────────────────
-
-def test_sales_sum_by_day_and_month(monkeypatch):
-    rows = [
-        {"date": "2026-09-16", "total": 12000}, {"date": "2026-09-16", "total": 3000},
-        {"date": "2026-09-17", "total": 5000},
-    ]
-    monkeypatch.setattr(sss, "_sales_rows", lambda df, dt, point: rows)
-    out = sss.sales(POINT, today=date(2026, 9, 17))
-    assert out["today"] == 5000 and out["yesterday"] == 15000
-    assert out["month"] == 20000 and out["month_days"] == 2 and out["avg_day"] == 10000
-    assert [d["day"] for d in out["days"]] == ["2026-09-16", "2026-09-17"]
-
-
-def test_sales_without_a_single_order(monkeypatch):
-    monkeypatch.setattr(sss, "_sales_rows", lambda df, dt, point: [])
-    out = sss.sales(POINT, today=date(2026, 9, 17))
-    assert out == {"today": 0.0, "yesterday": 0.0, "month": 0, "month_days": 0, "avg_day": 0.0,
-                   "days": [], "date_from": "2026-09-01", "date_to": "2026-09-17"}
-
-
-# ── Заказы точки ──────────────────────────────────────────────────
-
-def _orders_db(monkeypatch, rows):
-    class _Cur:
-        def execute(self, sql, params=()):
-            self.params = params
-
-        def fetchall(self):
-            return rows
-
-    class _Con:
-        def cursor(self):
-            return _Cur()
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr("app.services.firebird_service.FIREBIRD_AVAILABLE", True, raising=False)
-    monkeypatch.setattr("app.services.firebird_service._connect", lambda: _Con())
-
-
-def _row(num, status, due, photos=0):
-    # Колонки — как в запросе: номер, дата, клиент, телефон, статус, срок, сумма, фото.
-    return (num, date(2026, 9, 1), 42, "Клиент", "+79990000000", status, due, 1500, photos)
-
-
-def _resolver(monkeypatch, mapping=None):
-    """Определитель салона по номеру заказа: у кодов бывают двойники."""
-    class _R:
-        def __enter__(self):
-            return lambda doc_num, doc_date: (mapping or {}).get(doc_num, POINT.id)
-
-        def __exit__(self, *exc):
-            return False
-
-    monkeypatch.setattr("app.services.firebird_service._SalonResolver", _R)
-
-
-def test_ready_orders_are_separate_from_work(monkeypatch):
-    _orders_db(monkeypatch, [
-        _row("10001-7", 3, datetime(2026, 9, 25, 19, 0)),          # в работе, срок не горит
-        _row("10002-7", 3, datetime(2026, 9, 12, 19, 0)),          # в работе, просрочен
-        _row("10003-7", 4, datetime(2026, 3, 20, 19, 0), 3),       # готов, клиент не забрал
-        _row("10004-7", 3, datetime(2026, 9, 17, 19, 0)),          # в работе, сегодня
-        _row("10005-7", 4, datetime(2026, 9, 16, 19, 0)),          # готов вчера
-    ])
-    _resolver(monkeypatch)
-    out = sss.orders(POINT, now=NOW)
-    assert [r["doc_num"] for r in out["ready"]] == ["10003-7", "10005-7"]
-    assert [r["doc_num"] for r in out["work"]] == ["10002-7", "10004-7", "10001-7"]
-    assert out["counts"] == {"ready": 2, "overdue": 1, "today": 1, "work": 3}
-    assert out["ready"][0]["waiting_days"] == 181      # ждёт с 20 марта
-    assert out["work"][0]["overdue_days"] == 5
-    assert out["ready"][0]["photos"] == 3
-
-
-def test_orders_of_a_point_sharing_the_same_code_are_filtered_out(monkeypatch):
-    """«7» носят и Пассаж, и Гранд Палас — чужие заказы показывать нельзя."""
-    _orders_db(monkeypatch, [
-        _row("20001-7", 3, datetime(2026, 9, 12, 19, 0)),
-        _row("20002-7", 3, datetime(2026, 9, 12, 19, 0)),
-    ])
-    _resolver(monkeypatch, {"20002-7": "another-salon"})
-    out = sss.orders(POINT, now=NOW)
-    assert [r["doc_num"] for r in out["work"]] == ["20001-7"]
-
-
-def test_orders_ask_agbis_for_this_point_only(monkeypatch):
-    seen = {}
-
-    class _Cur:
-        def execute(self, sql, params=()):
-            seen["params"] = params
-
-        def fetchall(self):
-            return []
-
-    class _Con:
-        def cursor(self):
-            return _Cur()
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr("app.services.firebird_service.FIREBIRD_AVAILABLE", True, raising=False)
-    monkeypatch.setattr("app.services.firebird_service._connect", lambda: _Con())
-    _resolver(monkeypatch)
-    sss.orders(POINT, now=NOW)
-    assert "%-7" in seen["params"]
-
-
-def test_orders_survive_agbis_being_down(monkeypatch):
-    monkeypatch.setattr("app.services.firebird_service.FIREBIRD_AVAILABLE", True, raising=False)
-
-    def boom():
-        raise RuntimeError("Агбис молчит")
-
-    monkeypatch.setattr("app.services.firebird_service._connect", boom)
-    out = sss.orders(POINT, now=NOW)
-    assert out["ready"] == [] and out["work"] == [] and out["counts"]["ready"] == 0
-
-
 # ── API ───────────────────────────────────────────────────────────
 
 def test_point_endpoint_returns_point_and_shift(monkeypatch):
@@ -247,17 +122,12 @@ def test_account_without_an_employee_card_is_refused(monkeypatch):
     assert resp.status_code == 403 and resp.json()["detail"] == "not_an_employee"
 
 
-def test_sales_endpoint_uses_the_point_from_the_session(monkeypatch):
+def test_work_tools_of_the_point_are_not_exposed(monkeypatch):
+    """Кабинет — не рабочий инструмент: выручки и заказов точки здесь нет."""
     _salons(monkeypatch, [_Salon("b", ["500"], name="Пассаж")])
-    asked = {}
-
-    def fake_sales(point):
-        asked["id"] = point.id
-        return {"today": 1.0}
-
-    monkeypatch.setattr(sss, "sales", fake_sales)
-    body = _client().get("/api/salon/me/sales").json()
-    assert body == {"today": 1.0} and asked["id"] == "b"
+    client = _client()
+    assert client.get("/api/salon/me/sales").status_code == 404
+    assert client.get("/api/salon/me/orders").status_code == 404
 
 
 def test_assets_are_listed_for_the_signed_in_employee(monkeypatch):

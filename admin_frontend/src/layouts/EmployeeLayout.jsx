@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, Wallet, Wrench, ScanLine,
-  Store, ClipboardList, Package,
+  Package,
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -33,14 +33,16 @@ const MASTER_NAV_ITEMS = [
   { to: '/employee/profile', label: 'Профиль', icon: User },
 ];
 
-// Меню администратора точки (приложение «BONJOUR Салон»). Показывается тем,
-// за кем закреплён салон: это решает сервер (GET /salon/me/point), а не роль —
-// точка живёт в карточке салона, а не в правах.
+// Меню администратора точки (приложение «BONJOUR Салон»). Это личный кабинет
+// с тем же набором, что кнопки бота у администратора, плюс «Имущество»:
+// рабочих инструментов точки (выручка, заказы клиентов) здесь намеренно нет.
+// Показывается тем, за кем закреплён салон: это решает сервер
+// (GET /salon/me/point), а не роль — точка живёт в карточке салона, не в правах.
 const SALON_NAV_ITEMS = [
-  { to: '/employee/shift', label: 'Смена', icon: Store },
-  { to: '/employee/orders', label: 'Заказы', icon: ClipboardList },
   { to: '/employee/salary', label: 'Зарплата', icon: DollarSign },
+  { to: '/employee/schedule', label: 'График', icon: Calendar },
   { to: '/employee/payouts', label: 'Авансы', icon: CreditCard },
+  { to: '/employee/history', label: 'История', icon: History },
   { to: '/employee/assets', label: 'Имущество', icon: Package },
   { to: '/employee/profile', label: 'Профиль', icon: User },
 ];
