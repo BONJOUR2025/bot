@@ -5146,6 +5146,8 @@ body.viewer3d-fs-active .app-card {
 .emp-list .emp-payout-item__details > span:last-child { white-space: nowrap; }
 .emp-wip-row { display: flex; gap: 0.8rem; align-items: flex-start; }
 .emp-wip-main { flex: 1 1 auto; min-width: 0; }
+.emp-wip-main .emp-payout-item__details { gap: 0.6rem; align-items: flex-start; }
+.emp-wip-main .emp-payout-item__details > span:first-child { flex: 1 1 auto; min-width: 0; }
 .emp-wip-photo { position: relative; flex: none; width: 64px; height: 64px; padding: 0; border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; background: var(--color-surface-muted, rgba(127,127,127,0.08)); cursor: pointer; }
 .emp-wip-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .emp-wip-photo span { position: absolute; right: 3px; bottom: 3px; min-width: 18px; padding: 0 4px; border-radius: 9px; background: rgba(0,0,0,0.6); color: #fff; font-size: 0.7rem; line-height: 18px; text-align: center; }
