@@ -5117,6 +5117,11 @@ body.viewer3d-fs-active .app-card {
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   border-left: 3px solid var(--color-primary);
 }
+.emp-scan-msg--ok {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  border-left: 3px solid var(--color-success);
+}
 .emp-scan-go { width: 100%; min-height: 48px; margin-top: 0.9rem; }
 .emp-scan-confirm {
   margin-top: 0.9rem;

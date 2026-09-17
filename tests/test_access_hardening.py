@@ -335,6 +335,7 @@ AUTH_ONLY_REVIEWED = {
     "GET /api/masters/me/advance-cap",
     "GET /api/masters/me/scan/lookup",
     "POST /api/masters/me/scan/preview",
+    "POST /api/masters/me/scan/confirm",
 }
 
 

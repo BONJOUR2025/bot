@@ -4,12 +4,13 @@ import api from '../../api.js';
 import { IN_MASTER_APP } from '../../utils/masterApp.js';
 import { money, serviceTitle } from './masterFormat.js';
 
-/** Вход и выход по бирке — ПРОБНЫЙ РЕЖИМ.
+/** Вход и выход по бирке.
  *
  *  Мастер сканирует бирку камерой (сканер Google через мост приложения
  *  «BONJOUR Мастер» 1.1+) или вводит номер, видит услугу, выбирает вход или
- *  выход из цеха и подтверждает. В Агбис ничего не пишется: сервер отвечает
- *  тем, что записалось бы (master_scan_service.plan). */
+ *  выход из цеха и подтверждает. Когда на сервере включена запись
+ *  (dry_run: false), скан уходит в Агбис; иначе сервер отвечает тем, что
+ *  записалось бы (master_scan_service.confirm). */
 
 const ACTIONS = {
   in: { label: 'Вход в цех', confirm: 'Подтвердить вход' },
@@ -102,7 +103,14 @@ export default function EmployeeMasterScan() {
     setStage('saving');
     setError('');
     try {
-      const res = await api.post('/masters/me/scan/preview', { barcode: code, action });
+      const res = await api.post('/masters/me/scan/confirm', { barcode: code, action });
+      if (!res.data.dry_run && !res.data.written) {
+        // Проверка внутри записи не прошла — например, бирку уже отсканировали на терминале.
+        setError(res.data.blockers?.join(' ') || 'Скан не записан.');
+        setStage('found');
+        lookup(code);
+        return;
+      }
       setResult(res.data);
       setStage('done');
     } catch (err) {
@@ -119,9 +127,11 @@ export default function EmployeeMasterScan() {
         <h2 className="emp-page__title">Вход и выход</h2>
       </div>
 
-      <div className="emp-scan-banner" role="note">
-        <b>Пробный режим.</b> В Агбис ничего не записывается — после подтверждения вы увидите, что записалось бы.
-      </div>
+      {info?.dry_run !== false && (
+        <div className="emp-scan-banner" role="note">
+          <b>Пробный режим.</b> В Агбис ничего не записывается — после подтверждения вы увидите, что записалось бы.
+        </div>
+      )}
 
       {stage !== 'done' && (
         <div className="emp-scan-get">
@@ -249,7 +259,7 @@ export default function EmployeeMasterScan() {
                 disabled={!check?.allowed || stage === 'saving'}
                 onClick={() => setStage('confirm')}
               >
-                {stage === 'saving' ? 'Проверяю…' : ACTIONS[action].confirm}
+                {stage === 'saving' ? 'Записываю…' : ACTIONS[action].confirm}
               </button>
             )}
           </section>
@@ -262,13 +272,19 @@ export default function EmployeeMasterScan() {
             <div className="emp-salary-section__title">
               {ACTIONS[result.action].label} · заказ {result.service.doc_num}
             </div>
-            <p className="emp-scan-msg emp-scan-msg--info">
-              Пробный режим: в Агбис ничего не записано. При включённой записи появилось бы:
-            </p>
+            {result.dry_run ? (
+              <p className="emp-scan-msg emp-scan-msg--info">
+                Пробный режим: в Агбис ничего не записано. При включённой записи появилось бы:
+              </p>
+            ) : (
+              <p className="emp-scan-msg emp-scan-msg--ok">
+                Записано в Агбис: {ACTIONS[result.action].label.toLowerCase()}, «{serviceTitle(result.service.name)}».
+              </p>
+            )}
             {result.warnings.map((w) => (
               <p key={w} className="emp-scan-msg emp-scan-msg--warn">{w}</p>
             ))}
-            <ol className="emp-scan-writes">
+            {result.dry_run && <ol className="emp-scan-writes">
               {result.writes.map((w, i) => (
                 <li key={`${w.table}-${i}`} className="emp-scan-write">
                   <div className="emp-scan-write__head">
@@ -286,7 +302,7 @@ export default function EmployeeMasterScan() {
                   {w.note && <div className="emp-scan-write__note">{w.note}</div>}
                 </li>
               ))}
-            </ol>
+            </ol>}
           </section>
           <button type="button" className="btn btn--primary emp-scan-go" onClick={reset}>
             Сканировать следующую

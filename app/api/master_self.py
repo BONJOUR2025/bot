@@ -75,10 +75,10 @@ def create_master_self_router() -> APIRouter:
 
         return await _run(get_advance_cap, _master(current))
 
-    # ── Вход / выход по бирке — ПРОБНЫЙ РЕЖИМ ─────────────────────────
-    # Обе ручки только читают Агбис (см. master_scan_service): мастер
-    # сканирует бирку, подтверждает, и видит, что записалось бы. Сама запись
-    # включается отдельным шагом после пилота.
+    # ── Вход / выход по бирке ─────────────────────────────────────────
+    # lookup и preview только читают Агбис. confirm пишет скан, если в .env
+    # включён AGBIS_SCAN_WRITE, иначе отвечает как preview
+    # (см. master_scan_service).
     import logging
 
     from fastapi import Body
@@ -127,6 +127,36 @@ def create_master_self_router() -> APIRouter:
             "Пробный скан: %s (Агбис %s) %s, бирка %s, заказ %s — %s",
             master.name, master.agbis_user_id, action, scan.normalize_barcode(barcode),
             result["service"].get("doc_num"), "разрешён" if result["allowed"] else "; ".join(result["blockers"]),
+        )
+        return result
+
+    @router.post("/scan/confirm")
+    async def scan_confirm(
+        barcode: str = Body(...),
+        action: str = Body(...),
+        current: ResolvedUser = Depends(get_current_user),
+    ) -> dict:
+        from app.services import master_scan_service as scan
+
+        if action not in scan.ACTIONS:
+            raise HTTPException(status_code=400, detail="invalid_action")
+        master = _master(current)
+        try:
+            result = await _run(scan.confirm, master, barcode, action)
+        except scan.BarcodeError as exc:
+            raise _scan_error(exc)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Бирка не найдена в Агбисе. Проверьте номер под штрихкодом.")
+        if result["dry_run"]:
+            outcome = "пробно, " + ("разрешён" if result["allowed"] else "; ".join(result["blockers"]))
+        elif result.get("written"):
+            outcome = f"ЗАПИСАН в Агбис: {result['ids']}"
+        else:
+            outcome = "не записан: " + "; ".join(result["blockers"])
+        scan_logger.info(
+            "Скан: %s (Агбис %s) %s, бирка %s, заказ %s — %s",
+            master.name, master.agbis_user_id, action, scan.normalize_barcode(barcode),
+            result["service"].get("doc_num"), outcome,
         )
         return result
 

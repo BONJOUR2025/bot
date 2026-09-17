@@ -1,8 +1,9 @@
-"""Вход/выход по бирке из приложения мастера — пробный режим.
+"""Вход/выход по бирке из приложения мастера.
 
-Главное здесь три вещи: модуль ничего не пишет в Агбис (только SELECT),
-правила постов цеха соблюдены, и план записи совпадает с тем, что клиент
-Агбиса пишет при реальном скане (восстановлено по сканам 15.09.2026).
+Главное: без флага записи модуль ничего не пишет в Агбис (только SELECT),
+правила постов цеха соблюдены, а запись повторяет терминал цеха —
+отметка в открытой смене, одна транзакция, откат при любой проблеме
+(восстановлено опытом на тестовом заказе 32306-21, 17.09.2026).
 """
 from __future__ import annotations
 
@@ -127,10 +128,11 @@ def test_issued_closed_or_cancelled_service_is_blocked(status):
     assert not scan.check(_found(status=status), "in", ME)["allowed"]
 
 
-def test_repeated_entry_warns_about_rework():
+def test_repeated_entry_is_blocked_and_sent_to_the_terminal():
+    """Повтор триггер базы засчитывает браком прошлой работы — только через терминал."""
     result = scan.check(_found(status=3, scans=[_scan(1107)]), "in", ME)
-    assert result["allowed"]
-    assert "переделкой" in result["warnings"][0]
+    assert not result["allowed"]
+    assert "терминале" in result["blockers"][0]
 
 
 def test_exit_after_someone_elses_entry_warns():
@@ -145,29 +147,29 @@ def test_suggested_action_follows_the_last_workshop_scan():
     assert scan.suggest_action(_found(scans=[_scan(1107), _scan(1108)])) == "in"
 
 
-# ── План записи = то, что пишет клиент Агбиса ─────────────────────
+# ── План записи = то, что пишет терминал цеха ─────────────────────
 
-def test_entry_plan_matches_a_real_entry_scan():
+def test_entry_plan_matches_a_real_terminal_scan():
     writes = scan.plan_writes(_found(), "in", ME, NOW)
     tables = [w["table"] for w in writes]
     assert tables == [
         "USER_SESSION", "USER_SESSION_COWORKS", "USER_SESSION_ACTIONS", "USER_ACTION_HIST",
-        "DOC_ORDER_SERVICES", "DOC_ORDER_SERV_HISTORY", "DOCS_ORDER", "DOCS_ORDER_HISTORY",
+        "DOC_ORDER_SERVICES", "DOC_ORDER_SERV_HISTORY", "DOCS_ORDER",
     ]
-    session = _table(writes, "USER_SESSION")["fields"]
-    assert session["USER_ID"] == ME and session["WORK_PLACE_ID"] == 1107
+    assert _table(writes, "USER_SESSION")["op"] == "upsert"
     action = _table(writes, "USER_SESSION_ACTIONS")["fields"]
     assert action["DATE_BEG"] == action["DATE_END"]
-    assert action["WP_KOEF"] is None and action["SALARY_KOEF"] == 1.0 and action["BARCODE"] == BARCODE
+    assert action["WP_KOEF"] == 0.0 and action["NONACTIVE"] == 1 and action["REEXECUTION"] == 0
+    assert action["BARCODE"] == BARCODE and action["IS_ADD_OUT_OF_SERVICES"] == 0
     service = _table(writes, "DOC_ORDER_SERVICES")["fields"]
-    assert service["STATUS_ID"] == 3 and service["CURRENT_WORK_PLACE_ID"] == 1107 and service["CURRENT_SCLAD_ID"] == 21021
-    assert _table(writes, "DOCS_ORDER")["fields"]["STATUS_ID"] == 3
+    assert service["STATUS_ID"] == 3 and service["CURRENT_WORK_PLACE_ID"] == 1107
+    assert "CURRENT_SCLAD_ID" not in service   # склад терминал не меняет
 
 
 def test_exit_plan_carries_post_percent_and_leaves_order_alone():
     writes = scan.plan_writes(_found(status=3, order_status=3, scans=[_scan(1107)]), "out", ME, NOW)
     tables = [w["table"] for w in writes]
-    assert "DOCS_ORDER" not in tables and "DOCS_ORDER_HISTORY" not in tables
+    assert "DOCS_ORDER" not in tables
     assert _table(writes, "USER_SESSION_ACTIONS")["fields"]["WP_KOEF"] == 23.0
     service = _table(writes, "DOC_ORDER_SERVICES")["fields"]
     assert service["STATUS_ID"] == 3          # «исполненным» услугу делает салон, не выход из цеха
@@ -180,6 +182,150 @@ def test_plan_is_always_marked_dry_run_and_empty_when_blocked(monkeypatch):
     assert blocked["dry_run"] is True and not blocked["allowed"] and blocked["writes"] == []
     allowed = scan.plan(MASTER, BARCODE, "in", NOW)
     assert allowed["dry_run"] is True and allowed["allowed"] and allowed["writes"]
+
+
+# ── Запись в Агбис ────────────────────────────────────────────────
+
+class _WriteCursor:
+    """Отвечает на запросы execute_writes как база и запоминает всё, что пришло."""
+
+    def __init__(self, db):
+        self.db = db
+        self._rows = []
+
+    def execute(self, sql, params=()):
+        text = " ".join(sql.split()).lower()
+        self.db.sql.append((text, params))
+        rows = []
+        if text.startswith("select status_id, current_sclad_id"):
+            rows = [(self.db.status, 21021, 400, 1, 1, 10752587, BARCODE)]
+        elif text.startswith("select work_place_id from user_session_actions"):
+            rows = [(p,) for p in self.db.done_posts]
+        elif text.startswith("select first 1 id from user_session"):
+            rows = [(self.db.open_session,)] if self.db.open_session else []
+        elif "returning id" in text:
+            self.db.next_id += 1
+            rows = [(self.db.next_id,)]
+        elif "sp_get_order_status" in text:
+            rows = [(3, self.db.order_change)]
+        elif text.startswith("insert into user_action_hist") and self.db.fail_on_hist:
+            raise RuntimeError("база упала посреди записи")
+        self._rows = rows
+
+    def fetchall(self):
+        return self._rows
+
+
+class _WriteDb:
+    def __init__(self, status=1, done_posts=(), open_session=1019947, order_change=1, fail_on_hist=False):
+        self.status, self.done_posts, self.open_session = status, list(done_posts), open_session
+        self.order_change, self.fail_on_hist = order_change, fail_on_hist
+        self.sql, self.next_id = [], 1000
+        self.committed = self.rolled_back = self.closed = False
+
+    def cursor(self):
+        return _WriteCursor(self)
+
+    def commit(self):
+        self.committed = True
+
+    def rollback(self):
+        self.rolled_back = True
+
+    def close(self):
+        self.closed = True
+
+    def statements(self):
+        return [t for t, _ in self.sql]
+
+
+def _writes_to(db, table):
+    return [(t, p) for t, p in db.sql if t.startswith((f"insert into {table} ", f"update {table} "))]
+
+
+def test_entry_is_written_into_the_open_session_in_one_transaction():
+    db = _WriteDb()
+    ids = scan.execute_writes(db, _found(), "in", ME, NOW)
+    assert db.committed and not db.rolled_back
+    assert ids["session_id"] == 1019947
+    assert not any(t.startswith("insert into user_session ") for t in db.statements())
+    (_, params), = _writes_to(db, "user_session")
+    assert params == (NOW, 1019947)
+    (_, params), = _writes_to(db, "user_session_actions")
+    assert params[0] == 1019947 and params[4] == 1107 and params[5] == 0.0
+    service = _writes_to(db, "doc_order_services")[0][1]
+    assert service[:2] == (3, 1107)
+    assert _writes_to(db, "docs_order") and _writes_to(db, "docs_order_history")
+
+
+def test_new_session_is_opened_when_master_has_none():
+    db = _WriteDb(open_session=None)
+    ids = scan.execute_writes(db, _found(), "in", ME, NOW)
+    (sql, params), = _writes_to(db, "user_session")
+    assert sql.startswith("insert into user_session ") and params == (ME, 1107, NOW, NOW)
+    assert ids["session_id"] == 1001
+
+
+def test_exit_writes_post_percent_and_does_not_touch_the_order():
+    db = _WriteDb(status=3, done_posts=[1107])
+    ids = scan.execute_writes(db, _found(status=3, scans=[_scan(1107)]), "out", ME, NOW)
+    (_, params), = _writes_to(db, "user_session_actions")
+    assert params[4] == 1108 and params[5] == 23.0
+    assert not _writes_to(db, "docs_order") and not any("sp_get_order_status" in t for t in db.statements())
+    assert ids["service_status_id"] == 3 and ids["order_status_id"] is None
+
+
+def test_order_is_left_alone_when_its_status_does_not_change():
+    db = _WriteDb(order_change=0)
+    scan.execute_writes(db, _found(), "in", ME, NOW)
+    assert not _writes_to(db, "docs_order")
+
+
+def test_scan_made_on_the_terminal_meanwhile_is_rejected_before_any_write():
+    db = _WriteDb(status=3, done_posts=[1107])
+    with pytest.raises(scan.ScanRejected):
+        scan.execute_writes(db, _found(), "in", ME, NOW)
+    assert db.rolled_back and not db.committed
+    assert not any(t.startswith(("insert", "update")) for t in db.statements())
+
+
+def test_failure_mid_write_rolls_everything_back():
+    db = _WriteDb(fail_on_hist=True)
+    with pytest.raises(RuntimeError):
+        scan.execute_writes(db, _found(), "in", ME, NOW)
+    assert db.rolled_back and not db.committed
+
+
+def test_confirm_without_write_flag_only_plans(monkeypatch):
+    monkeypatch.setattr(scan, "write_enabled", lambda: False)
+    monkeypatch.setattr(scan, "lookup", lambda barcode: _found())
+    result = scan.confirm(MASTER, BARCODE, "in", connect=lambda: pytest.fail("без флага в базу не пишем"), now=NOW)
+    assert result["dry_run"] is True and result["writes"]
+
+
+def test_confirm_with_write_flag_writes_and_reports_ids(monkeypatch):
+    monkeypatch.setattr(scan, "write_enabled", lambda: True)
+    monkeypatch.setattr(scan, "lookup", lambda barcode: _found())
+    db = _WriteDb()
+    result = scan.confirm(MASTER, BARCODE, "in", connect=lambda: db, now=NOW)
+    assert result["dry_run"] is False and result["written"] and result["ids"]["action_id"]
+    assert db.committed and db.closed
+
+
+def test_confirm_blocked_scan_never_opens_a_connection(monkeypatch):
+    monkeypatch.setattr(scan, "write_enabled", lambda: True)
+    monkeypatch.setattr(scan, "lookup", lambda barcode: _found())
+    result = scan.confirm(MASTER, BARCODE, "out", connect=lambda: pytest.fail("заблокированный скан не пишется"))
+    assert result["written"] is False and result["blockers"]
+
+
+def test_confirm_reports_rejection_found_inside_the_transaction(monkeypatch):
+    monkeypatch.setattr(scan, "write_enabled", lambda: True)
+    monkeypatch.setattr(scan, "lookup", lambda barcode: _found())
+    db = _WriteDb(done_posts=[1107])
+    result = scan.confirm(MASTER, BARCODE, "in", connect=lambda: db, now=NOW)
+    assert result["written"] is False and not result["allowed"] and "терминале" in result["blockers"][0]
+    assert db.closed
 
 
 # ── API ────────────────────────────────────────────────────────────
@@ -208,7 +354,7 @@ def test_lookup_endpoint_describes_service_and_both_actions(client):
     resp = client.get("/api/masters/me/scan/lookup", params={"barcode": BARCODE})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["dry_run"] is True
+    assert body["dry_run"] is True       # флаг записи в тестах выключен
     assert body["service"]["status_name"] == "Новый"
     assert body["suggested_action"] == "in"
     assert body["checks"]["in"]["allowed"] and not body["checks"]["out"]["allowed"]
@@ -245,3 +391,21 @@ def test_non_master_cannot_scan(client):
     resp = client.get("/api/masters/me/scan/lookup", params={"barcode": BARCODE})
     assert resp.status_code == 404
     assert resp.json()["detail"] == "not_a_master"
+
+
+def test_confirm_endpoint_without_write_flag_answers_like_preview(client, monkeypatch):
+    monkeypatch.setattr(scan, "write_enabled", lambda: False)
+    resp = client.post("/api/masters/me/scan/confirm", json={"barcode": BARCODE, "action": "in"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["dry_run"] is True and body["writes"]
+
+
+def test_confirm_endpoint_with_write_flag_writes(client, monkeypatch):
+    monkeypatch.setattr(scan, "write_enabled", lambda: True)
+    monkeypatch.setattr(scan, "execute_writes", lambda con, found, action, uid, now=None: {"action_id": 1})
+    monkeypatch.setattr("app.services.firebird_service._connect", lambda: _WriteDb())
+    resp = client.post("/api/masters/me/scan/confirm", json={"barcode": BARCODE, "action": "in"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["dry_run"] is False and body["written"] and body["ids"] == {"action_id": 1}

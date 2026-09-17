@@ -93,6 +93,9 @@ class Settings(BaseSettings):
     firebird_user: str = Field("SYSDBA", validation_alias="FIREBIRD_USER")
     firebird_password: str = Field("masterkey", validation_alias="FIREBIRD_PASSWORD")
     firebird_charset: str = Field("UTF8", validation_alias="FIREBIRD_CHARSET")
+    # Запись сканов из приложения мастера в Агбис (master_scan_service).
+    # Выключено — приложение только показывает план записи.
+    agbis_scan_write: bool = Field(False, validation_alias="AGBIS_SCAN_WRITE")
 
     # Хранилище фотографий Agbis. Полноразмерные снимки лежат не в базе (там
     # только миниатюры) и не в облаке, а на агенте локального хранилища —
