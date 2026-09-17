@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,39 @@ class MasterAppValidationError(ValueError):
 
 def apk_path() -> Path:
     return Path(settings.master_app_apk_file)
+
+
+VERSION_RE = re.compile(r"^\d+(\.\d+){1,3}$")
+
+
+def archive_dir() -> Path:
+    """Прошлые и текущая сборки под своими версиями — рядом с основным APK.
+
+    Нужны, чтобы проверить обновление со старой версии (или вернуть мастеру
+    ту, что работала): основной файл каждая сборка перезаписывает.
+    """
+    return apk_path().parent / "master_app_archive"
+
+
+def archived_apk_path(version_name: str) -> Optional[Path]:
+    if not VERSION_RE.match(version_name or ""):
+        return None
+    return archive_dir() / f"bonjour-master-{version_name}.apk"
+
+
+def archive_apk(content: bytes) -> Optional[str]:
+    """Кладёт копию APK в архив под его версией. Без версии внутри — не кладёт."""
+    version_name, _ = read_version(content)
+    path = archived_apk_path(version_name) if version_name else None
+    if path is None:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return version_name
+
+
+def archive_url(version_name: str) -> str:
+    return settings.public_base_url.rstrip("/") + f"/api/master-app/archive/{version_name}.apk"
 
 
 def apk_url() -> str:
@@ -82,6 +116,7 @@ def save_apk(content: bytes) -> dict[str, Any]:
         raise MasterAppValidationError("foreign_apk")
 
     path = apk_path()
+    archive_apk(content)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(content)
     # Подмена целиком: мастер, который качает файл в эту секунду, не должен

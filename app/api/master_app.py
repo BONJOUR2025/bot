@@ -157,6 +157,19 @@ def create_master_app_public_router() -> APIRouter:
             headers={"Content-Encoding": "identity"},
         )
 
+    @router.get("/archive/{version_name}.apk")
+    async def download_archived_apk(version_name: str) -> FileResponse:
+        """Сборка конкретной версии — для проверки обновления со старой."""
+        path = master_app_service.archived_apk_path(version_name)
+        if path is None or not path.exists():
+            raise HTTPException(status_code=404, detail="version_not_found")
+        return FileResponse(
+            path,
+            media_type="application/vnd.android.package-archive",
+            filename=path.name,
+            headers={"Content-Encoding": "identity"},
+        )
+
     @router.post("/upload")
     async def upload_from_ci(
         file: UploadFile = File(...),

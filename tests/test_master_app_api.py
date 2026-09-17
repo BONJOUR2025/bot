@@ -153,3 +153,19 @@ def test_logins_for_the_app_login_dropdown(client, monkeypatch):
     resp = client.get("/api/master-app/logins")
     assert resp.status_code == 200
     assert resp.json() == [{"login": "koryagin", "name": "Корягин Константин Сергеевич"}]
+
+
+def test_every_upload_is_kept_under_its_version(client):
+    assert _upload(client, _apk(version=("1.0.0", 1))).status_code == 200
+    assert _upload(client, _apk(version=("1.1.0", 2))).status_code == 200
+    old = client.get("/api/master-app/archive/1.0.0.apk")
+    assert old.status_code == 200
+    assert old.headers["content-type"] == "application/vnd.android.package-archive"
+    assert old.content == _apk(version=("1.0.0", 1))
+    assert client.get("/api/master-app/archive/1.1.0.apk").content == _apk(version=("1.1.0", 2))
+
+
+def test_archive_rejects_unknown_or_odd_versions(client):
+    assert client.get("/api/master-app/archive/9.9.9.apk").status_code == 404
+    assert client.get("/api/master-app/archive/..%2Fmaster_app.apk").status_code == 404
+
