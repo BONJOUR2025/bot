@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import api from '../../api.js';
 import { masterErrorText, money, serviceTitle } from './masterFormat.js';
 
 /** Заработок мастера — те же цифры, что «🔧 Мой заработок» в Telegram-боте
- *  (GET /api/masters/me/earnings → master_bot_service.get_earnings), плюс
- *  подробности: выработка по дням, фильтр по видам работ и список услуг. */
+ *  (GET /api/masters/me/earnings → master_bot_service.get_earnings).
+ *
+ *  Страница отвечает на вопросы мастера в том порядке, в каком он их задаёт:
+ *  сколько я заработал (одно крупное число) → сколько сегодня и вчера →
+ *  сколько получу с учётом авансов → по каким дням и видам работ → какие
+ *  именно услуги. «Сумма работ» (цена услуг для клиента) больше не стоит
+ *  рядом с заработком: крупное чужое число рядом со своим сбивало с толку. */
 
 // Только прогретые периоды: всё остальное ушло бы живым запросом в самый
 // дорогой отчёт системы (см. master_bot_service).
 const PERIODS = [
-  { value: 'month', label: 'Текущий месяц' },
-  { value: 'prev_month', label: 'Прошлый месяц' },
+  { value: 'month', label: 'Этот месяц' },
+  { value: 'prev_month', label: 'Прошлый' },
 ];
 
-const MONTHS = [
-  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+const MONTHS_IN = [
+  'январе', 'феврале', 'марте', 'апреле', 'мае', 'июне',
+  'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре',
 ];
 const MONTHS_GEN = [
   'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
@@ -23,7 +29,7 @@ const MONTHS_GEN = [
 ];
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 const DAY_MS = 24 * 60 * 60 * 1000;
-const PAGE_SIZE = 40;
+const PAGE_SIZE = 30;
 
 // Дни считаем в UTC от строки «ГГГГ-ММ-ДД»: так часовой пояс телефона не
 // сдвигает услугу, выданную около полуночи, на соседний день.
@@ -34,10 +40,16 @@ function dayUtc(iso) {
 const isoFromUtc = (ms) => new Date(ms).toISOString().slice(0, 10);
 const dayOfMonth = (iso) => new Date(dayUtc(iso)).getUTCDate();
 
-function monthTitle(isoDate) {
+function localIso(offsetDays = 0) {
+  const d = new Date(Date.now() + offsetDays * DAY_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function monthIn(isoDate) {
   if (!isoDate) return '';
-  const [y, m] = String(isoDate).split('-').map(Number);
-  return `${MONTHS[m - 1]} ${y}`;
+  const [, m] = String(isoDate).split('-').map(Number);
+  return MONTHS_IN[m - 1];
 }
 
 function dayShort(iso) {
@@ -47,20 +59,18 @@ function dayShort(iso) {
 
 function dayTitle(iso) {
   if (!iso || iso === '—') return 'Без даты выдачи';
+  if (iso === localIso(0)) return `Сегодня, ${dayShort(iso)}`;
+  if (iso === localIso(-1)) return `Вчера, ${dayShort(iso)}`;
   const dt = new Date(dayUtc(iso));
   return `${dayShort(iso)}, ${WEEKDAYS[dt.getUTCDay()]}`;
 }
 
-function durationText(minutes) {
-  if (minutes == null) return '';
-  const m = Math.max(0, Math.round(Number(minutes)));
-  if (m < 60) return `в работе ${m} мин`;
-  if (m < 24 * 60) {
-    const h = Math.floor(m / 60);
-    const rest = m % 60;
-    return `в работе ${h} ч${rest ? ` ${rest} мин` : ''}`;
-  }
-  return `в работе ${Math.round(m / (24 * 60))} дн`;
+function countText(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} услуга`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} услуги`;
+  return `${n} услуг`;
 }
 
 // Верх шкалы — «круглое» число, чтобы подписи сетки читались без усилия.
@@ -79,19 +89,17 @@ function barPath(x, y, w, h) {
   return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
 }
 
-const CHART_H = 150;
+const CHART_H = 140;
 const AXIS_H = 22;
 const PAD_TOP = 22;
 const PAD_LEFT = 46;
 const PAD_RIGHT = 6;
 
-/** Выработка по дням: один ряд, один цвет, подпись только у лучшего дня.
- *  Значение любого дня — по нажатию (подсказка), а без нажатия — в списке
- *  услуг ниже, где у каждого дня своя сумма. */
-function DaysChart({ rows, metric, dateFrom, dateTo }) {
+/** Заработок по дням. Нажатие на столбец выбирает день — список услуг ниже
+ *  оставляет только его; повторное нажатие снимает выбор. */
+function DaysChart({ series, selectedDay, onSelectDay }) {
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(320);
-  const [active, setActive] = useState(null);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -103,25 +111,6 @@ function DaysChart({ rows, metric, dateFrom, dateTo }) {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  const series = useMemo(() => {
-    const byDay = new Map();
-    for (const row of rows) {
-      if (!row.day) continue;
-      const slot = byDay.get(row.day) || { value: 0, count: 0 };
-      slot.value += Number(row[metric]) || 0;
-      slot.count += 1;
-      byDay.set(row.day, slot);
-    }
-    const out = [];
-    if (!dateFrom || !dateTo) return out;
-    for (let t = dayUtc(dateFrom); t <= dayUtc(dateTo); t += DAY_MS) {
-      const day = isoFromUtc(t);
-      const slot = byDay.get(day);
-      out.push({ day, value: slot ? slot.value : 0, count: slot ? slot.count : 0 });
-    }
-    return out;
-  }, [rows, metric, dateFrom, dateTo]);
 
   if (series.length === 0) return null;
 
@@ -135,28 +124,24 @@ function DaysChart({ rows, metric, dateFrom, dateTo }) {
   const yOf = (v) => PAD_TOP + plotH - (top ? (v / top) * plotH : 0);
   const cx = (i) => PAD_LEFT + i * slot + slot / 2;
   const clampX = (x) => Math.min(Math.max(x, 64), width - 64);
+  const selected = selectedDay ? series.findIndex((s) => s.day === selectedDay) : -1;
   const peak = maxV > 0 ? series.findIndex((s) => s.value === maxV) : -1;
+  const today = localIso(0);
   const last = series.length - 1;
   const labeled = new Set([last]);
   series.forEach((s, i) => {
     if ((dayOfMonth(s.day) - 1) % 7 === 0 && last - i >= 3) labeled.add(i);
   });
-  const act = active != null ? series[active] : null;
+  const mark = selected >= 0 ? selected : peak;
 
   return (
-    <div
-      className="emp-earn-chart"
-      ref={wrapRef}
-      onPointerLeave={(e) => {
-        if (e.pointerType === 'mouse') setActive(null);
-      }}
-    >
+    <div className="emp-earn-chart" ref={wrapRef}>
       <svg
         width={width}
         height={CHART_H + AXIS_H}
         viewBox={`0 0 ${width} ${CHART_H + AXIS_H}`}
         role="img"
-        aria-label="Выработка по дням"
+        aria-label="Заработок по дням"
       >
         {ticks.map((v) => (
           <g key={v}>
@@ -170,10 +155,11 @@ function DaysChart({ rows, metric, dateFrom, dateTo }) {
           if (s.value <= 0) return null;
           const y = yOf(s.value);
           const x = PAD_LEFT + i * slot + (slot - barW) / 2;
+          const dim = selected >= 0 && selected !== i;
           return (
             <path
               key={s.day}
-              className={`emp-earn-bar${act && active !== i ? ' is-dim' : ''}`}
+              className={`emp-earn-bar${dim ? ' is-dim' : ''}${s.day === today ? ' is-today' : ''}`}
               d={barPath(x, y, barW, PAD_TOP + plotH - y)}
             />
           );
@@ -183,9 +169,9 @@ function DaysChart({ rows, metric, dateFrom, dateTo }) {
             {dayOfMonth(series[i].day)}
           </text>
         ))}
-        {peak >= 0 && !act && (
-          <text className="emp-earn-peak" x={clampX(cx(peak))} y={yOf(maxV) - 7} textAnchor="middle">
-            {money(maxV)}
+        {mark >= 0 && series[mark].value > 0 && (
+          <text className="emp-earn-peak" x={clampX(cx(mark))} y={yOf(series[mark].value) - 7} textAnchor="middle">
+            {money(series[mark].value)}
           </text>
         )}
         {series.map((s, i) => (
@@ -196,36 +182,20 @@ function DaysChart({ rows, metric, dateFrom, dateTo }) {
             y={PAD_TOP}
             width={slot}
             height={plotH}
-            tabIndex={0}
-            aria-label={`${dayShort(s.day)}: ${money(s.value)}, услуг ${s.count}`}
-            onPointerDown={() => setActive((current) => (current === i ? null : i))}
-            onPointerEnter={(e) => {
-              if (e.pointerType === 'mouse') setActive(i);
+            tabIndex={s.count ? 0 : -1}
+            role="button"
+            aria-pressed={selected === i}
+            aria-label={`${dayShort(s.day)}: ${money(s.value)}, ${countText(s.count)}`}
+            onClick={() => s.count && onSelectDay(selected === i ? null : s.day)}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === ' ') && s.count) {
+                e.preventDefault();
+                onSelectDay(selected === i ? null : s.day);
+              }
             }}
-            onFocus={() => setActive(i)}
-            onBlur={() => setActive(null)}
           />
         ))}
       </svg>
-      {act && (
-        <div
-          className="emp-earn-tip"
-          // Над столбцом, если сверху есть место (~56px — две строки подсказки
-          // с отступом). У высокого столбца места нет: подсказка вылезала за
-          // график и налезала на заголовок раздела — тогда ставим её сбоку от
-          // столбца, в ту половину графика, где свободнее.
-          style={
-            yOf(act.value) - 56 >= 0
-              ? { left: clampX(cx(active)), top: yOf(act.value) - 8 }
-              : cx(active) < width / 2
-                ? { left: cx(active) + barW / 2 + 8, top: yOf(act.value), transform: 'none' }
-                : { left: cx(active) - barW / 2 - 8, top: yOf(act.value), transform: 'translateX(-100%)' }
-          }
-        >
-          <b>{money(act.value)}</b>
-          <span>{dayShort(act.day)} · {act.count} шт</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -236,13 +206,16 @@ export default function EmployeeMasterEarnings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [group, setGroup] = useState(null);
+  const [day, setDay] = useState(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
+  const listRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError('');
     setGroup(null);
+    setDay(null);
     setLimit(PAGE_SIZE);
     api
       .get('/masters/me/earnings', { params: { period } })
@@ -265,11 +238,44 @@ export default function EmployeeMasterEarnings() {
   const r = report;
   // У ученика процент справочный: в подробностях показываем сумму работ.
   const metric = r?.is_apprentice ? 'kredit' : 'salary';
+  const all = useMemo(() => r?.services || [], [r]);
 
-  const rows = useMemo(() => {
-    const all = r?.services || [];
-    return group ? all.filter((s) => s.service_group === group) : all;
-  }, [r, group]);
+  const sumOf = (list) => list.reduce((acc, s) => acc + (Number(s[metric]) || 0), 0);
+
+  const quick = useMemo(() => {
+    const byDay = (iso) => all.filter((s) => s.day === iso);
+    const workDays = new Set(all.map((s) => s.day).filter(Boolean));
+    const total = all.reduce((acc, s) => acc + (Number(s[metric]) || 0), 0);
+    return {
+      today: byDay(localIso(0)),
+      yesterday: byDay(localIso(-1)),
+      workDays: workDays.size,
+      perDay: workDays.size ? total / workDays.size : 0,
+    };
+  }, [all, metric]);
+
+  const byGroup = useMemo(() => (group ? all.filter((s) => s.service_group === group) : all), [all, group]);
+
+  const series = useMemo(() => {
+    const totals = new Map();
+    for (const row of byGroup) {
+      if (!row.day) continue;
+      const slot = totals.get(row.day) || { value: 0, count: 0 };
+      slot.value += Number(row[metric]) || 0;
+      slot.count += 1;
+      totals.set(row.day, slot);
+    }
+    const out = [];
+    if (!r?.date_from || !r?.date_to) return out;
+    for (let t = dayUtc(r.date_from); t <= dayUtc(r.date_to); t += DAY_MS) {
+      const iso = isoFromUtc(t);
+      const slot = totals.get(iso);
+      out.push({ day: iso, value: slot ? slot.value : 0, count: slot ? slot.count : 0 });
+    }
+    return out;
+  }, [byGroup, metric, r]);
+
+  const rows = useMemo(() => (day ? byGroup.filter((s) => s.day === day) : byGroup), [byGroup, day]);
 
   // Итоги дня — по всем услугам фильтра, а не только по показанным: иначе
   // день, разрезанный кнопкой «Показать ещё», показал бы неполную сумму.
@@ -293,25 +299,37 @@ export default function EmployeeMasterEarnings() {
     else dayGroups.push({ day: key, items: [s] });
   }
 
-  const toggleGroup = (name) => {
+  const pickGroup = (name) => {
     setGroup((current) => (current === name ? null : name));
+    setDay(null);
     setLimit(PAGE_SIZE);
   };
+
+  const pickDay = (iso) => {
+    setDay(iso);
+    setLimit(PAGE_SIZE);
+    if (iso) listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const isCurrent = period === 'month';
+  const headline = r?.is_apprentice ? r?.stipend : r?.accrued;
 
   return (
     <div className="emp-page">
       <div className="emp-page__head">
         <h2 className="emp-page__title">Заработок</h2>
-        <select
-          className="emp-select"
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          aria-label="Период"
-        >
+        <div className="emp-earn-periods" role="group" aria-label="Период">
           {PERIODS.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
+            <button
+              key={p.value}
+              type="button"
+              aria-pressed={period === p.value}
+              onClick={() => setPeriod(p.value)}
+            >
+              {p.label}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       {loading && !r && <p className="emp-page__loading">Загрузка…</p>}
@@ -320,174 +338,169 @@ export default function EmployeeMasterEarnings() {
       {r && !error && (
         // При смене периода прежняя сводка остаётся на месте приглушённой —
         // без мигания «Загрузкой» и прыжков страницы.
-        <div className="emp-salary-card" style={loading ? { opacity: 0.5 } : undefined} aria-busy={loading}>
-          <div className="emp-salary-card__month">{monthTitle(r.date_from)}</div>
+        <div className="emp-earn" style={loading ? { opacity: 0.5 } : undefined} aria-busy={loading}>
+          <section className="emp-salary-card emp-earn-hero">
+            <div className="emp-earn-hero__label">
+              {r.is_apprentice ? 'Стипендия' : 'Заработано'} в {monthIn(r.date_from)}
+            </div>
+            <div className="emp-earn-hero__sum">{money(headline)}</div>
+            <div className="emp-earn-hero__sub">
+              {r.is_apprentice
+                ? `${r.stipend_days} дн. обучения × ${money(r.day_rate)} · на проценте было бы ${money(r.accrued)}`
+                : `${countText(r.services_count)} · ваш процент с работ на ${money(r.kredit)}`}
+            </div>
 
-          {r.is_apprentice ? (
-            <>
-              <section className="emp-salary-section">
-                <div className="emp-salary-section__title">Стипендия — к выплате</div>
-                <div className="emp-salary-grid">
-                  <div className="emp-salary-row">
-                    <span>Дней обучения</span>
-                    <span>{r.stipend_days} × {money(r.day_rate)}</span>
+            <div className="emp-earn-tiles">
+              {isCurrent ? (
+                <>
+                  <div className="emp-earn-tile">
+                    <span>Сегодня</span>
+                    <b>{money(sumOf(quick.today))}</b>
+                    <small>{countText(quick.today.length)}</small>
                   </div>
-                  <div className="emp-salary-row emp-salary-row--sub">
-                    <span>Стипендия</span>
-                    <span>{money(r.stipend)}</span>
+                  <div className="emp-earn-tile">
+                    <span>Вчера</span>
+                    <b>{money(sumOf(quick.yesterday))}</b>
+                    <small>{countText(quick.yesterday.length)}</small>
                   </div>
-                </div>
-              </section>
-              <section className="emp-salary-section">
-                <div className="emp-salary-section__title">Справочно — если бы на проценте</div>
-                <div className="emp-salary-grid">
-                  <div className="emp-salary-row"><span>Услуг</span><span>{r.services_count}</span></div>
-                  <div className="emp-salary-row"><span>Сумма работ</span><span>{money(r.kredit)}</span></div>
-                  <div className="emp-salary-row emp-salary-row--sub">
-                    <span>Было бы начислено</span>
-                    <span>{money(r.accrued)}</span>
-                  </div>
-                </div>
-              </section>
-            </>
-          ) : (
-            <section className="emp-salary-section">
-              <div className="emp-salary-section__title">Начислено</div>
-              <div className="emp-salary-grid">
-                <div className="emp-salary-row"><span>Услуг</span><span>{r.services_count}</span></div>
-                <div className="emp-salary-row"><span>Сумма работ</span><span>{money(r.kredit)}</span></div>
-                <div className="emp-salary-row emp-salary-row--sub">
-                  <span>Начислено</span>
-                  <span>{money(r.accrued)}</span>
-                </div>
-              </div>
-            </section>
-          )}
-
-          <section className="emp-salary-section">
-            <div className="emp-salary-section__title">Итог</div>
-            <div className="emp-salary-grid">
-              {r.advances > 0 && (
-                <div className="emp-salary-row emp-salary-row--neg">
-                  <span>Авансы с последней зарплаты</span>
-                  <span>−{money(r.advances)}</span>
+                </>
+              ) : (
+                <div className="emp-earn-tile">
+                  <span>Рабочих дней</span>
+                  <b>{quick.workDays}</b>
+                  <small>с выданными работами</small>
                 </div>
               )}
-              <div className="emp-salary-row emp-salary-row--total">
-                <span>К выплате сейчас</span>
-                <span>{money(Math.max(0, r.to_pay))}</span>
+              <div className="emp-earn-tile">
+                <span>В среднем за день</span>
+                <b>{money(quick.perDay)}</b>
+                <small>по дням с работами</small>
               </div>
             </div>
           </section>
 
-          {r.services_count === 0 && (
-            <div className="emp-salary-card__note">За этот период выданных работ пока нет.</div>
-          )}
+          <section className="emp-salary-card emp-earn-pay">
+            <div className="emp-salary-row">
+              <span>{r.is_apprentice ? 'Стипендия' : 'Заработано'}</span>
+              <span>{money(headline)}</span>
+            </div>
+            <div className="emp-salary-row emp-salary-row--neg">
+              <span>Уже получено авансами</span>
+              <span>{r.advances > 0 ? `−${money(r.advances)}` : money(0)}</span>
+            </div>
+            <div className="emp-salary-row emp-salary-row--total">
+              <span>Осталось получить</span>
+              <span>{money(Math.max(0, r.to_pay))}</span>
+            </div>
+            <p className="emp-earn-note">Суммы предварительные — окончательный расчёт у руководителя.</p>
+          </section>
 
-          {r.groups?.length > 0 && (
-            <section className="emp-salary-section">
-              <div className="emp-salary-section__title">По видам работ</div>
-              <div className="emp-earn-groups">
-                {r.groups.map((g) => {
-                  const on = group === g.group;
-                  return (
-                    <button
-                      key={g.group}
-                      type="button"
-                      className="emp-earn-group"
-                      aria-pressed={on}
-                      onClick={() => toggleGroup(g.group)}
-                    >
-                      <span>{g.group} · {g.count} шт</span>
-                      <span>{money(r.is_apprentice ? g.kredit : g.salary)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {group ? (
-                <button type="button" className="emp-earn-reset" onClick={() => toggleGroup(group)}>
-                  Показать все виды работ
-                </button>
-              ) : (
-                <div className="emp-earn-hint">Нажмите на вид работ, чтобы оставить в графике и списке только его</div>
-              )}
-            </section>
-          )}
-
-          {rows.length > 0 && (
-            <section className="emp-salary-section">
-              <div className="emp-salary-section__title">
-                По дням{group ? ` · ${group}` : ''}
-              </div>
-              <DaysChart
-                key={`${period}-${group || 'all'}`}
-                rows={rows}
-                metric={metric}
-                dateFrom={r.date_from}
-                dateTo={r.date_to}
-              />
-            </section>
-          )}
-
-          {rows.length > 0 && (
-            <section className="emp-salary-section">
-              <div className="emp-salary-section__title">
-                Услуги{group ? ` · ${group}` : ''} — {rows.length}
-              </div>
-              {dayGroups.map((d) => {
-                const total = dayTotals.get(d.day);
-                return (
-                  <div key={d.day} className="emp-earn-day">
-                    <div className="emp-earn-day__head">
-                      <span>{dayTitle(d.day)}</span>
-                      <span>{total.count} шт · {money(total.value)}</span>
-                    </div>
-                    {d.items.map((s, i) => (
-                      <div key={`${s.doc_num}-${s.out_time}-${i}`} className="emp-earn-svc">
-                        <div className="emp-earn-svc__main">
-                          <div className="emp-earn-svc__title">{serviceTitle(s.name)}</div>
-                          <div className="emp-earn-svc__meta">
-                            {[s.doc_num, group ? null : s.service_group, durationText(s.duration_min)]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </div>
-                        </div>
-                        <div className="emp-earn-svc__sum">
-                          {r.is_apprentice ? (
-                            <>
-                              <b>{money(s.kredit)}</b>
-                              <span>справочно {money(s.salary)}</span>
-                            </>
-                          ) : (
-                            <>
-                              <b>{money(s.salary)}</b>
-                              <span>
-                                {money(s.kredit)}
-                                {s.rate ? ` · ${Math.round(s.rate * 100)}%` : ''}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
+          {r.services_count === 0 ? (
+            <p className="emp-page__empty">За этот период выданных работ пока нет.</p>
+          ) : (
+            <>
+              {r.groups?.length > 1 && (
+                <section className="emp-earn-block">
+                  <div className="emp-salary-section__title">Виды работ</div>
+                  <div className="emp-earn-chips" role="group" aria-label="Вид работ">
+                    {r.groups.map((g) => (
+                      <button
+                        key={g.group}
+                        type="button"
+                        className="emp-earn-chip"
+                        aria-pressed={group === g.group}
+                        onClick={() => pickGroup(g.group)}
+                      >
+                        <span>{g.group}</span>
+                        <b>{money(r.is_apprentice ? g.kredit : g.salary)}</b>
+                        <small>{g.count} шт</small>
+                      </button>
                     ))}
                   </div>
-                );
-              })}
-              {rows.length > limit && (
-                <button
-                  type="button"
-                  className="btn btn--secondary emp-earn-more"
-                  onClick={() => setLimit((current) => current + PAGE_SIZE)}
-                >
-                  Показать ещё ({rows.length - limit})
-                </button>
+                </section>
               )}
-            </section>
-          )}
 
-          <div className="emp-salary-card__note">
-            Показатели предварительные, уточните у руководителя.
-          </div>
+              <section className="emp-salary-card emp-earn-block emp-earn-block--card">
+                <div className="emp-salary-section__title">
+                  По дням{group ? ` · ${group}` : ''}
+                </div>
+                <DaysChart
+                  key={`${period}-${group || 'all'}`}
+                  series={series}
+                  selectedDay={day}
+                  onSelectDay={pickDay}
+                />
+                <p className="emp-earn-note">Нажмите на день, чтобы увидеть его услуги.</p>
+              </section>
+
+              <section className="emp-earn-block" ref={listRef}>
+                <div className="emp-earn-list-head">
+                  <div className="emp-salary-section__title">Услуги — {rows.length}</div>
+                  {(day || group) && (
+                    <div className="emp-earn-filters">
+                      {group && (
+                        <button type="button" className="emp-earn-filter" onClick={() => pickGroup(group)}>
+                          {group} <X size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                      {day && (
+                        <button type="button" className="emp-earn-filter" onClick={() => pickDay(null)}>
+                          {dayShort(day)} <X size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {dayGroups.map((d) => {
+                  const total = dayTotals.get(d.day);
+                  return (
+                    <div key={d.day} className="emp-salary-card emp-earn-day">
+                      <div className="emp-earn-day__head">
+                        <span>{dayTitle(d.day)}</span>
+                        <b>{money(total.value)}</b>
+                      </div>
+                      {d.items.map((s, i) => (
+                        <div key={`${s.doc_num}-${s.out_time}-${i}`} className="emp-earn-svc">
+                          <div className="emp-earn-svc__main">
+                            <div className="emp-earn-svc__title">{serviceTitle(s.name)}</div>
+                            <div className="emp-earn-svc__meta">
+                              заказ {s.doc_num}
+                              {!group && s.service_group ? ` · ${s.service_group}` : ''}
+                            </div>
+                          </div>
+                          <div className="emp-earn-svc__sum">
+                            {r.is_apprentice ? (
+                              <>
+                                <b>{money(s.kredit)}</b>
+                                <span>справочно {money(s.salary)}</span>
+                              </>
+                            ) : (
+                              <>
+                                <b>{money(s.salary)}</b>
+                                <span>
+                                  {s.rate ? `${Math.round(s.rate * 100)}% ` : ''}из {money(s.kredit)}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+                {rows.length > limit && (
+                  <button
+                    type="button"
+                    className="btn btn--secondary emp-earn-more"
+                    onClick={() => setLimit((current) => current + PAGE_SIZE)}
+                  >
+                    Показать ещё ({rows.length - limit})
+                  </button>
+                )}
+              </section>
+            </>
+          )}
         </div>
       )}
     </div>

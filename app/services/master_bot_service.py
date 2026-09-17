@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable, Optional
@@ -172,6 +173,20 @@ def _advances(employee_id: str) -> float:
         return 0.0
 
 
+def work_kind(svc: dict[str, Any]) -> str:
+    """Вид работ для мастера — папка услуги в Агбисе без номера.
+
+    Раньше вид определялся по коду услуги (GROUP_RULES в masters_service), и у
+    мастера по сумкам больше половины работ падало в «Другое»: коды сумочного
+    ремонта в правила не входят. Папки Агбиса («09. Ремонт чемоданов, сумок,
+    саквояжей», «07. Ушивка, ремонт ремней») есть у каждой услуги и понятны
+    без расшифровки.
+    """
+    folder = str(svc.get("folder_name") or "").strip()
+    name = re.sub(r"^\d+(\.\d+)*\.?\s*", "", folder).strip()
+    return name or str(svc.get("service_group") or "Другое")
+
+
 def get_earnings(master: Master, period: str = PERIOD_MONTH) -> dict[str, Any]:
     """Отчёт «мой заработок» за прогретый период.
 
@@ -187,7 +202,7 @@ def get_earnings(master: Master, period: str = PERIOD_MONTH) -> dict[str, Any]:
 
     by_group: dict[str, dict[str, float]] = {}
     for svc in paid:
-        group = str(svc.get("service_group") or "Другое")
+        group = work_kind(svc)
         slot = by_group.setdefault(group, {"count": 0, "kredit": 0.0, "salary": 0.0})
         slot["count"] += 1
         slot["kredit"] += _num(svc.get("kredit"))
@@ -207,7 +222,7 @@ def get_earnings(master: Master, period: str = PERIOD_MONTH) -> dict[str, Any]:
             {
                 "doc_num": svc.get("doc_num"),
                 "name": svc.get("name"),
-                "service_group": str(svc.get("service_group") or "Другое"),
+                "service_group": work_kind(svc),
                 "kredit": _num(svc.get("kredit")),
                 "salary": _num(svc.get("master_salary")),
                 "rate": (

@@ -7373,3 +7373,43 @@ button:hover > .vac-desc { color: var(--color-text); }
   .pay-card--open .pay-sum,
   .pay-card--open .pay-chips { max-width: 44rem; }
 }
+
+/* ── «Заработок» мастера, вариант 2: главное число, сегодня/вчера, расчёт ── */
+.emp-earn { display: flex; flex-direction: column; gap: 0.9rem; }
+.emp-earn-periods { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--color-control-bg); border: 1px solid var(--color-border); }
+.emp-earn-periods button { min-height: 36px; padding: 0 0.85rem; border: 0; border-radius: 999px; background: transparent; color: var(--color-text-muted); font: inherit; font-size: 0.85rem; cursor: pointer; }
+.emp-earn-periods button[aria-pressed="true"] { background: var(--color-surface); color: var(--color-text); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
+.emp-earn-periods button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.emp-earn-hero { padding: 1.1rem 1.25rem 1.2rem; }
+.emp-earn-hero__label { color: var(--color-text-muted); font-size: 0.9rem; }
+.emp-earn-hero__sum { margin-top: 0.15rem; font-size: 2.4rem; font-weight: 700; line-height: 1.1; color: var(--color-text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.emp-earn-hero__sub { margin-top: 0.3rem; color: var(--color-text-muted); font-size: 0.82rem; line-height: 1.35; }
+.emp-earn-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: 0.5rem; margin-top: 1rem; }
+.emp-earn-tile { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.65rem 0.7rem; border-radius: 10px; background: var(--color-panel); min-width: 0; }
+.emp-earn-tile span { color: var(--color-text-muted); font-size: 0.75rem; }
+.emp-earn-tile b { color: var(--color-text); font-size: 1.05rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.emp-earn-tile small { color: var(--color-text-muted); font-size: 0.7rem; }
+
+.emp-earn-pay { padding: 0.8rem 1.25rem 0.9rem; }
+.emp-earn-note { margin: 0.5rem 0 0; color: var(--color-text-muted); font-size: 0.75rem; line-height: 1.35; }
+
+.emp-earn-block { display: flex; flex-direction: column; }
+.emp-earn-block--card { padding: 1rem 1.25rem; }
+.emp-earn-chips { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.2rem; scrollbar-width: none; margin: 0 -1rem; padding-left: 1rem; padding-right: 1rem; }
+.emp-earn-chips::-webkit-scrollbar { display: none; }
+.emp-earn-chip { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem; max-width: 12rem; min-height: 44px; padding: 0.55rem 0.8rem; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.emp-earn-chip span { font-size: 0.78rem; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.emp-earn-chip b { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+.emp-earn-chip small { font-size: 0.7rem; color: var(--color-text-muted); }
+.emp-earn-chip[aria-pressed="true"] { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface)); }
+.emp-earn-chip:focus-visible, .emp-earn-filter:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.emp-earn-bar.is-today { fill: color-mix(in srgb, var(--color-primary) 70%, var(--color-text)); }
+
+.emp-earn-list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem; margin-bottom: 0.2rem; }
+.emp-earn-list-head .emp-salary-section__title { margin-bottom: 0; }
+.emp-earn-filters { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.emp-earn-filter { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 32px; padding: 0 0.65rem; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 14%, transparent); color: var(--color-text); font: inherit; font-size: 0.8rem; cursor: pointer; }
+.emp-earn .emp-earn-day { margin-top: 0.6rem; padding: 0.2rem 1rem 0.3rem; }
+.emp-earn .emp-earn-day__head { align-items: baseline; padding: 0.6rem 0 0.45rem; color: var(--color-text); font-size: 0.85rem; font-weight: 600; }
+.emp-earn .emp-earn-day__head b { font-variant-numeric: tabular-nums; }
