@@ -7385,10 +7385,10 @@ button:hover > .vac-desc { color: var(--color-text); }
 .emp-earn-hero__label { color: var(--color-text-muted); font-size: 0.9rem; }
 .emp-earn-hero__sum { margin-top: 0.15rem; font-size: 2.4rem; font-weight: 700; line-height: 1.1; color: var(--color-text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .emp-earn-hero__sub { margin-top: 0.3rem; color: var(--color-text-muted); font-size: 0.82rem; line-height: 1.35; }
-.emp-earn-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: 0.5rem; margin-top: 1rem; }
-.emp-earn-tile { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.65rem 0.7rem; border-radius: 10px; background: var(--color-panel); min-width: 0; }
+.emp-earn-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); gap: 0.45rem; margin-top: 1rem; }
+.emp-earn-tile { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.6rem 0.65rem; border-radius: 10px; background: color-mix(in srgb, var(--color-text) 6%, transparent); min-width: 0; }
 .emp-earn-tile span { color: var(--color-text-muted); font-size: 0.75rem; }
-.emp-earn-tile b { color: var(--color-text); font-size: 1.05rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.emp-earn-tile b { color: var(--color-text); font-size: 0.98rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .emp-earn-tile small { color: var(--color-text-muted); font-size: 0.7rem; }
 
 .emp-earn-pay { padding: 0.8rem 1.25rem 0.9rem; }
