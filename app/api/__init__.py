@@ -379,9 +379,18 @@ def create_app() -> FastAPI:
     # Кабинет мастера (веб и приложение «BONJOUR Мастер»): только свои данные,
     # поэтому без права payroll — в отличие от сводки по всем мастерам ниже.
     from .master_self import create_master_self_router
+    from .salon_self import create_salon_self_router
 
     app.include_router(
         create_master_self_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
+    # Кабинет администратора точки (приложение «BONJOUR Салон»): точка берётся
+    # из карточки по сессии, поэтому тоже без отдельных прав.
+    app.include_router(
+        create_salon_self_router(),
         prefix="/api",
         dependencies=protected,
     )

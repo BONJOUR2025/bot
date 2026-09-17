@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, Wallet, Wrench, ScanLine,
+  Store, ClipboardList, Package,
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
 import MasterAppUpdate from '../components/MasterAppUpdate.jsx';
+import api from '../api.js';
 
 // «Отгулов» и «Связи» в меню нет ни у кого — так решил руководитель. Страницы
 // (/employee/leave-requests, /employee/feedback) остались и открываются по
@@ -31,11 +33,36 @@ const MASTER_NAV_ITEMS = [
   { to: '/employee/profile', label: 'Профиль', icon: User },
 ];
 
+// Меню администратора точки (приложение «BONJOUR Салон»). Показывается тем,
+// за кем закреплён салон: это решает сервер (GET /salon/me/point), а не роль —
+// точка живёт в карточке салона, а не в правах.
+const SALON_NAV_ITEMS = [
+  { to: '/employee/shift', label: 'Смена', icon: Store },
+  { to: '/employee/orders', label: 'Заказы', icon: ClipboardList },
+  { to: '/employee/salary', label: 'Зарплата', icon: DollarSign },
+  { to: '/employee/payouts', label: 'Авансы', icon: CreditCard },
+  { to: '/employee/assets', label: 'Имущество', icon: Package },
+  { to: '/employee/profile', label: 'Профиль', icon: User },
+];
+
 export default function EmployeeLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { isMobile } = useViewport();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [onPoint, setOnPoint] = useState(false);
+
+  useEffect(() => {
+    if (user?.is_master || !user?.employee_id) return undefined;
+    let alive = true;
+    api
+      .get('/salon/me/point')
+      .then(() => alive && setOnPoint(true))
+      .catch(() => alive && setOnPoint(false));
+    return () => {
+      alive = false;
+    };
+  }, [user?.is_master, user?.employee_id]);
 
   const handleLogout = async () => {
     await logout();
@@ -43,7 +70,7 @@ export default function EmployeeLayout() {
   };
 
   const displayName = user?.display_name || user?.login || 'Сотрудник';
-  const navItems = user?.is_master ? MASTER_NAV_ITEMS : NAV_ITEMS;
+  const navItems = user?.is_master ? MASTER_NAV_ITEMS : onPoint ? SALON_NAV_ITEMS : NAV_ITEMS;
 
   return (
     <div className="emp-shell">

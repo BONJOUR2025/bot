@@ -38,6 +38,9 @@ const EmployeeHome = lazy(() => import("./pages/employee/EmployeeHome.jsx"));
 const EmployeeMasterEarnings = lazy(() => import("./pages/employee/EmployeeMasterEarnings.jsx"));
 const EmployeeMasterWip = lazy(() => import("./pages/employee/EmployeeMasterWip.jsx"));
 const EmployeeMasterScan = lazy(() => import("./pages/employee/EmployeeMasterScan.jsx"));
+const SalonShift = lazy(() => import("./pages/employee/SalonShift.jsx"));
+const SalonOrders = lazy(() => import("./pages/employee/SalonOrders.jsx"));
+const SalonAssets = lazy(() => import("./pages/employee/SalonAssets.jsx"));
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Employees = lazy(() => import("./pages/Employees"));
@@ -190,6 +193,9 @@ export default function App() {
                 <Route path="earnings" element={<EmployeeMasterEarnings />} />
                 <Route path="wip" element={<EmployeeMasterWip />} />
                 <Route path="scan" element={<EmployeeMasterScan />} />
+                <Route path="shift" element={<SalonShift />} />
+                <Route path="orders" element={<SalonOrders />} />
+                <Route path="assets" element={<SalonAssets />} />
                 <Route path="salary" element={<EmployeeSalary />} />
                 <Route path="payouts" element={<EmployeePayouts />} />
                 <Route path="schedule" element={<EmployeeSchedule />} />

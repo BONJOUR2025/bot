@@ -7413,3 +7413,25 @@ button:hover > .vac-desc { color: var(--color-text); }
 .emp-earn .emp-earn-day { margin-top: 0.6rem; padding: 0.2rem 1rem 0.3rem; }
 .emp-earn .emp-earn-day__head { align-items: baseline; padding: 0.6rem 0 0.45rem; color: var(--color-text); font-size: 0.85rem; font-weight: 600; }
 .emp-earn .emp-earn-day__head b { font-variant-numeric: tabular-nums; }
+
+/* ── «BONJOUR Салон»: смена, выручка по дням, заказы точки ────────── */
+.salon-shift { padding: 1rem 1.25rem 1.1rem; border-left: 3px solid var(--color-warning, #d97706); }
+.salon-shift.is-open { border-left-color: var(--color-success); }
+.salon-shift__label { color: var(--color-text-muted); font-size: 0.85rem; }
+.salon-shift__state { margin-top: 0.15rem; font-size: 1.35rem; font-weight: 700; color: var(--color-success); }
+.salon-shift__state--wait { color: var(--color-warning, #d97706); }
+.salon-shift__sub { margin-top: 0.25rem; color: var(--color-text-muted); font-size: 0.85rem; line-height: 1.4; }
+
+.salon-bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 0.4rem; }
+.salon-bars__col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; min-width: 0; }
+.salon-bars__bar { width: 100%; border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--color-primary) 55%, transparent); margin-top: auto; }
+.salon-bars__bar.is-today { background: var(--color-primary); }
+.salon-bars__col span { font-size: 0.6rem; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+
+.salon-tabs { display: flex; width: 100%; margin-bottom: 0.8rem; }
+.salon-tabs button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; }
+.salon-tabs button b { font-variant-numeric: tabular-nums; }
+
+.salon-order__foot { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.4rem; color: var(--color-text-muted); font-size: 0.78rem; }
+.salon-order__call { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 32px; padding: 0 0.7rem; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 14%, transparent); color: var(--color-primary); text-decoration: none; font-weight: 600; }
+.salon-order__call:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
