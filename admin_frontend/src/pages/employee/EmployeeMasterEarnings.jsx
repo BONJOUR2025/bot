@@ -372,9 +372,9 @@ export default function EmployeeMasterEarnings() {
                 </div>
               )}
               <div className="emp-earn-tile">
-                <span>В среднем за день</span>
+                <span>В день</span>
                 <b>{money(quick.perDay)}</b>
-                <small>по дням с работами</small>
+                <small>в среднем</small>
               </div>
             </div>
           </section>
@@ -466,7 +466,6 @@ export default function EmployeeMasterEarnings() {
                             <div className="emp-earn-svc__title">{serviceTitle(s.name)}</div>
                             <div className="emp-earn-svc__meta">
                               заказ {s.doc_num}
-                              {!group && s.service_group ? ` · ${s.service_group}` : ''}
                             </div>
                           </div>
                           <div className="emp-earn-svc__sum">
