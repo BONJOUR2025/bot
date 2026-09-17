@@ -238,3 +238,52 @@ def test_earnings_lists_services_newest_first_with_rate_and_day(monkeypatch):
     assert rows[1]["rate"] == 0.23
     assert rows[2]["day"] == "2026-09-14"
     assert rows[2]["duration_min"] == 60.0
+
+
+# ── «В работе»: горящие сроки ──────────────────────────────────────
+
+from datetime import datetime as _dt  # noqa: E402
+
+
+def test_deadline_states_relative_to_now():
+    now = _dt(2026, 9, 17, 15, 0)
+    assert mbs.deadline(None, now)["due_state"] is None
+    past_today = mbs.deadline(_dt(2026, 9, 17, 12, 0), now)
+    assert past_today["due_state"] == "overdue" and past_today["overdue_days"] == 0
+    assert mbs.deadline(_dt(2026, 9, 14, 19, 0), now)["overdue_days"] == 3
+    assert mbs.deadline(_dt(2026, 9, 17, 19, 0), now)["due_state"] == "today"
+    assert mbs.deadline(_dt(2026, 9, 18, 19, 0), now)["due_state"] == "tomorrow"
+    assert mbs.deadline(_dt(2026, 9, 25, 19, 0), now)["due_state"] is None
+
+
+def test_wip_puts_burning_orders_first(monkeypatch):
+    master = mbs.Master(employee_id="1", name="М", position="Мастер", agbis_user_id=7)
+    services = [
+        {"service_id": 1, "in_user_id": 7, "status": "В работе", "doc_num": "old", "code": "1.0", "in_time": "2026-09-01"},
+        {"service_id": 2, "in_user_id": 7, "status": "В работе", "doc_num": "urgent", "code": "144.1", "in_time": "2026-09-16"},
+        {"service_id": 3, "in_user_id": 7, "status": "В работе", "doc_num": "today", "code": "1.0", "in_time": "2026-09-16"},
+        {"service_id": 4, "in_user_id": 7, "status": "В работе", "doc_num": "late", "code": "1.0", "in_time": "2026-09-10"},
+        {"service_id": 5, "in_user_id": 7, "status": "Выполнено", "doc_num": "done", "code": "1.0", "in_time": "2026-09-10"},
+    ]
+    monkeypatch.setattr(mbs, "_load_services", lambda period: services if period == mbs.PERIOD_MONTH else [])
+    far = _dt.now().replace(year=_dt.now().year + 1)
+    today_evening = _dt.now().replace(hour=23, minute=59)
+    monkeypatch.setattr(mbs, "_due_dates", lambda ids: {
+        1: far, 2: far, 3: today_evening, 4: _dt(2020, 1, 1, 12, 0),
+    })
+    rows = mbs.get_wip(master)
+    assert [r["doc_num"] for r in rows] == ["late", "today", "urgent", "old"]
+    assert rows[0]["due_state"] == "overdue" and rows[0]["overdue_days"] > 0
+
+
+def test_wip_survives_agbis_not_answering_about_deadlines(monkeypatch):
+    master = mbs.Master(employee_id="1", name="М", position="Мастер", agbis_user_id=7)
+    services = [{"service_id": 1, "in_user_id": 7, "status": "В работе", "doc_num": "a", "code": "1.0", "in_time": "2026-09-01"}]
+    monkeypatch.setattr(mbs, "_load_services", lambda period: services)
+
+    def boom():
+        raise RuntimeError("Агбис молчит")
+
+    monkeypatch.setattr("app.services.firebird_service._connect", boom)
+    rows = mbs.get_wip(master)
+    assert rows[0]["doc_num"] == "a" and rows[0]["due_state"] is None

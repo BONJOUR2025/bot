@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any, Iterable, Optional
 
 from app.data.employee_repository import EmployeeRepository
@@ -294,9 +294,9 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
             services.append(svc)
     today = date.today()
     wip = []
-    for svc in services:
-        if str(svc.get("status")) != "В работе":
-            continue
+    open_services = [svc for svc in services if str(svc.get("status")) == "В работе"]
+    due_by_id = _due_dates([svc.get("service_id") for svc in open_services])
+    for svc in open_services:
         days = None
         raw_in = svc.get("in_time")
         if raw_in:
@@ -304,6 +304,7 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
                 days = (today - date.fromisoformat(str(raw_in)[:10])).days
             except ValueError:
                 days = None
+        due = due_by_id.get(svc.get("service_id"))
         wip.append({
             "doc_num": svc.get("doc_num"),
             "name": svc.get("name"),
@@ -312,9 +313,81 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
             "in_time": raw_in,
             "days": days,
             "urgent": str(svc.get("code") or "").startswith("144."),
+            **deadline(due, datetime.now()),
         })
-    wip.sort(key=lambda r: (not r["urgent"], -(r["days"] or 0)))
+    wip.sort(key=_wip_order)
     return wip
+
+
+# Порядок в «В работе»: сначала то, что уже горит, потом срочные, потом
+# завтрашние, дальше — кто дольше ждёт.
+_DUE_RANK = {"overdue": 0, "today": 1, "tomorrow": 3}
+
+
+def _wip_order(row: dict[str, Any]) -> tuple:
+    rank = _DUE_RANK.get(row.get("due_state"), 4)
+    if rank > 1 and row.get("urgent"):
+        rank = 2
+    # Просроченные — самые давние сверху; сегодняшние — по часу обещания.
+    return (rank, -(row.get("overdue_days") or 0), row.get("due") or "", -(row.get("days") or 0))
+
+
+def deadline(due: Optional[datetime], now: datetime) -> dict[str, Any]:
+    """Где обещанная клиенту дата относительно «сейчас».
+
+    Обещание — DOCS_ORDER.DATE_OUT, тот же срок, по которому считаются
+    просрочки. Просрочен — если момент уже прошёл (а не только день): заказ,
+    обещанный сегодня к 12:00, в 15:00 уже просрочен.
+    """
+    if due is None:
+        return {"due": None, "due_state": None, "overdue_days": None}
+    state = None
+    overdue_days = None
+    if due < now:
+        state = "overdue"
+        overdue_days = max((now.date() - due.date()).days, 0)
+    elif due.date() == now.date():
+        state = "today"
+    elif due.date() == now.date() + timedelta(days=1):
+        state = "tomorrow"
+    return {"due": due.isoformat(timespec="minutes"), "due_state": state, "overdue_days": overdue_days}
+
+
+def _due_dates(service_ids: list[Any]) -> dict[Any, datetime]:
+    """Обещанная дата заказа для каждой услуги — живым запросом в Агбис.
+
+    В кэше отчёта masters.works срока нет, а тащить его туда ради одного экрана
+    значило бы менять самый дорогой отчёт системы. Здесь десятки услуг по
+    первичному ключу — миллисекунды. Если Агбис не ответил, экран всё равно
+    показывается, просто без сроков.
+    """
+    ids = [int(i) for i in service_ids if i is not None]
+    if not ids:
+        return {}
+    try:
+        from app.services.firebird_service import _connect
+
+        con = _connect()
+        try:
+            cur = con.cursor()
+            out: dict[Any, datetime] = {}
+            for start in range(0, len(ids), 500):
+                chunk = ids[start:start + 500]
+                cur.execute(
+                    "SELECT dos.id, dor.date_out FROM doc_order_services dos "
+                    "JOIN docs_order dor ON dor.id = dos.doc_order_id "
+                    f"WHERE dos.id IN ({','.join('?' * len(chunk))})",
+                    chunk,
+                )
+                for sid, date_out in cur.fetchall():
+                    if isinstance(date_out, datetime) and date_out.year > 2000:
+                        out[sid] = date_out
+            return out
+        finally:
+            con.close()
+    except Exception:
+        logger.exception("Не удалось получить сроки заказов для «В работе»")
+        return {}
 
 
 def get_advance_cap(master: Master) -> dict[str, Any]:

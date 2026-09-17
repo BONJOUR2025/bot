@@ -74,6 +74,7 @@ class _FakeCursor:
                 "id": 107349754, "doc_order_id": 10752587, "status_id": 1, "current_work_place_id": None,
                 "current_sclad_id": 21020, "kredit": 400, "kfx": 1, "qty_kredit": 1, "barcode": BARCODE,
                 "name": "Прошивка", "doc_num": "37502-7", "order_status_id": 1, "order_current_sclad_id": 21020,
+                "folder_id": 327, "top_category": "01. Ремонт обуви",
             }
             self._rows = [tuple(values[c] for c in scan._SERVICE_COLUMNS)]
         elif "from work_places" in text:
@@ -416,3 +417,33 @@ def test_mode_endpoint_tells_the_page_whether_scans_are_written(client, monkeypa
     assert client.get("/api/masters/me/scan/mode").json() == {"dry_run": False}
     monkeypatch.setattr(scan, "write_enabled", lambda: False)
     assert client.get("/api/masters/me/scan/mode").json() == {"dry_run": True}
+
+
+# ── Заработок на выходе ────────────────────────────────────────────
+
+def _priced(folder_id, top, kredit=1000.0):
+    found = _found(status=3, scans=[_scan(1107)])
+    found["service"].update({"folder_id": folder_id, "top_category": top, "kredit": kredit})
+    return found
+
+
+def test_exit_earning_uses_the_same_rate_as_the_salary_report():
+    repair = scan.earning(_priced(327, "01. Ремонт обуви", 3790.0), MASTER)
+    assert repair == {"kredit": 3790.0, "rate": 0.20, "salary": 758.0, "reference_only": False}
+    cleaning = scan.earning(_priced(327, "02. Химчистка обуви", 4500.0), MASTER)
+    assert cleaning["rate"] == 0.23 and cleaning["salary"] == 1035.0
+
+
+def test_item_outside_salary_folders_earns_nothing():
+    assert scan.earning(_priced(999999, "1.0 Изделия"), MASTER) is None
+
+
+def test_confirmed_exit_reports_earning(monkeypatch):
+    monkeypatch.setattr(scan, "write_enabled", lambda: True)
+    found = _priced(327, "02. Химчистка обуви", 4500.0)
+    monkeypatch.setattr(scan, "lookup", lambda barcode: found)
+    db = _WriteDb(status=3, done_posts=[1107])
+    result = scan.confirm(MASTER, BARCODE, "out", connect=lambda: db, now=NOW)
+    assert result["written"] and result["earning"]["salary"] == 1035.0
+    entry = scan.confirm(MASTER, BARCODE, "in", connect=lambda: _WriteDb(), now=NOW)
+    assert entry["earning"] is None

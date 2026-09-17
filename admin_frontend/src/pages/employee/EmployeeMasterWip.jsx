@@ -4,7 +4,27 @@ import api from '../../api.js';
 import { masterErrorText, money, serviceTitle } from './masterFormat.js';
 
 /** Что на мастере висит — принятые и не сданные услуги
- *  (GET /api/masters/me/wip → master_bot_service.get_wip). */
+ *  (GET /api/masters/me/wip → master_bot_service.get_wip).
+ *
+ *  Сверху — горящие: обещанная клиенту дата уже прошла или наступает сегодня.
+ *  Срок — тот же DATE_OUT заказа, по которому считаются просрочки. */
+
+function hhmm(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+function dueBadge(it) {
+  if (it.due_state === 'overdue') {
+    return {
+      cls: 'badge--error',
+      label: it.overdue_days > 0 ? `Просрочен на ${it.overdue_days} дн` : `Просрочен с ${hhmm(it.due)}`,
+    };
+  }
+  if (it.due_state === 'today') return { cls: 'badge--warning', label: `Сегодня до ${hhmm(it.due)}` };
+  if (it.due_state === 'tomorrow') return { cls: 'badge--info', label: `Завтра до ${hhmm(it.due)}` };
+  return null;
+}
 export default function EmployeeMasterWip() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +48,8 @@ export default function EmployeeMasterWip() {
   }, [load]);
 
   const total = items.reduce((sum, it) => sum + (Number(it.kredit) || 0), 0);
+  const overdue = items.filter((it) => it.due_state === 'overdue').length;
+  const dueToday = items.filter((it) => it.due_state === 'today').length;
 
   return (
     <div className="emp-page">
@@ -53,21 +75,35 @@ export default function EmployeeMasterWip() {
 
       {!loading && !error && items.length > 0 && (
         <>
+          {(overdue > 0 || dueToday > 0) && (
+            <div className="emp-wip-alert" role="status">
+              {overdue > 0 && <b>Просрочено: {overdue}</b>}
+              {dueToday > 0 && <span>Сдать сегодня: {dueToday}</span>}
+            </div>
+          )}
           <p className="emp-page__empty">
-            {items.length} шт на {money(total)}. Сверху срочные, дальше — те, что ждут дольше всех.
+            {items.length} шт на {money(total)}. Сверху горящие по сроку и срочные, дальше — те, что ждут дольше всех.
           </p>
           <div className="emp-list">
             {items.map((it, idx) => {
-              let badge = null;
-              if (it.urgent) badge = { cls: 'badge--error', label: 'Срочно' };
-              else if (it.days != null) {
-                badge = { cls: it.days >= 7 ? 'badge--warning' : 'badge--info', label: `${it.days} дн` };
+              const due = dueBadge(it);
+              let age = null;
+              if (it.urgent) age = { cls: 'badge--error', label: 'Срочно' };
+              else if (it.days != null && !due) {
+                age = { cls: it.days >= 7 ? 'badge--warning' : 'badge--info', label: `${it.days} дн` };
               }
+              const burning = it.due_state === 'overdue' || it.due_state === 'today';
               return (
-                <div key={`${it.doc_num}-${idx}`} className="emp-payout-item">
+                <div
+                  key={`${it.doc_num}-${idx}`}
+                  className={`emp-payout-item${burning ? ` emp-wip-item--${it.due_state}` : ''}`}
+                >
                   <div className="emp-payout-item__top">
                     <span className="emp-payout-item__amount">{it.doc_num}</span>
-                    {badge && <span className={`badge ${badge.cls}`}>{badge.label}</span>}
+                    <span className="emp-wip-badges">
+                      {due && <span className={`badge ${due.cls}`}>{due.label}</span>}
+                      {age && <span className={`badge ${age.cls}`}>{age.label}</span>}
+                    </span>
                   </div>
                   <div className="emp-payout-item__details">
                     <span>{serviceTitle(it.name)}</span>

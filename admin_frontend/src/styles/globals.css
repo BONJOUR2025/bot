@@ -5140,6 +5140,27 @@ body.viewer3d-fs-active .app-card {
   border-left: 3px solid var(--color-success);
 }
 .emp-scan-go { width: 100%; min-height: 48px; margin-top: 0.9rem; }
+
+/* «В работе»: горящие сроки */
+.emp-wip-alert { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin-bottom: 0.8rem; padding: 0.7rem 0.9rem; border-radius: 10px; background: color-mix(in srgb, var(--color-danger) 12%, transparent); border-left: 3px solid var(--color-danger); color: var(--color-text); font-size: 0.9rem; }
+.emp-wip-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem; }
+.emp-wip-item--overdue { border-left: 3px solid var(--color-danger); }
+.emp-wip-item--today { border-left: 3px solid var(--color-warning, #d97706); }
+
+/* Режим «Подряд», заработок на выходе и журнал отметок */
+.emp-scan-streak { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; color: var(--color-text); cursor: pointer; min-height: 44px; }
+.emp-scan-streak input { width: 1.15rem; height: 1.15rem; accent-color: var(--color-primary); }
+.emp-scan-quick { display: flex; flex-direction: column; gap: 0.7rem; }
+.emp-scan-quick__go { min-height: 64px; font-size: 1.05rem; }
+.emp-scan-earned { margin-top: 0.9rem; padding: 0.9rem 1rem; border-radius: 12px; background: color-mix(in srgb, var(--color-success) 12%, transparent); }
+.emp-scan-earned__sum { font-size: 2rem; font-weight: 700; line-height: 1.1; color: var(--color-success); font-variant-numeric: tabular-nums; }
+.emp-scan-earned__meta { margin-top: 0.25rem; font-size: 0.85rem; color: var(--color-text-muted); }
+.emp-scan-log { margin-top: 1.2rem; display: flex; flex-direction: column; gap: 0.1rem; }
+.emp-scan-log__row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.6rem; align-items: baseline; padding: 0.5rem 0; border-bottom: 1px solid var(--color-border); font-size: 0.88rem; }
+.emp-scan-log__time { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.emp-scan-log__what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emp-scan-log__what small { margin-left: 0.4rem; color: var(--color-text-muted); }
+.emp-scan-log__sum { color: var(--color-success); font-weight: 600; font-variant-numeric: tabular-nums; }
 .emp-scan-confirm {
   margin-top: 0.9rem;
   padding: 0.8rem;

@@ -59,7 +59,7 @@ BARCODE_ERRORS = {
 _SERVICE_COLUMNS = (
     "id", "doc_order_id", "status_id", "current_work_place_id", "current_sclad_id",
     "kredit", "kfx", "qty_kredit", "barcode", "name", "doc_num",
-    "order_status_id", "order_current_sclad_id",
+    "order_status_id", "order_current_sclad_id", "folder_id", "top_category",
 )
 
 
@@ -110,11 +110,13 @@ def lookup(barcode: str, connect: Optional[Callable[[], Any]] = None) -> Optiona
             SELECT FIRST 2
                 dos.id, dos.doc_order_id, dos.status_id, dos.current_work_place_id, dos.current_sclad_id,
                 dos.kredit, dos.kfx, dos.qty_kredit, dos.barcode, t.name, d.doc_num,
-                dor.status_id, dor.current_sclad_id
+                dor.status_id, dor.current_sclad_id, t.folder_id, top.name
             FROM doc_order_services dos
                 JOIN docs_order dor ON dor.id = dos.doc_order_id
                 JOIN docs d ON d.doc_id = dor.doc_id
                 LEFT JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id
+                LEFT JOIN tree folder ON folder.folder_id = t.folder_id
+                LEFT JOIN tree top ON top.folder_id = folder.top_parent
             WHERE {column} = ?
             """,
             (code,),
@@ -418,6 +420,30 @@ def execute_writes(con, found: dict[str, Any], action: str, master_user_id: int,
             "service_status_id": new_status, "order_status_id": order_status}
 
 
+def earning(found: dict[str, Any], master) -> Optional[dict[str, Any]]:
+    """Сколько мастер заработает на выходе по этой услуге — по правилам отчёта.
+
+    Та же формула, что masters_service: цена услуги × ставка по верхней
+    категории (23% химчистка и реставрация, 20% остальное), и только для папок,
+    за которые зарплата вообще начисляется. None — услуга не оплачивается
+    сдельно (например, «Изделие»). У ученика сумма справочная: на руки идёт
+    стипендия.
+    """
+    from app.services.masters_service import SALARY_FOLDER_IDS, _salary_rate
+
+    service = found["service"]
+    if service.get("folder_id") not in SALARY_FOLDER_IDS:
+        return None
+    rate = _salary_rate(service.get("top_category"))
+    kredit = service.get("kredit") or 0.0
+    return {
+        "kredit": kredit,
+        "rate": rate,
+        "salary": round(kredit * rate, 2),
+        "reference_only": bool(getattr(master, "is_apprentice", False)),
+    }
+
+
 def _public_service(found: dict[str, Any]) -> dict[str, Any]:
     service, posts = found["service"], found["posts"]
     current = service.get("current_work_place_id")
@@ -500,6 +526,7 @@ def plan(master, barcode: str, action: str, now: Optional[datetime] = None) -> O
     return {
         "dry_run": True,
         **_summary(found, action, result),
+        "earning": earning(found, master) if action == "out" else None,
         "writes": plan_writes(found, action, master.agbis_user_id, now) if result["allowed"] else [],
     }
 
@@ -518,7 +545,10 @@ def confirm(master, barcode: str, action: str, connect: Optional[Callable[[], An
     if prepared is None:
         return None
     found, result = prepared
-    summary = {"dry_run": False, **_summary(found, action, result), "written": False, "writes": []}
+    summary = {
+        "dry_run": False, **_summary(found, action, result), "written": False, "writes": [],
+        "earning": earning(found, master) if action == "out" else None,
+    }
     if not result["allowed"]:
         return summary
     if connect is None:
