@@ -102,3 +102,11 @@ def test_login_options_list_only_masters_who_can_actually_log_in(tmp_path):
 
     assert [o["login"] for o in options] == ["login-a1"]
     assert options[0]["name"]
+
+
+def test_login_names_are_short():
+    assert acs.short_person_name("Корягин Константин Сергеевич") == "Корягин К."
+    assert acs.short_person_name("Мартиросян Арсен") == "Мартиросян А."
+    assert acs.short_person_name("Руслан") == "Руслан"
+    assert acs.short_person_name("  ") == ""
+

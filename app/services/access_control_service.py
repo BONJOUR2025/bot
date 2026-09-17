@@ -162,6 +162,20 @@ class ResolvedUser:
     is_master: bool = False
 
 
+def short_person_name(full_name: str) -> str:
+    """«Иванов Иван Иванович» → «Иванов И.». Одно слово остаётся как есть.
+
+    В выпадающем списке входа мастер ищет себя по фамилии, а полное ФИО с
+    отчеством на узком экране телефона обрезается.
+    """
+    parts = str(full_name or "").split()
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    return f"{parts[0]} {parts[1][0].upper()}."
+
+
 class AccessControlService:
     """Manage access control configuration stored in JSON."""
 
@@ -743,8 +757,8 @@ class AccessControlService:
             if resolved is None or not resolved.is_master:
                 continue
             employee = self.employee_repo.get_employee(str(resolved.employee_id or resolved.id))
-            name = ((employee.full_name or employee.name) if employee else "") or login
-            options.append({"login": login, "name": name.strip()})
+            full = ((employee.full_name or employee.name) if employee else "") or ""
+            options.append({"login": login, "name": short_person_name(full) or login})
         options.sort(key=lambda option: option["name"].lower())
         return options
 
