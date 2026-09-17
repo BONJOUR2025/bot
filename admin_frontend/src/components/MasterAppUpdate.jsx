@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import api from '../api.js';
-import { MASTER_APP_UPDATE_URL, isOlderVersion, masterAppVersion } from '../utils/masterApp.js';
+import { APP_INFO_URL, APP_KIND, MASTER_APP_UPDATE_URL, isOlderVersion, masterAppVersion } from '../utils/masterApp.js';
 
 /** Плашка «Доступна новая версия» внутри приложения «BONJOUR Мастер».
  *
@@ -18,7 +18,7 @@ export default function MasterAppUpdate() {
     if (!installed) return undefined;
     let alive = true;
     api
-      .get('/master-app/info')
+      .get(APP_INFO_URL)
       .then((res) => {
         if (alive && res.data?.available) setLatest(res.data.version_name);
       })
@@ -34,7 +34,7 @@ export default function MasterAppUpdate() {
     <div className="emp-app-update" role="status">
       <div className="emp-app-update__text">
         <b>Доступна новая версия приложения {latest}</b>
-        <span>У вас {installed}. В новой — сканер бирок камерой.</span>
+        <span>У вас {installed}. {APP_KIND === 'salon' ? 'Обновление ставится поверх, вход сохранится.' : 'В новой — сканер бирок камерой.'}</span>
       </div>
       <a className="btn btn--primary emp-app-update__btn" href={MASTER_APP_UPDATE_URL}>
         <Download size={18} />

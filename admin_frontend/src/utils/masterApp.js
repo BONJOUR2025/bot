@@ -1,23 +1,54 @@
-/** Кабинет открыт внутри приложения «BONJOUR Мастер» (Android WebView).
+/** Кабинет открыт внутри нашего Android-приложения (WebView).
  *
- *  Метку в User-Agent ставит само приложение (device/master_app, MainActivity).
- *  Во WebView не работают push-уведомления браузера и скачивание файлов, поэтому
- *  такие элементы прячем — кнопка, которая молча ничего не делает, хуже её
- *  отсутствия. */
-export const IN_MASTER_APP =
-  typeof navigator !== 'undefined' && /BonjourMasterApp\//.test(navigator.userAgent || '');
+ *  Приложений два — «BONJOUR Мастер» (мастера цеха) и «BONJOUR Салон»
+ *  (администраторы точек). Каждое ставит свою метку в User-Agent
+ *  (device/master_app, device/salon_app → MainActivity). Во WebView не работают
+ *  push-уведомления браузера и скачивание файлов, поэтому такие элементы
+ *  прячем — кнопка, которая молча ничего не делает, хуже её отсутствия. */
 
-/** Страница установки по http. Приложение (с версии 1.0.0) выпускает во внешний
- *  браузер всё, что не https://app.bonjour.pw, а сервер отвечает на http
- *  переадресацией на https — так мастер попадает в Chrome, где скачивание APK
- *  работает, даже в версии без собственного загрузчика. */
-export const MASTER_APP_UPDATE_URL = 'http://app.bonjour.pw/api/master-app/';
+const APPS = [
+  { key: 'master', mark: 'BonjourMasterApp', prefix: '/api/master-app', logins: '/master-app/logins' },
+  { key: 'salon', mark: 'BonjourSalonApp', prefix: '/api/salon-app', logins: '/salon-app/logins' },
+];
 
-/** Версия установленного приложения из User-Agent («BonjourMasterApp/1.0.0»). */
-export function masterAppVersion() {
+function detect() {
   if (typeof navigator === 'undefined') return null;
-  const match = /BonjourMasterApp\/([\d.]+)/.exec(navigator.userAgent || '');
-  return match ? match[1] : null;
+  const ua = navigator.userAgent || '';
+  for (const app of APPS) {
+    const match = new RegExp(`${app.mark}/([\\d.]+)`).exec(ua);
+    if (match) return { ...app, version: match[1] };
+  }
+  return null;
+}
+
+const CURRENT = detect();
+
+/** Кабинет открыт в приложении (любом из наших). */
+export const IN_APP = CURRENT !== null;
+
+/** Оставлено прежним именем: на него ссылаются экраны мастера. */
+export const IN_MASTER_APP = IN_APP;
+
+/** Какое именно приложение: 'master' | 'salon' | null. */
+export const APP_KIND = CURRENT?.key ?? null;
+
+/** Адрес списка логинов для входа: у мастеров и администраторов он разный. */
+export const APP_LOGINS_URL = CURRENT?.logins ?? null;
+
+/** Страница установки по http. Приложение (с первой версии) выпускает во внешний
+ *  браузер всё, что не https://app.bonjour.pw, а сервер отвечает на http
+ *  переадресацией на https — так человек попадает в Chrome, где скачивание APK
+ *  работает, даже в версии без собственного загрузчика. */
+export const MASTER_APP_UPDATE_URL = CURRENT
+  ? `http://app.bonjour.pw${CURRENT.prefix}/`
+  : 'http://app.bonjour.pw/api/master-app/';
+
+/** Адрес сведений о свежей версии — для плашки обновления. */
+export const APP_INFO_URL = CURRENT ? `${CURRENT.prefix.replace('/api', '')}/info` : '/master-app/info';
+
+/** Версия установленного приложения из User-Agent («BonjourSalonApp/1.0.0»). */
+export function masterAppVersion() {
+  return CURRENT?.version ?? null;
 }
 
 /** «1.0.0» старше «1.1.0»? Сравнение по числам, а не строкам: «1.10» новее «1.9». */

@@ -1,0 +1,86 @@
+name: Salon app APK
+
+# Приложение «BONJOUR Салон» для телефонов администраторов точек (device/salon_app).
+# Локально собирать нечем: на рабочей машине нет ни JDK, ни Android SDK —
+# так же, как у агента MDM (mdm-agent.yml).
+
+on:
+  push:
+    branches: [claude/init-wmebv3]
+    paths:
+      - 'device/salon_app/**'
+      - '.github/workflows/salon-app.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Доставить Android SDK 34
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+
+      # Ключ — тот же, что у агента MDM (см. device/salon_app/README.md, почему
+      # не отдельный). Менять его нельзя: обновление с другой подписью поверх
+      # установленного приложения не встанет.
+      - name: Восстановить ключ подписи
+        env:
+          KEYSTORE_B64: ${{ secrets.MDM_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Секрет MDM_KEYSTORE_B64 не задан — подписать нечем"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/signing.p12"
+
+      - name: Собрать APK
+        working-directory: device/salon_app
+        env:
+          SIGNING_KEYSTORE_PATH: ${{ runner.temp }}/signing.p12
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.MDM_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: mdm
+        run: gradle --no-daemon assembleRelease
+
+      - name: Проверить подпись
+        working-directory: device/salon_app
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -n1)
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bonjour-salon-app
+          path: device/salon_app/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      # Кладём APK сразу на сервер — администраторы скачивают его со страницы
+      # https://app.bonjour.pw/api/salon-app/. Артефакт выше остаётся на
+      # случай, если сервер недоступен.
+      - name: Отправить APK на сервер
+        working-directory: device/salon_app
+        env:
+          UPLOAD_TOKEN: ${{ secrets.MDM_UPLOAD_TOKEN }}
+        run: |
+          if [ -z "$UPLOAD_TOKEN" ]; then
+            echo "::warning::Секрет MDM_UPLOAD_TOKEN не задан — APK придётся загрузить на сервер вручную"
+            exit 0
+          fi
+          curl -sS --fail-with-body --retry 3 --retry-delay 5 \
+            -X POST \
+            -H "X-Upload-Token: $UPLOAD_TOKEN" \
+            -F "file=@app/build/outputs/apk/release/app-release.apk" \
+            https://app.bonjour.pw/api/salon-app/upload

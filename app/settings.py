@@ -200,6 +200,7 @@ class Settings(BaseSettings):
     # корне рабочей директории и по той же причине: деплой зеркалит app/
     # через robocopy /MIR и снёс бы файл. Кладёт его сборка (master-app.yml).
     master_app_apk_file: str = Field("master_app.apk", validation_alias="MASTER_APP_APK_FILE")
+    salon_app_apk_file: str = Field("salon_app.apk", validation_alias="SALON_APP_APK_FILE")
 
     # Каталог с APK, которые раздаются на телефоны. Там же, в корне рабочей
     # директории, и по той же причине: деплой зеркалит только app/ и

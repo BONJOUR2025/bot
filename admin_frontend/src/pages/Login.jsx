@@ -5,7 +5,7 @@ import { ArrowUpRight } from 'lucide-react';
 import api from '../api.js';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
-import { IN_MASTER_APP } from '../utils/masterApp.js';
+import { APP_LOGINS_URL, IN_APP } from '../utils/masterApp.js';
 
 // Пункт списка логинов, после выбора которого вместо списка появляется поле.
 const OTHER_LOGIN = '__other__';
@@ -31,16 +31,17 @@ export default function Login() {
   const [form, setForm] = useState({ login: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  // В приложении мастера логин выбирается из списка (GET /master-app/logins):
-  // мастер ищет себя по фамилии и не ошибается в написании логина. Если
-  // список не пришёл или пуст — обычное поле, войти должно быть можно всегда.
+  // В приложении логин выбирается из списка (GET /master-app/logins для
+  // мастеров, /salon-app/logins для администраторов точек): человек ищет себя
+  // по фамилии и не ошибается в написании логина. Если список не пришёл или
+  // пуст — обычное поле, войти должно быть можно всегда.
   const [masterLogins, setMasterLogins] = useState(null);
-  const [manualLogin, setManualLogin] = useState(!IN_MASTER_APP);
+  const [manualLogin, setManualLogin] = useState(!IN_APP);
 
   useEffect(() => {
-    if (!IN_MASTER_APP) return;
+    if (!IN_APP || !APP_LOGINS_URL) return;
     api
-      .get('/master-app/logins')
+      .get(APP_LOGINS_URL)
       .then((res) => {
         const list = Array.isArray(res.data) ? res.data : [];
         setMasterLogins(list);

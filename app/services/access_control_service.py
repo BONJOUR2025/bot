@@ -762,6 +762,33 @@ class AccessControlService:
         options.sort(key=lambda option: option["name"].lower())
         return options
 
+    def point_login_options(self) -> list[dict[str, str]]:
+        """Логины администраторов точек — для входа в приложение «BONJOUR Салон».
+
+        Те же правила, что у мастеров: только аккаунты с паролем, привязанные к
+        сотруднику, но отбор другой — по закреплению за действующей точкой
+        (salons.json), а не по должности: приложение показывает выручку точки,
+        и право на неё даёт именно закрепление.
+        """
+        from app.services.salon_self_service import resolve_point
+
+        self._reload()
+        options: list[dict[str, str]] = []
+        for record in self._data.get("users", []):
+            login = record.get("login")
+            if not login or not record.get("password_hash"):
+                continue
+            resolved = self.resolve_user(str(record.get("id")))
+            if resolved is None or resolved.is_master or not resolved.employee_id:
+                continue
+            if resolve_point(resolved.employee_id) is None:
+                continue
+            employee = self.employee_repo.get_employee(str(resolved.employee_id))
+            full = ((employee.full_name or employee.name) if employee else "") or ""
+            options.append({"login": login, "name": short_person_name(full) or login})
+        options.sort(key=lambda option: option["name"].lower())
+        return options
+
     # ------------------------------------------------------------------
     # resolution helpers
     # ------------------------------------------------------------------

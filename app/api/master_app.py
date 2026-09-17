@@ -21,7 +21,7 @@ _PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BONJOUR Мастер</title>
+<title>%TITLE%</title>
 <style>
 :root { --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0; --btn:#0a0a0a; --btn-text:#f8fafc; }
 @media (prefers-color-scheme: dark) {
@@ -56,8 +56,8 @@ li + li { margin-top:10px; }
 <header class="head">
 <div class="logo">B</div>
 <div>
-<h1>BONJOUR Мастер</h1>
-<p class="lead">Заработок, работы в процессе и запрос аванса — в телефоне.</p>
+<h1>%TITLE%</h1>
+<p class="lead">%LEAD%</p>
 </div>
 </header>
 %BODY%
@@ -69,12 +69,7 @@ _AVAILABLE = """<div class="grid">
 <section>
 <a class="btn" href="/api/master-app/%APK%">Скачать приложение</a>
 <p class="meta">%META%</p>
-<ol class="card">
-<li>Нажмите «Скачать приложение» или наведите камеру телефона на QR-код и откройте скачанный файл.</li>
-<li>Если телефон спросит — разрешите установку из этого источника и вернитесь назад.</li>
-<li>Если Play Защита предупредит о неизвестном приложении — нажмите «Подробнее» → «Всё равно установить».</li>
-<li>Откройте «BONJOUR Мастер» и войдите по логину и паролю, которые выдал руководитель.</li>
-</ol>
+<ol class="card">%STEPS%</ol>
 </section>
 %QR%
 </div>"""
@@ -105,27 +100,54 @@ def _qr_svg(url: str) -> Optional[str]:
     )
 
 
+MASTER_STEPS = [
+    "Нажмите «Скачать приложение» или наведите камеру телефона на QR-код и откройте скачанный файл.",
+    "Если телефон спросит — разрешите установку из этого источника и вернитесь назад.",
+    "Если Play Защита предупредит о неизвестном приложении — нажмите «Подробнее» → «Всё равно установить».",
+    "Откройте «BONJOUR Мастер» и войдите по логину и паролю, которые выдал руководитель.",
+]
+
+
+def install_page_html(app, title: str, lead: str, steps: list[str]) -> str:
+    """Страница установки приложения — одна на «Мастера» и «Салон».
+
+    Отличаются только название, подпись и последний шаг, поэтому вёрстка
+    общая: расходиться двум почти одинаковым страницам незачем.
+    """
+    data = app.info()
+    if not data["available"]:
+        body = '<div class="card off">Приложение ещё не загружено на сервер. Попробуйте позже.</div>'
+    else:
+        meta = "Только для Android"
+        if data.get("version_name"):
+            size_mb = data["size"] / (1024 * 1024)
+            meta = f"Версия {data['version_name']} · {size_mb:.1f} МБ · только для Android"
+        svg = _qr_svg(app.apk_url())
+        body = (
+            _AVAILABLE.replace("%APK%", app.public_apk_name)
+            .replace("%META%", html.escape(meta))
+            .replace("%STEPS%", "".join(f"<li>{html.escape(step)}</li>" for step in steps))
+            .replace("%QR%", _QR.replace("%SVG%", svg) if svg else "")
+        )
+    return (_PAGE.replace("%BODY%", body)
+            .replace("%TITLE%", html.escape(title))
+            .replace("%LEAD%", html.escape(lead)))
+
+
 def create_master_app_public_router() -> APIRouter:
     router = APIRouter(prefix="/master-app", tags=["Master app"])
 
     @router.get("/", response_class=HTMLResponse, include_in_schema=False)
     async def install_page() -> HTMLResponse:
         """Страница, на которую ведёт ссылка, отправленная мастеру."""
-        data = master_app_service.info()
-        if not data["available"]:
-            body = '<div class="card off">Приложение ещё не загружено на сервер. Попробуйте позже.</div>'
-        else:
-            meta = "Только для Android"
-            if data.get("version_name"):
-                size_mb = data["size"] / (1024 * 1024)
-                meta = f"Версия {data['version_name']} · {size_mb:.1f} МБ · только для Android"
-            svg = _qr_svg(master_app_service.apk_url())
-            body = (
-                _AVAILABLE.replace("%APK%", master_app_service.PUBLIC_APK_NAME)
-                .replace("%META%", html.escape(meta))
-                .replace("%QR%", _QR.replace("%SVG%", svg) if svg else "")
-            )
-        return HTMLResponse(_PAGE.replace("%BODY%", body))
+        from app.services.device_app_service import MASTER_APP
+
+        return HTMLResponse(install_page_html(
+            MASTER_APP,
+            title="BONJOUR Мастер",
+            lead="Заработок, работы в процессе и запрос аванса — в телефоне.",
+            steps=MASTER_STEPS,
+        ))
 
     @router.get("/info")
     async def get_info() -> dict:

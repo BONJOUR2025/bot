@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Те же тона, что у оболочки iOS и заставки кабинета (capacitor.config.json). -->
+    <color name="bonjour_background">#F8FAFC</color>
+    <color name="bonjour_text">#0F172A</color>
+    <color name="bonjour_muted">#64748B</color>
+    <color name="bonjour_accent">#0A0A0A</color>
+    <!-- Значок салона — фиолетовый, чтобы не путать с чёрным значком «Мастера»
+         на телефоне, где стоят оба приложения. -->
+    <color name="ic_launcher_background">#6B3FE0</color>
+</resources>

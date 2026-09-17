@@ -398,8 +398,10 @@ def create_app() -> FastAPI:
     # Раздача приложения «BONJOUR Мастер» — без авторизации, как APK агента MDM:
     # мастер качает его по ссылке, когда у него ещё ничего не установлено.
     from .master_app import create_master_app_public_router
+    from .salon_app import create_salon_app_public_router
 
     app.include_router(create_master_app_public_router(), prefix="/api")
+    app.include_router(create_salon_app_public_router(), prefix="/api")
 
     # Masters / Agbis services dashboard
     from .masters import create_masters_router
