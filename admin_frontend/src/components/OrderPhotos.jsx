@@ -128,7 +128,10 @@ function anchorOffset(p, o0, s0, s1) {
   return p - ((p - o0) * s1) / s0;
 }
 
-function PhotoViewer({ photos, index, onIndex, onClose }) {
+/** Полноэкранный просмотр снимков. `pathFor` — откуда брать полный размер:
+ *  по умолчанию адрес карточки клиента (право payroll), кабинет мастера
+ *  передаёт свой (/masters/me/photos/…), который пускает только к своим работам. */
+export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPhotoPath }) {
   const { isMobile } = useViewport();
   const photo = photos[index];
 
@@ -147,7 +150,7 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
       if (urlsRef.current[p.id]) return;
       // Через axios, а не через <img>: только так виден текст ошибки от
       // сервера — «агент недоступен» вместо молчаливой битой картинки.
-      api.get(fullPhotoPath(p), { responseType: 'blob' })
+      api.get(pathFor(p), { responseType: 'blob' })
         .then((r) => {
           if (cancelled) return;
           setUrls((m) => (m[p.id] ? m : { ...m, [p.id]: URL.createObjectURL(r.data) }));
@@ -163,7 +166,7 @@ function PhotoViewer({ photos, index, onIndex, onClose }) {
         });
     });
     return () => { cancelled = true; };
-  }, [index, photos]);
+  }, [index, photos, pathFor]);
 
   // Блобы освобождаются при закрытии, а не при смене кадра: во время листания
   // они нужны соседям, и пересоздавать их на каждый шаг — лишние запросы.

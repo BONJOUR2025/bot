@@ -332,6 +332,7 @@ AUTH_ONLY_REVIEWED = {
     # Кабинет мастера: только свои данные.
     "GET /api/masters/me/earnings",
     "GET /api/masters/me/wip",
+    "GET /api/masters/me/photos/{photo_id}/full",
     "GET /api/masters/me/advance-cap",
     "GET /api/masters/me/scan/lookup",
     "GET /api/masters/me/scan/mode",

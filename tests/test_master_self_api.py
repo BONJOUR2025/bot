@@ -116,3 +116,32 @@ def test_wip_and_advance_cap(calls):
     cap = client.get("/api/masters/me/advance-cap")
     assert cap.status_code == 200
     assert cap.json()["available"] == 315.0
+
+
+def test_photo_of_someone_elses_order_is_not_served(calls, monkeypatch):
+    checked = []
+
+    def can_see(uid, photo_id, md5):
+        checked.append((uid, photo_id, md5))
+        return False
+
+    monkeypatch.setattr(mbs, "master_can_see_photo", can_see)
+    resp = _client(_user()).get("/api/masters/me/photos/555/full", params={"md5": "ABC"})
+    assert resp.status_code == 404
+    assert checked == [(110133, 555, "ABC")]   # id мастера — из сессии
+
+
+def test_photo_of_own_order_comes_from_storage(calls, monkeypatch):
+    from app.services import agbis_photos, firebird_service
+
+    monkeypatch.setattr(mbs, "master_can_see_photo", lambda uid, pid, md5: True)
+
+    class _Fb:
+        def get_order_photo_full_from_db(self, photo_id):
+            return None
+
+    monkeypatch.setattr(firebird_service, "get_firebird_service", lambda: _Fb())
+    monkeypatch.setattr(agbis_photos, "get_photo", lambda md5: b"\xff\xd8jpeg")
+    resp = _client(_user()).get("/api/masters/me/photos/555/full", params={"md5": "ABC"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/jpeg" and resp.content == b"\xff\xd8jpeg"

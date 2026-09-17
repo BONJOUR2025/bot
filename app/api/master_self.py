@@ -69,6 +69,37 @@ def create_master_self_router() -> APIRouter:
 
         return {"items": await _run(get_wip, _master(current))}
 
+    @router.get("/photos/{photo_id}/full")
+    async def get_my_order_photo(
+        photo_id: int,
+        md5: str = Query(...),
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        """Фото изделия в полном размере — только из заказа, где у мастера есть отметка.
+
+        Как /clients/photos/{id}/full (там же — почему проксируем, а не отдаём
+        ссылку на хранилище), но без права payroll и с проверкой, что изделие —
+        из работ этого мастера.
+        """
+        from fastapi import Response
+
+        from app.services import agbis_photos
+        from app.services.firebird_service import get_firebird_service
+        from app.services.master_bot_service import master_can_see_photo
+
+        master = _master(current)
+        if not await _run(master_can_see_photo, master.agbis_user_id, photo_id, md5):
+            raise HTTPException(status_code=404, detail="Снимок не найден")
+        try:
+            data = await _run(get_firebird_service().get_order_photo_full_from_db, photo_id)
+            if not data:
+                data = await _run(agbis_photos.get_photo, md5)
+        except agbis_photos.PhotoStorageError as exc:
+            # Хранилище — компьютер в салоне; он может быть выключен.
+            raise HTTPException(status_code=502, detail=str(exc))
+        return Response(content=data, media_type="image/jpeg",
+                        headers={"Cache-Control": "private, max-age=604800"})
+
     @router.get("/advance-cap")
     async def get_my_advance_cap(current: ResolvedUser = Depends(get_current_user)) -> dict:
         from app.services.master_bot_service import get_advance_cap

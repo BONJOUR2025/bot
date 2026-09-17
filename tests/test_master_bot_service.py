@@ -268,12 +268,14 @@ def test_wip_puts_burning_orders_first(monkeypatch):
     monkeypatch.setattr(mbs, "_load_services", lambda period: services if period == mbs.PERIOD_MONTH else [])
     far = _dt.now().replace(year=_dt.now().year + 1)
     today_evening = _dt.now().replace(hour=23, minute=59)
-    monkeypatch.setattr(mbs, "_due_dates", lambda ids: {
-        1: far, 2: far, 3: today_evening, 4: _dt(2020, 1, 1, 12, 0),
+    monkeypatch.setattr(mbs, "_order_details", lambda ids: {
+        1: {"due": far}, 2: {"due": far}, 3: {"due": today_evening, "photos": [{"id": 9}]},
+        4: {"due": _dt(2020, 1, 1, 12, 0)},
     })
     rows = mbs.get_wip(master)
     assert [r["doc_num"] for r in rows] == ["late", "today", "urgent", "old"]
     assert rows[0]["due_state"] == "overdue" and rows[0]["overdue_days"] > 0
+    assert rows[1]["photos"] == [{"id": 9}] and rows[0]["photos"] == []
 
 
 def test_wip_survives_agbis_not_answering_about_deadlines(monkeypatch):

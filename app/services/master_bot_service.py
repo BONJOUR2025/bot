@@ -295,7 +295,7 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
     today = date.today()
     wip = []
     open_services = [svc for svc in services if str(svc.get("status")) == "В работе"]
-    due_by_id = _due_dates([svc.get("service_id") for svc in open_services])
+    details = _order_details([svc.get("service_id") for svc in open_services])
     for svc in open_services:
         days = None
         raw_in = svc.get("in_time")
@@ -304,7 +304,7 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
                 days = (today - date.fromisoformat(str(raw_in)[:10])).days
             except ValueError:
                 days = None
-        due = due_by_id.get(svc.get("service_id"))
+        extra = details.get(svc.get("service_id")) or {}
         wip.append({
             "doc_num": svc.get("doc_num"),
             "name": svc.get("name"),
@@ -313,7 +313,8 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
             "in_time": raw_in,
             "days": days,
             "urgent": str(svc.get("code") or "").startswith("144."),
-            **deadline(due, datetime.now()),
+            **deadline(extra.get("due"), datetime.now()),
+            "photos": extra.get("photos") or [],
         })
     wip.sort(key=_wip_order)
     return wip
@@ -353,14 +354,31 @@ def deadline(due: Optional[datetime], now: datetime) -> dict[str, Any]:
     return {"due": due.isoformat(timespec="minutes"), "due_state": state, "overdue_days": overdue_days}
 
 
-def _due_dates(service_ids: list[Any]) -> dict[Any, datetime]:
-    """Обещанная дата заказа для каждой услуги — живым запросом в Агбис.
+# Сколько снимков изделия отдавать в «В работе». Миниатюра (~3 КБ) едет прямо
+# в ответе только у первого, главного: в списке видна она одна, а остальные
+# просмотрщик всё равно грузит в полном размере. С миниатюрами у всех шести
+# экран Корягина весил 259 КБ.
+WIP_PHOTOS_PER_ITEM = 6
 
-    В кэше отчёта masters.works срока нет, а тащить его туда ради одного экрана
-    значило бы менять самый дорогой отчёт системы. Здесь десятки услуг по
-    первичному ключу — миллисекунды. Если Агбис не ответил, экран всё равно
-    показывается, просто без сроков.
+
+def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
+    """Срок заказа и фото изделия для каждой услуги — живым запросом в Агбис.
+
+    Срок — DOCS_ORDER.DATE_OUT. В кэше отчёта masters.works его нет, а тащить
+    туда ради одного экрана значило бы менять самый дорогой отчёт системы.
+
+    Фото в Агбисе всегда висит на изделии («Ботильоны»), а не на услуге
+    («Набойки»): услуга ссылается на своё изделие через PARENT_DOS_ID. Строка
+    без родителя сама и есть изделие. Миниатюра (DOC_ORDER_SERV_PHOTOS.SMALL)
+    приходит data URI в том же ответе — отдельный запрос на каждую картинку
+    это параллельные подключения к Firebird, которые однажды уже уронили
+    сервер. Главное фото — первым.
+
+    Всё по первичным ключам и индексам — миллисекунды. Если Агбис не ответил,
+    экран всё равно показывается, просто без сроков и фото.
     """
+    import base64
+
     ids = [int(i) for i in service_ids if i is not None]
     if not ids:
         return {}
@@ -370,24 +388,83 @@ def _due_dates(service_ids: list[Any]) -> dict[Any, datetime]:
         con = _connect()
         try:
             cur = con.cursor()
-            out: dict[Any, datetime] = {}
+            out: dict[Any, dict[str, Any]] = {}
+            item_of: dict[int, int] = {}
             for start in range(0, len(ids), 500):
                 chunk = ids[start:start + 500]
                 cur.execute(
-                    "SELECT dos.id, dor.date_out FROM doc_order_services dos "
+                    "SELECT dos.id, dos.parent_dos_id, dor.date_out FROM doc_order_services dos "
                     "JOIN docs_order dor ON dor.id = dos.doc_order_id "
                     f"WHERE dos.id IN ({','.join('?' * len(chunk))})",
                     chunk,
                 )
-                for sid, date_out in cur.fetchall():
-                    if isinstance(date_out, datetime) and date_out.year > 2000:
-                        out[sid] = date_out
+                for sid, parent_id, date_out in cur.fetchall():
+                    due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
+                    out[sid] = {"due": due, "photos": []}
+                    item_of[sid] = parent_id or sid
+
+            photos_of_item: dict[int, list[dict[str, Any]]] = {}
+            items = sorted(set(item_of.values()))
+            for start in range(0, len(items), 500):
+                chunk = items[start:start + 500]
+                cur.execute(
+                    "SELECT p.dos_id, p.id, p.md5_checksum, p.small FROM doc_order_serv_photos p "
+                    f"WHERE p.dos_id IN ({','.join('?' * len(chunk))}) "
+                    "ORDER BY p.dos_id, p.is_main_photo DESC, p.id",
+                    chunk,
+                )
+                for item_id, photo_id, md5, small in cur.fetchall():
+                    bucket = photos_of_item.setdefault(item_id, [])
+                    if len(bucket) >= WIP_PHOTOS_PER_ITEM:
+                        continue
+                    if isinstance(md5, bytes):
+                        md5 = md5.decode("ascii", "replace")
+                    photo = {"id": photo_id, "md5": (md5 or "").strip(), "thumb": None}
+                    if not bucket:
+                        raw = small.read() if hasattr(small, "read") else small
+                        if raw:
+                            mime = "image/png" if raw[:4] == b"\x89PNG" else "image/jpeg"
+                            photo["thumb"] = f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+                    bucket.append(photo)
+            for sid, item_id in item_of.items():
+                out[sid]["photos"] = photos_of_item.get(item_id, [])
             return out
         finally:
             con.close()
     except Exception:
-        logger.exception("Не удалось получить сроки заказов для «В работе»")
+        logger.exception("Не удалось получить сроки и фото заказов для «В работе»")
         return {}
+
+
+def master_can_see_photo(master_user_id: int, photo_id: int, md5: str) -> bool:
+    """Снимок существует с этим хешем и снят с изделия, по услуге которого у
+    мастера есть отметка. Чужие заказы мастеру не открываются."""
+    from app.services.firebird_service import _connect
+
+    con = _connect()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            # Два EXISTS вместо одного с OR: так каждый идёт по своему индексу.
+            "SELECT p.md5_checksum FROM doc_order_serv_photos p "
+            "WHERE p.id = ? AND (EXISTS ("
+            "  SELECT 1 FROM doc_order_services dos "
+            "    JOIN user_session_actions usa ON usa.doc_order_services_id = dos.id "
+            "    JOIN user_session us ON us.id = usa.user_session_id "
+            "  WHERE dos.parent_dos_id = p.dos_id AND us.user_id = ?"
+            ") OR EXISTS ("
+            "  SELECT 1 FROM user_session_actions usa "
+            "    JOIN user_session us ON us.id = usa.user_session_id "
+            "  WHERE usa.doc_order_services_id = p.dos_id AND us.user_id = ?))",
+            (photo_id, master_user_id, master_user_id),
+        )
+        row = cur.fetchone()
+    finally:
+        con.close()
+    stored = row[0] if row else None
+    if isinstance(stored, bytes):
+        stored = stored.decode("ascii", "replace")
+    return bool(stored) and stored.strip().upper() == (md5 or "").strip().upper()
 
 
 def get_advance_cap(master: Master) -> dict[str, Any]:
