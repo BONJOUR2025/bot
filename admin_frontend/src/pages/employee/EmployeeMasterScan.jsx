@@ -54,6 +54,9 @@ export default function EmployeeMasterScan() {
   const [stage, setStage] = useState('idle'); // idle | looking | found | confirm | saving | done
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  // Режим (пишем ли в Агбис) узнаём при открытии: плашка «пробный режим» не
+  // должна висеть до первой бирки, когда запись уже включена.
+  const [dryRun, setDryRun] = useState(null);
   const inputRef = useRef(null);
   const canScan = canScanWithCamera();
 
@@ -68,12 +71,20 @@ export default function EmployeeMasterScan() {
     try {
       const res = await api.get('/masters/me/scan/lookup', { params: { barcode } });
       setInfo(res.data);
+      setDryRun(res.data.dry_run);
       setAction(res.data.suggested_action || 'in');
       setStage('found');
     } catch (err) {
       setError(errorText(err));
       setStage('idle');
     }
+  }, []);
+
+  useEffect(() => {
+    api
+      .get('/masters/me/scan/mode')
+      .then((res) => setDryRun(res.data.dry_run))
+      .catch(() => setDryRun(null));
   }, []);
 
   // Результат нативного сканера приходит событием из приложения (MainActivity).
@@ -127,7 +138,7 @@ export default function EmployeeMasterScan() {
         <h2 className="emp-page__title">Вход и выход</h2>
       </div>
 
-      {info?.dry_run !== false && (
+      {dryRun === true && (
         <div className="emp-scan-banner" role="note">
           <b>Пробный режим.</b> В Агбис ничего не записывается — после подтверждения вы увидите, что записалось бы.
         </div>

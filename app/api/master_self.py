@@ -90,6 +90,14 @@ def create_master_self_router() -> APIRouter:
 
         return HTTPException(status_code=400, detail=BARCODE_ERRORS.get(str(exc), "Не удалось прочитать бирку."))
 
+    @router.get("/scan/mode")
+    async def scan_mode(current: ResolvedUser = Depends(get_current_user)) -> dict:
+        """Пишет ли скан в Агбис — чтобы страница знала режим ещё до первой бирки."""
+        from app.services import master_scan_service as scan
+
+        _master(current)
+        return {"dry_run": not scan.write_enabled()}
+
     @router.get("/scan/lookup")
     async def scan_lookup(
         barcode: str = Query(...),

@@ -409,3 +409,10 @@ def test_confirm_endpoint_with_write_flag_writes(client, monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["dry_run"] is False and body["written"] and body["ids"] == {"action_id": 1}
+
+
+def test_mode_endpoint_tells_the_page_whether_scans_are_written(client, monkeypatch):
+    monkeypatch.setattr(scan, "write_enabled", lambda: True)
+    assert client.get("/api/masters/me/scan/mode").json() == {"dry_run": False}
+    monkeypatch.setattr(scan, "write_enabled", lambda: False)
+    assert client.get("/api/masters/me/scan/mode").json() == {"dry_run": True}
