@@ -5034,6 +5034,23 @@ body.viewer3d-fs-active .app-card {
   background-position: right 0.9rem center;
 }
 
+/* ── Обновление приложения «BONJOUR Мастер» ────────────────────────── */
+.emp-app-update {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-text);
+}
+.emp-app-update__text { display: flex; flex-direction: column; gap: 0.15rem; flex: 1 1 14rem; font-size: 0.9rem; line-height: 1.4; }
+.emp-app-update__text span { color: var(--color-text-muted); font-size: 0.82rem; }
+.emp-app-update__btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 44px; flex: 1 1 8rem; text-decoration: none; }
+
 /* ── Вход и выход по бирке (пробный режим) ─────────────────────────── */
 .emp-scan-banner {
   margin-bottom: 1rem;

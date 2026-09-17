@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import MasterAppUpdate from '../components/MasterAppUpdate.jsx';
 
 // «Отгулов» и «Связи» в меню нет ни у кого — так решил руководитель. Страницы
 // (/employee/leave-requests, /employee/feedback) остались и открываются по
@@ -118,6 +119,7 @@ export default function EmployeeLayout() {
           </aside>
         )}
         <main className="emp-content">
+          <MasterAppUpdate />
           <Outlet />
         </main>
       </div>
