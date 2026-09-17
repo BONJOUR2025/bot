@@ -29,6 +29,8 @@ TOKEN_TTL_SECONDS = 15 * 60
 # Напоминание за час: смена начинается в 10:00, а доехать надо заранее.
 ALARM_BEFORE_MINUTES = 60
 DEFAULT_HOURS = "10:00-22:00"
+MONTHS_RU = ["январь", "февраль", "март", "апрель", "май", "июнь",
+             "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"]
 
 
 class BadToken(ValueError):
@@ -125,6 +127,7 @@ def build_ics(shifts: list[Shift], employee_name: str, year: int, month: int) ->
     а обновляет события.
     """
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    month_ru = MONTHS_RU[month - 1] if 1 <= month <= 12 else str(month)
     slug = hashlib.sha1(employee_name.encode("utf-8")).hexdigest()[:10]
     lines = [
         "BEGIN:VCALENDAR",
@@ -132,7 +135,7 @@ def build_ics(shifts: list[Shift], employee_name: str, year: int, month: int) ->
         "PRODID:-//BONJOUR//Смены//RU",
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
-        f"X-WR-CALNAME:Смены BONJOUR — {_calendar.month_name[month]} {year}",
+        f"X-WR-CALNAME:Смены BONJOUR — {month_ru} {year}",
     ]
     for shift in shifts:
         lines += [
