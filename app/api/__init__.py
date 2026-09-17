@@ -379,7 +379,7 @@ def create_app() -> FastAPI:
     # Кабинет мастера (веб и приложение «BONJOUR Мастер»): только свои данные,
     # поэтому без права payroll — в отличие от сводки по всем мастерам ниже.
     from .master_self import create_master_self_router
-    from .salon_self import create_salon_self_router
+    from .salon_self import create_salon_ics_router, create_salon_self_router
 
     app.include_router(
         create_master_self_router(),
@@ -394,6 +394,10 @@ def create_app() -> FastAPI:
         prefix="/api",
         dependencies=protected,
     )
+
+    # Файл календаря со сменами: открывает внешний браузер по подписанной
+    # ссылке, поэтому сессии кабинета у него нет.
+    app.include_router(create_salon_ics_router(), prefix="/api")
 
     # Раздача приложения «BONJOUR Мастер» — без авторизации, как APK агента MDM:
     # мастер качает его по ссылке, когда у него ещё ничего не установлено.

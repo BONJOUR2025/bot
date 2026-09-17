@@ -333,6 +333,7 @@ AUTH_ONLY_REVIEWED = {
     "GET /api/masters/me/earnings",
     "GET /api/masters/me/wip",
     "GET /api/salon/me/point",
+    "GET /api/salon/me/shifts",
     "GET /api/salon/me/assets",
     "GET /api/masters/me/photos/{photo_id}/full",
     "GET /api/masters/me/advance-cap",

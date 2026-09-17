@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
+import PlanRings from './PlanRings.jsx';
 
 function fmt(n) {
   if (n == null || n === 0) return '—';
@@ -145,6 +146,7 @@ export default function EmployeeSalary() {
         <div className="emp-salary-card">
           <section className="emp-salary-section">
             <div className="emp-salary-section__title">План продаж</div>
+            <PlanRings payroll={payroll} />
             <div className="emp-salary-grid">
               <PlanRow
                 label="Ремонт"

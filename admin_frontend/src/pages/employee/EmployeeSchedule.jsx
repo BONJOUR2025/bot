@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
 
@@ -22,6 +22,48 @@ const MONTHS = [
   'Январь','Февраль','Март','Апрель','Май','Июнь',
   'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь',
 ];
+
+/** Смены месяца в календарь телефона.
+ *
+ *  Сервер отдаёт файл .ics по подписанной ссылке (у внешнего браузера сессии
+ *  кабинета нет), телефон открывает его календарём: смена со своими часами и
+ *  напоминанием за час. Кнопка молчит, если смен в этом месяце нет — незачем
+ *  предлагать пустой файл. */
+function ShiftsToCalendar({ month, year }) {
+  const [state, setState] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setState(null);
+    api
+      .get('/salon/me/shifts', { params: { year, month } })
+      .then((res) => alive && setState(res.data))
+      .catch(() => alive && setState({ count: 0, unavailable: true }));
+    return () => {
+      alive = false;
+    };
+  }, [month, year]);
+
+  if (!state || state.unavailable || !state.count) return null;
+
+  const next = state.next;
+  return (
+    <div className="emp-shifts-card">
+      <div className="emp-shifts-card__text">
+        <b>{state.count} смен в этом месяце</b>
+        <span>
+          {next
+            ? `Ближайшая: ${new Date(next.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}, ${next.point}, с ${next.start}`
+            : 'Смены можно перенести в календарь телефона'}
+        </span>
+      </div>
+      <a className="emp-shifts-card__btn" href={state.ics_url}>
+        <CalendarPlus size={18} aria-hidden="true" />
+        В календарь
+      </a>
+    </div>
+  );
+}
 
 export default function EmployeeSchedule() {
   const { user } = useAuth();
@@ -75,6 +117,8 @@ export default function EmployeeSchedule() {
           </button>
         </div>
       </div>
+
+      <ShiftsToCalendar month={weekStart.getMonth() + 1} year={weekStart.getFullYear()} />
 
       {loading && <p className="emp-page__loading">Загрузка…</p>}
 

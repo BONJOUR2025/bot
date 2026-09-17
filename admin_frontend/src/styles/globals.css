@@ -7435,3 +7435,29 @@ button:hover > .vac-desc { color: var(--color-text); }
 .salon-order__foot { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.4rem; color: var(--color-text-muted); font-size: 0.78rem; }
 .salon-order__call { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 32px; padding: 0 0.7rem; border-radius: 999px; background: color-mix(in srgb, var(--color-primary) 14%, transparent); color: var(--color-primary); text-decoration: none; font-weight: 600; }
 .salon-order__call:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* ── Кольца выполнения плана («Зарплата») ─────────────────────────── */
+.emp-rings { margin-bottom: 0.9rem; }
+.emp-rings__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.emp-ring { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; min-width: 0; }
+.emp-ring svg { width: 100%; max-width: 104px; height: auto; }
+.emp-ring__track { stroke: color-mix(in srgb, var(--color-text) 10%, transparent); }
+.emp-ring__value { transition: stroke-dasharray 600ms ease; }
+.emp-ring__value--done { stroke: var(--color-success); }
+.emp-ring__value--close { stroke: var(--color-warning, #d97706); }
+.emp-ring__value--far { stroke: var(--color-primary); }
+.emp-ring__value--none { stroke: var(--color-border); }
+.emp-ring__pct { fill: var(--color-text); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.emp-ring__label { font-size: 0.82rem; color: var(--color-text); }
+.emp-ring__sub { font-size: 0.72rem; color: var(--color-text-muted); text-align: center; }
+.emp-rings__total { margin: 0.7rem 0 0; font-size: 0.82rem; color: var(--color-text-muted); line-height: 1.4; }
+@media (prefers-reduced-motion: reduce) { .emp-ring__value { transition: none; } }
+
+/* ── Смены в календарь телефона («График») ────────────────────────── */
+.emp-shifts-card { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.9rem; margin-bottom: 0.9rem; padding: 0.85rem 1rem; border-radius: 14px; background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
+.emp-shifts-card__text { flex: 1 1 12rem; min-width: 0; font-size: 0.88rem; line-height: 1.4; }
+.emp-shifts-card__text b { display: block; }
+.emp-shifts-card__text span { color: var(--color-text-muted); font-size: 0.8rem; }
+.emp-shifts-card__btn { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; padding: 0 1rem; border: 0; border-radius: 999px; background: var(--color-primary); color: #fff; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+.emp-shifts-card__btn:disabled { opacity: 0.6; cursor: default; }
+.emp-shifts-card__btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
