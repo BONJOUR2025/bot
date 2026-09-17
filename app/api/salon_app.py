@@ -34,7 +34,7 @@ def create_salon_app_public_router() -> APIRouter:
         return HTMLResponse(install_page_html(
             SALON_APP,
             title="BONJOUR Салон",
-            lead="Смена, выручка точки, заказы клиентов и аванс — в телефоне.",
+            lead="Зарплата, график, авансы и имущество — в телефоне.",
             steps=_STEPS,
         ))
 
