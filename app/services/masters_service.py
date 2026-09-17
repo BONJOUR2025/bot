@@ -277,7 +277,7 @@ def _build_service_table(df_raw: pd.DataFrame) -> pd.DataFrame:
 
     # ── Master salary ──────────────────────────────────────────────
     # Strictly by OUT scans: only services that have an OUT event get salary,
-    # attributed to out_description (earliest OUT master by date_beg).
+    # attributed to out_description (latest OUT master by date_beg).
     service["salary_rate"] = service["top_parent_name"].apply(_salary_rate)
     service["master_salary"] = None
     has_out_mask = service["HAS_OUT"]
