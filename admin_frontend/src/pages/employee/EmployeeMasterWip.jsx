@@ -197,6 +197,7 @@ export default function EmployeeMasterWip() {
                         <div key={`${c.about}-${ci}`} className="emp-wip-note">
                           <MessageSquare size={14} aria-hidden="true" />
                           <span>
+                            {c.label ? <em>{c.label}: </em> : null}
                             {c.text}
                             <i>к {c.about}{c.date ? `, ${noteDate(c.date)}` : ''}</i>
                           </span>

@@ -421,17 +421,26 @@ def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
     Срок — DOCS_ORDER.DATE_OUT. В кэше отчёта masters.works его нет, а тащить
     туда ради одного экрана значило бы менять самый дорогой отчёт системы.
 
-    Комментарий приёмщика — DOC_ORDER_SERVICES.EXT_INFO («согласовать цвет»,
-    «подбор и установка пряжки», «носы»). Его пишут и на строке услуги, и на
-    строке изделия — берём оба, помечая, к чему относится: у изделия это
-    замечание ко всей паре, у услуги — к конкретной работе. Заполнен он
-    примерно у каждой десятой строки, поэтому экран обязан честно говорить
-    «комментариев нет», а не просто ничего не показывать.
+    Комментарий приёмщик пишет в «дополнение» услуги типа «КОММЕНТАРИЙ!» —
+    ADDON_ORDER_SERVICES.VALUE_STR (заказ 37441-7, «Профилактика женская»:
+    «вибрам черный»). Это основное место: почти пять тысяч заполнений на
+    свежих заказах против пары сотен у EXT_INFO. Берём и остальные дополнения
+    со свободным вводом («ЦВЕТ ТОНИРОВКИ/ПОКРАСКИ», «Какой вид материала»,
+    «Дополнительный комментарий пошива») — они подписаны названием типа;
+    справочные дополнения (цвет, материал, дефекты — is_combo = 1) это не
+    комментарии, а характеристики, и мастеру в список не идут. «Фамилия
+    клиента» исключена намеренно: мастеру она не нужна.
 
-    DOC_ORDER_SERV_COMMENTS — отдельная, почти неиспользуемая таблица (73
-    строки за всю историю), но раз комментарий там всё-таки может быть
-    оставлен, читаем и её: мастер не должен пропустить «в понедельник клиент
-    улетает в 16.00» из-за того, что приёмщик написал не в то поле.
+    VALUE_STR обязательно читать через CAST(... CHARACTER SET OCTETS):
+    соединение открыто в UTF8, а в колонке лежит cp1251, и без приведения fdb
+    падает на UnicodeDecodeError — вместе с ним пропали бы и сроки, и фото.
+
+    Плюс EXT_INFO услуги и её изделия («согласовать цвет», «+ ПЫЛЬНИК») и
+    почти неиспользуемая DOC_ORDER_SERV_COMMENTS (73 строки за всю историю):
+    мастер не должен пропустить «в понедельник клиент улетает в 16.00» из-за
+    того, что приёмщик написал не в то поле. Помечаем, к чему относится
+    запись: у изделия это замечание ко всей паре, у услуги — к конкретной
+    работе. Пустой случай экран проговаривает явно.
 
     Фото в Агбисе всегда висит на изделии («Ботильоны»), а не на услуге
     («Набойки»): услуга ссылается на своё изделие через PARENT_DOS_ID. Строка
@@ -470,7 +479,7 @@ def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
                     comments = []
                     note = _text(ext_info)
                     if note:
-                        comments.append({"text": note, "about": "услуге"})
+                        comments.append({"text": note, "about": "услуге", "label": None})
                     out[sid] = {"due": due, "photos": [], "comments": comments}
                     item_of[sid] = parent_id or sid
 
@@ -508,10 +517,39 @@ def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
                             photo["thumb"] = f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
                     bucket.append(photo)
 
-            # Редкая таблица отдельных комментариев — по строке услуги и по
-            # строке изделия сразу.
             typed: dict[int, list[dict[str, Any]]] = {}
             rows = sorted(set(ids) | set(items))
+
+            # Главное место комментария — «дополнение» услуги со свободным
+            # вводом. Тип «КОММЕНТАРИЙ!» показываем без подписи, остальные —
+            # с названием типа, иначе «в тон» непонятно само по себе.
+            for start in range(0, len(rows), 500):
+                chunk = rows[start:start + 500]
+                cur.execute(
+                    "SELECT a.line_id, "
+                    "       CAST(t.descr AS VARCHAR(128) CHARACTER SET OCTETS), "
+                    "       CAST(a.value_str AS VARCHAR(1024) CHARACTER SET OCTETS) "
+                    "FROM addon_order_services a "
+                    "  JOIN addon_types t ON t.id = a.addon_type_id "
+                    f"WHERE a.line_id IN ({','.join('?' * len(chunk))}) "
+                    "  AND (t.is_combo = 0 OR t.is_combo IS NULL) "
+                    "  AND t.is_active = 1 AND t.value_type = 1 "
+                    "ORDER BY a.line_id, a.num",
+                    chunk,
+                )
+                for line_id, descr, value in cur.fetchall():
+                    text = _text(value)
+                    label = _text(descr).strip("!").strip()
+                    if not text or "Фамилия клиента" in label:
+                        continue
+                    typed.setdefault(line_id, []).append({
+                        "text": text,
+                        "about": "услуге" if line_id in out else "изделию",
+                        "label": None if label.upper() == "КОММЕНТАРИЙ" else label,
+                    })
+
+            # Редкая таблица отдельных комментариев — по строке услуги и по
+            # строке изделия сразу.
             for start in range(0, len(rows), 500):
                 chunk = rows[start:start + 500]
                 cur.execute(
@@ -526,13 +564,14 @@ def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
                     typed.setdefault(dos_id, []).append({
                         "text": text,
                         "about": "услуге" if dos_id in out else "изделию",
+                        "label": None,
                         "date": when.isoformat(timespec="minutes") if isinstance(when, datetime) else None,
                     })
 
             for sid, item_id in item_of.items():
                 out[sid]["photos"] = photos_of_item.get(item_id, [])
                 note = note_of_item.get(item_id)
-                extra = [{"text": note, "about": "изделию"}] if note and item_id != sid else []
+                extra = [{"text": note, "about": "изделию", "label": None}] if note and item_id != sid else []
                 extra += typed.get(sid, []) + (typed.get(item_id, []) if item_id != sid else [])
                 # Одно и то же замечание часто стоит и на изделии, и на услуге —
                 # мастеру это один комментарий, а не два.
