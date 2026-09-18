@@ -7487,3 +7487,37 @@ button:hover > .vac-desc { color: var(--color-text); }
   border: 0; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; cursor: pointer;
 }
 .web-scan__close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* ── «График»: месяц сеткой, свои смены списком ───────────────────── */
+.emp-sched { display: flex; flex-direction: column; gap: 0.9rem; }
+.emp-sched__month { padding: 0.9rem 1rem 1rem; }
+.emp-sched__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.emp-sched__wd { text-align: center; font-size: 0.7rem; color: var(--color-text-muted); padding-bottom: 2px; }
+.emp-sched__cell {
+  position: relative; aspect-ratio: 1; min-width: 0; padding: 0; border: 0; border-radius: 10px;
+  background: var(--color-panel); color: var(--color-text); font: inherit; font-size: 0.85rem;
+  font-variant-numeric: tabular-nums; cursor: pointer; display: grid; place-items: center;
+}
+.emp-sched__cell--empty { background: transparent; cursor: default; }
+.emp-sched__cell.is-shift { background: color-mix(in srgb, var(--color-primary) 18%, transparent); font-weight: 700; }
+.emp-sched__cell.is-today { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.emp-sched__cell.is-open { background: var(--color-primary); color: #fff; }
+.emp-sched__cell i { position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; background: var(--color-primary); }
+.emp-sched__cell.is-open i { background: #fff; }
+.emp-sched__cell:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.emp-sched__legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin-top: 0.7rem; color: var(--color-text-muted); font-size: 0.72rem; }
+.emp-sched__legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -2px; margin-right: 4px; }
+.emp-sched__legend i.is-shift { background: color-mix(in srgb, var(--color-primary) 18%, transparent); }
+.emp-sched__legend i.is-today { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.emp-sched__list { display: flex; flex-direction: column; gap: 0.5rem; }
+.emp-sched__row { display: flex; align-items: center; gap: 0.9rem; padding: 0.7rem 1rem; }
+.emp-sched__row-day { flex: none; width: 2.6rem; text-align: center; }
+.emp-sched__row-day b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.emp-sched__row-day span { color: var(--color-text-muted); font-size: 0.7rem; }
+.emp-sched__row-main { flex: 1 1 auto; min-width: 0; }
+.emp-sched__row-point { font-weight: 600; }
+.emp-sched__row-time { color: var(--color-text-muted); font-size: 0.82rem; }
+.emp-sched__roster { padding: 0.8rem 1rem; }
+.emp-sched__roster-row { display: flex; justify-content: space-between; gap: 0.8rem; padding: 0.35rem 0; border-bottom: 1px solid var(--color-border); font-size: 0.86rem; }
+.emp-sched__roster-row:last-child { border-bottom: 0; }
+.emp-sched__roster-row span:last-child { color: var(--color-text-muted); }

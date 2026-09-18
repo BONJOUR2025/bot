@@ -40,18 +40,37 @@ export default function Login() {
   const [masterLogins, setMasterLogins] = useState(null);
   const [manualLogin, setManualLogin] = useState(!IN_APP);
 
+  // В браузере список собирается из двух источников и показывается двумя
+  // группами: мастеров и администраторов больше двух десятков, и без разбивки
+  // человек ищет себя по всему алфавиту. В приложении группа одна — своя.
   const loadLogins = useCallback(() => {
-    const urls = APP_LOGINS_URL ? [APP_LOGINS_URL] : ['/master-app/logins', '/salon-app/logins'];
+    const sources = APP_LOGINS_URL
+      ? [{ title: null, url: APP_LOGINS_URL }]
+      : [
+          { title: 'Мастера', url: '/master-app/logins' },
+          { title: 'Администраторы', url: '/salon-app/logins' },
+        ];
     setMasterLogins(null);
-    Promise.all(urls.map((url) => api.get(url).then((res) => res.data).catch(() => [])))
-      .then((lists) => {
+    Promise.all(
+      sources.map((source) =>
+        api
+          .get(source.url)
+          .then((res) => ({ title: source.title, items: Array.isArray(res.data) ? res.data : [] }))
+          .catch(() => ({ title: source.title, items: [] })),
+      ),
+    )
+      .then((groups) => {
         const seen = new Set();
-        const all = lists
-          .flat()
-          .filter((item) => item && item.login && !seen.has(item.login) && seen.add(item.login))
-          .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
-        setMasterLogins(all);
-        if (all.length === 0) setManualLogin(true);
+        const clean = groups
+          .map((group) => ({
+            title: group.title,
+            items: group.items
+              .filter((item) => item?.login && !seen.has(item.login) && seen.add(item.login))
+              .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru')),
+          }))
+          .filter((group) => group.items.length > 0);
+        setMasterLogins(clean);
+        if (clean.length === 0) setManualLogin(true);
       })
       .catch(() => setManualLogin(true));
   }, []);
@@ -141,9 +160,19 @@ export default function Login() {
                 <option value="" disabled>
                   {masterLogins === null ? 'Загрузка…' : 'Выберите себя'}
                 </option>
-                {(masterLogins || []).map((m) => (
-                  <option key={m.login} value={m.login}>{m.name}</option>
-                ))}
+                {(masterLogins || []).map((group) =>
+                  group.title ? (
+                    <optgroup key={group.title} label={group.title}>
+                      {group.items.map((m) => (
+                        <option key={m.login} value={m.login}>{m.name}</option>
+                      ))}
+                    </optgroup>
+                  ) : (
+                    group.items.map((m) => (
+                      <option key={m.login} value={m.login}>{m.name}</option>
+                    ))
+                  ),
+                )}
                 <option value={OTHER_LOGIN}>Другой логин…</option>
               </select>
             )}

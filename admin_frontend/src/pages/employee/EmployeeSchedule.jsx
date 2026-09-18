@@ -1,193 +1,217 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarPlus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
+
+/** График смен сотрудника.
+ *
+ *  Один запрос на месяц (`/salon/me/shifts`): свои смены, кто ещё работает в
+ *  эти дни и ссылка на файл календаря. Раньше экран спрашивал неделю семью
+ *  запросами по дню, и каждый заново разбирал Excel с расписанием — открытие
+ *  стоило около 25 секунд.
+ *
+ *  Вид — месяц целиком: сетка дней, где свои смены закрашены, а под ней
+ *  ближайшие смены с точкой и часами. Неделю за неделей приходилось листать,
+ *  чтобы просто увидеть, когда следующая смена. */
+
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const MONTHS = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+];
+const MONTHS_GEN = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+];
 
 function pad(n) {
   return String(n).padStart(2, '0');
 }
 
-function toIso(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function iso(year, month, day) {
+  return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-function addDays(d, n) {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
+function todayIso() {
+  const d = new Date();
+  return iso(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
-const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-const MONTHS = [
-  'Январь','Февраль','Март','Апрель','Май','Июнь',
-  'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь',
-];
+// День недели считаем от «ГГГГ-ММ-ДД» в UTC: часовой пояс телефона не должен
+// сдвигать колонку в сетке.
+function weekdayIndex(isoDate) {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+}
 
-/** Смены месяца в календарь телефона.
- *
- *  Сервер отдаёт файл .ics по подписанной ссылке (у внешнего браузера сессии
- *  кабинета нет), телефон открывает его календарём: смена со своими часами и
- *  напоминанием за час. Кнопка молчит, если смен в этом месяце нет — незачем
- *  предлагать пустой файл. */
-function ShiftsToCalendar({ month, year }) {
-  const [state, setState] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    setState(null);
-    api
-      .get('/salon/me/shifts', { params: { year, month } })
-      .then((res) => alive && setState(res.data))
-      .catch(() => alive && setState({ count: 0, unavailable: true }));
-    return () => {
-      alive = false;
-    };
-  }, [month, year]);
-
-  if (!state || state.unavailable || !state.count) return null;
-
-  const next = state.next;
-  return (
-    <div className="emp-shifts-card">
-      <div className="emp-shifts-card__text">
-        <b>{state.count} смен в этом месяце</b>
-        <span>
-          {next
-            ? `Ближайшая: ${new Date(next.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}, ${next.point}, с ${next.start}`
-            : 'Смены можно перенести в календарь телефона'}
-        </span>
-      </div>
-      <a className="emp-shifts-card__btn" href={state.ics_url}>
-        <CalendarPlus size={18} aria-hidden="true" />
-        В календарь
-      </a>
-    </div>
-  );
+function dayLabel(isoDate) {
+  const [, m, d] = isoDate.split('-').map(Number);
+  return `${d} ${MONTHS_GEN[m - 1]}, ${WEEKDAYS[weekdayIndex(isoDate)].toLowerCase()}`;
 }
 
 export default function EmployeeSchedule() {
-  const { user } = useAuth();
-  const employeeName = user?.display_name || user?.login || '';
+  const now = new Date();
+  const [view, setView] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [openDay, setOpenDay] = useState(null);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const [viewDate, setViewDate] = useState(today);
-  const [scheduleCache, setScheduleCache] = useState({});
-  const [loading, setLoading] = useState(false);
-
-  // Get first day of week (Monday) for the displayed week
-  const dayOfWeek = (viewDate.getDay() + 6) % 7; // 0=Mon
-  const weekStart = addDays(viewDate, -dayOfWeek);
-
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-
-  const fetchDay = async (date) => {
-    const key = toIso(date);
-    if (scheduleCache[key] !== undefined) return;
-    try {
-      const res = await api.get('/schedule/by_day', { params: { date: key } });
-      setScheduleCache((prev) => ({ ...prev, [key]: res.data || [] }));
-    } catch {
-      setScheduleCache((prev) => ({ ...prev, [key]: [] }));
-    }
-  };
+  const load = useCallback((year, month) => {
+    setLoading(true);
+    setError('');
+    api
+      .get('/salon/me/shifts', { params: { year, month } })
+      .then((res) => setData(res.data))
+      .catch((err) => {
+        setData(null);
+        setError(
+          err?.response?.status === 404
+            ? 'Вы не закреплены за точкой — попросите руководителя проставить её в вашей карточке.'
+            : 'Не удалось загрузить график. Попробуйте ещё раз.',
+        );
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all(weekDays.map(fetchDay)).finally(() => setLoading(false));
-  }, [weekStart.toISOString()]);
+    load(view.year, view.month);
+  }, [load, view]);
 
-  const prevWeek = () => setViewDate((d) => addDays(d, -7));
-  const nextWeek = () => setViewDate((d) => addDays(d, 7));
+  const shiftByDay = useMemo(() => {
+    const map = new Map();
+    (data?.days || []).forEach((d) => map.set(d.date, d));
+    return map;
+  }, [data]);
+
+  const today = todayIso();
+  const daysInMonth = new Date(view.year, view.month, 0).getDate();
+  const firstWeekday = weekdayIndex(iso(view.year, view.month, 1));
+  const cells = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => iso(view.year, view.month, i + 1)),
+  ];
+
+  const upcoming = (data?.days || []).filter((d) => d.date >= today).slice(0, 6);
+  const shown = openDay ? [shiftByDay.get(openDay)].filter(Boolean) : upcoming;
+
+  const step = (delta) => {
+    setOpenDay(null);
+    setView(({ year, month }) => {
+      const m = month + delta;
+      if (m < 1) return { year: year - 1, month: 12 };
+      if (m > 12) return { year: year + 1, month: 1 };
+      return { year, month: m };
+    });
+  };
 
   return (
     <div className="emp-page">
       <div className="emp-page__head">
         <h2 className="emp-page__title">График</h2>
         <div className="emp-schedule-nav">
-          <button type="button" className="icon-button" onClick={prevWeek}>
+          <button type="button" className="icon-button" onClick={() => step(-1)} aria-label="Предыдущий месяц">
             <ChevronLeft size={18} />
           </button>
-          <span className="emp-schedule-nav__label">
-            {MONTHS[weekStart.getMonth()]} {weekStart.getFullYear()}
-          </span>
-          <button type="button" className="icon-button" onClick={nextWeek}>
+          <span className="emp-schedule-nav__label">{MONTHS[view.month - 1]} {view.year}</span>
+          <button type="button" className="icon-button" onClick={() => step(1)} aria-label="Следующий месяц">
             <ChevronRight size={18} />
           </button>
         </div>
       </div>
 
-      <ShiftsToCalendar month={weekStart.getMonth() + 1} year={weekStart.getFullYear()} />
+      {loading && !data && <p className="emp-page__loading">Загрузка…</p>}
+      {!loading && error && <p className="emp-page__error">{error}</p>}
 
-      {loading && <p className="emp-page__loading">Загрузка…</p>}
-
-      <div className="emp-schedule-week">
-        {weekDays.map((day, i) => {
-          const key = toIso(day);
-          const points = scheduleCache[key] || [];
-          const isToday = toIso(day) === toIso(today);
-
-          // Check if this employee works on this day
-          const myPoints = employeeName
-            ? points.filter((p) =>
-                p.employee?.toLowerCase().includes(employeeName.toLowerCase()) ||
-                employeeName.toLowerCase().includes(p.employee?.toLowerCase())
-              )
-            : [];
-          const works = myPoints.length > 0;
-
-          return (
-            <div
-              key={key}
-              className={`emp-schedule-day ${isToday ? 'emp-schedule-day--today' : ''} ${works ? 'emp-schedule-day--work' : ''}`}
-            >
-              <div className="emp-schedule-day__head">
-                <span className="emp-schedule-day__wd">{WEEKDAYS[i]}</span>
-                <span className="emp-schedule-day__date">{pad(day.getDate())}.{pad(day.getMonth() + 1)}</span>
+      {data && !error && (
+        <div className="emp-sched" style={loading ? { opacity: 0.5 } : undefined}>
+          {data.count > 0 && (
+            <section className="emp-shifts-card">
+              <div className="emp-shifts-card__text">
+                <b>{data.count} смен в этом месяце</b>
+                <span>
+                  {data.next
+                    ? `Ближайшая ${dayLabel(data.next.date)}, ${data.next.point}, с ${data.next.start}`
+                    : 'Смены можно перенести в календарь телефона'}
+                </span>
               </div>
-              <div className="emp-schedule-day__body">
-                {works ? (
-                  myPoints.map((p, idx) => (
-                    <div key={idx} className="emp-schedule-day__point">{p.point}</div>
-                  ))
-                ) : (
-                  <span className="emp-schedule-day__off">—</span>
-                )}
-              </div>
+              <a className="emp-shifts-card__btn" href={data.ics_url}>
+                <CalendarPlus size={18} aria-hidden="true" />
+                В календарь
+              </a>
+            </section>
+          )}
+
+          <section className="emp-salary-card emp-sched__month">
+            <div className="emp-sched__grid">
+              {WEEKDAYS.map((w) => <div key={w} className="emp-sched__wd">{w}</div>)}
+              {cells.map((date, i) => {
+                if (!date) return <div key={`gap-${i}`} className="emp-sched__cell emp-sched__cell--empty" />;
+                const shift = shiftByDay.get(date);
+                const classes = [
+                  'emp-sched__cell',
+                  shift ? 'is-shift' : '',
+                  date === today ? 'is-today' : '',
+                  openDay === date ? 'is-open' : '',
+                ].filter(Boolean).join(' ');
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    className={classes}
+                    aria-pressed={openDay === date}
+                    aria-label={`${dayLabel(date)}${shift ? `, смена ${shift.point}` : ''}`}
+                    onClick={() => setOpenDay((cur) => (cur === date ? null : date))}
+                  >
+                    <span>{Number(date.slice(8))}</span>
+                    {shift && <i aria-hidden="true" />}
+                  </button>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+            <div className="emp-sched__legend">
+              <span><i className="is-shift" aria-hidden="true" /> моя смена</span>
+              <span><i className="is-today" aria-hidden="true" /> сегодня</span>
+              <span>нажмите на день, чтобы увидеть, кто работает</span>
+            </div>
+          </section>
 
-      <div className="emp-schedule-legend">
-        <span className="emp-schedule-legend__work">Рабочий день</span>
-        <span className="emp-schedule-legend__today">Сегодня</span>
-      </div>
-
-      <div className="emp-schedule-all">
-        <h3 className="emp-schedule-all__title">Расписание на неделю</h3>
-        {weekDays.map((day) => {
-          const key = toIso(day);
-          const points = scheduleCache[key] || [];
-          if (points.length === 0) return null;
-          return (
-            <div key={key} className="emp-schedule-table-row">
-              <div className="emp-schedule-table-row__date">
-                {pad(day.getDate())}.{pad(day.getMonth() + 1)} {WEEKDAYS[(day.getDay() + 6) % 7]}
+          <section className="emp-sched__list">
+            <div className="emp-salary-section__title">
+              {openDay ? dayLabel(openDay) : 'Ближайшие смены'}
+            </div>
+            {shown.length === 0 && (
+              <p className="emp-page__empty">
+                {openDay ? 'В этот день у вас смены нет.' : 'Смен в этом месяце больше нет.'}
+              </p>
+            )}
+            {shown.map((d) => (
+              <div key={d.date} className="emp-salary-card emp-sched__row">
+                <div className="emp-sched__row-day">
+                  <b>{Number(d.date.slice(8))}</b>
+                  <span>{WEEKDAYS[weekdayIndex(d.date)].toLowerCase()}</span>
+                </div>
+                <div className="emp-sched__row-main">
+                  <div className="emp-sched__row-point">{d.point}</div>
+                  <div className="emp-sched__row-time">с {d.start} до {d.end}</div>
+                </div>
+                {d.date === today && <span className="badge badge--info">сегодня</span>}
               </div>
-              <div className="emp-schedule-table-row__points">
-                {points.map((p, i) => (
-                  <div key={i} className="emp-schedule-point">
-                    <span className="emp-schedule-point__loc">{p.point}</span>
-                    <span className="emp-schedule-point__emp">{p.employee}</span>
+            ))}
+
+            {openDay && (data.roster?.[openDay] || []).length > 0 && (
+              <div className="emp-salary-card emp-sched__roster">
+                <div className="emp-salary-section__title">Кто работает</div>
+                {data.roster[openDay].map((r, i) => (
+                  <div key={`${r.point}-${i}`} className="emp-sched__roster-row">
+                    <span>{r.point}</span>
+                    <span>{r.employee}</span>
                   </div>
                 ))}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

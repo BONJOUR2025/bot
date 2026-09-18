@@ -45,6 +45,22 @@ def create_salon_self_router() -> APIRouter:
             "name": current.display_name,
         }
 
+    async def _roster(year: int, month: int) -> dict:
+        """Расписание месяца в виде {дата: [{point, employee}]}."""
+        from app.services.schedule_service import ScheduleService
+
+        data = await ScheduleService().get_schedule_month(year, month)
+        points = data.get("points") or {}
+        out: dict[str, list[dict]] = {}
+        for row in data.get("days") or []:
+            people = [
+                {"point": points.get(str(code).strip(), str(code).strip()), "employee": employee}
+                for employee, code in (row.get("assignments") or {}).items() if code
+            ]
+            if people:
+                out[row["date"]] = sorted(people, key=lambda x: x["point"])
+        return out
+
     def _employee_name(current: ResolvedUser) -> str:
         """Имя, под которым сотрудник стоит в графике (карточка, поле name)."""
         from app.data.employee_repository import EmployeeRepository
@@ -75,9 +91,14 @@ def create_salon_self_router() -> APIRouter:
         token = cal.make_token(current.id)
         return {
             "year": year, "month": month, "count": len(shifts),
+            "me": name,
             "next": cal.next_shift(shifts),
             "days": [{"date": s.day.isoformat(), "point": s.point_name,
                       "start": s.start, "end": s.end} for s in shifts],
+            # Кто ещё работает в эти дни — из того же разобранного месяца.
+            # Одним запросом, потому что экран «График» рисует и своё, и чужое:
+            # семь запросов по дню читали Excel семь раз и стоили секунд.
+            "roster": await _roster(year, month),
             "ics_url": f"/api/salon/shifts/{token}.ics?year={year}&month={month}",
         }
 

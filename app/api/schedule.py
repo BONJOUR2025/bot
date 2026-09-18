@@ -56,6 +56,7 @@ def create_schedule_router(service: ScheduleService) -> APIRouter:
         и замеры в app/services/schedule_editor.py.
         """
         from app.services.schedule_editor import ScheduleEditError, set_schedule_cell
+        from app.services.schedule_service import invalidate_month_cache
 
         if not (1 <= data.month <= 12):
             raise HTTPException(status_code=400, detail="month must be 1–12")
@@ -63,10 +64,14 @@ def create_schedule_router(service: ScheduleService) -> APIRouter:
         try:
             # Excel COM блокирует поток на время правки, поэтому уводим его в
             # пул — иначе на время сохранения встаёт весь event loop API.
-            return await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 set_schedule_cell, data.year, data.month,
                 data.employee, data.day, data.code or "",
             )
+            # Разобранный месяц лежит в кэше (schedule_service): без сброса
+            # правка появилась бы у сотрудников только через несколько минут.
+            invalidate_month_cache()
+            return result
         except ScheduleEditError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         except Exception as exc:

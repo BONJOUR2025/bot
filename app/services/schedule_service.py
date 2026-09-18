@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar
 import os
+import time
 from datetime import date
 from typing import Dict, List
 
@@ -40,6 +41,19 @@ def _open_sheet(year: int, month: int):
         if title.upper().startswith(month_name.upper()):
             return wb, wb[title]
     return wb, None
+
+
+# Расписание лежит в Excel у руководителя, и каждый разбор — открытие книги
+# целиком. Кабинет за одно открытие «Графика» спрашивал неделю семью запросами
+# по дню, и каждый читал файл заново — отсюда секунды ожидания на телефоне.
+# Держим разобранный месяц несколько минут.
+_MONTH_TTL_SECONDS = 180
+_month_cache: dict[tuple[int, int], tuple[float, dict]] = {}
+
+
+def invalidate_month_cache() -> None:
+    """Сбросить кэш — после правки расписания в панели."""
+    _month_cache.clear()
 
 
 class ScheduleService:
@@ -108,6 +122,10 @@ class ScheduleService:
         employees: ordered list of employee names found in the sheet
         points: {code: name} mapping
         """
+        cached = _month_cache.get((year, month))
+        if cached and (time.monotonic() - cached[0]) < _MONTH_TTL_SECONDS:
+            return cached[1]
+
         num_days = calendar.monthrange(year, month)[1]
 
         def _empty_days():
@@ -125,7 +143,9 @@ class ScheduleService:
         points = _get_points()
         _, sheet = _open_sheet(year, month)
         if sheet is None:
-            return {"employees": [], "days": _empty_days(), "points": points}
+            empty = {"employees": [], "days": _empty_days(), "points": points}
+            _month_cache[(year, month)] = (time.monotonic(), empty)
+            return empty
 
         # Map day number → column index (row 1 or row 2 holds day numbers)
         day_cols: Dict[int, int] = {}
@@ -173,4 +193,6 @@ class ScheduleService:
                 "assignments": assignments,
             })
 
-        return {"employees": employees, "days": days, "points": points}
+        result = {"employees": employees, "days": days, "points": points}
+        _month_cache[(year, month)] = (time.monotonic(), result)
+        return result
