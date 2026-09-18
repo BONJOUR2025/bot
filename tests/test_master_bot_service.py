@@ -12,6 +12,15 @@ import pytest
 from app.services import master_bot_service as mbs
 
 
+@pytest.fixture(autouse=True)
+def _clear_wip_cache():
+    """«В работе» кэшируется в памяти процесса на полторы минуты — между
+    тестами это был бы ответ предыдущего."""
+    mbs.invalidate_wip()
+    yield
+    mbs.invalidate_wip()
+
+
 # ── Кого пускаем ──────────────────────────────────────────────────
 
 def test_three_master_positions_are_in_scope():
@@ -289,3 +298,41 @@ def test_wip_survives_agbis_not_answering_about_deadlines(monkeypatch):
     monkeypatch.setattr("app.services.firebird_service._connect", boom)
     rows = mbs.get_wip(master)
     assert rows[0]["doc_num"] == "a" and rows[0]["due_state"] is None
+    assert rows[0]["comments"] == []   # экран скажет «комментариев нет», а не соврёт
+
+
+def _wip_master(monkeypatch, details):
+    master = mbs.Master(employee_id="1", name="М", position="Мастер", agbis_user_id=7)
+    services = [{"service_id": 1, "in_user_id": 7, "status": "В работе", "doc_num": "a",
+                 "code": "1.0", "in_time": "2026-09-01"}]
+    monkeypatch.setattr(mbs, "_load_services", lambda period: services if period == mbs.PERIOD_MONTH else [])
+    monkeypatch.setattr(mbs, "_order_details", lambda ids: details)
+    return master
+
+
+def test_wip_carries_agbis_comments(monkeypatch):
+    master = _wip_master(monkeypatch, {1: {"due": None, "comments": [
+        {"text": "согласовать цвет", "about": "услуге"},
+        {"text": "+ ПЫЛЬНИК", "about": "изделию"},
+    ]}})
+    rows = mbs.get_wip(master)
+    assert [c["text"] for c in rows[0]["comments"]] == ["согласовать цвет", "+ ПЫЛЬНИК"]
+
+
+def test_wip_is_cached_until_refresh(monkeypatch):
+    calls = []
+
+    def details(ids):
+        calls.append(ids)
+        return {1: {"due": None}}
+
+    master = _wip_master(monkeypatch, {})
+    monkeypatch.setattr(mbs, "_order_details", details)
+    mbs.get_wip(master)
+    mbs.get_wip(master)
+    assert len(calls) == 1            # второй заход на вкладку не ходит в Агбис
+    mbs.get_wip(master, refresh=True)
+    assert len(calls) == 2            # кнопка «Обновить» кэш обходит
+    mbs.invalidate_wip(master.agbis_user_id)
+    mbs.get_wip(master)
+    assert len(calls) == 3            # скан сбрасывает список

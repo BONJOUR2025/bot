@@ -236,8 +236,12 @@ export default function EmployeeMasterEarnings() {
   }, [period]);
 
   const r = report;
-  // У ученика процент справочный: в подробностях показываем сумму работ.
-  const metric = r?.is_apprentice ? 'kredit' : 'salary';
+  // Везде, где стоит знак рубля, — заработок мастера, а не цена услуги для
+  // клиента. У ученика процент справочный (получает он стипендию), но и ему в
+  // плитках «Сегодня/Вчера/В день» показывали сумму работ — крупное чужое
+  // число, которое читается как своя зарплата. Цена услуги осталась только
+  // подписью под заработком в списке.
+  const metric = 'salary';
   const all = useMemo(() => r?.services || [], [r]);
 
   const sumOf = (list) => list.reduce((acc, s) => acc + (Number(s[metric]) || 0), 0);
@@ -377,6 +381,11 @@ export default function EmployeeMasterEarnings() {
                 <small>в среднем</small>
               </div>
             </div>
+            {r.is_apprentice && (
+              <p className="emp-earn-note">
+                В плитках — заработок по проценту; на руки пока идёт стипендия.
+              </p>
+            )}
           </section>
 
           <section className="emp-salary-card emp-earn-pay">
@@ -412,7 +421,7 @@ export default function EmployeeMasterEarnings() {
                         onClick={() => pickGroup(g.group)}
                       >
                         <span>{g.group}</span>
-                        <b>{money(r.is_apprentice ? g.kredit : g.salary)}</b>
+                        <b>{money(g.salary)}</b>
                         <small>{g.count} шт</small>
                       </button>
                     ))}
@@ -469,19 +478,11 @@ export default function EmployeeMasterEarnings() {
                             </div>
                           </div>
                           <div className="emp-earn-svc__sum">
-                            {r.is_apprentice ? (
-                              <>
-                                <b>{money(s.kredit)}</b>
-                                <span>справочно {money(s.salary)}</span>
-                              </>
-                            ) : (
-                              <>
-                                <b>{money(s.salary)}</b>
-                                <span>
-                                  {s.rate ? `${Math.round(s.rate * 100)}% ` : ''}из {money(s.kredit)}
-                                </span>
-                              </>
-                            )}
+                            <b>{money(s.salary)}</b>
+                            <span>
+                              {r.is_apprentice ? 'справочно, ' : ''}
+                              {s.rate ? `${Math.round(s.rate * 100)}% ` : ''}из {money(s.kredit)}
+                            </span>
                           </div>
                         </div>
                       ))}

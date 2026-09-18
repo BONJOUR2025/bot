@@ -284,7 +284,16 @@ def _apprentice_stipend(master: Master, df: date, dt: date) -> tuple[float, int]
     return 0.0, 0
 
 
-def get_wip(master: Master) -> list[dict[str, Any]]:
+# Сколько «В работе» живёт в памяти процесса. Экран открывают пачками —
+# посмотрел, отсканировал, вернулся, — и каждый заход стоил бы запроса в
+# Агбис за сроками, фото и комментариями. Полторы минуты достаточно, чтобы
+# переключение вкладок было мгновенным, и мало, чтобы только что сданная
+# работа задержалась на экране; кнопка «Обновить» кэш всё равно обходит.
+WIP_CACHE_TTL_SECONDS = 90
+_wip_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
+
+
+def get_wip(master: Master, *, refresh: bool = False) -> list[dict[str, Any]]:
     """Услуги, принятые этим мастером и ещё не сданные.
 
     Склеиваем текущий и прошлый месяц: работа, принятая в конце прошлого
@@ -297,6 +306,26 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
     кнопки. Два прогретых месяца дают ~30-60 дней глубины бесплатно;
     работа, висящая дольше, — повод для разговора, а не для отчёта.
     """
+    import time as _time
+
+    if not refresh:
+        cached = _wip_cache.get(master.agbis_user_id)
+        if cached and _time.monotonic() - cached[0] < WIP_CACHE_TTL_SECONDS:
+            return cached[1]
+    rows = _build_wip(master)
+    _wip_cache[master.agbis_user_id] = (_time.monotonic(), rows)
+    return rows
+
+
+def invalidate_wip(master_user_id: int | None = None) -> None:
+    """Сбросить кэш «В работе» — после скана, который меняет этот список."""
+    if master_user_id is None:
+        _wip_cache.clear()
+    else:
+        _wip_cache.pop(int(master_user_id), None)
+
+
+def _build_wip(master: Master) -> list[dict[str, Any]]:
     seen: set[Any] = set()
     services: list[dict] = []
     for period in (PERIOD_MONTH, PERIOD_PREV_MONTH):
@@ -321,6 +350,7 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
                 days = None
         extra = details.get(svc.get("service_id")) or {}
         wip.append({
+            "service_id": svc.get("service_id"),
             "doc_num": svc.get("doc_num"),
             "name": svc.get("name"),
             "service_group": svc.get("service_group"),
@@ -330,6 +360,7 @@ def get_wip(master: Master) -> list[dict[str, Any]]:
             "urgent": str(svc.get("code") or "").startswith("144."),
             **deadline(extra.get("due"), datetime.now()),
             "photos": extra.get("photos") or [],
+            "comments": extra.get("comments") or [],
         })
     wip.sort(key=_wip_order)
     return wip
@@ -376,11 +407,31 @@ def deadline(due: Optional[datetime], now: datetime) -> dict[str, Any]:
 WIP_PHOTOS_PER_ITEM = 6
 
 
+def _text(value: Any) -> str:
+    """Строка из Агбиса: соединение открыто с charset=NONE, поэтому текст
+    приходит байтами в cp1251."""
+    if isinstance(value, bytes):
+        return value.decode("cp1251", "replace").strip()
+    return str(value or "").strip()
+
+
 def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
-    """Срок заказа и фото изделия для каждой услуги — живым запросом в Агбис.
+    """Срок заказа, фото изделия и комментарии приёмщика — живым запросом в Агбис.
 
     Срок — DOCS_ORDER.DATE_OUT. В кэше отчёта masters.works его нет, а тащить
     туда ради одного экрана значило бы менять самый дорогой отчёт системы.
+
+    Комментарий приёмщика — DOC_ORDER_SERVICES.EXT_INFO («согласовать цвет»,
+    «подбор и установка пряжки», «носы»). Его пишут и на строке услуги, и на
+    строке изделия — берём оба, помечая, к чему относится: у изделия это
+    замечание ко всей паре, у услуги — к конкретной работе. Заполнен он
+    примерно у каждой десятой строки, поэтому экран обязан честно говорить
+    «комментариев нет», а не просто ничего не показывать.
+
+    DOC_ORDER_SERV_COMMENTS — отдельная, почти неиспользуемая таблица (73
+    строки за всю историю), но раз комментарий там всё-таки может быть
+    оставлен, читаем и её: мастер не должен пропустить «в понедельник клиент
+    улетает в 16.00» из-за того, что приёмщик написал не в то поле.
 
     Фото в Агбисе всегда висит на изделии («Ботильоны»), а не на услуге
     («Набойки»): услуга ссылается на своё изделие через PARENT_DOS_ID. Строка
@@ -408,20 +459,35 @@ def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
             for start in range(0, len(ids), 500):
                 chunk = ids[start:start + 500]
                 cur.execute(
-                    "SELECT dos.id, dos.parent_dos_id, dor.date_out FROM doc_order_services dos "
+                    "SELECT dos.id, dos.parent_dos_id, dor.date_out, dos.ext_info "
+                    "FROM doc_order_services dos "
                     "JOIN docs_order dor ON dor.id = dos.doc_order_id "
                     f"WHERE dos.id IN ({','.join('?' * len(chunk))})",
                     chunk,
                 )
-                for sid, parent_id, date_out in cur.fetchall():
+                for sid, parent_id, date_out, ext_info in cur.fetchall():
                     due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
-                    out[sid] = {"due": due, "photos": []}
+                    comments = []
+                    note = _text(ext_info)
+                    if note:
+                        comments.append({"text": note, "about": "услуге"})
+                    out[sid] = {"due": due, "photos": [], "comments": comments}
                     item_of[sid] = parent_id or sid
 
             photos_of_item: dict[int, list[dict[str, Any]]] = {}
+            note_of_item: dict[int, str] = {}
             items = sorted(set(item_of.values()))
             for start in range(0, len(items), 500):
                 chunk = items[start:start + 500]
+                cur.execute(
+                    "SELECT dos.id, dos.ext_info FROM doc_order_services dos "
+                    f"WHERE dos.id IN ({','.join('?' * len(chunk))})",
+                    chunk,
+                )
+                for item_id, ext_info in cur.fetchall():
+                    note = _text(ext_info)
+                    if note:
+                        note_of_item[item_id] = note
                 cur.execute(
                     "SELECT p.dos_id, p.id, p.md5_checksum, p.small FROM doc_order_serv_photos p "
                     f"WHERE p.dos_id IN ({','.join('?' * len(chunk))}) "
@@ -441,13 +507,46 @@ def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
                             mime = "image/png" if raw[:4] == b"\x89PNG" else "image/jpeg"
                             photo["thumb"] = f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
                     bucket.append(photo)
+
+            # Редкая таблица отдельных комментариев — по строке услуги и по
+            # строке изделия сразу.
+            typed: dict[int, list[dict[str, Any]]] = {}
+            rows = sorted(set(ids) | set(items))
+            for start in range(0, len(rows), 500):
+                chunk = rows[start:start + 500]
+                cur.execute(
+                    "SELECT c.dos_id, c.dt, c.comment FROM doc_order_serv_comments c "
+                    f"WHERE c.dos_id IN ({','.join('?' * len(chunk))}) ORDER BY c.dt",
+                    chunk,
+                )
+                for dos_id, when, comment in cur.fetchall():
+                    text = _text(comment)
+                    if not text:
+                        continue
+                    typed.setdefault(dos_id, []).append({
+                        "text": text,
+                        "about": "услуге" if dos_id in out else "изделию",
+                        "date": when.isoformat(timespec="minutes") if isinstance(when, datetime) else None,
+                    })
+
             for sid, item_id in item_of.items():
                 out[sid]["photos"] = photos_of_item.get(item_id, [])
+                note = note_of_item.get(item_id)
+                extra = [{"text": note, "about": "изделию"}] if note and item_id != sid else []
+                extra += typed.get(sid, []) + (typed.get(item_id, []) if item_id != sid else [])
+                # Одно и то же замечание часто стоит и на изделии, и на услуге —
+                # мастеру это один комментарий, а не два.
+                seen_text = {c["text"] for c in out[sid]["comments"]}
+                for comment in extra:
+                    if comment["text"] in seen_text:
+                        continue
+                    seen_text.add(comment["text"])
+                    out[sid]["comments"].append(comment)
             return out
         finally:
             con.close()
     except Exception:
-        logger.exception("Не удалось получить сроки и фото заказов для «В работе»")
+        logger.exception("Не удалось получить сроки, фото и комментарии заказов для «В работе»")
         return {}
 
 

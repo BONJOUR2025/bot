@@ -19,6 +19,9 @@ from .dependencies import get_current_user
 
 PERIODS = ("month", "prev_month")
 
+# Сколько миниатюр едет в первом ответе «В работе» — примерно экран списка.
+WIP_INLINE_THUMBS = 8
+
 
 def create_master_self_router() -> APIRouter:
     router = APIRouter(prefix="/masters/me", tags=["Masters"])
@@ -64,10 +67,49 @@ def create_master_self_router() -> APIRouter:
         return {**report, "name": master.name, "position": master.position}
 
     @router.get("/wip")
-    async def get_my_wip(current: ResolvedUser = Depends(get_current_user)) -> dict:
+    async def get_my_wip(
+        refresh: bool = Query(False),
+        current: ResolvedUser = Depends(get_current_user),
+    ) -> dict:
+        """Незакрытые работы. Миниатюры изделий — только у первых строк.
+
+        Снимок едет data URI прямо в ответе (см. master_bot_service), и у
+        мастера с сорока открытыми работами ответ весил 190 КБ: на телефоне в
+        мастерской это секунды пустого экрана. Видны сразу всё равно первые
+        несколько строк, поэтому остальные миниатюры страница добирает
+        отдельным запросом (/wip/thumbs) уже после того, как список показан.
+        """
+        from functools import partial
+
         from app.services.master_bot_service import get_wip
 
-        return {"items": await _run(get_wip, _master(current))}
+        rows = await _run(partial(get_wip, refresh=refresh), _master(current))
+        items = []
+        deferred = 0
+        for index, row in enumerate(rows):
+            photos = row.get("photos") or []
+            if index >= WIP_INLINE_THUMBS and photos and photos[0].get("thumb"):
+                row = {**row, "photos": [{**photos[0], "thumb": None}, *photos[1:]]}
+                deferred += 1
+            items.append(row)
+        return {"items": items, "thumbs_deferred": deferred}
+
+    @router.get("/wip/thumbs")
+    async def get_my_wip_thumbs(current: ResolvedUser = Depends(get_current_user)) -> dict:
+        """Отложенные миниатюры — одним ответом, из того же прогретого списка.
+
+        Одним запросом, а не по снимку на строку: параллельные обращения к
+        Агбису за картинками однажды уже уронили сервер.
+        """
+        from app.services.master_bot_service import get_wip
+
+        rows = await _run(get_wip, _master(current))
+        thumbs = {}
+        for row in rows[WIP_INLINE_THUMBS:]:
+            photos = row.get("photos") or []
+            if photos and photos[0].get("thumb") and row.get("service_id") is not None:
+                thumbs[str(row["service_id"])] = photos[0]["thumb"]
+        return {"thumbs": thumbs}
 
     @router.get("/photos/{photo_id}/full")
     async def get_my_order_photo(
@@ -186,6 +228,12 @@ def create_master_self_router() -> APIRouter:
             raise _scan_error(exc)
         if result is None:
             raise HTTPException(status_code=404, detail="Бирка не найдена в Агбисе. Проверьте номер под штрихкодом.")
+        if result.get("written"):
+            # Список «В работе» только что изменился — отдавать из кэша
+            # прежний значило бы показать мастеру работу, которую он уже сдал.
+            from app.services.master_bot_service import invalidate_wip
+
+            invalidate_wip(master.agbis_user_id)
         if result["dry_run"]:
             outcome = "пробно, " + ("разрешён" if result["allowed"] else "; ".join(result["blockers"]))
         elif result.get("written"):

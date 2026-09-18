@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_current_user
+from app.api import master_self
 from app.api.master_self import create_master_self_router
 from app.services import master_bot_service as mbs
 from app.services.access_control_service import ResolvedUser
@@ -47,7 +48,10 @@ def calls(monkeypatch):
         return {"period": period, "accrued": 315.0, "is_apprentice": False}
 
     monkeypatch.setattr(mbs, "get_earnings", earnings)
-    monkeypatch.setattr(mbs, "get_wip", lambda master: [{"doc_num": "37209-7", "kredit": 2100.0}])
+    monkeypatch.setattr(
+        mbs, "get_wip",
+        lambda master, refresh=False: [{"doc_num": "37209-7", "kredit": 2100.0}],
+    )
     monkeypatch.setattr(
         mbs, "get_advance_cap",
         lambda master: {"earned": 315.0, "advances": 0.0, "available": 315.0, "basis": "accrued"},
@@ -116,6 +120,28 @@ def test_wip_and_advance_cap(calls):
     cap = client.get("/api/masters/me/advance-cap")
     assert cap.status_code == 200
     assert cap.json()["available"] == 315.0
+
+
+def test_far_thumbs_are_deferred_to_a_second_request(calls, monkeypatch):
+    """Миниатюры дальних строк не едут в первом ответе: у мастера с сорока
+    работами они весили втрое больше самого списка."""
+    rows = [
+        {"service_id": i, "doc_num": f"{i}-7", "kredit": 100.0,
+         "photos": [{"id": i, "md5": "x", "thumb": f"data:image/jpeg;base64,{i}"}]}
+        for i in range(12)
+    ]
+    monkeypatch.setattr(mbs, "get_wip", lambda master, refresh=False: rows)
+    client = _client(_user())
+
+    items = client.get("/api/masters/me/wip").json()
+    assert items["thumbs_deferred"] == 12 - master_self.WIP_INLINE_THUMBS
+    assert items["items"][0]["photos"][0]["thumb"] is not None
+    assert items["items"][-1]["photos"][0]["thumb"] is None
+    assert rows[-1]["photos"][0]["thumb"] is not None   # кэш сервиса не испорчен
+
+    thumbs = client.get("/api/masters/me/wip/thumbs").json()["thumbs"]
+    assert thumbs["11"] == "data:image/jpeg;base64,11"
+    assert "0" not in thumbs
 
 
 def test_photo_of_someone_elses_order_is_not_served(calls, monkeypatch):

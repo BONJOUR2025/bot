@@ -5157,6 +5157,17 @@ body.viewer3d-fs-active .app-card {
 .emp-wip-item--overdue { border-left: 3px solid var(--color-danger); }
 .emp-wip-item--today { border-left: 3px solid var(--color-warning, #d97706); }
 
+/* Комментарии приёмщика из Агбиса (ext_info услуги и изделия) */
+.emp-wip-notes { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.emp-wip-note { display: flex; gap: 0.45rem; align-items: flex-start; padding: 0.5rem 0.6rem; border-radius: 9px; background: color-mix(in srgb, var(--color-primary) 8%, transparent); font-size: 0.85rem; line-height: 1.35; color: var(--color-text); }
+.emp-wip-note svg { flex: none; margin-top: 0.15rem; color: var(--color-primary); }
+.emp-wip-note i { display: block; margin-top: 0.1rem; font-style: normal; font-size: 0.75rem; color: var(--color-text-muted); }
+.emp-wip-note--none { background: transparent; padding: 0.15rem 0; color: var(--color-text-muted); font-size: 0.8rem; }
+.emp-wip-note--none svg { color: var(--color-text-muted); opacity: 0.7; }
+.emp-wip-spin { animation: emp-wip-spin 0.9s linear infinite; }
+@keyframes emp-wip-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .emp-wip-spin { animation: none; } }
+
 /* Режим «Подряд», заработок на выходе и журнал отметок */
 .emp-scan-streak { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; color: var(--color-text); cursor: pointer; min-height: 44px; }
 .emp-scan-streak input { width: 1.15rem; height: 1.15rem; accent-color: var(--color-primary); }

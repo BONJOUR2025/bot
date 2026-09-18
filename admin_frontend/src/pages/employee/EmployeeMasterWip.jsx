@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { MessageSquare, RefreshCw } from 'lucide-react';
 import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
 import { masterErrorText, money, serviceTitle } from './masterFormat.js';
@@ -8,15 +8,47 @@ import { masterErrorText, money, serviceTitle } from './masterFormat.js';
  *  (GET /api/masters/me/wip → master_bot_service.get_wip).
  *
  *  Сверху — горящие: обещанная клиенту дата уже прошла или наступает сегодня.
- *  Срок — тот же DATE_OUT заказа, по которому считаются просрочки. */
+ *  Срок — тот же DATE_OUT заказа, по которому считаются просрочки.
+ *
+ *  Открывается мгновенно: список с прошлого захода лежит в sessionStorage и
+ *  рисуется сразу, а свежий подгружается следом и подменяет его. Миниатюры
+ *  дальних строк сервер в первом ответе не шлёт (они весили больше самого
+ *  списка) — страница добирает их вторым запросом. */
 
 // Полный размер — через адрес кабинета мастера: он отдаёт только фото
 // изделий из работ самого мастера.
 const masterPhotoPath = (p) => `/masters/me/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
 
+const CACHE_KEY = 'master_wip_cache';
+
+function readCache() {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    const data = raw ? JSON.parse(raw) : null;
+    return Array.isArray(data?.items) ? data.items : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(items) {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ items }));
+  } catch {
+    // Приватный режим или переполненное хранилище — кэш необязателен.
+  }
+}
+
 function hhmm(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+function noteDate(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
 
 function dueBadge(it) {
@@ -31,23 +63,49 @@ function dueBadge(it) {
   return null;
 }
 export default function EmployeeMasterWip() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cached = readCache();
+  const [items, setItems] = useState(cached || []);
+  const [loading, setLoading] = useState(!cached);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   // Просмотр фото изделия: { photos, index } или null.
   const [viewer, setViewer] = useState(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((refresh = false) => {
+    setRefreshing(true);
     setError('');
     api
-      .get('/masters/me/wip')
-      .then((res) => setItems(res.data?.items || []))
+      .get('/masters/me/wip', refresh ? { params: { refresh: 1 } } : undefined)
+      .then((res) => {
+        const rows = res.data?.items || [];
+        setItems(rows);
+        writeCache(rows);
+        if (res.data?.thumbs_deferred) {
+          api.get('/masters/me/wip/thumbs').then((r2) => {
+            const thumbs = r2.data?.thumbs || {};
+            if (!Object.keys(thumbs).length) return;
+            setItems((current) => {
+              const filled = current.map((it) => {
+                const thumb = thumbs[String(it.service_id)];
+                if (!thumb || !it.photos?.length || it.photos[0].thumb) return it;
+                return { ...it, photos: [{ ...it.photos[0], thumb }, ...it.photos.slice(1)] };
+              });
+              writeCache(filled);
+              return filled;
+            });
+          }).catch(() => {
+            // Без миниатюр список остаётся рабочим — молчим.
+          });
+        }
+      })
       .catch((err) => {
         setItems([]);
         setError(masterErrorText(err));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -65,11 +123,11 @@ export default function EmployeeMasterWip() {
         <button
           type="button"
           className="icon-button"
-          onClick={load}
-          disabled={loading}
+          onClick={() => load(true)}
+          disabled={refreshing}
           aria-label="Обновить"
         >
-          <RefreshCw size={18} />
+          <RefreshCw size={18} className={refreshing ? 'emp-wip-spin' : undefined} />
         </button>
       </div>
 
@@ -132,6 +190,24 @@ export default function EmployeeMasterWip() {
                         <span>{money(it.kredit)}</span>
                       </div>
                     </div>
+                  </div>
+                  <div className="emp-wip-notes">
+                    {it.comments?.length ? (
+                      it.comments.map((c, ci) => (
+                        <div key={`${c.about}-${ci}`} className="emp-wip-note">
+                          <MessageSquare size={14} aria-hidden="true" />
+                          <span>
+                            {c.text}
+                            <i>к {c.about}{c.date ? `, ${noteDate(c.date)}` : ''}</i>
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="emp-wip-note emp-wip-note--none">
+                        <MessageSquare size={14} aria-hidden="true" />
+                        <span>Комментариев в Агбисе нет</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

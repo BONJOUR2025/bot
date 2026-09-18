@@ -7,6 +7,7 @@ master_bot_service.MASTER_POSITIONS), а данные тянутся из общ
 from __future__ import annotations
 
 from datetime import date
+from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -120,6 +121,10 @@ def format_wip(rows: list[dict]) -> str:
         days = f" · {row['days']} дн" if row["days"] is not None else ""
         lines.append(f"{mark} <b>{row['doc_num']}</b>{days}")
         lines.append(f"    {str(row['name'])[:48]} — {money(row['kredit'])}")
+        # Комментарий приёмщика («согласовать цвет») — то, из-за чего работу
+        # переделывают, если его не прочитали.
+        for note in (row.get("comments") or [])[:2]:
+            lines.append(f"    💬 {escape(str(note.get('text'))[:80])}")
     if len(rows) > 30:
         lines.append(f"\n…и ещё {len(rows) - 30}")
     lines.append("")
