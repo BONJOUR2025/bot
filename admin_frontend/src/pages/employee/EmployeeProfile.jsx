@@ -196,7 +196,12 @@ export default function EmployeeProfile() {
             <EditableRow label="Банк" value={employee.bank} onSave={(v) => saveField('bank', v)} />
           </div>
 
-          <div className="emp-profile-section">
+          {/* Пустая секция с одним заголовком выглядела как недогрузившийся
+              экран: у многих карточек эти поля не заполнены. */}
+          <div
+            className="emp-profile-section"
+            hidden={!employee.work_place && !employee.clothing_size && !employee.birthdate}
+          >
             <div className="emp-profile-section__title">О сотруднике</div>
             <Row label="Подразделение" value={employee.work_place} />
             <Row label="Размер одежды" value={employee.clothing_size} />

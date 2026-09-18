@@ -7521,3 +7521,18 @@ button:hover > .vac-desc { color: var(--color-text); }
 .emp-sched__roster-row { display: flex; justify-content: space-between; gap: 0.8rem; padding: 0.35rem 0; border-bottom: 1px solid var(--color-border); font-size: 0.86rem; }
 .emp-sched__roster-row:last-child { border-bottom: 0; }
 .emp-sched__roster-row span:last-child { color: var(--color-text-muted); }
+
+/* ── Правки по итогам разбора экранов администратора ──────────────── */
+/* Шесть пунктов меню не помещались, и «Имущество» обрезалось многоточием. */
+.emp-bottomnav__item { font-size: 0.62rem; line-height: 1.15; text-align: center; padding-inline: 0.1rem; min-width: 0; }
+.emp-bottomnav__item span { display: block; max-width: 100%; }
+
+/* В сетке графика заливка и точка говорили одно и то же; оставили заливку,
+   а «сегодня» сделали заметнее. */
+.emp-sched__cell i { display: none; }
+.emp-sched__cell.is-today { box-shadow: inset 0 0 0 2px var(--color-primary); font-weight: 700; }
+.emp-sched__legend i.is-today { box-shadow: inset 0 0 0 2px var(--color-primary); }
+
+/* Метка «не подтверждено» рвала название вещи на две строки. */
+.emp-payout-item__top { gap: 0.5rem; align-items: flex-start; }
+.emp-payout-item__amount { min-width: 0; overflow-wrap: anywhere; }

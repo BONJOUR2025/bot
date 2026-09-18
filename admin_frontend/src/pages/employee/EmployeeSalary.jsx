@@ -142,6 +142,18 @@ export default function EmployeeSalary() {
         <p className="emp-page__empty">Данных за выбранный месяц нет</p>
       )}
 
+      {row && (
+        <section className="emp-salary-card emp-earn-hero">
+          <div className="emp-earn-hero__label">К выплате за {String(row.month).toLowerCase()}</div>
+          <div className="emp-earn-hero__sum">{fmt(row.final_amount)}</div>
+          <div className="emp-earn-hero__sub">
+            Начислено {fmt(row.salary_total)} за {fmtNum(row.shifts_total)} смен
+            {row.advance > 0 ? `, аванс уже выплачен ${fmt(row.advance)}` : ''}
+            {row.deduction > 0 ? `, удержания ${fmt(row.deduction)}` : ''}
+          </div>
+        </section>
+      )}
+
       {hasPlans && (
         <div className="emp-salary-card">
           <section className="emp-salary-section">
@@ -173,8 +185,6 @@ export default function EmployeeSalary() {
 
       {row && (
         <div className="emp-salary-card">
-          <div className="emp-salary-card__month">{row.month}</div>
-
           <section className="emp-salary-section">
             <div className="emp-salary-section__title">Смены</div>
             <div className="emp-salary-grid">
