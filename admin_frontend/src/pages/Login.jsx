@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 
@@ -31,24 +31,34 @@ export default function Login() {
   const [form, setForm] = useState({ login: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  // В приложении логин выбирается из списка (GET /master-app/logins для
-  // мастеров, /salon-app/logins для администраторов точек): человек ищет себя
-  // по фамилии и не ошибается в написании логина. Если список не пришёл или
-  // пуст — обычное поле, войти должно быть можно всегда.
+  // Логин выбирается из списка (GET /master-app/logins для мастеров,
+  // /salon-app/logins для администраторов точек): человек ищет себя по фамилии
+  // и не ошибается в написании логина «Виноградова В.» с пробелом и точкой.
+  // В приложении список открыт сразу, в браузере — по кнопке «Выбрать себя из
+  // списка»: там же входят руководители, которым список ни к чему. Если список
+  // не пришёл или пуст — обычное поле, войти должно быть можно всегда.
   const [masterLogins, setMasterLogins] = useState(null);
   const [manualLogin, setManualLogin] = useState(!IN_APP);
 
-  useEffect(() => {
-    if (!IN_APP || !APP_LOGINS_URL) return;
-    api
-      .get(APP_LOGINS_URL)
-      .then((res) => {
-        const list = Array.isArray(res.data) ? res.data : [];
-        setMasterLogins(list);
-        if (list.length === 0) setManualLogin(true);
+  const loadLogins = useCallback(() => {
+    const urls = APP_LOGINS_URL ? [APP_LOGINS_URL] : ['/master-app/logins', '/salon-app/logins'];
+    setMasterLogins(null);
+    Promise.all(urls.map((url) => api.get(url).then((res) => res.data).catch(() => [])))
+      .then((lists) => {
+        const seen = new Set();
+        const all = lists
+          .flat()
+          .filter((item) => item && item.login && !seen.has(item.login) && seen.add(item.login))
+          .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+        setMasterLogins(all);
+        if (all.length === 0) setManualLogin(true);
       })
       .catch(() => setManualLogin(true));
   }, []);
+
+  useEffect(() => {
+    if (IN_APP) loadLogins();
+  }, [loadLogins]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -138,6 +148,19 @@ export default function Login() {
               </select>
             )}
           </label>
+          {manualLogin && (
+            <button
+              type="button"
+              className="auth-card__pick"
+              onClick={() => {
+                setManualLogin(false);
+                setForm((prev) => ({ ...prev, login: '' }));
+                loadLogins();
+              }}
+            >
+              Выбрать себя из списка
+            </button>
+          )}
           <label className="form-field">
             <span>Пароль</span>
             <input

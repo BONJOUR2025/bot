@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScanLine } from 'lucide-react';
 import api from '../../api.js';
 import { IN_MASTER_APP } from '../../utils/masterApp.js';
+import WebScanner, { canScanInBrowser } from './WebScanner.jsx';
 import { money, serviceTitle } from './masterFormat.js';
 
 /** Вход и выход по бирке.
@@ -27,8 +28,15 @@ const STREAK_KEY = 'masterScan.streak';
 // Пауза перед повторным запуском камеры: мастер успевает увидеть «+758 ₽».
 const STREAK_REOPEN_MS = 1200;
 
+/** Чем сканировать бирку: 'app' — системный сканер приложения, 'web' — камера
+ *  браузера (BarcodeDetector), null — только ручной ввод. */
+function scannerKind() {
+  if (typeof window !== 'undefined' && typeof window.BonjourApp?.scanBarcode === 'function') return 'app';
+  return canScanInBrowser() ? 'web' : null;
+}
+
 function canScanWithCamera() {
-  return typeof window !== 'undefined' && typeof window.BonjourApp?.scanBarcode === 'function';
+  return scannerKind() !== null;
 }
 
 function readStreak() {
@@ -107,10 +115,15 @@ export default function EmployeeMasterScan() {
   const [today, setToday] = useState(null);
   const inputRef = useRef(null);
   const reopenTimer = useRef(null);
-  const canScan = canScanWithCamera();
+  const kind = scannerKind();
+  const canScan = kind !== null;
+  // Камера браузера живёт на этой же странице, поэтому её видимость — состояние.
+  const [webCamera, setWebCamera] = useState(false);
 
   const openCamera = useCallback(() => {
-    if (canScanWithCamera()) window.BonjourApp.scanBarcode();
+    const how = scannerKind();
+    if (how === 'app') window.BonjourApp.scanBarcode();
+    else if (how === 'web') setWebCamera(true);
   }, []);
 
   const lookup = useCallback(async (raw, { keepError = false } = {}) => {
@@ -232,6 +245,8 @@ export default function EmployeeMasterScan() {
 
   return (
     <div className="emp-page">
+      {webCamera && <WebScanner onClose={() => setWebCamera(false)} />}
+
       <div className="emp-page__head">
         <h2 className="emp-page__title">Вход и выход</h2>
         <label className="emp-scan-streak">
@@ -270,7 +285,12 @@ export default function EmployeeMasterScan() {
               Чтобы сканировать камерой, обновите приложение — кнопка «Обновить» вверху страницы.
               Пока можно ввести номер вручную.
             </p>
-          ) : null}
+          ) : (
+            <p className="emp-scan-hint">
+              Этот браузер не умеет читать штрихкод камерой — введите 18 цифр под ним.
+              В приложении «BONJOUR Мастер» сканер работает.
+            </p>
+          )}
 
           <form
             className="emp-scan-manual"

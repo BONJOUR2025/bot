@@ -7461,3 +7461,29 @@ button:hover > .vac-desc { color: var(--color-text); }
 .emp-shifts-card__btn { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; padding: 0 1rem; border: 0; border-radius: 999px; background: var(--color-primary); color: #fff; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
 .emp-shifts-card__btn:disabled { opacity: 0.6; cursor: default; }
 .emp-shifts-card__btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+
+/* Кнопка «Выбрать себя из списка» на входе в браузере — в приложении список
+   открыт сразу, здесь он прячется за одно нажатие. */
+.auth-card__pick {
+  align-self: flex-start; margin-top: -0.4rem; padding: 0.3rem 0;
+  border: 0; background: none; color: var(--color-primary);
+  font: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.auth-card__pick:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* Сканер бирки камерой в браузере — поверх страницы, как системный сканер. */
+.web-scan { position: fixed; inset: 0; z-index: 60; background: #000; display: grid; place-items: center; }
+.web-scan__video { width: 100%; height: 100%; object-fit: cover; }
+.web-scan__frame {
+  position: absolute; left: 50%; top: 50%; width: min(78vw, 420px); height: 34vh;
+  transform: translate(-50%, -50%); border: 2px solid rgba(255, 255, 255, 0.9); border-radius: 14px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+.web-scan__hint { position: absolute; left: 0; right: 0; bottom: calc(12% + env(safe-area-inset-bottom, 0px)); text-align: center; color: #fff; font-size: 0.95rem; }
+.web-scan__error { max-width: 22rem; padding: 0 1.5rem; color: #fff; text-align: center; line-height: 1.5; }
+.web-scan__close {
+  position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; z-index: 1;
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; cursor: pointer;
+}
+.web-scan__close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
