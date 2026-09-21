@@ -259,9 +259,32 @@ def _candidate_label(candidate, vacancy) -> str:
     return f"<b>{candidate.name}</b> ({src_label}){vac}"
 
 
-async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
+# Статусы, при которых опрос по карточке уже идёт или прошёл. «queued» сюда
+# не входит: это «ждём рабочих часов», вопросов ещё никто не задавал.
+_SURVEY_STARTED = {"asking", "waiting_admin", "done"}
+
+
+def twin_with_survey(db, candidate):
+    """Карточка того же человека в другой вакансии, где опрос уже начат.
+
+    Человек, откликнувшийся на две точки, получал два одинаковых опроса в
+    двух чатах. Второй не нужен: ответы по первой вакансии видны в карточке.
+    """
+    from app.services import candidate_merge
+
+    for twin in candidate_merge.other_vacancy_twins(db, candidate):
+        if load_state(twin).get("status") in _SURVEY_STARTED:
+            return twin
+    return None
+
+
+async def start_screening(db, candidate, vacancy, src, token: str,
+                          allow_twin: bool = False) -> bool:
     """Kick off the screen for a freshly-arrived response: alert the admin,
-    then ask the first question. Returns True if the first question was sent."""
+    then ask the first question. Returns True if the first question was sent.
+
+    allow_twin=True — запуск по явному решению человека, даже если этот же
+    кандидат уже проходит или прошёл опрос по другой вакансии."""
     from app.services.notify import send_notification
 
     from app.services import candidate_hours
@@ -273,6 +296,12 @@ async def start_screening(db, candidate, vacancy, src, token: str) -> bool:
         return False
     if load_state(candidate):
         return False  # already started
+    if not allow_twin:
+        twin = twin_with_survey(db, candidate)
+        if twin is not None:
+            log.info("quick_screening: candidate %s skipped — same person is screened as candidate %s "
+                     "(vacancy %s)", candidate.id, twin.id, twin.vacancy_id)
+            return False
 
     if not candidate_hours.is_within():
         # Отклик пришёл ночью — здороваться сейчас нельзя. Ставим опрос в

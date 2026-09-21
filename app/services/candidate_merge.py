@@ -356,3 +356,55 @@ def channel_by_key(candidate, key: str) -> dict | None:
 
 def channel_key(channel: dict) -> str:
     return f"{channel.get('source', '')}:{channel.get('external_id', '')}"
+
+
+# ── тот же человек в других вакансиях ────────────────────────────────────
+#
+# Слияние выше работает только внутри одной вакансии: отклик на «Охта Молл»
+# и отклик на «Академ Парк» — это два решения по двум точкам, и склеивать
+# их нельзя (человек может подойти в одну и не подойти в другую). Но и
+# делать вид, что это разные люди, тоже нельзя: бот вёл с ним два одинаковых
+# опроса, а рекрутёр не видел, что по соседней точке ему уже отказали.
+# Поэтому карточки остаются раздельными, а связь между ними вычисляется по
+# тем же ключам, что и слияние: id резюме hh и нормализованный телефон.
+
+def person_keys(candidate) -> set[str]:
+    keys: set[str] = set()
+    resume_id = (getattr(candidate, "resume_id", "") or "").strip()
+    if resume_id:
+        keys.add("r:" + resume_id)
+    phone = normalize_phone(getattr(candidate, "phone", ""))
+    if phone:
+        keys.add("p:" + phone)
+    return keys
+
+
+def cross_vacancy_index(candidates) -> dict[int, list]:
+    """id карточки → карточки того же человека в ДРУГИХ вакансиях."""
+    by_key: dict[str, list] = {}
+    for c in candidates:
+        for key in person_keys(c):
+            by_key.setdefault(key, []).append(c)
+    result: dict[int, list] = {}
+    for c in candidates:
+        twins: dict[int, object] = {}
+        for key in person_keys(c):
+            for other in by_key.get(key, ()):
+                if other.id != c.id and other.vacancy_id != c.vacancy_id:
+                    twins[other.id] = other
+        if twins:
+            result[c.id] = sorted(twins.values(), key=lambda o: o.id)
+    return result
+
+
+def other_vacancy_twins(db, candidate) -> list:
+    """Карточки этого же человека в других вакансиях (запрос в БД)."""
+    from app.models.recruitment import Candidate
+
+    if not person_keys(candidate):
+        return []
+    others = db.query(Candidate).filter(
+        Candidate.vacancy_id != candidate.vacancy_id,
+        Candidate.id != candidate.id,
+    ).all()
+    return cross_vacancy_index([candidate, *others]).get(candidate.id, [])

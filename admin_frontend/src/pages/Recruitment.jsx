@@ -592,7 +592,7 @@ function CallOutcome({ candidate, hasPlatformChat, platformLabel, templates, onC
 
 function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory,
                            onPauseToggle, templates = [], onCandidateChanged,
-                           initialTab = 'info' }) {
+                           onOpenTwin, initialTab = 'info' }) {
   const { toast } = useToast();
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
@@ -682,7 +682,16 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   async function startQuick() {
     setQuickStarting(true); setMsgError('');
     try {
-      await api.post(`/recruitment/candidates/${candidate.id}/quick-screening`);
+      try {
+        await api.post(`/recruitment/candidates/${candidate.id}/quick-screening`);
+      } catch (e) {
+        // 409 — этого человека уже опрашивают (или опросили) по другой
+        // вакансии. Второй опрос задаст ему те же вопросы ещё раз, поэтому
+        // только по явному «да».
+        if (e.response?.status !== 409) throw e;
+        if (!window.confirm(`${e.response.data.detail}\n\nЗапустить второй опрос всё равно?`)) return;
+        await api.post(`/recruitment/candidates/${candidate.id}/quick-screening`, null, { params: { force: 1 } });
+      }
       await loadQuick();
       await loadMessages();
     } catch (e) {
@@ -844,6 +853,68 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
 
         {/* ── Body ── */}
         {tab === 'info' && <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+
+          {/* Тот же человек в других вакансиях. Карточки не склеиваем:
+              отклик на другую точку — отдельное решение. Но видеть его надо
+              до разговора: по соседней точке человеку могли уже отказать, а
+              ответы опроса там — те же, что спросил бы бот здесь. */}
+          {(candidate.other_vacancies || []).length > 0 && (
+            <div className="rounded-xl border border-[color:var(--color-border)] px-4 py-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                Откликался и на другие вакансии
+              </p>
+              {candidate.other_vacancies.map(t => {
+                const st = stageOf(t.stage);
+                return (
+                  <div key={t.candidate_id} className="space-y-1.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium break-words">{t.vacancy_title}</p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}
+                          </span>
+                          {!t.vacancy_open && (
+                            <span className="text-xs text-[color:var(--color-muted-foreground)]">вакансия закрыта</span>
+                          )}
+                          {t.survey === 'done' && (
+                            <span className="text-xs text-[color:var(--color-muted-foreground)]">опрос пройден</span>
+                          )}
+                          {(t.survey === 'asking' || t.survey === 'waiting_admin') && (
+                            <span className="text-xs text-[color:var(--color-muted-foreground)]">опрос идёт там</span>
+                          )}
+                        </div>
+                      </div>
+                      {onOpenTwin && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenTwin(t)}
+                          className="flex-shrink-0 text-xs font-medium text-[color:var(--color-primary)] hover:underline flex items-center gap-1"
+                        >
+                          Открыть <ArrowRight size={12} />
+                        </button>
+                      )}
+                    </div>
+                    {t.answers.length > 0 && (
+                      <details className="text-sm">
+                        <summary className="cursor-pointer text-xs text-[color:var(--color-primary)]">
+                          Ответы опроса по этой вакансии ({t.answers.length})
+                        </summary>
+                        <ol className="mt-2 space-y-1.5 list-decimal pl-5">
+                          {t.answers.map((a, i) => (
+                            <li key={i}>
+                              <span className="text-[color:var(--color-muted-foreground)]">{a.q}</span>
+                              <br />{a.a || '—'}
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Contacts block */}
           {(candidate.phone || candidate.email) && (
@@ -1296,6 +1367,7 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
   // Поэтому под фильтром возраст отклика показываем на любом этапе, а не
   // только в «Новых», где его рисует staleDays.
   const ageDays = showAge ? daysSince(c.created_at) : null;
+  const twins = c.other_vacancies || [];
   return (
     <div
       draggable={!selectionMode}
@@ -1340,7 +1412,7 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
 
       {/* Флаги — то, ради чего карточку и открывают: видно, требует ли она
           действия, ещё до клика. */}
-      {(flags.length > 0 || c.is_new || c.is_paused || aiActive) && (
+      {(flags.length > 0 || c.is_new || c.is_paused || aiActive || twins.length > 0) && (
         <div className="flex flex-wrap items-center gap-1 mt-2">
           {aiActive && (
             <span className="recruit-fui-ai-tag" title="ИИ сейчас ведёт быстрый опрос кандидата">
@@ -1364,6 +1436,14 @@ function CandidateCard({ c, onClick, onDragStart, onDragEnd, selectionMode, sele
           {c.is_paused && <CardFlag tone="paused" label="на паузе" icon={<Pause size={9} />} />}
           {(c.merged_from || []).length > 0 && (
             <CardFlag tone="merged" label="объединено" icon={<GitMerge size={9} />} />
+          )}
+          {twins.length > 0 && (
+            <CardFlag
+              tone="twin"
+              label={twins.length === 1 ? 'ещё 1 вакансия' : `ещё ${twins.length} вакансии`}
+              icon={<Briefcase size={9} />}
+              title={twins.map(t => `${t.vacancy_title} — ${stageOf(t.stage).label}`).join('\n')}
+            />
           )}
         </div>
       )}
@@ -1482,6 +1562,10 @@ const FLAG_TONES = {
   // отдельный тон.
   awaiting_reply: 'bg-violet-100 text-violet-800 border-violet-200',
   new:         'bg-emerald-100 text-emerald-700 border-emerald-200',
+  // Тот же человек откликнулся и на другую нашу вакансию — справочная
+  // метка, не тревога: действие не требуется, но решение по соседней точке
+  // стоит увидеть до разговора.
+  twin:        'bg-[color:var(--color-bg-secondary)] text-[color:var(--color-foreground)] border-[color:var(--color-border)]',
   // Карточка собрана из нескольких откликов одного человека. Тон
   // нейтральный: это не проблема и не требует действия, это справка
   // о происхождении карточки.
@@ -1489,9 +1573,9 @@ const FLAG_TONES = {
   paused:      'bg-amber-100 text-amber-700 border-amber-200',
 };
 
-function CardFlag({ tone, label, icon }) {
+function CardFlag({ tone, label, icon, title }) {
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
+    <span title={title} className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
       FLAG_TONES[tone] || FLAG_TONES.silent
     }`}>
       {icon}{label}
@@ -2445,6 +2529,8 @@ export default function Recruitment() {
   // читается как рабочая стопка на сегодня, а не как ещё одна вкладка.
   const [callCounts,      setCallCounts]      = useState(null);
   const [interviewModal,  setInterviewModal]  = useState(null);
+  // Карточка, которую открыть после переключения на её вакансию.
+  const [pendingOpenId,   setPendingOpenId]   = useState(null);
   const [showVacList,     setShowVacList]     = useState(!isMobile);
   const [showIntegrations,setShowIntegrations]= useState(false);
   const [showStrategies,  setShowStrategies]  = useState(false);
@@ -2595,12 +2681,18 @@ export default function Recruitment() {
       // may already be mid-screen, lack quick-mode questions, or not be a
       // job-board candidate at all), and one such rejection must not hide
       // that the rest actually started.
-      const failed = results.filter(r => r.status === 'rejected').length;
-      const started = results.length - failed;
+      // Уже опрошенных по другой вакансии считаем отдельно: это не сбой, а
+      // защита от второго одинакового опроса (запустить можно из карточки).
+      const twinSkipped = results.filter(r => r.status === 'rejected' && r.reason?.response?.status === 409).length;
+      const failed = results.filter(r => r.status === 'rejected').length - twinSkipped;
+      const started = results.length - failed - twinSkipped;
       await loadCandidates();
       exitSelection();
+      const twinNote = twinSkipped ? ` Пропущено ${twinSkipped}: уже опрошены по другой вакансии.` : '';
       if (failed > 0) {
-        toast(`Опрос запущен: ${started} из ${results.length}. Не удалось: ${failed} — откройте карточку, там есть причина.`, failed === results.length ? 'error' : 'success');
+        toast(`Опрос запущен: ${started} из ${results.length}. Не удалось: ${failed} — откройте карточку, там есть причина.${twinNote}`, failed === results.length ? 'error' : 'success');
+      } else if (twinSkipped) {
+        toast(`Опрос запущен: ${started} из ${results.length}.${twinNote}`, 'success');
       } else {
         toast(`Опрос запущен для ${started} кандидатов`, 'success');
       }
@@ -2649,6 +2741,15 @@ export default function Recruitment() {
   }, [selectedId]);
 
   useEffect(() => { loadCandidates(); }, [loadCandidates]);
+
+  useEffect(() => {
+    if (pendingOpenId == null || cLoading) return;
+    const found = candidates.find(c => c.id === pendingOpenId);
+    if (found) {
+      setDetailModal(found);
+      setPendingOpenId(null);
+    }
+  }, [pendingOpenId, candidates, cLoading]);
 
   async function toggleVacancy(v) {
     try {
@@ -3208,6 +3309,15 @@ export default function Recruitment() {
           onPauseToggle={handlePauseToggle}
           templates={msgTemplates}
           onCandidateChanged={loadCandidates}
+          onOpenTwin={t => {
+            // Карточка живёт в другой вакансии: переключаем вакансию и
+            // открываем её, когда список кандидатов догрузится.
+            setDetailModal(null);
+            setDetailTab('info');
+            setMainView('funnel');
+            setPendingOpenId(t.candidate_id);
+            setSelectedId(t.vacancy_id);
+          }}
         />
       )}
 

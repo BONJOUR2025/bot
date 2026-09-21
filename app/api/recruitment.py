@@ -207,6 +207,23 @@ def duplicate_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
     return d
 
 
+def _twin_summary(twin) -> dict:
+    """Карточка того же человека в другой вакансии — для метки и окна кандидата."""
+    from app.services import quick_screening, recruitment_stages as rs
+
+    state = quick_screening.load_state(twin)
+    vacancy = twin.vacancy
+    return {
+        "candidate_id": twin.id,
+        "vacancy_id": twin.vacancy_id,
+        "vacancy_title": vacancy.title if vacancy else "",
+        "vacancy_open": bool(vacancy.is_open) if vacancy else False,
+        "stage": rs.derive_stage(twin.stage, state),
+        "survey": state.get("status"),
+        "answers": state.get("answers") or [],
+    }
+
+
 @router.get("/candidates")
 def list_candidates(
     vacancy_id: Optional[int] = Query(None),
@@ -224,6 +241,10 @@ def list_candidates(
 
     since_24h = datetime.utcnow() - timedelta(hours=24)
     now = datetime.utcnow()
+    # Связь «тот же человек в другой вакансии» считается по всей базе, а не
+    # по выбранной вакансии: иначе вторую половину пары не найти.
+    from app.services import candidate_merge
+    twins_by_id = candidate_merge.cross_vacancy_index(db.query(Candidate).all())
     # Вопросы кэшируем по вакансии: их парсинг из JSON одинаков для всех
     # кандидатов одной вакансии, а список может быть длинным.
     questions_by_vacancy: dict[int, list] = {}
@@ -245,6 +266,7 @@ def list_candidates(
         d["answers"] = state.get("answers") or []
         d["is_new"] = bool(c.created_at and c.created_at >= since_24h)
         d["vacancy_title"] = c.vacancy.title if c.vacancy else ""
+        d["other_vacancies"] = [_twin_summary(t) for t in twins_by_id.get(c.id, [])]
         result.append(d)
 
     if stage:
@@ -965,7 +987,8 @@ def get_quick_screening(candidate_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/candidates/{candidate_id}/quick-screening")
-async def start_quick_screening(candidate_id: int, db: Session = Depends(get_db)):
+async def start_quick_screening(candidate_id: int, force: bool = Query(False),
+                                db: Session = Depends(get_db)):
     """Start the screen for this one candidate, regardless of whether the
     vacancy's quick-mode toggle is on — that toggle only governs whether new
     responses start one automatically. Requires the vacancy to have questions."""
@@ -977,8 +1000,14 @@ async def start_quick_screening(candidate_id: int, db: Session = Depends(get_db)
         raise HTTPException(400, "У вакансии не заданы вопросы быстрого режима — заполните их в карточке вакансии.")
     if quick_screening.load_state(c):
         raise HTTPException(400, "Опрос по этому кандидату уже запущен.")
+    # Тот же человек уже опрошен по другой вакансии — второй опрос только по
+    # явному подтверждению (force), иначе он получит те же вопросы дважды.
+    twin = quick_screening.twin_with_survey(db, c)
+    if twin is not None and not force:
+        title = twin.vacancy.title if twin.vacancy else "другой вакансии"
+        raise HTTPException(409, f"Кандидат уже проходит или прошёл опрос по вакансии «{title}».")
 
-    ok = await quick_screening.start_screening(db, c, vacancy, src, token)
+    ok = await quick_screening.start_screening(db, c, vacancy, src, token, allow_twin=True)
     if not ok:
         raise HTTPException(502, "Не удалось начать опрос — подробности в уведомлении.")
     return {"status": "started"}
