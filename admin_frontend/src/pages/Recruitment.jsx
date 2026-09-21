@@ -739,7 +739,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
       <div className="modal-card max-w-xl w-full flex flex-col overflow-hidden p-0">
 
         {/* ── Header with photo ── */}
-        <div className="relative flex items-end gap-4 px-6 pt-6 pb-4 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/20">
+        <div className="relative flex flex-shrink-0 items-end gap-4 px-6 pt-6 pb-4 border-b border-[color:var(--color-border)] bg-[color:var(--color-muted)]/20">
           {/* Avatar / photo */}
           <div className="flex-shrink-0">
             {candidate.photo_url ? (
@@ -802,10 +802,15 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
             viewport (sm:) was the bug: desktop viewports got full-length labels
             that didn't actually fit this box, overflowing invisibly (no visible
             scrollbar) whenever the 4th hh.ru tab was present. */}
-        <div className="flex overflow-x-auto border-b border-[color:var(--color-border)] px-3">
+        {/* flex-shrink-0: ряд вкладок — элемент колонки с ограниченной
+            высотой, а overflow-x-auto обнуляет ему минимальную высоту. Когда
+            содержимое длинное, колонка сжимала ряд, и подпись «Инфо»
+            срезалась снизу. Плюс «Инфо» без иконки не была flex-кнопкой и
+            стояла ниже соседних «hh.ru» и «ИИ». */}
+        <div className="flex flex-shrink-0 overflow-x-auto border-b border-[color:var(--color-border)] px-3">
           <button
             onClick={() => setTab('info')}
-            className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors ${
+            className={`flex-shrink-0 whitespace-nowrap text-xs font-medium py-2.5 px-2.5 border-b-2 transition-colors flex items-center gap-1 ${
               tab === 'info'
                 ? 'border-[color:var(--color-primary)] text-[color:var(--color-primary)]'
                 : 'border-transparent text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'

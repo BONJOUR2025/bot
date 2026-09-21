@@ -7743,3 +7743,12 @@ button:hover > .vac-desc { color: var(--color-text); }
   .rf__row .rf__chips { flex: 0 1 auto; }
   .rf__more-toggle { margin-left: 0; padding-left: 0; }
 }
+
+/* Окно, нарисованное прямо на странице (а не порталом в body, как через
+   components/Modal.jsx), живёт в слое .app-shell__content (z-index: 1
+   в стекле) внутри .app-shell__main (z-index: 10). Свой z-index: 60 оно
+   сравнивает только с соседями по этому слою, поэтому шапка (5) и боковое
+   меню (30) рисовались поверх подложки: «Центр управления» закрывал верх
+   карточки кандидата. Пока такое окно открыто, поднимаем сами слои. */
+.app-shell__main:has(.modal-backdrop) { z-index: 50; }
+.app-shell__content:has(.modal-backdrop) { z-index: 6; }
