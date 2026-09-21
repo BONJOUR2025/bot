@@ -60,8 +60,30 @@ function dueBadge(it) {
   }
   if (it.due_state === 'today') return { cls: 'badge--warning', label: `Сегодня до ${hhmm(it.due)}` };
   if (it.due_state === 'tomorrow') return { cls: 'badge--info', label: `Завтра до ${hhmm(it.due)}` };
+  // Дальше завтрашнего — сколько дней осталось до выдачи. Раньше здесь
+  // стоял бейдж «N дн» про то, сколько вещь уже в работе, и мастер читал его
+  // как срок: принятый сегодня заказ со сдачей через 10 дней показывал «0 дн».
+  const left = daysUntil(it.due);
+  if (left != null && left > 1) {
+    return { cls: 'badge--neutral', label: `До выдачи ${left} дн`, title: `Выдача ${noteDate(it.due)}` };
+  }
   return null;
 }
+
+// Календарных дней от сегодня до даты выдачи. Срок приходит местным временем
+// без пояса («2026-09-29T19:00»), сравниваем только даты.
+function daysUntil(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  if (!m) return null;
+  const due = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((due - today) / 86400000);
+}
+
+// Сколько вещь уже на мастере — только когда это само по себе повод
+// насторожиться: неделя и больше. Меньшие числа рядом со сроком путали.
+const STALE_WIP_DAYS = 7;
 export default function EmployeeMasterWip() {
   const cached = readCache();
   const [items, setItems] = useState(cached || []);
@@ -147,15 +169,15 @@ export default function EmployeeMasterWip() {
             </div>
           )}
           <p className="emp-page__empty">
-            {items.length} шт на {money(total)}. Сверху горящие по сроку и срочные, дальше — те, что ждут дольше всех.
+            {items.length} шт на {money(total)}. Сверху горящие по сроку и срочные, дальше — по дате выдачи.
           </p>
           <div className="emp-list">
             {items.map((it, idx) => {
               const due = dueBadge(it);
               let age = null;
               if (it.urgent) age = { cls: 'badge--error', label: 'Срочно' };
-              else if (it.days != null && !due) {
-                age = { cls: it.days >= 7 ? 'badge--warning' : 'badge--info', label: `${it.days} дн` };
+              else if (it.days != null && it.days >= STALE_WIP_DAYS) {
+                age = { cls: 'badge--warning', label: `В работе ${it.days} дн` };
               }
               const burning = it.due_state === 'overdue' || it.due_state === 'today';
               return (
@@ -181,7 +203,7 @@ export default function EmployeeMasterWip() {
                       <div className="emp-payout-item__top">
                         <span className="emp-payout-item__amount">{it.doc_num}</span>
                         <span className="emp-wip-badges">
-                          {due && <span className={`badge ${due.cls}`}>{due.label}</span>}
+                          {due && <span className={`badge ${due.cls}`} title={due.title}>{due.label}</span>}
                           {age && <span className={`badge ${age.cls}`}>{age.label}</span>}
                         </span>
                       </div>

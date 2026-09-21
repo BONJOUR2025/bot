@@ -110,6 +110,39 @@ def format_earnings(master, report: dict) -> str:
     return "\n".join(lines)
 
 
+def _due_note(row: dict) -> str:
+    """Срок выдачи в строке заказа.
+
+    Раньше тут было «· N дн» — сколько вещь уже в работе, — и мастер читал
+    это как срок до выдачи: заказ, принятый сегодня со сдачей через 10 дней,
+    выглядел как «0 дн». Показываем срок; возраст — только когда вещь висит
+    неделю и больше.
+    """
+    from datetime import date
+
+    state = row.get("due_state")
+    due = str(row.get("due") or "")
+    note = ""
+    if state == "overdue":
+        n = row.get("overdue_days") or 0
+        note = f" · просрочен на {n} дн" if n > 0 else " · просрочен"
+    elif state == "today":
+        note = f" · сдать сегодня до {due[11:16]}"
+    elif state == "tomorrow":
+        note = f" · сдать завтра до {due[11:16]}"
+    elif due[:10]:
+        try:
+            left = (date.fromisoformat(due[:10]) - date.today()).days
+        except ValueError:
+            left = None
+        if left is not None and left > 1:
+            note = f" · до выдачи {left} дн"
+    days = row.get("days")
+    if days is not None and days >= 7:
+        note += f" · в работе {days} дн"
+    return note
+
+
 def format_wip(rows: list[dict]) -> str:
     if not rows:
         return "🧰 <b>Что на мне висит</b>\n\nНезакрытых работ нет — всё сдано. 👍"
@@ -118,8 +151,7 @@ def format_wip(rows: list[dict]) -> str:
     lines = [f"🧰 <b>Что на мне висит — {len(rows)} шт</b>", ""]
     for row in rows[:30]:
         mark = "🔴" if row["urgent"] else "•"
-        days = f" · {row['days']} дн" if row["days"] is not None else ""
-        lines.append(f"{mark} <b>{row['doc_num']}</b>{days}")
+        lines.append(f"{mark} <b>{row['doc_num']}</b>{_due_note(row)}")
         lines.append(f"    {str(row['name'])[:48]} — {money(row['kredit'])}")
         # Комментарий приёмщика («согласовать цвет») — то, из-за чего работу
         # переделывают, если его не прочитали.

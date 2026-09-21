@@ -5153,7 +5153,13 @@ body.viewer3d-fs-active .app-card {
 .emp-wip-photo span { position: absolute; right: 3px; bottom: 3px; min-width: 18px; padding: 0 4px; border-radius: 9px; background: rgba(0,0,0,0.6); color: #fff; font-size: 0.7rem; line-height: 18px; text-align: center; }
 .emp-wip-photo:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .emp-wip-photo--none { display: grid; place-items: center; cursor: default; color: var(--color-text-muted); font-size: 0.65rem; text-align: center; line-height: 1.1; }
-.emp-wip-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem; }
+.emp-wip-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-start; gap: 0.3rem; }
+/* На 360px номер «37441-7» рвался на «37441-» и «7», а бейдж срока — на две
+   строки внутри себя. Ни то, ни другое не делим: если рядом не влезает,
+   бейджи целиком уходят строкой ниже. */
+.emp-wip-main .emp-payout-item__top { flex-wrap: wrap; row-gap: 0.35rem; }
+.emp-wip-main .emp-payout-item__amount { white-space: nowrap; overflow-wrap: normal; }
+.emp-wip-badges .badge { white-space: nowrap; }
 .emp-wip-item--overdue { border-left: 3px solid var(--color-danger); }
 .emp-wip-item--today { border-left: 3px solid var(--color-warning, #d97706); }
 
