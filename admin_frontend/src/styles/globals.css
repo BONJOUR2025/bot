@@ -7548,3 +7548,192 @@ button:hover > .vac-desc { color: var(--color-text); }
 /* Метка «не подтверждено» рвала название вещи на две строки. */
 .emp-payout-item__top { gap: 0.5rem; align-items: flex-start; }
 .emp-payout-item__amount { min-width: 0; overflow-wrap: anywhere; }
+
+/* ================================================================
+   Подбор персонала: список вакансий и панель фильтров
+   ================================================================ */
+.vac-item {
+  position: relative;
+  cursor: pointer;
+  padding: 0.7rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  border-left: 2px solid transparent;
+  transition: background var(--transition-fast);
+}
+.vac-item:hover { background: var(--color-bg-subtle); }
+.vac-item.is-selected {
+  background: var(--color-primary-muted);
+  border-left-color: var(--color-primary);
+}
+.vac-item__role {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+.vac-item__place {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.vac-item.is-closed .vac-item__place { color: var(--color-text-muted); font-weight: 500; }
+.vac-item__actions {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+.vac-item:hover .vac-item__actions,
+.vac-item:focus-within .vac-item__actions { opacity: 1; pointer-events: auto; }
+.vac-item__actions button {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+}
+.vac-item__actions button:hover { background: var(--color-bg-subtle); color: var(--color-text); }
+.vac-item__actions button.is-danger:hover { background: var(--color-danger-muted); color: var(--color-danger); }
+.vac-item__actions button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+@media (hover: none) {
+  .vac-item__actions { opacity: 1; pointer-events: auto; position: static; margin-top: 0.4rem; width: max-content; box-shadow: none; }
+}
+
+/* Панель фильтров кандидатов: поиск и источник — строкой сверху, под ней
+   то, что требует действия, а сроки и контакты — по запросу. */
+.rf {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--color-surface);
+}
+.rf__top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.rf__search { position: relative; flex: 1 1 240px; max-width: 380px; min-width: 0; }
+.rf__search .input { padding-left: 2rem; padding-right: 2rem; }
+.rf__search-icon {
+  position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%);
+  color: var(--color-text-faint); pointer-events: none;
+}
+.rf__search-clear {
+  position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; color: var(--color-text-faint);
+}
+.rf__search-clear:hover { color: var(--color-text); background: var(--color-bg-subtle); }
+
+.rf-seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  max-width: 100%;
+  overflow-x: auto;
+}
+.rf-seg__btn {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  white-space: nowrap;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem; font-weight: 500;
+  color: var(--color-text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.rf-seg__btn:hover { color: var(--color-text); }
+.rf-seg__btn.is-active {
+  background: var(--color-panel);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.rf__sort .input { width: auto; padding-top: 0.45rem; padding-bottom: 0.45rem; font-size: 0.8rem; }
+
+.rf__status {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  font-size: 0.75rem; color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.rf__status b { color: var(--color-text); font-weight: 600; }
+.rf__reset {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  font-size: 0.75rem; font-weight: 500; color: var(--color-primary);
+}
+.rf__reset:hover { text-decoration: underline; }
+
+.rf__row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; }
+.rf__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.rf__chips { display: flex; flex-wrap: wrap; gap: 0.35rem; min-width: 0; flex: 1 1 0; }
+.rf__group .rf__chips { flex: 0 1 auto; }
+.rf__empty { font-size: 0.75rem; color: var(--color-text-faint); padding: 0.3rem 0; }
+.rf__more-toggle {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.75rem; font-weight: 500;
+  color: var(--color-text-muted);
+  padding: 0.3rem 0.5rem; border-radius: 8px;
+}
+.rf__more-toggle:hover { color: var(--color-text); background: var(--color-bg-subtle); }
+.rf__more-toggle svg { transition: transform var(--transition-fast); }
+.rf__more {
+  display: flex; flex-wrap: wrap; gap: 0.6rem 1.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--color-border);
+}
+.rf__group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
+
+.rf-chip { padding: 0.3rem 0.65rem; }
+.rf-chip:disabled { opacity: 0.45; cursor: default; }
+.rf-chip:disabled:hover { color: var(--color-text-muted); border-color: var(--color-border); }
+.rf-chip__n {
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  text-align: center;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+}
+.ui-chip.is-active .rf-chip__n { background: rgba(255, 255, 255, 0.22); color: inherit; }
+.rf-seg__btn.is-active .rf-chip__n { background: var(--color-primary-muted); color: var(--color-primary); }
+
+@media (max-width: 640px) {
+  .rf { padding: 0.6rem; }
+  .rf__search { max-width: none; flex-basis: 100%; }
+  .rf__status { margin-left: 0; }
+  .rf__row { align-items: flex-start; flex-direction: column; }
+  .rf__row .rf__chips { flex: 0 1 auto; }
+  .rf__more-toggle { margin-left: 0; padding-left: 0; }
+}

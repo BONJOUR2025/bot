@@ -1616,15 +1616,26 @@ function FunnelStats({ candidates, activeStage, onSelectStage }) {
 // ── Kanban board (desktop) ─────────────────────────────────────────
 // ── Поиск и фильтры по кандидатам ────────────────────────────────────────────
 
+// Время из БД приходит в UTC без суффикса. new Date() читает такую строку как
+// местную, и все «сколько дней» съезжали на три часа — та же ошибка, что уже
+// была исправлена в daysSince, но здесь осталась.
+function parseUtc(iso) {
+  if (!iso) return null;
+  const hasZone = /[Zz]$/.test(iso) || /[+-]\d{2}:\d{2}$/.test(iso);
+  const t = new Date(hasZone ? iso : `${iso}Z`);
+  return Number.isNaN(t.getTime()) ? null : t;
+}
+
 // «Молчит» — это не «давно не писали вообще», а «последнее слово за нами,
 // и ответа нет». Если последним писал кандидат, тишина означает, что мяч
 // на нашей стороне, и в этот фильтр он попадать не должен: там ищут тех,
-// кого мы уже потеребили и не дождались.
+// кого мы уже потеребили и не дождались. Нанятых и отказников не теребят —
+// их здесь тоже нет.
 function silentDays(c) {
-  if (!c.last_message_at) return null;          // переписки не было
+  if (c.stage === 'нанят' || c.stage === 'отказ') return null;
   if (c.last_message_from !== 'employer') return null; // ответил последним — не молчит
-  const t = new Date(c.last_message_at);
-  if (Number.isNaN(t.getTime())) return null;
+  const t = parseUtc(c.last_message_at);
+  if (!t) return null;                                  // переписки не было
   return Math.floor((Date.now() - t.getTime()) / 86400000);
 }
 
@@ -1634,183 +1645,320 @@ const SILENT_OPTIONS = [
   { value: 14, label: '14+ дней' },
 ];
 
-const SOURCE_OPTIONS = [
-  { value: 'avito', label: 'Авито' },
-  { value: 'hh', label: 'hh.ru' },
-  { value: 'manual', label: 'Вручную' },
-];
-
-/**
- * Отбирает кандидатов по строке поиска и фильтрам.
- * Вынесено из компонента, чтобы счётчики в панели считались тем же кодом,
- * что и содержимое доски: иначе они разъезжаются при любой правке.
- */
-function applyCandidateFilters(list, f) {
-  const q = f.query.trim().toLowerCase();
-  return list.filter((c) => {
-    if (q) {
-      const hay = [c.name, c.phone, c.email, c.telegram_username, c.last_message_text]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    if (f.source && c.source !== f.source) return false;
-    if (f.unanswered && !c.pending_question) return false;
-    if (f.silent) {
-      const d = silentDays(c);
-      if (d === null || d < f.silent) return false;
-    }
-    if (f.older) {
-      const d = daysSince(c.created_at);
-      if (d === null || d < f.older) return false;
-    }
-    // Флаги берём из ответа API, а не пересчитываем на фронте: подпись и
-    // условие должны совпадать с тем, что нарисовано на карточке.
-    const has = (code) => (c.flags || []).some((x) => x.code === code);
-    if (f.awaiting && !has('awaiting_reply')) return false;
-    if (f.noContact && !has('no_contact')) return false;
-    if (f.noPhone && String(c.phone || '').trim()) return false;
-    if (f.resume && !String(c.resume_url || '').trim()) return false;
-    return true;
-  });
-}
-
-const EMPTY_FILTERS = {
-  query: '', silent: 0, source: '', unanswered: false,
-  // «Молчит» и «старше» — разные вопросы: первый про то, сколько кандидат не
-  // отвечает НАМ после вопроса опроса, второй про возраст самого отклика.
-  // Половина живой воронки старше двух недель, и разбирают её именно по
-  // возрасту.
-  older: 0,
-  awaiting: false,   // написал последним и ждёт ответа текстом
-  noContact: false,  // три попытки дозвона исчерпаны
-  noPhone: false,    // звонить некуда — в «Прозвон» не попадёт никогда
-  resume: false,     // есть что почитать перед разговором
-};
-
-// Подписи намеренно не такие, как в «Без ответа»: там уже есть «7+ дней»,
-// и два одинаковых чипа в одной строке невозможно различить, даже когда над
-// ними стоят разные заголовки групп.
+// Подписи намеренно не такие, как у тишины: там уже есть «7+ дней», и два
+// одинаковых чипа рядом невозможно различить.
 const OLDER_OPTIONS = [
   { value: 7, label: 'неделя' },
   { value: 14, label: '2 недели' },
   { value: 30, label: 'месяц' },
 ];
 
-const FLAG_FILTERS = [
-  { key: 'awaiting', label: 'Ждут ответа',
-    title: 'Кандидат написал последним — нужен ответ текстом, а не звонок' },
-  { key: 'noContact', label: 'Не вышел на связь',
-    title: 'Три попытки дозвона исчерпаны — нужно решение: отказ, пауза или ручной звонок' },
-  { key: 'noPhone', label: 'Без телефона',
-    title: 'Позвонить нельзя, в «Прозвон» такие кандидаты не попадают' },
-  { key: 'resume', label: 'Есть резюме' },
+const SOURCE_OPTIONS = [
+  { value: 'hh', label: 'hh.ru' },
+  { value: 'avito', label: 'Авито' },
+  { value: 'manual', label: 'Вручную' },
 ];
 
-function CandidateFilters({ filters, onChange, total, shown }) {
+const hasFlag = (c, code) => (c.flags || []).some((x) => x.code === code);
+
+// «Требуют действия» — всё, что просит от рекрутёра шага прямо сейчас.
+// Флаги берём из ответа API, а не пересчитываем на фронте: подпись и условие
+// должны совпадать с тем, что нарисовано на карточке. Раньше фильтровать
+// можно было только два флага из шести: «нужен ваш ответ» и «не доставлено»
+// висели на карточках, но найти их можно было лишь глазами.
+// Внутри группы условия складываются через ИЛИ: «покажи всех, кому я что-то
+// должен» — один вопрос, и пересечение «ждёт ответа И не доставлено» почти
+// всегда пусто.
+const ATTENTION_OPTIONS = [
+  { key: 'awaiting', label: 'Ждут ответа', test: (c) => hasFlag(c, 'awaiting_reply'),
+    title: 'Кандидат написал последним — нужен ответ текстом, а не звонок' },
+  { key: 'needsReply', label: 'Нужен ваш ответ', test: (c) => hasFlag(c, 'needs_reply'),
+    title: 'Опрос передан человеку: ИИ не может продолжить сам' },
+  { key: 'question', label: 'Вопрос без ответа', test: (c) => !!c.pending_question,
+    title: 'Кандидат задал вопрос, на который ИИ не ответил' },
+  { key: 'undelivered', label: 'Не доставлено', test: (c) => hasFlag(c, 'undelivered'),
+    title: 'Первое сообщение опроса не ушло — кандидат о нас ещё не знает' },
+  { key: 'noAnswer', label: 'Не дозвонились', test: (c) => hasFlag(c, 'no_answer'),
+    title: 'Были недозвоны, попытки ещё остались' },
+  { key: 'noContact', label: 'Не вышел на связь', test: (c) => hasFlag(c, 'no_contact'),
+    title: 'Три попытки дозвона исчерпаны — нужно решение: отказ, пауза или ручной звонок' },
+  { key: 'silentPoll', label: 'Молчат в опросе', test: (c) => hasFlag(c, 'silent'),
+    title: 'ИИ задал вопрос опроса, кандидат не отвечает больше суток' },
+];
+
+const SORT_OPTIONS = [
+  { value: 'new', label: 'Сначала новые' },
+  { value: 'old', label: 'Сначала старые' },
+  { value: 'activity', label: 'По последней переписке' },
+];
+
+const EMPTY_FILTERS = {
+  query: '',
+  source: '',
+  attention: [],     // ключи ATTENTION_OPTIONS, через ИЛИ
+  // «Тишина» и «старше» — разные вопросы: первая про то, сколько кандидат не
+  // отвечает НАМ, второй про возраст самого отклика. Половина живой воронки
+  // старше двух недель, и разбирают её именно по возрасту.
+  silent: 0,
+  older: 0,
+  noPhone: false,    // звонить некуда — в «Прозвон» не попадёт никогда
+  resume: false,     // есть что почитать перед разговором
+  sort: 'new',
+};
+
+// Телефон в базе хранится как попало: +7 921…, 8921…, 7(921)… Ищем по цифрам
+// и приводим ведущую 8 к 7, иначе «8921» не находил «+7 921».
+const phoneDigits = (s) => {
+  const d = String(s || '').replace(/\D/g, '');
+  return d.length === 11 && d[0] === '8' ? `7${d.slice(1)}` : d;
+};
+const norm = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е');
+
+function matchesQuery(c, raw) {
+  const q = norm(raw).trim();
+  if (!q) return true;
+  const hay = norm([c.name, c.email, c.telegram_username, c.notes, c.last_message_text]
+    .filter(Boolean).join(' '));
+  // Похоже на номер — ищем по цифрам телефона, с той же заменой 8 → 7.
+  if (/^[\d\s()+-]{3,}$/.test(raw.trim())) {
+    const d = raw.trim().replace(/\D/g, '').replace(/^8/, '7');
+    return !!d && phoneDigits(c.phone).includes(d);
+  }
+  // Каждое слово должно найтись где-нибудь: «анна hh» не обязано стоять
+  // в одной строке подряд.
+  return q.split(/\s+/).every((w) => hay.includes(w));
+}
+
+// Отдельные проверки, чтобы счётчики на чипах считались тем же кодом, что и
+// доска: «чип минус свой собственный фильтр плюс этот вариант».
+const FILTER_TESTS = {
+  query: (c, f) => matchesQuery(c, f.query),
+  source: (c, f) => !f.source || c.source === f.source,
+  attention: (c, f) => !f.attention.length
+    || ATTENTION_OPTIONS.some((o) => f.attention.includes(o.key) && o.test(c)),
+  silent: (c, f) => {
+    if (!f.silent) return true;
+    const d = silentDays(c);
+    return d !== null && d >= f.silent;
+  },
+  older: (c, f) => {
+    if (!f.older) return true;
+    const d = daysSince(c.created_at);
+    return d !== null && d >= f.older;
+  },
+  noPhone: (c, f) => !f.noPhone || !String(c.phone || '').trim(),
+  resume: (c, f) => !f.resume || !!String(c.resume_url || '').trim(),
+};
+
+function passes(c, f, skip) {
+  for (const k in FILTER_TESTS) {
+    if (k !== skip && !FILTER_TESTS[k](c, f)) return false;
+  }
+  return true;
+}
+
+const sortTime = (iso) => parseUtc(iso)?.getTime() ?? 0;
+const SORTERS = {
+  new: (a, b) => sortTime(b.created_at) - sortTime(a.created_at),
+  old: (a, b) => sortTime(a.created_at) - sortTime(b.created_at),
+  // Без переписки — в конец: им нечего показывать в этом порядке.
+  activity: (a, b) => sortTime(b.last_message_at) - sortTime(a.last_message_at),
+};
+
+/**
+ * Отбирает и упорядочивает кандидатов по строке поиска и фильтрам.
+ * Вынесено из компонента, чтобы счётчики в панели считались тем же кодом,
+ * что и содержимое доски: иначе они разъезжаются при любой правке.
+ */
+function applyCandidateFilters(list, f) {
+  return list.filter((c) => passes(c, f)).sort(SORTERS[f.sort] || SORTERS.new);
+}
+
+function isFiltering(f) {
+  return !!(f.query.trim() || f.source || f.attention.length || f.silent || f.older
+    || f.noPhone || f.resume);
+}
+
+function FilterChip({ active, count, onClick, title, children }) {
+  // Ноль — не повод прятать чип (ряд прыгал бы при каждом обновлении), но
+  // нажимать его бессмысленно: доска станет пустой.
+  const empty = !active && count === 0;
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={empty}
+      onClick={onClick}
+      title={title}
+      className={`ui-chip rf-chip ${active ? 'is-active' : ''}`}
+    >
+      {children}
+      {count != null && <span className="rf-chip__n">{count}</span>}
+    </button>
+  );
+}
+
+function CandidateFilters({ filters, onChange, candidates, shown }) {
   const set = (patch) => onChange({ ...filters, ...patch });
-  const active = filters.query || filters.silent || filters.source
-    || filters.unanswered || filters.older
-    || FLAG_FILTERS.some((o) => filters[o.key]);
+  const active = isFiltering(filters);
+  const moreActive = [filters.silent, filters.older, filters.noPhone, filters.resume]
+    .filter(Boolean).length;
+  const [moreOpen, setMoreOpen] = useState(moreActive > 0);
+  useEffect(() => { if (moreActive > 0) setMoreOpen(true); }, [moreActive]);
+
+  // Сколько карточек даст каждый вариант при остальных фильтрах как есть.
+  const counts = useMemo(() => {
+    const without = (skip) => candidates.filter((c) => passes(c, filters, skip));
+    const bySource = without('source');
+    const byAttention = without('attention');
+    const bySilent = without('silent');
+    const byOlder = without('older');
+    const count = (list, fn) => list.reduce((n, c) => n + (fn(c) ? 1 : 0), 0);
+    return {
+      sourceAll: bySource.length,
+      source: Object.fromEntries(SOURCE_OPTIONS.map((o) => [o.value, count(bySource, (c) => c.source === o.value)])),
+      attention: Object.fromEntries(ATTENTION_OPTIONS.map((o) => [o.key, count(byAttention, o.test)])),
+      silent: Object.fromEntries(SILENT_OPTIONS.map((o) => [o.value, count(bySilent, (c) => {
+        const d = silentDays(c); return d !== null && d >= o.value;
+      })])),
+      older: Object.fromEntries(OLDER_OPTIONS.map((o) => [o.value, count(byOlder, (c) => {
+        const d = daysSince(c.created_at); return d !== null && d >= o.value;
+      })])),
+      noPhone: count(without('noPhone'), (c) => !String(c.phone || '').trim()),
+      resume: count(without('resume'), (c) => !!String(c.resume_url || '').trim()),
+    };
+  }, [candidates, filters]);
+
+  // Источники, которых в вакансии нет вовсе, не показываем: «Вручную 0»
+  // на вакансии, куда вручную никого не заводили, — просто шум.
+  const sources = SOURCE_OPTIONS.filter((o) => counts.source[o.value] > 0 || filters.source === o.value);
+  const attention = ATTENTION_OPTIONS.filter(
+    (o) => counts.attention[o.key] > 0 || filters.attention.includes(o.key));
+  const toggleAttention = (key) => set({
+    attention: filters.attention.includes(key)
+      ? filters.attention.filter((k) => k !== key)
+      : [...filters.attention, key],
+  });
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
-        <Search
-          size={14}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-text-faint)]"
-        />
-        <input
-          className="input w-full pl-8"
-          placeholder="Имя, телефон, текст сообщения…"
-          value={filters.query}
-          onChange={(e) => set({ query: e.target.value })}
-        />
+    <section className="rf" aria-label="Поиск и фильтры кандидатов">
+      <div className="rf__top">
+        <div className="rf__search">
+          <Search size={14} className="rf__search-icon" aria-hidden="true" />
+          <input
+            className="input w-full"
+            placeholder="Имя, телефон, заметка, текст сообщения…"
+            value={filters.query}
+            onChange={(e) => set({ query: e.target.value })}
+            aria-label="Поиск кандидатов"
+          />
+          {filters.query && (
+            <button type="button" className="rf__search-clear" onClick={() => set({ query: '' })}
+              aria-label="Очистить поиск">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {sources.length > 1 && (
+          <div className="rf-seg" role="group" aria-label="Источник">
+            <button type="button" aria-pressed={!filters.source}
+              className={`rf-seg__btn ${!filters.source ? 'is-active' : ''}`}
+              onClick={() => set({ source: '' })}>
+              Все <span className="rf-chip__n">{counts.sourceAll}</span>
+            </button>
+            {sources.map((o) => (
+              <button key={o.value} type="button" aria-pressed={filters.source === o.value}
+                className={`rf-seg__btn ${filters.source === o.value ? 'is-active' : ''}`}
+                onClick={() => set({ source: filters.source === o.value ? '' : o.value })}>
+                {o.label} <span className="rf-chip__n">{counts.source[o.value]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <label className="rf__sort">
+          <span className="sr-only">Порядок карточек</span>
+          <select className="input" value={filters.sort} onChange={(e) => set({ sort: e.target.value })}>
+            {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+
+        {active && (
+          <div className="rf__status">
+            {/* Счётчик обязателен: без него непонятно, доска пуста потому что
+                кандидатов нет, или потому что их отсеял забытый фильтр. */}
+            <span><b>{shown}</b> из {candidates.length}</span>
+            <button type="button" onClick={() => onChange({ ...EMPTY_FILTERS, sort: filters.sort })}
+              className="rf__reset">
+              <X size={12} /> Сбросить
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Без ответа: главный запрос — «кого мы потеребили и не дождались». */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-[color:var(--color-text-faint)]">Без ответа</span>
-        {SILENT_OPTIONS.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            aria-pressed={filters.silent === o.value}
-            onClick={() => set({ silent: filters.silent === o.value ? 0 : o.value })}
-            className={`ui-chip ${filters.silent === o.value ? 'is-active' : ''}`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Возраст самого отклика — отдельный вопрос от «молчит после нашего
-          вопроса»: половина живой воронки старше двух недель, и разбирают её
-          именно по этому. */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-[color:var(--color-text-faint)]">Старше</span>
-        {OLDER_OPTIONS.map((o) => (
-          <button
-            key={o.value}
-            type="button"
-            aria-pressed={filters.older === o.value}
-            onClick={() => set({ older: filters.older === o.value ? 0 : o.value })}
-            className={`ui-chip ${filters.older === o.value ? 'is-active' : ''}`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-
-      {SOURCE_OPTIONS.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          aria-pressed={filters.source === o.value}
-          onClick={() => set({ source: filters.source === o.value ? '' : o.value })}
-          className={`ui-chip ${filters.source === o.value ? 'is-active' : ''}`}
-        >
-          {o.label}
+      <div className="rf__row">
+        <span className="rf__label">Требуют действия</span>
+        <div className="rf__chips">
+          {/* Здесь нули прячем: семь чипов, из которых пять серых, читаются
+              как «всё сломано», а не как «всё разобрано». */}
+          {attention.map((o) => (
+            <FilterChip key={o.key} active={filters.attention.includes(o.key)}
+              count={counts.attention[o.key]} title={o.title}
+              onClick={() => toggleAttention(o.key)}>
+              {o.label}
+            </FilterChip>
+          ))}
+          {attention.length === 0 && <span className="rf__empty">Сейчас ничего — всё разобрано</span>}
+        </div>
+        <button type="button" className="rf__more-toggle" aria-expanded={moreOpen}
+          onClick={() => setMoreOpen((v) => !v)}>
+          Сроки и контакты{moreActive > 0 && <span className="rf-chip__n">{moreActive}</span>}
+          <ChevronDown size={13} className={moreOpen ? 'rotate-180' : ''} />
         </button>
-      ))}
+      </div>
 
-      <button
-        type="button"
-        aria-pressed={filters.unanswered}
-        onClick={() => set({ unanswered: !filters.unanswered })}
-        className={`ui-chip ${filters.unanswered ? 'is-active' : ''}`}
-        title="Кандидат задал вопрос, на который ИИ не ответил"
-      >
-        Вопрос без ответа
-      </button>
-
-      {FLAG_FILTERS.map((o) => (
-        <button
-          key={o.key}
-          type="button"
-          aria-pressed={!!filters[o.key]}
-          onClick={() => set({ [o.key]: !filters[o.key] })}
-          className={`ui-chip ${filters[o.key] ? 'is-active' : ''}`}
-          title={o.title}
-        >
-          {o.label}
-        </button>
-      ))}
-
-      {active && (
-        <>
-          {/* Счётчик обязателен: без него непонятно, доска пуста потому что
-              кандидатов нет, или потому что их отсеял забытый фильтр. */}
-          <span className="text-xs text-[color:var(--color-text-muted)]">
-            {shown} из {total}
-          </span>
-          <button type="button" onClick={() => onChange(EMPTY_FILTERS)} className="ui-chip">
-            <X size={12} /> Сбросить
-          </button>
-        </>
+      {moreOpen && (
+        <div className="rf__more">
+          <div className="rf__group">
+            <span className="rf__label" title="Последнее сообщение — наше, ответа нет">Не отвечают нам</span>
+            <div className="rf__chips">
+              {SILENT_OPTIONS.map((o) => (
+                <FilterChip key={o.value} active={filters.silent === o.value} count={counts.silent[o.value]}
+                  onClick={() => set({ silent: filters.silent === o.value ? 0 : o.value })}>
+                  {o.label}
+                </FilterChip>
+              ))}
+            </div>
+          </div>
+          <div className="rf__group">
+            <span className="rf__label">Отклик старше</span>
+            <div className="rf__chips">
+              {OLDER_OPTIONS.map((o) => (
+                <FilterChip key={o.value} active={filters.older === o.value} count={counts.older[o.value]}
+                  onClick={() => set({ older: filters.older === o.value ? 0 : o.value })}>
+                  {o.label}
+                </FilterChip>
+              ))}
+            </div>
+          </div>
+          <div className="rf__group">
+            <span className="rf__label">Контакты</span>
+            <div className="rf__chips">
+              <FilterChip active={filters.noPhone} count={counts.noPhone}
+                title="Позвонить нельзя, в «Прозвон» такие кандидаты не попадают"
+                onClick={() => set({ noPhone: !filters.noPhone })}>
+                Без телефона
+              </FilterChip>
+              <FilterChip active={filters.resume} count={counts.resume}
+                onClick={() => set({ resume: !filters.resume })}>
+                Есть резюме
+              </FilterChip>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -2220,6 +2368,16 @@ function InterviewSchedule({ onCandidateClick }) {
   );
 }
 
+// «Администратор-продавец — ТЦ "Озерки"»: в колонке шириной 240px от такого
+// названия оставалось «Администрат…» у всех четырёх вакансий подряд, и
+// различить их можно было только по числу кандидатов. Различает вакансии
+// место, поэтому оно идёт главной строкой, а должность — подписью над ним.
+function splitVacancyTitle(title) {
+  const t = String(title || '').trim();
+  const m = t.match(/^(.+?)\s+[—–-]\s+(.+)$/);
+  return m ? { role: m[1], place: m[2] } : { role: '', place: t };
+}
+
 // ── Main page ──────────────────────────────────────────────────────
 export default function Recruitment() {
   const { isMobile } = useViewport();
@@ -2237,6 +2395,11 @@ export default function Recruitment() {
   );
   // Резерв держим отдельно от доски: доска рисует только STAGES, поэтому
   // резервные карточки в неё не попадают сами, а счётчик нужен на кнопке.
+  // Для панели фильтров — те же границы, что у доски: без резерва.
+  const boardCandidates = useMemo(
+    () => candidates.filter(c => c.stage !== RESERVE.key),
+    [candidates],
+  );
   const reserved = candidates.filter(c => c.stage === RESERVE.key);
   const reserveCount = reserved.length;
   // Телеметрия конвейера (recruit-fui-strip): считаем по всем candidates
@@ -2313,6 +2476,19 @@ export default function Recruitment() {
     });
   }
   function exitSelection() { setSelectionMode(false); setSelectedIds(new Set()); }
+
+  // Выделение живёт только в пределах того, что видно. Иначе отмеченные
+  // карточки, скрытые новым фильтром или оставшиеся от другой вакансии,
+  // молча попадали под «Удалить N кандидатов» и массовую смену этапа.
+  useEffect(() => { setSelectedIds(new Set()); }, [selectedId]);
+  useEffect(() => {
+    setSelectedIds(prev => {
+      if (!prev.size) return prev;
+      const visible = new Set(visibleCandidates.map(c => c.id));
+      const next = new Set([...prev].filter(id => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [visibleCandidates]);
 
   async function bulkMoveStage(newStage) {
     if (!selectedIds.size) return;
@@ -2701,7 +2877,7 @@ export default function Recruitment() {
 
         {/* Left — vacancy list */}
         {showVacList && (
-          <aside className={`flex-shrink-0 border-b sm:border-b-0 sm:border-r border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10 ${isMobile ? 'w-full' : 'w-60'}`}>
+          <aside className={`flex-shrink-0 border-b sm:border-b-0 sm:border-r border-[color:var(--color-border)] bg-[color:var(--color-muted)]/10 ${isMobile ? 'w-full' : 'w-64'}`}>
             <div className="px-4 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-xs text-[color:var(--color-muted-foreground)] cursor-pointer">
                 <input type="checkbox" checked={showClosed} onChange={e => setShowClosed(e.target.checked)} className="rounded" />
@@ -2734,13 +2910,21 @@ export default function Recruitment() {
                     <button
                       key={v.id}
                       onClick={() => { setSelectedId(v.id); setShowVacList(false); }}
-                      className={`flex-shrink-0 text-left rounded-xl border px-3 py-2 text-sm transition-all ${
+                      className={`flex-shrink-0 max-w-[220px] text-left rounded-xl border px-3 py-2 text-sm transition-all ${
                         v.id === selectedId
                           ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/8 font-semibold'
                           : 'border-[color:var(--color-border)] bg-[color:var(--color-surface)]'
                       }`}
                     >
-                      <div className="whitespace-nowrap font-medium">{v.title}</div>
+                      {(() => {
+                        const { role, place } = splitVacancyTitle(v.title);
+                        return (
+                          <>
+                            {role && <div className="vac-item__role">{role}</div>}
+                            <div className="vac-item__place">{place}</div>
+                          </>
+                        );
+                      })()}
                       <div className="text-[10px] text-[color:var(--color-muted-foreground)] mt-0.5">
                         {v.candidate_count} чел. · {v.is_open ? 'Открыта' : 'Закрыта'}
                       </div>
@@ -2749,42 +2933,44 @@ export default function Recruitment() {
                     <div
                       key={v.id}
                       onClick={() => setSelectedId(v.id)}
-                      className={`group relative cursor-pointer px-4 py-3 border-b border-[color:var(--color-border)]/50 transition-colors ${
-                        v.id === selectedId
-                          ? 'bg-[color:var(--color-primary)]/8 border-l-2 border-l-[color:var(--color-primary)]'
-                          : 'hover:bg-[color:var(--color-muted)]/30'
-                      }`}
+                      title={v.title}
+                      className={`vac-item group ${v.id === selectedId ? 'is-selected' : ''} ${!v.is_open ? 'is-closed' : ''}`}
                     >
-                      <div className="flex items-start justify-between gap-1">
-                        <div className="min-w-0">
-                          <p className={`text-sm font-medium truncate ${!v.is_open ? 'text-[color:var(--color-muted-foreground)]' : ''}`}>{v.title}</p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${v.is_open ? 'bg-emerald-100 text-emerald-700' : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]'}`}>
-                              {v.is_open ? 'Открыта' : 'Закрыта'}
-                            </span>
-                            <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{v.candidate_count} чел.</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                          <button onClick={e => { e.stopPropagation(); setVacancyModal(v); }}
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
-                            <Pencil size={11} />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); duplicateVacancy(v.id); }}
-                            title="Дублировать (для повторной публикации)"
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
-                            <Copy size={11} />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); saveVacancyAsTemplate(v); }}
-                            title="Сохранить как шаблон (постоянное хранилище)"
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--color-muted)] text-[color:var(--color-muted-foreground)]">
-                            <FileStack size={11} />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); deleteVacancy(v.id); }}
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-red-400">
-                            <Trash2 size={11} />
-                          </button>
-                        </div>
+                      {(() => {
+                        const { role, place } = splitVacancyTitle(v.title);
+                        return (
+                          <>
+                            {role && <p className="vac-item__role">{role}</p>}
+                            <p className="vac-item__place">{place}</p>
+                          </>
+                        );
+                      })()}
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${v.is_open ? 'bg-emerald-100 text-emerald-700' : 'bg-[color:var(--color-bg-subtle)] text-[color:var(--color-text-muted)]'}`}>
+                          {v.is_open ? 'Открыта' : 'Закрыта'}
+                        </span>
+                        <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{v.candidate_count} чел.</span>
+                      </div>
+                      {/* Кнопки поверх карточки, а не в строке с названием:
+                          четыре иконки по 24px отнимали у названия треть
+                          ширины даже тогда, когда были невидимы. */}
+                      <div className="vac-item__actions">
+                        <button onClick={e => { e.stopPropagation(); setVacancyModal(v); }}
+                          title="Редактировать" aria-label="Редактировать вакансию">
+                          <Pencil size={12} />
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); duplicateVacancy(v.id); }}
+                          title="Дублировать (для повторной публикации)" aria-label="Дублировать вакансию">
+                          <Copy size={12} />
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); saveVacancyAsTemplate(v); }}
+                          title="Сохранить как шаблон (постоянное хранилище)" aria-label="Сохранить как шаблон">
+                          <FileStack size={12} />
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); deleteVacancy(v.id); }}
+                          title="Удалить" aria-label="Удалить вакансию" className="is-danger">
+                          <Trash2 size={12} />
+                        </button>
                       </div>
                     </div>
                   )
@@ -2904,7 +3090,7 @@ export default function Recruitment() {
                 // отдельной вкладке со своим счётчиком, и включать его
                 // сюда значит обещать больше карточек, чем видно. При
                 // поиске это давало «75 из 163» над доской с 61 карточкой.
-                total={candidates.filter((c) => c.stage !== RESERVE.key).length}
+                candidates={boardCandidates}
                 shown={visibleCandidates.filter((c) => c.stage !== RESERVE.key).length}
               />
             )}
@@ -2923,7 +3109,7 @@ export default function Recruitment() {
                 selectionMode={selectionMode}
                 selectedIds={selectedIds}
                 onToggle={toggleSelection}
-                showAge={filters.older > 0}
+                showAge={filters.older > 0 || filters.sort === 'old'}
               />
             ) : (
               <KanbanBoard
@@ -2934,7 +3120,7 @@ export default function Recruitment() {
                 selectionMode={selectionMode}
                 selectedIds={selectedIds}
                 onToggle={toggleSelection}
-                showAge={filters.older > 0}
+                showAge={filters.older > 0 || filters.sort === 'old'}
               />
             )}
           </div>
