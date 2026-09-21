@@ -45,6 +45,8 @@ STAGE_RANK = {
 
 REASON_RESUME = "resume_id"
 REASON_PHONE = "phone"
+# Склейка вручную карточек одного человека из разных вакансий.
+REASON_CROSS_VACANCY = "cross_vacancy"
 
 
 # ── ключи дубликата ──────────────────────────────────────────────────────
@@ -408,3 +410,64 @@ def other_vacancy_twins(db, candidate) -> list:
         Candidate.id != candidate.id,
     ).all()
     return cross_vacancy_index([candidate, *others]).get(candidate.id, [])
+
+
+def merge_across_vacancies(winner, loser, now: datetime | None = None) -> dict:
+    """Склеить отклики одного человека на разные вакансии.
+
+    Выживает карточка основной вакансии (её выбирает человек). Отличия от
+    обычного merge:
+    * опрос остаётся тот, что шёл по основной вакансии. Правило «где больше
+      ответов» тут не годится: у вакансий разные вопросы, а переписка второй
+      шла в другом чате, и продолжать её из основной карточки нельзя. Чужой
+      опрос берём, только если по основной его не было вовсе, а там он
+      завершён — тогда ответы уже получены и спрашивать заново незачем;
+    * ответы и вакансия второй карточки сохраняются в записи аудита, чтобы
+      их было видно и после удаления строки.
+    """
+    import json as _json
+
+    from app.services import quick_screening
+
+    own = (winner.quick_state_json, winner.stage, winner.is_paused)
+    loser_state = quick_screening.load_state(loser)
+    entry = merge(winner, loser, REASON_CROSS_VACANCY, now=now)
+    # Этап, опрос и пауза — решения по конкретной точке, и они остаются
+    # решениями основной вакансии: отказ по соседней точке не отказ здесь,
+    # а пауза на второй карточке ставилась ровно против дублирующего опроса,
+    # который склейка и убирает. Этап второй карточки есть в аудите.
+    winner.quick_state_json, winner.stage, winner.is_paused = own
+    if not winner.quick_state_json and loser_state.get("status") == "done":
+        winner.quick_state_json = loser.quick_state_json
+
+    vacancy = getattr(loser, "vacancy", None)
+    entry["vacancy_id"] = loser.vacancy_id
+    entry["vacancy_title"] = vacancy.title if vacancy else ""
+    entry["answers"] = loser_state.get("answers") or []
+    audit = winner.merged_from() or []
+    if audit:
+        audit[-1] = entry
+    winner.merged_json = _json.dumps(audit, ensure_ascii=False)
+    return entry
+
+
+def find_absorbed(db, source: str, external_id: str):
+    """Карточка, к которой этот отклик уже подшит дополнительным каналом.
+
+    Нужна импорту: после склейки между вакансиями отклик второй вакансии
+    живёт каналом на карточке ДРУГОЙ вакансии, и поиск близнеца внутри
+    вакансии его не находит — без этой проверки синк через 15 минут завёл
+    бы удалённую карточку заново.
+    """
+    from app.models.recruitment import Candidate
+
+    external_id = (external_id or "").strip()
+    if not external_id:
+        return None
+    for c in db.query(Candidate).filter(
+            Candidate.channels_json.isnot(None),
+            Candidate.channels_json.like(f"%{external_id}%")).all():
+        for ch in c.channels():
+            if ch.get("source") == source and ch.get("external_id") == external_id:
+                return c
+    return None

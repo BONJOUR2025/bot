@@ -101,3 +101,61 @@ class TestSecondSurveySkipped:
         ok = run_async(qs.start_screening(_Db(), _C(2, 20, resume_id="r1"), _Vacancy(), None, "tok",
                                           allow_twin=True))
         assert ok is True
+
+
+class _Full(_C):
+    """Карточка с полями, которые трогает merge."""
+    def __init__(self, id, vacancy_id, stage="новый", state=None, paused=False, **kw):
+        super().__init__(id, vacancy_id, state=state, **kw)
+        from datetime import datetime
+        self.stage = stage
+        self.is_paused = paused
+        self.email = self.resume_url = self.photo_url = ""
+        self.telegram_chat_id = self.telegram_username = ""
+        self.age = None
+        self.notes = ""
+        self.last_message_text, self.last_message_at, self.last_message_from = "", None, ""
+        self.call_log_json = None
+        self.follow_up_count, self.follow_up_last_sent_at = 0, None
+        self.last_inbound_handled_at = self.next_attempt_at = None
+        self.has_unread_hh_msg = 0
+        self.created_at = self.updated_at = datetime(2026, 9, 1)
+        self.channels_json = self.merged_json = None
+        self.vacancy = type("V", (), {"title": f"Вакансия {vacancy_id}"})()
+
+    def channels(self):
+        return json.loads(self.channels_json) if self.channels_json else []
+
+    def merged_from(self):
+        return json.loads(self.merged_json) if self.merged_json else []
+
+    def call_log(self):
+        return []
+
+
+class TestMergeAcrossVacancies:
+    def test_primary_keeps_own_stage_survey_and_pause(self):
+        w = _Full(1, 10, stage="ответил", state={"status": "done", "answers": [{"q": "A", "a": "1"}]})
+        l = _Full(2, 20, stage="отказ", paused=True,
+                  state={"status": "done", "answers": [{"q": "B", "a": "2"}, {"q": "C", "a": "3"}]})
+        entry = cm.merge_across_vacancies(w, l)
+        assert w.stage == "ответил"
+        assert w.is_paused is False
+        assert qs.load_state(w)["answers"] == [{"q": "A", "a": "1"}]
+        assert entry["vacancy_id"] == 20 and entry["vacancy_title"] == "Вакансия 20"
+        assert entry["answers"] == [{"q": "B", "a": "2"}, {"q": "C", "a": "3"}]
+        assert w.merged_from()[-1]["reason"] == cm.REASON_CROSS_VACANCY
+        # переписка второй вакансии — дополнительным каналом
+        assert any(ch["external_id"] == "neg-2" for ch in w.channels())
+
+    def test_finished_survey_is_taken_when_primary_had_none(self):
+        w = _Full(1, 10)
+        l = _Full(2, 20, state={"status": "done", "answers": [{"q": "B", "a": "2"}]})
+        cm.merge_across_vacancies(w, l)
+        assert qs.load_state(w)["status"] == "done"
+
+    def test_running_survey_of_other_vacancy_is_not_taken(self):
+        w = _Full(1, 10)
+        l = _Full(2, 20, state={"status": "asking", "answers": []})
+        cm.merge_across_vacancies(w, l)
+        assert qs.load_state(w) == {}

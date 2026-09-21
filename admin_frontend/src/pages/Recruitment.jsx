@@ -592,7 +592,7 @@ function CallOutcome({ candidate, hasPlatformChat, platformLabel, templates, onC
 
 function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, onResetHistory,
                            onPauseToggle, templates = [], onCandidateChanged,
-                           onOpenTwin, initialTab = 'info' }) {
+                           onOpenTwin, onMerged, initialTab = 'info' }) {
   const { toast } = useToast();
   const stage = stageOf(candidate.stage);
   const tg = tgLink(candidate.phone);
@@ -640,6 +640,26 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   // Job-board chat state (hh.ru / Авито)
   const [quick, setQuick]           = useState(null);
   const [quickStarting, setQuickStarting] = useState(false);
+  // Склейка с откликом на другую вакансию: {twinId, primaryId} или null.
+  const [twinMerge, setTwinMerge] = useState(null);
+  const [twinMerging, setTwinMerging] = useState(false);
+  // Отклики с других вакансий, уже влитые в эту карточку, — их этап и
+  // ответы опроса остались только в истории объединения.
+  const absorbedVacancies = (candidate.merged_from || []).filter(m => m.reason === 'cross_vacancy');
+
+  async function mergeTwin() {
+    setTwinMerging(true);
+    try {
+      const res = await api.post(`/recruitment/candidates/${candidate.id}/merge-twin`, {
+        twin_id: twinMerge.twinId, primary_vacancy_id: twinMerge.primaryId,
+      });
+      toast('Отклики склеены', 'success');
+      setTwinMerge(null);
+      onMerged?.(res.data);
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message, 'error');
+    } finally { setTwinMerging(false); }
+  }
   const [messages, setMessages]     = useState([]);
   const [msgLoading, setMsgLoading] = useState(false);
   const [msgError, setMsgError]     = useState('');
@@ -787,6 +807,7 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                 <span
                   title={mergedFrom.map(m => (
                     `${SRC_TITLE[m.source] || m.source}`
+                    + (m.vacancy_title ? ` · вакансия «${m.vacancy_title}»` : '')
                     + (m.stage ? ` · был этап «${m.stage}»` : '')
                     + (m.reason === 'phone' ? ' · совпал телефон' : ' · то же резюме')
                   )).join('\n')}
@@ -885,16 +906,61 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                           )}
                         </div>
                       </div>
-                      {onOpenTwin && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenTwin(t)}
-                          className="flex-shrink-0 text-xs font-medium text-[color:var(--color-primary)] hover:underline flex items-center gap-1"
-                        >
-                          Открыть <ArrowRight size={12} />
-                        </button>
-                      )}
+                      <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
+                        {onOpenTwin && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenTwin(t)}
+                            className="text-xs font-medium text-[color:var(--color-primary)] hover:underline flex items-center gap-1"
+                          >
+                            Открыть <ArrowRight size={12} />
+                          </button>
+                        )}
+                        {twinMerge?.twinId !== t.candidate_id && (
+                          <button
+                            type="button"
+                            onClick={() => setTwinMerge({ twinId: t.candidate_id, primaryId: candidate.vacancy_id })}
+                            className="text-xs font-medium text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] flex items-center gap-1"
+                          >
+                            <GitMerge size={12} /> Склеить…
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    {twinMerge?.twinId === t.candidate_id && (
+                      <div className="rounded-lg bg-[color:var(--color-bg-secondary)] px-3 py-3 space-y-2.5">
+                        <p className="text-xs font-semibold">Основная вакансия</p>
+                        {[
+                          { id: candidate.vacancy_id, title: candidate.vacancy_title, note: 'эта карточка' },
+                          { id: t.vacancy_id, title: t.vacancy_title, note: 'та карточка' },
+                        ].map(o => (
+                          <label key={o.id} className="flex items-start gap-2 text-sm cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`twin-primary-${t.candidate_id}`}
+                              className="mt-1"
+                              checked={twinMerge.primaryId === o.id}
+                              onChange={() => setTwinMerge({ ...twinMerge, primaryId: o.id })}
+                            />
+                            <span>{o.title} <span className="text-[color:var(--color-muted-foreground)]">· {o.note}</span></span>
+                          </label>
+                        ))}
+                        <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                          Карточка останется одна — в основной вакансии, со своими этапом и опросом.
+                          Переписка второго отклика станет дополнительным чатом, её этап и ответы
+                          сохранятся в истории. Разделить обратно нельзя.
+                        </p>
+                        <div className="flex gap-2">
+                          <button type="button" disabled={twinMerging} onClick={mergeTwin}
+                            className="btn btn--primary text-xs">
+                            {twinMerging ? 'Склеиваю…' : 'Склеить'}
+                          </button>
+                          <button type="button" onClick={() => setTwinMerge(null)} className="btn btn-secondary text-xs">
+                            Отмена
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {t.answers.length > 0 && (
                       <details className="text-sm">
                         <summary className="cursor-pointer text-xs text-[color:var(--color-primary)]">
@@ -913,6 +979,38 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {absorbedVacancies.length > 0 && (
+            <div className="rounded-xl border border-[color:var(--color-border)] px-4 py-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted-foreground)]">
+                Склеено с откликами на другие вакансии
+              </p>
+              {absorbedVacancies.map((m, i) => (
+                <div key={i} className="space-y-1">
+                  <p className="text-sm font-medium break-words">{m.vacancy_title || 'другая вакансия'}</p>
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                    этап там: {m.stage ? stageOf(m.stage).label : '—'}
+                    {m.at ? ` · склеено ${new Date(m.at).toLocaleDateString('ru-RU')}` : ''}
+                  </p>
+                  {(m.answers || []).length > 0 && (
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-xs text-[color:var(--color-primary)]">
+                        Ответы опроса по этой вакансии ({m.answers.length})
+                      </summary>
+                      <ol className="mt-2 space-y-1.5 list-decimal pl-5">
+                        {m.answers.map((a, j) => (
+                          <li key={j}>
+                            <span className="text-[color:var(--color-muted-foreground)]">{a.q}</span>
+                            <br />{a.a || '—'}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
@@ -3309,6 +3407,16 @@ export default function Recruitment() {
           onPauseToggle={handlePauseToggle}
           templates={msgTemplates}
           onCandidateChanged={loadCandidates}
+          onMerged={res => {
+            // Выжившая карточка может жить в другой вакансии — переходим
+            // туда и открываем её, когда список догрузится.
+            setDetailModal(null);
+            setDetailTab('info');
+            setPendingOpenId(res.id);
+            if (res.vacancy_id === selectedId) loadCandidates();
+            else setSelectedId(res.vacancy_id);
+            loadVacancies();
+          }}
           onOpenTwin={t => {
             // Карточка живёт в другой вакансии: переключаем вакансию и
             // открываем её, когда список кандидатов догрузится.

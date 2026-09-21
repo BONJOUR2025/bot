@@ -77,6 +77,11 @@ class CandidateUpdate(BaseModel):
     rejection_message: Optional[str] = None
     hh_message: Optional[str] = None
 
+class MergeTwinRequest(BaseModel):
+    twin_id: int
+    primary_vacancy_id: int
+
+
 class NoAnswerRequest(BaseModel):
     """Не дозвонились. По умолчанию пишем кандидату сами."""
     send_message: bool = True
@@ -984,6 +989,39 @@ def get_quick_screening(candidate_id: int, db: Session = Depends(get_db)):
         "can_start": bool(questions) and not state and c.source in ("hh", "avito"),
         "vacancy_quick_mode": bool(vacancy and vacancy.quick_mode_enabled),
     }
+
+
+@router.post("/candidates/{candidate_id}/merge-twin")
+def merge_twin(candidate_id: int, data: MergeTwinRequest, db: Session = Depends(get_db)):
+    """Склеить отклики одного человека на разные вакансии в одну карточку.
+
+    Основную вакансию выбирает человек: карточка в ней остаётся, вторая
+    вливается в неё (переписка — дополнительным каналом) и удаляется.
+    """
+    from app.models.recruitment import TelegramMessage
+    from app.services import candidate_merge
+
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    twin = db.query(Candidate).filter(Candidate.id == data.twin_id).first()
+    if not c or not twin:
+        raise HTTPException(404, "Candidate not found")
+    if twin.id not in {t.id for t in candidate_merge.other_vacancy_twins(db, c)}:
+        raise HTTPException(400, "Эти карточки не распознаны как один человек в разных вакансиях.")
+    if data.primary_vacancy_id not in (c.vacancy_id, twin.vacancy_id):
+        raise HTTPException(400, "Основной может быть только одна из вакансий этих откликов.")
+
+    winner, loser = (c, twin) if c.vacancy_id == data.primary_vacancy_id else (twin, c)
+    candidate_merge.merge_across_vacancies(winner, loser)
+    # Переписка из Telegram привязана к строке кандидата каскадом — без
+    # переноса она удалилась бы вместе со второй карточкой.
+    db.query(TelegramMessage).filter(TelegramMessage.candidate_id == loser.id)         .update({TelegramMessage.candidate_id: winner.id}, synchronize_session=False)
+    winner.updated_at = datetime.utcnow()
+    db.flush()
+    db.delete(loser)
+    db.commit()
+    log.info("recruitment: candidate %s merged into %s (primary vacancy %s)",
+             loser.id, winner.id, winner.vacancy_id)
+    return {"id": winner.id, "vacancy_id": winner.vacancy_id}
 
 
 @router.post("/candidates/{candidate_id}/quick-screening")

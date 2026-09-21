@@ -796,6 +796,10 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
         # получал два отклика, два чата и две карточки, и бот вёл с ним два
         # опроса сразу, задавая одни и те же вопросы в разных чатах.
         # Ключи, по которым это ловится, — в candidate_merge.
+        if not exists and cm.find_absorbed(db, src.source, ext_id) is not None:
+            # Отклик уже склеен вручную с карточкой другой вакансии — он
+            # живёт там дополнительным каналом, заводить его заново нельзя.
+            continue
         if not exists:
             twin = _find_twin(db, link.vacancy_id, src.source, item)
             if twin is not None:
