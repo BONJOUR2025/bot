@@ -180,6 +180,15 @@ function ResumeProfile({ profile }) {
   );
 }
 
+// Запасной текст отказа — только на случай, когда в «Настройки → Шаблоны»
+// нет ни одного шаблона «Отказ». Если шаблоны есть, по умолчанию
+// подставляется первый из них: текст, который уходит кандидатам, должен
+// меняться в настройках, а не правкой кода.
+const FALLBACK_REJECTION_MSG = 'Здравствуйте! К сожалению, ваша кандидатура не подошла для данной вакансии. Спасибо за проявленный интерес, желаем удачи в поиске работы!';
+
+const rejectionTemplates = (templates) =>
+  (templates || []).filter(t => t.type === 'rejection' && String(t.text || '').trim());
+
 /** Куда уйдёт текст отказа: 'hh' | 'avito' | null.
  *
  * У hh отказ — действие в API отклика, текст прикладывается к нему. У Авито
@@ -2442,10 +2451,19 @@ export default function Recruitment() {
   const [selectedIds,     setSelectedIds]     = useState(new Set());
   const [bulkLoading,     setBulkLoading]     = useState(false);
   // Подтверждение отказа (hh.ru и Авито)
-  const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null); // {candidateId, newStage, candidate}
-  const DEFAULT_REJECTION_MSG = 'Здравствуйте! К сожалению, ваша кандидатура не подошла для данной вакансии. Спасибо за проявленный интерес, желаем удачи в поиске работы!';
-  const [rejectionMsg, setRejectionMsg] = useState(DEFAULT_REJECTION_MSG);
+  // Одному: {candidateId, newStage, candidate}; массово: {bulk: true, ids, candidates}.
+  const [hhDiscardConfirm, setHhDiscardConfirm] = useState(null);
+  const [rejectionMsg, setRejectionMsg] = useState(FALLBACK_REJECTION_MSG);
+  const [rejectionTplIdx, setRejectionTplIdx] = useState('');
   const [msgTemplates, setMsgTemplates] = useState([]);
+  // Открыть подтверждение отказа с текстом по умолчанию: первый шаблон
+  // «Отказ» из настроек, а если их нет — запасной текст.
+  function openRejection(payload) {
+    const tpl = rejectionTemplates(msgTemplates)[0];
+    setRejectionMsg(tpl ? tpl.text : FALLBACK_REJECTION_MSG);
+    setRejectionTplIdx(tpl ? '0' : '');
+    setHhDiscardConfirm(payload);
+  }
   useEffect(() => {
     api.get('/config/message-templates').then(r => setMsgTemplates(r.data || [])).catch(() => {});
   }, []);
@@ -2490,17 +2508,45 @@ export default function Recruitment() {
     });
   }, [visibleCandidates]);
 
-  async function bulkMoveStage(newStage) {
+  async function bulkMoveStage(newStage, extraFields = {}) {
     if (!selectedIds.size) return;
+    // Массовый отказ раньше уходил молча: hh ставил «Не подходит» без
+    // письма, Авито не получал ничего. Теперь — то же подтверждение с
+    // текстом, что и для одной карточки, если хоть кому-то есть куда писать.
+    if (newStage === 'отказ' && !extraFields.rejection_message) {
+      const picked = candidates.filter(c => selectedIds.has(c.id) && c.stage !== 'отказ');
+      if (picked.some(c => rejectionTarget(c))) {
+        openRejection({ bulk: true, newStage, ids: picked.map(c => c.id), candidates: picked });
+        return;
+      }
+    }
     if (newStage === 'собеседование') {
       // For bulk move to interview, skip the interview form and just move
       // (form is only shown for single-card drag)
     }
     setBulkLoading(true);
     try {
-      await Promise.all([...selectedIds].map(id =>
-        api.patch(`/recruitment/candidates/${id}`, { stage: newStage })
-      ));
+      if (extraFields.rejection_message) {
+        // По одному, а не пачкой: каждый отказ — это запросы к hh/Авито, и
+        // двадцать параллельных легко упираются в их лимиты. Сбой одного не
+        // должен останавливать остальных.
+        const ids = extraFields.ids || [...selectedIds];
+        let failed = 0;
+        for (const id of ids) {
+          try {
+            await api.patch(`/recruitment/candidates/${id}`, {
+              stage: newStage, rejection_message: extraFields.rejection_message,
+            });
+          } catch { failed += 1; }
+        }
+        toast(failed
+          ? `Отказ: ${ids.length - failed} из ${ids.length}, ${failed} не удалось — проверьте карточки`
+          : `Отказ отправлен: ${ids.length}`, failed ? 'error' : 'success');
+      } else {
+        await Promise.all([...selectedIds].map(id =>
+          api.patch(`/recruitment/candidates/${id}`, { stage: newStage })
+        ));
+      }
       await loadCandidates();
       exitSelection();
     } catch (e) { setError(e.message); }
@@ -2684,8 +2730,7 @@ export default function Recruitment() {
     // условие было только на hh — а откликов с Авито теперь большинство, и
     // они уходили в отказ молча, без единого слова кандидату.
     if (newStage === 'отказ' && rejectionTarget(candidate)) {
-      setRejectionMsg(DEFAULT_REJECTION_MSG);
-      setHhDiscardConfirm({ candidateId, newStage, candidate });
+      openRejection({ candidateId, newStage, candidate });
       return;
     }
     stageChange(candidateId, newStage);
@@ -3169,29 +3214,49 @@ export default function Recruitment() {
                 <X size={18} className="text-red-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-base">Подтвердите отказ</h3>
+                <h3 className="font-semibold text-base">
+                  {hhDiscardConfirm.bulk ? `Отказ: ${hhDiscardConfirm.ids.length} канд.` : 'Подтвердите отказ'}
+                </h3>
                 <p className="text-sm text-[color:var(--color-muted-foreground)] mt-1">
-                  {rejectionTarget(hhDiscardConfirm.candidate) === 'hh'
+                  {hhDiscardConfirm.bulk ? (() => {
+                    const list = hhDiscardConfirm.candidates;
+                    const hh = list.filter(c => rejectionTarget(c) === 'hh').length;
+                    const av = list.filter(c => rejectionTarget(c) === 'avito').length;
+                    const none = list.length - hh - av;
+                    return [
+                      hh && `${hh} — письмо на hh.ru и статус «Не подходит»`,
+                      av && `${av} — сообщение в переписку на Авито`,
+                      none && `${none} — без переписки, отказ проставится молча`,
+                    ].filter(Boolean).join('; ') + '. Это действие нельзя отменить.';
+                  })() : rejectionTarget(hhDiscardConfirm.candidate) === 'hh'
                     ? 'Кандидат получит письмо на hh.ru и увидит статус «Не подходит». Это действие нельзя отменить.'
                     : 'Текст уйдёт кандидату в переписку на Авито. Это действие нельзя отменить.'}
                 </p>
               </div>
             </div>
             <div className="mb-4 space-y-2">
-              {msgTemplates.filter(t => t.type === 'rejection').length > 0 && (
+              {rejectionTemplates(msgTemplates).length > 0 ? (
                 <div>
                   <label className="block text-xs text-[color:var(--color-muted-foreground)] mb-1">Шаблон</label>
                   <select
                     className="input w-full text-sm"
-                    defaultValue=""
-                    onChange={e => { if (e.target.value) setRejectionMsg(e.target.value); }}
+                    value={rejectionTplIdx}
+                    onChange={e => {
+                      const t = rejectionTemplates(msgTemplates)[Number(e.target.value)];
+                      setRejectionTplIdx(e.target.value);
+                      if (t) setRejectionMsg(t.text);
+                    }}
                   >
-                    <option value="">— выбрать шаблон —</option>
-                    {msgTemplates.filter(t => t.type === 'rejection').map((t, i) => (
-                      <option key={i} value={t.text}>{t.name}</option>
+                    {rejectionTplIdx === '' && <option value="">— свой текст —</option>}
+                    {rejectionTemplates(msgTemplates).map((t, i) => (
+                      <option key={i} value={String(i)}>{t.name || `Шаблон ${i + 1}`}</option>
                     ))}
                   </select>
                 </div>
+              ) : (
+                <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                  Шаблонов отказа нет — текст ниже стандартный. Свои можно завести в «Настройки → Шаблоны».
+                </p>
               )}
               <div>
                 <label className="block text-sm font-medium mb-1">Текст письма кандидату</label>
@@ -3199,7 +3264,7 @@ export default function Recruitment() {
                   className="input w-full text-sm"
                   rows={4}
                   value={rejectionMsg}
-                  onChange={e => setRejectionMsg(e.target.value)}
+                  onChange={e => { setRejectionMsg(e.target.value); setRejectionTplIdx(''); }}
                   placeholder="Текст сообщения об отказе..."
                 />
               </div>
@@ -3214,9 +3279,15 @@ export default function Recruitment() {
               <button
                 className="btn text-sm bg-red-500 hover:bg-red-600 text-white border-red-500"
                 onClick={() => {
-                  const { candidateId, newStage } = hhDiscardConfirm;
+                  const confirm = hhDiscardConfirm;
                   setHhDiscardConfirm(null);
-                  stageChange(candidateId, newStage, {
+                  if (confirm.bulk) {
+                    bulkMoveStage(confirm.newStage, {
+                      ids: confirm.ids, rejection_message: rejectionMsg.trim() || FALLBACK_REJECTION_MSG,
+                    });
+                    return;
+                  }
+                  stageChange(confirm.candidateId, confirm.newStage, {
                     rejection_message: rejectionMsg.trim() || null,
                   });
                 }}
