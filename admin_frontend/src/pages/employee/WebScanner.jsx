@@ -4,10 +4,13 @@ import { X } from 'lucide-react';
 /** Сканер бирки камерой в браузере.
  *
  *  В приложении сканирует системный сканер Google (мост BonjourApp), у него и
- *  автофокус, и подсветка. В браузере такого нет, поэтому берём камеру через
- *  getUserMedia и распознаём встроенным BarcodeDetector (Chrome на Android).
- *  Там, где его нет — Safari, старые браузеры, — сканер не предлагается вовсе:
- *  кнопка, которая открывает чёрный прямоугольник, хуже ручного ввода.
+ *  автофокус, и подсветка. В браузере камеру берём через getUserMedia, а
+ *  распознаём встроенным BarcodeDetector, если он есть и умеет Code 128
+ *  (Chrome на Android и macOS). Во всех остальных браузерах — Safari на
+ *  iPhone, Chrome на Windows, Firefox — встроенного распознавания нет, и
+ *  раньше кнопка скана там не показывалась вовсе: веб-версия умела только
+ *  ручной ввод. Теперь там работает ZXing, собранный в WebAssembly. Он весит
+ *  около мегабайта и грузится с нашего сервера только при открытии сканера.
  *
  *  Результат отдаётся тем же событием `bonjour-scan`, что и приложение, —
  *  страница «Скан» не знает, откуда пришла бирка. */
@@ -15,12 +18,43 @@ import { X } from 'lucide-react';
 const FORMATS = ['code_128', 'code_39', 'code_93', 'itf', 'ean_13', 'codabar', 'qr_code'];
 
 export function canScanInBrowser() {
+  // Камера в браузере доступна только по https (и на localhost).
   return (
     typeof window !== 'undefined' &&
-    'BarcodeDetector' in window &&
+    window.isSecureContext !== false &&
     typeof navigator !== 'undefined' &&
     !!navigator.mediaDevices?.getUserMedia
   );
+}
+
+async function nativeDetector() {
+  if (typeof window === 'undefined' || !('BarcodeDetector' in window)) return null;
+  try {
+    // На Windows и Linux Chrome объявляет BarcodeDetector, но список
+    // форматов у него пустой — такой детектор ничего не найдёт.
+    const supported = await window.BarcodeDetector.getSupportedFormats();
+    const formats = FORMATS.filter((f) => supported.includes(f));
+    return formats.includes('code_128') ? new window.BarcodeDetector({ formats }) : null;
+  } catch {
+    return null;
+  }
+}
+
+let zxingReady = null;
+async function zxingDetector() {
+  const [{ BarcodeDetector, prepareZXingModule }, { default: wasmUrl }] = await Promise.all([
+    import('barcode-detector/ponyfill'),
+    import('zxing-wasm/reader/zxing_reader.wasm?url'),
+  ]);
+  if (!zxingReady) {
+    // Без этого библиотека тянет .wasm с jsDelivr: лишняя внешняя
+    // зависимость у экрана, которым мастер пользуется весь день.
+    prepareZXingModule({
+      overrides: { locateFile: (path, prefix) => (path.endsWith('.wasm') ? wasmUrl : prefix + path) },
+    });
+    zxingReady = true;
+  }
+  return new BarcodeDetector({ formats: FORMATS });
 }
 
 export default function WebScanner({ onClose }) {
@@ -36,12 +70,18 @@ export default function WebScanner({ onClose }) {
 
   useEffect(() => {
     let alive = true;
-    // eslint-disable-next-line no-undef
-    const detector = new BarcodeDetector({ formats: FORMATS });
+    let detector = null;
+    const detectorReady = nativeDetector()
+      .then((d) => d || zxingDetector())
+      .then((d) => { detector = d; })
+      .catch(() => {
+        if (alive) setError('Не удалось загрузить распознавание штрихкодов. Введите номер бирки вручную.');
+      });
 
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
-      .then((stream) => {
+      .then(async (stream) => {
+        await detectorReady;
         if (!alive) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -53,6 +93,7 @@ export default function WebScanner({ onClose }) {
         video.play().catch(() => {});
         const tick = async () => {
           if (!alive || !videoRef.current) return;
+          if (!detector) return;
           try {
             const codes = await detector.detect(videoRef.current);
             const value = codes.find((c) => (c.rawValue || '').replace(/\D/g, '').length >= 14)?.rawValue;
