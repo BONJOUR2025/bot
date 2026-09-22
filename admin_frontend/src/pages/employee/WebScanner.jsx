@@ -7,15 +7,33 @@ import { X } from 'lucide-react';
  *  автофокус, и подсветка. В браузере камеру берём через getUserMedia, а
  *  распознаём встроенным BarcodeDetector, если он есть и умеет Code 128
  *  (Chrome на Android и macOS). Во всех остальных браузерах — Safari на
- *  iPhone, Chrome на Windows, Firefox — встроенного распознавания нет, и
- *  раньше кнопка скана там не показывалась вовсе: веб-версия умела только
- *  ручной ввод. Теперь там работает ZXing, собранный в WebAssembly. Он весит
- *  около мегабайта и грузится с нашего сервера только при открытии сканера.
+ *  iPhone, Chrome на Windows, Firefox — работает ZXing, собранный в
+ *  WebAssembly (около мегабайта, грузится с нашего сервера).
+ *
+ *  Скорость. Первая версия отдавала ZXing весь кадр раз в 250 мс, со всеми
+ *  форматами вплоть до QR и в режиме «искать изо всех сил» — в Safari бирка
+ *  находилась за несколько секунд, тогда как сканер Google в приложении
+ *  ловит её мгновенно. Теперь:
+ *  - камера просит Full HD: без этого Safari отдаёт 640×480, штрихкод выходит
+ *    мелким, и бирку приходится подносить так близко, что камера iPhone
+ *    перестаёт фокусироваться;
+ *  - распознаётся только полоса в центре кадра, где рамка, не шире 1280 px;
+ *  - только линейные форматы, как на бирках; QR — самое дорогое в поиске —
+ *    не ищем;
+ *  - без пауз: следующий кадр берётся, как только готов предыдущий ответ;
+ *  - каждая пятая попытка — весь кадр с поворотом, на случай если бирку
+ *    держат вертикально;
+ *  - модуль ZXing грузится заранее, при открытии экрана «Скан», а не при
+ *    нажатии кнопки.
  *
  *  Результат отдаётся тем же событием `bonjour-scan`, что и приложение, —
  *  страница «Скан» не знает, откуда пришла бирка. */
 
-const FORMATS = ['code_128', 'code_39', 'code_93', 'itf', 'ean_13', 'codabar', 'qr_code'];
+// Как в нативном приложении (MainActivity), но без QR: на бирках его нет.
+const NATIVE_FORMATS = ['code_128', 'code_39', 'code_93', 'itf', 'ean_13', 'codabar'];
+const ZXING_FORMATS = ['Code128', 'Code39', 'Code93', 'ITF', 'EAN13', 'Codabar'];
+const BAND_MAX_WIDTH = 1280;
+const FULL_FRAME_EVERY = 5;
 
 export function canScanInBrowser() {
   // Камера в браузере доступна только по https (и на localhost).
@@ -33,34 +51,81 @@ async function nativeDetector() {
     // На Windows и Linux Chrome объявляет BarcodeDetector, но список
     // форматов у него пустой — такой детектор ничего не найдёт.
     const supported = await window.BarcodeDetector.getSupportedFormats();
-    const formats = FORMATS.filter((f) => supported.includes(f));
+    const formats = NATIVE_FORMATS.filter((f) => supported.includes(f));
     return formats.includes('code_128') ? new window.BarcodeDetector({ formats }) : null;
   } catch {
     return null;
   }
 }
 
-let zxingReady = null;
-async function zxingDetector() {
-  const [{ BarcodeDetector, prepareZXingModule }, { default: wasmUrl }] = await Promise.all([
-    import('barcode-detector/ponyfill'),
-    import('zxing-wasm/reader/zxing_reader.wasm?url'),
-  ]);
-  if (!zxingReady) {
-    // Без этого библиотека тянет .wasm с jsDelivr: лишняя внешняя
-    // зависимость у экрана, которым мастер пользуется весь день.
-    prepareZXingModule({
-      overrides: { locateFile: (path, prefix) => (path.endsWith('.wasm') ? wasmUrl : prefix + path) },
+let zxingPromise = null;
+function loadZXing() {
+  if (!zxingPromise) {
+    zxingPromise = Promise.all([
+      import('zxing-wasm/reader'),
+      import('zxing-wasm/reader/zxing_reader.wasm?url'),
+    ]).then(async ([zxing, { default: wasmUrl }]) => {
+      // Без locateFile библиотека тянет .wasm с jsDelivr — лишняя внешняя
+      // зависимость у экрана, которым мастер пользуется весь день.
+      await zxing.prepareZXingModule({
+        overrides: { locateFile: (path, prefix) => (path.endsWith('.wasm') ? wasmUrl : prefix + path) },
+        fireImmediately: true,
+      });
+      return zxing;
     });
-    zxingReady = true;
+    zxingPromise.catch(() => { zxingPromise = null; });
   }
-  return new BarcodeDetector({ formats: FORMATS });
+  return zxingPromise;
+}
+
+/** Загрузить распознавание заранее, пока мастер ещё не нажал «Сканировать». */
+export function preloadWebScanner() {
+  if (!canScanInBrowser()) return;
+  nativeDetector().then((d) => { if (!d) loadZXing().catch(() => {}); });
+}
+
+/** Функция «кадр → строка штрихкода или null» для выбранного движка. */
+async function makeReader() {
+  const native = await nativeDetector();
+  if (native) {
+    return async (video) => {
+      const codes = await native.detect(video);
+      return codes.map((c) => c.rawValue || '');
+    };
+  }
+  const zxing = await loadZXing();
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let attempt = 0;
+  return async (video) => {
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh) return [];
+    attempt += 1;
+    const full = attempt % FULL_FRAME_EVERY === 0;
+    // Полоса по центру — там, где рамка на экране.
+    const sw = full ? vw : Math.round(vw * 0.9);
+    const sh = full ? vh : Math.round(vh * 0.45);
+    const scale = Math.min(1, BAND_MAX_WIDTH / sw);
+    canvas.width = Math.round(sw * scale);
+    canvas.height = Math.round(sh * scale);
+    ctx.drawImage(video, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, canvas.width, canvas.height);
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const results = await zxing.readBarcodes(image, {
+      formats: ZXING_FORMATS,
+      tryHarder: full,
+      tryRotate: full,
+      tryInvert: false,
+      tryDownscale: false,
+      maxNumberOfSymbols: 1,
+    });
+    return results.filter((r) => r.isValid).map((r) => r.text || '');
+  };
 }
 
 export default function WebScanner({ onClose }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const timerRef = useRef(null);
   const [error, setError] = useState('');
 
   const finish = useCallback((detail) => {
@@ -70,33 +135,50 @@ export default function WebScanner({ onClose }) {
 
   useEffect(() => {
     let alive = true;
-    let detector = null;
-    const detectorReady = nativeDetector()
-      .then((d) => d || zxingDetector())
-      .then((d) => { detector = d; })
-      .catch(() => {
-        if (alive) setError('Не удалось загрузить распознавание штрихкодов. Введите номер бирки вручную.');
-      });
+    const readerReady = makeReader().catch(() => {
+      if (alive) setError('Не удалось загрузить распознавание штрихкодов. Введите номер бирки вручную.');
+      return null;
+    });
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+      .getUserMedia({
+        // Full HD: по умолчанию Safari даёт 640×480, и штрихкод читается
+        // только вплотную. Больше не нужно — 4K только замедлит распознавание.
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      })
       .then(async (stream) => {
-        await detectorReady;
         if (!alive) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
         streamRef.current = stream;
+        const [track] = stream.getVideoTracks();
+        // Непрерывный автофокус там, где браузер позволяет им управлять.
+        try {
+          if (track?.getCapabilities?.().focusMode?.includes('continuous')) {
+            await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          }
+        } catch {
+          // Не поддерживается — камера фокусируется сама.
+        }
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = stream;
         video.play().catch(() => {});
-        const tick = async () => {
+        const read = await readerReady;
+        if (!read || !alive) return;
+
+        const next = (fn) => (
+          typeof video.requestVideoFrameCallback === 'function'
+            ? video.requestVideoFrameCallback(() => fn())
+            : requestAnimationFrame(() => fn())
+        );
+        const loop = async () => {
           if (!alive || !videoRef.current) return;
-          if (!detector) return;
           try {
-            const codes = await detector.detect(videoRef.current);
-            const value = codes.find((c) => (c.rawValue || '').replace(/\D/g, '').length >= 14)?.rawValue;
+            const values = await read(videoRef.current);
+            const value = values.find((v) => v.replace(/\D/g, '').length >= 14);
             if (value) {
               finish({ value, error: null, cancelled: false });
               return;
@@ -104,9 +186,9 @@ export default function WebScanner({ onClose }) {
           } catch {
             // Кадр мог не успеть отрисоваться — пробуем следующий.
           }
-          timerRef.current = setTimeout(tick, 250);
+          next(loop);
         };
-        tick();
+        next(loop);
       })
       .catch((err) => {
         if (!alive) return;
@@ -119,7 +201,6 @@ export default function WebScanner({ onClose }) {
 
     return () => {
       alive = false;
-      clearTimeout(timerRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, [finish]);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScanLine } from 'lucide-react';
 import api from '../../api.js';
 import { IN_MASTER_APP } from '../../utils/masterApp.js';
-import WebScanner, { canScanInBrowser } from './WebScanner.jsx';
+import WebScanner, { canScanInBrowser, preloadWebScanner } from './WebScanner.jsx';
 import { money, serviceTitle } from './masterFormat.js';
 
 /** Вход и выход по бирке.
@@ -145,6 +145,12 @@ export default function EmployeeMasterScan() {
       setStage('idle');
     }
   }, []);
+
+  // Распознавание для браузера грузим сразу при открытии экрана: иначе
+  // первое нажатие «Сканировать» ждало загрузки мегабайта WebAssembly.
+  useEffect(() => {
+    if (kind === 'web') preloadWebScanner();
+  }, [kind]);
 
   useEffect(() => {
     api
