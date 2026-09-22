@@ -7756,14 +7756,16 @@ button:hover > .vac-desc { color: var(--color-text); }
 /* ================================================================
    Цех — приложение старшего мастера (EmployeeWorkshop)
    ================================================================ */
+/* Шесть вкладок в одну строку не помещались: последняя («Условия») уезжала
+   за край, и о ней просто не знали. Теперь переносятся на вторую строку. */
 .ws-tabs {
-  display: flex; gap: 2px; padding: 3px; margin-bottom: 0.75rem;
-  border-radius: 999px; background: var(--color-control-bg); border: 1px solid var(--color-border);
-  overflow-x: auto; scrollbar-width: none;
+  display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; margin-bottom: 0.75rem;
+  border-radius: 18px; background: var(--color-control-bg); border: 1px solid var(--color-border);
 }
 .ws-tabs::-webkit-scrollbar { display: none; }
 .ws-tabs button {
-  flex: 1 0 auto; min-height: 36px; padding: 0 0.5rem; border: 0; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  flex: 1 0 auto; min-height: 36px; padding: 0 0.6rem; border: 0; border-radius: 999px;
   background: transparent; color: var(--color-text-muted); font: inherit; font-size: 0.8rem;
   white-space: nowrap; cursor: pointer;
 }
@@ -7856,3 +7858,31 @@ button:hover > .vac-desc { color: var(--color-text); }
 .ws-thumbs .emp-wip-photo { flex: none; width: 56px; height: 56px; }
 .ws-advice__rec { display: grid; gap: 0.15rem; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px dashed var(--color-border); font-size: 0.9rem; color: var(--color-text); }
 .ws-advice__rec small { color: var(--color-text-muted); font-size: 0.75rem; }
+
+/* ── Разбор экрана «Цех»: что было непонятно ──────────────────────── */
+/* Плитки называли разделы, но не открывали их — теперь это кнопки. */
+.ws-tile-link { cursor: pointer; border: 0; text-align: left; font: inherit; }
+.ws-tile-link:active { transform: scale(0.99); }
+.ws-tile-link small { color: var(--color-primary); }
+/* Стрелка у номера заказа: видно, что карточка открывается. */
+.ws-open-arrow { flex: none; margin-left: 0.25rem; color: var(--color-text-muted); vertical-align: -3px; }
+.emp-payout-item__amount { display: inline-flex; align-items: center; white-space: nowrap; }
+/* Объяснение «как считается» больше не закрывает собой список. */
+.ws-how { margin: 0 0 0.75rem; font-size: 0.8rem; color: var(--color-text-muted); }
+.ws-how > summary { cursor: pointer; color: var(--color-primary); list-style: none; padding: 0.3rem 0; }
+.ws-how > summary::-webkit-details-marker { display: none; }
+.ws-how > summary::before { content: '▸ '; }
+.ws-how[open] > summary::before { content: '▾ '; }
+.ws-how > div { padding: 0.5rem 0.7rem; border-radius: 10px; background: color-mix(in srgb, var(--color-text) 5%, transparent); line-height: 1.45; }
+.ws-load__plan { color: var(--color-primary); }
+.ws-master__head { align-items: center; }
+.ws-master__head .emp-wip-badges { flex-wrap: nowrap; align-items: center; gap: 0.35rem; }
+.ws-master__name { min-width: 0; }
+/* Четыре плитки ложились как 3 + 1: одинокая четвёртая читалась как ошибка. */
+.ws-tiles { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 620px) { .ws-tiles { grid-template-columns: repeat(4, 1fr); } }
+/* Плашки загрузки уезжали вбок, и у крайнего мастера цифры были обрезаны. */
+.ws-loads { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); overflow: visible; }
+.ws-load { white-space: normal; }
+/* Четвёртый вид ошибки сканов («Повторные сканы») уезжал за край экрана. */
+.ws-chips { flex-wrap: wrap; overflow: visible; }

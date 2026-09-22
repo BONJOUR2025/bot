@@ -442,8 +442,10 @@ def _advice(queue: list[dict], services: list[dict], stats: dict[int, dict],
                         key=lambda u: (round(backlog(u), 1), -skill(u), -experience[u]["__total"]))
         best = ranked[0]
         did = experience[best].get(folder, 0)
+        # Коротко и в том порядке, в каком это читают: сначала «почему он»,
+        # потом «сколько у него сейчас». Дроби — с запятой, как везде в UI.
         reason = (f"делал «{folder}» {did} раз за 2 месяца" if did else "такую работу не делал, но самый свободный") \
-            + f"; в работе {load(best)}, сдаёт ~{per_day(best):.0f} в день — очередь на {backlog(best):.1f} дн"
+            + f" · в работе {load(best)}, очередь на {backlog(best):.1f} дн".replace(".", ",")
         rows.append({
             **item,
             "recommended": {"master_uid": best, "name": name(best), "reason": reason},

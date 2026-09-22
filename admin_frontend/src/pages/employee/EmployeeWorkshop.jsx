@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MessageSquare, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, MessageSquare, RefreshCw } from 'lucide-react';
 import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
 import { money, serviceTitle, workshopPhotoPath } from './masterFormat.js';
@@ -15,17 +15,27 @@ import { OrderSearch, OrderView } from './WorkshopOrder.jsx';
  *  (ошибки, из-за которых мастер теряет процент или отчёт врёт), «Ученики»,
  *  «Условия» (комментарии приёмщика к тому, что сейчас в работе). */
 
+// Счётчик на вкладке отвечает на вопрос «а что там» до того, как её открыли:
+// пустая вкладка видна сразу, а не после перехода.
 const TABS = [
-  { key: 'now', label: 'Сейчас' },
-  { key: 'advice', label: 'Кому дать' },
-  { key: 'masters', label: 'Мастера' },
-  { key: 'scans', label: 'Сканы' },
-  { key: 'apprentices', label: 'Ученики' },
-  { key: 'notes', label: 'Условия' },
+  { key: 'now', label: 'Сейчас', count: (d) => d.wip.length },
+  { key: 'advice', label: 'Кому дать', count: (d) => d.advice?.queue.length },
+  { key: 'masters', label: 'Мастера', count: (d) => d.masters.length },
+  { key: 'scans', label: 'Сканы', count: (d) => d.scan_issues.filter(thisMonth).length },
+  { key: 'apprentices', label: 'Ученики', count: (d) => d.apprentices?.length },
+  { key: 'notes', label: 'Условия', count: (d) => d.wip.filter((it) => (it.comments || []).length > 0).length },
 ];
 const TAB_KEY = 'workshop.tab';
 const STALE_DAYS = 7;
 const PREVIEW = 6;
+
+/** Запись этого месяца — счётчик на вкладке «Сканы» должен совпадать с тем,
+ *  что внутри неё показано за текущий период. */
+function thisMonth(row) {
+  const t = new Date(row.when);
+  const now = new Date();
+  return t >= new Date(now.getFullYear(), now.getMonth(), 1);
+}
 
 function hhmm(iso) {
   const d = new Date(iso);
@@ -93,7 +103,10 @@ function Item({ it, extra, onOpenDoc, onPhoto }) {
   const body = (
     <>
       <div className="emp-payout-item__top">
-        <span className="emp-payout-item__amount">{it.doc_num}</span>
+        <span className="emp-payout-item__amount">
+          {it.doc_num}
+          {onOpenDoc && <ChevronRight size={16} className="ws-open-arrow" aria-hidden="true" />}
+        </span>
         <span className="emp-wip-badges">
           {due && <span className={`badge ${due.cls}`}>{due.label}</span>}
           {extra}
@@ -116,14 +129,25 @@ function Item({ it, extra, onOpenDoc, onPhoto }) {
   );
 }
 
-function Section({ title, count, children, empty }) {
+function Section({ id, title, count, hint, children, empty }) {
   return (
-    <section className="ws-section">
+    <section className="ws-section" id={id}>
       <h3 className="ws-section__title">
         {title}{count != null && <span className="ws-count">{count}</span>}
       </h3>
+      {hint && <p className="ws-hint">{hint}</p>}
       {count === 0 ? <p className="emp-page__empty">{empty}</p> : children}
     </section>
+  );
+}
+
+/** Объяснение «откуда цифры» — свёрнуто, чтобы не закрывать собой список. */
+function How({ children }) {
+  return (
+    <details className="ws-how">
+      <summary>Как это считается</summary>
+      <div>{children}</div>
+    </details>
   );
 }
 
@@ -154,26 +178,41 @@ function NowTab({ d, onOpenDoc, onPhoto }) {
   const overdue = d.wip.filter((it) => it.due_state === 'overdue').length;
   const today = d.wip.filter((it) => it.due_state === 'today').length;
 
+  const jump = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   return (
     <>
       <div className="emp-earn-tiles ws-tiles">
         <div className="emp-earn-tile"><span>В работе</span><b>{d.wip.length}</b><small>{money(total)}</small></div>
-        <div className={`emp-earn-tile${overdue ? ' ws-tile--bad' : ''}`}><span>Просрочено</span><b>{overdue}</b><small>по сроку выдачи</small></div>
-        <div className={`emp-earn-tile${today ? ' ws-tile--warn' : ''}`}><span>Сдать сегодня</span><b>{today}</b><small>ещё не просрочено</small></div>
-        <div className="emp-earn-tile"><span>Никто не взял</span><b>{d.queue ? d.queue.length : '—'}</b><small>без скана входа</small></div>
+        <button type="button" className={`emp-earn-tile ws-tile-link${overdue ? ' ws-tile--bad' : ''}`} onClick={() => jump('ws-burning')}>
+          <span>Просрочено</span><b>{overdue}</b><small>показать список</small>
+        </button>
+        <button type="button" className={`emp-earn-tile ws-tile-link${today ? ' ws-tile--warn' : ''}`} onClick={() => jump('ws-burning')}>
+          <span>Сдать сегодня</span><b>{today}</b><small>показать список</small>
+        </button>
+        <button type="button" className="emp-earn-tile ws-tile-link" onClick={() => jump('ws-queue')}>
+          <span>Никто не взял</span><b>{d.queue ? d.queue.length : '—'}</b><small>показать список</small>
+        </button>
       </div>
 
-      <Section title="Горит" count={burning.length} empty="Ничего не горит: просроченных и на сегодня-завтра нет.">
+      <Section
+        id="ws-burning"
+        title="Горит"
+        count={burning.length}
+        hint="Уже просрочено или сдавать сегодня-завтра. Нажмите на заказ — откроется карточка с услугами, сканами и фото."
+        empty="Ничего не горит: просроченных и на сегодня-завтра нет."
+      >
         <Limited items={burning} render={(it) => <Item key={it.service_id} it={it} onOpenDoc={onOpenDoc} />} />
       </Section>
 
       <Section
+        id="ws-queue"
         title="Никто не взял"
         count={d.queue ? d.queue.length : null}
+        hint="Изделие лежит в месте ремонта, а скана входа нет ни у кого: работа не начата."
         empty="Всё, что лежит в местах ремонта, уже у мастеров."
       >
         {!d.queue && <p className="emp-page__error">Очередь сейчас не получена — Агбис не ответил.</p>}
-        <p className="ws-hint">Заказ в исполнении, изделие лежит в месте ремонта, а скана входа нет ни у кого.</p>
         {Object.entries(queueByPoint).map(([point, items]) => (
           <div key={point} className="ws-group">
             <h4 className="ws-group__title">{point} <span className="ws-count">{items.length}</span></h4>
@@ -194,7 +233,12 @@ function NowTab({ d, onOpenDoc, onPhoto }) {
         ))}
       </Section>
 
-      <Section title={`Зависли ${STALE_DAYS}+ дней`} count={stale.length} empty="Зависших нет.">
+      <Section
+        title={`Зависли ${STALE_DAYS}+ дней`}
+        count={stale.length}
+        hint="У мастера дольше недели, но срок выдачи ещё не поджимает."
+        empty="Зависших нет."
+      >
         <Limited items={stale} render={(it) => <Item key={it.service_id} it={it} onOpenDoc={onOpenDoc} />} />
       </Section>
     </>
@@ -205,6 +249,7 @@ function MastersTab({ d, onOpenDoc }) {
   const [open, setOpen] = useState(null);
   return (
     <div className="emp-list">
+      <p className="ws-hint">Сколько у кого работы и как быстро он её сдаёт. Нажмите на мастера — покажет, что именно у него в работе.</p>
       {d.masters.map((m) => {
         const theirs = d.wip.filter((it) => it.master_uid === m.master_uid);
         const isOpen = open === m.master_uid;
@@ -216,9 +261,13 @@ function MastersTab({ d, onOpenDoc }) {
                 {m.name}
                 {m.position && <small>{m.position}</small>}
               </span>
-              {m.on_shift == null ? null : m.on_shift
-                ? <span className="badge badge--success">на смене с {hhmm(m.shift_from)}</span>
-                : <span className="badge badge--neutral">не отмечался</span>}
+              <span className="emp-wip-badges">
+                {m.on_shift == null ? null : m.on_shift
+                  ? <span className="badge badge--success">на смене с {hhmm(m.shift_from)}</span>
+                  : <span className="badge badge--neutral">не отмечался</span>}
+                {isOpen ? <ChevronDown size={18} className="ws-open-arrow" aria-hidden="true" />
+                  : <ChevronRight size={18} className="ws-open-arrow" aria-hidden="true" />}
+              </span>
             </button>
             <dl className="ws-stats">
               <div><dt>В работе</dt><dd>{m.wip}{m.overdue > 0 && <em className="ws-bad"> · {m.overdue} проср.</em>}</dd></div>
@@ -230,6 +279,7 @@ function MastersTab({ d, onOpenDoc }) {
             </dl>
             {isOpen && (
               <div className="ws-master__wip">
+                <p className="ws-hint">Сейчас в работе у мастера — {theirs.length}:</p>
                 {theirs.length === 0 ? <p className="emp-page__empty">В работе ничего нет.</p>
                   : <div className="emp-list">{theirs.map((it) => <Item key={it.service_id} it={{ ...it, master: null }} onOpenDoc={onOpenDoc} />)}</div>}
               </div>
@@ -248,7 +298,7 @@ const ISSUE_KINDS = [
   { key: 'multi', label: 'Повторные сканы', hint: 'Несколько входов или выходов по одной бирке.' },
 ];
 
-function ScansTab({ d }) {
+function ScansTab({ d, onOpenDoc }) {
   const monthStart = useMemo(() => {
     const n = new Date();
     return new Date(n.getFullYear(), n.getMonth(), 1);
@@ -285,16 +335,22 @@ function ScansTab({ d }) {
           items={list}
           render={(i) => (
             <div key={`${i.kind}-${i.service_id}`} className="emp-payout-item">
-              <div className="emp-payout-item__top">
-                <span className="emp-payout-item__amount">{i.doc_num}</span>
-                <span className="emp-wip-badges"><span className="badge badge--neutral">{dayShort(i.when)}</span></span>
-              </div>
-              <div className="emp-payout-item__details">
-                <span>{serviceTitle(i.name)}</span>
-                <span>{money(i.kredit)}</span>
-              </div>
-              <div className="ws-sub"><b>{i.master || 'мастер не указан'}</b>{i.kind === 'no_out' ? ` · ${i.label.toLowerCase()}` : ''}</div>
-              {i.detail && <div className="ws-sub">{i.detail}</div>}
+              <button type="button" className="ws-advice__open" onClick={() => onOpenDoc(i.doc_num)}>
+                <div className="emp-payout-item__top">
+                  <span className="emp-payout-item__amount">
+                    {i.doc_num}
+                    <ChevronRight size={16} className="ws-open-arrow" aria-hidden="true" />
+                  </span>
+                  <span className="emp-wip-badges"><span className="badge badge--neutral">{dayShort(i.when)}</span></span>
+                </div>
+                <div className="emp-payout-item__details">
+                  <span>{serviceTitle(i.name)}</span>
+                  <span>{money(i.kredit)}</span>
+                </div>
+                {/* Что именно не так, уже написано над списком — здесь только
+                    мастер и цифры, которые у каждой записи свои. */}
+                <div className="ws-sub"><b>{i.master || 'мастер не указан'}</b>{i.detail && i.kind !== 'no_out' ? ` · ${i.detail}` : ''}</div>
+              </button>
             </div>
           )}
         />
@@ -391,30 +447,44 @@ function AdviceTab({ d, onOpenDoc, onPhoto }) {
   return (
     <>
       <p className="ws-hint">
-        Ремонт обуви, который лежит в цехе и который никто не взял: заказ принят на Бестужевской, привезён
-        по накладной или это курьерский заказ, числящийся в цехе. Одна пара — одному мастеру. Сначала самые срочные; каждому достаётся тот, у кого меньше
-        всего работы в днях (сколько в работе ÷ сколько сдаёт за день) из тех, кто делал такую работу
-        {a.only_on_shift ? ' и сегодня на смене' : ''}. Советуем только мастеров по ремонту: химчистка и
-        индивидуальный пошив — другая работа и другие люди.
+        Ремонт обуви, который лежит в цехе и который никто не взял. Одна пара — одному мастеру
+        {a.only_on_shift ? ', только из тех, кто сегодня на смене' : ''}.
       </p>
+      <How>
+        «В цехе» — заказ принят на Бестужевской, привезён по накладной или это курьерский заказ,
+        числящийся в цехе. Сначала самые срочные; каждую пару отдаём тому, у кого меньше всего работы
+        в днях: сколько сейчас в работе ÷ сколько он сдаёт за рабочий день. Считаем только мастеров по
+        ремонту — химчистка и индивидуальный пошив делают другую работу. Опыт — выходы по такой же
+        работе за этот и прошлый месяц.
+      </How>
+      <h4 className="ws-group__title">Кто сейчас свободнее</h4>
       <div className="ws-loads">
         {a.masters.filter((m) => !a.only_on_shift || m.on_shift).map((m) => (
           <div key={m.master_uid} className="ws-load">
             <b>{m.name.split(' ').slice(0, 2).join(' ')}</b>
             {m.position && <span className="ws-load__pos">{m.position}</span>}
-            <span>в работе {m.wip} · ~{m.per_day}/день</span>
-            <span>очередь {String(m.backlog_days).replace('.', ',')} дн{m.planned ? ` · +${m.planned} по совету` : ''}</span>
+            <span>очередь на {String(m.backlog_days).replace('.', ',')} дн</span>
+            <span>в работе {m.wip} · сдаёт ~{m.per_day}/день</span>
+            {m.planned > 0 && <span className="ws-load__plan">+{m.planned} по совету ниже</span>}
           </div>
         ))}
       </div>
-      <Section title="Кому дать" count={a.queue.length} empty="Весь ремонт обуви в цехе уже у мастеров.">
+      <Section
+        title="Кому дать"
+        count={a.queue.length}
+        hint="Нажмите на заказ — откроется карточка с услугами, сканами и фото."
+        empty="Весь ремонт обуви в цехе уже у мастеров."
+      >
         <Limited
           items={a.queue}
           render={(q) => (
             <div key={q.item_id} className="emp-payout-item ws-advice">
               <button type="button" className="ws-advice__open" onClick={() => onOpenDoc(q.doc_num)}>
                 <div className="emp-payout-item__top">
-                  <span className="emp-payout-item__amount">{q.doc_num}</span>
+                  <span className="emp-payout-item__amount">
+                    {q.doc_num}
+                    <ChevronRight size={16} className="ws-open-arrow" aria-hidden="true" />
+                  </span>
                   <span className="emp-wip-badges">
                     {dueBadge(q) && <span className={`badge ${dueBadge(q).cls}`}>{dueBadge(q).label}</span>}
                     {q.urgent && <span className="badge badge--error">Срочно</span>}
@@ -498,12 +568,15 @@ export default function EmployeeWorkshop() {
       <OrderSearch onOpen={setOrderId} />
       {openError && <p className="emp-page__error">{openError}</p>}
       <div className="ws-tabs" role="tablist" aria-label="Разделы цеха">
-        {TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key}
-            className={tab === t.key ? 'is-active' : ''} onClick={() => pickTab(t.key)}>
-            {t.label}
-          </button>
-        ))}
+        {TABS.map((t) => {
+          const n = d ? t.count(d) : null;
+          return (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key}
+              className={tab === t.key ? 'is-active' : ''} onClick={() => pickTab(t.key)}>
+              {t.label}{n != null && <span className="rf-chip__n">{n}</span>}
+            </button>
+          );
+        })}
       </div>
 
       {loading && !d && <p className="emp-page__loading">Загрузка…</p>}
@@ -514,7 +587,7 @@ export default function EmployeeWorkshop() {
           {tab === 'now' && <NowTab d={d} onOpenDoc={openDoc} onPhoto={openPhoto} />}
           {tab === 'advice' && <AdviceTab d={d} onOpenDoc={openDoc} onPhoto={openPhoto} />}
           {tab === 'masters' && <MastersTab d={d} onOpenDoc={openDoc} />}
-          {tab === 'scans' && <ScansTab d={d} />}
+          {tab === 'scans' && <ScansTab d={d} onOpenDoc={openDoc} />}
           {tab === 'apprentices' && <ApprenticesTab d={d} onChanged={() => load(true)} />}
           {tab === 'notes' && <NotesTab d={d} />}
         </div>
