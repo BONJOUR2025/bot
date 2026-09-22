@@ -284,6 +284,12 @@ async def send_message(access_token: str, user_id: str, chat_id: str, text: str)
                 "доступен только на тарифе «Максимальный» — проверьте тариф и права ключа "
                 "(нужен scope messenger:write)."
             )
+        if r.status_code == 402:
+            # Авито объясняет причину в теле, а raise_for_status оставлял от
+            # неё только «402 Payment Required». По такому тексту нельзя было
+            # понять, почему в один чат того же объявления пишется, а в
+            # соседний — нет.
+            raise ValueError(f"Авито: отправка в этот чат требует оплаты (402). Ответ Авито: {r.text[:500]}")
         r.raise_for_status()
         return r.json() if r.content else {}
 
