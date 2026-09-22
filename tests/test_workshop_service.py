@@ -77,3 +77,33 @@ def test_master_stats_have_no_money_and_know_the_shift(world):
     assert m["median_min"] == 180  # услуги короче 15 минут в медиану не идут
     assert m["on_shift"] is True
     assert not any("salary" in k for k in m)
+
+
+def test_position_decides_who_repairs_shoes():
+    assert ws._repairs_shoes("Мастер по ремонту") is True
+    assert ws._repairs_shoes("Ученик мастера") is True
+    assert ws._repairs_shoes("Мастер по изготовлению подошвы") is True
+    assert ws._repairs_shoes("Мастер по химчистке") is False
+    assert ws._repairs_shoes("Руководитель отдела пошива") is False
+    assert ws._repairs_shoes("") is None          # должности нет — решает опыт
+
+
+def test_advice_skips_dry_cleaning_master():
+    """Сканы по ремонту у химчистки бывают (подменял) — в совет он не попадает."""
+    queue = [{"service_id": 1, "item_id": 10, "doc_num": "1-1", "name": "Набойки", "kredit": 1000.0,
+              "folder": "01. Набойки", "how": "принят на Бестужевской", "urgent": False,
+              "waiting_days": 1, "due": None, "due_state": None}]
+    services = [{"service_id": i, "out_user_id": uid, "out_time": "2026-09-20T10:00:00",
+                 "top_parent_name": "01. Ремонт обуви", "folder_name": "01. Набойки"}
+                for i, uid in enumerate([1, 1, 1, 1, 2, 2, 2, 2])]
+    stats = {1: {"name": "Химчисткин", "wip": 0, "position": "Мастер по химчистке"},
+             2: {"name": "Ремонтников", "wip": 0, "position": "Мастер по ремонту"}}
+    people = {1: {"position": "Мастер по химчистке"}, 2: {"position": "Мастер по ремонту"}}
+    a = ws._advice(queue, services, stats, None, people)
+    assert [m["master_uid"] for m in a["masters"]] == [2]
+    assert a["queue"][0]["recommended"]["name"] == "Ремонтников"
+
+
+def test_tailoring_is_not_workshop():
+    assert ws._is_tailoring("4.0 Услуги по инд. пошиву")
+    assert not ws._is_tailoring("01. Ремонт обуви")

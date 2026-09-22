@@ -151,11 +151,14 @@ def _queue() -> list[dict[str, Any]]:
         cur.execute(
             f"""
             SELECT dos.id, d.doc_num, t.name, dos.kredit, dos.current_sclad_id,
-                   d.doc_date, dor.date_out
+                   d.doc_date, dor.date_out, COALESCE(dos.parent_dos_id, dos.id),
+                   CAST(top.name AS VARCHAR(200) CHARACTER SET OCTETS)
             FROM doc_order_services dos
                 JOIN docs_order dor ON dor.id = dos.doc_order_id
                 JOIN docs d ON d.doc_id = dor.doc_id
                 JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id
+                LEFT JOIN tree folder ON folder.folder_id = t.folder_id
+                LEFT JOIN tree top ON top.folder_id = folder.top_parent
             WHERE t.folder_id IN ({_SALARY_FOLDERS_SQL})
               AND d.doc_date > DATEADD(-{QUEUE_LOOKBACK_DAYS} DAY TO CURRENT_DATE)
               AND dor.status_id = 3
@@ -171,16 +174,20 @@ def _queue() -> list[dict[str, Any]]:
         con.close()
 
     from app.services.master_bot_service import deadline
+    from app.services.workshop_order_service import _text
 
     now = datetime.now()
     out = []
-    for sid, doc_num, name, kredit, sclad, doc_date, date_out in rows:
+    for sid, doc_num, name, kredit, sclad, doc_date, date_out, item_id, top in rows:
+        if _is_tailoring(_text(top)):
+            continue
         due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
         accepted = doc_date if isinstance(doc_date, (date, datetime)) else None
         waiting = (now.date() - (accepted.date() if isinstance(accepted, datetime) else accepted)).days \
             if accepted else None
         out.append({
             "service_id": sid,
+            "item_id": item_id,
             "doc_num": str(doc_num or ""),
             "name": str(name or ""),
             "kredit": _num(kredit),
@@ -235,6 +242,32 @@ SHOE_REPAIR_TOP = "ремонт обуви"
 # числятся уже на складе цеха — их руководитель тоже считает «в цеху».
 COURIER_SCLAD = 21023
 ADVICE_MIN_EXPERIENCE = 3   # столько выходов по ремонту обуви за 2 месяца — уже «ремонтник»
+
+# Индивидуальный пошив («4.0 Услуги по инд. пошиву») делает отдельный отдел со
+# своим руководителем — в цехе его не показываем нигде.
+TAILORING_WORD = "пошив"
+
+# Должность решает, кому можно отдать ремонт обуви: мастер по химчистке его не
+# делает, даже если пара его сканов по ремонту в базе есть (подменял, помогал).
+# Кого считаем ремонтником — по должности из карточки сотрудника.
+REPAIR_POSITION_WORDS = ("ремонт", "подошв", "ученик", "старший мастер")
+OTHER_POSITION_WORDS = ("химчист", TAILORING_WORD, "администратор", "курьер", "менеджер", "приём")
+
+
+def _is_tailoring(top_name: Any) -> bool:
+    return TAILORING_WORD in str(top_name or "").lower()
+
+
+def _repairs_shoes(position: str) -> Optional[bool]:
+    """Ремонтник ли по должности: True/False, либо None — должность неизвестна."""
+    low = (position or "").strip().lower()
+    if not low:
+        return None
+    if any(w in low for w in REPAIR_POSITION_WORDS):
+        return True
+    if any(w in low for w in OTHER_POSITION_WORDS):
+        return False
+    return None
 
 
 def _workshop_shoe_queue() -> list[dict[str, Any]]:
@@ -321,15 +354,21 @@ def _workshop_shoe_queue() -> list[dict[str, Any]]:
 
 
 def _advice(queue: list[dict], services: list[dict], stats: dict[int, dict],
-            on_shift: Optional[dict]) -> dict[str, Any]:
+            on_shift: Optional[dict], people: Optional[dict[int, dict]] = None) -> dict[str, Any]:
     """Кому какой заказ дать: срочные — первыми, каждому — наименее загруженный
     из тех, кто на смене и уже делал такую работу.
+
+    В совет попадают только мастера по ремонту (должность из карточки
+    сотрудника): химчистка и индивидуальный пошив — другие люди и другая
+    работа, и раздавать им ремонт обуви нельзя, даже если в базе есть их
+    случайные сканы по ремонту.
 
     Опыт — выходы по ремонту обуви за текущий и прошлый месяц, по папке услуги
     («01. Набойки», «Профилактика»…). Нагрузка — сколько у мастера сейчас в
     работе плюс то, что ему уже посоветовали в этом же расчёте, иначе все
     заказы достались бы одному самому свободному.
     """
+    people = people or {}
     experience: dict[int, dict[str, int]] = {}
     outs: dict[int, int] = {}
     days: dict[int, set] = {}
@@ -346,7 +385,11 @@ def _advice(queue: list[dict], services: list[dict], stats: dict[int, dict],
         bucket[folder] = bucket.get(folder, 0) + 1
         bucket["__total"] = bucket.get("__total", 0) + 1
 
-    pool = [uid for uid, e in experience.items() if e["__total"] >= ADVICE_MIN_EXPERIENCE]
+    def position_of(uid: int) -> str:
+        return (people.get(uid) or {}).get("position") or (stats.get(uid) or {}).get("position") or ""
+
+    pool = [uid for uid, e in experience.items()
+            if e["__total"] >= ADVICE_MIN_EXPERIENCE and _repairs_shoes(position_of(uid)) is not False]
     shift_known = on_shift is not None
     working = [uid for uid in pool if shift_known and uid in on_shift]
     candidates = working or pool
@@ -413,7 +456,8 @@ def _advice(queue: list[dict], services: list[dict], stats: dict[int, dict],
     return {
         "queue": rows,
         "masters": sorted(({
-            "master_uid": u, "name": name(u), "wip": (stats.get(u) or {}).get("wip", 0),
+            "master_uid": u, "name": name(u), "position": position_of(u),
+            "wip": (stats.get(u) or {}).get("wip", 0),
             "planned": planned.get(u, 0), "on_shift": bool(shift_known and u in on_shift),
             "experience": experience[u]["__total"], "per_day": round(per_day(u), 1),
             "backlog_days": round(backlog(u), 1),
@@ -421,6 +465,24 @@ def _advice(queue: list[dict], services: list[dict], stats: dict[int, dict],
         "shift_known": shift_known,
         "only_on_shift": bool(working),
     }
+
+
+# Миниатюры — только в списках, где мастер выбирает, что взять, и не больше
+# THUMBS_LIMIT изделий на список: пара снимков на изделие — это килобайты, а
+# сотня изделий с фото — уже мегабайты в одном ответе.
+THUMBS_LIMIT = 80
+
+
+def _attach_photos(*lists: Optional[list[dict]]) -> None:
+    """Дописывает `photos` изделиям в переданных списках (одним запросом)."""
+    from app.services.workshop_order_service import thumbs
+
+    rows = [row for items in lists if items for row in items[:THUMBS_LIMIT] if row.get("item_id")]
+    if not rows:
+        return
+    found = thumbs([row["item_id"] for row in rows])
+    for row in rows:
+        row["photos"] = found.get(row["item_id"], [])
 
 
 def build_overview() -> dict[str, Any]:
@@ -433,6 +495,8 @@ def build_overview() -> dict[str, Any]:
     month, prev = _services()
     by_id: dict[Any, dict] = {}
     for svc in prev + month:  # месяц перекрывает прошлый — он свежее
+        if _is_tailoring(svc.get("top_parent_name")):
+            continue  # индивидуальный пошив — не цех
         by_id[svc.get("service_id")] = svc
     services = list(by_id.values())
 
@@ -567,10 +631,16 @@ def build_overview() -> dict[str, Any]:
 
     # ── совет: кому какой ремонт обуви дать ───────────────────────────
     try:
-        advice = _advice(_workshop_shoe_queue(), services, stats, on_shift)
+        advice = _advice(_workshop_shoe_queue(), services, stats, on_shift, people)
     except Exception:
         logger.warning("workshop: совет по распределению не собран", exc_info=True)
         advice = None
+
+    # ── миниатюры изделий для списков ───────────────────────────────────
+    try:
+        _attach_photos((advice or {}).get("queue"), queue)
+    except Exception:
+        logger.warning("workshop: миниатюры не получены", exc_info=True)
 
     # ── ученики ─────────────────────────────────────────────────────────
     try:

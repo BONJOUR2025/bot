@@ -290,6 +290,42 @@ def card(order_id: int) -> dict[str, Any]:
     }
 
 
+def thumbs(item_ids: list[int], per_item: int = 2) -> dict[int, list[dict]]:
+    """Миниатюры изделий для списков цеха: {id строки-изделия: [{id, md5, thumb}]}.
+
+    Те же снимки, что в карточке заказа, но по паре на изделие — список
+    цеха грузится целиком, и полная пачка фото раздула бы ответ.
+    """
+    from app.services.firebird_service import _connect
+
+    ids = [int(i) for i in dict.fromkeys(item_ids) if i is not None]
+    if not ids:
+        return {}
+    out: dict[int, list[dict]] = {}
+    con = _connect()
+    try:
+        cur = con.cursor()
+        marks = ",".join("?" * len(ids))
+        cur.execute(
+            f"SELECT p.dos_id, p.id, p.md5_checksum, p.small FROM doc_order_serv_photos p "
+            f"WHERE p.dos_id IN ({marks}) ORDER BY p.dos_id, p.is_main_photo DESC, p.id", ids)
+        for item_id, pid, md5, small in cur.fetchall():
+            bucket = out.setdefault(item_id, [])
+            if len(bucket) >= per_item:
+                continue
+            if isinstance(md5, bytes):
+                md5 = md5.decode("ascii", "replace")
+            raw = small.read() if hasattr(small, "read") else small
+            if not raw:
+                continue
+            mime = "image/png" if raw[:4] == b"\x89PNG" else "image/jpeg"
+            bucket.append({"id": pid, "md5": (md5 or "").strip(),
+                           "thumb": f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"})
+    finally:
+        con.close()
+    return out
+
+
 def photo_exists(photo_id: int, md5: str) -> bool:
     """Снимок с таким id и хешем есть в базе (защита от перебора id)."""
     from app.services.firebird_service import _connect

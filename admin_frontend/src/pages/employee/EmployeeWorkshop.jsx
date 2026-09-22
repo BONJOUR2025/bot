@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MessageSquare, RefreshCw } from 'lucide-react';
 import api from '../../api.js';
-import { money, serviceTitle } from './masterFormat.js';
+import { PhotoViewer } from '../../components/OrderPhotos.jsx';
+import { money, serviceTitle, workshopPhotoPath } from './masterFormat.js';
 import { OrderSearch, OrderView } from './WorkshopOrder.jsx';
 
 /** Цех — приложение старшего мастера (GET /api/workshop/overview).
@@ -72,10 +73,25 @@ function errorText(err) {
   return 'Не удалось загрузить данные. Попробуйте ещё раз.';
 }
 
-function Item({ it, extra }) {
-  const due = dueBadge(it);
+/** Миниатюры изделия: нажатие открывает снимок во весь экран. */
+function Thumbs({ photos, onPhoto }) {
+  if (!photos?.length || !onPhoto) return null;
   return (
-    <div className={`emp-payout-item${it.due_state === 'overdue' ? ' emp-wip-item--overdue' : ''}${it.due_state === 'today' ? ' emp-wip-item--today' : ''}`}>
+    <div className="ws-thumbs">
+      {photos.map((p, i) => (
+        <button key={p.id} type="button" className="emp-wip-photo" onClick={() => onPhoto(photos, i)}
+          aria-label={`Фото ${i + 1}`}>
+          {p.thumb ? <img src={p.thumb} alt="" /> : <span>фото</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Item({ it, extra, onOpenDoc, onPhoto }) {
+  const due = dueBadge(it);
+  const body = (
+    <>
       <div className="emp-payout-item__top">
         <span className="emp-payout-item__amount">{it.doc_num}</span>
         <span className="emp-wip-badges">
@@ -88,6 +104,14 @@ function Item({ it, extra }) {
         <span>{money(it.kredit)}</span>
       </div>
       {it.master && <div className="ws-sub">{it.master}{it.days > 0 ? ` · в работе ${it.days} дн` : ''}</div>}
+    </>
+  );
+  return (
+    <div className={`emp-payout-item${it.due_state === 'overdue' ? ' emp-wip-item--overdue' : ''}${it.due_state === 'today' ? ' emp-wip-item--today' : ''}`}>
+      {onOpenDoc
+        ? <button type="button" className="ws-advice__open" onClick={() => onOpenDoc(it.doc_num)}>{body}</button>
+        : body}
+      <Thumbs photos={it.photos} onPhoto={onPhoto} />
     </div>
   );
 }
@@ -117,7 +141,7 @@ function Limited({ items, render, step = PREVIEW }) {
   );
 }
 
-function NowTab({ d }) {
+function NowTab({ d, onOpenDoc, onPhoto }) {
   const burning = d.wip.filter((it) => ['overdue', 'today', 'tomorrow'].includes(it.due_state));
   const stale = d.wip.filter((it) => (it.days || 0) >= STALE_DAYS && !['overdue', 'today'].includes(it.due_state))
     .sort((a, b) => (b.days || 0) - (a.days || 0));
@@ -140,7 +164,7 @@ function NowTab({ d }) {
       </div>
 
       <Section title="Горит" count={burning.length} empty="Ничего не горит: просроченных и на сегодня-завтра нет.">
-        <Limited items={burning} render={(it) => <Item key={it.service_id} it={it} />} />
+        <Limited items={burning} render={(it) => <Item key={it.service_id} it={it} onOpenDoc={onOpenDoc} />} />
       </Section>
 
       <Section
@@ -160,6 +184,8 @@ function NowTab({ d }) {
                 <Item
                   key={q.service_id}
                   it={q}
+                  onOpenDoc={onOpenDoc}
+                  onPhoto={onPhoto}
                   extra={q.waiting_days != null && <span className="badge badge--neutral">ждёт {q.waiting_days} дн</span>}
                 />
               )}
@@ -169,13 +195,13 @@ function NowTab({ d }) {
       </Section>
 
       <Section title={`Зависли ${STALE_DAYS}+ дней`} count={stale.length} empty="Зависших нет.">
-        <Limited items={stale} render={(it) => <Item key={it.service_id} it={it} />} />
+        <Limited items={stale} render={(it) => <Item key={it.service_id} it={it} onOpenDoc={onOpenDoc} />} />
       </Section>
     </>
   );
 }
 
-function MastersTab({ d }) {
+function MastersTab({ d, onOpenDoc }) {
   const [open, setOpen] = useState(null);
   return (
     <div className="emp-list">
@@ -205,7 +231,7 @@ function MastersTab({ d }) {
             {isOpen && (
               <div className="ws-master__wip">
                 {theirs.length === 0 ? <p className="emp-page__empty">В работе ничего нет.</p>
-                  : <div className="emp-list">{theirs.map((it) => <Item key={it.service_id} it={{ ...it, master: null }} />)}</div>}
+                  : <div className="emp-list">{theirs.map((it) => <Item key={it.service_id} it={{ ...it, master: null }} onOpenDoc={onOpenDoc} />)}</div>}
               </div>
             )}
           </div>
@@ -359,7 +385,7 @@ function NotesTab({ d }) {
   );
 }
 
-function AdviceTab({ d, onOpenDoc }) {
+function AdviceTab({ d, onOpenDoc, onPhoto }) {
   const a = d.advice;
   if (!a) return <p className="emp-page__error">Совет сейчас не собран — Агбис не ответил. Обновите через минуту.</p>;
   return (
@@ -368,12 +394,14 @@ function AdviceTab({ d, onOpenDoc }) {
         Ремонт обуви, который лежит в цехе и который никто не взял: заказ принят на Бестужевской, привезён
         по накладной или это курьерский заказ, числящийся в цехе. Одна пара — одному мастеру. Сначала самые срочные; каждому достаётся тот, у кого меньше
         всего работы в днях (сколько в работе ÷ сколько сдаёт за день) из тех, кто делал такую работу
-        {a.only_on_shift ? ' и сегодня на смене' : ''}.
+        {a.only_on_shift ? ' и сегодня на смене' : ''}. Советуем только мастеров по ремонту: химчистка и
+        индивидуальный пошив — другая работа и другие люди.
       </p>
       <div className="ws-loads">
         {a.masters.filter((m) => !a.only_on_shift || m.on_shift).map((m) => (
           <div key={m.master_uid} className="ws-load">
             <b>{m.name.split(' ').slice(0, 2).join(' ')}</b>
+            {m.position && <span className="ws-load__pos">{m.position}</span>}
             <span>в работе {m.wip} · ~{m.per_day}/день</span>
             <span>очередь {String(m.backlog_days).replace('.', ',')} дн{m.planned ? ` · +${m.planned} по совету` : ''}</span>
           </div>
@@ -398,6 +426,7 @@ function AdviceTab({ d, onOpenDoc }) {
                 </div>
                 <div className="ws-sub">{q.how}{q.waiting_days != null ? ` · ждёт ${q.waiting_days} дн` : ''}</div>
               </button>
+              <Thumbs photos={q.photos} onPhoto={onPhoto} />
               {q.recommended ? (
                 <div className="ws-advice__rec">
                   <span>Дать: <b>{q.recommended.name}</b></span>
@@ -423,6 +452,9 @@ export default function EmployeeWorkshop() {
   // Открытая карточка заказа: поверх вкладок, «Назад» возвращает к цеху.
   const [orderId, setOrderId] = useState(null);
   const [openError, setOpenError] = useState('');
+  // Снимок изделия во весь экран — прямо из списка, не заходя в карточку.
+  const [viewer, setViewer] = useState(null);
+  const openPhoto = useCallback((photos, index) => setViewer({ photos, index }), []);
 
   const openDoc = useCallback((docNum) => {
     setOpenError('');
@@ -479,13 +511,22 @@ export default function EmployeeWorkshop() {
       {d && (
         <div style={loading ? { opacity: 0.6 } : undefined} aria-busy={loading}>
           <p className="ws-updated">Обновлено в {hhmm(d.generated_at)}</p>
-          {tab === 'now' && <NowTab d={d} />}
-          {tab === 'advice' && <AdviceTab d={d} onOpenDoc={openDoc} />}
-          {tab === 'masters' && <MastersTab d={d} />}
+          {tab === 'now' && <NowTab d={d} onOpenDoc={openDoc} onPhoto={openPhoto} />}
+          {tab === 'advice' && <AdviceTab d={d} onOpenDoc={openDoc} onPhoto={openPhoto} />}
+          {tab === 'masters' && <MastersTab d={d} onOpenDoc={openDoc} />}
           {tab === 'scans' && <ScansTab d={d} />}
           {tab === 'apprentices' && <ApprenticesTab d={d} onChanged={() => load(true)} />}
           {tab === 'notes' && <NotesTab d={d} />}
         </div>
+      )}
+      {viewer && (
+        <PhotoViewer
+          photos={viewer.photos}
+          index={viewer.index}
+          onIndex={(index) => setViewer((v) => (v ? { ...v, index } : v))}
+          onClose={() => setViewer(null)}
+          pathFor={workshopPhotoPath}
+        />
       )}
     </div>
   );

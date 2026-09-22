@@ -22,3 +22,6 @@ export function masterErrorText(err) {
   }
   return 'Не удалось загрузить данные. Попробуйте ещё раз.';
 }
+
+/** Полный снимок изделия из цеха (id + md5 — защита от перебора id). */
+export const workshopPhotoPath = (p) => `/workshop/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;

@@ -7850,6 +7850,9 @@ button:hover > .vac-desc { color: var(--color-text); }
 .ws-loads { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.3rem; }
 .ws-load { flex: none; display: grid; gap: 0.1rem; padding: 0.55rem 0.7rem; border-radius: 10px; background: color-mix(in srgb, var(--color-text) 6%, transparent); font-size: 0.75rem; color: var(--color-text-muted); }
 .ws-load b { color: var(--color-text); font-size: 0.85rem; }
+.ws-load__pos { font-size: 0.7rem; opacity: 0.85; }
 .ws-advice__open { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ws-thumbs { display: flex; gap: 0.4rem; margin-top: 0.55rem; overflow-x: auto; }
+.ws-thumbs .emp-wip-photo { flex: none; width: 56px; height: 56px; }
 .ws-advice__rec { display: grid; gap: 0.15rem; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px dashed var(--color-border); font-size: 0.9rem; color: var(--color-text); }
 .ws-advice__rec small { color: var(--color-text-muted); font-size: 0.75rem; }

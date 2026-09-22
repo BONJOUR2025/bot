@@ -3,13 +3,11 @@ import { ArrowLeft, MessageSquare, ScanLine, Search, X } from 'lucide-react';
 import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
 import WebScanner, { canScanInBrowser } from './WebScanner.jsx';
-import { money, serviceTitle } from './masterFormat.js';
+import { money, serviceTitle, workshopPhotoPath } from './masterFormat.js';
 
 /** Поиск заказа (номер или бирка) и карточка заказа для старшего мастера,
  *  плюс отметка входа или выхода за мастера — когда приложение мастера её
  *  не даёт поставить (GET /workshop/orders/*, POST /workshop/scan/*). */
-
-const workshopPhotoPath = (p) => `/workshop/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
 
 function when(iso) {
   const d = new Date(iso);
