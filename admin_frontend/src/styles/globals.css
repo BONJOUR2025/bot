@@ -7763,8 +7763,8 @@ button:hover > .vac-desc { color: var(--color-text); }
 }
 .ws-tabs::-webkit-scrollbar { display: none; }
 .ws-tabs button {
-  flex: 1 0 auto; min-height: 36px; padding: 0 0.8rem; border: 0; border-radius: 999px;
-  background: transparent; color: var(--color-text-muted); font: inherit; font-size: 0.85rem;
+  flex: 1 0 auto; min-height: 36px; padding: 0 0.5rem; border: 0; border-radius: 999px;
+  background: transparent; color: var(--color-text-muted); font: inherit; font-size: 0.8rem;
   white-space: nowrap; cursor: pointer;
 }
 .ws-tabs button.is-active { background: var(--color-surface); color: var(--color-text); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }

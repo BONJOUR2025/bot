@@ -85,7 +85,7 @@ function Item({ it, extra }) {
         <span>{serviceTitle(it.name)}</span>
         <span>{money(it.kredit)}</span>
       </div>
-      {it.master && <div className="ws-sub">{it.master}{it.days != null ? ` · в работе ${it.days} дн` : ''}</div>}
+      {it.master && <div className="ws-sub">{it.master}{it.days > 0 ? ` · в работе ${it.days} дн` : ''}</div>}
     </div>
   );
 }
