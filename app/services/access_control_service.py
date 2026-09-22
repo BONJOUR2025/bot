@@ -20,6 +20,7 @@ AVAILABLE_PERMISSIONS: list[dict[str, str]] = [
     {"id": "dashboard", "label": "Дашборд"},
     {"id": "employees", "label": "Сотрудники"},
     {"id": "payroll", "label": "Расчёт зарплаты"},
+    {"id": "workshop", "label": "Цех: приложение старшего мастера"},
     {"id": "payouts", "label": "Выплаты"},
     {
         "id": "payouts-manage-dates",

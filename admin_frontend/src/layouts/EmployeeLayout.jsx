@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, Wallet, Wrench, ScanLine,
-  Package,
+  Package, Factory,
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -38,6 +38,8 @@ const MASTER_NAV_ITEMS = [
 // рабочих инструментов точки (выручка, заказы клиентов) здесь намеренно нет.
 // Показывается тем, за кем закреплён салон: это решает сервер
 // (GET /salon/me/point), а не роль — точка живёт в карточке салона, не в правах.
+const WORKSHOP_NAV_ITEM = { to: '/employee/workshop', label: 'Цех', icon: Factory };
+
 const SALON_NAV_ITEMS = [
   { to: '/employee/salary', label: 'Зарплата', icon: DollarSign },
   { to: '/employee/schedule', label: 'График', icon: Calendar },
@@ -72,7 +74,16 @@ export default function EmployeeLayout() {
   };
 
   const displayName = user?.display_name || user?.login || 'Сотрудник';
-  const navItems = user?.is_master ? MASTER_NAV_ITEMS : onPoint ? SALON_NAV_ITEMS : NAV_ITEMS;
+  const baseItems = user?.is_master ? MASTER_NAV_ITEMS : onPoint ? SALON_NAV_ITEMS : NAV_ITEMS;
+  // «Цех» — по праву, а не по должности: старшим мастером может быть и мастер,
+  // и руководитель отдела пошива. Встаёт первым пунктом.
+  const hasWorkshop = (user?.permissions || []).includes('workshop');
+  const navItems = hasWorkshop ? [WORKSHOP_NAV_ITEM, ...baseItems] : baseItems;
+  // В нижней панели больше шести пунктов не помещаются (подписи обрезаются):
+  // «История» остаётся в меню, из панели уходит.
+  const bottomItems = navItems.length > 6
+    ? navItems.filter((i) => i.to !== '/employee/history')
+    : navItems;
 
   return (
     <div className="emp-shell">
@@ -155,7 +166,7 @@ export default function EmployeeLayout() {
 
       {isMobile && (
         <nav className="emp-bottomnav">
-          {navItems.map(({ to, label, icon: Icon }) => (
+          {bottomItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

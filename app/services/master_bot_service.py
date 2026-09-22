@@ -415,7 +415,7 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
+def _order_details(service_ids: list[Any], with_photos: bool = True) -> dict[Any, dict[str, Any]]:
     """Срок заказа, фото изделия и комментарии приёмщика — живым запросом в Агбис.
 
     Срок — DOCS_ORDER.DATE_OUT. В кэше отчёта masters.works его нет, а тащить
@@ -468,19 +468,20 @@ def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
             for start in range(0, len(ids), 500):
                 chunk = ids[start:start + 500]
                 cur.execute(
-                    "SELECT dos.id, dos.parent_dos_id, dor.date_out, dos.ext_info "
+                    "SELECT dos.id, dos.parent_dos_id, dor.date_out, dos.ext_info, dor.status_id "
                     "FROM doc_order_services dos "
                     "JOIN docs_order dor ON dor.id = dos.doc_order_id "
                     f"WHERE dos.id IN ({','.join('?' * len(chunk))})",
                     chunk,
                 )
-                for sid, parent_id, date_out, ext_info in cur.fetchall():
+                for sid, parent_id, date_out, ext_info, order_status in cur.fetchall():
                     due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
                     comments = []
                     note = _text(ext_info)
                     if note:
                         comments.append({"text": note, "about": "услуге", "label": None})
-                    out[sid] = {"due": due, "photos": [], "comments": comments}
+                    out[sid] = {"due": due, "photos": [], "comments": comments,
+                                "order_status_id": order_status}
                     item_of[sid] = parent_id or sid
 
             photos_of_item: dict[int, list[dict[str, Any]]] = {}
@@ -497,6 +498,10 @@ def _order_details(service_ids: list[Any]) -> dict[Any, dict[str, Any]]:
                     note = _text(ext_info)
                     if note:
                         note_of_item[item_id] = note
+                if not with_photos:
+                    # Обзор цеха (workshop_service) фото не показывает, а
+                    # миниатюры сотни изделий — это мегабайты в одном ответе.
+                    continue
                 cur.execute(
                     "SELECT p.dos_id, p.id, p.md5_checksum, p.small FROM doc_order_serv_photos p "
                     f"WHERE p.dos_id IN ({','.join('?' * len(chunk))}) "

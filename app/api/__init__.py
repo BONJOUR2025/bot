@@ -407,6 +407,15 @@ def create_app() -> FastAPI:
     app.include_router(create_master_app_public_router(), prefix="/api")
     app.include_router(create_salon_app_public_router(), prefix="/api")
 
+    # Цех — приложение старшего мастера, под правом «workshop».
+    from .workshop import create_workshop_router
+
+    app.include_router(
+        create_workshop_router(),
+        prefix="/api",
+        dependencies=protected,
+    )
+
     # Masters / Agbis services dashboard
     from .masters import create_masters_router
 

@@ -7752,3 +7752,64 @@ button:hover > .vac-desc { color: var(--color-text); }
    карточки кандидата. Пока такое окно открыто, поднимаем сами слои. */
 .app-shell__main:has(.modal-backdrop) { z-index: 50; }
 .app-shell__content:has(.modal-backdrop) { z-index: 6; }
+
+/* ================================================================
+   Цех — приложение старшего мастера (EmployeeWorkshop)
+   ================================================================ */
+.ws-tabs {
+  display: flex; gap: 2px; padding: 3px; margin-bottom: 0.75rem;
+  border-radius: 999px; background: var(--color-control-bg); border: 1px solid var(--color-border);
+  overflow-x: auto; scrollbar-width: none;
+}
+.ws-tabs::-webkit-scrollbar { display: none; }
+.ws-tabs button {
+  flex: 1 0 auto; min-height: 36px; padding: 0 0.8rem; border: 0; border-radius: 999px;
+  background: transparent; color: var(--color-text-muted); font: inherit; font-size: 0.85rem;
+  white-space: nowrap; cursor: pointer;
+}
+.ws-tabs button.is-active { background: var(--color-surface); color: var(--color-text); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
+.ws-tabs button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.ws-updated { margin: 0 0 0.5rem; color: var(--color-text-muted); font-size: 0.75rem; }
+.ws-tiles { margin: 0 0 1rem; }
+.ws-tile--bad { background: color-mix(in srgb, var(--color-danger) 12%, transparent); }
+.ws-tile--bad b { color: var(--color-danger); }
+.ws-tile--warn { background: color-mix(in srgb, var(--color-warning, #d97706) 14%, transparent); }
+.ws-section { margin-top: 1.25rem; }
+.ws-section__title { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.6rem; font-size: 1rem; font-weight: 600; color: var(--color-text); }
+.ws-count {
+  display: inline-flex; min-width: 1.5rem; justify-content: center; padding: 0 0.4rem;
+  border-radius: 999px; background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  color: var(--color-text-muted); font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.ws-group { margin-top: 0.75rem; }
+.ws-group__title { display: flex; align-items: center; gap: 0.4rem; margin: 0 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.ws-hint { margin: 0.25rem 0 0.6rem; color: var(--color-text-muted); font-size: 0.8rem; line-height: 1.4; }
+.ws-sub { margin-top: 0.3rem; color: var(--color-text-muted); font-size: 0.8rem; }
+.ws-sub b { color: var(--color-text); font-weight: 600; }
+.ws-more { margin-top: 0.5rem; padding: 0.5rem 0; border: 0; background: none; color: var(--color-primary); font: inherit; font-size: 0.85rem; cursor: pointer; }
+.ws-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.6rem; }
+.ws-chips { display: flex; gap: 0.35rem; overflow-x: auto; padding-bottom: 0.2rem; scrollbar-width: none; }
+.ws-chips::-webkit-scrollbar { display: none; }
+.ws-master__head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem;
+  width: 100%; padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; color: inherit;
+}
+.ws-master__name { display: flex; flex-direction: column; font-weight: 600; font-size: 1rem; color: var(--color-text); min-width: 0; }
+.ws-master__name small { font-weight: 400; font-size: 0.75rem; color: var(--color-text-muted); }
+.ws-master__head .badge { white-space: nowrap; flex: none; }
+.ws-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem 0.75rem; margin: 0.7rem 0 0; }
+.ws-stats div { min-width: 0; }
+.ws-stats dt { color: var(--color-text-muted); font-size: 0.7rem; }
+.ws-stats dd { margin: 0; font-weight: 600; font-size: 0.95rem; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.ws-stats dd small { display: block; font-weight: 400; font-size: 0.7rem; color: var(--color-text-muted); }
+.ws-stats dd em { font-style: normal; font-weight: 500; font-size: 0.75rem; }
+.ws-bad { color: var(--color-danger); }
+.ws-master__wip { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--color-border); }
+.ws-name { font-size: 1rem; overflow-wrap: anywhere; }
+.ws-mark {
+  margin-top: 0.6rem; width: 100%; min-height: 40px; border-radius: 10px;
+  border: 1px dashed var(--color-border-hover, var(--color-border)); background: transparent;
+  color: var(--color-primary); font: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.ws-mark:disabled { opacity: 0.6; cursor: default; }
+@media (max-width: 380px) { .ws-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
