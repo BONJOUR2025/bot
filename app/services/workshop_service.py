@@ -231,6 +231,9 @@ def _issue(kind: str, svc: dict, people: dict, **extra) -> dict[str, Any]:
 
 
 SHOE_REPAIR_TOP = "ремонт обуви"
+# Заказы, принятые курьером (склад «Курьер»), едут в цех без накладной и
+# числятся уже на складе цеха — их руководитель тоже считает «в цеху».
+COURIER_SCLAD = 21023
 ADVICE_MIN_EXPERIENCE = 3   # столько выходов по ремонту обуви за 2 месяца — уже «ремонтник»
 
 
@@ -238,8 +241,9 @@ def _workshop_shoe_queue() -> list[dict[str, Any]]:
     """Ремонт обуви, который лежит в цехе и который ещё никто не взял.
 
     «В цехе» — так, как считает руководитель: заказ принят на Бестужевской
-    (склад цеха или приёмка в том же здании), или последняя накладная по
-    услуге везёт её в цех. Если после приёма на Бестужевской изделие уехало по
+    (склад цеха или приёмка в том же здании), последняя накладная по
+    изделию везёт его в цех, или это курьерский заказ, который числится на
+    складе цеха. Если после приёма на Бестужевской изделие уехало по
     накладной на точку — оно уже не в цехе. «Не взял» — ни одного скана на
     постах ремонта.
     """
@@ -262,7 +266,7 @@ def _workshop_shoe_queue() -> list[dict[str, Any]]:
             SELECT dos.id, COALESCE(dos.parent_dos_id, dos.id), d.doc_num, t.name, dos.kredit,
                    CAST(folder.name AS VARCHAR(200) CHARACTER SET OCTETS),
                    CAST(top.name AS VARCHAR(200) CHARACTER SET OCTETS),
-                   d.doc_date, dor.date_out, dor.sclad_kredit_id, dor.fast_execute,
+                   d.doc_date, dor.date_out, dor.sclad_kredit_id, dor.fast_execute, dos.current_sclad_id,
                    {last_move.format(col="to_sclad_id")}, {last_move.format(col="diw_status_id")}
             FROM doc_order_services dos
                 JOIN docs_order dor ON dor.id = dos.doc_order_id
@@ -287,12 +291,16 @@ def _workshop_shoe_queue() -> list[dict[str, Any]]:
 
     now = datetime.now()
     out = []
-    for sid, item_id, doc_num, name, kredit, folder, top, doc_date, date_out, accepted_at, fast, last_to, last_status in rows:
+    for (sid, item_id, doc_num, name, kredit, folder, top, doc_date, date_out, accepted_at, fast, current,
+         last_to, last_status) in rows:
         if SHOE_REPAIR_TOP not in _text(top).lower():
             continue
         if last_to is not None:
             in_workshop = last_to == WORKSHOP_SCLAD and last_status in (2, 3, 4)
             how = "едет в цех по накладной" if last_status == 2 else "привезли по накладной"
+        elif accepted_at == COURIER_SCLAD:
+            in_workshop = current == WORKSHOP_SCLAD
+            how = "курьерский заказ, числится в цехе"
         else:
             in_workshop = accepted_at in BESTUZHEVSKAYA_SCLADS
             how = "принят на Бестужевской"
