@@ -20,7 +20,8 @@
 
 Ремонт идёт в трёх местах, у каждого свои посты входа и выхода: центральный
 цех и две точки. Их склады — это WORK_PLACES.SCLAD_ID постов входа (WP_IN):
-1107 → 21021, 11017 → 21020, 11019 → 21016.
+1107 → 21021 «Бестужевская ЦЕХ», 11017 → 21020 «Гранд Палас» (пост по-старому
+называется «ПАССАЖ»), 11019 → 21016 «Академическая».
 """
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-REPAIR_POINTS: dict[int, str] = {21021: "Цех", 21020: "Пассаж", 21016: "Академ Парк"}
+REPAIR_POINTS: dict[int, str] = {21021: "Цех", 21020: "Гранд Палас", 21016: "Академическая"}
 
 ORDER_STATUS_LABEL = {3: "в исполнении", 4: "готов", 5: "выдан", 6: "закрыт", 7: "отменён"}
 # Заказ готов или выдан, а скана выхода по услуге нет — процент мастеру не
@@ -229,6 +230,191 @@ def _issue(kind: str, svc: dict, people: dict, **extra) -> dict[str, Any]:
     }
 
 
+SHOE_REPAIR_TOP = "ремонт обуви"
+ADVICE_MIN_EXPERIENCE = 3   # столько выходов по ремонту обуви за 2 месяца — уже «ремонтник»
+
+
+def _workshop_shoe_queue() -> list[dict[str, Any]]:
+    """Ремонт обуви, который лежит в цехе и который ещё никто не взял.
+
+    «В цехе» — так, как считает руководитель: заказ принят на Бестужевской
+    (склад цеха или приёмка в том же здании), или последняя накладная по
+    услуге везёт её в цех. Если после приёма на Бестужевской изделие уехало по
+    накладной на точку — оно уже не в цехе. «Не взял» — ни одного скана на
+    постах ремонта.
+    """
+    from app.services.firebird_service import _connect
+    from app.services.masters_service import WP_IN, WP_OUT, _SALARY_FOLDERS_SQL
+    from app.services.workshop_order_service import BESTUZHEVSKAYA_SCLADS, WORKSHOP_SCLAD, _text
+
+    posts = ",".join(str(p) for p in sorted(WP_IN | WP_OUT | {1087}))
+    # Накладная перевозит изделие (строку-родителя), а не отдельную услугу:
+    # по самим услугам строк в DOCS_IN_WAY_SERVS почти нет.
+    last_move = (
+        "(SELECT FIRST 1 w.{col} FROM docs_in_way_servs s JOIN docs_in_way w ON w.id = s.doc_in_way_id "
+        "WHERE s.dos_id = COALESCE(dos.parent_dos_id, dos.id) ORDER BY w.doc_date DESC, w.id DESC)"
+    )
+    con = _connect()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            f"""
+            SELECT dos.id, COALESCE(dos.parent_dos_id, dos.id), d.doc_num, t.name, dos.kredit,
+                   CAST(folder.name AS VARCHAR(200) CHARACTER SET OCTETS),
+                   CAST(top.name AS VARCHAR(200) CHARACTER SET OCTETS),
+                   d.doc_date, dor.date_out, dor.sclad_kredit_id, dor.fast_execute,
+                   {last_move.format(col="to_sclad_id")}, {last_move.format(col="diw_status_id")}
+            FROM doc_order_services dos
+                JOIN docs_order dor ON dor.id = dos.doc_order_id
+                JOIN docs d ON d.doc_id = dor.doc_id
+                JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id
+                LEFT JOIN tree folder ON folder.folder_id = t.folder_id
+                LEFT JOIN tree top ON top.folder_id = folder.top_parent
+            WHERE t.folder_id IN ({_SALARY_FOLDERS_SQL})
+              AND d.doc_date > DATEADD(-{QUEUE_LOOKBACK_DAYS} DAY TO CURRENT_DATE)
+              AND dor.status_id IN (1, 3)
+              AND (dos.status_id IS NULL OR dos.status_id NOT IN (4, 5, 6, 7))
+              AND NOT EXISTS (
+                  SELECT 1 FROM user_session_actions a
+                  WHERE a.doc_order_services_id = dos.id AND a.work_place_id IN ({posts}))
+            """
+        )
+        rows = cur.fetchall()
+    finally:
+        con.close()
+
+    from app.services.master_bot_service import deadline
+
+    now = datetime.now()
+    out = []
+    for sid, item_id, doc_num, name, kredit, folder, top, doc_date, date_out, accepted_at, fast, last_to, last_status in rows:
+        if SHOE_REPAIR_TOP not in _text(top).lower():
+            continue
+        if last_to is not None:
+            in_workshop = last_to == WORKSHOP_SCLAD and last_status in (2, 3, 4)
+            how = "едет в цех по накладной" if last_status == 2 else "привезли по накладной"
+        else:
+            in_workshop = accepted_at in BESTUZHEVSKAYA_SCLADS
+            how = "принят на Бестужевской"
+        if not in_workshop:
+            continue
+        due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
+        accepted = doc_date if isinstance(doc_date, (date, datetime)) else None
+        accepted_day = accepted.date() if isinstance(accepted, datetime) else accepted
+        out.append({
+            "service_id": sid, "item_id": item_id, "doc_num": _text(doc_num), "name": _text(name),
+            "kredit": _num(kredit),
+            "folder": _text(folder), "how": how, "urgent": bool(fast),
+            "waiting_days": (now.date() - accepted_day).days if accepted_day else None,
+            **deadline(due, now),
+        })
+    out.sort(key=lambda r: (_due_rank(r), not r["urgent"], r["due"] or "9999", -(r["waiting_days"] or 0)))
+    return out
+
+
+def _advice(queue: list[dict], services: list[dict], stats: dict[int, dict],
+            on_shift: Optional[dict]) -> dict[str, Any]:
+    """Кому какой заказ дать: срочные — первыми, каждому — наименее загруженный
+    из тех, кто на смене и уже делал такую работу.
+
+    Опыт — выходы по ремонту обуви за текущий и прошлый месяц, по папке услуги
+    («01. Набойки», «Профилактика»…). Нагрузка — сколько у мастера сейчас в
+    работе плюс то, что ему уже посоветовали в этом же расчёте, иначе все
+    заказы достались бы одному самому свободному.
+    """
+    experience: dict[int, dict[str, int]] = {}
+    outs: dict[int, int] = {}
+    days: dict[int, set] = {}
+    for svc in services:
+        uid = _uid(svc.get("out_user_id"))
+        done = _dt(svc.get("out_time"))
+        if uid is not None and done:
+            outs[uid] = outs.get(uid, 0) + 1
+            days.setdefault(uid, set()).add(done.date())
+        if uid is None or SHOE_REPAIR_TOP not in str(svc.get("top_parent_name") or "").lower():
+            continue
+        bucket = experience.setdefault(uid, {})
+        folder = str(svc.get("folder_name") or "")
+        bucket[folder] = bucket.get(folder, 0) + 1
+        bucket["__total"] = bucket.get("__total", 0) + 1
+
+    pool = [uid for uid, e in experience.items() if e["__total"] >= ADVICE_MIN_EXPERIENCE]
+    shift_known = on_shift is not None
+    working = [uid for uid in pool if shift_known and uid in on_shift]
+    candidates = working or pool
+    planned: dict[int, int] = {uid: 0 for uid in pool}
+
+    def per_day(uid: int) -> float:
+        """Сколько мастер обычно сдаёт за рабочий день (все категории)."""
+        worked = len(days.get(uid) or ())
+        return (outs.get(uid, 0) / worked) if worked else 1.0
+
+    def load(uid: int) -> int:
+        return (stats.get(uid) or {}).get("wip", 0) + planned[uid]
+
+    def backlog(uid: int) -> float:
+        """Через сколько рабочих дней мастер разгребёт то, что у него уже есть.
+
+        Считать нагрузку штуками — значит отдавать всё ученикам: у них меньше
+        всего в работе, но и сдают они в разы медленнее. Амбарцумов с 23
+        изделиями и десятью в день свободнее ученика с пятью.
+        """
+        return load(uid) / max(per_day(uid), 0.5)
+
+    def name(uid: int) -> str:
+        return (stats.get(uid) or {}).get("name") or f"Агбис {uid}"
+
+    # Одна пара — один мастер: услуги изделия не раздаются разным людям.
+    # Изделия идут в порядке самой срочной своей услуги (очередь уже
+    # отсортирована), главная работа изделия — самая дорогая услуга.
+    groups: dict[Any, list[dict]] = {}
+    for svc in queue:
+        groups.setdefault(svc["item_id"], []).append(svc)
+
+    rows = []
+    for services_of_item in groups.values():
+        head = services_of_item[0]
+        main = max(services_of_item, key=lambda x: x["kredit"])
+        folders = {x["folder"] for x in services_of_item}
+        item = {**head, "services": services_of_item, "folder": main["folder"], "main": main["name"],
+                "kredit": sum(x["kredit"] for x in services_of_item)}
+        if not candidates:
+            rows.append({**item, "recommended": None, "alternatives": []})
+            continue
+        folder = main["folder"]
+
+        def skill(u: int) -> int:
+            return sum(experience[u].get(f, 0) for f in folders)
+
+        skilled = [u for u in candidates if experience[u].get(folder, 0) > 0]
+        ranked = sorted(skilled or candidates,
+                        key=lambda u: (round(backlog(u), 1), -skill(u), -experience[u]["__total"]))
+        best = ranked[0]
+        did = experience[best].get(folder, 0)
+        reason = (f"делал «{folder}» {did} раз за 2 месяца" if did else "такую работу не делал, но самый свободный") \
+            + f"; в работе {load(best)}, сдаёт ~{per_day(best):.0f} в день — очередь на {backlog(best):.1f} дн"
+        rows.append({
+            **item,
+            "recommended": {"master_uid": best, "name": name(best), "reason": reason},
+            "alternatives": [{"master_uid": u, "name": name(u), "load": load(u),
+                              "backlog_days": round(backlog(u), 1),
+                              "did": experience[u].get(folder, 0)} for u in ranked[1:3]],
+        })
+        planned[best] += len(services_of_item)
+
+    return {
+        "queue": rows,
+        "masters": sorted(({
+            "master_uid": u, "name": name(u), "wip": (stats.get(u) or {}).get("wip", 0),
+            "planned": planned.get(u, 0), "on_shift": bool(shift_known and u in on_shift),
+            "experience": experience[u]["__total"], "per_day": round(per_day(u), 1),
+            "backlog_days": round(backlog(u), 1),
+        } for u in pool), key=lambda m: (not m["on_shift"], m["backlog_days"])),
+        "shift_known": shift_known,
+        "only_on_shift": bool(working),
+    }
+
+
 def build_overview() -> dict[str, Any]:
     from app.services import master_bot_service as mbs
     from app.services.masters_service import get_apprentice_stipends
@@ -371,6 +557,13 @@ def build_overview() -> dict[str, Any]:
         logger.warning("workshop: очередь не получена", exc_info=True)
         queue = None
 
+    # ── совет: кому какой ремонт обуви дать ───────────────────────────
+    try:
+        advice = _advice(_workshop_shoe_queue(), services, stats, on_shift)
+    except Exception:
+        logger.warning("workshop: совет по распределению не собран", exc_info=True)
+        advice = None
+
     # ── ученики ─────────────────────────────────────────────────────────
     try:
         raw = get_apprentice_stipends(month_start, today)
@@ -393,6 +586,7 @@ def build_overview() -> dict[str, Any]:
         "scan_issues": issues[:300],
         "fast_scans_month": sum(r["fast"] for r in stats.values()),
         "apprentices": apprentices,
+        "advice": advice,
         "points": list(REPAIR_POINTS.values()),
     }
 

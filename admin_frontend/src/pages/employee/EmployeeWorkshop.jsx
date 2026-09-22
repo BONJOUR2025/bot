@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MessageSquare, RefreshCw } from 'lucide-react';
 import api from '../../api.js';
 import { money, serviceTitle } from './masterFormat.js';
+import { OrderSearch, OrderView } from './WorkshopOrder.jsx';
 
 /** Цех — приложение старшего мастера (GET /api/workshop/overview).
  *
@@ -15,6 +16,7 @@ import { money, serviceTitle } from './masterFormat.js';
 
 const TABS = [
   { key: 'now', label: 'Сейчас' },
+  { key: 'advice', label: 'Кому дать' },
   { key: 'masters', label: 'Мастера' },
   { key: 'scans', label: 'Сканы' },
   { key: 'apprentices', label: 'Ученики' },
@@ -357,11 +359,77 @@ function NotesTab({ d }) {
   );
 }
 
+function AdviceTab({ d, onOpenDoc }) {
+  const a = d.advice;
+  if (!a) return <p className="emp-page__error">Совет сейчас не собран — Агбис не ответил. Обновите через минуту.</p>;
+  return (
+    <>
+      <p className="ws-hint">
+        Ремонт обуви, который лежит в цехе и который никто не взял: заказ принят на Бестужевской или привезён
+        по накладной. Одна пара — одному мастеру. Сначала самые срочные; каждому достаётся тот, у кого меньше
+        всего работы в днях (сколько в работе ÷ сколько сдаёт за день) из тех, кто делал такую работу
+        {a.only_on_shift ? ' и сегодня на смене' : ''}.
+      </p>
+      <div className="ws-loads">
+        {a.masters.filter((m) => !a.only_on_shift || m.on_shift).map((m) => (
+          <div key={m.master_uid} className="ws-load">
+            <b>{m.name.split(' ').slice(0, 2).join(' ')}</b>
+            <span>в работе {m.wip} · ~{m.per_day}/день</span>
+            <span>очередь {String(m.backlog_days).replace('.', ',')} дн{m.planned ? ` · +${m.planned} по совету` : ''}</span>
+          </div>
+        ))}
+      </div>
+      <Section title="Кому дать" count={a.queue.length} empty="Весь ремонт обуви в цехе уже у мастеров.">
+        <Limited
+          items={a.queue}
+          render={(q) => (
+            <div key={q.item_id} className="emp-payout-item ws-advice">
+              <button type="button" className="ws-advice__open" onClick={() => onOpenDoc(q.doc_num)}>
+                <div className="emp-payout-item__top">
+                  <span className="emp-payout-item__amount">{q.doc_num}</span>
+                  <span className="emp-wip-badges">
+                    {dueBadge(q) && <span className={`badge ${dueBadge(q).cls}`}>{dueBadge(q).label}</span>}
+                    {q.urgent && <span className="badge badge--error">Срочно</span>}
+                  </span>
+                </div>
+                <div className="emp-payout-item__details">
+                  <span>{serviceTitle(q.main)}{q.services.length > 1 ? ` + ещё ${q.services.length - 1}` : ''}</span>
+                  <span>{money(q.kredit)}</span>
+                </div>
+                <div className="ws-sub">{q.how}{q.waiting_days != null ? ` · ждёт ${q.waiting_days} дн` : ''}</div>
+              </button>
+              {q.recommended ? (
+                <div className="ws-advice__rec">
+                  <span>Дать: <b>{q.recommended.name}</b></span>
+                  <small>{q.recommended.reason}</small>
+                  {q.alternatives.length > 0 && (
+                    <small>Или: {q.alternatives.map((x) => `${x.name.split(' ').slice(0, 2).join(' ')} (очередь ${String(x.backlog_days).replace('.', ',')} дн)`).join(', ')}</small>
+                  )}
+                </div>
+              ) : <p className="ws-sub">Некому посоветовать: нет мастеров с опытом ремонта обуви на смене.</p>}
+            </div>
+          )}
+        />
+      </Section>
+    </>
+  );
+}
+
 export default function EmployeeWorkshop() {
   const [d, setD] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState(readTab);
+  // Открытая карточка заказа: поверх вкладок, «Назад» возвращает к цеху.
+  const [orderId, setOrderId] = useState(null);
+  const [openError, setOpenError] = useState('');
+
+  const openDoc = useCallback((docNum) => {
+    setOpenError('');
+    api.get('/workshop/orders/find', { params: { q: docNum } })
+      .then((r) => { if (r.data.order_id) setOrderId(r.data.order_id); })
+      .catch(() => setOpenError(`Заказ ${docNum} не открылся — попробуйте найти его поиском.`));
+  }, []);
 
   const load = useCallback((refresh = false) => {
     setLoading(true);
@@ -379,6 +447,14 @@ export default function EmployeeWorkshop() {
     try { window.localStorage.setItem(TAB_KEY, key); } catch { /* вкладка просто не запомнится */ }
   };
 
+  if (orderId) {
+    return (
+      <div className="emp-page">
+        <OrderView orderId={orderId} onBack={() => setOrderId(null)} />
+      </div>
+    );
+  }
+
   return (
     <div className="emp-page">
       <div className="emp-page__head">
@@ -387,6 +463,8 @@ export default function EmployeeWorkshop() {
           <RefreshCw size={18} className={loading ? 'emp-wip-spin' : ''} />
         </button>
       </div>
+      <OrderSearch onOpen={setOrderId} />
+      {openError && <p className="emp-page__error">{openError}</p>}
       <div className="ws-tabs" role="tablist" aria-label="Разделы цеха">
         {TABS.map((t) => (
           <button key={t.key} type="button" role="tab" aria-selected={tab === t.key}
@@ -402,6 +480,7 @@ export default function EmployeeWorkshop() {
         <div style={loading ? { opacity: 0.6 } : undefined} aria-busy={loading}>
           <p className="ws-updated">Обновлено в {hhmm(d.generated_at)}</p>
           {tab === 'now' && <NowTab d={d} />}
+          {tab === 'advice' && <AdviceTab d={d} onOpenDoc={openDoc} />}
           {tab === 'masters' && <MastersTab d={d} />}
           {tab === 'scans' && <ScansTab d={d} />}
           {tab === 'apprentices' && <ApprenticesTab d={d} onChanged={() => load(true)} />}

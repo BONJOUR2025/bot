@@ -295,7 +295,9 @@ def plan_writes(
     return writes
 
 
-def _history_basis(post_name: str) -> str:
+def _history_basis(post_name: str, lead: Optional[str] = None) -> str:
+    if lead:
+        return f"Изменение статуса услуги на рабочем месте {post_name}: отметку поставил старший мастер {lead}"
     return f"Изменение статуса услуги на рабочем месте {post_name} из приложения мастера"
 
 
@@ -304,7 +306,7 @@ class ScanRejected(RuntimeError):
 
 
 def execute_writes(con, found: dict[str, Any], action: str, master_user_id: int,
-                   now: Optional[datetime] = None) -> dict[str, Any]:
+                   now: Optional[datetime] = None, *, lead: Optional[str] = None) -> dict[str, Any]:
     """Записывает скан в Агбис одной транзакцией и возвращает номера новых строк.
 
     Строку услуги блокируем и перечитываем внутри транзакции: между показом
@@ -328,7 +330,11 @@ def execute_writes(con, found: dict[str, Any], action: str, master_user_id: int,
             raise ScanRejected("Услуга не найдена в Агбисе.")
         status, sclad, kredit, kfx, qty, order_id, barcode = rows[0]
         status = status or 0
-        if status in CLOSED_STATUSES:
+        # Старший мастер может поставить отметку по выданной или закрытой
+        # услуге — ради этого он и нужен: иначе мастер теряет процент. По
+        # отменённой — нельзя никому.
+        allowed_closed = LEAD_ALLOWED_CLOSED if lead else set()
+        if status in CLOSED_STATUSES and status not in allowed_closed:
             raise ScanRejected(f"Услуга уже в статусе «{STATUS_NAMES.get(status, status)}».")
         cur.execute(
             "SELECT work_place_id FROM user_session_actions WHERE doc_order_services_id = ?",
@@ -390,7 +396,7 @@ def execute_writes(con, found: dict[str, Any], action: str, master_user_id: int,
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (service["id"], ts, master_user_id, new_status, sclad, post, kredit, kfx, qty,
              # BASIS здесь — двоичный BLOB, клиент Агбиса кладёт в него текст в cp1251.
-             _history_basis(work_place.get("name") or str(post)).encode("cp1251", "replace"), ts, ts),
+             _history_basis(work_place.get("name") or str(post), lead).encode("cp1251", "replace"), ts, ts),
         )
 
         order_status = None
@@ -564,3 +570,111 @@ def confirm(master, barcode: str, action: str, connect: Optional[Callable[[], An
         except Exception:
             pass
     return {**summary, "written": True, "ids": ids}
+
+
+
+# ── отметка через старшего мастера ────────────────────────────────────────
+#
+# Когда приложение мастера не даёт поставить вход или выход, это может
+# сделать старший мастер — за конкретного мастера. Что ему можно, а что нет:
+#
+# - повтор на том же посту — нельзя никогда: триггер Агбиса засчитает его
+#   переделкой и пометит прошлую работу браком; повтор — только на терминале;
+# - отменённая услуга — нельзя;
+# - выход по выданной или закрытой услуге — можно: иначе мастер теряет
+#   процент (он начисляется по скану выхода);
+# - вход по выданной или закрытой услуге — незачем, за вход процента нет;
+# - выход без входа — не ставим: сначала вход, потом выход, оба за того же
+#   мастера, чтобы отчёт не получил «выход без входа».
+#
+# В истории услуги Агбиса остаётся, что отметку поставил старший мастер.
+
+LEAD_ALLOWED_CLOSED = {5, 6}
+
+
+def check_lead(found: dict[str, Any], action: str, master_user_id: int) -> dict[str, Any]:
+    service, scans = found["service"], found["scans"]
+    status = service.get("status_id") or 0
+    post = ACTIONS[action]
+    blockers: list[str] = []
+    warnings: list[str] = []
+
+    if status == 7:
+        blockers.append("Услуга отменена — отметки по ней не ставятся.")
+    same_post = [x for x in scans if x["work_place_id"] == post]
+    if same_post:
+        last = same_post[-1]
+        what = "Вход" if action == "in" else "Выход"
+        blockers.append(
+            f"{what} уже был {_fmt_dt(last['date'])} ({last['master'] or 'мастер не указан'}). Повтор — это "
+            "переделка, Агбис пометит прошлую работу браком. Повтор отмечается только на терминале цеха."
+        )
+    if action == "in" and status in LEAD_ALLOWED_CLOSED:
+        blockers.append(
+            f"Услуга уже {STATUS_NAMES.get(status, status).lower()} — за вход процент не начисляется, "
+            "ставить его незачем. Если мастер делал работу, поставьте выход."
+        )
+
+    steps = [action]
+    if action == "out":
+        had_in = any(x["work_place_id"] in POSTS_BEFORE_OUT for x in scans)
+        if not had_in and not blockers:
+            steps = ["in", "out"]
+            warnings.append("Входа не было — сначала поставится вход, сразу за ним выход, оба за этого мастера.")
+        if status in LEAD_ALLOWED_CLOSED:
+            warnings.append(
+                f"Услуга уже {STATUS_NAMES.get(status, status).lower()} — выход ставится задним числом, "
+                "чтобы мастер получил процент."
+            )
+        ins = [x for x in scans if x["work_place_id"] == POST_IN]
+        if ins and ins[-1]["user_id"] != master_user_id:
+            warnings.append(f"Вход делал {ins[-1]['master'] or 'другой мастер'} — выход и процент уйдут выбранному мастеру.")
+    return {"allowed": not blockers, "blockers": blockers, "warnings": warnings, "steps": steps}
+
+
+def lead_preview(barcode: str, action: str, master_user_id: int) -> Optional[dict[str, Any]]:
+    if action not in ACTIONS:
+        raise ValueError("invalid_action")
+    found = lookup(barcode)
+    if found is None:
+        return None
+    return {
+        "dry_run": not write_enabled(),
+        "service": _public_service(found),
+        "scans": _public_scans(found, master_user_id),
+        **check_lead(found, action, master_user_id),
+    }
+
+
+def lead_confirm(barcode: str, action: str, master_user_id: int, lead: str,
+                 connect: Optional[Callable[[], Any]] = None,
+                 now: Optional[datetime] = None) -> Optional[dict[str, Any]]:
+    """Отметка за мастера. Каждый шаг — отдельная транзакция execute_writes со
+    всеми её проверками внутри; если вход записался, а выход нет, ответ это
+    честно показывает."""
+    from datetime import timedelta
+
+    preview = lead_preview(barcode, action, master_user_id)
+    if preview is None:
+        return None
+    result = {**preview, "written": [], "failed": None}
+    if not preview["allowed"] or preview["dry_run"]:
+        return result
+    if connect is None:
+        from app.services.firebird_service import _connect as connect
+    moment = now or datetime.now()
+    for i, step in enumerate(preview["steps"]):
+        found = lookup(barcode)
+        con = connect()
+        try:
+            ids = execute_writes(con, found, step, master_user_id, moment + timedelta(seconds=i), lead=lead)
+            result["written"].append({"action": step, "ids": ids})
+        except ScanRejected as exc:
+            result["failed"] = {"action": step, "reason": str(exc)}
+            break
+        finally:
+            try:
+                con.close()
+            except Exception:
+                pass
+    return result
