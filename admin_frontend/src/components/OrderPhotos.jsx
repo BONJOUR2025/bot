@@ -189,6 +189,7 @@ export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPho
   // useState на каждый touchmove — это ре-рендер на каждый пиксель движения,
   // ~60 раз в секунду, и никакие пороги такую дёрганость не лечат.
   const stageRef = useRef(null);
+  const imgRef = useRef(null);   // текущий снимок: по его размеру считаются пределы сдвига
   const zoomRef = useRef(1);
   const lastTap = useRef(0);
   const [zoomed, setZoomed] = useState(false);
@@ -251,11 +252,18 @@ export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPho
     spring.set({ stripX: restX(index), dy: 0, dismiss: 1, backdrop: 1, ox: 0, oy: 0, sc: 1 });
   }, [index, spring, setZoomState, restX]);
 
-  // Пределы панорамирования увеличенного кадра.
+  // Пределы панорамирования увеличенного кадра — по размеру самой картинки,
+  // а не сцены. Снимок вписан в сцену (object-contain), и у горизонтального
+  // фото на телефоне высота втрое меньше сцены: пределы от сцены позволяли
+  // утащить его в пустоту, а на отпускании он пружиной летел обратно.
+  // offsetWidth/Height — размер до transform, то есть при масштабе 1.
   const panMax = useCallback((s) => {
     const b = box();
     if (!b) return [0, 0];
-    return [Math.max(0, (b.width * (s - 1)) / 2), Math.max(0, (b.height * (s - 1)) / 2)];
+    const img = imgRef.current;
+    const w = img?.offsetWidth || b.width;
+    const h = img?.offsetHeight || b.height;
+    return [Math.max(0, (w * s - b.width) / 2), Math.max(0, (h * s - b.height) / 2)];
   }, [box]);
 
   // Доводим ленту до соседнего кадра и только по завершении анимации меняем
@@ -274,7 +282,7 @@ export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPho
   const bind = useGesture(
     {
       onDrag: ({ down, movement: [mx, my], velocity: [vx, vy], direction: [dxDir, dyDir],
-                 pinching, cancel, tap, event }) => {
+                 pinching, cancel, tap, event, first, memo, xy: [px, py], initial: [ix, iy] }) => {
         if (pinching) { cancel(); return; }
 
         if (tap) {
@@ -310,19 +318,31 @@ export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPho
         const s = zoomRef.current;
 
         // Увеличенный кадр жест панорамирует, а не листает ленту.
+        //
+        // movement — сдвиг пальца от начала ЭТОГО жеста, а не положение
+        // картинки. Раньше он писался в ox/oy как есть, и каждое новое касание
+        // начиналось с нуля: снимок, который щипком приблизили к углу, на
+        // первом же движении прыгал в центр. Положение на старте жеста
+        // запоминаем в memo и прибавляем к нему сдвиг пальца.
         if (s > 1.01) {
+          const base = first || !memo ? [ox.get(), oy.get()] : memo;
           const b = box();
           const [mxLim, myLim] = panMax(s);
-          const rx = mx > mxLim ? mxLim + rubber(mx - mxLim, b?.width)
-            : mx < -mxLim ? -mxLim + rubber(mx + mxLim, b?.width) : mx;
-          const ry = my > myLim ? myLim + rubber(my - myLim, b?.height)
-            : my < -myLim ? -myLim + rubber(my + myLim, b?.height) : my;
-          if (down) { spring.start({ ox: rx, oy: ry, immediate: true }); return; }
+          // Сдвиг — от точки касания (xy - initial), а не movement: из
+          // movement вычтен порог жеста в 10px, и снимок отставал бы от
+          // пальца на эти 10px всё время, пока его тянут.
+          const x = base[0] + (px - ix);
+          const y = base[1] + (py - iy);
+          const rx = x > mxLim ? mxLim + rubber(x - mxLim, b?.width)
+            : x < -mxLim ? -mxLim + rubber(x + mxLim, b?.width) : x;
+          const ry = y > myLim ? myLim + rubber(y - myLim, b?.height)
+            : y < -myLim ? -myLim + rubber(y + myLim, b?.height) : y;
+          if (down) { spring.start({ ox: rx, oy: ry, immediate: true }); return base; }
           spring.start({
             ox: Math.min(mxLim, Math.max(-mxLim, rx)),
             oy: Math.min(myLim, Math.max(-myLim, ry)),
           });
-          return;
+          return undefined;
         }
 
         const w = stageW();
@@ -464,6 +484,7 @@ export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPho
                 )}
                 {!err && url && (
                   <AnimatedImg
+                    ref={isCurrent ? imgRef : undefined}
                     src={url}
                     alt=""
                     draggable={false}
