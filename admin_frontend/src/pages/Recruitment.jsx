@@ -937,23 +937,38 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
               </p>
               {candidate.other_vacancies.map(t => {
                 const st = stageOf(t.stage);
+                const place = splitVacancyTitle(t.vacancy_title).place;
+                const herePlace = splitVacancyTitle(candidate.vacancy_title).place;
+                // Оба варианта склейки описаны одинаково и полностью: какая
+                // вакансия, этап, когда отклик и что с опросом. «Эта / та
+                // карточка» без этого не отвечало на вопрос, что выбирать.
+                const options = [
+                  { id: candidate.vacancy_id, place: herePlace, where: 'открытая сейчас',
+                    stage: candidate.stage, created: candidate.created_at, survey: surveyLabel(candidate) },
+                  { id: t.vacancy_id, place, where: 'другая карточка',
+                    stage: t.stage, created: t.created_at, survey: surveyLabel(t) },
+                ];
+                const keep = options.find(o => o.id === twinMerge?.primaryId) || options[0];
+                const absorb = options.find(o => o !== keep);
+                const day = iso => parseUtc(iso)?.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) || '—';
                 return (
-                  <div key={t.candidate_id} className="space-y-1.5">
+                  <div key={t.candidate_id} className="space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium break-words">{t.vacancy_title}</p>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}
-                          </span>
-                          {!t.vacancy_open && (
-                            <span className="text-xs text-[color:var(--color-muted-foreground)]">вакансия закрыта</span>
-                          )}
-                        </div>
-                        <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                        <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs items-center">
+                          <dt className="text-[color:var(--color-muted-foreground)]">Этап там</dt>
+                          <dd className="flex flex-wrap items-center gap-1.5">
+                            <span className={`inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded-full ${st.color}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}
+                            </span>
+                            {!t.vacancy_open && (
+                              <span className="text-[color:var(--color-muted-foreground)]">вакансия закрыта</span>
+                            )}
+                          </dd>
                           <dt className="text-[color:var(--color-muted-foreground)]">Отклик</dt>
                           <dd>{responseOrder(t.created_at, candidate.created_at)}</dd>
-                          <dt className="text-[color:var(--color-muted-foreground)]">Опрос</dt>
+                          <dt className="text-[color:var(--color-muted-foreground)]">Опрос там</dt>
                           <dd>{surveyLabel(t)}</dd>
                         </dl>
                       </div>
@@ -979,32 +994,52 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                       </div>
                     </div>
                     {twinMerge?.twinId === t.candidate_id && (
-                      <div className="rounded-lg bg-[color:var(--color-bg-secondary)] px-3 py-3 space-y-2.5">
-                        <p className="text-xs font-semibold">Основная вакансия</p>
-                        {[
-                          { id: candidate.vacancy_id, title: candidate.vacancy_title, note: 'эта карточка' },
-                          { id: t.vacancy_id, title: t.vacancy_title, note: 'та карточка' },
-                        ].map(o => (
-                          <label key={o.id} className="flex items-start gap-2 text-sm cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`twin-primary-${t.candidate_id}`}
-                              className="mt-1"
-                              checked={twinMerge.primaryId === o.id}
-                              onChange={() => setTwinMerge({ ...twinMerge, primaryId: o.id })}
-                            />
-                            <span>{o.title} <span className="text-[color:var(--color-muted-foreground)]">· {o.note}</span></span>
-                          </label>
-                        ))}
-                        <p className="text-xs text-[color:var(--color-muted-foreground)]">
-                          Карточка останется одна — в основной вакансии, со своими этапом и опросом.
-                          Переписка второго отклика станет дополнительным чатом, её этап и ответы
-                          сохранятся в истории. Разделить обратно нельзя.
-                        </p>
-                        <div className="flex gap-2">
-                          <button type="button" disabled={twinMerging} onClick={mergeTwin}
-                            className="btn btn--primary text-xs">
-                            {twinMerging ? 'Склеиваю…' : 'Склеить'}
+                      <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] px-3 py-3 space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold">Склеить две карточки в одну</p>
+                          <p className="text-xs text-[color:var(--color-muted-foreground)] mt-0.5">
+                            В какой вакансии оставить кандидата?
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          {options.map(o => {
+                            const ost = stageOf(o.stage);
+                            const active = keep.id === o.id;
+                            return (
+                              <label
+                                key={o.id}
+                                className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${
+                                  active
+                                    ? 'border-[color:var(--color-primary)] bg-[color:var(--color-surface)]'
+                                    : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]/50'}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`twin-primary-${t.candidate_id}`}
+                                  className="mt-1"
+                                  checked={active}
+                                  onChange={() => setTwinMerge({ ...twinMerge, primaryId: o.id })}
+                                />
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-medium">
+                                    {o.place} <span className="font-normal text-[color:var(--color-muted-foreground)]">· {o.where}</span>
+                                  </span>
+                                  <span className="block text-xs text-[color:var(--color-muted-foreground)]">
+                                    этап «{ost.label}» · отклик {day(o.created)} · опрос: {o.survey}
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <ul className="text-xs space-y-1 list-disc pl-4">
+                          <li>Останется одна карточка — в «{keep.place}», со своим этапом «{stageOf(keep.stage).label}» и своим опросом.</li>
+                          <li>Карточка «{absorb.place}» исчезнет с доски. Её переписка станет вторым чатом, а этап и ответы опроса сохранятся в истории.</li>
+                          <li>Разделить обратно нельзя.</li>
+                        </ul>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" disabled={twinMerging} onClick={mergeTwin} className="btn btn--primary text-xs">
+                            {twinMerging ? 'Склеиваю…' : `Склеить, оставить в «${keep.place}»`}
                           </button>
                           <button type="button" onClick={() => setTwinMerge(null)} className="btn btn-secondary text-xs">
                             Отмена

@@ -295,6 +295,8 @@ def list_candidates(
         d["flags"] = _candidate_flags(c, state, now, d["stage"])
         d["progress"] = rs.progress(state, questions)
         d["answers"] = state.get("answers") or []
+        d["survey"] = state.get("status")
+        d["survey_reason"] = state.get("reason") or ""
         d["is_new"] = bool(c.created_at and c.created_at >= since_24h)
         d["vacancy_title"] = c.vacancy.title if c.vacancy else ""
         d["other_vacancies"] = [_twin_summary(t) for t in twins_by_id.get(c.id, [])]
