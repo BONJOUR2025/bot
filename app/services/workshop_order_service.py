@@ -150,7 +150,7 @@ def card(order_id: int) -> dict[str, Any]:
         cur.execute(
             """
             SELECT dos.id, dos.parent_dos_id, t.name, dos.kredit, dos.status_id, dos.current_sclad_id,
-                   dos.current_work_place_id, dos.barcode, dos.ext_info, folder.name, top.name
+                   dos.current_work_place_id, dos.barcode, dos.ext_info, folder.name, top.name, t.folder_id
             FROM doc_order_services dos
                 LEFT JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id
                 LEFT JOIN tree folder ON folder.folder_id = t.folder_id
@@ -233,14 +233,16 @@ def card(order_id: int) -> dict[str, Any]:
         })
 
     by_item: dict[int, dict] = {}
-    for dos_id, parent, name, line_kredit, line_status, line_sclad, wp, barcode, line_ext, folder, top in lines:
+    from app.services.masters_service import SALARY_FOLDER_IDS
+
+    for dos_id, parent, name, line_kredit, line_status, line_sclad, wp, barcode, line_ext, folder, top, folder_id in lines:
         if not parent:
             by_item[dos_id] = {
                 "item_id": dos_id, "name": _text(name), "note": _text(line_ext),
                 "photos": photos.get(dos_id, []), "services": [],
                 "location": sclad_label(line_sclad),
             }
-    for dos_id, parent, name, line_kredit, line_status, line_sclad, wp, barcode, line_ext, folder, top in lines:
+    for dos_id, parent, name, line_kredit, line_status, line_sclad, wp, barcode, line_ext, folder, top, folder_id in lines:
         if not parent:
             continue
         item = by_item.setdefault(parent, {"item_id": parent, "name": "Изделие", "note": "", "photos": photos.get(parent, []),
@@ -258,6 +260,9 @@ def card(order_id: int) -> dict[str, Any]:
             "location": sclad_label(line_sclad),
             "post": places.get(wp) if wp else None,
             "barcode": _text(barcode),
+            # Работа мастера на посту (сдельная): только по ней есть смысл
+            # ставить вход и выход. Консультации, товары и т.п. — нет.
+            "workshop_work": folder_id in SALARY_FOLDER_IDS,
             "scans": service_scans,
             "has_in": any(s["kind"] == "in" for s in service_scans),
             "has_out": any(s["kind"] == "out" for s in service_scans),

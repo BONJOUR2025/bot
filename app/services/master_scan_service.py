@@ -599,6 +599,10 @@ def check_lead(found: dict[str, Any], action: str, master_user_id: int) -> dict[
     blockers: list[str] = []
     warnings: list[str] = []
 
+    from app.services.masters_service import SALARY_FOLDER_IDS
+
+    if service.get("folder_id") not in SALARY_FOLDER_IDS:
+        blockers.append("Это не работа мастера на посту (консультация, товар и т.п.) — вход и выход по ней не ставятся.")
     if status == 7:
         blockers.append("Услуга отменена — отметки по ней не ставятся.")
     same_post = [x for x in scans if x["work_place_id"] == post]

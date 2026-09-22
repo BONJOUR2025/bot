@@ -12,6 +12,7 @@ OTHER = 110124
 def found(status=3, scans=()):
     return {
         "service": {"id": 1, "doc_order_id": 10, "status_id": status, "barcode": "1" * 18, "name": "Набойки",
+                    "folder_id": next(iter(__import__("app.services.masters_service", fromlist=["x"]).SALARY_FOLDER_IDS)),
                     "doc_num": "1-1", "kredit": 1000.0, "current_work_place_id": None},
         "scans": [{"id": i, "date": "2026-09-20T10:00:00", "work_place_id": wp, "user_id": uid, "master": "М."}
                   for i, (wp, uid) in enumerate(scans)],
@@ -78,3 +79,10 @@ def test_lead_confirm_dry_run_writes_nothing(monkeypatch):
 def test_lead_basis_names_the_lead():
     assert "старший мастер Смирнов С." in scan._history_basis("Выход", "Смирнов С.")
     assert "приложения мастера" in scan._history_basis("Выход")
+
+
+def test_non_workshop_service_is_blocked():
+    f = found(status=3)
+    f["service"]["folder_id"] = -1
+    r = scan.check_lead(f, "out", MASTER)
+    assert not r["allowed"] and any("консультация" in b for b in r["blockers"])

@@ -285,7 +285,7 @@ export function OrderView({ orderId, onBack }) {
                     {s.moves.length > 0 && (
                       <p className="ws-sub">Накладные: {s.moves.map((m) => `${day(m.date)} ${m.from} → ${m.to} (${m.status})`).join('; ')}</p>
                     )}
-                    {s.barcode && s.status_id !== 7 && (
+                    {s.barcode && s.workshop_work && s.status_id !== 7 && (
                       <div className="wo-lead">
                         <button type="button" className="ui-chip" onClick={() => setDialog({ service: s, action: 'in' })}>Вход за мастера</button>
                         <button type="button" className="ui-chip" onClick={() => setDialog({ service: s, action: 'out' })}>Выход за мастера</button>
