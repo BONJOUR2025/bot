@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import json
 import logging
 from typing import List, Optional
 
@@ -43,12 +44,25 @@ class VacancyCreate(BaseModel):
     quick_mode_enabled: bool = True
     quick_questions: Optional[List[str]] = None
 
+class DealBreaker(BaseModel):
+    label: str
+    value: str
+
+
 class VacancyUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     is_open: Optional[bool] = None
     quick_mode_enabled: Optional[bool] = None
     quick_questions: Optional[List[str]] = None
+    # Оба поля читает сводка ИИ (candidate_profile.format_vacancy): жёсткие
+    # условия и критерии «профильный / смежный опыт». 10.08 они выпали из
+    # модели вместе со старой воронкой, и окно вакансии с тех пор писало
+    # «Сохранено», а бэкенд молча их отбрасывал.
+    deal_breakers: Optional[List[DealBreaker]] = None
+    # Текст для ИИ — только вместе с confirmed=True, после ИИ-проверки в окне.
+    extra_instructions: Optional[str] = None
+    confirmed: bool = False
 
 
 class CandidateCreate(BaseModel):
@@ -171,6 +185,14 @@ def update_vacancy(vacancy_id: int, data: VacancyUpdate, db: Session = Depends(g
         v.quick_mode_enabled = data.quick_mode_enabled
     if data.quick_questions is not None:
         v.quick_questions_json = _serialize_questions(data.quick_questions)
+    if data.deal_breakers is not None:
+        v.deal_breakers_json = json.dumps(
+            [d.model_dump() for d in data.deal_breakers if d.label.strip() and d.value.strip()],
+            ensure_ascii=False)
+    if data.extra_instructions is not None:
+        if not data.confirmed:
+            raise HTTPException(400, "Критерии для ИИ сохраняются только после проверки в окне вакансии.")
+        v.extra_instructions = data.extra_instructions.strip()
     db.commit(); db.refresh(v)
     return v.to_dict()
 
