@@ -240,7 +240,11 @@ def _twin_summary(twin) -> dict:
 
     state = quick_screening.load_state(twin)
     vacancy = twin.vacancy
+    questions = quick_screening.get_questions(vacancy)
     return {
+        "created_at": twin.created_at.isoformat() if twin.created_at else None,
+        "survey_reason": state.get("reason") or "",
+        "progress": rs.progress(state, questions),
         "candidate_id": twin.id,
         "vacancy_id": twin.vacancy_id,
         "vacancy_title": vacancy.title if vacancy else "",

@@ -180,6 +180,36 @@ function ResumeProfile({ profile }) {
   );
 }
 
+// «Откликался и на другие вакансии»: когда был тот отклик относительно этого.
+// Порядок важен — первый отклик обычно и есть основная точка человека.
+function responseOrder(otherIso, thisIso) {
+  const other = parseUtc(otherIso);
+  if (!other) return '—';
+  const day = other.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+  const here = parseUtc(thisIso);
+  if (!here) return day;
+  const diffDays = Math.round((other - here) / 86400000);
+  if (diffDays === 0) return `${day} — в тот же день`;
+  return diffDays < 0 ? `${day} — раньше этого` : `${day} — позже этого`;
+}
+
+// Состояние опроса по той вакансии — словами и с прогрессом.
+function surveyLabel(t) {
+  const p = t.progress || {};
+  const of = p.total ? ` (${p.answered} из ${p.total})` : '';
+  switch (t.survey) {
+    case 'done':
+      return t.survey_reason === 'not_looking' ? 'остановлен — ответил, что работу уже не ищет'
+        : `заполнен${of}`;
+    case 'asking': return `идёт, не заполнен${of}`;
+    case 'waiting_admin':
+      return t.survey_reason === 'send_failed' ? 'не доставлен — написать не удалось'
+        : `ждёт вашего ответа${of}`;
+    case 'queued': return 'запланирован на рабочие часы';
+    default: return 'не проводился';
+  }
+}
+
 // Запасной текст отказа — только на случай, когда в «Настройки → Шаблоны»
 // нет ни одного шаблона «Отказ». Если шаблоны есть, по умолчанию
 // подставляется первый из них: текст, который уходит кандидатам, должен
@@ -919,13 +949,13 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
                           {!t.vacancy_open && (
                             <span className="text-xs text-[color:var(--color-muted-foreground)]">вакансия закрыта</span>
                           )}
-                          {t.survey === 'done' && (
-                            <span className="text-xs text-[color:var(--color-muted-foreground)]">опрос пройден</span>
-                          )}
-                          {(t.survey === 'asking' || t.survey === 'waiting_admin') && (
-                            <span className="text-xs text-[color:var(--color-muted-foreground)]">опрос идёт там</span>
-                          )}
                         </div>
+                        <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                          <dt className="text-[color:var(--color-muted-foreground)]">Отклик</dt>
+                          <dd>{responseOrder(t.created_at, candidate.created_at)}</dd>
+                          <dt className="text-[color:var(--color-muted-foreground)]">Опрос</dt>
+                          <dd>{surveyLabel(t)}</dd>
+                        </dl>
                       </div>
                       <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
                         {onOpenTwin && (
