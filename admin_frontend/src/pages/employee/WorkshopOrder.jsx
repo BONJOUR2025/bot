@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, MessageSquare, ScanLine, Search, X } from 'lucide-react';
 import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
@@ -23,6 +23,27 @@ function day(iso) {
 function detail(err, fallback) {
   const d = err?.response?.data?.detail;
   return typeof d === 'string' ? d : fallback;
+}
+
+/** Услуги изделия: сначала незакрытые (выхода нет), потом сделанные.
+ *
+ *  В заказе из шести услуг взгляд должен падать на ту одну, которую ещё не
+ *  сдали, а не перебирать закрытые. Сделанной считаем услугу со сканом выхода
+ *  или в конечном статусе (исполнена, выдана, закрыта, отменена).
+ */
+const DONE_STATUSES = [4, 5, 6, 7];
+
+function isDone(s) {
+  return s.has_out || DONE_STATUSES.includes(s.status_id);
+}
+
+function splitServices(services) {
+  const open = services.filter((s) => !isDone(s));
+  const done = services.filter(isDone);
+  return [
+    ...open.map((service) => ({ service, done: false, first_done: false })),
+    ...done.map((service, i) => ({ service, done: true, first_done: i === 0 })),
+  ];
 }
 
 /** Строка поиска с кнопкой камеры: номер «37441-7», «37441» или бирка. */
@@ -244,7 +265,12 @@ export function OrderView({ orderId, onBack }) {
 
           {o.items.map((it) => (
             <section key={it.item_id} className="wo-item">
-              <h3 className="ws-section__title">{it.name}{it.location && <span className="ws-count">{it.location}</span>}</h3>
+              <h3 className="ws-section__title">
+                {it.name}
+                {it.location && <span className="ws-count">{it.location}</span>}
+                {it.services.length > 0 && it.services.every(isDone)
+                  && <span className="badge badge--success">всё сделано</span>}
+              </h3>
               {it.note && <p className="ws-sub">{it.note}</p>}
               {it.photos.length > 0 && (
                 <div className="wo-photos">
@@ -257,8 +283,10 @@ export function OrderView({ orderId, onBack }) {
                 </div>
               )}
               <div className="emp-list">
-                {it.services.map((s) => (
-                  <div key={s.service_id} className="emp-payout-item">
+                {splitServices(it.services).map(({ service: s, done, first_done: firstDone }) => (
+                  <Fragment key={s.service_id}>
+                    {firstDone && <p className="wo-done-sep">Сделано — внимания не требует</p>}
+                  <div className={`emp-payout-item${done ? ' wo-svc-done' : ''}`}>
                     <div className="emp-payout-item__top">
                       <span className="wo-svc">{serviceTitle(s.name)}</span>
                       <span className="emp-wip-badges"><span className="badge badge--neutral">{s.status}</span></span>
@@ -290,6 +318,7 @@ export function OrderView({ orderId, onBack }) {
                       </div>
                     )}
                   </div>
+                  </Fragment>
                 ))}
               </div>
             </section>

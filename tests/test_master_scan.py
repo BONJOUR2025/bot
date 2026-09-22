@@ -447,3 +447,13 @@ def test_confirmed_exit_reports_earning(monkeypatch):
     assert result["written"] and result["earning"]["salary"] == 1035.0
     entry = scan.confirm(MASTER, BARCODE, "in", connect=lambda: _WriteDb(), now=NOW)
     assert entry["earning"] is None
+
+
+def test_scan_moves_service_to_the_post_warehouse():
+    """Как на терминале: вход в цех переносит услугу на склад цеха."""
+    db = _WriteDb()
+    scan.execute_writes(db, _found(), "in", ME, NOW)
+    service = _writes_to(db, "doc_order_services")[0][1]
+    assert service[:3] == (3, 1107, 21021)          # статус, пост, склад поста
+    history = _writes_to(db, "doc_order_serv_history")[0][1]
+    assert history[4] == 21021 and history[5] == 1107  # в истории — новый склад

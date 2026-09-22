@@ -7886,3 +7886,10 @@ button:hover > .vac-desc { color: var(--color-text); }
 .ws-load { white-space: normal; }
 /* Четвёртый вид ошибки сканов («Повторные сканы») уезжал за край экрана. */
 .ws-chips { flex-wrap: wrap; overflow: visible; }
+/* В карточке заказа закрытые услуги уходят вниз и гасятся: взгляд должен
+   падать на то, что ещё не сдано. */
+.wo-done-sep { margin: 0.9rem 0 0.35rem; font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.wo-svc-done { opacity: 0.55; background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.wo-svc-done .badge { opacity: 0.9; }
+/* Веб-приложение с домашнего экрана: двойное касание больше не зумит. */
+.is-standalone, .is-standalone body { touch-action: manipulation; }

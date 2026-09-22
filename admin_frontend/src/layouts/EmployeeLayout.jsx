@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import { useTheme } from '../providers/ThemeProvider.jsx';
 import MasterAppUpdate from '../components/MasterAppUpdate.jsx';
 import api from '../api.js';
 
@@ -53,8 +54,15 @@ export default function EmployeeLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { isMobile } = useViewport();
+  const { setForced } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [onPoint, setOnPoint] = useState(false);
+
+  // Кабинет сотрудника всегда светлый, какая бы тема ни стояла в телефоне.
+  useEffect(() => {
+    setForced('light');
+    return () => setForced(null);
+  }, [setForced]);
 
   useEffect(() => {
     if (user?.is_master || !user?.employee_id) return undefined;

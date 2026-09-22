@@ -22,6 +22,9 @@
           var dark =
             mode === 'dark' ||
             (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          // Кабинет сотрудника всегда светлый (см. ThemeProvider) — гасим
+          // тёмную ещё до отрисовки, иначе мастер видит вспышку тёмного фона.
+          if (location.pathname.indexOf('/employee') === 0) dark = false;
           // Vite подставляет значение из .env; если переменная не задана,
           // плейсхолдер остаётся строкой и мы попадаем в ветку по умолчанию
           // — ту же, что и резолвер в providers/visualTheme.js.
@@ -34,6 +37,34 @@
           if (cls === 'visual-glass') root.style.background = dark ? '#050505' : '#f1f1f3';
         } catch (e) {
           /* приватный режим или заблокированное хранилище — просто рисуем как есть */
+        }
+      })();
+
+      // Запуск с домашнего экрана (Safari web app): запрещаем зум. В обычной
+      // вкладке Safari отключать масштаб нельзя — и не нужно, это поведение
+      // браузера; а в приложении случайный щипок или двойное касание
+      // «ломает» экран, и вернуть масштаб нечем — адресной строки нет.
+      (function () {
+        try {
+          var standalone =
+            window.navigator.standalone === true ||
+            (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+          if (!standalone) return;
+          document.documentElement.classList.add('is-standalone');
+          var vp = document.querySelector('meta[name=viewport]');
+          if (vp) {
+            vp.setAttribute(
+              'content',
+              'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
+            );
+          }
+          // iOS до сих пор масштабирует щипком в вебвью, несмотря на
+          // user-scalable=no, — гасим сами жесты.
+          ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
+            document.addEventListener(name, function (e) { e.preventDefault(); }, { passive: false });
+          });
+        } catch (e) {
+          /* не смогли — остаётся поведение браузера по умолчанию */
         }
       })();
     </script>

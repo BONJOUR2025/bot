@@ -1,11 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import { VISUAL_THEME_CLASS, ALL_VISUAL_CLASSES } from "./visualTheme.js";
 
 const STORAGE_KEY = "theme";
 const VALID_MODES = new Set(["light", "dark", "auto"]);
 
-const ThemeContext = createContext({ mode: "auto", theme: "light", setMode: () => {} });
+const ThemeContext = createContext({ mode: "auto", theme: "light", setMode: () => {}, setForced: () => {} });
 
 // Lets any component read/toggle the theme without prop-drilling.
 export const useTheme = () => useContext(ThemeContext);
@@ -22,6 +22,12 @@ export default function ThemeProvider({ children }) {
   });
   // systemDark: live OS preference, only actually used while mode === 'auto'.
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
+  // forced: раздел, который сам решает, в какой теме показываться. Кабинет
+  // мастера всегда светлый: его открывают в цехе, часто в перчатках и при
+  // ярком свете, и тёмная тема там читается хуже — а «авто» переключала её
+  // по системной настройке телефона, о которой мастер не догадывается.
+  const [forced, setForcedState] = useState(null);
+  const setForced = useCallback((next) => setForcedState(next), []);
 
   const setMode = (next) => {
     localStorage.setItem(STORAGE_KEY, next);
@@ -37,7 +43,7 @@ export default function ThemeProvider({ children }) {
   }, []);
 
   // theme: the actual light/dark used for styling, resolving 'auto' live.
-  const theme = mode === "auto" ? (systemDark ? "dark" : "light") : mode;
+  const theme = forced || (mode === "auto" ? (systemDark ? "dark" : "light") : mode);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -67,7 +73,7 @@ export default function ThemeProvider({ children }) {
     });
   }, [theme]);
 
-  const value = useMemo(() => ({ mode, theme, setMode }), [mode, theme]);
+  const value = useMemo(() => ({ mode, theme, setMode, setForced }), [mode, theme, setForced]);
   // Provide via context; still support the existing render-prop usage in App.
   return (
     <ThemeContext.Provider value={value}>

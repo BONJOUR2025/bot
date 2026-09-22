@@ -43,7 +43,9 @@ def test_wip_and_ready_without_out(world):
         svc(3, "В работе", in_uid=7, in_time=TODAY),                         # заказ отменён
         svc(4, "Выполнено", in_uid=7, in_time=TODAY - timedelta(days=3)),  # выдан без выхода
     ]
-    world["details"] = {1: {"order_status_id": 3, "due": TODAY - timedelta(hours=1)},
+    # Срок считаем от NOW, а не от полудня: с TODAY тест падал каждое утро,
+    # когда его запускали раньше 11:00 — «час назад» был ещё в будущем.
+    world["details"] = {1: {"order_status_id": 3, "due": NOW - timedelta(hours=1)},
                         2: {"order_status_id": 4}, 3: {"order_status_id": 7}, 4: {"order_status_id": 5}}
     d = ws.build_overview()
     assert [w["service_id"] for w in d["wip"]] == [1]

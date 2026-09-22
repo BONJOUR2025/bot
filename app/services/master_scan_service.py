@@ -385,16 +385,21 @@ def execute_writes(con, found: dict[str, Any], action: str, master_user_id: int,
             "INSERT INTO user_action_hist (usa_id, kind_id, dttm) VALUES (?, ?, ?)",
             (action_id, ACTION_HIST_KIND, ts),
         )
+        # Скан на терминале переносит услугу на склад рабочего места: приняли
+        # на Меркурии, отсканировали вход в цех — изделие числится в цехе.
+        # Без этого приложение оставляло услугу на складе приёмки, и заказ
+        # «лежал» не там, где он физически лежит.
+        new_sclad = work_place.get("sclad_id") or sclad
         cur.execute(
-            "UPDATE doc_order_services SET status_id = ?, current_work_place_id = ?, "
+            "UPDATE doc_order_services SET status_id = ?, current_work_place_id = ?, current_sclad_id = ?, "
             "last_time_ch_status = ?, last_time_ch_cur_sclad = ? WHERE id = ?",
-            (new_status, post, ts, ts, service["id"]),
+            (new_status, post, new_sclad, ts, ts, service["id"]),
         )
         cur.execute(
             "INSERT INTO doc_order_serv_history (dos_id, dt, user_id, status_id, current_sclad_id, current_wp_id, "
             "kredit, kfx, qty_kredit, basis, last_time_ch_status, last_time_ch_cur_sclad) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (service["id"], ts, master_user_id, new_status, sclad, post, kredit, kfx, qty,
+            (service["id"], ts, master_user_id, new_status, new_sclad, post, kredit, kfx, qty,
              # BASIS здесь — двоичный BLOB, клиент Агбиса кладёт в него текст в cp1251.
              _history_basis(work_place.get("name") or str(post), lead).encode("cp1251", "replace"), ts, ts),
         )
