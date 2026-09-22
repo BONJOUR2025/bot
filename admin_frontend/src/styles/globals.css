@@ -7893,3 +7893,7 @@ button:hover > .vac-desc { color: var(--color-text); }
 .wo-svc-done .badge { opacity: 0.9; }
 /* Веб-приложение с домашнего экрана: двойное касание больше не зумит. */
 .is-standalone, .is-standalone body { touch-action: manipulation; }
+/* Открыто фото на весь экран — закреплённые шапка и нижнее меню кабинета не
+   нужны и на iPhone налезали на снимок. */
+.photo-open .emp-header,
+.photo-open .emp-bottomnav { visibility: hidden; }

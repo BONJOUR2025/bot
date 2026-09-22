@@ -5,6 +5,7 @@
  * достаточно, чтобы не заводить им вторую копию.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { RefreshCw } from 'lucide-react';
 import { useSpring, animated, to } from '@react-spring/web';
 import { useGesture } from '@use-gesture/react';
@@ -134,6 +135,15 @@ function anchorOffset(p, o0, s0, s1) {
 export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPhotoPath }) {
   const { isMobile } = useViewport();
   const photo = photos[index];
+
+  // Пока открыто фото, закреплённая шапка и нижнее меню кабинета прячутся
+  // (см. .photo-open в globals.css): снимку нужен весь экран, а Safari на
+  // iPhone рисовал шапку поверх просмотра.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('photo-open');
+    return () => root.classList.remove('photo-open');
+  }, []);
 
   // Соседние кадры грузятся вместе с текущим: без них свайп показывал бы
   // пустоту, и ощущения ленты не возникает.
@@ -431,14 +441,20 @@ export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPho
   const slides = [index - 1, index, index + 1].filter((i) => i >= 0 && i < photos.length);
 
   if (isMobile) {
-    return (
+    // Портал в body: просмотр не должен жить внутри прокручиваемой области
+    // страницы. Там Safari на iPhone ставил его под закреплённую шапку,
+    // хотя по z-index он выше.
+    return createPortal((
       <AnimatedDiv
         // 100dvh, а не 100vh: на мобильных 100vh уходит под адресную строку,
         // и низ кадра с подписью оказывался за краем экрана.
         className="fixed inset-0 z-50 flex flex-col"
         style={{ height: '100dvh', backgroundColor: backdrop.to((v) => `rgba(0,0,0,${v})`) }}
       >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 text-white/90 flex-shrink-0">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 text-white/90 flex-shrink-0"
+          // Шапки кабинета нет, а в приложении с домашнего экрана страница
+          // уходит под вырез и часы iPhone — «×» не должна оказаться под ними.
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
           <div className="text-xs min-w-0 truncate">
             <span className="font-medium">{photo.item}</span>
             <span className="opacity-70 ml-2">
@@ -505,11 +521,12 @@ export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPho
           })}
         </div>
 
-        <div className="flex items-center justify-center px-4 py-3 flex-shrink-0 text-white/50 text-[11px]">
+        <div className="flex items-center justify-center px-4 py-3 flex-shrink-0 text-white/50 text-[11px]"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
           {zoomed ? 'Двойной тап — сбросить масштаб' : 'Свайп — листать · вниз — закрыть · щипок — зум'}
         </div>
       </AnimatedDiv>
-    );
+    ), document.body);
   }
 
   const url = urls[photo.id];
