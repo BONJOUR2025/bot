@@ -640,6 +640,27 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
   // Job-board chat state (hh.ru / Авито)
   const [quick, setQuick]           = useState(null);
   const [quickStarting, setQuickStarting] = useState(false);
+  // Сводка ИИ: своя копия, чтобы пересчёт был виден сразу, без закрытия окна.
+  const [profile, setProfile] = useState(candidate.profile || null);
+  const [profileAt, setProfileAt] = useState(candidate.profile_generated_at || null);
+  const [profileBusy, setProfileBusy] = useState(false);
+  useEffect(() => {
+    setProfile(candidate.profile || null);
+    setProfileAt(candidate.profile_generated_at || null);
+  }, [candidate.id, candidate.profile, candidate.profile_generated_at]);
+
+  async function regenerateProfile() {
+    setProfileBusy(true);
+    try {
+      const res = await api.post(`/recruitment/candidates/${candidate.id}/profile`);
+      setProfile(res.data.profile);
+      setProfileAt(res.data.profile_generated_at);
+      toast('Сводка пересчитана', 'success');
+      onCandidateChanged?.();
+    } catch (e) {
+      toast(e.response?.data?.detail || e.message, 'error');
+    } finally { setProfileBusy(false); }
+  }
   // Склейка с откликом на другую вакансию: {twinId, primaryId} или null.
   const [twinMerge, setTwinMerge] = useState(null);
   const [twinMerging, setTwinMerging] = useState(false);
@@ -1291,16 +1312,32 @@ function CandidateDetail({ candidate, onClose, onEdit, onDelete, onStageChange, 
 
         {tab === 'profile' && (
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            {!candidate.profile ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                {profileAt
+                  ? `Сводка от ${new Date(profileAt.endsWith('Z') ? profileAt : `${profileAt}Z`).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                  : 'Оценка по анкете, «О себе», сопроводительному и ответам опроса'}
+              </p>
+              <button
+                type="button"
+                onClick={regenerateProfile}
+                disabled={profileBusy}
+                className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border border-[color:var(--color-border)] hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)] transition-colors flex items-center gap-1.5 disabled:opacity-60"
+              >
+                {profileBusy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                {profileBusy ? 'Считаю…' : (profile ? 'Пересчитать' : 'Собрать сводку')}
+              </button>
+            </div>
+            {!profile ? (
               <div className="text-sm text-[color:var(--color-muted-foreground)] text-center py-8 space-y-1.5">
                 <p>Сводки пока нет.</p>
                 <p className="text-xs">
                   Она собирается автоматически, когда кандидат ответит на все вопросы
-                  быстрого опроса — из его ответов и анкеты с площадки.
+                  быстрого опроса. Можно собрать и сейчас — по анкете с площадки.
                 </p>
               </div>
             ) : (() => {
-              const p = candidate.profile;
+              const p = profile;
               const recBadge = {
                 invite:  { label: '✅ Пригласить', color: 'bg-emerald-100 text-emerald-700' },
                 reserve: { label: '🔶 В резерв',    color: 'bg-amber-100 text-amber-700' },

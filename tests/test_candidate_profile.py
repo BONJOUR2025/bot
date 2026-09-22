@@ -123,7 +123,9 @@ def test_resume_is_formatted_readably():
     text = cp.format_resume(RESUME)
     assert "Ожидания по зарплате: 75000 RUR" in text
     assert "Общий стаж: 3 г. 10 мес." in text
-    assert "2022-01-01 — по настоящее время, Кожа и нитки: Закройщик" in text
+    # Стаж на месте работы посчитан за модель: по одним датам она его не
+    # выводила и писала «срок не уточнён».
+    assert re.search(r"2022-01 — по настоящее время \(\d+ г\.( \d+ мес\.)?\), Кожа и нитки: Закройщик", text)
     # Переносы и двойные пробелы из описания схлопнуты: это одна строка
     # в промпте, а не кусок вёрстки.
     assert "Раскрой кожи, сборка изделий" in text
@@ -409,3 +411,25 @@ def test_profile_records_what_it_was_built_from(llm):
     bare = cand(resume_profile_json=None)
     assert cp.generate(_Db(), bare, _Vacancy(), ANSWERS, {})["basis"] == "answers"
     assert cp.generate(_Db(), bare, _Vacancy(), [], {})["basis"] == "none"
+
+
+def test_job_months_counts_inclusive_and_open_ended():
+    from datetime import date
+    assert cp.job_months("2017-07-01", "", today=date(2026, 9, 22)) == 111
+    assert cp.job_months("2022-08-01", "2023-08-01", today=date(2026, 9, 22)) == 13
+    assert cp.job_months("", "2023-08-01") is None
+
+
+def test_about_and_cover_letter_reach_the_prompt():
+    c = cand()
+    c.resume_profile_json = json.dumps({**RESUME, "about": "Шью из кожи с детства"}, ensure_ascii=False)
+    c.cover_letter = "Хочу учиться ремонту обуви"
+    prompt = cp.build_prompt(c, _Vacancy(), ANSWERS)
+    assert "О себе: Шью из кожи с детства" in prompt
+    assert "СОПРОВОДИТЕЛЬНОЕ ПИСЬМО К ОТКЛИКУ:\nХочу учиться ремонту обуви" in prompt
+
+
+def test_no_cover_letter_block_when_empty():
+    c = cand()
+    c.cover_letter = ""
+    assert "СОПРОВОДИТЕЛЬНОЕ" not in cp.build_prompt(c, _Vacancy(), ANSWERS)

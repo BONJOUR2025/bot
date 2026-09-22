@@ -70,6 +70,7 @@ def _migrate_columns() -> None:
         _add_column_if_missing(conn, "candidates", "channels_json", "TEXT")
         _add_column_if_missing(conn, "candidates", "merged_json", "TEXT")
         _add_column_if_missing(conn, "candidates", "resume_profile_json", "TEXT")
+        _add_column_if_missing(conn, "candidates", "cover_letter", "TEXT")
         _add_column_if_missing(conn, "employee_llm_usage", "cached_tokens", "INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "employee_llm_usage", "question", "TEXT DEFAULT ''")
         _add_column_if_missing(conn, "employee_llm_usage", "answer", "TEXT DEFAULT ''")

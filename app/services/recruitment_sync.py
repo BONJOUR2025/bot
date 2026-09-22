@@ -880,6 +880,16 @@ async def _sync_link(db, src, link, token: str) -> list[dict]:
     if not new_candidate_objs:
         return new_candidates
 
+    # Сопроводительное — до старта опроса: оно нужно сводке ИИ, а
+    # приходит только отдельным запросом за перепиской отклика.
+    if src.source == "hh":
+        for c in new_candidate_objs:
+            try:
+                c.cover_letter = await hh_api.get_cover_letter(token, c.external_id)
+            except Exception as exc:
+                logger.info("[Sync] hh: сопроводительное к %s не получено: %s", c.external_id, exc)
+        db.flush()
+
     # A vacancy in "быстрый режим" is screened right here on the job board and
     # never invited to Telegram, so it must not also go through the automation
     # that sends the Telegram-link message — the two flows would talk over each

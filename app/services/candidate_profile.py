@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 log = logging.getLogger(__name__)
 
@@ -71,8 +71,17 @@ SYSTEM = """Ты — помощник рекрутера. Тебе дают те
 - Отличай «нет опыта» от «про опыт не сказано». Про второе никогда не пиши,
   что опыта нет, и не снижай за это балл — вместо этого добавь пункт в
   to_ask, чтобы рекрутер спросил на звонке.
-- Ответы кандидата важнее анкеты: анкета описывает прошлое, ответы — то,
-  что человек говорит про эту вакансию сейчас.
+- Анкета и ответы — равноправные источники об опыте. Ответы важнее
+  анкеты только в том, что касается мотивации и готовности работать на
+  этой вакансии сейчас. Если ответ про опыт короче или расплывчатее
+  анкеты («есть опыт»), опыт и его срок бери из анкеты.
+- Стаж на каждом месте работы уже посчитан и стоит в скобках после дат.
+  Опирайся на него: «срок неизвестен» — только если у места работы нет
+  дат, а в ответах срок не назван.
+- «О себе» и сопроводительное письмо — слова самого кандидата. Опыт,
+  названный только там, без места работы в анкете, считай так же, как
+  сказанное в ответах; интерес к вакансии, показанный там, учитывай при
+  сдвиге балла внутри полосы.
 - Пиши по-русски, по делу, без канцелярита и без похвал.
 
 КАК СЧИТАТЬ БАЛЛ (0-100)
@@ -156,6 +165,27 @@ def _months_label(months) -> str:
     return " ".join(parts)
 
 
+def _parse_ym(value) -> tuple[int, int] | None:
+    m = re.match(r"^(\d{4})-(\d{2})", str(value or ""))
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def job_months(start, end, today: date | None = None) -> int | None:
+    """Сколько месяцев длилась работа. Без даты начала — None.
+
+    Считается здесь, а не моделью: модель видела «2017-07-01 — по настоящее
+    время» и писала «срок работы не уточнён», из-за чего человек с девятью
+    годами профильного опыта застревал в середине полосы 60-79.
+    """
+    s = _parse_ym(start)
+    if not s:
+        return None
+    today = today or date.today()
+    e = _parse_ym(end) or (today.year, today.month)
+    months = (e[0] - s[0]) * 12 + (e[1] - s[1]) + 1
+    return months if months > 0 else None
+
+
 def format_resume(profile: dict | None) -> str:
     """Анкета в виде текста для модели и для уведомления админу."""
     if not profile:
@@ -185,16 +215,23 @@ def format_resume(profile: dict | None) -> str:
         if profile.get(field):
             lines.append(f"{label}: {profile[field]}")
 
+    about = re.sub(r"\s+", " ", str(profile.get("about") or "")).strip()
+    if about:
+        lines.append("О себе: " + about[:1500])
+
     jobs = profile.get("experience") or []
     if jobs:
         lines.append("Опыт работы:")
-        for e in jobs[:5]:
-            period = f"{e.get('start') or '?'} — {e.get('end') or 'по настоящее время'}"
+        for e in jobs[:6]:
+            period = f"{(e.get('start') or '?')[:7]} — {(e.get('end') or '')[:7] or 'по настоящее время'}"
+            dur = _months_label(job_months(e.get("start"), e.get("end")))
+            if dur:
+                period += f" ({dur})"
             head = f"  • {period}, {e.get('company') or 'без названия'}: {e.get('position') or '—'}"
             lines.append(head)
             desc = (e.get("description") or "").strip()
             if desc:
-                lines.append("    " + re.sub(r"\s+", " ", desc)[:400])
+                lines.append("    " + re.sub(r"\s+", " ", desc)[:800])
     return "\n".join(lines)
 
 
@@ -271,6 +308,10 @@ def build_prompt(candidate, vacancy, answers: list) -> str:
     parts.append("АНКЕТА С САЙТА:\n"
                  + (resume or "не получена — на площадке анкеты нет. Это отсутствие "
                               "сведений, а не отсутствие опыта."))
+
+    cover = re.sub(r"\s+", " ", str(getattr(candidate, "cover_letter", "") or "")).strip()
+    if cover:
+        parts.append("СОПРОВОДИТЕЛЬНОЕ ПИСЬМО К ОТКЛИКУ:\n" + cover[:2000])
 
     replies = format_answers(answers)
     parts.append("ОТВЕТЫ НА ВОПРОСЫ БОТА:\n"

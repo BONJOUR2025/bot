@@ -991,6 +991,42 @@ def get_quick_screening(candidate_id: int, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/candidates/{candidate_id}/profile")
+async def regenerate_profile(candidate_id: int, db: Session = Depends(get_db)):
+    """Пересчитать сводку ИИ по кандидату — с опросом или по одной анкете.
+
+    Автоматически сводка собирается только в конце опроса. Пересчёт нужен,
+    чтобы оценить сильное резюме, не дожидаясь ответов, и чтобы обновить
+    оценку, когда кандидат дописал резюме или изменились критерии вакансии.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    from app.services import candidate_profile, quick_screening
+    from app.services.config_service import ConfigService
+
+    c = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not c:
+        raise HTTPException(404, "Candidate not found")
+    vacancy = db.query(Vacancy).filter(Vacancy.id == c.vacancy_id).first() if c.vacancy_id else None
+
+    if c.source == "hh" and c.cover_letter is None:
+        src = db.query(RecruitmentSource).filter(RecruitmentSource.source == "hh").first()
+        if src and src.access_token:
+            await quick_screening.ensure_cover_letter(db, c, src.access_token)
+
+    answers = quick_screening.load_state(c).get("answers") or []
+    if not c.resume_profile() and not answers:
+        raise HTTPException(400, "Нет ни анкеты с площадки, ни ответов опроса — оценивать не по чему.")
+    # Вызов модели синхронный и идёт до десятка секунд — не держим им цикл
+    # событий, на котором висят остальные запросы панели.
+    profile = await run_in_threadpool(
+        candidate_profile.generate, db, c, vacancy, answers, ConfigService().load())
+    if not profile:
+        raise HTTPException(502, "Модель не ответила или ответила неразборчиво — попробуйте ещё раз.")
+    return {"profile": profile,
+            "profile_generated_at": c.profile_generated_at.isoformat() if c.profile_generated_at else None}
+
+
 @router.post("/candidates/{candidate_id}/merge-twin")
 def merge_twin(candidate_id: int, data: MergeTwinRequest, db: Session = Depends(get_db)):
     """Склеить отклики одного человека на разные вакансии в одну карточку.

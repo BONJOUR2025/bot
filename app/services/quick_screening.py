@@ -348,6 +348,25 @@ async def start_screening(db, candidate, vacancy, src, token: str,
     return True
 
 
+async def ensure_cover_letter(db, candidate, token: str) -> None:
+    """Дозапросить сопроводительное к отклику hh, если его ещё не спрашивали.
+
+    Новые отклики получают его при импорте; этот путь — для тех, кто
+    импортирован раньше, чем письмо начали сохранять. Сбой не критичен:
+    сводка соберётся и без письма.
+    """
+    from app.services import hh_api
+
+    if (candidate.source != "hh" or getattr(candidate, "cover_letter", "") is not None
+            or not candidate.external_id):
+        return
+    try:
+        candidate.cover_letter = await hh_api.get_cover_letter(token, candidate.external_id)
+        db.commit()
+    except Exception as exc:
+        log.info("quick_screening: сопроводительное к %s не получено: %s", candidate.id, exc)
+
+
 def _looks_like_question(text: str, cfg: dict) -> bool:
     """Is the candidate asking us something instead of answering?
 
@@ -663,6 +682,7 @@ async def _process_message(db, candidate, vacancy, src, token: str,
     # закрыт и кандидату отправлено прощание: это подпись к карточке, и её
     # отсутствие не должно ни задерживать, ни ломать сам опрос.
     profile = None
+    await ensure_cover_letter(db, candidate, token)
     try:
         profile = candidate_profile.generate(db, candidate, vacancy, answers, cfg)
     except Exception:

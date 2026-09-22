@@ -174,6 +174,10 @@ def build_resume_profile(resume: dict, full: dict | None = None) -> dict:
         "education_level": _name(education.get("level")),
         "education": schools,
         "skills": [str(x) for x in (src.get("skill_set") or [])][:40],
+        # «Обо мне». В API hh это поле называется skills (строка), а теги
+        # навыков — skill_set. Раньше выбрасывалось, хотя именно там люди
+        # пишут про себя главное.
+        "about": str(src.get("skills") or "")[:2000],
         "languages": [f"{_name(l)} — {_name(l.get('level'))}".strip(" —")
                       for l in (src.get("language") or []) if isinstance(l, dict)],
         "employment": _name(src.get("employment")),
@@ -422,11 +426,25 @@ async def get_messages(access_token: str, neg_id: str) -> list[dict]:
                 "author_type": (m.get("author") or {}).get("participant_type", ""),
                 "author_name": (m.get("author") or {}).get("name", ""),
                 "read": m.get("read", True),
+                # «response» — сам отклик: его текст и есть сопроводительное.
+                "state": (m.get("state") or {}).get("id", ""),
             }
             for m in items
         ]
         result.sort(key=lambda m: _sort_ts(m["created_at"]))
         return result
+
+
+async def get_cover_letter(access_token: str, neg_id: str) -> str:
+    """Сопроводительное письмо к отклику: текст сообщения-отклика. "" — письма нет.
+
+    Пишут его примерно в каждом восьмом отклике. Отдельного поля в отклике
+    hh нет — письмо приходит первым сообщением переписки со state «response».
+    """
+    for m in await get_messages(access_token, neg_id):
+        if m.get("state") == "response" and m.get("author_type") == "applicant":
+            return (m.get("text") or "").strip()[:4000]
+    return ""
 
 
 # Расшифровки кодов ошибок hh для человека, который получит алерт.

@@ -361,6 +361,10 @@ class Candidate(Base):
     # должностью и опытом рекрутер шёл на сайт. Обновляется на каждом синке:
     # кандидат правит резюме, и хранить снимок годовой давности незачем.
     resume_profile_json = Column(Text, nullable=True)
+    # Сопроводительное письмо к отклику (hh: текст сообщения-отклика).
+    # Отдельно от анкеты, потому что анкета перезаписывается на каждом синке,
+    # а письмо приходит один раз. NULL — ещё не запрашивали, "" — письма нет.
+    cover_letter = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -411,6 +415,7 @@ class Candidate(Base):
             "call_log": self.call_log(),
             "resume_id": self.resume_id or "",
             "resume_profile": self.resume_profile(),
+            "cover_letter": self.cover_letter or "",
             # Обе витрины объединения: чем писать и из чего собрано.
             "channels": self.channels(),
             "merged_from": self.merged_from(),
