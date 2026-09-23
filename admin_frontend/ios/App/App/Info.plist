@@ -74,5 +74,7 @@
 	<false/>
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleDarkContent</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера нужна, чтобы сканировать бирки заказов.</string>
 </dict>
 </plist>
