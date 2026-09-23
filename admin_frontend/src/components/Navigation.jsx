@@ -9,7 +9,7 @@ import {
   Hammer, TrendingUp, ListTodo, KeyRound, Send, LibraryBig, Truck,
   Clock, Replace, CalendarOff, MessageCircle, Users2, Sun, Moon, Monitor,
   Landmark, UserSearch, UserCog, SlidersHorizontal, Scan, Headphones, Search,
-  Smartphone,
+  Smartphone, Factory, ScanBarcode,
 } from 'lucide-react';
 
 import { useAuth } from '../providers/AuthProvider.jsx';
@@ -38,6 +38,13 @@ const navStructure = [
       { to: '/admin/vacations',      label: 'Отпуска',          permission: 'vacations',      icon: Umbrella },
       { to: '/admin/leave-requests', label: 'Заявки на отгул',  permission: 'leave-requests', icon: CalendarOff },
       { to: '/admin/shift-checkins', label: 'Рабочее время',    permission: 'shift-checkins', icon: Clock },
+    ],
+  },
+  {
+    name: 'Цех',
+    items: [
+      { to: '/admin/workshop',    label: 'Цех',            permission: 'workshop', icon: Factory },
+      { to: '/admin/tag-scanner', label: 'Сканер бирок',   permission: 'workshop', icon: ScanBarcode },
     ],
   },
   {

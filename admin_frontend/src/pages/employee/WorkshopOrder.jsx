@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, MessageSquare, ScanLine, Search, X } from 'lucide-react';
 import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
@@ -46,8 +46,15 @@ function splitServices(services) {
   ];
 }
 
-/** Строка поиска с кнопкой камеры: номер «37441-7», «37441» или бирка. */
-export function OrderSearch({ onOpen }) {
+/** Строка поиска с кнопкой камеры: номер «37441-7», «37441» или бирка.
+ *
+ *  `onOpen(orderId, serviceId)` — serviceId есть, только когда искали по бирке.
+ *  `scanMode` — для сканера бирок в админке: поле в фокусе с самого начала,
+ *  а после поиска текст выделен, чтобы следующая бирка (ручной сканер
+ *  печатает её как клавиатура) заменила предыдущую, а не дописалась к ней. */
+export function OrderSearch({ onOpen, inputRef, scanMode = false }) {
+  const ownRef = useRef(null);
+  const input = inputRef || ownRef;
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -64,14 +71,15 @@ export function OrderSearch({ onOpen }) {
     setChoices(null);
     try {
       const res = await api.get('/workshop/orders/find', { params: { q: text } });
-      if (res.data.order_id) onOpen(res.data.order_id);
+      if (res.data.order_id) onOpen(res.data.order_id, res.data.service_id || null);
       else setChoices(res.data.choices || []);
     } catch (e) {
       setError(detail(e, 'Не удалось найти заказ.'));
     } finally {
       setBusy(false);
+      if (scanMode) input.current?.select();
     }
-  }, [onOpen]);
+  }, [onOpen, scanMode, input]);
 
   useEffect(() => {
     const onScan = (event) => {
@@ -96,6 +104,8 @@ export function OrderSearch({ onOpen }) {
         <div className="wo-search__field">
           <Search size={16} aria-hidden="true" />
           <input
+            ref={input}
+            autoFocus={scanMode}
             className="input"
             inputMode="search"
             placeholder="Заказ 37441-7 или бирка"
@@ -216,8 +226,10 @@ function LeadScanDialog({ service, action, masters, onClose, onDone }) {
   );
 }
 
-/** Карточка заказа. */
-export function OrderView({ orderId, onBack }) {
+/** Карточка заказа. `highlightServiceId` — услуга, чью бирку отсканировали:
+ *  она подсвечена и прокручена в поле зрения. Без `onBack` кнопки «Назад» нет. */
+export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху', highlightServiceId = null }) {
+  const hitRef = useRef(null);
   const [o, setO] = useState(null);
   const [error, setError] = useState('');
   const [viewer, setViewer] = useState(null);
@@ -233,6 +245,9 @@ export function OrderView({ orderId, onBack }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
+    if (o && hitRef.current) hitRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [o, highlightServiceId]);
+  useEffect(() => {
     api.get('/workshop/masters').then((r) => setMasters(r.data || [])).catch(() => setMasters([]));
   }, []);
 
@@ -240,7 +255,7 @@ export function OrderView({ orderId, onBack }) {
 
   return (
     <div className="wo">
-      <button type="button" className="wo-back" onClick={onBack}><ArrowLeft size={16} /> Назад к цеху</button>
+      {onBack && <button type="button" className="wo-back" onClick={onBack}><ArrowLeft size={16} /> {backLabel}</button>}
       {error && <p className="emp-page__error">{error}</p>}
       {!o && !error && <p className="emp-page__loading">Загрузка…</p>}
       {o && (
@@ -286,7 +301,11 @@ export function OrderView({ orderId, onBack }) {
                 {splitServices(it.services).map(({ service: s, done, first_done: firstDone }) => (
                   <Fragment key={s.service_id}>
                     {firstDone && <p className="wo-done-sep">Сделано — внимания не требует</p>}
-                  <div className={`emp-payout-item${done ? ' wo-svc-done' : ''}`}>
+                  <div
+                    ref={s.service_id === highlightServiceId ? hitRef : undefined}
+                    className={`emp-payout-item${done ? ' wo-svc-done' : ''}${s.service_id === highlightServiceId ? ' wo-svc-hit' : ''}`}
+                  >
+                    {s.service_id === highlightServiceId && <span className="wo-hit-tag">Эта бирка</span>}
                     <div className="emp-payout-item__top">
                       <span className="wo-svc">{serviceTitle(s.name)}</span>
                       <span className="emp-wip-badges"><span className="badge badge--neutral">{s.status}</span></span>

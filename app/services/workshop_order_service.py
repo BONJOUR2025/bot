@@ -96,10 +96,11 @@ def find(query: str) -> dict[str, Any]:
         cur = con.cursor()
         if re.fullmatch(r"\d{14}|\d{18}", raw.replace(" ", "")):
             column = "barcode" if len(digits) == 18 else "barcode14"
-            cur.execute(f"SELECT FIRST 2 doc_order_id FROM doc_order_services WHERE {column} = ?", (digits,))
+            cur.execute(f"SELECT FIRST 2 doc_order_id, id FROM doc_order_services WHERE {column} = ?", (digits,))
             rows = cur.fetchall()
             if rows:
-                return {"order_id": rows[0][0]}
+                # Услуга, чья это бирка, — сканер бирок подсвечивает её в карточке.
+                return {"order_id": rows[0][0], "service_id": rows[0][1]}
             raise OrderNotFound("Бирка не найдена в Агбисе.")
         m = re.fullmatch(r"(\d{2,7})\s*[-–/ ]\s*(\d{1,3})", raw)
         if m:
