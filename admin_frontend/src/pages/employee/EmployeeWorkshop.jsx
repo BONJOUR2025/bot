@@ -4,6 +4,8 @@ import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
 import { money, serviceTitle, workshopPhotoPath } from './masterFormat.js';
 import { OrderSearch, OrderView } from './WorkshopOrder.jsx';
+import { Tabs } from '../../components/ui/SalaryUI.jsx';
+import { TopProgressBar } from '../../components/ui/ProgressBar.jsx';
 
 /** Цех — приложение старшего мастера (GET /api/workshop/overview).
  *
@@ -514,7 +516,9 @@ function AdviceTab({ d, onOpenDoc, onPhoto }) {
   );
 }
 
-export default function EmployeeWorkshop() {
+/** `admin` — тот же цех внутри админки: шапка, вкладки и ширина как у
+ *  остальных страниц панели, а не мобильный кабинет мастера. */
+export default function EmployeeWorkshop({ admin = false }) {
   const [d, setD] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -549,10 +553,64 @@ export default function EmployeeWorkshop() {
     try { window.localStorage.setItem(TAB_KEY, key); } catch { /* вкладка просто не запомнится */ }
   };
 
+  const shell = admin ? 'space-y-6 max-w-5xl mx-auto pb-12' : 'emp-page';
+
   if (orderId) {
     return (
-      <div className="emp-page">
+      <div className={shell}>
         <OrderView orderId={orderId} onBack={() => setOrderId(null)} />
+      </div>
+    );
+  }
+
+  const body = d && (
+    <div style={loading ? { opacity: 0.6 } : undefined} aria-busy={loading}>
+      {!admin && <p className="ws-updated">Обновлено в {hhmm(d.generated_at)}</p>}
+      {tab === 'now' && <NowTab d={d} onOpenDoc={openDoc} onPhoto={openPhoto} />}
+      {tab === 'advice' && <AdviceTab d={d} onOpenDoc={openDoc} onPhoto={openPhoto} />}
+      {tab === 'masters' && <MastersTab d={d} onOpenDoc={openDoc} />}
+      {tab === 'scans' && <ScansTab d={d} onOpenDoc={openDoc} />}
+      {tab === 'apprentices' && <ApprenticesTab d={d} onChanged={() => load(true)} />}
+      {tab === 'notes' && <NotesTab d={d} />}
+    </div>
+  );
+  const photoViewer = viewer && (
+    <PhotoViewer
+      photos={viewer.photos}
+      index={viewer.index}
+      onIndex={(index) => setViewer((v) => (v ? { ...v, index } : v))}
+      onClose={() => setViewer(null)}
+      pathFor={workshopPhotoPath}
+    />
+  );
+
+  if (admin) {
+    return (
+      <div className={shell}>
+        <TopProgressBar active={loading} />
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <span className="ui-eyebrow mb-3">{d ? `Обновлено в ${hhmm(d.generated_at)}` : 'Цех'}</span>
+            <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">Цех</h2>
+            <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2 max-w-[60ch]">
+              Что в работе, что горит, кому отдать заказ, ошибки сканов и ученики — те же данные, что у старшего мастера
+            </p>
+          </div>
+          <button type="button" className="btn btn--secondary" onClick={() => load(true)} disabled={loading}>
+            <RefreshCw size={15} className={loading ? 'emp-wip-spin' : ''} /> Обновить
+          </button>
+        </div>
+        <OrderSearch onOpen={setOrderId} />
+        {openError && <p className="emp-page__error">{openError}</p>}
+        <Tabs
+          tabs={TABS.map((t) => ({ key: t.key, label: t.label, badge: d ? t.count(d) : undefined }))}
+          active={tab}
+          onChange={pickTab}
+        />
+        {loading && !d && <p className="emp-page__loading">Загрузка…</p>}
+        {!loading && error && <p className="emp-page__error">{error}</p>}
+        {body}
+        {photoViewer}
       </div>
     );
   }
@@ -581,26 +639,8 @@ export default function EmployeeWorkshop() {
 
       {loading && !d && <p className="emp-page__loading">Загрузка…</p>}
       {!loading && error && <p className="emp-page__error">{error}</p>}
-      {d && (
-        <div style={loading ? { opacity: 0.6 } : undefined} aria-busy={loading}>
-          <p className="ws-updated">Обновлено в {hhmm(d.generated_at)}</p>
-          {tab === 'now' && <NowTab d={d} onOpenDoc={openDoc} onPhoto={openPhoto} />}
-          {tab === 'advice' && <AdviceTab d={d} onOpenDoc={openDoc} onPhoto={openPhoto} />}
-          {tab === 'masters' && <MastersTab d={d} onOpenDoc={openDoc} />}
-          {tab === 'scans' && <ScansTab d={d} onOpenDoc={openDoc} />}
-          {tab === 'apprentices' && <ApprenticesTab d={d} onChanged={() => load(true)} />}
-          {tab === 'notes' && <NotesTab d={d} />}
-        </div>
-      )}
-      {viewer && (
-        <PhotoViewer
-          photos={viewer.photos}
-          index={viewer.index}
-          onIndex={(index) => setViewer((v) => (v ? { ...v, index } : v))}
-          onClose={() => setViewer(null)}
-          pathFor={workshopPhotoPath}
-        />
-      )}
+      {body}
+      {photoViewer}
     </div>
   );
 }

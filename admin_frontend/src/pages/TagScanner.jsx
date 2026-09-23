@@ -34,11 +34,11 @@ export default function TagScanner() {
   }, []);
 
   return (
-    <div className="space-y-5 max-w-[760px] mx-auto pb-12">
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
       <div>
         <span className="ui-eyebrow mb-3">Цех</span>
-        <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)] flex items-center gap-2">
-          <ScanBarcode size={22} style={{ color: 'var(--color-primary)' }} /> Сканер бирок
+        <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">
+          Сканер бирок
         </h2>
         <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2 max-w-[62ch]">
           Отсканируйте бирку ручным сканером или камерой — откроется весь заказ: изделия, фото, услуги,
@@ -55,7 +55,10 @@ export default function TagScanner() {
       {found ? (
         <OrderView key={`${found.orderId}-${found.at}`} orderId={found.orderId} highlightServiceId={found.serviceId} />
       ) : (
-        <p className="emp-page__empty">Ждём бирку.</p>
+        <div className="app-card p-12 text-center text-[color:var(--color-muted-foreground)]">
+          <ScanBarcode size={28} className="mx-auto mb-2 opacity-60" />
+          Отсканируйте бирку — заказ откроется здесь
+        </div>
       )}
     </div>
   );

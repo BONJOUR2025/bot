@@ -166,7 +166,7 @@ export default function App() {
                 <Route path="visitor-counters" element={<VisitorCounters />} />
                 <Route path="mdm-devices" element={<MdmDevices />} />
                 <Route path="workstations" element={<Workstations />} />
-                <Route path="workshop" element={<div className="max-w-[760px] mx-auto pb-12"><EmployeeWorkshop /></div>} />
+                <Route path="workshop" element={<EmployeeWorkshop admin />} />
                 <Route path="tag-scanner" element={<TagScanner />} />
                 <Route path="scanner-3d" element={<Scanner3D />} />
                 <Route path="salon-audio" element={<SalonAudio />} />

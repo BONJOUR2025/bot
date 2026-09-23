@@ -245,7 +245,12 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (o && hitRef.current) hitRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    // Прокручиваем, только если услуга не видна целиком: иначе страница
+    // уезжала и поле поиска пряталось под закреплённой шапкой.
+    const el = hitRef.current;
+    if (!o || !el) return;
+    const r = el.getBoundingClientRect();
+    if (r.top < 90 || r.bottom > window.innerHeight) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [o, highlightServiceId]);
   useEffect(() => {
     api.get('/workshop/masters').then((r) => setMasters(r.data || [])).catch(() => setMasters([]));
