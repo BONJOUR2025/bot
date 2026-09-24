@@ -665,7 +665,7 @@ function dayLabel(value) {
 // ── Одна запись ленты заявок ───────────────────────────────────────
 function PayoutFeedItem({
   p, selected, onToggleSelect, moveMatch, findingMove, onFindMove, onQuickView,
-  onEdit, onApprove, onReject, onMarkPaid, onRemove, flash,
+  onEdit, onApprove, onApproveNotify, onReject, onMarkPaid, onRemove, flash,
 }) {
   const initial = (p.name || '?').trim().charAt(0).toUpperCase();
   return (
@@ -732,6 +732,7 @@ function PayoutFeedItem({
         {p.status === 'Ожидает' && (
           <>
             <button onClick={onApprove} className="p-1 rounded text-[color:var(--color-success)] hover:bg-[color:var(--color-success)]/10" title="Одобрить"><CheckCircle size={16} /></button>
+            <button onClick={onApproveNotify} className="p-1 rounded text-[color:var(--color-success)] hover:bg-[color:var(--color-success)]/10" title="Одобрить и уведомить кассира" aria-label="Одобрить и уведомить кассира"><Send size={15} /></button>
             <button onClick={onReject} className="p-1 rounded text-[color:var(--color-danger)] hover:bg-[color:var(--color-danger)]/10" title="Отказать"><XCircle size={16} /></button>
           </>
         )}
@@ -1153,6 +1154,22 @@ export default function Payouts() {
     } catch (err) {
       console.error(err);
       toast('Ошибка обновления статуса', 'error');
+    }
+  }
+
+  async function approveAndNotify(id) {
+    try {
+      const { data } = await api.post(`payouts/${id}/approve_notify_cashier`);
+      const c = data.cashier || {};
+      if (c.sent) toast(`Одобрено, кассиру отправлено${c.chat ? ` (${c.chat})` : ''}`, 'success');
+      else toast(`Одобрено, но кассиру не отправлено: ${c.error || 'неизвестная ошибка'}`, 'error');
+      setFlashId(id);
+      setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 700);
+      load();
+      loadActivity();
+    } catch (err) {
+      console.error(err);
+      toast(err?.response?.data?.detail || 'Не удалось одобрить', 'error');
     }
   }
 
@@ -1755,6 +1772,7 @@ export default function Payouts() {
                           onQuickView={() => setQuickViewPayout(p)}
                           onEdit={() => openEdit(p)}
                           onApprove={() => updateStatus(p.id, 'Одобрено')}
+                          onApproveNotify={() => approveAndNotify(p.id)}
                           onReject={() => updateStatus(p.id, 'Отклонено')}
                           onMarkPaid={() => updateStatus(p.id, 'Выплачено')}
                           onRemove={() => remove(p.id)}

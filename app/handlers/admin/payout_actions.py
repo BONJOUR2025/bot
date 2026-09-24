@@ -219,71 +219,65 @@ async def allow_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Editing message is optional; continue without raising
 
     if should_notify_cashier:
-        contact_value = (
-            request_to_approve.get("card_number")
-            or request_to_approve.get("phone")
-            or ""
+        await send_cashier_notice(
+            context.bot, request_to_approve,
+            chat=(cashier_chat_id, cashier_chat_name, cashier_chat_key),
         )
-        bank_value = request_to_approve.get("bank") or ""
-        header = "📤 Запрос на перевод"
-        if cashier_chat_name:
-            header += f" — {cashier_chat_name}"
-        elif cashier_chat_key:
-            header += f" — {cashier_chat_key}"
-        lines = [
-            f"{header}:",
-            "",
-            f"👤 {request_to_approve['name']}",
-        ]
-        if contact_value:
-            contact_label = "💳" if method == "💳 На карту" else "📞"
-            lines.append(f"{contact_label} {contact_value}")
-        if bank_value:
-            lines.append(f"🏦 {bank_value}")
-        lines.append(f"💰 {request_to_approve['amount']} ₽")
-        lines.append(f"📂 {payout_type}")
-        if method:
-            lines.append(f"🔄 Способ: {method}")
-        cashier_text = "\n".join(lines)
-        if (
-            request_to_approve.get("note")
-            and request_to_approve.get("show_note_in_bot")
-        ):
-            cashier_text += f"\n\n📝 {request_to_approve['note']}"
-        cashier_buttons = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "📤 Отправлено", callback_data=f"mark_sent_{request_to_approve['id']}_{user_id}"
-                    )
-                ]
-            ]
-        )
-        target_label = cashier_chat_name or cashier_chat_key or str(cashier_chat_id)
-        if not cashier_chat_id:
-            log(
-                f"⚠️ [allow_payout] Не указан чат кассира для пользователя {user_id}; уведомление не отправлено"
-            )
-        else:
-            log(
-                f"[Telegram] sending cashier notice to {target_label} — text: '{cashier_text[:50]}'"
-            )
-            try:
-                await context.bot.send_message(
-                    chat_id=cashier_chat_id,
-                    text=cashier_text,
-                    reply_markup=cashier_buttons,
-                )
-                log(
-                    f"📨 [allow_payout] Сообщение кассиру отправлено для user_id: {user_id}"
-                )
-            except BadRequest as e:
-                log(
-                    f"❌ Failed to send message to chat {cashier_chat_id} — {e}"
-                )
-                # Continue even if the cashier chat is missing
-            except Exception as e:
-                log(f"❌ [allow_payout] Ошибка отправки кассиру: {e}")
+
+
+def _cashier_text(payout: dict, chat_name: str, chat_key: str | None) -> str:
+    method = payout.get("method") or ""
+    contact_value = payout.get("card_number") or payout.get("phone") or ""
+    bank_value = payout.get("bank") or ""
+    header = "📤 Запрос на перевод"
+    if chat_name:
+        header += f" — {chat_name}"
+    elif chat_key:
+        header += f" — {chat_key}"
+    lines = [f"{header}:", "", f"👤 {payout['name']}"]
+    if contact_value:
+        contact_label = "💳" if method == "💳 На карту" else "📞"
+        lines.append(f"{contact_label} {contact_value}")
+    if bank_value:
+        lines.append(f"🏦 {bank_value}")
+    lines.append(f"💰 {payout['amount']} ₽")
+    lines.append(f"📂 {payout.get('payout_type') or 'Не указано'}")
+    if method:
+        lines.append(f"🔄 Способ: {method}")
+    text = "\n".join(lines)
+    if payout.get("note") and payout.get("show_note_in_bot"):
+        text += f"\n\n📝 {payout['note']}"
+    return text
+
+
+async def send_cashier_notice(bot, payout: dict, chat: tuple | None = None) -> dict:
+    """Сообщение кассиру с кнопкой «📤 Отправлено» — то же, что уходит после
+    «✅ Разрешить» в админском чате. Вызывается и из бота, и из админки
+    (кнопка «Одобрить и уведомить кассира»), поэтому кнопку «Отправлено»
+    обрабатывает бот, как обычно.
+
+    Возвращает {"sent": bool, "chat": имя чата, "error": текст или None}.
+    """
+    user_id = payout["user_id"]
+    if chat is None:
+        chat = _resolve_cashier_chat(user_id, load_users_map())
+    chat_id, chat_name, chat_key = chat
+    label = chat_name or chat_key or (str(chat_id) if chat_id else "")
+    if not chat_id:
+        log(f"⚠️ [cashier] Не указан чат кассира для пользователя {user_id}; уведомление не отправлено")
+        return {"sent": False, "chat": label, "error": "Чат кассира не настроен"}
+    buttons = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("📤 Отправлено", callback_data=f"mark_sent_{payout['id']}_{user_id}")]]
+    )
+    text = _cashier_text(payout, chat_name, chat_key)
+    log(f"[Telegram] sending cashier notice to {label} — text: '{text[:50]}'")
+    try:
+        await bot.send_message(chat_id=chat_id, text=text, reply_markup=buttons)
+    except Exception as e:
+        log(f"❌ [cashier] Ошибка отправки кассиру ({label}): {e}")
+        return {"sent": False, "chat": label, "error": str(e)}
+    log(f"📨 [cashier] Сообщение кассиру отправлено для user_id: {user_id}")
+    return {"sent": True, "chat": label, "error": None}
 
 
 async def deny_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

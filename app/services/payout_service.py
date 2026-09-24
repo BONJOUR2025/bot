@@ -250,6 +250,30 @@ class PayoutService:
             logger.info(f"✏️ Выплата {payout_id} обновлена")
         return Payout(**updated)
 
+    async def approve_and_notify_cashier(self, payout_id: str) -> dict:
+        """Одобрить из админки и отправить кассиру, как кнопка в боте."""
+        from app.handlers.admin.payout_actions import send_cashier_notice
+
+        self._repo.reload()
+        current = next((p for p in self._repo.load_all() if str(p.get("id")) == str(payout_id)), None)
+        if current is None:
+            raise LookupError(payout_id)
+        if current.get("status") not in (PAYOUT_STATUSES[0], PAYOUT_STATUSES[1]):
+            raise ValueError(f"Выплата уже в статусе «{current.get('status')}»")
+        updated = await self.update_status(payout_id, PAYOUT_STATUSES[1])
+        if updated is None:
+            raise LookupError(payout_id)
+        bot = getattr(self._telegram, "bot", None) if self._telegram else None
+        if bot is None:
+            cashier = {"sent": False, "chat": "", "error": "Telegram не настроен"}
+        else:
+            cashier = await send_cashier_notice(bot, updated.model_dump())
+        logger.info(
+            f"📨 Выплата {payout_id}: одобрена в админке, кассиру — "
+            + ("отправлено" if cashier["sent"] else f"не отправлено ({cashier['error']})")
+        )
+        return {"payout": updated.model_dump(), "cashier": cashier}
+
     async def update_status(
         self, payout_id: str, status: str, notify: bool = True
     ) -> Optional[Payout]:

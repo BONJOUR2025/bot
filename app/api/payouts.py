@@ -145,6 +145,11 @@ def create_payout_router(
         ):
             raise HTTPException(status_code=403, detail="forbidden")
         await _check_master_advance_cap(data, current)
+        # Сотрудник просит выплату сам (кабинет, приложение мастера) — заявка
+        # всегда уходит в админский чат с кнопками «Разрешить / Отклонить»,
+        # что бы ни прислал клиент. Кто ведёт выплаты, решает сам.
+        if not access_service.user_has_permission(current, PAYOUTS_PERMISSION):
+            data.sync_to_bot = True
         return await service.create_payout(data)
 
     @router.put("/{payout_id}", response_model=Payout)
@@ -208,6 +213,22 @@ def create_payout_router(
                 raise HTTPException(status_code=403, detail="forbidden")
             return updated
         raise HTTPException(status_code=404, detail="not found")
+
+    @router.post("/{payout_id}/approve_notify_cashier")
+    async def approve_notify_cashier(
+        payout_id: str, current: ResolvedUser = Depends(require_permission(PAYOUTS_PERMISSION))
+    ):
+        """«Одобрить и уведомить кассира» — то же, что «✅ Разрешить» в боте:
+        статус «Одобрено», сообщение сотруднику и запрос кассиру с кнопкой
+        «📤 Отправлено». Кассиру отправляем при любом способе выплаты: раз
+        нажали эту кнопку, значит, кассир нужен."""
+        _ensure_access(payout_id, current)
+        try:
+            return await service.approve_and_notify_cashier(payout_id)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="not found")
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
 
     @router.post("/{payout_id}/reject", response_model=Payout)
     async def reject(
