@@ -5,7 +5,8 @@ import api from '../../api.js';
 import { PAYOUT_TYPES, REQUESTABLE_TYPES } from '../../constants/payouts.js';
 import useBackClose from '../../hooks/useBackClose.js';
 
-const METHODS = ['💳 На карту', '🏦 Из кассы'];
+// Те же три способа, что в боте (app/core/constants.py PAYOUT_METHODS).
+const METHODS = ['💳 На карту', '🏦 Из кассы', '🤝 Наличными'];
 
 const STATUS_LABELS = {
   'Ожидает': { label: 'Ожидает', cls: 'badge--warning' },
