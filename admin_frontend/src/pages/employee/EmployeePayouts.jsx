@@ -110,6 +110,10 @@ export default function EmployeePayouts() {
         method: form.method,
         payout_type: form.payout_type,
         note: form.note || null,
+        // Без этого флага заявка только ложилась в базу: в бот (и кассиру)
+        // уходят лишь выплаты с sync_to_bot, а по умолчанию он выключен —
+        // так рассчитано на выплаты, которые админ заводит сам.
+        sync_to_bot: true,
       });
       setShowForm(false);
       setForm({ amount: '', method: METHODS[0], payout_type: PAYOUT_TYPES[0], note: '' });
