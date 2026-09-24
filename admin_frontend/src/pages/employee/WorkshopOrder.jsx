@@ -226,8 +226,9 @@ function LeadScanDialog({ service, action, masters, onClose, onDone }) {
   );
 }
 
-/** Карточка заказа. `highlightServiceId` — услуга, чью бирку отсканировали:
- *  она подсвечена и прокручена в поле зрения. Без `onBack` кнопки «Назад» нет. */
+/** Карточка заказа. `highlightServiceId` — строка заказа, чью бирку
+ *  отсканировали: услуга или (почти у половины бирок) изделие целиком.
+ *  Она подсвечена и прокручена в поле зрения. Без `onBack` кнопки «Назад» нет. */
 export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху', highlightServiceId = null }) {
   const hitRef = useRef(null);
   const [o, setO] = useState(null);
@@ -284,7 +285,12 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
           </section>
 
           {o.items.map((it) => (
-            <section key={it.item_id} className="wo-item">
+            <section
+              key={it.item_id}
+              ref={it.item_id === highlightServiceId ? hitRef : undefined}
+              className={`wo-item${it.item_id === highlightServiceId ? ' wo-item-hit' : ''}`}
+            >
+              {it.item_id === highlightServiceId && <span className="wo-hit-tag">Эта бирка — изделие целиком</span>}
               <h3 className="ws-section__title">
                 {it.name}
                 {it.location && <span className="ws-count">{it.location}</span>}

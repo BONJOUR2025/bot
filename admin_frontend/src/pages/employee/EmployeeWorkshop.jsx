@@ -525,6 +525,8 @@ export default function EmployeeWorkshop({ admin = false }) {
   const [tab, setTab] = useState(readTab);
   // Открытая карточка заказа: поверх вкладок, «Назад» возвращает к цеху.
   const [orderId, setOrderId] = useState(null);
+  const [hitId, setHitId] = useState(null);
+  const openOrder = useCallback((id, scanned = null) => { setHitId(scanned); setOrderId(id); }, []);
   const [openError, setOpenError] = useState('');
   // Снимок изделия во весь экран — прямо из списка, не заходя в карточку.
   const [viewer, setViewer] = useState(null);
@@ -533,9 +535,9 @@ export default function EmployeeWorkshop({ admin = false }) {
   const openDoc = useCallback((docNum) => {
     setOpenError('');
     api.get('/workshop/orders/find', { params: { q: docNum } })
-      .then((r) => { if (r.data.order_id) setOrderId(r.data.order_id); })
+      .then((r) => { if (r.data.order_id) openOrder(r.data.order_id); })
       .catch(() => setOpenError(`Заказ ${docNum} не открылся — попробуйте найти его поиском.`));
-  }, []);
+  }, [openOrder]);
 
   const load = useCallback((refresh = false) => {
     setLoading(true);
@@ -558,7 +560,7 @@ export default function EmployeeWorkshop({ admin = false }) {
   if (orderId) {
     return (
       <div className={shell}>
-        <OrderView orderId={orderId} onBack={() => setOrderId(null)} />
+        <OrderView orderId={orderId} highlightServiceId={hitId} onBack={() => setOrderId(null)} />
       </div>
     );
   }
@@ -600,7 +602,7 @@ export default function EmployeeWorkshop({ admin = false }) {
             <RefreshCw size={15} className={loading ? 'emp-wip-spin' : ''} /> Обновить
           </button>
         </div>
-        <OrderSearch onOpen={setOrderId} />
+        <OrderSearch onOpen={openOrder} />
         {openError && <p className="emp-page__error">{openError}</p>}
         <Tabs
           tabs={TABS.map((t) => ({ key: t.key, label: t.label, badge: d ? t.count(d) : undefined }))}
@@ -623,7 +625,7 @@ export default function EmployeeWorkshop({ admin = false }) {
           <RefreshCw size={18} className={loading ? 'emp-wip-spin' : ''} />
         </button>
       </div>
-      <OrderSearch onOpen={setOrderId} />
+      <OrderSearch onOpen={openOrder} />
       {openError && <p className="emp-page__error">{openError}</p>}
       <div className="ws-tabs" role="tablist" aria-label="Разделы цеха">
         {TABS.map((t) => {
