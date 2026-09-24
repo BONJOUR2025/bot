@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
+import useBackClose from '../../hooks/useBackClose.js';
 
 const TYPES = ['Отгул', 'Отпуск без содержания', 'Больничный', 'Другое'];
 
@@ -23,6 +24,7 @@ export default function EmployeeLeaveRequests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  useBackClose(showForm, () => setShowForm(false));
   const [employee, setEmployee] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');

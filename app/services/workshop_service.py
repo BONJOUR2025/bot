@@ -258,6 +258,66 @@ def _is_tailoring(top_name: Any) -> bool:
     return TAILORING_WORD in str(top_name or "").lower()
 
 
+def _is_tailoring_line(name: Any, top_name: Any) -> bool:
+    """Строка заказа от пошива: изделие или услуга из папок «по инд. пошиву»,
+    а также «Индивидуальный…» и «Изготовление…» из старых папок (тапочки,
+    стельки, колодки). «Изготовление/замена комплектующих» — это ремонт."""
+    n = str(name or "").strip().lower()
+    return (
+        _is_tailoring(top_name)
+        or "индивидуальн" in n
+        or (n.startswith("изготовлени") and "замена" not in n and "подошв" not in n)
+    )
+
+
+def _tailoring_docs(doc_nums: Any) -> set[str]:
+    """Номера заказов, где хоть одна строка — пошив.
+
+    Такой заказ целиком ведёт отдел пошива, даже если к пошитой паре
+    добавлена обычная услуга ремонта («Изготовление подошвы» на изделии
+    «Индивидуальный пошив обуви»), — поэтому в цехе не показываем его весь,
+    а не только строки из папок пошива.
+    """
+    from app.services.firebird_service import _connect
+    from app.services.workshop_order_service import _text
+
+    nums = sorted({str(n) for n in doc_nums if n})
+    if not nums:
+        return set()
+    found: set[str] = set()
+    con = _connect()
+    try:
+        cur = con.cursor()
+        for i in range(0, len(nums), 100):  # больше — Firebird: «block size exceeds»
+            chunk = nums[i:i + 100]
+            cur.execute(
+                f"""
+                SELECT d.doc_num, CAST(t.name AS VARCHAR(400) CHARACTER SET OCTETS),
+                       CAST(top.name AS VARCHAR(200) CHARACTER SET OCTETS)
+                FROM docs d
+                    JOIN docs_order dor ON dor.doc_id = d.doc_id
+                    JOIN doc_order_services dos ON dos.doc_order_id = dor.id
+                    JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id
+                    LEFT JOIN tree folder ON folder.folder_id = t.folder_id
+                    LEFT JOIN tree top ON top.folder_id = folder.top_parent
+                WHERE d.doc_num IN ({",".join("?" * len(chunk))})
+                  AND d.doc_date > DATEADD(-400 DAY TO CURRENT_DATE)
+                """, chunk)
+            for num, name, top in cur.fetchall():
+                if _is_tailoring_line(_text(name), _text(top)):
+                    found.add(_text(num))
+    finally:
+        con.close()
+    return found
+
+
+def _drop_tailoring(rows: Any) -> Any:
+    if not rows:
+        return rows
+    docs = _tailoring_docs(r.get("doc_num") for r in rows)
+    return [r for r in rows if str(r.get("doc_num") or "") not in docs]
+
+
 def _repairs_shoes(position: str) -> Optional[bool]:
     """Ремонтник ли по должности: True/False, либо None — должность неизвестна."""
     low = (position or "").strip().lower()
@@ -500,7 +560,11 @@ def build_overview() -> dict[str, Any]:
         if _is_tailoring(svc.get("top_parent_name")):
             continue  # индивидуальный пошив — не цех
         by_id[svc.get("service_id")] = svc
-    services = list(by_id.values())
+    try:
+        services = _drop_tailoring(list(by_id.values()))
+    except Exception:
+        logger.warning("workshop: заказы пошива не отфильтрованы", exc_info=True)
+        services = list(by_id.values())
 
     open_rows = [s for s in services if s.get("status") == "В работе"]
     closed_no_out = [s for s in services
@@ -626,14 +690,14 @@ def build_overview() -> dict[str, Any]:
 
     # ── очередь ─────────────────────────────────────────────────────────
     try:
-        queue = _queue()
+        queue = _drop_tailoring(_queue())
     except Exception:
         logger.warning("workshop: очередь не получена", exc_info=True)
         queue = None
 
     # ── совет: кому какой ремонт обуви дать ───────────────────────────
     try:
-        advice = _advice(_workshop_shoe_queue(), services, stats, on_shift, people)
+        advice = _advice(_drop_tailoring(_workshop_shoe_queue()), services, stats, on_shift, people)
     except Exception:
         logger.warning("workshop: совет по распределению не собран", exc_info=True)
         advice = None

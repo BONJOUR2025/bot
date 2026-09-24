@@ -3,6 +3,7 @@ import { Plus, X } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider.jsx';
 import api from '../../api.js';
 import { PAYOUT_TYPES, REQUESTABLE_TYPES } from '../../constants/payouts.js';
+import useBackClose from '../../hooks/useBackClose.js';
 
 const METHODS = ['💳 На карту', '🏦 Из кассы'];
 
@@ -30,6 +31,7 @@ export default function EmployeePayouts() {
   const [payouts, setPayouts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  useBackClose(showForm, () => setShowForm(false));
   const [employee, setEmployee] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');

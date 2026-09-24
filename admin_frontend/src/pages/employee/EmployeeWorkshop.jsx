@@ -6,6 +6,7 @@ import { money, serviceTitle, workshopPhotoPath } from './masterFormat.js';
 import { OrderSearch, OrderView } from './WorkshopOrder.jsx';
 import { Tabs } from '../../components/ui/SalaryUI.jsx';
 import { TopProgressBar } from '../../components/ui/ProgressBar.jsx';
+import useBackClose from '../../hooks/useBackClose.js';
 
 /** Цех — приложение старшего мастера (GET /api/workshop/overview).
  *
@@ -526,6 +527,7 @@ export default function EmployeeWorkshop({ admin = false }) {
   // Открытая карточка заказа: поверх вкладок, «Назад» возвращает к цеху.
   const [orderId, setOrderId] = useState(null);
   const [hitId, setHitId] = useState(null);
+  useBackClose(orderId != null, () => setOrderId(null));
   const openOrder = useCallback((id, scanned = null) => { setHitId(scanned); setOrderId(id); }, []);
   const [openError, setOpenError] = useState('');
   // Снимок изделия во весь экран — прямо из списка, не заходя в карточку.

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import useBackClose from '../../hooks/useBackClose.js';
 
 /** Сканер бирки камерой в браузере.
  *
@@ -127,6 +128,7 @@ export default function WebScanner({ onClose }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [error, setError] = useState('');
+  useBackClose(true, onClose);
 
   const finish = useCallback((detail) => {
     window.dispatchEvent(new CustomEvent('bonjour-scan', { detail }));

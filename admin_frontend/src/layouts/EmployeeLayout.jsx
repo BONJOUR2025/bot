@@ -9,6 +9,7 @@ import { useViewport } from '../providers/ViewportProvider.jsx';
 import { useTheme } from '../providers/ThemeProvider.jsx';
 import MasterAppUpdate from '../components/MasterAppUpdate.jsx';
 import api from '../api.js';
+import useBackClose from '../hooks/useBackClose.js';
 
 // «Отгулов» и «Связи» в меню нет ни у кого — так решил руководитель. Страницы
 // (/employee/leave-requests, /employee/feedback) остались и открываются по
@@ -56,6 +57,7 @@ export default function EmployeeLayout() {
   const { isMobile } = useViewport();
   const { setForced } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  useBackClose(menuOpen, () => setMenuOpen(false));
   const [onPoint, setOnPoint] = useState(false);
 
   // Кабинет сотрудника всегда светлый, какая бы тема ни стояла в телефоне.

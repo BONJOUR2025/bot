@@ -4,6 +4,7 @@ import api from '../../api.js';
 import { IN_MASTER_APP } from '../../utils/masterApp.js';
 import WebScanner, { canScanInBrowser, preloadWebScanner } from './WebScanner.jsx';
 import { money, serviceTitle } from './masterFormat.js';
+import useBackClose from '../../hooks/useBackClose.js';
 
 /** Вход и выход по бирке.
  *
@@ -190,6 +191,10 @@ export default function EmployeeMasterScan() {
     setError('');
     setStage('idle');
   };
+
+  // «Назад» с найденной бирки или результата — к пустому сканеру, а не
+  // на прошлый раздел кабинета.
+  useBackClose(['found', 'confirm', 'done'].includes(stage), reset);
 
   const confirm = async (chosen = action) => {
     setStage('saving');

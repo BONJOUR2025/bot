@@ -4,6 +4,7 @@ import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
 import WebScanner, { canScanInBrowser } from './WebScanner.jsx';
 import { money, serviceTitle, workshopPhotoPath } from './masterFormat.js';
+import useBackClose from '../../hooks/useBackClose.js';
 
 /** Поиск заказа (номер или бирка) и карточка заказа для старшего мастера,
  *  плюс отметка входа или выхода за мастера — когда приложение мастера её
@@ -148,6 +149,7 @@ function LeadScanDialog({ service, action, masters, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  useBackClose(true, onClose);
 
   useEffect(() => {
     if (!uid) { setPreview(null); return; }

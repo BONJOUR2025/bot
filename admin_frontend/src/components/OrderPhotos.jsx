@@ -11,6 +11,7 @@ import { useSpring, animated, to } from '@react-spring/web';
 import { useGesture } from '@use-gesture/react';
 import api from '../api';
 import { useViewport } from '../providers/ViewportProvider.jsx';
+import useBackClose from '../hooks/useBackClose.js';
 
 const fmtDate = (v) => {
   if (!v) return '—';
@@ -135,6 +136,7 @@ function anchorOffset(p, o0, s0, s1) {
 export function PhotoViewer({ photos, index, onIndex, onClose, pathFor = fullPhotoPath }) {
   const { isMobile } = useViewport();
   const photo = photos[index];
+  useBackClose(true, onClose);
 
   // Пока открыто фото, закреплённая шапка и нижнее меню кабинета прячутся
   // (см. .photo-open в globals.css): снимку нужен весь экран, а Safari на

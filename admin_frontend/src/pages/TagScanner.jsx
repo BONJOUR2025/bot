@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScanBarcode } from 'lucide-react';
 import { OrderSearch, OrderView } from './employee/WorkshopOrder.jsx';
+import useBackClose from '../hooks/useBackClose.js';
 
 /** Сканер бирок: бирка → вся карточка заказа (GET /api/workshop/orders/*).
  *
@@ -17,6 +18,7 @@ function isEditable(el) {
 export default function TagScanner() {
   const inputRef = useRef(null);
   const [found, setFound] = useState(null);
+  useBackClose(!!found, () => setFound(null));
 
   useEffect(() => {
     const onKey = (e) => {

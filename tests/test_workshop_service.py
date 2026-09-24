@@ -109,3 +109,22 @@ def test_advice_skips_dry_cleaning_master():
 def test_tailoring_is_not_workshop():
     assert ws._is_tailoring("4.0 Услуги по инд. пошиву")
     assert not ws._is_tailoring("01. Ремонт обуви")
+
+
+def test_tailoring_line_rules():
+    from app.services.workshop_service import _is_tailoring_line as t
+
+    assert t("Индивидуальный пошив обуви", "1.1 Изделия по инд. пошиву")
+    assert t("Изготовление тапочек", "(не входить)")
+    assert t("Индивидуальное изготовление ортопедических стелек", "(не входить)")
+    assert not t("Изготовление подошвы для обуви", "01. Ремонт обуви")
+    assert not t("Изготовление/замена комплектующих", "01. Ремонт обуви")
+    assert not t("Замена подошвы", "01. Ремонт обуви")
+
+
+def test_drop_tailoring_removes_whole_order(monkeypatch):
+    from app.services import workshop_service as ws
+
+    monkeypatch.setattr(ws, "_tailoring_docs", lambda nums: {"100-1"})
+    rows = [{"doc_num": "100-1", "name": "Изготовление подошвы"}, {"doc_num": "200-2"}]
+    assert ws._drop_tailoring(rows) == [{"doc_num": "200-2"}]
