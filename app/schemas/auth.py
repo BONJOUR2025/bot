@@ -24,6 +24,7 @@ class AuthUser(BaseModel):
     # Мастер по должности в карточке: кабинет показывает ему свой набор
     # разделов (заработок по сканам вместо «Зарплаты» из Excel админов).
     is_master: bool = False
+    is_manager: bool = False
 
 
 class LoginResponse(BaseModel):

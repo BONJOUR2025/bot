@@ -5,5 +5,5 @@ import { useAuth } from '../../providers/AuthProvider.jsx';
  *  зарплата из расчёта. Приложение «BONJOUR Мастер» открывается сюда же. */
 export default function EmployeeHome() {
   const { user } = useAuth();
-  return <Navigate to={user?.is_master ? '/employee/earnings' : '/employee/salary'} replace />;
+  return <Navigate to={user?.is_master ? '/employee/earnings' : user?.is_manager ? '/employee/kpi' : '/employee/salary'} replace />;
 }

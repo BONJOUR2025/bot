@@ -161,6 +161,8 @@ class ResolvedUser:
     allowed_departments: list[str] | None
     employee_id: str | None = None
     is_master: bool = False
+    # Менеджер по работе с клиентами: в кабинете у него раздел «Мой KPI».
+    is_manager: bool = False
 
 
 def short_person_name(full_name: str) -> str:
@@ -875,6 +877,7 @@ class AccessControlService:
             allowed_departments=allowed_departments,
             employee_id=employee_id,
             is_master=is_master,
+            is_manager=self._is_manager(linked),
         )
 
     def _resolve_permissions(
@@ -1033,6 +1036,13 @@ class AccessControlService:
             master_ids = {b["id"] for b in BOT_BUTTON_CATALOG if b.get("scope") == "master"}
             buttons = [b for b in buttons if b not in master_ids]
         return self._buttons_to_text(buttons)
+
+    @staticmethod
+    def _is_manager(employee) -> bool:
+        """Как и у мастера — по должности в карточке."""
+        from app.services.manager_salary import is_manager_position
+
+        return employee is not None and is_manager_position(getattr(employee, "position", ""))
 
     @staticmethod
     def _is_master(employee) -> bool:

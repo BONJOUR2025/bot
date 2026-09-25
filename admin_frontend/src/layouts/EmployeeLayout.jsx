@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LogOut, Menu, X, DollarSign, CreditCard, Calendar, User, History, Wallet, Wrench, ScanLine,
   Package, Factory,
+  Target,
 } from 'lucide-react';
 import { useAuth } from '../providers/AuthProvider.jsx';
 import { useViewport } from '../providers/ViewportProvider.jsx';
@@ -40,6 +41,9 @@ const MASTER_NAV_ITEMS = [
 // рабочих инструментов точки (выручка, заказы клиентов) здесь намеренно нет.
 // Показывается тем, за кем закреплён салон: это решает сервер
 // (GET /salon/me/point), а не роль — точка живёт в карточке салона, не в правах.
+// Менеджеру по работе с клиентами — «Мой KPI» первым пунктом: зарплата у
+// него считается от плана и amoCRM, а не из Excel админов.
+const MANAGER_KPI_ITEM = { to: '/employee/kpi', label: 'Мой KPI', icon: Target };
 const WORKSHOP_NAV_ITEM = { to: '/employee/workshop', label: 'Цех', icon: Factory };
 
 const SALON_NAV_ITEMS = [
@@ -84,7 +88,9 @@ export default function EmployeeLayout() {
   };
 
   const displayName = user?.display_name || user?.login || 'Сотрудник';
-  const baseItems = user?.is_master ? MASTER_NAV_ITEMS : onPoint ? SALON_NAV_ITEMS : NAV_ITEMS;
+  const baseItems = user?.is_master ? MASTER_NAV_ITEMS
+    : user?.is_manager ? [MANAGER_KPI_ITEM, ...NAV_ITEMS.filter((i) => i.to !== '/employee/salary')]
+    : onPoint ? SALON_NAV_ITEMS : NAV_ITEMS;
   // «Цех» — по праву, а не по должности: старшим мастером может быть и мастер,
   // и руководитель отдела пошива. Встаёт первым пунктом.
   const hasWorkshop = (user?.permissions || []).includes('workshop');

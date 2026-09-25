@@ -34,6 +34,14 @@ STAGE_RECEIVED_SEW = 46942378      # «Получена заявка» (поши
 STAGE_WON = 142             # «Успешно реализовано» (built-in won status)
 SEW_MIN_LEADS = 50
 
+# Должность, по которой человек считается менеджером (так же отбирает
+# менеджеров страница «Менеджеры» в админке).
+MANAGER_POSITION = "менеджер по работе с клиентами"
+
+
+def is_manager_position(position) -> bool:
+    return str(position or "").strip().lower() == MANAGER_POSITION
+
 
 def _component(actual: float, plan: float, max_amount: float, *, gate_ok: bool = True) -> dict:
     """Return {ratio, amount, zeroed} for one KPI component."""

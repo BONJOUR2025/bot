@@ -269,3 +269,124 @@ def create_manager_salary_router(
         return {"deleted": get_manager_salary_repository().delete(accrual_id)}
 
     return router
+
+
+# ── кабинет менеджера ──────────────────────────────────────────────────
+# Менеджер видит свой KPI за месяц: тот же расчёт, что на странице
+# «Менеджеры» у бухгалтера (план из manager_plan_repository, факт из amoCRM,
+# авансы с последней зарплаты, премии и штрафы), но только по себе — id
+# берётся из сессии, а не из запроса, поэтому права не нужны. Без блока
+# «Контроль» (подозрительные переносы сделок): это инструмент проверки
+# менеджера, а не его рабочий экран.
+
+_SELF_CACHE: dict[tuple[str, str], tuple[float, dict]] = {}
+_SELF_TTL = 600  # amoCRM отвечает десятки секунд — не дёргаем его на каждое открытие
+
+
+def _month_range(period: str):
+    from calendar import monthrange
+    from datetime import date, datetime
+
+    try:
+        y, m = (int(x) for x in period.split("-"))
+        start = date(y, m, 1)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Период в формате YYYY-MM")
+    end = date(y, m, monthrange(y, m)[1])
+    today = date.today()
+    if start > today:
+        raise HTTPException(status_code=400, detail="Этот месяц ещё не начался")
+    end = min(end, today)
+    return start, end, datetime.combine(start, datetime.min.time()), datetime.combine(end, datetime.max.time())
+
+
+def create_manager_self_router(payout_service: PayoutService) -> APIRouter:
+    router = APIRouter(prefix="/managers/me", tags=["ManagerSalary"])
+
+    @router.get("/kpi")
+    async def my_kpi(
+        period: Optional[str] = Query(None, description="YYYY-MM, по умолчанию текущий"),
+        refresh: bool = Query(False),
+        current: ResolvedUser = Depends(get_current_user),
+    ):
+        import time
+        from datetime import date
+
+        from app.data.employee_repository import EmployeeRepository
+        from app.data.incentive_repository import IncentiveRepository
+        from app.data.manager_plan_repository import get_manager_plan_repository
+        from app.services.amo_metrics import compute_metrics
+        from app.services.manager_salary import is_manager_position
+
+        emp_id = current.employee_id
+        employee = EmployeeRepository().get_employee(emp_id) if emp_id else None
+        if employee is None or not is_manager_position(employee.position):
+            raise HTTPException(status_code=403, detail="Раздел для менеджеров по работе с клиентами.")
+        period = period or date.today().strftime("%Y-%m")
+        d_from, d_to, dt_from, dt_to = _month_range(period)
+
+        key = (str(emp_id), period)
+        hit = _SELF_CACHE.get(key)
+        if hit and not refresh and time.time() - hit[0] < _SELF_TTL:
+            return hit[1]
+
+        plan = get_manager_plan_repository().get(str(emp_id), period)
+        amo_id = str(getattr(employee, "amo_user_id", "") or "").strip()
+        metrics, metrics_error = None, None
+        if not amo_id:
+            metrics_error = "Ваш профиль не связан с amoCRM — обратитесь к руководителю."
+        else:
+            try:
+                metrics = await compute_metrics(dt_from, dt_to, int(amo_id), detail=True)
+            except Exception:
+                metrics_error = "amoCRM сейчас не отвечает, попробуйте позже."
+        advances = await _advances_since_last_salary(payout_service, str(emp_id))
+        inc = IncentiveRepository().list(str(emp_id), None, d_from.isoformat(), d_to.isoformat())
+        bonuses = sum(float(i.get("amount") or 0) for i in inc if i.get("type") == "bonus")
+        penalties = sum(float(i.get("amount") or 0) for i in inc if i.get("type") == "penalty")
+        m = metrics or {}
+        result = _calc(SalaryInput(
+            oklad=plan.get("oklad") or 0, kpi_max=plan.get("kpi_max") or 0,
+            revenue_plan=plan.get("revenue_plan") or 0, revenue_actual=m.get("revenue_actual") or 0,
+            repair_plan_conv=plan.get("repair_plan_conv") or 0,
+            repair_target_deals=m.get("repair_target_deals") or 0, repair_total_deals=m.get("repair_total_deals") or 0,
+            sew_plan_conv=plan.get("sew_plan_conv") or 0,
+            sew_target_deals=m.get("sew_target_deals") or 0, sew_total_deals=m.get("sew_total_deals") or 0,
+            sew_new_leads=m.get("sew_new_leads") or 0,
+            advances=advances["total"], bonuses=bonuses, penalties=penalties,
+        ))
+        items = (m.get("items") or {})
+        accruals = get_manager_salary_repository().list(employee_code=str(emp_id), limit=12)
+        payload = {
+            "period": period,
+            "date_from": d_from.isoformat(),
+            "date_to": d_to.isoformat(),
+            "name": employee.full_name or employee.name,
+            "plan_set": bool(plan.get("oklad") or plan.get("kpi_max") or plan.get("revenue_plan")),
+            "result": result,
+            "metrics_error": metrics_error,
+            "response": {
+                "avg_seconds": m.get("avg_response_seconds"),
+                "median_seconds": m.get("median_response_seconds"),
+                "sample": m.get("response_sample"),
+                "slowest": (items.get("response") or [])[:10],
+            },
+            "deals": {
+                "won": items.get("revenue") or [],
+                "repair_total": len(items.get("repair_denom") or []),
+                "sew_total": len(items.get("sew_denom") or []),
+            },
+            "incentives": [{"date": i.get("date"), "type": i.get("type"), "amount": i.get("amount"),
+                            "reason": i.get("reason") or i.get("comment") or ""} for i in inc],
+            "advances": advances,
+            "accruals": [{"id": a.get("id"), "period": a.get("period"),
+                          "to_pay": (a.get("result") or {}).get("to_pay"),
+                          "gross": (a.get("result") or {}).get("gross"),
+                          "paid": bool(a.get("payout_id")), "created_at": a.get("created_at")} for a in accruals],
+            "generated_at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+        }
+        if metrics is not None:
+            _SELF_CACHE[key] = (time.time(), payload)
+        return payload
+
+    return router

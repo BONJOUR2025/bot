@@ -50,6 +50,7 @@ def _to_auth_user(resolved: ResolvedUser) -> AuthUser:
         allowed_departments=resolved.allowed_departments,
         employee_id=resolved.employee_id,
         is_master=resolved.is_master,
+        is_manager=resolved.is_manager,
     )
 
 

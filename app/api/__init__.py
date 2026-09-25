@@ -237,6 +237,13 @@ def create_app() -> FastAPI:
         prefix="/api",
         dependencies=protected,
     )
+    from .manager_salary import create_manager_self_router
+
+    app.include_router(
+        create_manager_self_router(payout_service),
+        prefix="/api",
+        dependencies=protected,
+    )
     app.include_router(
         create_courier_salary_router(payout_service, access_service),
         prefix="/api",

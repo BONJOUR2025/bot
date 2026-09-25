@@ -7909,3 +7909,23 @@ button:hover > .vac-desc { color: var(--color-text); }
 .tg-banner__text span { color: var(--color-text-muted); font-size: 0.8125rem; }
 .tg-banner__btn { flex: none; white-space: nowrap; }
 @media (max-width: 480px) { .tg-banner { flex-wrap: wrap; } .tg-banner__btn { width: 100%; justify-content: center; } }
+
+/* «Мой KPI» менеджера (EmployeeManagerKpi). */
+.mk { display: flex; flex-direction: column; gap: 1rem; }
+.mk-head-actions { display: flex; align-items: center; gap: 0.5rem; }
+.mk-warn { padding: 0.7rem 0.9rem; border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-warning, #b7791f) 12%, var(--color-surface)); color: var(--color-text); font-size: 0.875rem; }
+.mk-comp { display: flex; flex-direction: column; gap: 0.45rem; }
+.mk-comp__title { font-weight: 600; }
+.mk-comp__fact { font-size: 0.9rem; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.mk-muted { color: var(--color-text-muted); }
+.mk-hint { margin: 0; font-size: 0.8125rem; color: var(--color-text-muted); }
+.mk-progress { position: relative; height: 8px; border-radius: 999px; background: var(--color-control-bg); overflow: visible; }
+.mk-progress__fill { height: 100%; border-radius: 999px; }
+.mk-progress__fill.is-low { background: var(--color-danger); }
+.mk-progress__fill.is-ok { background: var(--color-warning, #d69e2e); }
+.mk-progress__fill.is-good { background: var(--color-success); }
+.mk-progress__mark { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--color-text-muted); border-radius: 1px; }
+.mk-progress__mark--full { background: var(--color-text); }
+.mk-deal { min-width: 0; overflow-wrap: anywhere; }
+.mk-plus { color: var(--color-success); }
+.mk-minus { color: var(--color-danger); }
