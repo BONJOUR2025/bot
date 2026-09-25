@@ -153,6 +153,13 @@ def create_master_app_public_router() -> APIRouter:
     async def get_info() -> dict:
         return master_app_service.info()
 
+    @router.get("/manager-logins")
+    async def list_manager_logins() -> list[dict]:
+        """Менеджеры по работе с клиентами — третья группа списка на входе."""
+        from app.services.access_control_service import get_access_control_service
+
+        return get_access_control_service().manager_login_options()
+
     @router.get("/logins")
     async def list_master_logins() -> list[dict]:
         """Логины мастеров для выпадающего списка на входе в приложение.

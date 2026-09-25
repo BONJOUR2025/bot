@@ -49,6 +49,7 @@ export default function Login() {
       : [
           { title: 'Мастера', url: '/master-app/logins' },
           { title: 'Администраторы', url: '/salon-app/logins' },
+          { title: 'Менеджеры', url: '/master-app/manager-logins' },
         ];
     setMasterLogins(null);
     Promise.all(

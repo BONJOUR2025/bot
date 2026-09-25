@@ -811,7 +811,27 @@ class AccessControlService:
             status = str(getattr(getattr(employee, "status", ""), "value", getattr(employee, "status", "")))
             if mbs.is_master_position(position) or status not in ("active", ""):
                 continue
+            if self._is_manager(employee):
+                continue  # у менеджеров своя группа — manager_login_options
             full = (employee.full_name or employee.name) or ""
+            options.append({"login": login, "name": short_person_name(full) or login})
+        options.sort(key=lambda option: option["name"].lower())
+        return options
+
+    def manager_login_options(self) -> list[dict[str, str]]:
+        """Логины менеджеров по работе с клиентами — отдельная группа «Менеджеры»
+        на входе в браузере. Правила те же: есть пароль, есть карточка."""
+        self._reload()
+        options: list[dict[str, str]] = []
+        for record in self._data.get("users", []):
+            login = record.get("login")
+            if not login or not record.get("password_hash"):
+                continue
+            resolved = self.resolve_user(str(record.get("id")))
+            if resolved is None or not resolved.is_manager or not resolved.employee_id:
+                continue
+            employee = self.employee_repo.get_employee(str(resolved.employee_id))
+            full = ((employee.full_name or employee.name) if employee else "") or ""
             options.append({"login": login, "name": short_person_name(full) or login})
         options.sort(key=lambda option: option["name"].lower())
         return options
