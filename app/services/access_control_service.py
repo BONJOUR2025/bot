@@ -672,6 +672,26 @@ class AccessControlService:
             self._persist()
             return user
 
+    def reassign_employee(self, old_id: str, new_id: str) -> int:
+        """Сотрудник получил новый id (привязка к Telegram переключает его на
+        Telegram ID). Учётки, привязанные к старому id, идут за ним — иначе
+        мастер после привязки терял вход в свой кабинет в приложении."""
+        old_id, new_id = str(old_id), str(new_id)
+        changed = 0
+        with self._lock:
+            self._reload()
+            for user in self._data.get("users", []):
+                if str(user.get("employee_id") or "") == old_id:
+                    user["employee_id"] = new_id
+                    changed += 1
+                ids = user.get("allowed_employee_ids")
+                if isinstance(ids, list) and old_id in [str(i) for i in ids]:
+                    user["allowed_employee_ids"] = [new_id if str(i) == old_id else i for i in ids]
+                    changed += 1
+            if changed:
+                self._persist()
+        return changed
+
     def delete_user(self, user_id: str) -> None:
         with self._lock:
             self._reload()

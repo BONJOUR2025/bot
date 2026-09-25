@@ -76,7 +76,8 @@ export default function AccessControl() {
   }
 
   async function linkBotUser(telegramId) {
-    const employeeId = linkSelections[telegramId];
+    const employeeId = linkSelections[telegramId]
+      ?? botUsers.find((u) => u.telegram_id === telegramId)?.requested_employee_id;
     if (!employeeId) return;
     try {
       await api.post(`bot-users/${telegramId}/link`, { employee_id: employeeId });
@@ -840,6 +841,12 @@ export default function AccessControl() {
             { label: 'Telegram ID', key: 'telegram_id' },
             { label: 'Username', primary: true, render: (u) => (u.username ? `@${u.username}` : '—') },
             { label: 'Имя', render: (u) => [u.first_name, u.last_name].filter(Boolean).join(' ') || '—' },
+            {
+              label: 'Запуск из кабинета',
+              render: (u) => (u.requested_employee_name && !u.employee_id
+                ? <span title="Запустил бота по ссылке из приложения мастера">{u.requested_employee_name}</span>
+                : '—'),
+            },
             { label: 'Первый запуск', render: (u) => fmtDateTime(u.first_seen) },
             { label: 'Последний запуск', render: (u) => fmtDateTime(u.last_seen) },
             {
@@ -863,7 +870,7 @@ export default function AccessControl() {
                   <div className="flex gap-2 items-center min-w-0 w-full sm:w-auto">
                     <select
                       className="input min-w-0 w-full sm:w-48"
-                      value={linkSelections[u.telegram_id] || ''}
+                      value={linkSelections[u.telegram_id] ?? u.requested_employee_id ?? ''}
                       onChange={(e) =>
                         setLinkSelections((prev) => ({ ...prev, [u.telegram_id]: e.target.value }))
                       }
@@ -877,7 +884,7 @@ export default function AccessControl() {
                     </select>
                     <button
                       className="btn shrink-0"
-                      disabled={!linkSelections[u.telegram_id]}
+                      disabled={!(linkSelections[u.telegram_id] ?? u.requested_employee_id)}
                       onClick={() => linkBotUser(u.telegram_id)}
                     >
                       Связать

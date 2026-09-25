@@ -25,10 +25,12 @@ def create_bot_users_router(repo: BotUserRepository) -> APIRouter:
         result = []
         for item in repo.list():
             employee = employees.get_employee(item["telegram_id"])
+            requested = employees.get_employee(item["requested_employee_id"]) if item.get("requested_employee_id") else None
             result.append({
                 **item,
                 "employee_id": employee.id if employee else None,
                 "employee_name": (employee.full_name or employee.name) if employee else None,
+                "requested_employee_name": (requested.full_name or requested.name) if requested else None,
             })
         return result
 
@@ -53,6 +55,8 @@ def create_bot_users_router(repo: BotUserRepository) -> APIRouter:
         AssetRepository().reassign_employee(old_id, telegram_id)
         get_shift_checkin_repository().reassign_employee(old_id, telegram_id)
         PayoutRepository().reassign_user(old_id, telegram_id)
+        from app.services.access_control_service import get_access_control_service
+        get_access_control_service().reassign_employee(old_id, telegram_id)
 
         item = next((u for u in repo.list() if u["telegram_id"] == telegram_id), None)
         return {

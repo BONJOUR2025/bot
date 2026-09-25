@@ -7901,3 +7901,11 @@ button:hover > .vac-desc { color: var(--color-text); }
    нужны и на iPhone налезали на снимок. */
 .photo-open .emp-header,
 .photo-open .emp-bottomnav { visibility: hidden; }
+
+/* Плашка «Подключите Telegram-бота» (TelegramBotBanner). */
+.tg-banner { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; padding: 0.85rem 1rem; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, #229ED9 45%, var(--color-border)); background: color-mix(in srgb, #229ED9 9%, var(--color-surface)); }
+.tg-banner__icon { flex: none; color: #229ED9; }
+.tg-banner__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.875rem; color: var(--color-text); }
+.tg-banner__text span { color: var(--color-text-muted); font-size: 0.8125rem; }
+.tg-banner__btn { flex: none; white-space: nowrap; }
+@media (max-width: 480px) { .tg-banner { flex-wrap: wrap; } .tg-banner__btn { width: 100%; justify-content: center; } }

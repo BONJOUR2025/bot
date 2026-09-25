@@ -23,6 +23,29 @@ PERIODS = ("month", "prev_month")
 WIP_INLINE_THUMBS = 8
 
 
+_BOT_USERNAME: str | None = None
+
+
+async def _bot_username() -> str | None:
+    """Имя бота из Telegram (getMe), один раз на процесс."""
+    global _BOT_USERNAME
+    if _BOT_USERNAME:
+        return _BOT_USERNAME
+    try:
+        import httpx
+
+        from app.config import TOKEN
+        from app.settings import settings
+
+        # Тем же путём, что и бот: у этой машины Telegram доступен через прокси.
+        async with httpx.AsyncClient(timeout=10, proxy=settings.telegram_proxy or None) as client:
+            r = await client.get(f"https://api.telegram.org/bot{TOKEN}/getMe")
+        _BOT_USERNAME = r.json().get("result", {}).get("username")
+    except Exception:
+        return None
+    return _BOT_USERNAME
+
+
 def create_master_self_router() -> APIRouter:
     router = APIRouter(prefix="/masters/me", tags=["Masters"])
 
@@ -52,6 +75,24 @@ def create_master_self_router() -> APIRouter:
                 status_code=504,
                 detail="Сервер учёта сейчас занят, попробуйте через пару минут.",
             )
+
+    @router.get("/telegram")
+    async def my_telegram(current: ResolvedUser = Depends(get_current_user)) -> dict:
+        """Подключён ли у мастера Telegram-бот и ссылка, чтобы его запустить.
+
+        Привязанный сотрудник живёт под своим Telegram ID, поэтому «подключён»
+        — это когда id сотрудника есть среди запускавших бота. Ссылка несёт id
+        сотрудника (start=emp_…), чтобы в «Доступе» было видно, кто это.
+        """
+        from app.data.bot_user_repository import get_bot_user_repository
+
+        emp = current.employee_id
+        if not emp:
+            return {"linked": True, "bot_url": None}
+        linked = get_bot_user_repository().has(emp)
+        username = await _bot_username()
+        url = f"https://t.me/{username}?start=emp_{emp}" if username else None
+        return {"linked": linked, "bot_url": url}
 
     @router.get("/earnings")
     async def get_my_earnings(

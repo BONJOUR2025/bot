@@ -32,12 +32,17 @@ class BotUserRepository:
         result.sort(key=lambda x: x.get("last_seen", ""), reverse=True)
         return result
 
+    def has(self, telegram_id: int | str) -> bool:
+        self._data = self._load()
+        return str(telegram_id) in self._data
+
     def touch(
         self,
         telegram_id: int | str,
         username: Optional[str] = None,
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
+        requested_employee_id: Optional[str] = None,
     ) -> None:
         self._data = self._load()  # sync with disk before mutating
         telegram_id = str(telegram_id)
@@ -48,6 +53,10 @@ class BotUserRepository:
         record["last_name"] = last_name or ""
         record["last_seen"] = now
         record.setdefault("first_seen", now)
+        if requested_employee_id:
+            # Запуск по ссылке из кабинета (?start=emp_<id>): кто это, мы уже
+            # знаем — админу остаётся подтвердить привязку.
+            record["requested_employee_id"] = str(requested_employee_id)
         self._data[telegram_id] = record
         self._save()
 

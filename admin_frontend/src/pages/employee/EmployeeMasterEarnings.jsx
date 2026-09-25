@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import api from '../../api.js';
 import { masterErrorText, money, serviceTitle } from './masterFormat.js';
+import TelegramBotBanner from '../../components/TelegramBotBanner.jsx';
 
 /** Заработок мастера — те же цифры, что «🔧 Мой заработок» в Telegram-боте
  *  (GET /api/masters/me/earnings → master_bot_service.get_earnings).
@@ -320,6 +321,7 @@ export default function EmployeeMasterEarnings() {
 
   return (
     <div className="emp-page">
+      <TelegramBotBanner />
       <div className="emp-page__head">
         <h2 className="emp-page__title">Заработок</h2>
         <div className="emp-earn-periods" role="group" aria-label="Период">

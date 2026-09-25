@@ -128,3 +128,13 @@ def test_drop_tailoring_removes_whole_order(monkeypatch):
     monkeypatch.setattr(ws, "_tailoring_docs", lambda nums: {"100-1"})
     rows = [{"doc_num": "100-1", "name": "Изготовление подошвы"}, {"doc_num": "200-2"}]
     assert ws._drop_tailoring(rows) == [{"doc_num": "200-2"}]
+
+
+def test_bot_user_requested_employee(tmp_path):
+    from app.data.bot_user_repository import BotUserRepository
+
+    repo = BotUserRepository(str(tmp_path / "bot_users.json"))
+    repo.touch(111, username="m", requested_employee_id="emp42")
+    repo.touch(111, username="m")  # повторный /start без метки не стирает её
+    assert repo.has(111) and not repo.has(222)
+    assert repo.list()[0]["requested_employee_id"] == "emp42"

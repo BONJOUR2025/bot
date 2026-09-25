@@ -11,6 +11,9 @@ class BotUserOut(BaseModel):
     last_seen: Optional[str] = None
     employee_id: Optional[str] = None
     employee_name: Optional[str] = None
+    # Кто запустил бота по ссылке из кабинета мастера.
+    requested_employee_id: Optional[str] = None
+    requested_employee_name: Optional[str] = None
 
 
 class BotUserLinkRequest(BaseModel):
