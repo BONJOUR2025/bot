@@ -32,6 +32,12 @@ function phoneText(p) {
   }
   return p || '';
 }
+/** «ЦВЕТ ТОНИРОВКИ/ПОКРАСКИ» → «Цвет тонировки/покраски»: подписи
+ *  дополнений Агбиса набраны капсом и кричат громче самого комментария. */
+function labelText(label) {
+  const s = String(label || '').trim().replace(/[!:]+$/, '');
+  return s === s.toUpperCase() ? s.charAt(0) + s.slice(1).toLowerCase() : s;
+}
 function plural(n, one, few, many) {
   const m10 = n % 10;
   const m100 = n % 100;
@@ -195,7 +201,12 @@ export default function PointOrderCard({ orderId, highlightServiceId = null, not
                 {it.item_id === highlightServiceId && <span className="badge badge--info">эта бирка</span>}
                 {it.location && it.location !== o.location && <span className="poc-muted">лежит: {it.location}</span>}
               </div>
-              {it.note && <p className="poc-item__note">{it.note}</p>}
+              {it.note && (
+                <p className="poc-comment">
+                  <MessageSquare size={14} aria-hidden="true" />
+                  <span><b>Комментарий приёмщика</b> {it.note}</span>
+                </p>
+              )}
               {it.photos.length > 0 && (
                 <div className="poc-photos">
                   {thumbs.map((p, i) => (
@@ -221,8 +232,12 @@ export default function PointOrderCard({ orderId, highlightServiceId = null, not
                       <div className="poc-svc__main">
                         <span className="poc-svc__name">{serviceTitle(s.name)}</span>
                         <span className="poc-svc__state">{st.label}{st.who ? ` · ${st.who}` : ''}{hit ? ' · эта бирка' : ''}</span>
-                        {s.comments.map((c, i) => (
-                          <span key={i} className="poc-svc__comment"><MessageSquare size={12} aria-hidden="true" /> {c.label ? `${c.label}: ` : ''}{c.text}</span>
+                        {/* Комментарий к изделию уже показан над списком услуг — не дублируем. */}
+                        {s.comments.filter((c) => c.about !== 'изделию').map((c, i) => (
+                          <span key={i} className="poc-svc__comment">
+                            <MessageSquare size={12} aria-hidden="true" />
+                            <span><b>{c.label ? labelText(c.label) : 'Комментарий'}</b> {c.text}</span>
+                          </span>
                         ))}
                       </div>
                       <span className="poc-svc__price">{money(s.kredit)}</span>
