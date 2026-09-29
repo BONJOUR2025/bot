@@ -302,12 +302,21 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
               {it.note && <p className="ws-sub">{it.note}</p>}
               {it.photos.length > 0 && (
                 <div className="wo-photos">
-                  {it.photos.map((p, i) => (
+                  {/* Миниатюры приходят только у первых снимков — остальные
+                      за плиткой «+N», листаются в просмотрщике. */}
+                  {it.photos.map((p, i) => (p.thumb ? (
                     <button key={p.id} type="button" className="emp-wip-photo" onClick={() => setViewer({ photos: it.photos, index: i })}
-                      aria-label={`Фото ${i + 1}`}>
-                      {p.thumb ? <img src={p.thumb} alt="" /> : <span>фото</span>}
+                      aria-label={`Фото ${i + 1} из ${it.photos.length}`}>
+                      <img src={p.thumb} alt="" />
                     </button>
-                  ))}
+                  ) : null))}
+                  {it.photos.some((p) => !p.thumb) && (
+                    <button type="button" className="emp-wip-photo wo-photos__more"
+                      onClick={() => setViewer({ photos: it.photos, index: it.photos.findIndex((p) => !p.thumb) })}
+                      aria-label={`Ещё ${it.photos.filter((p) => !p.thumb).length} фото`}>
+                      <span>+{it.photos.filter((p) => !p.thumb).length}</span>
+                    </button>
+                  )}
                 </div>
               )}
               <div className="emp-list">

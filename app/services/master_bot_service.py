@@ -403,11 +403,12 @@ def deadline(due: Optional[datetime], now: datetime) -> dict[str, Any]:
     return {"due": due.isoformat(timespec="minutes"), "due_state": state, "overdue_days": overdue_days}
 
 
-# Сколько снимков изделия отдавать в «В работе». Миниатюра (~3 КБ) едет прямо
-# в ответе только у первого, главного: в списке видна она одна, а остальные
-# просмотрщик всё равно грузит в полном размере. С миниатюрами у всех шести
-# экран Корягина весил 259 КБ.
-WIP_PHOTOS_PER_ITEM = 6
+# Снимки изделия в «В работе» отдаём все: у изделия их обычно около двадцати
+# (у 98% — больше шести), а при лимите в 6 мастер не видел большую часть фото.
+# Миниатюра (~3 КБ) едет прямо в ответе только у первого, главного: в списке
+# видна она одна, остальные — это id и md5 (~100 байт), а просмотрщик грузит
+# их в полном размере по одному. С миниатюрами у всех экран Корягина весил 259 КБ.
+WIP_PHOTOS_PER_ITEM: int | None = None
 
 
 def _text(value: Any) -> str:
@@ -513,7 +514,7 @@ def _order_details(service_ids: list[Any], with_photos: bool = True) -> dict[Any
                 )
                 for item_id, photo_id, md5, small in cur.fetchall():
                     bucket = photos_of_item.setdefault(item_id, [])
-                    if len(bucket) >= WIP_PHOTOS_PER_ITEM:
+                    if WIP_PHOTOS_PER_ITEM is not None and len(bucket) >= WIP_PHOTOS_PER_ITEM:
                         continue
                     if isinstance(md5, bytes):
                         md5 = md5.decode("ascii", "replace")

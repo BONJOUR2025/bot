@@ -26,7 +26,10 @@ BESTUZHEVSKAYA_SCLADS = {21021, 21024}  # цех и приёмка в том ж�
 STATUS_NAMES = {1: "Новый", 2: "На хранении", 3: "В исполнении", 4: "Исполненный",
                 5: "Выданный", 6: "Закрытый", 7: "Отменённый"}
 IN_WAY_STATUS = {1: "готова к отгрузке", 2: "в пути", 3: "принята", 4: "принята не полностью"}
-MAX_PHOTOS_PER_ITEM = 8
+# Карточка заказа отдаёт все снимки изделия (их обычно около двадцати), но
+# миниатюры — только первым THUMBS_PER_ITEM: остальные открываются в
+# просмотрщике в полном размере, а сотня base64-миниатюр раздула бы ответ.
+THUMBS_PER_ITEM = 12
 
 
 class OrderNotFound(LookupError):
@@ -209,11 +212,11 @@ def card(order_id: int) -> dict[str, Any]:
                 f"WHERE p.dos_id IN ({marks}) ORDER BY p.dos_id, p.is_main_photo DESC, p.id", items)
             for item_id, pid, md5, small in cur.fetchall():
                 bucket = photos.setdefault(item_id, [])
-                if len(bucket) >= MAX_PHOTOS_PER_ITEM:
-                    continue
                 if isinstance(md5, bytes):
                     md5 = md5.decode("ascii", "replace")
-                raw = small.read() if hasattr(small, "read") else small
+                raw = None
+                if len(bucket) < THUMBS_PER_ITEM:
+                    raw = small.read() if hasattr(small, "read") else small
                 thumb = None
                 if raw:
                     mime = "image/png" if raw[:4] == b"\x89PNG" else "image/jpeg"
