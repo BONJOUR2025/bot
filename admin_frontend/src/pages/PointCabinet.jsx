@@ -54,7 +54,7 @@ const TITLES = {
   stale: ['Смена', 'Долго лежат', 'Готовы больше 14 дней назад и до сих пор не выданы. Напомните клиенту.'],
   handover: ['Смена', 'Передача смены', 'Заметки для смены пишите в течение дня — на любую дату и к заказу. При уходе сдайте смену: пересчёт кассы и чек-лист.'],
   cash: ['Точка', 'Касса', 'Касса точки в Агбисе за сегодня: остаток, приход и перемещения в «Основную».'],
-  accepted: ['Точка', 'Принято сегодня', 'Заказы, оформленные на точке за сегодня.'],
+  accepted: ['Точка', 'Принято сегодня', 'Что оформили на точке за сегодня: заказы в работу и продажи товаров.'],
   schedule: ['Точка', 'График на неделю', 'Кто работает на точке — по общему графику.'],
   clients: ['Помощь', 'Клиенты', 'Поиск по фамилии, телефону или номеру заказа. История заказов и пароль от личного кабинета.'],
   kb: ['Помощь', 'База знаний', 'Прайсы, методички и регламенты. Помощник отвечает на вопросы строго по ним.'],
@@ -212,25 +212,62 @@ function Accepted({ tick, onOpen }) {
   const { data, loading, error } = useSection('/point/accepted', true, tick);
   if (loading && !data) return <p className="pc-muted">Загрузка…</p>;
   if (error) return <p className="pc-error">{error}</p>;
-  const rows = data || [];
-  if (!rows.length) return <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Сегодня заказов на точке ещё не оформляли.</div>;
+  const orders = data?.orders || [];
+  const sales = data?.sales || [];
+  const goodsText = (g) => `${g.name}${g.qty && g.qty !== 1 ? ` × ${g.qty}` : ''}`;
+  const empty = (text) => <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">{text}</div>;
   return (
-    <div className="app-card pc-table-wrap">
-      <table className="pc-table">
-        <thead><tr><th>Время</th><th>Заказ</th><th>Изделия</th><th>Клиент</th><th>Срок</th><th>Статус</th></tr></thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.order_id} onClick={() => onOpen(r.order_id)}>
-              <td className="pc-num">{r.time}</td>
-              <td className="pc-num">{r.doc_num}{r.urgent && <span className="badge badge--error ml-1">срочно</span>}</td>
-              <td>{r.items.length ? r.items.join(', ') : '—'}</td>
-              <td>{r.client || '—'}</td>
-              <td>{r.due ? day(r.due) : '—'}</td>
-              <td><span className="badge badge--neutral">{r.status}</span></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-5">
+      <section className="space-y-2">
+        <h3 className="pc-h3">Приняли в работу <span className="badge badge--neutral">{orders.length}</span></h3>
+        {orders.length === 0 ? empty('Сегодня заказов в работу ещё не оформляли.') : (
+          <div className="app-card pc-table-wrap">
+            <table className="pc-table">
+              <thead><tr><th>Время</th><th>Заказ</th><th>Изделия</th><th>Клиент</th><th>Срок</th><th>Статус</th></tr></thead>
+              <tbody>
+                {orders.map((r) => (
+                  <tr key={r.order_id} onClick={() => onOpen(r.order_id)}>
+                    <td className="pc-num">{r.time}</td>
+                    <td className="pc-num">{r.doc_num}{r.urgent && <span className="badge badge--error ml-1">срочно</span>}</td>
+                    <td>
+                      <div>{r.items.length ? r.items.join(', ') : '—'}</div>
+                      {r.goods.length > 0 && <div className="pc-muted">+ товар: {r.goods.map(goodsText).join(', ')}</div>}
+                    </td>
+                    <td>{r.client || '—'}</td>
+                    <td>{r.due ? day(r.due) : '—'}</td>
+                    <td><span className="badge badge--neutral">{r.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      <section className="space-y-2">
+        <h3 className="pc-h3">Продажи <span className="badge badge--neutral">{sales.length}</span></h3>
+        {sales.length === 0 ? empty('Сегодня товаров ещё не продавали.') : (
+          <div className="app-card pc-table-wrap">
+            <table className="pc-table">
+              <thead><tr><th>Время</th><th>Документ</th><th>Что продали</th><th>Клиент</th><th className="num">Сумма</th></tr></thead>
+              <tbody>
+                {sales.map((r) => (
+                  <tr key={r.order_id} style={{ cursor: 'default' }}>
+                    <td className="pc-num">{r.time}</td>
+                    <td className="pc-num">{r.doc_num}</td>
+                    <td>
+                      {r.goods.map((g, i) => (
+                        <div key={i}>{goodsText(g)} <span className="pc-muted">· {money(g.price)}</span></div>
+                      ))}
+                    </td>
+                    <td>{r.client || '—'}</td>
+                    <td className="num">{money(r.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

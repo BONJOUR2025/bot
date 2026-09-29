@@ -314,8 +314,13 @@ def note_order(query: str = "", order_id: int | None = None) -> dict[str, Any]:
 
 
 # ── приём сегодня и перемещения точка ↔ цех ─────────────────────────
-def accepted_today(salon) -> list[dict[str, Any]]:
-    """Заказы, принятые на точке сегодня: что именно и на кого."""
+def accepted_today(salon) -> dict[str, list[dict[str, Any]]]:
+    """Что оформили на точке сегодня — отдельно заказы в работу и продажи.
+
+    В Агбисе продажа товара (крем, стельки) — тот же документ-заказ, только
+    вместо услуг у него строки товара (DOC_ORDER_LINES). Раньше такие
+    документы шли в общий список пустой строкой. Бывает и смешанный заказ:
+    ремонт плюс купленный крем — он в заказах, с припиской о товаре."""
     from app.services.firebird_service import _connect
     from app.services.workshop_order_service import STATUS_NAMES, _iso, _text
 
@@ -337,24 +342,41 @@ def accepted_today(salon) -> list[dict[str, Any]]:
             """, sclads)
         rows = cur.fetchall()
         items: dict[int, list[str]] = {}
+        has_services: set[int] = set()
+        goods: dict[int, list[dict[str, Any]]] = {}
         ids = [r[0] for r in rows]
         if ids:
             mm = ",".join("?" * len(ids))
             cur.execute(
-                f"SELECT dos.doc_order_id, t.name FROM doc_order_services dos LEFT JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id "
-                f"WHERE dos.doc_order_id IN ({mm}) AND dos.parent_dos_id IS NULL ORDER BY dos.id", ids)
-            for oid, name in cur.fetchall():
-                if _text(name):
+                f"SELECT dos.doc_order_id, t.name, dos.parent_dos_id FROM doc_order_services dos "
+                f"LEFT JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id "
+                f"WHERE dos.doc_order_id IN ({mm}) ORDER BY dos.id", ids)
+            for oid, name, parent in cur.fetchall():
+                has_services.add(oid)
+                if not parent and _text(name):
                     items.setdefault(oid, []).append(_text(name))
+            cur.execute(
+                f"SELECT l.doc_order_id, CAST(t.name AS VARCHAR(400) CHARACTER SET OCTETS), "
+                f"l.qty_kredit, l.price, l.kredit FROM doc_order_lines l "
+                f"LEFT JOIN tovars_tbl t ON t.tovar_id = l.tovar_id "
+                f"WHERE l.doc_order_id IN ({mm}) ORDER BY l.id", ids)
+            for oid, name, qty, price, total in cur.fetchall():
+                goods.setdefault(oid, []).append({
+                    "name": _text(name) or "Товар", "qty": float(qty or 0),
+                    "price": _money(price), "total": _money(total)})
     finally:
         con.close()
-    out = []
+    orders, sales = [], []
     for oid, num, ddate, dtime, status, date_out, fast, cname in rows:
-        due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
-        out.append({"order_id": oid, "doc_num": _text(num), "time": str(dtime)[:5] if dtime else "",
-                    "status": STATUS_NAMES.get(status, "—"), "due": _iso(due), "urgent": bool(fast),
-                    "client": _text(cname), "items": items.get(oid, [])})
-    return out
+        base = {"order_id": oid, "doc_num": _text(num), "time": str(dtime)[:5] if dtime else "",
+                "client": _text(cname), "goods": goods.get(oid, [])}
+        if oid in has_services:
+            due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
+            orders.append({**base, "status": STATUS_NAMES.get(status, "—"), "due": _iso(due),
+                           "urgent": bool(fast), "items": items.get(oid, [])})
+        elif base["goods"]:
+            sales.append({**base, "total": round(sum(g["total"] for g in base["goods"]), 2)})
+    return {"orders": orders, "sales": sales}
 
 
 def logistics(salon) -> dict[str, Any]:
