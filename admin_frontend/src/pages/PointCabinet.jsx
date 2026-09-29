@@ -4,7 +4,8 @@ import {
   Phone, PhoneOff, RefreshCw, ScanBarcode, Send, Sparkles, StickyNote, Trash2, Truck, UserSearch, Wallet, X,
 } from 'lucide-react';
 import api, { POINT_TOKEN_KEY } from '../api.js';
-import { OrderSearch, OrderView } from './employee/WorkshopOrder.jsx';
+import { OrderSearch } from './employee/WorkshopOrder.jsx';
+import PointOrderCard from './point/PointOrderCard.jsx';
 import { StatCard } from '../components/ui/SalaryUI.jsx';
 import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import useBackClose from '../hooks/useBackClose.js';
@@ -455,13 +456,11 @@ function NotesBoard({ notes, reload, people, onOpenOrder }) {
   );
 }
 
-/** Заметки прямо в карточке заказа: что уже висит по заказу и быстрая новая. */
+/** Заметки по заказу — раздел внутри карточки: что уже висит и быстрая новая. */
 function OrderNotes({ orderId, notes, reload, people }) {
   const mine = notes.filter((n) => n.order?.order_id === orderId && !n.done);
   return (
     <div className="pc-order-notes">
-      <div className="pc-note-group__title"><StickyNote size={15} aria-hidden="true" /><b>Заметка смене по заказу</b>
-        {mine.length > 0 && <span className="badge badge--warning">{mine.length}</span>}</div>
       {mine.length > 0 && (
         <ul className="pc-notes">{mine.map((n) => <NoteRow key={n.id} n={n} onChanged={reload} onOpenOrder={() => {}} showDue />)}</ul>
       )}
@@ -1090,9 +1089,10 @@ function Cabinet() {
             <button type="button" className="icon-button pc-drawer__close" onClick={() => setOrder(null)} aria-label="Закрыть">
               <X size={18} />
             </button>
-            <OrderNotes orderId={order.orderId} notes={notes} reload={loadNotes} people={people} />
-            <OrderView key={`${order.orderId}-${order.serviceId || ''}`} orderId={order.orderId}
-              highlightServiceId={order.serviceId || null} apiBase="/point" />
+            <PointOrderCard key={`${order.orderId}-${order.serviceId || ''}`} orderId={order.orderId}
+              highlightServiceId={order.serviceId || null}
+              openNotesCount={notes.filter((n) => n.order?.order_id === order.orderId && !n.done).length}
+              notesSlot={<OrderNotes orderId={order.orderId} notes={notes} reload={loadNotes} people={people} />} />
           </div>
         </div>
       )}
