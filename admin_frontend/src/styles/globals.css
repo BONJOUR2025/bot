@@ -8077,7 +8077,7 @@ button:hover > .vac-desc { color: var(--color-text); }
 .wo-dialog--split { width: min(36rem, 100%); max-width: 100%; }
 .wo-split__row { display: grid; grid-template-columns: minmax(0, 1fr) 4.6rem 4.8rem auto; gap: 8px; align-items: center; }
 .wo-split__pct { display: flex; align-items: center; gap: 4px; }
-.wo-split__pct .input { text-align: right; font-variant-numeric: tabular-nums; }
+.wo-split__pct .input { text-align: right; font-variant-numeric: tabular-nums; padding-inline: 10px; min-width: 0; }
 .wo-split__sum { font-variant-numeric: tabular-nums; font-size: 0.85rem; color: var(--color-text-muted); text-align: right; }
 .wo-split__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wo-split__total { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
