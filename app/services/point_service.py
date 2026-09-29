@@ -246,25 +246,69 @@ def logistics(salon) -> dict[str, Any]:
 
 
 # ── график точки ──────────────────────────────────────────────────────
+_WEEK_CACHE: dict[str, tuple[float, list]] = {}
+_WEEK_TTL = 600
+
+
+def _read_week(code: str, days: int) -> list[dict[str, Any]]:
+    """Одно открытие Excel-графика на всю неделю (read_only — в разы быстрее
+    полной загрузки). Раньше по дню открывали книгу заново: 7 × 4 секунды."""
+    import os
+    from datetime import date as _date
+
+    from openpyxl import load_workbook
+
+    from app.config import EXCEL_FILE
+    from app.core.constants import MONTHS_RU
+
+    dates = [_date.today() + timedelta(days=i) for i in range(days)]
+    who: dict[str, str] = {}
+    if os.path.exists(EXCEL_FILE):
+        wb = load_workbook(EXCEL_FILE, data_only=True, read_only=True)
+        try:
+            for (y, m) in sorted({(d.year, d.month) for d in dates}):
+                name = MONTHS_RU[m - 1]
+                title = next((t for t in wb.sheetnames if t.upper() == name.upper()), None)                     or next((t for t in wb.sheetnames if t.upper().startswith(name.upper())), None)
+                if not title:
+                    continue
+                rows = list(wb[title].iter_rows(min_row=1, max_row=40, max_col=40, values_only=True))
+                if len(rows) < 3:
+                    continue
+                # Столбец дня — по номеру дня в первой или второй строке.
+                col_of: dict[int, int] = {}
+                for c in range(len(rows[0])):
+                    for hdr in (rows[0][c], rows[1][c] if len(rows) > 1 else None):
+                        try:
+                            n = int(str(hdr).strip())
+                        except (TypeError, ValueError):
+                            continue
+                        if 1 <= n <= 31 and n not in col_of:
+                            col_of[n] = c
+                for d in dates:
+                    if (d.year, d.month) != (y, m) or d.day not in col_of:
+                        continue
+                    c = col_of[d.day]
+                    names = [str(r[0]).strip() for r in rows[2:]
+                             if r and r[0] and c < len(r) and str(r[c] or "").strip() == code]
+                    who[d.isoformat()] = ", ".join(names)
+        finally:
+            wb.close()
+    return [{"date": d.isoformat(), "employee": who.get(d.isoformat(), "")} for d in dates]
+
+
 async def week_schedule(salon, days: int = 7) -> list[dict[str, Any]]:
     """Кто работает на точке ближайшие дни — из того же Excel-графика, что
     видит бот. Точка в графике — код салона (у Бестужевской «Ц»)."""
-    from datetime import date as _date
-
-    from app.services.schedule_service import ScheduleService
+    import asyncio
+    import time
 
     code = (salon.code or "").strip()
-    svc = ScheduleService()
-    out = []
-    for i in range(days):
-        d = _date.today() + timedelta(days=i)
-        try:
-            points = await svc.get_schedule_by_day(d.isoformat())
-        except Exception:
-            points = []
-        who = next((p.employee for p in points if (p.short or "").strip() == code), "")
-        out.append({"date": d.isoformat(), "employee": who})
-    return out
+    hit = _WEEK_CACHE.get(code)
+    if hit and time.time() - hit[0] < _WEEK_TTL:
+        return hit[1]
+    data = await asyncio.to_thread(_read_week, code, days)
+    _WEEK_CACHE[code] = (time.time(), data)
+    return data
 
 
 # ── база знаний ───────────────────────────────────────────────────────
