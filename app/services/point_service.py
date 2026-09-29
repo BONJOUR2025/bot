@@ -161,3 +161,152 @@ def shift(salon) -> dict[str, Any]:
         people.append({"name": (e.name if e else "") or r.get("employee_name") or "Сотрудник",
                        "at": r.get("sent_at")})
     return {"opened": bool(people), "people": people}
+
+
+# ── приём сегодня и перемещения точка ↔ цех ─────────────────────────
+def accepted_today(salon) -> list[dict[str, Any]]:
+    """Заказы, принятые на точке сегодня: что именно и на кого."""
+    from app.services.firebird_service import _connect
+    from app.services.workshop_order_service import STATUS_NAMES, _iso, _text
+
+    sclads = point_sclads(salon)
+    if not sclads:
+        return []
+    con = _connect()
+    try:
+        cur = con.cursor()
+        m = ",".join("?" * len(sclads))
+        cur.execute(
+            f"""
+            SELECT dor.id, d.doc_num, d.doc_date, d.doc_time, dor.status_id, dor.date_out, dor.fast_execute,
+                   c.name
+            FROM docs_order dor JOIN docs d ON d.doc_id = dor.doc_id
+                LEFT JOIN contragents c ON c.contr_id = d.contragent_id
+            WHERE dor.sclad_kredit_id IN ({m}) AND d.doc_date = CURRENT_DATE AND dor.status_id <> 7
+            ORDER BY d.doc_time
+            """, sclads)
+        rows = cur.fetchall()
+        items: dict[int, list[str]] = {}
+        ids = [r[0] for r in rows]
+        if ids:
+            mm = ",".join("?" * len(ids))
+            cur.execute(
+                f"SELECT dos.doc_order_id, t.name FROM doc_order_services dos LEFT JOIN tovars_tbl t ON t.tovar_id = dos.tovar_id "
+                f"WHERE dos.doc_order_id IN ({mm}) AND dos.parent_dos_id IS NULL ORDER BY dos.id", ids)
+            for oid, name in cur.fetchall():
+                if _text(name):
+                    items.setdefault(oid, []).append(_text(name))
+    finally:
+        con.close()
+    out = []
+    for oid, num, ddate, dtime, status, date_out, fast, cname in rows:
+        due = date_out if isinstance(date_out, datetime) and date_out.year > 2000 else None
+        out.append({"order_id": oid, "doc_num": _text(num), "time": str(dtime)[:5] if dtime else "",
+                    "status": STATUS_NAMES.get(status, "—"), "due": _iso(due), "urgent": bool(fast),
+                    "client": _text(cname), "items": items.get(oid, [])})
+    return out
+
+
+def logistics(salon) -> dict[str, Any]:
+    """Накладные точки за последние две недели: что едет к нам и что от нас.
+
+    Статусы Агбиса: 1 — готова к отгрузке, 2 — в пути, 3 — принята,
+    4 — принята не полностью. «Не полностью» — повод проверить полку."""
+    from app.services.firebird_service import _connect
+    from app.services.workshop_order_service import IN_WAY_STATUS, _iso, _text, sclad_label
+
+    sclads = point_sclads(salon)
+    if not sclads:
+        return {"incoming": [], "outgoing": []}
+    con = _connect()
+    try:
+        cur = con.cursor()
+        m = ",".join("?" * len(sclads))
+        cur.execute(
+            f"""
+            SELECT w.id, w.doc_num, w.doc_date, w.from_sclad_id, w.to_sclad_id, w.diw_status_id,
+                   (SELECT COUNT(*) FROM docs_in_way_servs s WHERE s.doc_in_way_id = w.id)
+            FROM docs_in_way w
+            WHERE w.doc_date > DATEADD(-14 DAY TO CURRENT_DATE)
+              AND (w.to_sclad_id IN ({m}) OR w.from_sclad_id IN ({m}))
+            ORDER BY w.doc_date DESC, w.id DESC
+            """, (*sclads, *sclads))
+        rows = cur.fetchall()
+    finally:
+        con.close()
+    incoming, outgoing = [], []
+    for wid, num, ddate, frm, to, st, cnt in rows:
+        # Перемещения внутри одной точки (приёмка ↔ цех в одном здании) — не логистика.
+        if frm in sclads and to in sclads:
+            continue
+        row = {"id": wid, "doc_num": _text(num), "date": _iso(ddate), "from": sclad_label(frm),
+               "to": sclad_label(to), "status": IN_WAY_STATUS.get(st, "—"), "status_id": st, "items": int(cnt or 0)}
+        (incoming if to in sclads else outgoing).append(row)
+    return {"incoming": incoming, "outgoing": outgoing}
+
+
+# ── график точки ──────────────────────────────────────────────────────
+async def week_schedule(salon, days: int = 7) -> list[dict[str, Any]]:
+    """Кто работает на точке ближайшие дни — из того же Excel-графика, что
+    видит бот. Точка в графике — код салона (у Бестужевской «Ц»)."""
+    from datetime import date as _date
+
+    from app.services.schedule_service import ScheduleService
+
+    code = (salon.code or "").strip()
+    svc = ScheduleService()
+    out = []
+    for i in range(days):
+        d = _date.today() + timedelta(days=i)
+        try:
+            points = await svc.get_schedule_by_day(d.isoformat())
+        except Exception:
+            points = []
+        who = next((p.employee for p in points if (p.short or "").strip() == code), "")
+        out.append({"date": d.isoformat(), "employee": who})
+    return out
+
+
+# ── база знаний ───────────────────────────────────────────────────────
+# Что администратору на стойке знать не нужно: условия оплаты сотрудников.
+KB_HIDDEN_CATEGORIES = {"Авто-обучение"}
+
+
+def kb_documents() -> list[dict[str, Any]]:
+    from app.db.session import SessionLocal
+    from app.models.knowledge import KnowledgeDocument
+
+    db = SessionLocal()
+    try:
+        docs = db.query(KnowledgeDocument).order_by(KnowledgeDocument.order_idx, KnowledgeDocument.id).all()
+        return [{"id": d.id, "title": d.title, "category": d.category, "content": d.content}
+                for d in docs
+                if (d.content or "").strip() and (d.category or "") not in KB_HIDDEN_CATEGORIES]
+    finally:
+        db.close()
+
+
+def kb_ask(question: str, salon_name: str) -> str:
+    """Ответ по базе знаний — как «📚 База знаний» в боте, та же модель."""
+    from app.handlers.knowledge_base import _kb_model
+    from app.services.config_service import ConfigService
+    from app.services.llm_client import chat, get_client
+
+    cfg = ConfigService().load()
+    if not get_client(cfg):
+        raise RuntimeError("Помощник не настроен: нет ключа нейросети.")
+    kb = "\n\n".join(f"=== {d['title']} ({d['category']}) ===\n{d['content'].strip()}" for d in kb_documents())
+    system = f"""Ты помощник администратора салона BONJOUR (точка «{salon_name}»). Отвечай на вопросы строго по базе знаний ниже: прайс, методички, регламенты, инструкции по оформлению.
+
+База знаний компании:
+{kb}
+
+Правила:
+1. Отвечай только по базе знаний. Не придумывай цены, сроки и услуги.
+2. Если ответа в базе нет — скажи: «В базе знаний этого нет. Уточните у руководителя или мастера цеха.»
+3. Если спрашивают цену — назови услугу так, как она названа в прайсе, и цену.
+4. Пиши кратко, по делу, без форматирования (никаких **, *, #). На «вы»."""
+    reply = chat(cfg, [{"role": "user", "content": question}], system=system, max_tokens=700,
+                 model=_kb_model(cfg), employee_id=f"point:{salon_name}", employee_name=f"Точка {salon_name}",
+                 feature="point_knowledge_base") or ""
+    return reply.replace("**", "").replace("__", "").strip() or "Помощник не ответил, попробуйте ещё раз."

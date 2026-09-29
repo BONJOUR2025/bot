@@ -7995,3 +7995,27 @@ button:hover > .vac-desc { color: var(--color-text); }
 .pc-activate__card label { font-size: 0.85rem; font-weight: 600; margin-top: 6px; }
 .pc-activate__code { font-size: 1.6rem; letter-spacing: 0.3em; text-align: center; font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .pc-body { grid-template-columns: 1fr; } .pc-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--color-border); } .pc-kpis { grid-template-columns: repeat(2, 1fr); } }
+
+/* Кабинет точки в оболочке админки: меню-кнопки вместо ссылок, счётчики, разделы. */
+.pc-shell .sidebar__link { width: 100%; border: 0; background: transparent; font: inherit; cursor: pointer; text-align: left; }
+.pc-shell .sidebar__link .pc-count { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.75rem; opacity: 0.8; }
+.pc-scan { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 2px solid var(--color-primary); }
+.pc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.pc-h3 { margin: 4px 0 0; font-size: 1.05rem; font-weight: 600; display: flex; align-items: center; gap: 8px; color: var(--color-text); }
+.pc-hint { margin: 0; color: var(--color-muted-foreground, var(--color-text-muted)); font-size: 0.85rem; }
+.pc-table-wrap { overflow-x: auto; padding: 0; }
+.pc-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.pc-day { padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.pc-day b { font-size: 0.95rem; }
+.pc-day.is-today { outline: 2px solid var(--color-primary); }
+.pc-clients, .pc-kb { display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: 16px; align-items: start; }
+.pc-list { padding: 4px; display: flex; flex-direction: column; max-height: 32rem; overflow-y: auto; }
+.pc-list__row { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--color-text); font: inherit; font-size: 0.9rem; text-align: left; cursor: pointer; }
+.pc-list__row:hover { background: var(--color-control-bg); }
+.pc-list__row.is-on { background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+.pc-lk { display: flex; align-items: baseline; gap: 12px; font-size: 0.95rem; }
+.pc-lk b { font-variant-numeric: tabular-nums; letter-spacing: 0.08em; font-size: 1.15rem; }
+.pc-doc { max-height: 70vh; overflow-y: auto; font-size: 0.92rem; line-height: 1.6; }
+.pc-answer { border-left: 3px solid var(--color-primary); padding: 8px 12px; background: color-mix(in srgb, var(--color-primary) 6%, transparent); border-radius: 0 10px 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.pc-activate__card { gap: 10px; }
+@media (max-width: 1100px) { .pc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pc-week { grid-template-columns: repeat(4, minmax(0, 1fr)); } .pc-clients, .pc-kb { grid-template-columns: 1fr; } }

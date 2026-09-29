@@ -157,6 +157,75 @@ def create_point_router() -> APIRouter:
         except orders.OrderNotFound as exc:
             raise HTTPException(404, str(exc))
 
+    # ── приём, логистика, график ──────────────────────────────────────
+    @router.get("/accepted")
+    async def accepted(dev=Depends(point_device)):
+        from app.services import point_service
+
+        return await _run(point_service.accepted_today, dev[1])
+
+    @router.get("/logistics")
+    async def logistics(dev=Depends(point_device)):
+        from app.services import point_service
+
+        return await _run(point_service.logistics, dev[1])
+
+    @router.get("/schedule")
+    async def schedule(dev=Depends(point_device)):
+        from app.services import point_service
+
+        return await point_service.week_schedule(dev[1])
+
+    # ── клиенты: поиск, история, пароль от личного кабинета ───────────
+    @router.get("/clients/search")
+    async def clients_search(q: str = Query(..., min_length=2, max_length=60), dev=Depends(point_device)):
+        from app.services.firebird_service import get_firebird_service
+
+        return await _run(get_firebird_service().search_clients, q.strip(), 20)
+
+    @router.get("/clients/{contragent_id}")
+    async def client_profile(contragent_id: int, dev=Depends(point_device)):
+        from app.services.firebird_service import get_firebird_service
+
+        profile = await _run(get_firebird_service().get_client_profile, contragent_id)
+        if not profile:
+            raise HTTPException(404, "Клиент не найден")
+        # Сумма всех покупок клиента — коммерческая сводка для руководителя,
+        # на стойке она ни к чему: оставляем число заказов и их список.
+        profile.pop("total_spent", None)
+        profile.pop("avg_check", None)
+        profile["orders"] = list(reversed(profile.get("orders") or []))[:30]
+        return profile
+
+    @router.get("/clients-lk-password")
+    async def lk_password(phone: str = Query(..., min_length=5, max_length=30), dev=Depends(point_device)):
+        from app.services.firebird_service import get_firebird_service
+
+        return await _run(get_firebird_service().get_client_lk_passwords, phone)
+
+    # ── база знаний и помощник ───────────────────────────────────────
+    @router.get("/kb")
+    async def kb(dev=Depends(point_device)):
+        from app.services import point_service
+
+        return point_service.kb_documents()
+
+    class AskIn(BaseModel):
+        question: str
+
+    @router.post("/kb/ask")
+    async def kb_ask(data: AskIn, dev=Depends(point_device)):
+        from app.services import point_service
+
+        q = (data.question or "").strip()
+        if len(q) < 3:
+            raise HTTPException(400, "Задайте вопрос подробнее.")
+        try:
+            answer = await asyncio.to_thread(point_service.kb_ask, q[:1000], dev[1].name)
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc))
+        return {"answer": answer}
+
     @router.get("/photos/{photo_id}/full")
     async def photo(photo_id: int, md5: str = Query(...), dev=Depends(point_device)):
         from app.services import agbis_photos

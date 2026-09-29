@@ -1,23 +1,61 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MessageCircle, Phone, PhoneOff, RefreshCw, ScanBarcode, X } from 'lucide-react';
+import {
+  AlarmClock, Archive, BookOpen, CalendarDays, ClipboardList, Inbox, KeyRound, MessageCircle,
+  Phone, PhoneOff, RefreshCw, ScanBarcode, Send, Sparkles, Truck, UserSearch, X,
+} from 'lucide-react';
 import api, { POINT_TOKEN_KEY } from '../api.js';
 import { OrderSearch, OrderView } from './employee/WorkshopOrder.jsx';
+import { StatCard } from '../components/ui/SalaryUI.jsx';
+import { TopProgressBar } from '../components/ui/ProgressBar.jsx';
 import useBackClose from '../hooks/useBackClose.js';
 
 /** Кабинет точки — открыт весь день на рабочем ПК салона (/admin/point).
  *
  *  Вход не по логину: ПК подключают один раз кодом из «Салонов», дальше
- *  браузер помнит ключ точки. Экран отвечает на вопросы смены: кто сегодня на
- *  точке, что готово к выдаче и кому ещё не позвонили, у кого срок сегодня, а
- *  изделие не готово, что давно лежит. Сканер бирок — сверху на любой вкладке:
- *  ручной сканер печатает бирку в поле и сразу открывает заказ. */
+ *  браузер помнит ключ точки. Оболочка та же, что у админки (боковое меню,
+ *  верхняя строка, карточки), чтобы администратор и руководитель видели
+ *  одну систему. Разделы отвечают на вопросы смены: кто на точке, что
+ *  выдать и кому позвонить, что просрочено, что едет из цеха, как найти
+ *  клиента и что сказать ему по прайсу. Сканер бирок — вверху на любой
+ *  странице: ручной сканер печатает бирку в поле и открывает заказ. */
 
-const TABS = [
-  { key: 'today', label: 'Сегодня' },
-  { key: 'ready', label: 'Выдача' },
-  { key: 'due', label: 'Сроки' },
-  { key: 'stale', label: 'Долго лежат' },
+const SECTIONS = [
+  {
+    name: 'Смена',
+    items: [
+      { key: 'today', label: 'Сегодня', icon: ClipboardList },
+      { key: 'ready', label: 'Выдача', icon: Inbox, count: (l) => l.ready.length },
+      { key: 'due', label: 'Сроки', icon: AlarmClock, count: (l) => l.due.length },
+      { key: 'stale', label: 'Долго лежат', icon: Archive, count: (l) => l.stale.length },
+    ],
+  },
+  {
+    name: 'Точка',
+    items: [
+      { key: 'accepted', label: 'Принято сегодня', icon: Send },
+      { key: 'logistics', label: 'Перемещения', icon: Truck },
+      { key: 'schedule', label: 'График', icon: CalendarDays },
+    ],
+  },
+  {
+    name: 'Помощь',
+    items: [
+      { key: 'clients', label: 'Клиенты', icon: UserSearch },
+      { key: 'kb', label: 'База знаний', icon: BookOpen },
+    ],
+  },
 ];
+const TITLES = {
+  today: ['Смена', 'Сегодня на точке', 'Кого обзвонить, что предупредить и что лежит на полке — одним экраном.'],
+  ready: ['Смена', 'Готово к выдаче', 'Изделия готовы, клиент ещё не забрал. Сначала те, кому ещё не звонили.'],
+  due: ['Смена', 'Сроки', 'Не готово, а срок выдачи сегодня или уже прошёл. Предупредите клиента до того, как он приедет.'],
+  stale: ['Смена', 'Долго лежат', 'Готовы больше 14 дней назад и до сих пор не выданы. Напомните клиенту.'],
+  accepted: ['Точка', 'Принято сегодня', 'Заказы, оформленные на точке за сегодня.'],
+  logistics: ['Точка', 'Перемещения', 'Накладные между точкой и цехом за две недели: что едет к нам и что уехало.'],
+  schedule: ['Точка', 'График на неделю', 'Кто работает на точке — по общему графику.'],
+  clients: ['Помощь', 'Клиенты', 'Поиск по фамилии, телефону или номеру заказа. История заказов и пароль от личного кабинета.'],
+  kb: ['Помощь', 'База знаний', 'Прайсы, методички и регламенты. Помощник отвечает на вопросы строго по ним.'],
+};
 const CALL_RESULTS = [
   { key: 'reached', label: 'Дозвонилась', icon: Phone },
   { key: 'no_answer', label: 'Не ответил', icon: PhoneOff },
@@ -28,34 +66,45 @@ const CALL_LABEL = { reached: 'дозвонилась', no_answer: 'не отв�
 function readToken() {
   try { return window.localStorage.getItem(POINT_TOKEN_KEY); } catch { return null; }
 }
-
-function money(n) {
-  return `${Math.round(Number(n) || 0).toLocaleString('ru-RU')} ₽`;
-}
-
+const money = (n) => `${Math.round(Number(n) || 0).toLocaleString('ru-RU')} ₽`;
 function day(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
-
+function weekday(iso) {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+}
 function dayTime(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '—'
     : d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
-
 function hhmm(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
-
 function errText(e, fallback) {
   const d = e?.response?.data?.detail;
   return typeof d === 'string' ? d : fallback;
 }
-
 function isEditable(el) {
   return !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+}
+
+/** Данные раздела: грузим при первом открытии, дальше — по кнопке «Обновить». */
+function useSection(url, enabled, tick) {
+  const [state, setState] = useState({ data: null, loading: false, error: '' });
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let alive = true;
+    setState((s) => ({ ...s, loading: true, error: '' }));
+    api.get(url)
+      .then((r) => alive && setState({ data: r.data, loading: false, error: '' }))
+      .catch((e) => alive && setState((s) => ({ ...s, loading: false, error: errText(e, 'Не удалось загрузить.') })));
+    return () => { alive = false; };
+  }, [url, enabled, tick]);
+  return state;
 }
 
 /* ── подключение ПК ─────────────────────────────────────────────── */
@@ -82,10 +131,13 @@ function Activate({ onDone }) {
 
   return (
     <div className="pc-activate">
-      <form className="pc-activate__card" onSubmit={submit}>
-        <span className="pc-logo">B</span>
-        <h1>Кабинет точки</h1>
-        <p>Этот компьютер ещё не подключён. Попросите руководителя открыть «Салоны → ваша точка → Подключить компьютер» и введите код.</p>
+      <form className="app-card pc-activate__card" onSubmit={submit}>
+        <span className="sidebar__badge">B</span>
+        <span className="ui-eyebrow">Кабинет точки</span>
+        <h1 className="text-2xl font-semibold tracking-tight">Подключите компьютер</h1>
+        <p className="text-sm text-[color:var(--color-muted-foreground)]">
+          Попросите руководителя открыть «Салоны → ваша точка → Подробнее → Компьютеры → Подключить компьютер» и введите код.
+        </p>
         <label htmlFor="pc-code">Код из шести цифр</label>
         <input id="pc-code" className="input pc-activate__code" inputMode="numeric" autoFocus maxLength={6}
           value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="000000" />
@@ -100,7 +152,7 @@ function Activate({ onDone }) {
   );
 }
 
-/* ── строка заказа с отметкой звонка ────────────────────────────── */
+/* ── заказы с отметкой звонка ───────────────────────────────────── */
 function CallButtons({ row, onMarked }) {
   const [busy, setBusy] = useState(null);
   const mark = async (result) => {
@@ -109,7 +161,7 @@ function CallButtons({ row, onMarked }) {
       await api.post(`/point/orders/${row.order_id}/call`, { result });
       onMarked();
     } catch {
-      /* отметка не сохранилась — кнопка просто отпустится */
+      /* не сохранилось — кнопка отпустится, можно нажать ещё раз */
     } finally {
       setBusy(null);
     }
@@ -118,7 +170,7 @@ function CallButtons({ row, onMarked }) {
     <div className="pc-calls">
       {CALL_RESULTS.map(({ key, label, icon: Icon }) => (
         <button key={key} type="button" className="pc-call" onClick={(e) => { e.stopPropagation(); mark(key); }}
-          disabled={!!busy} title={label} aria-label={`${label}: ${row.doc_num}`}>
+          disabled={!!busy} aria-label={`${label}: ${row.doc_num}`}>
           <Icon size={14} aria-hidden="true" /><span>{label}</span>
         </button>
       ))}
@@ -127,36 +179,31 @@ function CallButtons({ row, onMarked }) {
 }
 
 function CallState({ call }) {
-  if (!call) return <span className="pc-tag pc-tag--warn">не звонили</span>;
+  if (!call) return <span className="badge badge--warning">не звонили</span>;
   return (
-    <span className={`pc-tag ${call.result === 'reached' ? 'pc-tag--ok' : ''}`}>
-      {CALL_LABEL[call.result] || call.result} · {dayTime(call.at)}
-      {call.count > 1 ? ` · ${call.count}×` : ''}
+    <span className={`badge ${call.result === 'reached' ? 'badge--success' : 'badge--neutral'}`}>
+      {CALL_LABEL[call.result] || call.result} · {dayTime(call.at)}{call.count > 1 ? ` · ${call.count}×` : ''}
     </span>
   );
 }
 
 function OrdersTable({ rows, kind, onOpen, onMarked, empty }) {
-  if (!rows.length) return <p className="pc-empty">{empty}</p>;
+  if (!rows.length) return <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">{empty}</div>;
   return (
-    <div className="pc-table-wrap">
+    <div className="app-card pc-table-wrap">
       <table className="pc-table">
         <thead>
           <tr>
-            <th>Заказ</th>
-            <th>Изделия</th>
-            <th>Клиент</th>
-            {kind === 'due' ? <th>Срок</th> : <th>Готов</th>}
-            <th className="num">К оплате</th>
-            <th>Звонок</th>
-            <th aria-label="Отметить звонок" />
+            <th>Заказ</th><th>Изделия</th><th>Клиент</th>
+            <th>{kind === 'due' ? 'Срок' : 'Готов'}</th>
+            <th className="num">К оплате</th><th>Звонок</th><th aria-label="Отметить звонок" />
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.order_id} onClick={() => onOpen(r.order_id)} tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') onOpen(r.order_id); }}>
-              <td className="pc-num">{r.doc_num}{r.urgent && <span className="pc-tag pc-tag--bad">срочно</span>}</td>
+              <td className="pc-num">{r.doc_num}{r.urgent && <span className="badge badge--error ml-1">срочно</span>}</td>
               <td>{r.items.length ? r.items.join(', ') : '—'}</td>
               <td>
                 <div>{r.client || '—'}</div>
@@ -166,8 +213,8 @@ function OrdersTable({ rows, kind, onOpen, onMarked, empty }) {
                 <td>
                   <div>{day(r.due)}</div>
                   {r.overdue_days > 0
-                    ? <span className="pc-tag pc-tag--bad">просрочен {r.overdue_days} дн</span>
-                    : <span className="pc-tag pc-tag--warn">сегодня</span>}
+                    ? <span className="badge badge--error">просрочен {r.overdue_days} дн</span>
+                    : <span className="badge badge--warning">сегодня</span>}
                   <div className="pc-muted">сейчас: {r.location || '—'}</div>
                 </td>
               ) : (
@@ -188,6 +235,261 @@ function OrdersTable({ rows, kind, onOpen, onMarked, empty }) {
   );
 }
 
+/* ── разделы «Точка» ─────────────────────────────────────────────── */
+function Accepted({ tick, onOpen }) {
+  const { data, loading, error } = useSection('/point/accepted', true, tick);
+  if (loading && !data) return <p className="pc-muted">Загрузка…</p>;
+  if (error) return <p className="pc-error">{error}</p>;
+  const rows = data || [];
+  if (!rows.length) return <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Сегодня заказов на точке ещё не оформляли.</div>;
+  return (
+    <div className="app-card pc-table-wrap">
+      <table className="pc-table">
+        <thead><tr><th>Время</th><th>Заказ</th><th>Изделия</th><th>Клиент</th><th>Срок</th><th>Статус</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.order_id} onClick={() => onOpen(r.order_id)}>
+              <td className="pc-num">{r.time}</td>
+              <td className="pc-num">{r.doc_num}{r.urgent && <span className="badge badge--error ml-1">срочно</span>}</td>
+              <td>{r.items.length ? r.items.join(', ') : '—'}</td>
+              <td>{r.client || '—'}</td>
+              <td>{r.due ? day(r.due) : '—'}</td>
+              <td><span className="badge badge--neutral">{r.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Logistics({ tick }) {
+  const { data, loading, error } = useSection('/point/logistics', true, tick);
+  if (loading && !data) return <p className="pc-muted">Загрузка…</p>;
+  if (error) return <p className="pc-error">{error}</p>;
+  const inc = data?.incoming || [];
+  const out = data?.outgoing || [];
+  const open = (l) => l.filter((w) => w.status_id === 1 || w.status_id === 2);
+  const partial = [...inc, ...out].filter((w) => w.status_id === 4);
+  const table = (rows, dirLabel) => (rows.length === 0
+    ? <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Нет.</div>
+    : (
+      <div className="app-card pc-table-wrap">
+        <table className="pc-table" style={{ minWidth: '40rem' }}>
+          <thead><tr><th>Накладная</th><th>Дата</th><th>{dirLabel}</th><th className="num">Изделий</th><th>Статус</th></tr></thead>
+          <tbody>
+            {rows.map((w) => (
+              <tr key={w.id} style={{ cursor: 'default' }}>
+                <td className="pc-num">{w.doc_num}</td>
+                <td>{day(w.date)}</td>
+                <td>{dirLabel === 'Откуда' ? w.from : w.to}</td>
+                <td className="num">{w.items}</td>
+                <td><span className={`badge ${w.status_id === 4 ? 'badge--error' : w.status_id === 2 ? 'badge--info' : 'badge--warning'}`}>{w.status}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ));
+  return (
+    <div className="space-y-5">
+      {partial.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="pc-h3">Принято не полностью <span className="badge badge--error">{partial.length}</span></h3>
+          <p className="pc-hint">Часть изделий по накладной не дошла — проверьте полку и сообщите в цех.</p>
+          {table(partial, 'Куда')}
+        </section>
+      )}
+      <section className="space-y-2">
+        <h3 className="pc-h3">Едет к нам <span className="badge badge--neutral">{open(inc).length}</span></h3>
+        {table(open(inc), 'Откуда')}
+      </section>
+      <section className="space-y-2">
+        <h3 className="pc-h3">Отправлено от нас, ещё не принято <span className="badge badge--neutral">{open(out).length}</span></h3>
+        {table(open(out), 'Куда')}
+      </section>
+    </div>
+  );
+}
+
+function Schedule({ tick }) {
+  const { data, loading, error } = useSection('/point/schedule', true, tick);
+  if (loading && !data) return <p className="pc-muted">Загрузка…</p>;
+  if (error) return <p className="pc-error">{error}</p>;
+  return (
+    <div className="pc-week">
+      {(data || []).map((d, i) => (
+        <div key={d.date} className={`app-card pc-day ${i === 0 ? 'is-today' : ''}`}>
+          <span className="pc-muted">{i === 0 ? 'Сегодня' : weekday(d.date)}</span>
+          <b>{d.employee || '—'}</b>
+          {i === 0 && <span className="pc-muted">{weekday(d.date)}</span>}
+        </div>
+      ))}
+      <p className="pc-hint" style={{ gridColumn: '1 / -1' }}>Если день пустой — в графике на него никто не поставлен или месяц ещё не заполнен.</p>
+    </div>
+  );
+}
+
+/* ── раздел «Клиенты» ────────────────────────────────────────────── */
+function Clients({ onOpenDoc }) {
+  const [q, setQ] = useState('');
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [profile, setProfile] = useState(null);
+  const [lk, setLk] = useState(null);
+
+  const search = async (e) => {
+    e?.preventDefault();
+    if (q.trim().length < 2) return;
+    setBusy(true); setErr(''); setProfile(null); setLk(null);
+    try {
+      const r = await api.get('/point/clients/search', { params: { q: q.trim() } });
+      setList(r.data || []);
+    } catch (e2) { setErr(errText(e2, 'Поиск не удался.')); } finally { setBusy(false); }
+  };
+  const open = async (c) => {
+    setProfile({ loading: true, name: c.name }); setLk(null);
+    try {
+      const r = await api.get(`/point/clients/${c.contragent_id}`);
+      setProfile(r.data);
+    } catch (e2) { setProfile({ error: errText(e2, 'Не удалось открыть клиента.') }); }
+  };
+  const password = async () => {
+    setLk({ loading: true });
+    try {
+      const r = await api.get('/point/clients-lk-password', { params: { phone: profile.phone } });
+      setLk({ rows: r.data || [] });
+    } catch (e2) { setLk({ error: errText(e2, 'Не удалось получить пароль.') }); }
+  };
+
+  return (
+    <div className="pc-clients">
+      <div className="space-y-3">
+        <form className="flex gap-2" onSubmit={search}>
+          <input className="input flex-1" placeholder="Фамилия, телефон или номер заказа" value={q}
+            onChange={(e) => setQ(e.target.value)} aria-label="Поиск клиента" />
+          <button type="submit" className="btn btn--primary" disabled={busy || q.trim().length < 2}>{busy ? '…' : 'Найти'}</button>
+        </form>
+        {err && <p className="pc-error">{err}</p>}
+        {list && (list.length === 0
+          ? <p className="pc-muted">Никого не нашли.</p>
+          : (
+            <div className="app-card pc-list">
+              {list.map((c) => (
+                <button key={c.contragent_id} type="button" className={`pc-list__row ${profile?.contragent_id === c.contragent_id ? 'is-on' : ''}`} onClick={() => open(c)}>
+                  <b>{c.name || 'Без имени'}</b><span className="pc-phone">{c.phone || ''}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+      </div>
+      <div>
+        {!profile && <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Выберите клиента — здесь появится история его заказов.</div>}
+        {profile?.loading && <p className="pc-muted">Загрузка…</p>}
+        {profile?.error && <p className="pc-error">{profile.error}</p>}
+        {profile && !profile.loading && !profile.error && (
+          <div className="app-card p-5 space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold">{profile.name}</h3>
+              <div className="pc-phone">{profile.phone || 'телефон не указан'}</div>
+              <div className="pc-muted mt-1">
+                Заказов: {profile.order_count}{profile.first_order_date ? ` · с ${day(profile.first_order_date)}` : ''}
+                {profile.last_order_date ? ` · последний ${day(profile.last_order_date)}` : ''}
+              </div>
+            </div>
+            {profile.phone && (
+              <div className="space-y-2">
+                <button type="button" className="btn btn--secondary" onClick={password} disabled={lk?.loading}>
+                  <KeyRound size={15} /> Пароль от личного кабинета
+                </button>
+                {lk?.error && <p className="pc-error">{lk.error}</p>}
+                {lk?.rows && (lk.rows.length === 0
+                  ? <p className="pc-muted">Личный кабинет по этому телефону не найден.</p>
+                  : lk.rows.map((row, i) => (
+                    <div key={i} className="pc-lk"><span className="pc-muted">{row.name || row.login || ''}</span><b>{row.password || 'пароль не восстанавливается — поможет сброс в ЛК'}</b></div>
+                  )))}
+              </div>
+            )}
+            <div>
+              <div className="pc-h3 mb-2">Последние заказы</div>
+              {(profile.orders || []).map((o) => (
+                <button key={o.doc_num} type="button" className="pc-list__row" onClick={() => onOpenDoc(o.doc_num)}>
+                  <b>{o.doc_num}</b><span className="pc-muted">{day(o.date)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── раздел «База знаний» ────────────────────────────────────────── */
+function Knowledge() {
+  const { data, loading, error } = useSection('/point/kb', true, 0);
+  const [doc, setDoc] = useState(null);
+  const [q, setQ] = useState('');
+  const [ask, setAsk] = useState(null);
+  const [filter, setFilter] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (q.trim().length < 3) return;
+    setAsk({ loading: true, q: q.trim() });
+    try {
+      const r = await api.post('/point/kb/ask', { question: q.trim() });
+      setAsk({ q: q.trim(), answer: r.data.answer });
+    } catch (e2) { setAsk({ q: q.trim(), error: errText(e2, 'Помощник сейчас недоступен.') }); }
+  };
+  const docs = (data || []).filter((d) => !filter || `${d.title} ${d.content}`.toLowerCase().includes(filter.toLowerCase()));
+
+  return (
+    <div className="space-y-5">
+      <form className="app-card p-5 space-y-3" onSubmit={submit}>
+        <div className="flex items-center gap-2 font-semibold"><Sparkles size={16} style={{ color: 'var(--color-primary)' }} /> Спросить помощника</div>
+        <div className="flex gap-2">
+          <input className="input flex-1" value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Например: сколько стоит перекрасить замшевые сапоги в чёрный?" aria-label="Вопрос помощнику" />
+          <button type="submit" className="btn btn--primary" disabled={ask?.loading || q.trim().length < 3}>{ask?.loading ? 'Думаю…' : 'Спросить'}</button>
+        </div>
+        {ask && !ask.loading && (
+          <div className="pc-answer">
+            <div className="pc-muted">Вопрос: {ask.q}</div>
+            {ask.error ? <p className="pc-error">{ask.error}</p> : <p style={{ whiteSpace: 'pre-wrap' }}>{ask.answer}</p>}
+          </div>
+        )}
+        <p className="pc-hint">Отвечает только по документам ниже. Если ответа в них нет — так и скажет.</p>
+      </form>
+
+      <div className="pc-kb">
+        <div className="space-y-2">
+          <input className="input w-full" placeholder="Поиск по документам" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Поиск по документам" />
+          {loading && !data && <p className="pc-muted">Загрузка…</p>}
+          {error && <p className="pc-error">{error}</p>}
+          <div className="app-card pc-list">
+            {docs.map((d) => (
+              <button key={d.id} type="button" className={`pc-list__row ${doc?.id === d.id ? 'is-on' : ''}`} onClick={() => setDoc(d)}>
+                <b>{d.title}</b><span className="pc-muted">{d.category}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="app-card p-5 pc-doc">
+          {doc ? (
+            <>
+              <span className="ui-eyebrow">{doc.category}</span>
+              <h3 className="text-xl font-semibold mt-2 mb-3">{doc.title}</h3>
+              <div style={{ whiteSpace: 'pre-wrap' }}>{doc.content}</div>
+            </>
+          ) : <p className="text-sm text-[color:var(--color-muted-foreground)]">Выберите документ слева.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── кабинет ─────────────────────────────────────────────────────── */
 function Cabinet() {
   const [me, setMe] = useState(null);
@@ -195,6 +497,7 @@ function Cabinet() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('today');
+  const [tick, setTick] = useState(0);
   const [order, setOrder] = useState(null);
   const inputRef = useRef(null);
   useBackClose(!!order, () => setOrder(null));
@@ -231,119 +534,133 @@ function Cabinet() {
 
   const lists = useMemo(() => {
     const ready = d?.ready || [];
+    const due = d?.due || [];
     return {
       ready: ready.filter((r) => !r.stale),
       stale: ready.filter((r) => r.stale),
       toCall: ready.filter((r) => !r.stale && !r.call),
-      due: d?.due || [],
-      dueToday: (d?.due || []).filter((r) => !(r.overdue_days > 0)),
-      overdue: (d?.due || []).filter((r) => r.overdue_days > 0),
+      due,
+      dueToday: due.filter((r) => !(r.overdue_days > 0)),
+      overdue: due.filter((r) => r.overdue_days > 0),
     };
   }, [d]);
 
-  const counts = { today: null, ready: lists.ready.length, due: lists.due.length, stale: lists.stale.length };
+  const openDoc = async (docNum) => {
+    try {
+      const r = await api.get('/point/orders/find', { params: { q: docNum } });
+      if (r.data.order_id) setOrder({ orderId: r.data.order_id });
+    } catch { /* номер не нашёлся — ничего не открываем */ }
+  };
+  const refresh = () => { load(true); setTick((t) => t + 1); };
   const shift = d?.shift;
+  const [eyebrow, title, sub] = TITLES[tab];
+  const openRow = (id) => setOrder({ orderId: id });
 
   return (
-    <div className="pc">
-      <header className="pc-bar">
-        <span className="pc-logo">B</span>
-        <div className="pc-bar__title">
-          <b>{me?.salon?.name || 'Кабинет точки'}</b>
-          {me?.device?.label && <span className="pc-muted">{me.device.label}</span>}
-        </div>
-        {shift && (shift.opened
-          ? <span className="pc-tag pc-tag--ok">Смена открыта · {shift.people.map((p) => `${p.name} ${hhmm(p.at)}`).join(', ')}</span>
-          : <span className="pc-tag pc-tag--warn">Смену ещё не открыли в боте</span>)}
-        <div className="pc-bar__right">
-          {d?.generated_at && <span className="pc-muted">данные на {hhmm(d.generated_at)}</span>}
-          <button type="button" className="btn btn--secondary" onClick={() => load(true)} disabled={loading}>
-            <RefreshCw size={15} className={loading ? 'emp-wip-spin' : ''} /> Обновить
-          </button>
-        </div>
-      </header>
-
-      <div className="pc-body">
-        <nav className="pc-nav" aria-label="Разделы">
-          {TABS.map((t) => (
-            <button key={t.key} type="button" className={tab === t.key ? 'is-on' : ''} aria-pressed={tab === t.key}
-              onClick={() => setTab(t.key)}>
-              <span>{t.label}</span>
-              {counts[t.key] != null && <small>{counts[t.key]}</small>}
-            </button>
-          ))}
-        </nav>
-
-        <main className="pc-main">
-          <section className="pc-scan">
-            <ScanBarcode size={20} aria-hidden="true" />
-            <div className="pc-scan__field">
-              <OrderSearch inputRef={inputRef} scanMode apiBase="/point" onOpen={(orderId, serviceId) => setOrder({ orderId, serviceId })} />
+    <div className="app-shell pc-shell">
+      <TopProgressBar active={loading} />
+      <aside className="app-shell__sidebar is-open">
+        <nav className="sidebar">
+          <div className="sidebar__header">
+            <div className="sidebar__badge">B</div>
+            <div className="sidebar__title">
+              <span className="sidebar__title-main">{me?.salon?.name || 'Точка'}</span>
+              <span className="sidebar__title-sub">Кабинет точки{me?.device?.label ? ` · ${me.device.label}` : ''}</span>
             </div>
-          </section>
-
-          {loading && !d && <p className="pc-muted">Загружаю заказы точки… первый раз это до 15 секунд.</p>}
-          {!loading && error && <p className="pc-error">{error}</p>}
-
-          {d && tab === 'today' && (
-            <>
-              <div className="pc-kpis">
-                <button type="button" className="pc-kpi" onClick={() => setTab('ready')}>
-                  <span>Готово к выдаче</span><b>{lists.ready.length}</b>
-                  <small>{lists.toCall.length ? `${lists.toCall.length} ещё не звонили` : 'всем позвонили'}</small>
-                </button>
-                <button type="button" className={`pc-kpi ${lists.dueToday.length ? 'pc-kpi--warn' : ''}`} onClick={() => setTab('due')}>
-                  <span>Срок сегодня, не готово</span><b>{lists.dueToday.length}</b><small>предупредить клиента</small>
-                </button>
-                <button type="button" className={`pc-kpi ${lists.overdue.length ? 'pc-kpi--bad' : ''}`} onClick={() => setTab('due')}>
-                  <span>Просрочено</span><b>{lists.overdue.length}</b>
-                  <small>{d.old_due_count ? `и ещё ${d.old_due_count} старше 60 дней` : 'за последние 60 дней'}</small>
-                </button>
-                <button type="button" className="pc-kpi" onClick={() => setTab('stale')}>
-                  <span>Долго лежат</span><b>{lists.stale.length}</b><small>готовы больше 14 дней</small>
-                </button>
+          </div>
+          <div className="sidebar__sections">
+            {SECTIONS.map((sec) => (
+              <div key={sec.name} className="sidebar__section">
+                <div className="sidebar__section-label">{sec.name}</div>
+                <div className="sidebar__links">
+                  {sec.items.map(({ key, label, icon: Icon, count }) => (
+                    <button key={key} type="button" onClick={() => setTab(key)} aria-current={tab === key ? 'page' : undefined}
+                      className={`sidebar__link ${tab === key ? 'is-active' : ''}`}>
+                      <Icon size={16} strokeWidth={1.4} className="shrink-0" />
+                      <span>{label}</span>
+                      {count && d && <small className="pc-count">{count(lists)}</small>}
+                    </button>
+                  ))}
+                </div>
               </div>
+            ))}
+          </div>
+        </nav>
+      </aside>
 
-              <h2 className="pc-h2">Позвонить сейчас <small>{lists.toCall.length}</small></h2>
-              <p className="pc-hint">Готовые заказы, по которым ещё нет отметки звонка. Отметьте результат — строка уйдёт из списка.</p>
-              <OrdersTable rows={lists.toCall.slice(0, 15)} kind="ready" onOpen={(id) => setOrder({ orderId: id })}
-                onMarked={() => load()} empty="Всем клиентам с готовыми заказами уже позвонили." />
+      <div className="app-shell__main">
+        <div className="fui-topline app-shell__topline">
+          <span className="fui-topline__dot" />
+          {shift?.opened ? 'СМЕНА ОТКРЫТА' : 'СМЕНУ ЕЩЁ НЕ ОТКРЫЛИ В БОТЕ'}
+          {shift?.people?.length > 0 && <><span className="fui-topline__sep">/</span>{shift.people.map((p) => `${p.name} ${hhmm(p.at)}`).join(', ')}</>}
+          <span className="fui-topline__sep">/</span>{new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+        </div>
+        <header className="app-shell__header">
+          <div className="app-shell__brand">{me?.salon?.name || 'Кабинет точки'}</div>
+          <div className="app-shell__user">
+            {d?.generated_at && <span className="app-shell__user-name">данные на {hhmm(d.generated_at)}</span>}
+            <button type="button" className="icon-button icon-button--ghost" onClick={refresh} disabled={loading} aria-label="Обновить">
+              <RefreshCw size={18} className={loading ? 'emp-wip-spin' : ''} /><span>Обновить</span>
+            </button>
+          </div>
+        </header>
 
-              {lists.dueToday.length > 0 && (
-                <>
-                  <h2 className="pc-h2">Срок сегодня, а изделие не готово <small>{lists.dueToday.length}</small></h2>
-                  <OrdersTable rows={lists.dueToday} kind="due" onOpen={(id) => setOrder({ orderId: id })}
-                    onMarked={() => load()} empty="" />
-                </>
-              )}
-            </>
-          )}
+        <main className="app-shell__content">
+          <div className="space-y-5 max-w-6xl mx-auto pb-12">
+            <div className="app-card pc-scan">
+              <ScanBarcode size={20} aria-hidden="true" />
+              <div className="pc-scan__field">
+                <OrderSearch inputRef={inputRef} scanMode apiBase="/point" onOpen={(orderId, serviceId) => setOrder({ orderId, serviceId })} />
+              </div>
+            </div>
 
-          {d && tab === 'ready' && (
-            <>
-              <h2 className="pc-h2">Готово к выдаче <small>{lists.ready.length}</small></h2>
-              <p className="pc-hint">Сначала те, кому ещё не звонили.</p>
-              <OrdersTable rows={lists.ready} kind="ready" onOpen={(id) => setOrder({ orderId: id })}
-                onMarked={() => load()} empty="Готовых заказов на точке нет." />
-            </>
-          )}
-          {d && tab === 'due' && (
-            <>
-              <h2 className="pc-h2">Сроки: сегодня и просроченные <small>{lists.due.length}</small></h2>
-              <p className="pc-hint">Заказ не готов, а срок выдачи сегодня или уже прошёл. Предупредите клиента до того, как он приедет.
-                {d.old_due_count ? ` Старше 60 дней — ещё ${d.old_due_count}, в список не входят.` : ''}</p>
-              <OrdersTable rows={lists.due} kind="due" onOpen={(id) => setOrder({ orderId: id })}
-                onMarked={() => load()} empty="Просроченных и сегодняшних сроков нет." />
-            </>
-          )}
-          {d && tab === 'stale' && (
-            <>
-              <h2 className="pc-h2">Долго лежат <small>{lists.stale.length}</small></h2>
-              <p className="pc-hint">Готовы больше 14 дней назад и до сих пор не выданы. Напомните клиенту.</p>
-              <OrdersTable rows={lists.stale} kind="ready" onOpen={(id) => setOrder({ orderId: id })}
-                onMarked={() => load()} empty="Таких заказов нет." />
-            </>
-          )}
+            <div>
+              <span className="ui-eyebrow mb-3">{eyebrow}</span>
+              <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--color-text)]">{title}</h2>
+              <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2 max-w-[70ch]">{sub}</p>
+            </div>
+
+            {['today', 'ready', 'due', 'stale'].includes(tab) && loading && !d && <p className="pc-muted">Загружаю заказы точки… первый раз это до 15 секунд.</p>}
+            {['today', 'ready', 'due', 'stale'].includes(tab) && !loading && error && <p className="pc-error">{error}</p>}
+
+            {d && tab === 'today' && (
+              <>
+                <div className="pc-kpis">
+                  <StatCard icon={<Inbox size={18} />} label="Готово к выдаче" value={lists.ready.length}
+                    sub={lists.toCall.length ? `${lists.toCall.length} ещё не звонили` : 'всем позвонили'} onClick={() => setTab('ready')} />
+                  <StatCard icon={<AlarmClock size={18} />} label="Срок сегодня, не готово" value={lists.dueToday.length}
+                    tone={lists.dueToday.length ? 'text-[color:var(--color-warning)]' : ''} sub="предупредить клиента" onClick={() => setTab('due')} />
+                  <StatCard icon={<AlarmClock size={18} />} label="Просрочено" value={lists.overdue.length}
+                    tone={lists.overdue.length ? 'text-[color:var(--color-danger)]' : ''}
+                    sub={d.old_due_count ? `и ещё ${d.old_due_count} старше 60 дней` : 'за 60 дней'} onClick={() => setTab('due')} />
+                  <StatCard icon={<Archive size={18} />} label="Долго лежат" value={lists.stale.length} sub="готовы больше 14 дней" onClick={() => setTab('stale')} />
+                </div>
+                <h3 className="pc-h3">Позвонить сейчас <span className="badge badge--neutral">{lists.toCall.length}</span></h3>
+                <p className="pc-hint">Готовые заказы без отметки звонка. Отметьте результат — строка уйдёт из списка.</p>
+                <OrdersTable rows={lists.toCall.slice(0, 15)} kind="ready" onOpen={openRow} onMarked={() => load()}
+                  empty="Всем клиентам с готовыми заказами уже позвонили." />
+                {lists.dueToday.length > 0 && (
+                  <>
+                    <h3 className="pc-h3">Срок сегодня, а изделие не готово <span className="badge badge--warning">{lists.dueToday.length}</span></h3>
+                    <OrdersTable rows={lists.dueToday} kind="due" onOpen={openRow} onMarked={() => load()} empty="" />
+                  </>
+                )}
+              </>
+            )}
+            {d && tab === 'ready' && <OrdersTable rows={lists.ready} kind="ready" onOpen={openRow} onMarked={() => load()} empty="Готовых заказов на точке нет." />}
+            {d && tab === 'due' && (
+              <>
+                {d.old_due_count > 0 && <p className="pc-hint">Просроченных больше чем на 60 дней ещё {d.old_due_count} — в список не входят.</p>}
+                <OrdersTable rows={lists.due} kind="due" onOpen={openRow} onMarked={() => load()} empty="Просроченных и сегодняшних сроков нет." />
+              </>
+            )}
+            {d && tab === 'stale' && <OrdersTable rows={lists.stale} kind="ready" onOpen={openRow} onMarked={() => load()} empty="Таких заказов нет." />}
+            {tab === 'accepted' && <Accepted tick={tick} onOpen={openRow} />}
+            {tab === 'logistics' && <Logistics tick={tick} />}
+            {tab === 'schedule' && <Schedule tick={tick} />}
+            {tab === 'clients' && <Clients onOpenDoc={openDoc} />}
+            {tab === 'kb' && <Knowledge />}
+          </div>
         </main>
       </div>
 
