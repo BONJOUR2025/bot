@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, ChevronDown, CircleDashed, Clock, MessageSquare, Phone, Wallet, XCircle,
+  AlertTriangle, CheckCircle2, ChevronDown, CircleDashed, Clock, MessageCircle, MessageSquare, Phone, Wallet, XCircle,
 } from 'lucide-react';
 import api from '../../api.js';
 import { PhotoViewer } from '../../components/OrderPhotos.jsx';
@@ -11,12 +11,11 @@ import { money, serviceTitle } from '../employee/masterFormat.js';
  *  Отвечает сверху вниз на вопросы администратора: готов ли заказ и где
  *  лежит → кому отдать → сколько взять → что в заказе. Язык — человеческий,
  *  без терминов Агбиса («Исполненный», «Вход/Выход», папки услуг). Оплата,
- *  звонки, СМС и заметки — в раскрывающихся разделах, открыты только те,
+ *  СМС Агбиса и заметки — в раскрывающихся разделах, открыты только те,
  *  где есть что-то важное. Карточка цеха (старший мастер) — отдельная,
  *  WorkshopOrder.jsx, её это не касается. */
 
 const photoPath = (p) => `/point/photos/${p.id}/full?md5=${encodeURIComponent(p.md5)}`;
-const CALL_TEXT = { reached: 'дозвонились', no_answer: 'не ответил', message: 'написали в мессенджер' };
 
 function when(iso, withTime = true) {
   if (!iso) return '—';
@@ -115,7 +114,6 @@ export default function PointOrderCard({ orderId, highlightServiceId = null, not
   const active = services.filter((s) => s.status_id !== 7);
   const readyCount = active.filter((s) => ['ready', 'done'].includes(serviceState(s).tone)).length;
   const hist = x.client_history;
-  const contacts = (x.calls?.length || 0) + (x.smses?.length || 0);
 
   return (
     <div className="poc">
@@ -265,15 +263,8 @@ export default function PointOrderCard({ orderId, highlightServiceId = null, not
           ) : <p className="poc-muted">Платежей не было.</p>}
         </Section>
       )}
-      <Section title="Звонки и СМС" icon={Phone}
-        badge={contacts ? <span className="badge badge--neutral">{contacts}</span> : null}>
-        {x.calls?.length ? (
-          <ul className="poc-list">
-            {x.calls.map((c, i) => (
-              <li key={`c${i}`}><b>{CALL_TEXT[c.result] || c.result}</b><span className="poc-muted">{when(c.at)}</span>{c.note && <span>{c.note}</span>}</li>
-            ))}
-          </ul>
-        ) : <p className="poc-muted">Звонков не отмечали.</p>}
+      <Section title="СМС клиенту" icon={MessageCircle}
+        badge={x.smses?.length ? <span className="badge badge--neutral">{x.smses.length}</span> : null}>
         {x.smses?.length ? (
           <ul className="poc-list">
             {x.smses.map((m, i) => (

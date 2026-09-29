@@ -1,4 +1,4 @@
-from app.data.point_device_repository import PointCallRepository, PointDeviceRepository
+from app.data.point_device_repository import PointDeviceRepository
 
 
 def test_code_activates_once_and_token_resolves(tmp_path):
@@ -21,14 +21,6 @@ def test_new_code_replaces_old_one(tmp_path):
     if old != new:
         assert repo.activate(old, "") is None
     assert repo.activate(new, "") is not None
-
-
-def test_calls_keep_last(tmp_path):
-    calls = PointCallRepository(str(tmp_path / "calls.json"))
-    calls.add(10, "no_answer", "", "s", "d")
-    calls.add(10, "reached", "придёт завтра", "s", "d")
-    last = calls.last_for([10, 11])
-    assert last[10]["result"] == "reached" and last[10]["count"] == 2 and 11 not in last
 
 
 def test_handover_add_accept_and_scope(tmp_path):

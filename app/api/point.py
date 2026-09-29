@@ -29,11 +29,6 @@ class AskIn(BaseModel):
     question: str
 
 
-class CallIn(BaseModel):
-    result: str
-    note: str = ""
-
-
 class HandoverIn(BaseModel):
     by: str
     cash_counted: float | None = None
@@ -142,7 +137,6 @@ def create_point_router() -> APIRouter:
 
     @router.get("/today")
     async def today(refresh: bool = Query(False), dev=Depends(point_device)):
-        from app.data.point_device_repository import PointCallRepository
         from app.services import point_service
 
         device, salon = dev
@@ -153,23 +147,8 @@ def create_point_router() -> APIRouter:
             data = await _run(point_service.orders, salon)
             at = time.time()
             _CACHE[salon.id] = (at, data)
-        # Отметки звонков — свежие всегда: только что отмеченный звонок должен
-        # сразу уйти из «позвонить», не дожидаясь кэша.
-        ids = [r["order_id"] for r in data["ready"]] + [r["order_id"] for r in data["due"]]
-        calls = PointCallRepository().last_for(ids)
-        for r in data["ready"] + data["due"]:
-            r["call"] = calls.get(r["order_id"])
         return {**data, "shift": point_service.shift(salon),
                 "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(at))}
-
-    @router.post("/orders/{order_id}/call")
-    async def mark_call(order_id: int, data: CallIn, dev=Depends(point_device)):
-        from app.data.point_device_repository import PointCallRepository
-
-        device, salon = dev
-        if data.result not in PointCallRepository.RESULTS:
-            raise HTTPException(400, "Неизвестный результат звонка")
-        return PointCallRepository().add(order_id, data.result, data.note, salon.id, device["id"])
 
     # ── поиск заказа и карточка: те же, что в «Цехе», но по ключу точки ──
     @router.get("/orders/find")
@@ -190,7 +169,7 @@ def create_point_router() -> APIRouter:
             data = await _run(orders.card, order_id)
         except orders.OrderNotFound as exc:
             raise HTTPException(404, str(exc))
-        # Для стойки — клиент, оплата, звонки, СМС. Не получилось — карточка
+        # Для стойки — клиент, оплата, СМС Агбиса. Не получилось — карточка
         # всё равно открывается, просто без этого блока.
         try:
             data["extras"] = await _run(point_service.order_extras, order_id)

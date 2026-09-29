@@ -1,5 +1,5 @@
-"""Кабинет точки: какие рабочие ПК к какой точке подключены, отметки звонков
-и журнал передачи смены.
+"""Кабинет точки: какие рабочие ПК к какой точке подключены, журнал передачи
+смены и заметки смены.
 
 Подключение — одноразовым кодом: руководитель в «Салонах» выдаёт код, на ПК
 точки его вводят один раз, и браузер получает свой ключ. Храним только хэш
@@ -17,7 +17,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from app.config import POINT_CALLS_FILE, POINT_DEVICES_FILE, POINT_HANDOVERS_FILE, POINT_NOTES_FILE
+from app.config import POINT_DEVICES_FILE, POINT_HANDOVERS_FILE, POINT_NOTES_FILE
 
 CODE_TTL = timedelta(minutes=15)
 
@@ -124,37 +124,6 @@ class PointDeviceRepository:
             return False
         _save(self._file, data)
         return True
-
-
-class PointCallRepository:
-    """Отметки «позвонила клиенту» — в Агбисе такого поля нет (DATE_OUT_INFORM
-    не заполняется), поэтому ведём у себя: заказ → последние отметки."""
-
-    RESULTS = {"reached": "дозвонилась", "no_answer": "не ответил", "message": "написала в мессенджер"}
-
-    def __init__(self, file_path: Optional[str] = None) -> None:
-        self._file = file_path or POINT_CALLS_FILE
-
-    def add(self, order_id: int, result: str, note: str, salon_id: str, device_id: str) -> dict[str, Any]:
-        data = _load(self._file, {})
-        rec = {"at": _now().isoformat(), "result": result, "note": (note or "").strip()[:300],
-               "salon_id": salon_id, "device_id": device_id}
-        data.setdefault(str(order_id), []).append(rec)
-        data[str(order_id)] = data[str(order_id)][-10:]
-        _save(self._file, data)
-        return rec
-
-    def history(self, order_id: int) -> list[dict[str, Any]]:
-        return list(reversed(_load(self._file, {}).get(str(order_id)) or []))
-
-    def last_for(self, order_ids: list[int]) -> dict[int, dict[str, Any]]:
-        data = _load(self._file, {})
-        out = {}
-        for oid in order_ids:
-            recs = data.get(str(oid))
-            if recs:
-                out[oid] = {**recs[-1], "count": len(recs)}
-        return out
 
 
 def _money_or_none(v) -> Optional[float]:

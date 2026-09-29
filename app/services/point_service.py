@@ -1,12 +1,12 @@
 """Кабинет точки на рабочем ПК салона — данные экрана смены.
 
 Точка — салон из «Салонов», её склады приёма — salon.sclad_ids (для Бестужевской
-добавляем и склад приёмки в том же здании). Всё только чтение Агбиса; своё —
-отметки звонков (point_device_repository.PointCallRepository).
+добавляем и склад приёмки в том же здании). Заказы — только чтение Агбиса;
+о клиенте смена узнаёт из СМС Агбиса (отправлено ли, доставлено ли).
 
 Три списка, на которые смена смотрит весь день:
 - «Выдача» — заказы точки в статусе «Исполненный»: изделие готово, клиент ещё
-  не забрал. Позвонить надо тем, по кому ещё нет отметки звонка.
+  не забрал.
 - «Сроки» — не готовые заказы со сроком сегодня или раньше: клиента нужно
   предупредить до того, как он приедет.
 - «Долго лежат» — готовы больше STALE_DAYS дней назад и до сих пор не выданы.
@@ -102,10 +102,8 @@ def orders(salon) -> dict[str, Any]:
     finally:
         con.close()
 
-    from app.data.point_device_repository import PointCallRepository
     from app.services.workshop_order_service import sclad_label
 
-    calls = PointCallRepository().last_for(ids)
     ready, due = [], []
     for (oid, num, ddate, status, date_out, completed, kredit, debet, cur_sclad, fast, cid,
          cname, cphone, tel1) in rows:
@@ -123,7 +121,6 @@ def orders(salon) -> dict[str, Any]:
             "due": _iso(due_dt),
             "location": sclad_label(cur_sclad),
             "sms": sms.get(oid),
-            "call": calls.get(oid),
         }
         if status == READY:
             done = completed if isinstance(completed, datetime) else None
@@ -134,7 +131,7 @@ def orders(salon) -> dict[str, Any]:
         else:
             row["overdue_days"] = (now.date() - due_dt.date()).days if due_dt else None
             due.append(row)
-    ready.sort(key=lambda r: (r["call"] is not None, r["ready_since"] or ""))
+    ready.sort(key=lambda r: r["ready_since"] or "")
     # Просрочка старше DUE_WINDOW_DAYS — это уже не «предупредить клиента до
     # приезда», а забытые заказы (часто индивидуальный пошив): отдельным счётчиком.
     old_due = [r for r in due if (r["overdue_days"] or 0) > DUE_WINDOW_DAYS]
@@ -209,9 +206,7 @@ PAY_KINDS = {9: "картой", 31: "наличными", 3: "наличными
 
 def order_extras(order_id: int) -> dict[str, Any]:
     """Что нужно на стойке сверх карточки цеха: клиент, оплата и платежи,
-    кто принял, звонки, СМС и история клиента. Только чтение Агбиса плюс
-    наши отметки звонков."""
-    from app.data.point_device_repository import PointCallRepository
+    кто принял, СМС Агбиса и история клиента. Только чтение Агбиса."""
     from app.services.firebird_service import _connect
     from app.services.workshop_order_service import _iso, _text
 
@@ -282,7 +277,6 @@ def order_extras(order_id: int) -> dict[str, Any]:
         "payment": {"total": total, "paid": paid, "to_pay": max(round(total - paid, 2), 0.0)},
         "payments": payments,
         "accepted_by": accepted_by,
-        "calls": PointCallRepository().history(order_id),
         "smses": smses,
     }
 

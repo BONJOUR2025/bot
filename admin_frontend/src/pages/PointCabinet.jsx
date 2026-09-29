@@ -16,7 +16,7 @@ import useBackClose from '../hooks/useBackClose.js';
  *  браузер помнит ключ точки. Оболочка та же, что у админки (боковое меню,
  *  верхняя строка, карточки), чтобы администратор и руководитель видели
  *  одну систему. Разделы отвечают на вопросы смены: кто на точке, что
- *  выдать и кому позвонить, что просрочено, что едет из цеха, как найти
+ *  выдать и кому ушло СМС, что просрочено, как найти
  *  клиента и что сказать ему по прайсу. Сканер бирок — вверху на любой
  *  странице: ручной сканер печатает бирку в поле и открывает заказ. */
 
@@ -48,8 +48,8 @@ const SECTIONS = [
   },
 ];
 const TITLES = {
-  today: ['Смена', 'Сегодня на точке', 'Кого обзвонить, что предупредить и что лежит на полке — одним экраном.'],
-  ready: ['Смена', 'Готово к выдаче', 'Изделия готовы, клиент ещё не забрал. Сначала те, кому ещё не звонили.'],
+  today: ['Смена', 'Сегодня на точке', 'Что готово к выдаче, что горит по срокам и что лежит на полке — одним экраном.'],
+  ready: ['Смена', 'Готово к выдаче', 'Изделия готовы, клиент ещё не забрал. Сначала те, что лежат дольше. СМС — по данным Агбиса.'],
   due: ['Смена', 'Сроки', 'Не готово, а срок выдачи сегодня или уже прошёл. Предупредите клиента до того, как он приедет.'],
   stale: ['Смена', 'Долго лежат', 'Готовы больше 14 дней назад и до сих пор не выданы. Напомните клиенту.'],
   handover: ['Смена', 'Передача смены', 'Заметки для смены пишите в течение дня — на любую дату и к заказу. При уходе сдайте смену: пересчёт кассы и чек-лист.'],
@@ -59,13 +59,6 @@ const TITLES = {
   clients: ['Помощь', 'Клиенты', 'Поиск по фамилии, телефону или номеру заказа. История заказов и пароль от личного кабинета.'],
   kb: ['Помощь', 'База знаний', 'Прайсы, методички и регламенты. Помощник отвечает на вопросы строго по ним.'],
 };
-const CALL_RESULTS = [
-  { key: 'reached', label: 'Дозвонилась', icon: Phone },
-  { key: 'no_answer', label: 'Не ответил', icon: PhoneOff },
-  { key: 'message', label: 'Написала', icon: MessageCircle },
-];
-const CALL_LABEL = { reached: 'дозвонилась', no_answer: 'не ответил', message: 'написала' };
-
 function readToken() {
   try { return window.localStorage.getItem(POINT_TOKEN_KEY); } catch { return null; }
 }
@@ -155,42 +148,17 @@ function Activate({ onDone }) {
   );
 }
 
-/* ── заказы с отметкой звонка ───────────────────────────────────── */
-function CallButtons({ row, onMarked }) {
-  const [busy, setBusy] = useState(null);
-  const mark = async (result) => {
-    setBusy(result);
-    try {
-      await api.post(`/point/orders/${row.order_id}/call`, { result });
-      onMarked();
-    } catch {
-      /* не сохранилось — кнопка отпустится, можно нажать ещё раз */
-    } finally {
-      setBusy(null);
-    }
-  };
+/* ── заказы: выдача и сроки ────────────────────────────────────── */
+function SmsState({ sms }) {
+  if (!sms) return <span className="badge badge--warning">не отправлено</span>;
   return (
-    <div className="pc-calls">
-      {CALL_RESULTS.map(({ key, label, icon: Icon }) => (
-        <button key={key} type="button" className="pc-call" onClick={(e) => { e.stopPropagation(); mark(key); }}
-          disabled={!!busy} aria-label={`${label}: ${row.doc_num}`}>
-          <Icon size={14} aria-hidden="true" /><span>{label}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function CallState({ call }) {
-  if (!call) return <span className="badge badge--warning">не звонили</span>;
-  return (
-    <span className={`badge ${call.result === 'reached' ? 'badge--success' : 'badge--neutral'}`}>
-      {CALL_LABEL[call.result] || call.result} · {dayTime(call.at)}{call.count > 1 ? ` · ${call.count}×` : ''}
+    <span className={`badge ${sms.delivered ? 'badge--success' : 'badge--neutral'}`}>
+      {sms.delivered ? 'доставлено' : 'отправлено'} · {day(sms.sent)}
     </span>
   );
 }
 
-function OrdersTable({ rows, kind, onOpen, onMarked, empty }) {
+function OrdersTable({ rows, kind, onOpen, empty }) {
   if (!rows.length) return <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">{empty}</div>;
   return (
     <div className="app-card pc-table-wrap">
@@ -199,7 +167,7 @@ function OrdersTable({ rows, kind, onOpen, onMarked, empty }) {
           <tr>
             <th>Заказ</th><th>Изделия</th><th>Клиент</th>
             <th>{kind === 'due' ? 'Срок' : 'Готов'}</th>
-            <th className="num">К оплате</th><th>Звонок</th><th aria-label="Отметить звонок" />
+            <th className="num">К оплате</th>{kind !== 'due' && <th>СМС о готовности</th>}
           </tr>
         </thead>
         <tbody>
@@ -224,12 +192,10 @@ function OrdersTable({ rows, kind, onOpen, onMarked, empty }) {
                 <td>
                   <div>{r.ready_since ? day(r.ready_since) : '—'}</div>
                   {r.ready_days != null && <div className="pc-muted">{r.ready_days} дн назад</div>}
-                  {r.sms && <div className="pc-muted">СМС {day(r.sms.sent)}{r.sms.delivered ? ', доставлено' : ''}</div>}
                 </td>
               )}
               <td className="num">{r.to_pay > 0 ? money(r.to_pay) : <span className="pc-muted">оплачен</span>}</td>
-              <td><CallState call={r.call} /></td>
-              <td><CallButtons row={r} onMarked={onMarked} /></td>
+              {kind !== 'due' && <td><SmsState sms={r.sms} /></td>}
             </tr>
           ))}
         </tbody>
@@ -339,7 +305,7 @@ function NoteForm({ onAdded, fixedOrderId, people, idPrefix = 'note' }) {
     <form className="pc-note-form" onSubmit={submit}>
       <div className="pc-note-form__main">
         <input className="input" value={text} onChange={(e) => setText(e.target.value)} maxLength={500}
-          placeholder={fixedOrderId ? 'Что по этому заказу передать смене' : 'Что передать: перезвонить, клиент придёт в 12, кончились пакеты…'}
+          placeholder={fixedOrderId ? 'Что по этому заказу передать смене' : 'Что передать: клиент придёт в 12, кончились пакеты…'}
           aria-label="Текст заметки" />
         {!fixedOrderId && (
           <input className="input pc-note-form__order" value={order} onChange={(e) => setOrder(e.target.value)} maxLength={40}
@@ -940,7 +906,7 @@ function Cabinet() {
     return {
       ready: ready.filter((r) => !r.stale),
       stale: ready.filter((r) => r.stale),
-      toCall: ready.filter((r) => !r.stale && !r.call),
+      noSms: ready.filter((r) => !r.stale && !r.sms),
       due,
       dueToday: due.filter((r) => !(r.overdue_days > 0)),
       overdue: due.filter((r) => r.overdue_days > 0),
@@ -1032,7 +998,7 @@ function Cabinet() {
               <>
                 <div className="pc-kpis">
                   <StatCard icon={<Inbox size={18} />} label="Готово к выдаче" value={lists.ready.length}
-                    sub={lists.toCall.length ? `${lists.toCall.length} ещё не звонили` : 'всем позвонили'} onClick={() => setTab('ready')} />
+                    sub={lists.noSms.length ? `${lists.noSms.length} без СМС о готовности` : 'всем ушло СМС'} onClick={() => setTab('ready')} />
                   <StatCard icon={<AlarmClock size={18} />} label="Срок сегодня, не готово" value={lists.dueToday.length}
                     tone={lists.dueToday.length ? 'text-[color:var(--color-warning)]' : ''} sub="предупредить клиента" onClick={() => setTab('due')} />
                   <StatCard icon={<AlarmClock size={18} />} label="Просрочено" value={lists.overdue.length}
@@ -1052,26 +1018,22 @@ function Cabinet() {
                     </ul>
                   </section>
                 )}
-                <h3 className="pc-h3">Позвонить сейчас <span className="badge badge--neutral">{lists.toCall.length}</span></h3>
-                <p className="pc-hint">Готовые заказы без отметки звонка. Отметьте результат — строка уйдёт из списка.</p>
-                <OrdersTable rows={lists.toCall.slice(0, 15)} kind="ready" onOpen={openRow} onMarked={() => load()}
-                  empty="Всем клиентам с готовыми заказами уже позвонили." />
                 {lists.dueToday.length > 0 && (
                   <>
                     <h3 className="pc-h3">Срок сегодня, а изделие не готово <span className="badge badge--warning">{lists.dueToday.length}</span></h3>
-                    <OrdersTable rows={lists.dueToday} kind="due" onOpen={openRow} onMarked={() => load()} empty="" />
+                    <OrdersTable rows={lists.dueToday} kind="due" onOpen={openRow} empty="" />
                   </>
                 )}
               </>
             )}
-            {d && tab === 'ready' && <OrdersTable rows={lists.ready} kind="ready" onOpen={openRow} onMarked={() => load()} empty="Готовых заказов на точке нет." />}
+            {d && tab === 'ready' && <OrdersTable rows={lists.ready} kind="ready" onOpen={openRow} empty="Готовых заказов на точке нет." />}
             {d && tab === 'due' && (
               <>
                 {d.old_due_count > 0 && <p className="pc-hint">Просроченных больше чем на 60 дней ещё {d.old_due_count} — в список не входят.</p>}
-                <OrdersTable rows={lists.due} kind="due" onOpen={openRow} onMarked={() => load()} empty="Просроченных и сегодняшних сроков нет." />
+                <OrdersTable rows={lists.due} kind="due" onOpen={openRow} empty="Просроченных и сегодняшних сроков нет." />
               </>
             )}
-            {d && tab === 'stale' && <OrdersTable rows={lists.stale} kind="ready" onOpen={openRow} onMarked={() => load()} empty="Таких заказов нет." />}
+            {d && tab === 'stale' && <OrdersTable rows={lists.stale} kind="ready" onOpen={openRow} empty="Таких заказов нет." />}
             {tab === 'handover' && <Handover tick={tick} people={people} notes={notes} reloadNotes={loadNotes} onOpenOrder={openRow} />}
             {tab === 'cash' && <Cash tick={tick} />}
             {tab === 'accepted' && <Accepted tick={tick} onOpen={openRow} />}

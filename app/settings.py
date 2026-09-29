@@ -161,7 +161,6 @@ class Settings(BaseSettings):
     workstations_file: str = Field("workstations.json", validation_alias="WORKSTATIONS_FILE")
     # Кабинет точки на рабочих ПК салонов: подключённые компьютеры и отметки звонков.
     point_devices_file: str = Field("point_devices.json", validation_alias="POINT_DEVICES_FILE")
-    point_calls_file: str = Field("point_calls.json", validation_alias="POINT_CALLS_FILE")
     point_handovers_file: str = Field("point_handovers.json", validation_alias="POINT_HANDOVERS_FILE")
     point_notes_file: str = Field("point_notes.json", validation_alias="POINT_NOTES_FILE")
     service_splits_file: str = Field("service_splits.json", validation_alias="SERVICE_SPLITS_FILE")

@@ -71,7 +71,6 @@ VISITOR_COUNTER_RESETS_FILE = settings.visitor_counter_resets_file
 MDM_DEVICES_FILE = settings.mdm_devices_file
 WORKSTATIONS_FILE = settings.workstations_file
 POINT_DEVICES_FILE = settings.point_devices_file
-POINT_CALLS_FILE = settings.point_calls_file
 POINT_HANDOVERS_FILE = settings.point_handovers_file
 POINT_NOTES_FILE = settings.point_notes_file
 SERVICE_SPLITS_FILE = settings.service_splits_file
