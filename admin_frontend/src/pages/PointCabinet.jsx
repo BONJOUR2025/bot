@@ -271,6 +271,7 @@ function Logistics({ tick }) {
   const out = data?.outgoing || [];
   const open = (l) => l.filter((w) => w.status_id === 1 || w.status_id === 2);
   const partial = [...inc, ...out].filter((w) => w.status_id === 4);
+  const place = (w, dirLabel) => (dirLabel === 'Маршрут' ? `${w.from} → ${w.to}` : dirLabel === 'Откуда' ? w.from : w.to);
   const table = (rows, dirLabel) => (rows.length === 0
     ? <div className="app-card p-6 text-sm text-[color:var(--color-muted-foreground)]">Нет.</div>
     : (
@@ -282,7 +283,7 @@ function Logistics({ tick }) {
               <tr key={w.id} style={{ cursor: 'default' }}>
                 <td className="pc-num">{w.doc_num}</td>
                 <td>{day(w.date)}</td>
-                <td>{dirLabel === 'Откуда' ? w.from : w.to}</td>
+                <td>{place(w, dirLabel)}</td>
                 <td className="num">{w.items}</td>
                 <td><span className={`badge ${w.status_id === 4 ? 'badge--error' : w.status_id === 2 ? 'badge--info' : 'badge--warning'}`}>{w.status}</span></td>
               </tr>
@@ -297,7 +298,7 @@ function Logistics({ tick }) {
         <section className="space-y-2">
           <h3 className="pc-h3">Принято не полностью <span className="badge badge--error">{partial.length}</span></h3>
           <p className="pc-hint">Часть изделий по накладной не дошла — проверьте полку и сообщите в цех.</p>
-          {table(partial, 'Куда')}
+          {table(partial, 'Маршрут')}
         </section>
       )}
       <section className="space-y-2">
@@ -589,14 +590,13 @@ function Cabinet() {
       </aside>
 
       <div className="app-shell__main">
-        <div className="fui-topline app-shell__topline">
-          <span className="fui-topline__dot" />
-          {shift?.opened ? 'СМЕНА ОТКРЫТА' : 'СМЕНУ ЕЩЁ НЕ ОТКРЫЛИ В БОТЕ'}
-          {shift?.people?.length > 0 && <><span className="fui-topline__sep">/</span>{shift.people.map((p) => `${p.name} ${hhmm(p.at)}`).join(', ')}</>}
-          <span className="fui-topline__sep">/</span>{new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-        </div>
         <header className="app-shell__header">
-          <div className="app-shell__brand">{me?.salon?.name || 'Кабинет точки'}</div>
+          <div className="app-shell__brand pc-brand">
+            <span>{me?.salon?.name || 'Кабинет точки'}</span>
+            {shift && (shift.opened
+              ? <span className="badge badge--success">Смена открыта · {shift.people.map((p) => `${p.name} ${hhmm(p.at)}`).join(', ')}</span>
+              : <span className="badge badge--warning">Смену ещё не открыли в боте</span>)}
+          </div>
           <div className="app-shell__user">
             {d?.generated_at && <span className="app-shell__user-name">данные на {hhmm(d.generated_at)}</span>}
             <button type="button" className="icon-button icon-button--ghost" onClick={refresh} disabled={loading} aria-label="Обновить">

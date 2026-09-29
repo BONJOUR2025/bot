@@ -8019,3 +8019,6 @@ button:hover > .vac-desc { color: var(--color-text); }
 .pc-answer { border-left: 3px solid var(--color-primary); padding: 8px 12px; background: color-mix(in srgb, var(--color-primary) 6%, transparent); border-radius: 0 10px 10px 0; display: flex; flex-direction: column; gap: 6px; }
 .pc-activate__card { gap: 10px; }
 @media (max-width: 1100px) { .pc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pc-week { grid-template-columns: repeat(4, minmax(0, 1fr)); } .pc-clients, .pc-kb { grid-template-columns: 1fr; } }
+
+.pc-brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pc-table .badge { white-space: nowrap; }

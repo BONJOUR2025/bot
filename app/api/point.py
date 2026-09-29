@@ -24,6 +24,10 @@ class ActivateIn(BaseModel):
     label: str = ""
 
 
+class AskIn(BaseModel):
+    question: str
+
+
 class CallIn(BaseModel):
     result: str
     note: str = ""
@@ -209,9 +213,6 @@ def create_point_router() -> APIRouter:
         from app.services import point_service
 
         return point_service.kb_documents()
-
-    class AskIn(BaseModel):
-        question: str
 
     @router.post("/kb/ask")
     async def kb_ask(data: AskIn, dev=Depends(point_device)):
