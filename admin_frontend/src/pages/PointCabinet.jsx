@@ -174,7 +174,10 @@ function OrdersTable({ rows, kind, onOpen, empty }) {
           {rows.map((r) => (
             <tr key={r.order_id} onClick={() => onOpen(r.order_id)} tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') onOpen(r.order_id); }}>
-              <td className="pc-num">{r.doc_num}{r.urgent && <span className="badge badge--error ml-1">срочно</span>}</td>
+              <td className="pc-num">
+                {r.doc_num}{r.urgent && <span className="badge badge--error ml-1">срочно</span>}
+                {r.tailoring && <div><span className="badge badge--info">пошив</span></div>}
+              </td>
               <td>{r.items.length ? r.items.join(', ') : '—'}</td>
               <td>
                 <div>{r.client || '—'}</div>
@@ -860,6 +863,14 @@ function Cabinet() {
   const [tick, setTick] = useState(0);
   const [order, setOrder] = useState(null);
   const [notes, setNotes] = useState([]);
+  // Быстрый фильтр индивидуального пошива: all / hide / only. Запоминается на этом ПК.
+  const [sewing, setSewingState] = useState(() => {
+    try { return window.localStorage.getItem('point_sewing') || 'all'; } catch { return 'all'; }
+  });
+  const setSewing = (v) => {
+    setSewingState(v);
+    try { window.localStorage.setItem('point_sewing', v); } catch { /* не запомним — не страшно */ }
+  };
   const inputRef = useRef(null);
   useBackClose(!!order, () => setOrder(null));
 
@@ -901,9 +912,13 @@ function Cabinet() {
   }, []);
 
   const lists = useMemo(() => {
-    const ready = d?.ready || [];
-    const due = d?.due || [];
+    const keep = (r) => (sewing === 'all' || (sewing === 'only' ? r.tailoring : !r.tailoring));
+    const ready = (d?.ready || []).filter(keep);
+    const due = (d?.due || []).filter(keep);
+    const oldAll = d?.old_due_count || 0;
+    const oldSew = d?.old_due_tailoring || 0;
     return {
+      oldDue: sewing === 'all' ? oldAll : sewing === 'only' ? oldSew : oldAll - oldSew,
       ready: ready.filter((r) => !r.stale),
       stale: ready.filter((r) => r.stale),
       noSms: ready.filter((r) => !r.stale && !r.sms),
@@ -912,7 +927,7 @@ function Cabinet() {
       overdue: due.filter((r) => r.overdue_days > 0),
       notesNow: notes.filter((n) => !n.done && n.due <= isoDay(0)).length,
     };
-  }, [d, notes]);
+  }, [d, notes, sewing]);
   const notesToday = notes.filter((n) => !n.done && n.due <= isoDay(0))
     .sort((a, b) => (a.due + a.created_at).localeCompare(b.due + b.created_at));
   const people = (d?.shift?.people || []).map((p) => p.name);
@@ -991,6 +1006,18 @@ function Cabinet() {
               <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2 max-w-[70ch]">{sub}</p>
             </div>
 
+            {['today', 'ready', 'due', 'stale'].includes(tab) && (
+              <div className="pc-filter">
+                <span>Инд. пошив</span>
+                <div className="pc-seg" role="group" aria-label="Индивидуальный пошив">
+                  {[['all', 'Все'], ['hide', 'Скрыть'], ['only', 'Только пошив']].map(([k, label]) => (
+                    <button key={k} type="button" className={sewing === k ? 'is-on' : ''} onClick={() => setSewing(k)}>{label}</button>
+                  ))}
+                </div>
+                {sewing !== 'all' && <span className="pc-muted">{sewing === 'hide' ? 'заказы пошива скрыты' : 'показан только пошив'}</span>}
+              </div>
+            )}
+
             {['today', 'ready', 'due', 'stale'].includes(tab) && loading && !d && <p className="pc-muted">Загружаю заказы точки… первый раз это до 15 секунд.</p>}
             {['today', 'ready', 'due', 'stale'].includes(tab) && !loading && error && <p className="pc-error">{error}</p>}
 
@@ -1003,7 +1030,7 @@ function Cabinet() {
                     tone={lists.dueToday.length ? 'text-[color:var(--color-warning)]' : ''} sub="предупредить клиента" onClick={() => setTab('due')} />
                   <StatCard icon={<AlarmClock size={18} />} label="Просрочено" value={lists.overdue.length}
                     tone={lists.overdue.length ? 'text-[color:var(--color-danger)]' : ''}
-                    sub={d.old_due_count ? `и ещё ${d.old_due_count} старше 60 дней` : 'за 60 дней'} onClick={() => setTab('due')} />
+                    sub={lists.oldDue ? `и ещё ${lists.oldDue} старше 60 дней` : 'за 60 дней'} onClick={() => setTab('due')} />
                   <StatCard icon={<Archive size={18} />} label="Долго лежат" value={lists.stale.length} sub="готовы больше 14 дней" onClick={() => setTab('stale')} />
                 </div>
                 {notesToday.length > 0 && (
@@ -1029,7 +1056,7 @@ function Cabinet() {
             {d && tab === 'ready' && <OrdersTable rows={lists.ready} kind="ready" onOpen={openRow} empty="Готовых заказов на точке нет." />}
             {d && tab === 'due' && (
               <>
-                {d.old_due_count > 0 && <p className="pc-hint">Просроченных больше чем на 60 дней ещё {d.old_due_count} — в список не входят.</p>}
+                {lists.oldDue > 0 && <p className="pc-hint">Просроченных больше чем на 60 дней ещё {lists.oldDue} — в список не входят.</p>}
                 <OrdersTable rows={lists.due} kind="due" onOpen={openRow} empty="Просроченных и сегодняшних сроков нет." />
               </>
             )}

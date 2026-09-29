@@ -8184,3 +8184,7 @@ button:hover > .vac-desc { color: var(--color-text); }
   .poc-keys { grid-template-columns: 1fr; }
   .poc-num { font-size: 1.35rem; }
 }
+
+/* Кабинет точки: быстрый фильтр индивидуального пошива. */
+.pc-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.88rem; color: var(--color-text); }
+.pc-filter > span:first-child { font-weight: 600; }

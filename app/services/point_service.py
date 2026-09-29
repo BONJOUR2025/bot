@@ -137,7 +137,15 @@ def orders(salon) -> dict[str, Any]:
     old_due = [r for r in due if (r["overdue_days"] or 0) > DUE_WINDOW_DAYS]
     due = [r for r in due if (r["overdue_days"] or 0) <= DUE_WINDOW_DAYS]
     due.sort(key=lambda r: r["due"] or "")
-    return {"ready": ready, "due": due, "old_due_count": len(old_due), "sclads": sclads}
+    # Индивидуальный пошив — тем же признаком, что и в «Цехе»: заказ, где
+    # хоть одна строка из папок пошива. Для быстрого фильтра на экране.
+    from app.services.workshop_service import _tailoring_docs
+
+    sewing = _tailoring_docs(r["doc_num"] for r in ready + due + old_due)
+    for r in ready + due + old_due:
+        r["tailoring"] = r["doc_num"] in sewing
+    return {"ready": ready, "due": due, "old_due_count": len(old_due),
+            "old_due_tailoring": sum(1 for r in old_due if r["tailoring"]), "sclads": sclads}
 
 
 def shift(salon) -> dict[str, Any]:
