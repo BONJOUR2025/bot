@@ -8074,7 +8074,8 @@ button:hover > .vac-desc { color: var(--color-text); }
 
 /* Деление услуги между мастерами (карточка заказа, старший мастер). */
 .wo-split { display: flex; flex-direction: column; gap: 8px; margin: 0.4rem 0 0.6rem; }
-.wo-split__row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 6rem auto; gap: 8px; align-items: center; }
+.wo-dialog--split { width: min(36rem, 100%); max-width: 100%; }
+.wo-split__row { display: grid; grid-template-columns: minmax(0, 1fr) 4.6rem 4.8rem auto; gap: 8px; align-items: center; }
 .wo-split__pct { display: flex; align-items: center; gap: 4px; }
 .wo-split__pct .input { text-align: right; font-variant-numeric: tabular-nums; }
 .wo-split__sum { font-variant-numeric: tabular-nums; font-size: 0.85rem; color: var(--color-text-muted); text-align: right; }

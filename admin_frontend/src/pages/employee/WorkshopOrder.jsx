@@ -278,7 +278,7 @@ function SplitDialog({ service, masters, onClose, onDone }) {
 
   return (
     <div className="modal-backdrop" role="dialog" aria-label="Разделить услугу" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-card wo-dialog">
+      <div className="modal-card wo-dialog wo-dialog--split">
         <div className="wo-dialog__head">
           <h3>Разделить между мастерами</h3>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>
