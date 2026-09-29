@@ -8094,3 +8094,19 @@ button:hover > .vac-desc { color: var(--color-text); }
 .emp-pw__actions { display: flex; justify-content: flex-end; gap: 8px; }
 .emp-pw__open { margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; }
 .emp-pw__ok { margin: 6px 0 0; font-size: 0.85rem; color: var(--color-success); }
+
+/* Карточка заказа в кабинете точки: клиент, оплата, звонки, СМС. */
+.wo-extras { display: flex; flex-direction: column; gap: 14px; }
+.wo-extras__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.wo-extras__h { margin: 0 0 6px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-muted); }
+.wo-extras__big { margin: 0; font-weight: 600; font-size: 1rem; }
+.wo-extras__phone { margin: 2px 0 4px; font-variant-numeric: tabular-nums; font-size: 0.95rem; }
+.wo-extras__pay { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.wo-extras__pay div { display: flex; justify-content: space-between; gap: 12px; font-size: 0.9rem; }
+.wo-extras__pay dt { color: var(--color-text-muted); }
+.wo-extras__pay dd { margin: 0; font-variant-numeric: tabular-nums; }
+.wo-extras__pay .is-due dt, .wo-extras__pay .is-due dd { color: var(--color-danger); font-weight: 700; }
+.wo-extras__pay .is-ok dd { color: var(--color-success); font-weight: 600; }
+.wo-extras__list { margin: 6px 0 0; padding-left: 1rem; font-size: 0.84rem; display: flex; flex-direction: column; gap: 3px; }
+.wo-extras__list b { font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .wo-extras__grid { grid-template-columns: 1fr; } }

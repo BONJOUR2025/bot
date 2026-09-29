@@ -230,6 +230,85 @@ function LeadScanDialog({ service, action, masters, onClose, onDone }) {
   );
 }
 
+const CALL_TEXT = { reached: 'дозвонились', no_answer: 'не ответил', message: 'написали в мессенджер' };
+
+/** Для стойки (кабинет точки): клиент, оплата и платежи, кто принял,
+ *  звонки и СМС. Приходит только в ответе /point/orders/{id}. */
+function OrderExtras({ x }) {
+  const pay = x.payment || {};
+  const hist = x.client_history;
+  return (
+    <section className="emp-payout-item wo-extras">
+      <div className="wo-extras__grid">
+        <div>
+          <h4 className="wo-extras__h">Клиент</h4>
+          {x.client ? (
+            <>
+              <p className="wo-extras__big">{x.client.name || 'Без имени'}</p>
+              {x.client.phone && <p className="wo-extras__phone">{x.client.phone}</p>}
+              {hist && (
+                <p className="ws-sub">
+                  {hist.orders > 1
+                    ? `Постоянный: ${hist.orders} заказов с ${day(hist.first)}`
+                    : 'Первый заказ'}
+                  {hist.previous ? ` · прошлый ${hist.previous.doc_num} от ${day(hist.previous.date)}` : ''}
+                </p>
+              )}
+            </>
+          ) : <p className="ws-sub">Клиент в заказе не указан.</p>}
+          {x.accepted_by && <p className="ws-sub">Принял: {x.accepted_by}</p>}
+        </div>
+        <div>
+          <h4 className="wo-extras__h">Оплата</h4>
+          <dl className="wo-extras__pay">
+            <div><dt>Сумма</dt><dd>{money(pay.total)}</dd></div>
+            <div><dt>Оплачено</dt><dd>{money(pay.paid)}</dd></div>
+            <div className={pay.to_pay > 0 ? 'is-due' : 'is-ok'}>
+              <dt>{pay.to_pay > 0 ? 'К доплате' : 'Оплачен'}</dt>
+              <dd>{pay.to_pay > 0 ? money(pay.to_pay) : 'полностью'}</dd>
+            </div>
+          </dl>
+          {x.payments?.length > 0 && (
+            <ul className="wo-extras__list">
+              {x.payments.map((p, i) => (
+                <li key={i}>
+                  <b>{p.refund ? '−' : ''}{money(Math.abs(p.amount))}</b> {p.refund ? 'возврат' : p.kind} · {when(p.at)}
+                  {p.by && <span className="ws-sub"> · {p.by}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+      <div className="wo-extras__grid">
+        <div>
+          <h4 className="wo-extras__h">Звонки</h4>
+          {x.calls?.length ? (
+            <ul className="wo-extras__list">
+              {x.calls.map((c, i) => (
+                <li key={i}>{when(c.at)} · {CALL_TEXT[c.result] || c.result}{c.note ? ` — ${c.note}` : ''}</li>
+              ))}
+            </ul>
+          ) : <p className="ws-sub">Отметок звонков нет.</p>}
+        </div>
+        <div>
+          <h4 className="wo-extras__h">СМС клиенту</h4>
+          {x.smses?.length ? (
+            <ul className="wo-extras__list">
+              {x.smses.map((m, i) => (
+                <li key={i}>
+                  {when(m.sent)} · {m.delivered ? `доставлено ${when(m.delivered)}` : 'не доставлено'}
+                  {m.text && <div className="ws-sub">{m.text}</div>}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="ws-sub">СМС по заказу не отправлялись.</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** Деление одной услуги между мастерами: кто и сколько процентов.
  *  Пишется в нашу базу, не в Агбис — зарплата по доле считается поверх
  *  отчёта мастеров. Предзаполняем тем, кто ставил вход и выход. */
@@ -388,6 +467,8 @@ export function OrderView({ orderId, onBack, backLabel = 'Назад к цеху
             {o.note && <p className="ws-sub">Примечание: {o.note}</p>}
             {o.defects && <p className="ws-sub">Дефекты: {o.defects}</p>}
           </section>
+
+          {o.extras && <OrderExtras x={o.extras} />}
 
           {o.items.map((it) => (
             <section

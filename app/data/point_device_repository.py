@@ -144,6 +144,9 @@ class PointCallRepository:
         _save(self._file, data)
         return rec
 
+    def history(self, order_id: int) -> list[dict[str, Any]]:
+        return list(reversed(_load(self._file, {}).get(str(order_id)) or []))
+
     def last_for(self, order_ids: list[int]) -> dict[int, dict[str, Any]]:
         data = _load(self._file, {})
         out = {}

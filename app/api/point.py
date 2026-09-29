@@ -183,12 +183,24 @@ def create_point_router() -> APIRouter:
 
     @router.get("/orders/{order_id}")
     async def card(order_id: int, dev=Depends(point_device)):
+        from app.services import point_service
         from app.services import workshop_order_service as orders
 
         try:
-            return await _run(orders.card, order_id)
+            data = await _run(orders.card, order_id)
         except orders.OrderNotFound as exc:
             raise HTTPException(404, str(exc))
+        # Для стойки — клиент, оплата, звонки, СМС. Не получилось — карточка
+        # всё равно открывается, просто без этого блока.
+        try:
+            data["extras"] = await _run(point_service.order_extras, order_id)
+        except HTTPException:
+            raise
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("Кабинет точки: доп. данные заказа %s", order_id, exc_info=True)
+        return data
 
     # ── приём и график ────────────────────────────────────────────────
     @router.get("/accepted")

@@ -200,6 +200,93 @@ def cash(salon, days: int = CASH_DAYS) -> dict[str, Any]:
             "days": list(reversed(data.get("days", []))), "entries": entries}
 
 
+# Виды платежей по заказу — DOC_ORDER_PAYS.DOC_TYPE (справочник DOC_TYPES).
+# Сумма платежей по заказу сходится с DOCS_ORDER.DEBET (сверено на 300
+# заказах за месяц), так что список полный: карта здесь тоже есть, в
+# кассовой книге DOCS_KASSA её нет.
+PAY_KINDS = {9: "картой", 31: "наличными", 3: "наличными", 91: "бонусами", 92: "с депозита"}
+
+
+def order_extras(order_id: int) -> dict[str, Any]:
+    """Что нужно на стойке сверх карточки цеха: клиент, оплата и платежи,
+    кто принял, звонки, СМС и история клиента. Только чтение Агбиса плюс
+    наши отметки звонков."""
+    from app.data.point_device_repository import PointCallRepository
+    from app.services.firebird_service import _connect
+    from app.services.workshop_order_service import _iso, _text
+
+    con = _connect()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            "SELECT d.doc_id, d.doc_num, d.contragent_id, dor.kredit, dor.debet, dor.pay_status_id, "
+            "dor.creater_id, dor.contact_tel1, dor.sms_tel, c.name, c.teleph_cell "
+            "FROM docs_order dor JOIN docs d ON d.doc_id = dor.doc_id "
+            "LEFT JOIN contragents c ON c.contr_id = d.contragent_id WHERE dor.id = ?", (order_id,))
+        row = cur.fetchone()
+        if not row:
+            return {}
+        (doc_id, doc_num, contr_id, kredit, debet, _pay_status, creater,
+         tel1, sms_tel, cname, cphone) = row
+
+        cur.execute(
+            "SELECT p.doc_type, d.doc_date, d.doc_time, d.debet, d.kredit, u.description "
+            "FROM doc_order_pays p JOIN docs d ON d.doc_id = p.doc_id "
+            "LEFT JOIN users u ON u.user_id = d.user_id "
+            "WHERE p.doc_order_id = ? ORDER BY d.doc_date, d.doc_time", (order_id,))
+        payments = []
+        for kind, pdate, ptime, pdeb, pkred, who in cur.fetchall():
+            amount = round(float(pdeb or 0) - float(pkred or 0), 2)
+            if not amount:
+                continue
+            when = datetime.combine(pdate, ptime) if isinstance(pdate, date) and ptime else pdate
+            payments.append({"at": _iso(when), "amount": amount, "kind": PAY_KINDS.get(kind, "другое"),
+                             "refund": amount < 0, "by": _text(who)})
+
+        accepted_by = None
+        if creater:
+            cur.execute("SELECT description FROM users WHERE user_id = ?", (creater,))
+            r = cur.fetchone()
+            accepted_by = _text(r[0]) if r else None
+
+        cur.execute(
+            "SELECT dt_added, dt_deliver, CAST(txt AS VARCHAR(1000) CHARACTER SET OCTETS) "
+            "FROM smses WHERE doc_id = ? ORDER BY dt_added", (doc_id,))
+        smses = [{"sent": _iso(a), "delivered": _iso(dlv), "text": _text(t)[:300]}
+                 for a, dlv, t in cur.fetchall()]
+
+        history = None
+        if contr_id:
+            cur.execute(
+                "SELECT COUNT(*), MIN(d.doc_date) FROM docs d JOIN docs_order dor ON dor.doc_id = d.doc_id "
+                "WHERE d.contragent_id = ?", (contr_id,))
+            count, first = cur.fetchone()
+            cur.execute(
+                "SELECT FIRST 1 d.doc_num, d.doc_date FROM docs d JOIN docs_order dor ON dor.doc_id = d.doc_id "
+                "WHERE d.contragent_id = ? AND d.doc_id <> ? ORDER BY d.doc_date DESC, d.doc_id DESC",
+                (contr_id, doc_id))
+            prev = cur.fetchone()
+            history = {"orders": int(count or 0), "first": _iso(first),
+                       "previous": {"doc_num": _text(prev[0]), "date": _iso(prev[1])} if prev else None}
+    finally:
+        con.close()
+
+    total = round(float(kredit or 0), 2)
+    paid = round(float(debet or 0), 2)
+    phone = _text(cphone) or _text(tel1) or _text(sms_tel)
+    return {
+        "client": {"id": contr_id, "name": _text(cname), "phone": phone} if contr_id or phone else None,
+        "client_history": history,
+        # Статус оплаты из Агбиса (PAY_STATUS_ID) не отдаём: он расходится с
+        # суммами — у 22585-8 «Оплачен полностью» при 20 000 из 33 590 ₽.
+        "payment": {"total": total, "paid": paid, "to_pay": max(round(total - paid, 2), 0.0)},
+        "payments": payments,
+        "accepted_by": accepted_by,
+        "calls": PointCallRepository().history(order_id),
+        "smses": smses,
+    }
+
+
 def note_order(query: str = "", order_id: int | None = None) -> dict[str, Any]:
     """Заказ для заметки по номеру или бирке: id, номер и клиент — чтобы в
     списке было «22585-8 · Иванова», а не голое число. Номер без суффикса,
